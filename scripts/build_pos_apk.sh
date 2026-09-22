@@ -21,6 +21,7 @@ RUN_CODEGEN=false
 OUT_DIR="${DEFAULT_OUT_DIR}"
 DEVICE_ID=""
 API_URL=""
+TEST_CONCURRENCY=""
 PILOT_MODE=false
 PLAN_ONLY=false
 
@@ -63,6 +64,21 @@ validate_api_url() {
         exit 1
     fi
     API_URL="${raw}"
+}
+
+# Validate a --test-concurrency candidate: a positive integer (>= 1). Rejected
+# before any side effect. When absent, `flutter test` runs with its own default.
+validate_test_concurrency() {
+    local raw="$1"
+    if [ -z "${raw}" ]; then
+        echo "Invalid --test-concurrency: value is empty." >&2
+        exit 1
+    fi
+    if ! printf '%s' "${raw}" | grep -Eq '^[1-9][0-9]*$'; then
+        echo "Invalid --test-concurrency: '${raw}' must be a positive integer (>= 1)." >&2
+        exit 1
+    fi
+    TEST_CONCURRENCY="${raw}"
 }
 
 # Parse Arguments
@@ -112,6 +128,14 @@ while [[ $# -gt 0 ]]; do
             validate_api_url "$2"
             shift 2
             ;;
+        --test-concurrency)
+            if [ "$#" -lt 2 ]; then
+                echo "Invalid --test-concurrency: missing required value." >&2
+                exit 1
+            fi
+            validate_test_concurrency "$2"
+            shift 2
+            ;;
         --pilot)
             PILOT_MODE=true
             shift
@@ -135,6 +159,10 @@ while [[ $# -gt 0 ]]; do
             echo "  --pilot           Pilot/single-terminal build; REQUIRES --device-id and --api-url"
             echo "  --plan            Print resolved configuration and the exact flutter build apk"
             echo "                    command(s), then exit 0 without building (no Flutter/SDK needed)"
+            echo "  --test-concurrency <n>"
+            echo "                    Run 'flutter test --concurrency=<n>' (n must be a positive"
+            echo "                    integer >= 1); without it, 'flutter test' uses the"
+            echo "                    Flutter default concurrency"
             echo "  --skip-tests      Skip running Flutter test suite"
             echo "  --with-codegen    Run build_runner code generation before building"
             echo "  --out-dir <path>  Specify output directory (default: dist/release_candidate)"
@@ -180,6 +208,14 @@ if [ -n "${API_URL}" ]; then
     API_URL_BINDING="${API_URL}"
 fi
 
+# Test concurrency binding: explicit value or the Flutter default.
+TEST_CONCURRENCY_BINDING="flutter-default"
+FLUTTER_TEST_CMD="flutter test"
+if [ -n "${TEST_CONCURRENCY}" ]; then
+    TEST_CONCURRENCY_BINDING="${TEST_CONCURRENCY}"
+    FLUTTER_TEST_CMD="flutter test --concurrency=${TEST_CONCURRENCY}"
+fi
+
 # Plan mode: print resolved configuration and exact build commands, then stop.
 # Must run before any side effect and must not require Flutter or the Android SDK.
 if [ "${PLAN_ONLY}" = true ]; then
@@ -200,9 +236,21 @@ if [ "${PLAN_ONLY}" = true ]; then
     if [ -z "${API_URL}" ]; then
         echo "   (fleet build: no API_URL dart-define is baked; backend is provisioned at runtime)"
     fi
+    echo "🧵 Test concurrency:    ${TEST_CONCURRENCY_BINDING}"
+    if [ -z "${TEST_CONCURRENCY}" ]; then
+        echo "   (no --test-concurrency given; 'flutter test' will use the Flutter default)"
+    fi
     echo "📋 release_manifest.json would record terminal_identity: ${TERMINAL_ID_BINDING}"
     echo "📋 release_manifest.json would record api_url: ${API_URL_BINDING}"
+    echo "📋 release_manifest.json would record test_concurrency: ${TEST_CONCURRENCY_BINDING}"
     echo "------------------------------------------------------------------------------"
+    if [ "${RUN_TESTS}" = true ]; then
+        echo "flutter test command that would run:"
+        echo "  ${FLUTTER_TEST_CMD}"
+    else
+        echo "flutter test command that would run:"
+        echo "  (skipped: --skip-tests active)"
+    fi
     echo "flutter build apk command(s) that would run:"
     if [ "${BUILD_MODE}" = "split" ] || [ "${BUILD_MODE}" = "both" ]; then
         echo "  flutter build apk --release --split-per-abi ${DART_DEFINE_ARGS[*]:-}"
@@ -247,7 +295,7 @@ fi
 # 3. Test Suite Verification
 if [ "${RUN_TESTS}" = true ]; then
     echo "🧪 [3/5] Running Flutter test suite..."
-    flutter test
+    ${FLUTTER_TEST_CMD}
 else
     echo "⏩ [3/5] Tests skipped (--skip-tests active)."
 fi
@@ -295,6 +343,7 @@ cat <<EOF > release_manifest.json
   "build_timestamp": "${BUILD_TIMESTAMP}",
   "terminal_identity": "${TERMINAL_ID_BINDING}",
   "api_url": "${API_URL_BINDING}",
+  "test_concurrency": "${TEST_CONCURRENCY_BINDING}",
   "artifacts": [
 EOF
 

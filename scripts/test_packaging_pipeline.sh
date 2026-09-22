@@ -338,6 +338,115 @@ fi
 printf '%s\n' "${FLEET_API_OUTPUT}" | grep -q -- "api_url: provisioned-at-runtime" || { echo "❌ FAILED: fleet --plan must report api_url as provisioned-at-runtime"; echo "${FLEET_API_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
 echo "✅ [Test 15 Passed] Fleet builds bake no API_URL define and report provisioned-at-runtime."
 
+# Test 16: --test-concurrency is accepted, shown on the flutter test command
+# line in --plan, and recorded in the manifest.
+echo "🔍 [Test 16] Verifying --test-concurrency resolves and appears in the plan..."
+CONC_RC=0
+CONC_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --pilot --device-id Q802024120001 --api-url "${STAGING_URL}" --test-concurrency 4 2>&1)" || CONC_RC=$?
+if [ "${CONC_RC}" -ne 0 ]; then
+    echo "❌ FAILED: --plan --test-concurrency 4 exited with code ${CONC_RC} (expected 0). Output:" >&2
+    echo "${CONC_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if ! printf '%s\n' "${CONC_OUTPUT}" | grep -q '^  flutter test --concurrency=4$'; then
+    echo "❌ FAILED: --plan output does not show the exact 'flutter test --concurrency=4' command" >&2
+    echo "${CONC_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if ! printf '%s\n' "${CONC_OUTPUT}" | grep -q "test_concurrency: 4"; then
+    echo "❌ FAILED: --plan output does not state that release_manifest.json would record test_concurrency: 4" >&2
+    echo "${CONC_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if printf '%s\n' "${CONC_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+    echo "❌ FAILED: --plan --test-concurrency invoked the flutter toolchain" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 16 Passed] --test-concurrency is accepted, shown on the flutter test command line and recorded."
+
+# Test 17: invalid --test-concurrency values are rejected before any build step.
+echo "🔍 [Test 17] Verifying invalid --test-concurrency values are rejected..."
+for INVALID_CONC in 0 -1 abc 3.5 "" " 4" "4 "; do
+    BADCONC_RC=0
+    BADCONC_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --pilot --device-id Q802024120001 --api-url "${STAGING_URL}" --test-concurrency "${INVALID_CONC}" 2>&1)" || BADCONC_RC=$?
+    if [ "${BADCONC_RC}" -eq 0 ]; then
+        echo "❌ FAILED: invalid --test-concurrency '${INVALID_CONC}' was accepted" >&2
+        echo "${BADCONC_OUTPUT}" >&2
+        rm -rf "${SHIM_DIR}"
+        exit 1
+    fi
+    if ! printf '%s\n' "${BADCONC_OUTPUT}" | grep -q "Invalid --test-concurrency"; then
+        echo "❌ FAILED: invalid --test-concurrency rejection must print a clear 'Invalid --test-concurrency' message for '${INVALID_CONC}'. Output:" >&2
+        echo "${BADCONC_OUTPUT}" >&2
+        rm -rf "${SHIM_DIR}"
+        exit 1
+    fi
+    if printf '%s\n' "${BADCONC_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+        echo "❌ FAILED: invalid --test-concurrency rejection ran a build step for '${INVALID_CONC}'" >&2
+        rm -rf "${SHIM_DIR}"
+        exit 1
+    fi
+done
+MISSINGCONC_RC=0
+MISSINGCONC_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --pilot --device-id Q802024120001 --api-url "${STAGING_URL}" --test-concurrency 2>&1)" || MISSINGCONC_RC=$?
+if [ "${MISSINGCONC_RC}" -eq 0 ] || ! printf '%s\n' "${MISSINGCONC_OUTPUT}" | grep -q "Invalid --test-concurrency" || printf '%s\n' "${MISSINGCONC_OUTPUT}" | grep -q "unbound variable"; then
+    echo "❌ FAILED: --test-concurrency with a missing value must fail cleanly with a clear message. Output:" >&2
+    echo "${MISSINGCONC_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 17 Passed] 0, negative, non-numeric, empty and missing values are rejected before any build step."
+
+# Test 18: without the option, the plan reports the Flutter default and the
+# manifest would record 'flutter-default'; the exact command is plain 'flutter test'.
+echo "🔍 [Test 18] Verifying absent --test-concurrency keeps the Flutter default..."
+DEFAULTCONC_RC=0
+DEFAULTCONC_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan 2>&1)" || DEFAULTCONC_RC=$?
+if [ "${DEFAULTCONC_RC}" -ne 0 ]; then
+    echo "❌ FAILED: bare --plan exited with code ${DEFAULTCONC_RC} (expected 0). Output:" >&2
+    echo "${DEFAULTCONC_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if ! printf '%s\n' "${DEFAULTCONC_OUTPUT}" | grep -q '^  flutter test$'; then
+    echo "❌ FAILED: bare --plan must show the exact 'flutter test' command" >&2
+    echo "${DEFAULTCONC_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if printf '%s\n' "${DEFAULTCONC_OUTPUT}" | grep -q -- "--concurrency="; then
+    echo "❌ FAILED: bare --plan must not introduce a --concurrency flag" >&2
+    echo "${DEFAULTCONC_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if ! printf '%s\n' "${DEFAULTCONC_OUTPUT}" | grep -q "Test concurrency:    flutter-default" || ! printf '%s\n' "${DEFAULTCONC_OUTPUT}" | grep -q "Flutter default"; then
+    echo "❌ FAILED: bare --plan must state the Flutter default will be used and record flutter-default" >&2
+    echo "${DEFAULTCONC_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if ! printf '%s\n' "${DEFAULTCONC_OUTPUT}" | grep -q "test_concurrency: flutter-default"; then
+    echo "❌ FAILED: bare --plan must state that release_manifest.json would record test_concurrency: flutter-default" >&2
+    echo "${DEFAULTCONC_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 18 Passed] Without the option, the plan shows the Flutter default and flutter-default recording."
+
+# Test 19: the manifest schema carries the test_concurrency field in the
+# packaging script, so a real build records the resolved value or flutter-default.
+echo "🔍 [Test 19] Verifying release_manifest.json records test_concurrency..."
+if ! grep -q '"test_concurrency": "${TEST_CONCURRENCY_BINDING}"' "${SCRIPT_DIR}/build_pos_apk.sh"; then
+    echo "❌ FAILED: build_pos_apk.sh does not record test_concurrency in release_manifest.json" >&2
+    exit 1
+fi
+echo "✅ [Test 19 Passed] release_manifest.json records the resolved test concurrency or flutter-default."
+
 rm -rf "${SHIM_DIR}"
 
 echo "=============================================================================="
