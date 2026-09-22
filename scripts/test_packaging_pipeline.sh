@@ -244,6 +244,100 @@ if [ "${MANIFEST_HW_VALUE}" != "Android POS terminal" ]; then
 fi
 echo "✅ [Test 11 Passed] target_hardware is exactly 'Android POS terminal'."
 
+# -----------------------------------------------------------------------------
+# Cheap api-url tests (12-15): --plan mode only, with the failing flutter shim
+# on PATH proving no build step ever runs.
+# -----------------------------------------------------------------------------
+
+# Test 12: --pilot --device-id --api-url is accepted; plan shows the resolved
+# URL and the exact API_URL dart-define in the printed build commands.
+echo "🔍 [Test 12] Verifying --pilot --api-url resolves the backend URL binding..."
+STAGING_URL="https://api-staging.nhilospos.com/api"
+API_RC=0
+API_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --pilot --device-id Q802024120001 --api-url "${STAGING_URL}" 2>&1)" || API_RC=$?
+if [ "${API_RC}" -ne 0 ]; then
+    echo "❌ FAILED: --plan --pilot --api-url exited with code ${API_RC} (expected 0). Output:" >&2
+    echo "${API_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "${API_OUTPUT}" | grep -q -- "--dart-define=API_URL=${STAGING_URL}" || { echo "❌ FAILED: --plan output does not contain --dart-define=API_URL=${STAGING_URL}"; echo "${API_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+# The resolved URL must appear explicitly and on the printed flutter build lines.
+API_CMD_LINES="$(printf '%s\n' "${API_OUTPUT}" | grep '^  flutter build apk')"
+printf '%s\n' "${API_CMD_LINES}" | grep -q -- "--dart-define=API_URL=${STAGING_URL}" || { echo "❌ FAILED: printed flutter build apk command lines do not contain the API_URL define"; echo "${API_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+printf '%s\n' "${API_OUTPUT}" | grep -q "api_url: ${STAGING_URL}" || { echo "❌ FAILED: --plan output does not state that release_manifest.json would record api_url"; echo "${API_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+if printf '%s\n' "${API_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+    echo "❌ FAILED: --plan --api-url invoked the flutter toolchain" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 12 Passed] Pilot --api-url is accepted, resolved and shown on the build command lines."
+
+# Test 13: --pilot without --api-url fails closed (non-zero) with an
+# actionable message, executing nothing.
+echo "🔍 [Test 13] Verifying --pilot without --api-url fails closed..."
+NOURL_RC=0
+NOURL_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --pilot --device-id Q802024120001 2>&1)" || NOURL_RC=$?
+if [ "${NOURL_RC}" -eq 0 ]; then
+    echo "❌ FAILED: --pilot without --api-url was accepted" >&2
+    echo "${NOURL_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+printf '%s\n' "${NOURL_OUTPUT}" | grep -q -- "--api-url" || { echo "❌ FAILED: fail-closed message must name the missing --api-url flag"; echo "${NOURL_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+if printf '%s\n' "${NOURL_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+    echo "❌ FAILED: pilot fail-closed path invoked the flutter toolchain" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 13 Passed] --pilot without --api-url fails closed with a clear message and no build."
+
+# Test 14: invalid --api-url values are rejected before any build step:
+# relative URL, URL with whitespace, non-http scheme, empty host.
+echo "🔍 [Test 14] Verifying invalid --api-url values are rejected..."
+for INVALID_URL in "api/v1" "https://api.example.com/api v2" "ftp://api.example.com/api" "https://"; do
+    BAD_RC=0
+    BAD_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --pilot --device-id Q802024120001 --api-url "${INVALID_URL}" 2>&1)" || BAD_RC=$?
+    if [ "${BAD_RC}" -eq 0 ]; then
+        echo "❌ FAILED: invalid --api-url '${INVALID_URL}' was accepted" >&2
+        echo "${BAD_OUTPUT}" >&2
+        rm -rf "${SHIM_DIR}"
+        exit 1
+    fi
+    if ! printf '%s\n' "${BAD_OUTPUT}" | grep -q "Invalid --api-url"; then
+        echo "❌ FAILED: invalid --api-url rejection must print a clear 'Invalid --api-url' message for '${INVALID_URL}'. Output:" >&2
+        echo "${BAD_OUTPUT}" >&2
+        rm -rf "${SHIM_DIR}"
+        exit 1
+    fi
+    if printf '%s\n' "${BAD_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+        echo "❌ FAILED: invalid --api-url rejection ran a build step for '${INVALID_URL}'" >&2
+        rm -rf "${SHIM_DIR}"
+        exit 1
+    fi
+done
+echo "✅ [Test 14 Passed] Relative, whitespace-containing, non-http and empty-host URLs are rejected before any build step."
+
+# Test 15: non-pilot (fleet) behavior is unchanged: no API_URL define is baked
+# and the plan reports the api_url as provisioned-at-runtime.
+echo "🔍 [Test 15] Verifying fleet builds stay provisioned-at-runtime for api_url..."
+FLEET_API_RC=0
+FLEET_API_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan 2>&1)" || FLEET_API_RC=$?
+if [ "${FLEET_API_RC}" -ne 0 ]; then
+    echo "❌ FAILED: fleet --plan exited with code ${FLEET_API_RC} (expected 0). Output:" >&2
+    echo "${FLEET_API_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if printf '%s\n' "${FLEET_API_OUTPUT}" | grep -q -- "--dart-define=API_URL"; then
+    echo "❌ FAILED: fleet --plan must not bake an API_URL define" >&2
+    echo "${FLEET_API_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+printf '%s\n' "${FLEET_API_OUTPUT}" | grep -q -- "api_url: provisioned-at-runtime" || { echo "❌ FAILED: fleet --plan must report api_url as provisioned-at-runtime"; echo "${FLEET_API_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+echo "✅ [Test 15 Passed] Fleet builds bake no API_URL define and report provisioned-at-runtime."
+
 rm -rf "${SHIM_DIR}"
 
 echo "=============================================================================="
