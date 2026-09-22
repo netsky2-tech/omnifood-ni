@@ -20,6 +20,7 @@ RUN_TESTS=true
 RUN_CODEGEN=false
 OUT_DIR="${DEFAULT_OUT_DIR}"
 DEVICE_ID=""
+API_URL=""
 PILOT_MODE=false
 PLAN_ONLY=false
 
@@ -41,6 +42,27 @@ validate_device_id() {
         exit 1
     fi
     DEVICE_ID="${id}"
+}
+
+# Validate an --api-url candidate: absolute http:// or https:// URL with no
+# whitespace and a non-empty host. Rejected before any side effect.
+validate_api_url() {
+    local raw="$1"
+    if [ -z "${raw}" ]; then
+        echo "Invalid --api-url: value is empty." >&2
+        exit 1
+    fi
+    if printf '%s' "${raw}" | grep -q '[[:space:]]'; then
+        echo "Invalid --api-url: '${raw}' contains whitespace." >&2
+        exit 1
+    fi
+    local host
+    host="$(printf '%s' "${raw}" | sed -n 's#^https\?://\([^/]*\).*#\1#p')"
+    if [ -z "${host}" ]; then
+        echo "Invalid --api-url: '${raw}' must be an absolute http:// or https:// URL with a non-empty host (e.g. https://api-staging.example.com/api)." >&2
+        exit 1
+    fi
+    API_URL="${raw}"
 }
 
 # Parse Arguments
@@ -82,6 +104,14 @@ while [[ $# -gt 0 ]]; do
             validate_device_id "$2"
             shift 2
             ;;
+        --api-url)
+            if [ "$#" -lt 2 ]; then
+                echo "Invalid --api-url: missing required value." >&2
+                exit 1
+            fi
+            validate_api_url "$2"
+            shift 2
+            ;;
         --pilot)
             PILOT_MODE=true
             shift
@@ -98,7 +128,11 @@ while [[ $# -gt 0 ]]; do
             echo "  --both            Build both split APKs and universal APK (Default)"
             echo "  --device-id <id>  Canonical terminal id baked into the APK via"
             echo "                    --dart-define=DEVICE_ID (trimmed, no whitespace, max 64 chars)"
-            echo "  --pilot           Pilot/single-terminal build; REQUIRES --device-id"
+            echo "  --api-url <url>   Backend base URL baked into the APK via"
+            echo "                    --dart-define=API_URL (absolute http:// or https:// URL,"
+            echo "                    no whitespace, non-empty host). REQUIRED for --pilot;"
+            echo "                    fleet builds omit it and provision the terminal at runtime"
+            echo "  --pilot           Pilot/single-terminal build; REQUIRES --device-id and --api-url"
             echo "  --plan            Print resolved configuration and the exact flutter build apk"
             echo "                    command(s), then exit 0 without building (no Flutter/SDK needed)"
             echo "  --skip-tests      Skip running Flutter test suite"
@@ -121,12 +155,29 @@ if [ "${PILOT_MODE}" = true ] && [ -z "${DEVICE_ID}" ]; then
     exit 2
 fi
 
+# Pilot builds fail closed without a baked backend URL: the pilot artifact must
+# state which backend it targets, otherwise the installed app would silently
+# fall back to the app's localhost default and never reach a deployed backend.
+if [ "${PILOT_MODE}" = true ] && [ -z "${API_URL}" ]; then
+    echo "ERROR: --pilot requires --api-url (missing backend URL)." >&2
+    echo "The pilot artifact must state which backend it targets; without a baked API_URL the installed app silently uses its localhost default." >&2
+    exit 2
+fi
+
 # Terminal identity binding
 DART_DEFINE_ARGS=()
 TERMINAL_ID_BINDING="provisioned-at-runtime"
 if [ -n "${DEVICE_ID}" ]; then
     DART_DEFINE_ARGS+=("--dart-define=DEVICE_ID=${DEVICE_ID}")
     TERMINAL_ID_BINDING="${DEVICE_ID}"
+fi
+
+# Backend URL binding: only baked when explicitly provided. Fleet builds keep
+# 'provisioned-at-runtime' and must NOT bake an API_URL define.
+API_URL_BINDING="provisioned-at-runtime"
+if [ -n "${API_URL}" ]; then
+    DART_DEFINE_ARGS+=("--dart-define=API_URL=${API_URL}")
+    API_URL_BINDING="${API_URL}"
 fi
 
 # Plan mode: print resolved configuration and exact build commands, then stop.
@@ -145,7 +196,12 @@ if [ "${PLAN_ONLY}" = true ]; then
     if [ -z "${DEVICE_ID}" ]; then
         echo "   (fleet build: no DEVICE_ID dart-define is baked; terminal is provisioned at runtime)"
     fi
+    echo "🌐 API URL:             ${API_URL_BINDING}"
+    if [ -z "${API_URL}" ]; then
+        echo "   (fleet build: no API_URL dart-define is baked; backend is provisioned at runtime)"
+    fi
     echo "📋 release_manifest.json would record terminal_identity: ${TERMINAL_ID_BINDING}"
+    echo "📋 release_manifest.json would record api_url: ${API_URL_BINDING}"
     echo "------------------------------------------------------------------------------"
     echo "flutter build apk command(s) that would run:"
     if [ "${BUILD_MODE}" = "split" ] || [ "${BUILD_MODE}" = "both" ]; then
@@ -238,6 +294,7 @@ cat <<EOF > release_manifest.json
   "git_commit": "${GIT_COMMIT}",
   "build_timestamp": "${BUILD_TIMESTAMP}",
   "terminal_identity": "${TERMINAL_ID_BINDING}",
+  "api_url": "${API_URL_BINDING}",
   "artifacts": [
 EOF
 
