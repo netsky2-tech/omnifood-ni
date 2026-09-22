@@ -104,10 +104,13 @@ module, focused tests, this task record. No production migration in this task.
 
 Status: in progress; T1 dependency satisfied by `b23a8b7`. T2.S1 is committed
 as `5bbefe5`; T2.S2a is GREEN, independently verified, and committed as
-`26342d2`; T2.S2b is in progress and S3–S4 remain pending. **S1 must NOT be deployed
-alone**: the S1 policies intentionally make the still-unbound runtime paths
-fail closed, so S2 (session/idempotency service binding on the same
-transaction/manager) has to land in the same release before any deploy.
+`26342d2`; T2.S2b is GREEN, verified on the same six-command gate, and left
+UNCOMMITTED in the worktree for the orchestrator's functional commit; S3–S4
+remain pending. **S1 must NOT be deployed alone**: the S1 policies intentionally
+make the still-unbound runtime paths fail closed, so S2 (session/idempotency
+service binding on the same transaction/manager) has to land in the same release
+before any deploy. Deploy remains unauthorized while S3/S4 onboarding debt is
+open.
 
 Implementation route: delegated direct. Trigger evidence: understanding the
 onboarding/activation path requires mapping more than four migration, service,
@@ -119,11 +122,12 @@ Delivery slices:
    migration-built RED, ENABLE+FORCE and command-appropriate policies for
    `onboarding_sessions` and `onboarding_idempotency_records`, plus atomic
    manifest promotion.
-2. **T2.S2 — session/idempotency binding (in progress):** split into two bounded,
-   deployment-coupled work units: **S2a** binds `OnboardingSessionService` and
-   replaces its vacuous synchronize/superuser test (completed: `26342d2`);
-   **S2b** does the same for `OnboardingIdempotencyCoordinator` and is now in
-   progress. Both must land before deploy.
+2. **T2.S2 — session/idempotency binding (complete, awaiting the S2b functional
+   commit):** split into two bounded, deployment-coupled work units: **S2a**
+   binds `OnboardingSessionService` and replaces its vacuous
+   synchronize/superuser test (completed: `26342d2`); **S2b** does the same for
+   `OnboardingIdempotencyCoordinator` and is GREEN and verified (see evidence
+   below; commit pending). Both must land before deploy.
 3. **T2.S3 — template/import/legacy policies:** cover the remaining six direct
    onboarding debt tables and promote them atomically in the manifest.
 4. **T2.S4 — template/import/legacy binding:** bind every affected production flow
@@ -133,15 +137,14 @@ S1 and S2 must both land before any deploy; S1 alone intentionally makes unbound
 runtime paths fail closed. No privacy/consent table exists in the current schema, so
 there is no fabricated target for that vocabulary.
 
-Next step (T2 entry point): promote `onboarding_sessions` and
-`onboarding_idempotency_records` from `debt` to `direct` in
-`scripts/schema-rls-coverage-manifest.txt` in the same slice that adds ENABLE+FORCE
-and command-appropriate policies — the stale-debt ratchet makes the manifest entry
-fail until the migration and the promotion land together.
+Next step (T2 entry point): T2.S3 — promote the remaining six direct onboarding
+ debt tables (template/import/legacy) in `scripts/schema-rls-coverage-manifest.txt`
+ in the same slice that adds ENABLE+FORCE and command-appropriate policies; S2b
+ left no follow-up debt in the session/idempotency binding.
 
-- [ ] RED: migrate the existing onboarding session/idempotency DB tests away from
+- [x] RED: migrate the existing onboarding session/idempotency DB tests away from
       `synchronize: true`/superuser and reproduce cross-tenant visibility under the
-      runtime-shaped role.
+      runtime-shaped role. (S2a session spec 7/1 RED; S2b idempotency spec 4/1 RED.)
 - [ ] Add ENABLE+FORCE and command-appropriate policies for onboarding, template,
       import, and legacy onboarding/privacy tables required by fresh-tenant setup.
 - [ ] Preserve authorized provisioning through an explicit transaction boundary;
@@ -287,6 +290,95 @@ NOT deployed):
   same transaction/manager pattern and replace its vacuous DB test; S2a and
   S2b must land together before any deploy.
 
+T2.S2b evidence (implemented, verified, UNCOMMITTED in the worktree; commit
+pending with the orchestrator):
+
+- Route: delegated direct implementation on the same S1/S2a migration-built
+  fixture vocabulary. Three files touched:
+  `src/modules/onboarding/services/onboarding-idempotency.coordinator.ts`,
+  `src/modules/onboarding/services/onboarding-idempotency.coordinator.spec.ts`,
+  `test/onboarding/onboarding-idempotency.db.e2e-spec.ts` (plus this evidence).
+- Binding shape: `acquireLease` now runs its lookup/insert/reclaim inside one
+  canonical `runInTenantTransaction` (repository resolved from the transaction
+  manager after the transaction-local parameterized `app.tenant_id` binding);
+  the public params object is unchanged. `completeSuccess`/`completeFailure`
+  keep their positional signatures and gain an optional trailing `tenantId`:
+  with a supplied `EntityManager` they bind `app.tenant_id` on that exact
+  manager (never a nested transaction), mutate through the manager's
+  repository, and without one they open one canonical tenant transaction
+  bound to the explicit tenant, or to the tenant discovered from the record
+  when the connection can see it (legacy 2-arg callers). An explicit blank
+  tenant fails fast with `TenantContextRequiredError` before any SQL; a
+  hidden or unreadable completion target fails closed with a non-disclosing
+  `ConflictException` (no blind zero-affected mutation). No tenant-id WHERE
+  clauses were added as an RLS substitute; idempotency semantics
+  (tenant-keyed uniqueness, lease ownership/expiry, FAILED_RETRYABLE vs
+  FAILED_FINAL replay, payload/error shape, atomic transitions) are preserved.
+- Strict RED (behavioral, observed): the rewritten DB e2e spec was authored
+  and run BEFORE the binding, compiling against the then-unbound coordinator
+  on the migration-built fixture's table-non-owner `NOSUPERUSER NOBYPASSRLS`
+  runtime role: 4 failed / 1 passed. Failures were RLS-behavioral, not
+  compile/config: `new row violates row-level security policy for table
+  "onboarding_idempotency_records"` on the pooled INSERT for acquire, and a
+  blank-tenant call reaching PostgreSQL (`invalid input syntax for type
+  uuid: ""`) instead of failing closed. One test-design artifact was fixed
+  before counting the RED (raw SQL rows typed as the entity).
+- GREEN (through the production coordinator, same spec, same role): 6/6 —
+  role/catalog non-ownership, tenant-local acquire + caller-bound-manager
+  success completion + ALREADY_COMPLETED replay with cached result,
+  same-key isolation across tenants (B's active lease does not block A; two
+  rows for one key) with forged cross-tenant completion rejected and B's row
+  byte-verified unchanged, blank-tenant and unbound-completion fail-closed
+  with B's row unchanged, no-manager completion through the coordinator's own
+  bound transaction, and the lease matrix (active-lease conflict, integrity
+  conflict, expired-lease reclaim attemptCount 2, retryable-failure replay
+  attemptCount 3, final-failure BadRequest replay).
+- Unit spec (ordering/fail-fast proofs are unit-level GREEN evidence; the
+  behavioral RED above carries the strict-TDD obligation): 17/17 — each
+  protected operation proven to bind `TENANT_CONTEXT_SET_CONFIG_SQL` before
+  its first repository access, to resolve the repository from the transaction
+  manager (pooled repository never touched), to reuse a provided manager
+  without opening a nested transaction, to open exactly one transaction on
+  the no-manager path, to fail fast on blank tenants before any SQL or repo
+  access, to prevent protected access when the in-transaction binding fails
+  or the transaction fails to open, and all pre-existing idempotency
+  semantics re-covered.
+- TRIANGULATION defect found and fixed during GREEN: an unbound pooled read
+  can ERROR (not merely return zero rows) once the connection has ever
+  served a transaction-local `set_config` binding — PostgreSQL keeps the
+  custom parameter defined as `''` after that transaction ends (observed
+  after both ROLLBACK and COMMIT), so the S1 policy predicate's `'' ::uuid`
+  cast fails. The coordinator's legacy discovery probe therefore catches
+  discovery failures and fails closed with the non-disclosing
+  `ConflictException` instead of mutating blind; a dedicated unit case covers
+  it. WARNING for S3/S4 (pre-existing, systemic, outside this slice): every
+  unbound pooled SELECT on any tenant-RLS table shares this hazard once the
+  pool has served a bound transaction — fail-closed, but erroring instead of
+  zero rows.
+- Verification (all observed, one at a time): `npx jest
+  src/modules/onboarding/services/onboarding-idempotency.coordinator.spec.ts
+  --runInBand` → 17/17; `npx jest --config ./test/jest-e2e.json --runInBand
+  onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding,
+  6/6 post-binding; `npm run test:db` → 45 suites / 256 tests passed;
+  `npm run build` → clean; `SCHEMA_CHECK_DB=omnifood_schema_build_test bash
+  scripts/verify-schema-build.sh` → PASS both scenarios (coverage 79/79:
+  direct 34, parent-owned 5, global 8, debt 32, failures 0); `git diff
+  --check` → clean.
+- Authored lines: ~1100 across the three code files (coordinator ~316
+  rewritten, unit spec ~536, DB e2e spec ~646 incl. replaced lines). Exceeds
+  the ~400 advisory bound; the excess is test surface preserved for
+  correctness; the coordinator's behavioral diff is small and additive.
+- Rollback boundary: the three code paths plus this evidence; reverting them
+  restores the committed S2a state (`cf5c7b6` worktree baseline) without
+  touching migrations, schema, or data.
+- No side effects: session service/tests, migrations, manifest, schema
+  verifier, controllers, sibling e2e specs (fault-injection, 74-scenarios —
+  which the additive signatures keep source-compatible), and unrelated
+  services untouched. No commit, push, PR, deploy, staging mutation,
+  provisioning, or Q80 operation.
+- Next step: T2.S3 — template/import/legacy policies; S2b leaves no binding
+  debt behind.
+
 ### T3 — Enforce first-business transaction-path isolation
 
 Status: pending; depends on T1 and the classification learned from T2.
@@ -318,7 +410,7 @@ Status: pending; depends on T2 and T3.
 | Task | Commit(s) | Verification | Result |
 |---|---|---|---|
 | T1 | `b23a8b7` | unit: `npx jest src/core/database/tenant-rls-coverage.spec.ts --runInBand` → 18/18 passed; DB: `npx jest --config ./test/jest-db.json --runInBand tenant-rls-coverage` → 5/5 passed; suite: `npm run test:db` → 45 suites / 256 tests passed; harness: `SCHEMA_CHECK_DB=omnifood_schema_build_test bash scripts/verify-schema-build.sh` → PASS both scenarios, coverage 79/79 classified (32 direct, 5 parent-owned, 8 global, 34 debt), failures 0; `git diff --check` → clean | RED observed: `onboarding_idempotency_records` and `onboarding_sessions` surfaced as unclassified tenant-bearing tables (1 failed, 4 passed). GREEN and independent verification observed; T1 complete. |
-| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b–S4 pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding (RLS-behavioral), then 8/8; suite `npm run test:db` → 45 suites / 256 tests; build clean; harness PASS both scenarios (direct 34, debt 32, total 79, failures 0); `git diff --check` clean | S1 and S2a behavioral RED/GREEN observed, independently verified, and committed; S1 scenario-2 replay DB-observed post-correction; S2b–S4 pending |
+| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b pending commit; S3–S4 pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding (RLS-behavioral), then 8/8; suite `npm run test:db` → 45 suites / 256 tests; build clean; harness PASS both scenarios (direct 34, debt 32, total 79, failures 0); `git diff --check` clean. S2b: unit `onboarding-idempotency.coordinator.spec.ts` → 17/17; DB e2e `onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding (RLS-behavioral), then 6/6; `npm run test:db` → 45/256; build clean; harness PASS both scenarios; `git diff --check` clean | S1, S2a, and S2b behavioral RED/GREEN observed; S1 and S2a independently verified and committed; S2b verified, uncommitted; S3–S4 pending |
 | T3 | pending | pending | pending |
 | T4 | pending | pending | pending |
 
