@@ -102,9 +102,9 @@ module, focused tests, this task record. No production migration in this task.
 
 ### T2 — Enforce onboarding and activation critical-path RLS
 
-Status: in progress; T1 dependency satisfied by `b23a8b7`. T2.S1 is GREEN,
-independently verified, and committed as `5bbefe5`; T2.S2a is implemented and
-verified but NOT yet committed; S2b–S4 remain pending. **S1 must NOT be deployed
+Status: in progress; T1 dependency satisfied by `b23a8b7`. T2.S1 is committed
+as `5bbefe5`; T2.S2a is GREEN, independently verified, and committed as
+`26342d2`; T2.S2b is in progress and S3–S4 remain pending. **S1 must NOT be deployed
 alone**: the S1 policies intentionally make the still-unbound runtime paths
 fail closed, so S2 (session/idempotency service binding on the same
 transaction/manager) has to land in the same release before any deploy.
@@ -121,9 +121,9 @@ Delivery slices:
    manifest promotion.
 2. **T2.S2 — session/idempotency binding (in progress):** split into two bounded,
    deployment-coupled work units: **S2a** binds `OnboardingSessionService` and
-   replaces its vacuous synchronize/superuser test (implemented, verified, not
-   committed — see S2a evidence below); **S2b** does the same for
-   `OnboardingIdempotencyCoordinator`. Both must land before deploy.
+   replaces its vacuous synchronize/superuser test (completed: `26342d2`);
+   **S2b** does the same for `OnboardingIdempotencyCoordinator` and is now in
+   progress. Both must land before deploy.
 3. **T2.S3 — template/import/legacy policies:** cover the remaining six direct
    onboarding debt tables and promote them atomically in the manifest.
 4. **T2.S4 — template/import/legacy binding:** bind every affected production flow
@@ -212,8 +212,8 @@ T2.S1 evidence (implemented, independently verified, committed as `5bbefe5`):
   synchronize/superuser tests) must land before any deploy — S1 alone
   intentionally fails the unbound runtime paths closed.
 
-T2.S2a evidence (implemented and verified in the working tree; NOT committed,
-NOT deployed — commit remains a user decision):
+T2.S2a evidence (implemented, independently verified, committed as `26342d2`;
+NOT deployed):
 
 - Route: delegated direct implementation on the same S1 migration-built
   fixture vocabulary. Three files touched:
@@ -280,8 +280,9 @@ NOT deployed — commit remains a user decision):
   restores the committed S1 state (`5bbefe5`) and the pre-S2a task record
   without touching migrations, schema, or data.
 - No side effects: idempotency coordinator/tests, migrations, manifest,
-  schema verifier, controllers, and unrelated services untouched; no commit,
-  push, PR, deploy, staging mutation, provisioning, or Q80 operation.
+  schema verifier, controllers, and unrelated services untouched. Functional
+  commit `26342d2` was created locally; no push, PR, deploy, staging mutation,
+  provisioning, or Q80 operation.
 - Next step: T2.S2b — bind `OnboardingIdempotencyCoordinator` through the
   same transaction/manager pattern and replace its vacuous DB test; S2a and
   S2b must land together before any deploy.
@@ -317,7 +318,7 @@ Status: pending; depends on T2 and T3.
 | Task | Commit(s) | Verification | Result |
 |---|---|---|---|
 | T1 | `b23a8b7` | unit: `npx jest src/core/database/tenant-rls-coverage.spec.ts --runInBand` → 18/18 passed; DB: `npx jest --config ./test/jest-db.json --runInBand tenant-rls-coverage` → 5/5 passed; suite: `npm run test:db` → 45 suites / 256 tests passed; harness: `SCHEMA_CHECK_DB=omnifood_schema_build_test bash scripts/verify-schema-build.sh` → PASS both scenarios, coverage 79/79 classified (32 direct, 5 parent-owned, 8 global, 34 debt), failures 0; `git diff --check` → clean | RED observed: `onboarding_idempotency_records` and `onboarding_sessions` surfaced as unclassified tenant-bearing tables (1 failed, 4 passed). GREEN and independent verification observed; T1 complete. |
-| T2 | S1 `5bbefe5`; S2a implemented (uncommitted); S2b–S4 pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding (RLS-behavioral), then 8/8; suite `npm run test:db` → 45 suites / 256 tests; build clean; harness PASS both scenarios (direct 34, debt 32, total 79, failures 0); `git diff --check` clean | S1 behavioral RED and GREEN observed and committed; S1 scenario-2 replay DB-observed post-correction; S2a behavioral RED and GREEN observed, uncommitted; S2b–S4 pending |
+| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b–S4 pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding (RLS-behavioral), then 8/8; suite `npm run test:db` → 45 suites / 256 tests; build clean; harness PASS both scenarios (direct 34, debt 32, total 79, failures 0); `git diff --check` clean | S1 and S2a behavioral RED/GREEN observed, independently verified, and committed; S1 scenario-2 replay DB-observed post-correction; S2b–S4 pending |
 | T3 | pending | pending | pending |
 | T4 | pending | pending | pending |
 
