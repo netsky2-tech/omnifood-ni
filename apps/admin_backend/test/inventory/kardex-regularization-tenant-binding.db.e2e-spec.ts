@@ -27,6 +27,7 @@ import {
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
+  signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
 import {
   provisionDeviceSyncCredential,
@@ -112,6 +113,32 @@ async function applyRegularizationRls(
     'select',
     'insert',
   ]);
+
+  // HR-01 (issue #486): the human pending/approve routes read and update the
+  // queue table, which production rebinds to uuid with the uuid-cast tenant
+  // predicate (migration 1809070000000). Mirror that shape so an unbound or
+  // cleared app.tenant_id deterministically fails the empty-string uuid cast
+  // instead of silently hiding rows. Emitted inline (as for the kardex UPDATE
+  // policy above) because the shared helper only carries select/insert.
+  await rebindTenantColumnToUuid(ddl, schema, 'kardex_recalculate_queue');
+  await ddl.query(
+    `ALTER TABLE "${schema}"."kardex_recalculate_queue" ENABLE ROW LEVEL SECURITY`,
+  );
+  await ddl.query(
+    `ALTER TABLE "${schema}"."kardex_recalculate_queue" FORCE ROW LEVEL SECURITY`,
+  );
+  const queuePredicate = await resolveTenantRlsPredicate(
+    ddl,
+    'kardex_recalculate_queue',
+  );
+  await ddl.query(
+    `CREATE POLICY kardex_recalculate_queue_tenant_select ON "${schema}"."kardex_recalculate_queue" FOR SELECT ` +
+      `USING (${queuePredicate})`,
+  );
+  await ddl.query(
+    `CREATE POLICY kardex_recalculate_queue_tenant_update ON "${schema}"."kardex_recalculate_queue" FOR UPDATE ` +
+      `USING (${queuePredicate}) WITH CHECK (${queuePredicate})`,
+  );
 }
 
 async function withIsolatedSchema(
@@ -123,7 +150,12 @@ async function withIsolatedSchema(
     /** The connection the application runs on: restricted role, RLS-bound. */
     dataSource: DataSource;
     deviceToken: string;
+    /** HR-01: human OWNER/MANAGER access token bound to tenantId. */
+    humanToken: string;
     tenantId: string;
+    /** HR-01: tenant A's pending queue item (and tenant B's probe). */
+    queueItemId: string;
+    otherQueueItemId: string;
   }) => Promise<void>,
 ): Promise<void> {
   const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
@@ -169,9 +201,20 @@ async function withIsolatedSchema(
     await bootstrap.query(
       `GRANT INSERT, UPDATE ON "${schema}"."kardex_correction", "${schema}"."inventory_kardex" TO "${roleName}"`,
     );
+    // HR-01: the human approve route completes the queue item.
+    await bootstrap.query(
+      `GRANT UPDATE ON "${schema}"."kardex_recalculate_queue" TO "${roleName}"`,
+    );
     await bootstrap.query(
       `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA "${schema}" TO "${roleName}"`,
     );
+    // Reproduce the production failure shape from issue #486: a pooled
+    // connection whose app.tenant_id setting was cleared comes back as the
+    // empty string, and `''::uuid` raises instead of filtering. With the role
+    // default empty, every unbound query in this suite hits that exact cast
+    // failure, so any green assertion here proves the service bound the
+    // tenant before its first protected query.
+    await bootstrap.query(`ALTER ROLE "${roleName}" SET app.tenant_id = ''`);
 
     const tenantId = randomUUID();
     const otherTenantId = randomUUID();
@@ -211,6 +254,23 @@ async function withIsolatedSchema(
         scopes: ['sync:push'],
       }),
     );
+
+    // HR-01: one pending queue item per tenant. Tenant B's item is the
+    // cross-tenant probe: tenant A's human session must neither see it in
+    // the pending queue nor be able to approve it.
+    const queueItemId = randomUUID();
+    const otherQueueItemId = randomUUID();
+    for (const [id, owner, origin, trigger] of [
+      [queueItemId, tenantId, 101, 102],
+      [otherQueueItemId, otherTenantId, 201, 201],
+    ] as const) {
+      await admin.query(
+        `INSERT INTO kardex_recalculate_queue
+           (id, tenant_id, insumo_id, origin_movement_id, trigger_movement_id, status)
+         VALUES ($1, $2, $3, $4, $5, 'PENDING')`,
+        [id, owner, randomUUID(), origin, trigger],
+      );
+    }
 
     // The application runs as the restricted role: NOSUPERUSER NOBYPASSRLS,
     // not the table owner, so FORCED RLS applies to every query it makes.
@@ -272,13 +332,22 @@ async function withIsolatedSchema(
     await app.init();
 
     const deviceToken = signDeviceSyncAccessToken(app, provisionedDevices[0]);
+    const humanToken = signIdentityJwtAccessToken(app.get(JwtService), {
+      sub: 'human-admin-1',
+      email: 'human-admin-1@example.test',
+      tenant_id: tenantId,
+      role: 'MANAGER',
+    });
 
     await assertion({
       app,
       admin,
       dataSource,
       deviceToken,
+      humanToken,
       tenantId,
+      queueItemId,
+      otherQueueItemId,
     });
   } finally {
     if (app) await app.close();
@@ -491,6 +560,147 @@ describe('Kardex regularization sync tenant binding E2E — real PostgreSQL unde
           );
           expect(corrections).toHaveLength(1);
           expect(corrections[0].tenant_id).toBe(tenantId);
+        },
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // HR-01 (issue #486): the human routes bind the authenticated tenant on
+  // the same transaction that reads the FORCE-RLS queue table. With the
+  // role's session default app.tenant_id = '' (the cleared-pool production
+  // shape), any unbound query here fails the ''::uuid cast with a 500, so
+  // these assertions cannot pass vacuously.
+  it(
+    'serves only the authenticated tenant\u2019s pending queue to a human manager under FORCED RLS',
+    async () => {
+      await withIsolatedSchema(
+        'e2e_reg_human_pending',
+        async ({ app, humanToken, queueItemId, otherQueueItemId }) => {
+          const res = await request(app.getHttpServer())
+            .get('/inventory/regularization/pending')
+            .set('Authorization', `Bearer ${humanToken}`)
+            .expect(200);
+
+          expect(Array.isArray(res.body)).toBe(true);
+          expect(res.body).toHaveLength(1);
+          expect(res.body[0].id).toBe(queueItemId);
+          expect(res.body.some((row: any) => row.id === otherQueueItemId)).toBe(
+            false,
+          );
+        },
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'approves a same-tenant pending item as a human manager and persists only same-tenant effects under FORCED RLS',
+    async () => {
+      await withIsolatedSchema(
+        'e2e_reg_human_approve',
+        async ({ app, admin, humanToken, tenantId, queueItemId }) => {
+          // Give the trigger movement a higher cost so the approval carries a
+          // meaningful, assertable delta (100 -> 120 over 10 units).
+          await admin.query(
+            `UPDATE inventory_kardex SET unit_cost_nio = 120 WHERE id = 102`,
+          );
+
+          const res = await request(app.getHttpServer())
+            .post('/inventory/regularization/approve')
+            .set('Authorization', `Bearer ${humanToken}`)
+            .send({
+              queueId: queueItemId,
+              authMethod: 'PIN',
+              token: 'e2e-human-session',
+            })
+            .expect(201);
+
+          expect(res.body).toEqual(
+            expect.objectContaining({
+              tenant_id: tenantId,
+              deltaUnitCostNio: 20,
+              totalDeltaCostNio: 200,
+              authorizedByUserId: 'human-admin-1',
+              authorizedByRole: 'MANAGER',
+              authorizationMethod: 'PIN',
+            }),
+          );
+
+          // The queue item was completed inside the bound transaction.
+          const queue = await admin.query(
+            `SELECT status FROM kardex_recalculate_queue WHERE id = $1`,
+            [queueItemId],
+          );
+          expect(queue[0].status).toBe('COMPLETED');
+
+          // The correction ledger row and the movement costing update are
+          // bound to the authenticated tenant.
+          const corrections = await admin.query(
+            `SELECT tenant_id, origin_movement_id, trigger_movement_id,
+                    authorized_by_user_id, authorization_method
+             FROM kardex_correction`,
+          );
+          expect(corrections).toHaveLength(1);
+          expect(corrections[0]).toEqual(
+            expect.objectContaining({
+              tenant_id: tenantId,
+              origin_movement_id: '101',
+              trigger_movement_id: '102',
+              authorized_by_user_id: 'human-admin-1',
+              authorization_method: 'PIN',
+            }),
+          );
+
+          const own = await admin.query(
+            `SELECT estado_costeo, unit_cost_nio FROM inventory_kardex WHERE id = 101`,
+          );
+          expect(own[0].estado_costeo).toBe(30);
+          expect(Number(own[0].unit_cost_nio)).toBe(120);
+        },
+      );
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'keeps another tenant\u2019s queue item invisible and unmutatable from a human session without a 500',
+    async () => {
+      await withIsolatedSchema(
+        'e2e_reg_human_isolation',
+        async ({ app, admin, humanToken, otherQueueItemId }) => {
+          // The cross-tenant queue id exists but must be invisible: the route
+          // answers with its existing not-found behavior, never a 500 and
+          // never a mutation.
+          const res = await request(app.getHttpServer())
+            .post('/inventory/regularization/approve')
+            .set('Authorization', `Bearer ${humanToken}`)
+            .send({
+              queueId: otherQueueItemId,
+              authMethod: 'PIN',
+              token: 'e2e-human-session',
+            })
+            .expect(404);
+          expect(res.body.message).toContain('no encontrado');
+
+          // Tenant B's queue item is still pending and its movement is
+          // untouched; no correction row exists for it.
+          const otherQueue = await admin.query(
+            `SELECT status FROM kardex_recalculate_queue WHERE id = $1`,
+            [otherQueueItemId],
+          );
+          expect(otherQueue[0].status).toBe('PENDING');
+
+          const otherMovement = await admin.query(
+            `SELECT estado_costeo, unit_cost_nio FROM inventory_kardex WHERE id = 201`,
+          );
+          expect(otherMovement[0].estado_costeo).toBe(40);
+          expect(Number(otherMovement[0].unit_cost_nio)).toBe(100);
+
+          const corrections = await admin.query(
+            `SELECT id FROM kardex_correction`,
+          );
+          expect(corrections).toHaveLength(0);
         },
       );
     },

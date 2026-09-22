@@ -295,6 +295,210 @@ describe('KardexRegularizationService', () => {
     expect(movementRepo.save).not.toHaveBeenCalled();
   });
 
+  // HR-01 (issue #486): the human pending and approve routes read and write
+  // FORCE-RLS tables, so both must bind app.tenant_id on their own
+  // transaction before the first protected query and use only
+  // manager-scoped repositories — the same invariant ST-06 set for sync.
+  describe('human regularization tenant binding (HR-01, issue #486)', () => {
+    const TENANT_BIND_SQL = "SELECT set_config('app.tenant_id', $1, true)";
+
+    it('getPendingQueue binds the tenant context in its own transaction before the first query', async () => {
+      const callOrder: string[] = [];
+      const managerQuery = jest.fn(async () => {
+        callOrder.push('bind');
+      });
+      queueRepo.find.mockImplementation(async () => {
+        callOrder.push('find');
+        return [];
+      });
+
+      (dataSource.transaction as jest.Mock).mockImplementation(
+        async (callback) =>
+          callback({
+            query: managerQuery,
+            getRepository: (entity: any) =>
+              entity === KardexRecalculateQueue ? queueRepo : null,
+          }),
+      );
+
+      await service.getPendingQueue('tenant-test');
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(managerQuery).toHaveBeenCalledWith(TENANT_BIND_SQL, [
+        'tenant-test',
+      ]);
+      expect(callOrder[0]).toBe('bind');
+      expect(callOrder.indexOf('bind')).toBeLessThan(callOrder.indexOf('find'));
+    });
+
+    it('getPendingQueue reads only through the manager-scoped repository, never the global one', async () => {
+      const txQueueRepo = { find: jest.fn(async () => []) };
+      (dataSource.transaction as jest.Mock).mockImplementation(
+        async (callback) =>
+          callback({
+            query: jest.fn(async () => undefined),
+            getRepository: (entity: any) =>
+              entity === KardexRecalculateQueue ? txQueueRepo : null,
+          }),
+      );
+
+      await service.getPendingQueue('tenant-test');
+
+      expect(txQueueRepo.find).toHaveBeenCalledWith({
+        where: { tenant_id: 'tenant-test' },
+        order: { createdAt: 'ASC' },
+      });
+      expect(queueRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('getPendingQueue fails fast on a blank tenant before any transaction or SQL', async () => {
+      const managerQuery = jest.fn(async () => undefined);
+      (dataSource.transaction as jest.Mock).mockImplementation(
+        async (callback) =>
+          callback({
+            query: managerQuery,
+            getRepository: () => queueRepo,
+          }),
+      );
+
+      await expect(service.getPendingQueue('   ')).rejects.toThrow(
+        'TENANT_CONTEXT_REQUIRED',
+      );
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      expect(managerQuery).not.toHaveBeenCalled();
+      expect(queueRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('approveRegularization binds the tenant context as the first SQL operation of its transaction', async () => {
+      const queueItem = {
+        id: 'q-hr-1',
+        tenant_id: 'tenant-test',
+        insumoId: 'ins-hr-1',
+        originMovementId: '101',
+        triggerMovementId: '102',
+        status: KardexQueueStatus.PENDING,
+      };
+      const originMovement = {
+        id: '101',
+        tenant_id: 'tenant-test',
+        quantity: -10,
+        unitCostNio: 100,
+        estadoCosteo: 40,
+      };
+      const triggerMovement = {
+        id: '102',
+        tenant_id: 'tenant-test',
+        quantity: 10,
+        unitCostNio: 120,
+        estadoCosteo: 30,
+      };
+
+      const callOrder: string[] = [];
+      const managerQuery = jest.fn(async () => {
+        callOrder.push('bind');
+      });
+      queueRepo.findOne.mockImplementation(async () => {
+        callOrder.push('queue-find');
+        return queueItem;
+      });
+      movementRepo.findOne.mockImplementation(async () => {
+        callOrder.push('movement-find');
+        return callOrder.filter((c) => c === 'movement-find').length === 1
+          ? originMovement
+          : triggerMovement;
+      });
+
+      (dataSource.transaction as jest.Mock).mockImplementation(
+        async (callback) =>
+          callback({
+            query: managerQuery,
+            getRepository: (entity: any) => {
+              if (entity === KardexRecalculateQueue) return queueRepo;
+              if (entity === KardexCorrection) return correctionRepo;
+              if (entity === InventoryMovement) return movementRepo;
+              return null;
+            },
+          }),
+      );
+
+      const correction = await service.approveRegularization('tenant-test', {
+        queueId: 'q-hr-1',
+        approvedByUserId: 'user-admin-1',
+        role: 'MANAGER',
+        authMethod: 'PIN',
+      });
+
+      expect(correction.totalDeltaCostNio).toBe(200);
+      expect(managerQuery).toHaveBeenCalledWith(TENANT_BIND_SQL, [
+        'tenant-test',
+      ]);
+      expect(callOrder[0]).toBe('bind');
+      expect(callOrder.indexOf('bind')).toBeLessThan(
+        callOrder.indexOf('queue-find'),
+      );
+    });
+
+    it('approveRegularization uses only manager-scoped repositories and never the global ones', async () => {
+      const txQueueRepo = { findOne: jest.fn(async () => null) };
+      const txCorrectionRepo = {
+        create: jest.fn((dto) => ({ id: 'corr-hr-1', ...dto })),
+        save: jest.fn(async (entity) => entity),
+      };
+      const txMovementRepo = { findOne: jest.fn(async () => null) };
+
+      (dataSource.transaction as jest.Mock).mockImplementation(
+        async (callback) =>
+          callback({
+            query: jest.fn(async () => undefined),
+            getRepository: (entity: any) => {
+              if (entity === KardexRecalculateQueue) return txQueueRepo;
+              if (entity === KardexCorrection) return txCorrectionRepo;
+              if (entity === InventoryMovement) return txMovementRepo;
+              return null;
+            },
+          }),
+      );
+
+      await expect(
+        service.approveRegularization('tenant-test', {
+          queueId: 'q-missing',
+          approvedByUserId: 'user-admin-1',
+          role: 'MANAGER',
+          authMethod: 'PIN',
+        }),
+      ).rejects.toThrow('no encontrado');
+
+      expect(txQueueRepo.findOne).toHaveBeenCalled();
+      expect(queueRepo.findOne).not.toHaveBeenCalled();
+      expect(correctionRepo.findOne).not.toHaveBeenCalled();
+      expect(correctionRepo.save).not.toHaveBeenCalled();
+      expect(movementRepo.findOne).not.toHaveBeenCalled();
+      expect(movementRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('approveRegularization fails fast on a blank tenant before any protected SQL', async () => {
+      const managerQuery = jest.fn(async () => undefined);
+      (dataSource.transaction as jest.Mock).mockImplementation(
+        async (callback) =>
+          callback({
+            query: managerQuery,
+            getRepository: () => queueRepo,
+          }),
+      );
+
+      await expect(
+        service.approveRegularization('   ', {
+          queueId: 'q-hr-1',
+          approvedByUserId: 'user-admin-1',
+          role: 'MANAGER',
+          authMethod: 'PIN',
+        }),
+      ).rejects.toThrow('TENANT_CONTEXT_REQUIRED');
+      expect(managerQuery).not.toHaveBeenCalled();
+      expect(queueRepo.findOne).not.toHaveBeenCalled();
+    });
+  });
+
   describe('syncCorrections actor fields (ST-06, DSI-6 self-reported until attested)', () => {
     const baseCorrection = {
       id: 'corr-actor-1',

@@ -5,7 +5,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, EntityManager } from 'typeorm';
-import { bindTenantContext } from '../../../core/database/tenant-transaction';
+import {
+  bindTenantContext,
+  resolveTenantContextId,
+  runInTenantTransaction,
+} from '../../../core/database/tenant-transaction';
 import { createHash } from 'crypto';
 import {
   KardexRecalculateQueue,
@@ -36,14 +40,23 @@ export class KardexRegularizationService {
   ) {}
 
   async getPendingQueue(tenantId: string): Promise<KardexRecalculateQueue[]> {
-    return this.queueRepository.find({
-      where: {
-        tenant_id: tenantId,
-      },
-      order: {
-        createdAt: 'ASC',
-      },
-    });
+    // HR-01 (issue #486): the human pending route reads kardex_recalculate_queue,
+    // which carries a FORCED tenant RLS policy. The read must run inside one
+    // transaction whose app.tenant_id is bound before the first query, using a
+    // repository scoped to that transaction's manager — never a global one.
+    // A blank tenant id fails here, before a connection is borrowed or any
+    // SQL is issued.
+    const tenant = resolveTenantContextId(tenantId);
+    return runInTenantTransaction(this.dataSource, tenant, async (manager) =>
+      manager.getRepository(KardexRecalculateQueue).find({
+        where: {
+          tenant_id: tenant,
+        },
+        order: {
+          createdAt: 'ASC',
+        },
+      }),
+    );
   }
 
   async approveRegularization(
@@ -51,6 +64,13 @@ export class KardexRegularizationService {
     input: ApproveRegularizationInput,
   ): Promise<KardexCorrection> {
     return this.dataSource.transaction(async (manager) => {
+      // HR-01 (issue #486): binding is the first SQL operation of this
+      // transaction. The queue table's tenant predicate casts the setting to
+      // uuid, so without this binding the first protected query either hides
+      // the tenant's rows or fails the empty-string cast on a cleared pooled
+      // connection.
+      await bindTenantContext(manager, tenantId);
+
       const queueRepo = manager.getRepository(KardexRecalculateQueue);
       const correctionRepo = manager.getRepository(KardexCorrection);
       const movementRepo = manager.getRepository(InventoryMovement);
