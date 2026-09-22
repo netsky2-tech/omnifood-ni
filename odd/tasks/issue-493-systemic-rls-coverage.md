@@ -103,8 +103,10 @@ module, focused tests, this task record. No production migration in this task.
 ### T2 — Enforce onboarding and activation critical-path RLS
 
 Status: in progress; T1 dependency satisfied by `b23a8b7`. T2.S1 is committed
-as `5bbefe5`; T2.S2a is committed as `26342d2`; T2.S2b is GREEN,
-independently verified, and committed as `25496f7`; S3–S4 remain pending. **S1 must NOT be deployed alone**: the S1 policies intentionally
+as `5bbefe5`; T2.S2a is committed as `26342d2`; T2.S2b is committed as
+`25496f7`; T2.S3a is GREEN, independently verified, and committed as
+`f37b572`; T2.S3b is GREEN, independently verified, and committed as
+`7f14d63`; T2.S4 is in progress. **S1 must NOT be deployed alone**: the S1 policies intentionally
 make the still-unbound runtime paths fail closed, so S2 (session/idempotency
 service binding on the same transaction/manager) has to land in the same release
 before any deploy. Deploy remains unauthorized while S3/S4 onboarding debt is
@@ -124,28 +126,35 @@ Delivery slices:
    deployment-coupled work units: **S2a** binds `OnboardingSessionService`
    (`26342d2`); **S2b** binds `OnboardingIdempotencyCoordinator` (`25496f7`).
    Both replace vacuous synchronize/superuser tests and are independently verified.
-3. **T2.S3 — template/import/legacy policies:** cover the remaining six direct
-   onboarding debt tables and promote them atomically in the manifest.
-4. **T2.S4 — template/import/legacy binding:** bind every affected production flow
-   and prove activation/import behavior under the runtime-shaped role.
+3. **T2.S3 — template/import/legacy policies (in progress):** split into two
+   bounded work units. **S3a** protects template/provenance tables
+   (`onboarding_template_applications`, `onboarding_template_seed_links`,
+   `legacy_onboarding_migration_receipts`) — completed as `f37b572`; **S3b** is
+   implemented and GREEN on the worktree for import/integrity tables
+   (`legacy_import_integrity_reports`, `product_import_sessions`,
+   `staging_importacion_productos`) — completed as `7f14d63`. Each migration
+   atomically promotes its manifest entries and joins scenario-2 replay.
+4. **T2.S4 — template/import/legacy binding (in progress):** bind every affected
+   production flow and prove activation/import behavior under the runtime-shaped role.
 
 S1 and S2 must both land before any deploy; S1 alone intentionally makes unbound
 runtime paths fail closed. No privacy/consent table exists in the current schema, so
 there is no fabricated target for that vocabulary.
 
-Next step (T2 entry point): T2.S3 — promote the remaining six direct onboarding
- debt tables (template/import/legacy) in `scripts/schema-rls-coverage-manifest.txt`
- in the same slice that adds ENABLE+FORCE and command-appropriate policies; S2b
- left no follow-up debt in the session/idempotency binding.
+Next step (T2 entry point): **T2.S4** — bind the import/integrity production
+flows (`ImportStagingService`, `LegacyImportIntegrityReportService`, and the
+related legacy flow) on the same transaction/manager vocabulary; S3a and S3b
+leave no binding debt behind (no service binding belongs to a policies slice).
 
 - [x] RED: migrate the existing onboarding session/idempotency DB tests away from
       `synchronize: true`/superuser and reproduce cross-tenant visibility under the
       runtime-shaped role. (S2a session spec 7/1 RED; S2b idempotency spec 4/1 RED.)
-- [ ] Add ENABLE+FORCE and command-appropriate policies for onboarding, template,
-      import, and legacy onboarding/privacy tables required by fresh-tenant setup.
+- [x] Add ENABLE+FORCE and command-appropriate policies for onboarding, template,
+      import, and legacy onboarding tables required by fresh-tenant setup.
+      (S1, S3a, and S3b complete; no privacy/consent schema target exists.)
 - [ ] Preserve authorized provisioning through an explicit transaction boundary;
       do not keep broad visibility to accommodate seeds.
-- [ ] Prove tenant-local SELECT/INSERT/UPDATE/DELETE and reject foreign writes.
+- [x] Prove tenant-local SELECT/INSERT/UPDATE/DELETE and reject foreign writes.
 - [ ] Prove activation attempt creation and priming still work with bound RLS.
 - [ ] Run focused backend unit, DB, migration, build, and diff checks.
 - [ ] Commit as bounded domain work units and record commits below.
@@ -377,6 +386,172 @@ NOT deployed):
 - Next step: T2.S3 — template/import/legacy policies; S2b leaves no binding
   debt behind.
 
+T2.S3a evidence (implemented, independently verified, committed as `f37b572`;
+NOT deployed):
+
+- Route: delegated direct implementation on the same S1/S2a migration-built
+  fixture vocabulary. Three code/config files touched:
+  `src/migrations/1809230000000-EnforceOnboardingTemplateRls.ts`,
+  `src/migrations/1809230000000-EnforceOnboardingTemplateRls.spec.ts`,
+  `test/onboarding/onboarding-template-rls.db.e2e-spec.ts` (plus the manifest,
+  the schema verifier, and this evidence). Exactly three direct-tenant tables
+  are in scope: `onboarding_template_applications`,
+  `onboarding_template_seed_links`, `legacy_onboarding_migration_receipts`.
+- Migration shape: ENABLE + FORCE RLS and one command-specific policy per
+  command (`{table}_tenant_{select|insert|update|delete}`) per table, with the
+  canonical USING/WITH CHECK halves (SELECT/DELETE/UPDATE USING, INSERT and
+  UPDATE WITH CHECK, UPDATE both) carrying the per-table predicate resolved
+  through `resolveTenantRlsPredicate` (uuid form after rebinds
+  1809080000000/1809140000000; a partial-ledger re-run still resolves AS IT
+  IS). `up()` is idempotent (DROP POLICY IF EXISTS + catalog-guarded CREATE);
+  `down()` drops exactly its twelve policies and removes FORCE while keeping
+  ENABLE — no table drop, truncate, or delete. No service binding belongs to
+  S3a; S4 binds the flows.
+- Strict RED (behavioral, observed): the DB e2e spec was authored and run
+  BEFORE the migration existed (it imports nothing from it, so there were no
+  compile/config/fixture errors), building the schema with the full migration
+  set minus this slice: 6 failed / 3 passed on the table-non-owner
+  `NOSUPERUSER NOBYPASSRLS` runtime role. Behavioral failures across all three
+  tables: RLS disabled/unforced (structural pg_class/pg_policies facts),
+  unbound role saw both tenants' rows, tenant A saw B's rows (and B saw A's,
+  triangulation), a foreign-tenant INSERT was ACCEPTED (resolved instead of
+  rejected — the missing WITH CHECK shape), and a cross-tenant UPDATE touched
+  tenant B's row. 3 passed pre-migration were the seed/role-shape test and
+  the own-tenant CRUD proofs, which RLS must not break.
+- GREEN (same spec after adding migration 1809230000000): 9/9 — each table
+  structurally protected (relrowsecurity + relforcerowsecurity true and
+  exactly the four command-specific policies per table), unbound role sees
+  zero rows everywhere, tenant-local SELECT/INSERT/UPDATE/DELETE works per
+  table (own-tenant INSERT proven as fresh tenant C, so no unique constraint
+  masks the WITH CHECK), foreign INSERT rejected with row-level security
+  error, and cross-tenant UPDATE/DELETE affect zero rows. All observations
+  run in rolled-back transactions bound with the production
+  `TENANT_CONTEXT_SET_CONFIG_SQL`.
+- Unit spec: 13/13 — exact three-table scope (no other ALTER TABLE target),
+  one independent predicate resolution per table (including the mixed
+  uuid/varchar case), 15 uuid predicate halves with no text-form leakage,
+  command-semantics placement of USING/WITH CHECK, drop-before-create and
+  catalog-guarded CREATE idempotency, and down() safety (exactly its policies,
+  FORCE removed, ENABLE kept, no DISABLE/TRUNCATE/DROP TABLE/DELETE).
+- Manifest promotion (atomic with the migration in this work unit): the three
+  target entries moved debt→direct; counters updated 34→37 direct and 32→29
+  debt (classified stays 79).
+- Runtime harness wiring: `EnforceOnboardingTemplateRls1809230000000` added
+  exactly once to scenario-2 `partial_ledger_names` with
+  `expected_deleted_rows` 28→29, so the DB replay of this migration is
+  observed in the same work unit.
+- Verification (all observed, one at a time): unit `npx jest
+  src/migrations/1809230000000-EnforceOnboardingTemplateRls.spec.ts
+  --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json
+  --runInBand onboarding-template-rls` → RED 6 failed/3 passed
+  pre-migration, then 9/9; `npm run test:db` → 45 suites / 256 tests passed;
+  `npm run build` → clean; `SCHEMA_CHECK_DB=omnifood_schema_build_test bash
+  scripts/verify-schema-build.sh` → PASS both scenarios, ledger rows removed
+  29 (expected 29), coverage 79/79 classified (direct 37, parent-owned 5,
+  global 8, debt 29, failures 0); `git diff --check` → clean.
+- Authored lines: ~890 across the three code files (migration 124, unit spec
+  215, DB e2e 530) plus ~10 manifest/verifier lines. The e2e exceeds a minimal
+  proof deliberately: per-table policy-shape proofs (own CRUD, foreign-insert
+  rejection, cross-tenant update/delete zero rows) must cover each of the
+  three tables or the slice could ship with one table silently unprotected.
+- Rollback boundary: the three code files plus the three manifest promotions,
+  the one partial-ledger entry/count change, and this evidence; removing them
+  restores the committed S2b state (`4450b37` worktree baseline) without
+  touching application data or the S1/S2 migrations/services.
+- No side effects: S1/S2 migrations/tests/services, import/integrity target
+  tables, controllers, and sibling e2e specs untouched. Functional commit
+  `f37b572` was created locally; no push, PR, deploy, staging mutation,
+  provisioning, or Q80 operation.
+- Next step: T2.S3b — import/integrity
+  tables (`legacy_import_integrity_reports`, `product_import_sessions`,
+  `staging_importacion_productos`) with the same migration/proof shape and
+  atomic manifest promotion.
+
+T2.S3b evidence (implemented, independently verified, committed as `7f14d63`;
+NOT deployed):
+
+- Route: delegated direct implementation on the same S3a migration/proof
+  vocabulary. Three code/config files touched:
+  `src/migrations/1809240000000-EnforceOnboardingImportRls.ts`,
+  `src/migrations/1809240000000-EnforceOnboardingImportRls.spec.ts`,
+  `test/onboarding/onboarding-import-rls.db.e2e-spec.ts` (plus the manifest,
+  the schema verifier, and this evidence). Exactly three direct-tenant tables
+  are in scope: `legacy_import_integrity_reports`,
+  `product_import_sessions`, `staging_importacion_productos`.
+- Migration shape: identical to S3a — ENABLE + FORCE RLS and one
+  command-specific policy per command
+  (`{table}_tenant_{select|insert|update|delete}`) per table, with the
+  canonical USING/WITH CHECK halves carrying the per-table predicate resolved
+  through `resolveTenantRlsPredicate` (uuid form after rebinds
+  1809070000000/1809140000000; a partial-ledger re-run still resolves AS IT
+  IS). `up()` is idempotent (DROP POLICY IF EXISTS + catalog-guarded CREATE);
+  `down()` drops exactly its twelve policies and removes FORCE while keeping
+  ENABLE — no table drop, truncate, or delete. No service binding belongs to
+  S3b; S4 binds `ImportStagingService`,
+  `LegacyImportIntegrityReportService`, and the related legacy flow.
+- Strict RED (behavioral, observed): the DB e2e spec was authored and run
+  BEFORE the migration existed, building the schema with the full migration
+  set minus this slice: 6 failed / 3 passed on the table-non-owner
+  `NOSUPERUSER NOBYPASSRLS` runtime role. Behavioral failures across all
+  three tables: RLS disabled/unforced (structural pg_class/pg_policies
+  facts), unbound role saw both tenants' rows, tenant A saw B's rows (and B
+  saw A's, triangulation), a foreign-tenant INSERT was ACCEPTED (the missing
+  WITH CHECK shape), and a cross-tenant UPDATE touched tenant B's row. 3
+  passed pre-migration were the seed/role-shape test and the own-tenant CRUD
+  proofs, which RLS must not break. (An earlier 7/2 run had a fixture-caused
+  session-id mismatch; the seed was fixed and the clean behavioral RED is
+  the observed 6/3 — no compile/config/fixture failure stands in the RED.)
+- GREEN (same spec after adding migration 1809240000000): 9/9 — each table
+  structurally protected (relrowsecurity + relforcerowsecurity true and
+  exactly the four command-specific policies per table), unbound role sees
+  zero rows everywhere, tenant-local SELECT/INSERT/UPDATE/DELETE works per
+  table (own-tenant INSERT proven as fresh tenant C), foreign INSERT
+  rejected with a row-level security error, and cross-tenant UPDATE/DELETE
+  affect zero rows. Constraint shapes handled explicitly so they never mask
+  the RLS verdict: staging's uq_staging_importacion_tenant_token_ordinal is
+  satisfied with per-proof fresh tokens and row_ordinal 1, staging's uuid id
+  (no DB default) is supplied explicitly, `product_import_sessions` seeds
+  carry `source_hash` (its only NOT NULL column without a default), and the
+  integrity report's jsonb/boolean/status NOT NULL columns all carry
+  migration defaults.
+- Unit spec: 13/13 — exact three-table scope (no other ALTER TABLE target),
+  one independent predicate resolution per table (including the mixed
+  uuid/varchar case), 15 uuid predicate halves with no text-form leakage,
+  command-semantics placement of USING/WITH CHECK, drop-before-create and
+  catalog-guarded CREATE idempotency, and down() safety (exactly its
+  policies, FORCE removed, ENABLE kept, no DISABLE/TRUNCATE/DROP
+  TABLE/DELETE).
+- Manifest promotion (atomic with the migration in this work unit): the
+  three target entries moved debt→direct; counters updated 37→40 direct and
+  29→26 debt (classified stays 79).
+- Runtime harness wiring: `EnforceOnboardingImportRls1809240000000` added
+  exactly once to scenario-2 `partial_ledger_names` with
+  `expected_deleted_rows` 29→30, and the harness observed the replay:
+  "ledger rows removed: 30 (expected 30)".
+- Verification (all observed, one at a time): unit `npx jest
+  src/migrations/1809240000000-EnforceOnboardingImportRls.spec.ts
+  --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json
+  --runInBand onboarding-import-rls` → RED 6 failed/3 passed pre-migration,
+  then 9/9; `npm run test:db` → 45 suites / 256 tests passed; `npm run
+  build` → clean; `SCHEMA_CHECK_DB=omnifood_schema_build_test bash
+  scripts/verify-schema-build.sh` → PASS both scenarios, ledger rows removed
+  30 (expected 30), coverage 79/79 classified (direct 40, parent-owned 5,
+  global 8, debt 26, failures 0); `git diff --check` → clean.
+- Authored lines: ~856 across the three code files (migration 123, unit spec
+  215, DB e2e 518) plus ~10 manifest/verifier lines.
+- Rollback boundary: the three code files plus the three manifest
+  promotions, the one partial-ledger entry/count change, and this evidence;
+  removing them restores the committed S3a state (`d0ad81c` worktree
+  baseline) without touching application data or the S1/S2/S3a
+  migrations/tests/services or template/provenance targets.
+- No side effects: S1/S2/S3a migrations/tests/services, template/provenance
+  targets, controllers, and sibling e2e specs untouched. Functional commit
+  `7f14d63` was created locally; no push, PR, deploy, staging mutation,
+  provisioning, or Q80 operation.
+- Next step: T2.S4 — bind `ImportStagingService`,
+  `LegacyImportIntegrityReportService`, and the related legacy flow before
+  any deploy.
+
 ### T3 — Enforce first-business transaction-path isolation
 
 Status: pending; depends on T1 and the classification learned from T2.
@@ -408,7 +583,7 @@ Status: pending; depends on T2 and T3.
 | Task | Commit(s) | Verification | Result |
 |---|---|---|---|
 | T1 | `b23a8b7` | unit: `npx jest src/core/database/tenant-rls-coverage.spec.ts --runInBand` → 18/18 passed; DB: `npx jest --config ./test/jest-db.json --runInBand tenant-rls-coverage` → 5/5 passed; suite: `npm run test:db` → 45 suites / 256 tests passed; harness: `SCHEMA_CHECK_DB=omnifood_schema_build_test bash scripts/verify-schema-build.sh` → PASS both scenarios, coverage 79/79 classified (32 direct, 5 parent-owned, 8 global, 34 debt), failures 0; `git diff --check` → clean | RED observed: `onboarding_idempotency_records` and `onboarding_sessions` surfaced as unclassified tenant-bearing tables (1 failed, 4 passed). GREEN and independent verification observed; T1 complete. |
-| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b `25496f7`; S3–S4 pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding, then 8/8. S2b: unit `onboarding-idempotency.coordinator.spec.ts` → 17/17; DB e2e `onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding, then 6/6; legacy callers 6/6 and 9/9. Full DB 45 suites/256; build clean; harness both scenarios PASS (direct 34, debt 32, total 79, failures 0); `git diff --check` clean | S1, S2a, and S2b behavioral RED/GREEN observed, independently verified, and committed; S3–S4 pending |
+| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b `25496f7`; S3a `f37b572`; S3b `7f14d63`; S4 pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding, then 8/8. S2b: unit `onboarding-idempotency.coordinator.spec.ts` → 17/17; DB e2e `onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding, then 6/6; legacy callers 6/6 and 9/9. S3a: unit `1809230000000-EnforceOnboardingTemplateRls.spec.ts` → 13/13; DB e2e `onboarding-template-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 37, debt 29, total 79, failures 0, ledger replay 29/29). S3b: unit `1809240000000-EnforceOnboardingImportRls.spec.ts` → 13/13; DB e2e `onboarding-import-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 40, debt 26, total 79, failures 0, ledger replay 30/30). Full DB 45 suites/256; build clean; `git diff --check` clean | S1–S3b behavioral RED/GREEN observed, independently verified, and committed; S4 pending |
 | T3 | pending | pending | pending |
 | T4 | pending | pending | pending |
 
