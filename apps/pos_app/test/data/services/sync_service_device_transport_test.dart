@@ -252,6 +252,66 @@ void main() {
   );
 
   test(
+    'recipe 401 does not suppress the later sales batch; failed recipe stays pending and the error names the domain',
+    () async {
+      final pendingRecipe = RecipeVersionDocument(
+        id: 'recipe-doc-1',
+        productId: 'prod-1',
+        productName: 'Nacatamal',
+        versionNumber: 3,
+        yieldQuantity: 10,
+        technicalShrinkPct: 2.0,
+        createdAt: DateTime.utc(2026, 3, 1),
+        components: [],
+      );
+      when(() => inventoryRepo.getUnsyncedRecipeVersionDocuments())
+          .thenAnswer((_) async => [pendingRecipe]);
+      when(() => salesRepo.getUnsyncedAggregates()).thenAnswer(
+        (_) async => [pendingSaleAggregate],
+      );
+      when(() => salesRepo.markAsSynced(any())).thenAnswer((_) async {});
+
+      syncDio.httpClientAdapter = _MockHttpClientAdapter((options) {
+        if (options.path.contains('recipes/versions')) {
+          return ResponseBody.fromString(
+            '{"statusCode": 401, "message": "Invalid device credentials"}',
+            401,
+            headers: {
+              HttpHeaders.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        }
+        return ResponseBody.fromString(
+          '{"processed": 1, "results": [{"idempotencyKey": "sale:term-1:inv-101", "status": "ACCEPTED"}]}',
+          200,
+          headers: {
+            HttpHeaders.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+
+      final outcome = await syncService.triggerManualSync();
+
+      // Auth failure stays observable for the whole pass.
+      expect(outcome.status, SyncRunStatus.partial);
+      expect(syncService.status, CloudSyncStatus.error);
+      expect(syncService.isAuthBlocked, isTrue);
+      expect(syncService.syncBlockedReason, 'AUTH_BLOCKED');
+
+      // Final error names both the reauthentication requirement and the
+      // failed domain instead of discarding the per-domain details.
+      expect(syncService.lastSyncError, contains('Reautenticación requerida'));
+      expect(syncService.lastSyncError, contains('Recetas'));
+
+      // Auth-failed recipe outbox remains pending (not synced, not failed).
+      verifyNever(() => inventoryRepo.markRecipeVersionDocumentAsSynced(any()));
+
+      // The independent later sales domain still ran and completed.
+      verify(() => salesRepo.markAsSynced(['inv-101'])).called(1);
+    },
+  );
+
+  test(
     'when device credential is revoked, Outbox remains pending and status surfaces DEVICE_REVOKED',
     () async {
       when(() => salesRepo.getUnsyncedAggregates()).thenAnswer(
