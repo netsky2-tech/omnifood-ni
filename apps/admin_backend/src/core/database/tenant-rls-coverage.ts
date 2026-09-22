@@ -39,6 +39,8 @@
  * the exact same rules the production gate enforces.
  */
 
+import { readFileSync } from 'node:fs';
+
 export type RlsCoverageClass = 'direct' | 'parent-owned' | 'global' | 'debt';
 
 export const RLS_COVERAGE_CLASSES: readonly RlsCoverageClass[] = [
@@ -164,10 +166,7 @@ export function parseManifestText(text: string): ParsedTenantRlsManifest {
 
 /** Load and parse the manifest from disk; a missing file throws (fail closed). */
 export function loadTenantRlsManifest(path: string): ParsedTenantRlsManifest {
-  // Lazy require keeps this module importable in every Jest environment.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require('fs') as typeof import('fs');
-  return parseManifestText(fs.readFileSync(path, 'utf8'));
+  return parseManifestText(readFileSync(path, 'utf8'));
 }
 
 function directProtectionGaps(table: TenantRlsCatalogTable): string[] {
@@ -207,7 +206,8 @@ export function evaluateTenantRlsCoverage(
     failures.push({
       kind: 'duplicate-manifest-entry',
       table: duplicate,
-      detail: 'classified more than once; the manifest must carry one entry per table',
+      detail:
+        'classified more than once; the manifest must carry one entry per table',
     });
   }
 
@@ -285,7 +285,9 @@ export function evaluateTenantRlsCoverage(
   }
 
   for (const table of tables) {
-    const classified = manifest.entries.some((entry) => entry.table === table.name);
+    const classified = manifest.entries.some(
+      (entry) => entry.table === table.name,
+    );
     if (!classified) {
       failures.push({
         kind: 'unclassified-table',
@@ -296,7 +298,9 @@ export function evaluateTenantRlsCoverage(
   }
 
   failures.sort((a, b) =>
-    a.kind === b.kind ? a.table.localeCompare(b.table) : a.kind.localeCompare(b.kind),
+    a.kind === b.kind
+      ? a.table.localeCompare(b.table)
+      : a.kind.localeCompare(b.kind),
   );
 
   return { failures, classifiedCounts };

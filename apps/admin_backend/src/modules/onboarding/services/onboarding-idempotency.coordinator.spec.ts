@@ -1,14 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, EntityManager } from 'typeorm';
+import { EntityManager } from 'typeorm';
 import { ConflictException, BadRequestException } from '@nestjs/common';
 import {
   OnboardingIdempotencyRecord,
   OnboardingIdempotencyStatus,
 } from '../entities/onboarding-idempotency.entity';
-import {
-  OnboardingIdempotencyCoordinator,
-} from './onboarding-idempotency.coordinator';
+import { OnboardingIdempotencyCoordinator } from './onboarding-idempotency.coordinator';
 import {
   TENANT_CONTEXT_SET_CONFIG_SQL,
   TenantContextRequiredError,
@@ -54,25 +52,24 @@ describe('OnboardingIdempotencyCoordinator (Unit — tenant-bound access)', () =
 
   const existingRecord = (
     overrides: Partial<OnboardingIdempotencyRecord> = {},
-  ): OnboardingIdempotencyRecord =>
-    ({
-      id: 'record-uuid-2',
-      tenantId: 'tenant-1',
-      idempotencyKey: 'key-1',
-      commandType: 'ConfigureFiscal',
-      payloadHash: 'hash-abc',
-      status: OnboardingIdempotencyStatus.IN_PROGRESS,
-      leaseOwner: null,
-      leaseAcquiredAt: null,
-      leaseExpiresAt: null,
-      attemptCount: 1,
-      resultRef: null,
-      lastErrorCode: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      completedAt: null,
-      ...overrides,
-    }) as OnboardingIdempotencyRecord;
+  ): OnboardingIdempotencyRecord => ({
+    id: 'record-uuid-2',
+    tenantId: 'tenant-1',
+    idempotencyKey: 'key-1',
+    commandType: 'ConfigureFiscal',
+    payloadHash: 'hash-abc',
+    status: OnboardingIdempotencyStatus.IN_PROGRESS,
+    leaseOwner: null,
+    leaseAcquiredAt: null,
+    leaseExpiresAt: null,
+    attemptCount: 1,
+    resultRef: null,
+    lastErrorCode: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    completedAt: null,
+    ...overrides,
+  });
 
   beforeEach(async () => {
     txRepo = {
@@ -105,7 +102,7 @@ describe('OnboardingIdempotencyCoordinator (Unit — tenant-bound access)', () =
         OnboardingIdempotencyCoordinator,
         {
           provide: getRepositoryToken(OnboardingIdempotencyRecord),
-          useValue: pooledRepo as unknown as Repository<OnboardingIdempotencyRecord>,
+          useValue: pooledRepo,
         },
       ],
     }).compile();
@@ -115,10 +112,7 @@ describe('OnboardingIdempotencyCoordinator (Unit — tenant-bound access)', () =
     );
   });
 
-  const expectBoundBefore = (
-    firstAccess: jest.Mock,
-    accessIndex = 0,
-  ): void => {
+  const expectBoundBefore = (firstAccess: jest.Mock, accessIndex = 0): void => {
     const bindOrder = txManager.query.mock.invocationCallOrder[0];
     const accessOrder = firstAccess.mock.invocationCallOrder[accessIndex];
     expect(bindOrder).toBeLessThan(accessOrder);
@@ -324,11 +318,15 @@ describe('OnboardingIdempotencyCoordinator (Unit — tenant-bound access)', () =
         }),
       );
       // Binding happened on the provided manager before the first access.
-      expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
-        'tenant-1',
-      ]);
-      const bindOrder = (manager.query as jest.Mock).mock.invocationCallOrder[0];
-      expect(bindOrder).toBeLessThan(txRepo.findOne.mock.invocationCallOrder[0]);
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-1'],
+      );
+      const bindOrder = (manager.query as jest.Mock).mock
+        .invocationCallOrder[0];
+      expect(bindOrder).toBeLessThan(
+        txRepo.findOne.mock.invocationCallOrder[0],
+      );
       expect(pooledRepo.findOne).not.toHaveBeenCalled();
       expect(pooledRepo.save).not.toHaveBeenCalled();
     });
@@ -342,11 +340,7 @@ describe('OnboardingIdempotencyCoordinator (Unit — tenant-bound access)', () =
         existingRecord({ id: 'record-uuid-9', tenantId: 'tenant-1' }),
       );
 
-      await coordinator.completeSuccess(
-        'record-uuid-9',
-        { ok: 1 },
-        manager,
-      );
+      await coordinator.completeSuccess('record-uuid-9', { ok: 1 }, manager);
 
       expect(pooledRepo.manager.connection.transaction).not.toHaveBeenCalled();
       expect(manager.query).toHaveBeenCalledTimes(1);
@@ -354,7 +348,8 @@ describe('OnboardingIdempotencyCoordinator (Unit — tenant-bound access)', () =
         TENANT_CONTEXT_SET_CONFIG_SQL,
         ['tenant-1'],
       );
-      const bindOrder = (manager.query as jest.Mock).mock.invocationCallOrder[0];
+      const bindOrder = (manager.query as jest.Mock).mock
+        .invocationCallOrder[0];
       expect(bindOrder).toBeLessThan(txRepo.save.mock.invocationCallOrder[0]);
     });
 
