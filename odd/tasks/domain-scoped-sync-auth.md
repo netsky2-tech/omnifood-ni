@@ -51,7 +51,7 @@ The background pass uses one device-only Dio, not a human cloud session. A route
 
 ### DA-01 — Continue independent sync domains after auth failure
 
-Status: complete — implementation and independent verification complete; uncommitted pending founder delivery authorization.
+Status: complete — implementation and independent verification complete; published in PR #488.
 
 - [x] Observe RED for recipe 401 suppressing a later successful sales batch.
 - [x] Remove only the pass-wide auth short circuit; preserve per-domain error handling.
@@ -100,7 +100,8 @@ Parent spot check:
 - 2026-09-21: DA-01 implementation completed uncommitted in the two authorized POS files at 76 authored changed lines. Focused tests and analyzer passed; full-suite loader flakes were isolated to unrelated files that pass alone.
 - 2026-09-21: Native risk assessment returned unavailable/empty, so high-risk independent verification reran focused tests, full Flutter tests, analyzer, and whitespace checks.
 - 2026-09-21: Independent verification found no implementation defects. Its full suite reproduced one unrelated loader-only WebSocket failure; the exact file passed 11/11 in isolation. Parent focused spot check passed 7/7.
+- 2026-09-21: Founder authorized delivery. Work-unit commit `dd441c6` was pushed and PR #488 opened against `main` with `Closes #473` and exactly one `type:bug` label. GitHub reported the PR mergeable; checks were pending (`UNSTABLE`) at publication.
 
 ## Next step
 
-Await founder authorization to create the work-unit commit and publish a PR closing issue #473.
+Wait for PR #488 checks to reach a terminal state, then decide merge.
