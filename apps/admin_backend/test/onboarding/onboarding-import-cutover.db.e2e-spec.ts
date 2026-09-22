@@ -8,6 +8,7 @@ import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
+import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import {
@@ -73,6 +74,7 @@ async function withImportCutoverIsolatedSchema(
         Tenant,
         SystemParametersConfig,
         Product,
+        InventoryMovement,
         Insumo,
         UomConversion,
         ImportStaging,
