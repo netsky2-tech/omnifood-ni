@@ -1,6 +1,9 @@
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
-import { ActivationService, V1_REQUIRED_ACTIVATION_CHECKS } from '../../src/modules/onboarding/services/activation.service';
+import {
+  ActivationService,
+  V1_REQUIRED_ACTIVATION_CHECKS,
+} from '../../src/modules/onboarding/services/activation.service';
 import { FiscalConfigVersionService } from '../../src/modules/onboarding/services/fiscal-config-version.service';
 import { OnboardingCatalogService } from '../../src/modules/onboarding/services/onboarding-catalog.service';
 import { ChangeLogService } from '../../src/modules/audit/change-log.service';
@@ -169,11 +172,15 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
   let aInvoiceId = '';
   let bInvoiceId = '';
 
-  const countAdmin = async (table: string, where: string, params: unknown[]) => {
-    const rows = (await admin.query(
+  const countAdmin = async (
+    table: string,
+    where: string,
+    params: unknown[],
+  ) => {
+    const rows = await admin.query(
       `SELECT count(*)::int AS count FROM ${table} WHERE ${where}`,
       params,
-    )) as Array<{ count: number }>;
+    );
     return rows[0].count;
   };
 
@@ -198,34 +205,34 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     tenantId: string,
   ): Promise<Record<string, unknown[]>> => {
     const attempts = normalize(
-      (await admin.query(
+      await admin.query(
         `SELECT id, status, candidate_terminal_id, trusted_terminal_id,
                 verification_ticket_id, warnings_count, failure_code, completed_at
            FROM onboarding_activation_attempts WHERE tenant_id = $1 ORDER BY id`,
         [tenantId],
-      )) as unknown[],
+      ),
     );
     const checks = normalize(
-      (await admin.query(
+      await admin.query(
         `SELECT id, check_code, status, required, evidence_ref, recorded_at
            FROM onboarding_activation_check_results WHERE tenant_id = $1 ORDER BY id`,
         [tenantId],
-      )) as unknown[],
+      ),
     );
     const followUps = normalize(
-      (await admin.query(
+      await admin.query(
         `SELECT id, warning_code, status, opened_by, closure_evidence_ref, closed_at
            FROM onboarding_activation_follow_ups WHERE tenant_id = $1 ORDER BY id`,
         [tenantId],
-      )) as unknown[],
+      ),
     );
     const session = normalize(
-      (await admin.query(
+      await admin.query(
         `SELECT id, lifecycle_state, optimistic_version, current_activation_attempt_id,
                 activation_started_at, activated_at, first_successful_sale_at, last_activity_at
            FROM onboarding_sessions WHERE tenant_id = $1 ORDER BY id`,
         [tenantId],
-      )) as unknown[],
+      ),
     );
     return { attempts, checks, followUps, session };
   };
@@ -365,16 +372,16 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     await seedTenantFixture(tenantAId, 'A');
     await seedTenantFixture(tenantBId, 'B');
     aInvoiceId = (
-      (await admin.query(
+      await admin.query(
         `SELECT id FROM invoices WHERE tenant_id = $1 ORDER BY created_at LIMIT 1`,
         [tenantAId],
-      )) as Array<{ id: string }>
+      )
     )[0].id;
     bInvoiceId = (
-      (await admin.query(
+      await admin.query(
         `SELECT id FROM invoices WHERE tenant_id = $1 ORDER BY created_at LIMIT 1`,
         [tenantBId],
-      )) as Array<{ id: string }>
+      )
     )[0].id;
 
     // Foreign tenant B's rows are produced through the same production path
@@ -384,7 +391,10 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     // activation table.
     const bAttempt = await activationService.startActivation(
       tenantBId,
-      { candidateTerminalId: terminalB, idempotencyKey: `foreign-seed-${tenantBId}` },
+      {
+        candidateTerminalId: terminalB,
+        idempotencyKey: `foreign-seed-${tenantBId}`,
+      },
       '',
     );
     bAttemptId = bAttempt.id;
@@ -429,14 +439,10 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
   });
 
   it('raw probe: the runtime role is NOSUPERUSER, does not bypass RLS, and owns none of the tables the flow touches', async () => {
-    const roles = (await admin.query(
+    const roles = await admin.query(
       `SELECT rolsuper, rolbypassrls, rolcanlogin FROM pg_roles WHERE rolname = $1`,
       [fixture.runtimeRoleName],
-    )) as Array<{
-      rolsuper: boolean;
-      rolbypassrls: boolean;
-      rolcanlogin: boolean;
-    }>;
+    );
     expect(roles).toHaveLength(1);
     expect(roles[0]).toMatchObject({
       rolsuper: false,
@@ -447,24 +453,24 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     // The runtime role must own NOTHING in the scratch schema: under FORCE
     // RLS even an owner is subject to the policies, but a non-owner runtime
     // role is what production stages run as, so the proof binds that shape.
-    const owned = (await admin.query(
+    const owned = await admin.query(
       `SELECT c.relname FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = $1
           AND c.relowner = (SELECT oid FROM pg_roles WHERE rolname = $2)`,
       [fixture.schema, fixture.runtimeRoleName],
-    )) as Array<{ relname: string }>;
+    );
     expect(owned).toEqual([]);
 
     // Everything the flow touches was created (and is owned) by the
     // migration role the helper provisioned — the schema is migration output.
-    const owners = (await admin.query(
+    const owners = await admin.query(
       `SELECT c.relname, r.rolname AS owner FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
          JOIN pg_roles r ON r.oid = c.relowner
         WHERE n.nspname = $1 AND c.relname = ANY($2)`,
       [fixture.schema, ALL_TOUCHED_TABLES as unknown as string[]],
-    )) as Array<{ relname: string; owner: string }>;
+    );
     expect(owners.map((o) => o.relname).sort()).toEqual(
       [...ALL_TOUCHED_TABLES].sort(),
     );
@@ -474,16 +480,12 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
   });
 
   it('raw probe: the activation tables carry FORCE RLS with the migration-emitted tenant policies (pg_policies, not a hand-written copy)', async () => {
-    const rls = (await admin.query(
+    const rls = await admin.query(
       `SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = $1 AND c.relname = ANY($2)`,
       [fixture.schema, ACTIVATION_PROTECTED_TABLES as unknown as string[]],
-    )) as Array<{
-      relname: string;
-      relrowsecurity: boolean;
-      relforcerowsecurity: boolean;
-    }>;
+    );
     expect(rls).toHaveLength(ACTIVATION_PROTECTED_TABLES.length);
     for (const row of rls) {
       expect(row).toMatchObject({
@@ -496,18 +498,12 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     // 1809000000001 / 1809080000000 (attempts/checks/follow-ups/revisions)
     // and 1809220000000 (sessions). The predicate must be the production
     // transaction-local binding form, not a hand-rolled variant.
-    const policies = (await admin.query(
+    const policies = await admin.query(
       `SELECT tablename, policyname, cmd, qual, with_check FROM pg_policies
         WHERE schemaname = $1 AND tablename = ANY($2)
         ORDER BY tablename, policyname`,
       [fixture.schema, ACTIVATION_PROTECTED_TABLES as unknown as string[]],
-    )) as Array<{
-      tablename: string;
-      policyname: string;
-      cmd: string;
-      qual: string | null;
-      with_check: string | null;
-    }>;
+    );
     for (const table of ACTIVATION_PROTECTED_TABLES) {
       const forTable = policies.filter((p) => p.tablename === table);
       expect(forTable.map((p) => p.cmd).sort()).toEqual([
@@ -517,9 +513,13 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
         'UPDATE',
       ]);
       for (const policy of forTable) {
-        expect(policy.policyname).toBe(`${table}_tenant_${policy.cmd.toLowerCase()}`);
+        expect(policy.policyname).toBe(
+          `${table}_tenant_${policy.cmd.toLowerCase()}`,
+        );
         if (policy.cmd === 'INSERT') {
-          expect(policy.with_check).toContain(`current_setting('app.tenant_id'`);
+          expect(policy.with_check).toContain(
+            `current_setting('app.tenant_id'`,
+          );
         } else {
           expect(policy.qual).toContain(`current_setting('app.tenant_id'`);
         }
@@ -544,19 +544,19 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     await probe.initialize();
     try {
       for (const table of ACTIVATION_PROTECTED_TABLES) {
-        const rows = (await probe.query(
+        const rows = await probe.query(
           `SELECT count(*)::int AS count FROM ${table}`,
-        )) as Array<{ count: number }>;
+        );
         expect(rows[0].count).toBe(0);
       }
 
-      const [, unboundUpdate] = (await probe.query(
+      const unboundUpdateRaw = await probe.query(
         `UPDATE onboarding_activation_attempts
             SET candidate_terminal_id = 'forged-unbound'
           WHERE tenant_id = $1`,
         [tenantAId],
-      )) as [unknown[], number];
-      expect(unboundUpdate).toBe(0);
+      );
+      expect(affectedOf(unboundUpdateRaw)).toBe(0);
 
       await expect(
         probe.query(
@@ -592,17 +592,20 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     });
 
     // Exactly one attempt for the bound tenant (admin-side read-back).
-    expect(await countAdmin('onboarding_activation_attempts', 'tenant_id = $1', [tenantAId])).toBe(1);
+    expect(
+      await countAdmin('onboarding_activation_attempts', 'tenant_id = $1', [
+        tenantAId,
+      ]),
+    ).toBe(1);
     // The bound runtime role sees its own row.
-    expect(await boundCount('onboarding_activation_attempts', tenantAId)).toBe(1);
+    expect(await boundCount('onboarding_activation_attempts', tenantAId)).toBe(
+      1,
+    );
     // The session advanced tenant-locally.
-    const session = (await admin.query(
+    const session = await admin.query(
       `SELECT lifecycle_state, current_activation_attempt_id FROM onboarding_sessions WHERE tenant_id = $1`,
       [tenantAId],
-    )) as Array<{
-      lifecycle_state: string;
-      current_activation_attempt_id: string;
-    }>;
+    );
     expect(session[0]).toMatchObject({
       lifecycle_state: OnboardingLifecycleState.ACTIVATION_IN_PROGRESS,
       current_activation_attempt_id: aAttemptId,
@@ -637,19 +640,15 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
         [tenantAId, aAttemptId],
       ),
     ).toBe(V1_REQUIRED_ACTIVATION_CHECKS.length);
-    expect(await boundCount('onboarding_activation_check_results', tenantAId)).toBe(
-      V1_REQUIRED_ACTIVATION_CHECKS.length,
-    );
+    expect(
+      await boundCount('onboarding_activation_check_results', tenantAId),
+    ).toBe(V1_REQUIRED_ACTIVATION_CHECKS.length);
 
-    const attempt = (await admin.query(
+    const attempt = await admin.query(
       `SELECT status, trusted_terminal_id, verification_ticket_id
          FROM onboarding_activation_attempts WHERE id = $1`,
       [aAttemptId],
-    )) as Array<{
-      status: string;
-      trusted_terminal_id: string | null;
-      verification_ticket_id: string | null;
-    }>;
+    );
     expect(attempt[0]).toMatchObject({
       status: ActivationAttemptStatus.IN_PROGRESS,
       trusted_terminal_id: terminalA,
@@ -678,22 +677,30 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     // caught here (an unbound role is fail-closed and sees zero rows); it
     // is caught by the spec's positive assertions.
     expect(
-      await countAdmin('onboarding_activation_attempts', 'tenant_id = ANY($1)', [
-        [tenantAId, tenantBId],
-      ]),
+      await countAdmin(
+        'onboarding_activation_attempts',
+        'tenant_id = ANY($1)',
+        [[tenantAId, tenantBId]],
+      ),
     ).toBe(2);
-    expect(await boundCount('onboarding_activation_attempts', tenantAId)).toBe(1);
+    expect(await boundCount('onboarding_activation_attempts', tenantAId)).toBe(
+      1,
+    );
   });
 
   it('foreign-tenant non-disclosure: bound as A, tenant B rows are invisible and a forged cross-tenant read or update affects zero rows', async () => {
     const before = await snapshotTenantRows(tenantBId);
-    expectSnapshotsEqual(foreignSnapshot!, before);
+    expectSnapshotsEqual(foreignSnapshot, before);
 
     await boundAs(tenantAId, async (manager) => {
       // Forged cross-tenant reads: zero rows, per table (attempts have no
       // activation_attempt_id column; each predicate names the right keys).
       for (const [table, predicate, params] of [
-        ['onboarding_activation_attempts', 'id = $1 OR tenant_id = $2', [bAttemptId, tenantBId]],
+        [
+          'onboarding_activation_attempts',
+          'id = $1 OR tenant_id = $2',
+          [bAttemptId, tenantBId],
+        ],
         [
           'onboarding_activation_check_results',
           'activation_attempt_id = $1 OR tenant_id = $2',
@@ -706,45 +713,45 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
         ],
         ['onboarding_sessions', 'tenant_id = $1', [tenantBId]],
       ] as const) {
-        const rows = (await manager.query(
+        const rows = await manager.query(
           `SELECT * FROM ${table} WHERE ${predicate}`,
           [...params],
-        )) as unknown[];
+        );
         // The RLS policy filters the rows before the predicate applies, so
         // even these deliberately over-broad predicates surface nothing.
         expect(rows).toEqual([]);
       }
 
       // Forged cross-tenant writes: zero rows affected.
-      const [, attemptsAffected] = (await manager.query(
+      const attemptsRaw = await manager.query(
         `UPDATE onboarding_activation_attempts
             SET candidate_terminal_id = 'forged-by-tenant-a'
           WHERE id = $1`,
         [bAttemptId],
-      )) as [unknown[], number];
-      expect(attemptsAffected).toBe(0);
+      );
+      expect(affectedOf(attemptsRaw)).toBe(0);
 
-      const [, checksAffected] = (await manager.query(
+      const checksRaw = await manager.query(
         `UPDATE onboarding_activation_check_results SET status = 'FAIL'
           WHERE activation_attempt_id = $1`,
         [bAttemptId],
-      )) as [unknown[], number];
-      expect(checksAffected).toBe(0);
+      );
+      expect(affectedOf(checksRaw)).toBe(0);
 
-      const [, followUpsAffected] = (await manager.query(
+      const followUpsRaw = await manager.query(
         `UPDATE onboarding_activation_follow_ups SET status = 'CLOSED'
           WHERE activation_attempt_id = $1`,
         [bAttemptId],
-      )) as [unknown[], number];
-      expect(followUpsAffected).toBe(0);
+      );
+      expect(affectedOf(followUpsRaw)).toBe(0);
 
-      const [, sessionsAffected] = (await manager.query(
+      const sessionsRaw = await manager.query(
         `UPDATE onboarding_sessions
             SET optimistic_version = optimistic_version + 1
           WHERE tenant_id = $1`,
         [tenantBId],
-      )) as [unknown[], number];
-      expect(sessionsAffected).toBe(0);
+      );
+      expect(affectedOf(sessionsRaw)).toBe(0);
     });
 
     // The production service read paths fail closed the same way: a foreign
@@ -776,15 +783,11 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     expect(finalized.completedAt).not.toBeNull();
 
     // Tenant-local transition: A's session is ACTIVATED against A's attempt.
-    const sessionA = (await admin.query(
+    const sessionA = await admin.query(
       `SELECT lifecycle_state, current_activation_attempt_id, activated_at
          FROM onboarding_sessions WHERE tenant_id = $1`,
       [tenantAId],
-    )) as Array<{
-      lifecycle_state: string;
-      current_activation_attempt_id: string;
-      activated_at: string | null;
-    }>;
+    );
     expect(sessionA[0]).toMatchObject({
       lifecycle_state: OnboardingLifecycleState.ACTIVATED,
       current_activation_attempt_id: aAttemptId,
@@ -801,20 +804,28 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
       ),
     ).toBe(1);
     expect(
-      ((await admin.query(
-        `SELECT status FROM onboarding_activation_follow_ups WHERE tenant_id = $1`,
-        [tenantAId],
-      )) as Array<{ status: string }>)[0]?.status,
+      (
+        await admin.query(
+          `SELECT status FROM onboarding_activation_follow_ups WHERE tenant_id = $1`,
+          [tenantAId],
+        )
+      )[0]?.status,
     ).toBe(ActivationFollowUpStatus.OPEN);
-    expect(await boundCount('onboarding_activation_follow_ups', tenantAId)).toBe(1);
-    expect(await boundCount('onboarding_activation_attempts', tenantAId)).toBe(1);
     expect(
-      await countAdmin('onboarding_activation_attempts', 'tenant_id = ANY($1)', [
-        [tenantAId, tenantBId],
-      ]),
+      await boundCount('onboarding_activation_follow_ups', tenantAId),
+    ).toBe(1);
+    expect(await boundCount('onboarding_activation_attempts', tenantAId)).toBe(
+      1,
+    );
+    expect(
+      await countAdmin(
+        'onboarding_activation_attempts',
+        'tenant_id = ANY($1)',
+        [[tenantAId, tenantBId]],
+      ),
     ).toBe(2);
 
     // Foreign rows remain untouched by A's whole flow, finalize included.
-    expectSnapshotsEqual(foreignSnapshot!, await snapshotTenantRows(tenantBId));
+    expectSnapshotsEqual(foreignSnapshot, await snapshotTenantRows(tenantBId));
   });
 });

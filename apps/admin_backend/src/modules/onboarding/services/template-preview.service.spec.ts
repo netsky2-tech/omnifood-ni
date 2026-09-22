@@ -119,7 +119,15 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
           return insumoRepo as unknown as Repository<Insumo>;
         if (entity === Product)
           return productRepo as unknown as Repository<Product>;
-        throw new Error(`Unexpected repository request: ${String(entity)}`);
+        // Class tokens stringify poorly (Object.prototype.toString), so
+        // describe them by their name; anything else gets a fixed placeholder.
+        const entityLabel =
+          typeof entity === 'function'
+            ? entity.name || 'anonymous-function'
+            : typeof entity === 'object' && entity !== null
+              ? entity.constructor?.name || 'anonymous-object'
+              : 'unknown-entity';
+        throw new Error(`Unexpected repository request: ${entityLabel}`);
       }) as any) as any,
     };
 
@@ -169,8 +177,8 @@ describe('TemplatePreviewService (TDD / ONB1.3A-B)', () => {
       TENANT_CONTEXT_SET_CONFIG_SQL,
       ['tenant-1'],
     );
-    const queryOrder =
-      (mockManager.query as jest.Mock).mock.invocationCallOrder[0];
+    const queryOrder = (mockManager.query as jest.Mock).mock
+      .invocationCallOrder[0];
     const firstProtected = Math.min(
       ...(seedLinkRepo.find as jest.Mock).mock.invocationCallOrder,
       ...(insumoRepo.find as jest.Mock).mock.invocationCallOrder,
