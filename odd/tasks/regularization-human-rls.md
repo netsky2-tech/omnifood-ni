@@ -44,7 +44,7 @@ Tenant presence in an HTTP request is not PostgreSQL RLS binding. Every protecte
 
 ### HR-01 — Bind and prove human regularization RLS context
 
-Status: complete — implementation and independent verification green; uncommitted pending founder delivery authorization.
+Status: complete — implementation and independent verification green; published in PR #487.
 
 - [x] Observe RED unit coverage for manager scope, bind-before-query ordering, and blank-tenant fail-fast behavior.
 - [x] Observe RED real-database behavior for human pending/approve under FORCE RLS and a non-bypass role.
@@ -99,7 +99,8 @@ Parent spot check:
 - 2026-09-21: Native risk assessment returned unavailable/empty and therefore required high-risk independent verification.
 - 2026-09-21: Founder chose one atomic PR and accepted the 452-line size exception rather than separating the production fix from its security proof.
 - 2026-09-21: Independent verification completed with no blocking, high, or medium findings; all authorized commands passed. Parent targeted-ESLint spot check also passed with 0 errors and the same 7 warnings.
+- 2026-09-21: Founder authorized delivery. Work-unit commit `e1e72e0` was pushed and PR #487 opened against `main` with `Closes #486` and exactly one `type:bug` label. GitHub reported the PR mergeable; checks were pending (`UNSTABLE`) at publication.
 
 ## Next step
 
-Await founder authorization to create the atomic work-unit commit and publish the branch/PR closing issue #486.
+Wait for PR #487 checks to reach a terminal state, then decide merge.
