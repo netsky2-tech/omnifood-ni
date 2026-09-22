@@ -345,16 +345,20 @@ class SyncService {
         return const SyncRunOutcome.complete();
       } else {
         _consecutiveFailures++;
+        final domainErrorSummary = domainErrors.join('; ');
         if (_authBlocked) {
-          _lastSyncError = _syncBlockedReason == 'DEVICE_REVOKED'
+          final authMessage = _syncBlockedReason == 'DEVICE_REVOKED'
               ? 'DEVICE_REVOKED'
               : 'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403)';
+          _lastSyncError = domainErrorSummary.isEmpty
+              ? authMessage
+              : '$authMessage; $domainErrorSummary';
         } else {
-          _lastSyncError = domainErrors.join('; ');
+          _lastSyncError = domainErrorSummary;
         }
         _updateStatus(CloudSyncStatus.error);
         developer.log(
-          '[SYNC_MANUAL] completed=false reason=${_authBlocked ? _syncBlockedReason : domainErrors.join(",")}',
+          '[SYNC_MANUAL] completed=false reason=$_lastSyncError',
           name: 'SyncService',
         );
         return const SyncRunOutcome.partial();
@@ -393,9 +397,9 @@ class SyncService {
     String domain,
     Future<void> Function() operation,
   ) async {
-    if (_authBlocked) {
-      return false;
-    }
+    // Auth failures are domain-scoped (issue #473): they set the pass-wide
+    // _authBlocked observability flags but must not suppress independent
+    // later domains in the same pass.
     try {
       await operation();
       return true;
