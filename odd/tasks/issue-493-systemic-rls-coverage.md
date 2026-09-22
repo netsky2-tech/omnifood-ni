@@ -76,8 +76,8 @@ Status: completed
 - [x] REFACTOR: reuse existing tenant-RLS predicate/test helpers; do not introduce a
       parallel policy vocabulary.
 - [x] Run focused migration/schema checks and `git diff --check`.
-- [ ] Commit as one conventional work unit and record the commit below.
-      (Commit itself is a separate user decision; all verification is green.)
+- [x] Commit as one conventional work unit and record the commit below.
+      Functional work unit: `b23a8b7` (`fix(db): add systemic RLS coverage ratchet`).
 
 Implementation route: classification semantics live in one dependency-free module
 (`src/core/database/tenant-rls-coverage.ts`); the reviewed manifest
@@ -153,7 +153,7 @@ Status: pending; depends on T2 and T3.
 
 | Task | Commit(s) | Verification | Result |
 |---|---|---|---|
-| T1 | pending (work-unit commit deferred to explicit user decision) | unit: `npx jest src/core/database/tenant-rls-coverage.spec.ts --runInBand` → 18/18 passed; DB: `npx jest --config ./test/jest-db.json --runInBand tenant-rls-coverage` → 5/5 passed; suite: `npm run test:db` → 45 suites / 256 tests passed; harness: `SCHEMA_CHECK_DB=omnifood_schema_build_test bash scripts/verify-schema-build.sh` → PASS both scenarios, coverage 79/79 classified (32 direct, 5 parent-owned, 8 global, 34 debt), failures 0; `git diff --check` → clean | RED observed: `onboarding_idempotency_records` and `onboarding_sessions` surfaced as unclassified tenant-bearing tables (1 failed, 4 passed). GREEN observed: all five checks pass; T1 implementation complete. |
+| T1 | `b23a8b7` | unit: `npx jest src/core/database/tenant-rls-coverage.spec.ts --runInBand` → 18/18 passed; DB: `npx jest --config ./test/jest-db.json --runInBand tenant-rls-coverage` → 5/5 passed; suite: `npm run test:db` → 45 suites / 256 tests passed; harness: `SCHEMA_CHECK_DB=omnifood_schema_build_test bash scripts/verify-schema-build.sh` → PASS both scenarios, coverage 79/79 classified (32 direct, 5 parent-owned, 8 global, 34 debt), failures 0; `git diff --check` → clean | RED observed: `onboarding_idempotency_records` and `onboarding_sessions` surfaced as unclassified tenant-bearing tables (1 failed, 4 passed). GREEN and independent verification observed; T1 complete. |
 | T2 | pending | pending | pending |
 | T3 | pending | pending | pending |
 | T4 | pending | pending | pending |
@@ -181,8 +181,9 @@ Status: pending; depends on T2 and T3.
   debt 34), failures 0; the gate also caught and failed a real defect during
   bring-up (boolean spelling drift in the catalog feed), proving it fails
   closed rather than passing vacuously.
-- Side effects: none outside the six authorized paths. No production migration,
-  commit, push, PR, deploy, staging mutation, provisioning, or Q80 operation.
+- Side effects: none outside the six authorized paths. Functional commit `b23a8b7`
+  was created locally. No production migration, push, PR, deploy, staging mutation,
+  provisioning, or Q80 operation.
 - Rollback boundary: only the six authorized paths; removing/reverting them
   returns to `88dd778` without touching migrations or runtime behavior.
 
