@@ -170,15 +170,7 @@ class _$AppDatabase extends AppDatabase {
 
   FulfillmentPersistenceDao? _fulfillmentPersistenceDaoInstance;
 
-  OhacPolicyEpochDao? _ohacPolicyEpochDaoInstance;
-
-  OhacPolicyEntryDao? _ohacPolicyEntryDaoInstance;
-
-  OhacTerminalStateDao? _ohacTerminalStateDaoInstance;
-
-  OhacAttemptStateDao? _ohacAttemptStateDaoInstance;
-
-  OhacLocalEventDao? _ohacLocalEventDaoInstance;
+  OhacDeliveryDao? _ohacDeliveryDaoInstance;
 
   Future<sqflite.Database> open(
     String path,
@@ -681,33 +673,9 @@ class _$AppDatabase extends AppDatabase {
   }
 
   @override
-  OhacPolicyEpochDao get ohacPolicyEpochDao {
-    return _ohacPolicyEpochDaoInstance ??=
-        _$OhacPolicyEpochDao(database, changeListener);
-  }
-
-  @override
-  OhacPolicyEntryDao get ohacPolicyEntryDao {
-    return _ohacPolicyEntryDaoInstance ??=
-        _$OhacPolicyEntryDao(database, changeListener);
-  }
-
-  @override
-  OhacTerminalStateDao get ohacTerminalStateDao {
-    return _ohacTerminalStateDaoInstance ??=
-        _$OhacTerminalStateDao(database, changeListener);
-  }
-
-  @override
-  OhacAttemptStateDao get ohacAttemptStateDao {
-    return _ohacAttemptStateDaoInstance ??=
-        _$OhacAttemptStateDao(database, changeListener);
-  }
-
-  @override
-  OhacLocalEventDao get ohacLocalEventDao {
-    return _ohacLocalEventDaoInstance ??=
-        _$OhacLocalEventDao(database, changeListener);
+  OhacDeliveryDao get ohacDeliveryDao {
+    return _ohacDeliveryDaoInstance ??=
+        _$OhacDeliveryDao(database, changeListener);
   }
 }
 
@@ -7542,8 +7510,8 @@ class _$FulfillmentPersistenceDao extends FulfillmentPersistenceDao {
   }
 }
 
-class _$OhacPolicyEpochDao extends OhacPolicyEpochDao {
-  _$OhacPolicyEpochDao(
+class _$OhacDeliveryDao extends OhacDeliveryDao {
+  _$OhacDeliveryDao(
     this.database,
     this.changeListener,
   )   : _queryAdapter = QueryAdapter(database),
@@ -7563,6 +7531,72 @@ class _$OhacPolicyEpochDao extends OhacPolicyEpochDao {
                   'minimum_assertion_schema': item.minimumAssertionSchema,
                   'payload': item.payload,
                   'received_at': item.receivedAt
+                }),
+        _ohacPolicyEntryEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'human_auth_policy_entries',
+            (OhacPolicyEntryEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'sequence': item.sequence,
+                  'user_id': item.userId,
+                  'status': item.status,
+                  'role': item.role,
+                  'permissions': item.permissions,
+                  'verifier_algorithm': item.verifierAlgorithm,
+                  'verifier_format_version': item.verifierFormatVersion,
+                  'verifier_encoded': item.verifierEncoded,
+                  'attempt_reset_generation': item.attemptResetGeneration
+                }),
+        _ohacTerminalStateEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'human_auth_terminal_state',
+            (OhacTerminalStateEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'state': item.state,
+                  'active_sequence': item.activeSequence,
+                  'active_digest': item.activeDigest,
+                  'candidate_sequence': item.candidateSequence,
+                  'candidate_digest': item.candidateDigest,
+                  'server_floor_sequence': item.serverFloorSequence,
+                  'server_floor_digest': item.serverFloorDigest,
+                  'negotiated_pos_build': item.negotiatedPosBuild,
+                  'negotiated_backend_build': item.negotiatedBackendBuild,
+                  'negotiated_policy_schema': item.negotiatedPolicySchema,
+                  'negotiated_assertion_schema': item.negotiatedAssertionSchema,
+                  'integrity_classification': item.integrityClassification,
+                  'local_authorization_sequence':
+                      item.localAuthorizationSequence,
+                  'revision': item.revision,
+                  'updated_at': item.updatedAt
+                }),
+        _ohacAttemptStateEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'human_auth_attempt_state',
+            (OhacAttemptStateEntity item) => <String, Object?>{
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'user_id': item.userId,
+                  'failure_timestamps': item.failureTimestamps,
+                  'locked_until': item.lockedUntil,
+                  'reset_generation': item.resetGeneration,
+                  'local_authorization_sequence':
+                      item.localAuthorizationSequence,
+                  'revision': item.revision,
+                  'updated_at': item.updatedAt
+                }),
+        _ohacLocalEventEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'human_auth_local_events',
+            (OhacLocalEventEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'tenant_id': item.tenantId,
+                  'terminal_id': item.terminalId,
+                  'event_type': item.eventType,
+                  'sequence': item.sequence,
+                  'payload': item.payload,
+                  'created_at': item.createdAt
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -7573,6 +7607,18 @@ class _$OhacPolicyEpochDao extends OhacPolicyEpochDao {
 
   final InsertionAdapter<OhacPolicyEpochEntity>
       _ohacPolicyEpochEntityInsertionAdapter;
+
+  final InsertionAdapter<OhacPolicyEntryEntity>
+      _ohacPolicyEntryEntityInsertionAdapter;
+
+  final InsertionAdapter<OhacTerminalStateEntity>
+      _ohacTerminalStateEntityInsertionAdapter;
+
+  final InsertionAdapter<OhacAttemptStateEntity>
+      _ohacAttemptStateEntityInsertionAdapter;
+
+  final InsertionAdapter<OhacLocalEventEntity>
+      _ohacLocalEventEntityInsertionAdapter;
 
   @override
   Future<OhacPolicyEpochEntity?> findEpoch(
@@ -7610,44 +7656,6 @@ class _$OhacPolicyEpochDao extends OhacPolicyEpochDao {
   }
 
   @override
-  Future<void> insertEpoch(OhacPolicyEpochEntity epoch) async {
-    await _ohacPolicyEpochEntityInsertionAdapter.insert(
-        epoch, OnConflictStrategy.abort);
-  }
-}
-
-class _$OhacPolicyEntryDao extends OhacPolicyEntryDao {
-  _$OhacPolicyEntryDao(
-    this.database,
-    this.changeListener,
-  )   : _queryAdapter = QueryAdapter(database),
-        _ohacPolicyEntryEntityInsertionAdapter = InsertionAdapter(
-            database,
-            'human_auth_policy_entries',
-            (OhacPolicyEntryEntity item) => <String, Object?>{
-                  'tenant_id': item.tenantId,
-                  'terminal_id': item.terminalId,
-                  'sequence': item.sequence,
-                  'user_id': item.userId,
-                  'status': item.status,
-                  'role': item.role,
-                  'permissions': item.permissions,
-                  'verifier_algorithm': item.verifierAlgorithm,
-                  'verifier_format_version': item.verifierFormatVersion,
-                  'verifier_encoded': item.verifierEncoded,
-                  'attempt_reset_generation': item.attemptResetGeneration
-                });
-
-  final sqflite.DatabaseExecutor database;
-
-  final StreamController<String> changeListener;
-
-  final QueryAdapter _queryAdapter;
-
-  final InsertionAdapter<OhacPolicyEntryEntity>
-      _ohacPolicyEntryEntityInsertionAdapter;
-
-  @override
   Future<List<OhacPolicyEntryEntity>> findEntries(
     String tenantId,
     String terminalId,
@@ -7671,51 +7679,6 @@ class _$OhacPolicyEntryDao extends OhacPolicyEntryDao {
         mapper: (Map<String, Object?> row) => OhacPolicyEntryEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, sequence: row['sequence'] as int, userId: row['user_id'] as String, status: row['status'] as String, role: row['role'] as String, permissions: row['permissions'] as String, verifierAlgorithm: row['verifier_algorithm'] as String, verifierFormatVersion: row['verifier_format_version'] as String, verifierEncoded: row['verifier_encoded'] as String, attemptResetGeneration: row['attempt_reset_generation'] as String),
         arguments: [tenantId, terminalId, sequence, userId]);
   }
-
-  @override
-  Future<void> insertEntries(List<OhacPolicyEntryEntity> entries) async {
-    await _ohacPolicyEntryEntityInsertionAdapter.insertList(
-        entries, OnConflictStrategy.abort);
-  }
-}
-
-class _$OhacTerminalStateDao extends OhacTerminalStateDao {
-  _$OhacTerminalStateDao(
-    this.database,
-    this.changeListener,
-  )   : _queryAdapter = QueryAdapter(database),
-        _ohacTerminalStateEntityInsertionAdapter = InsertionAdapter(
-            database,
-            'human_auth_terminal_state',
-            (OhacTerminalStateEntity item) => <String, Object?>{
-                  'tenant_id': item.tenantId,
-                  'terminal_id': item.terminalId,
-                  'state': item.state,
-                  'active_sequence': item.activeSequence,
-                  'active_digest': item.activeDigest,
-                  'candidate_sequence': item.candidateSequence,
-                  'candidate_digest': item.candidateDigest,
-                  'server_floor_sequence': item.serverFloorSequence,
-                  'server_floor_digest': item.serverFloorDigest,
-                  'negotiated_pos_build': item.negotiatedPosBuild,
-                  'negotiated_backend_build': item.negotiatedBackendBuild,
-                  'negotiated_policy_schema': item.negotiatedPolicySchema,
-                  'negotiated_assertion_schema': item.negotiatedAssertionSchema,
-                  'integrity_classification': item.integrityClassification,
-                  'local_authorization_sequence':
-                      item.localAuthorizationSequence,
-                  'revision': item.revision,
-                  'updated_at': item.updatedAt
-                });
-
-  final sqflite.DatabaseExecutor database;
-
-  final StreamController<String> changeListener;
-
-  final QueryAdapter _queryAdapter;
-
-  final InsertionAdapter<OhacTerminalStateEntity>
-      _ohacTerminalStateEntityInsertionAdapter;
 
   @override
   Future<OhacTerminalStateEntity?> findTerminalState(
@@ -7827,43 +7790,6 @@ class _$OhacTerminalStateDao extends OhacTerminalStateDao {
   }
 
   @override
-  Future<void> insertTerminalState(OhacTerminalStateEntity state) async {
-    await _ohacTerminalStateEntityInsertionAdapter.insert(
-        state, OnConflictStrategy.abort);
-  }
-}
-
-class _$OhacAttemptStateDao extends OhacAttemptStateDao {
-  _$OhacAttemptStateDao(
-    this.database,
-    this.changeListener,
-  )   : _queryAdapter = QueryAdapter(database),
-        _ohacAttemptStateEntityInsertionAdapter = InsertionAdapter(
-            database,
-            'human_auth_attempt_state',
-            (OhacAttemptStateEntity item) => <String, Object?>{
-                  'tenant_id': item.tenantId,
-                  'terminal_id': item.terminalId,
-                  'user_id': item.userId,
-                  'failure_timestamps': item.failureTimestamps,
-                  'locked_until': item.lockedUntil,
-                  'reset_generation': item.resetGeneration,
-                  'local_authorization_sequence':
-                      item.localAuthorizationSequence,
-                  'revision': item.revision,
-                  'updated_at': item.updatedAt
-                });
-
-  final sqflite.DatabaseExecutor database;
-
-  final StreamController<String> changeListener;
-
-  final QueryAdapter _queryAdapter;
-
-  final InsertionAdapter<OhacAttemptStateEntity>
-      _ohacAttemptStateEntityInsertionAdapter;
-
-  @override
   Future<OhacAttemptStateEntity?> findAttemptState(
     String tenantId,
     String terminalId,
@@ -7904,40 +7830,6 @@ class _$OhacAttemptStateDao extends OhacAttemptStateDao {
   }
 
   @override
-  Future<void> insertAttemptState(OhacAttemptStateEntity state) async {
-    await _ohacAttemptStateEntityInsertionAdapter.insert(
-        state, OnConflictStrategy.abort);
-  }
-}
-
-class _$OhacLocalEventDao extends OhacLocalEventDao {
-  _$OhacLocalEventDao(
-    this.database,
-    this.changeListener,
-  )   : _queryAdapter = QueryAdapter(database),
-        _ohacLocalEventEntityInsertionAdapter = InsertionAdapter(
-            database,
-            'human_auth_local_events',
-            (OhacLocalEventEntity item) => <String, Object?>{
-                  'id': item.id,
-                  'tenant_id': item.tenantId,
-                  'terminal_id': item.terminalId,
-                  'event_type': item.eventType,
-                  'sequence': item.sequence,
-                  'payload': item.payload,
-                  'created_at': item.createdAt
-                });
-
-  final sqflite.DatabaseExecutor database;
-
-  final StreamController<String> changeListener;
-
-  final QueryAdapter _queryAdapter;
-
-  final InsertionAdapter<OhacLocalEventEntity>
-      _ohacLocalEventEntityInsertionAdapter;
-
-  @override
   Future<List<OhacLocalEventEntity>> findEventsForTerminal(
     String tenantId,
     String terminalId,
@@ -7946,6 +7838,30 @@ class _$OhacLocalEventDao extends OhacLocalEventDao {
         'SELECT * FROM human_auth_local_events WHERE tenant_id = ?1 AND terminal_id = ?2 ORDER BY created_at ASC, id ASC',
         mapper: (Map<String, Object?> row) => OhacLocalEventEntity(id: row['id'] as String, tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, eventType: row['event_type'] as String, sequence: row['sequence'] as int, payload: row['payload'] as String, createdAt: row['created_at'] as String),
         arguments: [tenantId, terminalId]);
+  }
+
+  @override
+  Future<void> insertEpoch(OhacPolicyEpochEntity epoch) async {
+    await _ohacPolicyEpochEntityInsertionAdapter.insert(
+        epoch, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertEntries(List<OhacPolicyEntryEntity> entries) async {
+    await _ohacPolicyEntryEntityInsertionAdapter.insertList(
+        entries, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertTerminalState(OhacTerminalStateEntity state) async {
+    await _ohacTerminalStateEntityInsertionAdapter.insert(
+        state, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertAttemptState(OhacAttemptStateEntity state) async {
+    await _ohacAttemptStateEntityInsertionAdapter.insert(
+        state, OnConflictStrategy.abort);
   }
 
   @override

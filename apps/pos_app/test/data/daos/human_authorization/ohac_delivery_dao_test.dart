@@ -148,9 +148,9 @@ void main() {
       expect(await database.database.query('human_auth_policy_epochs'), isEmpty);
 
       final inserted = epoch(sequence: 3);
-      await database.ohacPolicyEpochDao.insertEpoch(inserted);
+      await database.ohacDeliveryDao.insertEpoch(inserted);
 
-      final read = await database.ohacPolicyEpochDao.findEpoch(
+      final read = await database.ohacDeliveryDao.findEpoch(
         'tenant-1',
         'terminal-1',
         3,
@@ -171,9 +171,9 @@ void main() {
     });
 
     test('findEpoch returns null for an unknown epoch', () async {
-      await database.ohacPolicyEpochDao.insertEpoch(epoch(sequence: 1));
+      await database.ohacDeliveryDao.insertEpoch(epoch(sequence: 1));
 
-      final read = await database.ohacPolicyEpochDao.findEpoch(
+      final read = await database.ohacDeliveryDao.findEpoch(
         'tenant-1',
         'terminal-1',
         99,
@@ -185,11 +185,11 @@ void main() {
         () async {
       expect(await database.database.query('human_auth_policy_epochs'), isEmpty);
 
-      await database.ohacPolicyEpochDao.insertEpoch(epoch(sequence: 3));
-      await database.ohacPolicyEpochDao.insertEpoch(epoch(sequence: 1));
-      await database.ohacPolicyEpochDao.insertEpoch(epoch(sequence: 7));
+      await database.ohacDeliveryDao.insertEpoch(epoch(sequence: 3));
+      await database.ohacDeliveryDao.insertEpoch(epoch(sequence: 1));
+      await database.ohacDeliveryDao.insertEpoch(epoch(sequence: 7));
 
-      final newest = await database.ohacPolicyEpochDao.findNewestEpoch(
+      final newest = await database.ohacDeliveryDao.findNewestEpoch(
         'tenant-1',
         'terminal-1',
       );
@@ -199,11 +199,11 @@ void main() {
 
     test('findEpochsAfter returns ascending and excludes the boundary',
         () async {
-      await database.ohacPolicyEpochDao.insertEpoch(epoch(sequence: 1));
-      await database.ohacPolicyEpochDao.insertEpoch(epoch(sequence: 2));
-      await database.ohacPolicyEpochDao.insertEpoch(epoch(sequence: 3));
+      await database.ohacDeliveryDao.insertEpoch(epoch(sequence: 1));
+      await database.ohacDeliveryDao.insertEpoch(epoch(sequence: 2));
+      await database.ohacDeliveryDao.insertEpoch(epoch(sequence: 3));
 
-      final after = await database.ohacPolicyEpochDao.findEpochsAfter(
+      final after = await database.ohacDeliveryDao.findEpochsAfter(
         'tenant-1',
         'terminal-1',
         1,
@@ -217,9 +217,9 @@ void main() {
       expect(await database.database.query('human_auth_policy_entries'), isEmpty);
 
       final inserted = entry(sequence: 2, userId: 'user-9');
-      await database.ohacPolicyEntryDao.insertEntries([inserted]);
+      await database.ohacDeliveryDao.insertEntries([inserted]);
 
-      final read = await database.ohacPolicyEntryDao.findEntryForUser(
+      final read = await database.ohacDeliveryDao.findEntryForUser(
         'tenant-1',
         'terminal-1',
         2,
@@ -240,13 +240,13 @@ void main() {
     });
 
     test('findEntries returns entries ordered by user_id', () async {
-      await database.ohacPolicyEntryDao.insertEntries([
+      await database.ohacDeliveryDao.insertEntries([
         entry(userId: 'zoe'),
         entry(userId: 'ada'),
         entry(userId: 'mia'),
       ]);
 
-      final entries = await database.ohacPolicyEntryDao.findEntries(
+      final entries = await database.ohacDeliveryDao.findEntries(
         'tenant-1',
         'terminal-1',
         1,
@@ -256,12 +256,12 @@ void main() {
 
     test('findEntryForUser finds the right one and null for an unknown user',
         () async {
-      await database.ohacPolicyEntryDao.insertEntries([
+      await database.ohacDeliveryDao.insertEntries([
         entry(sequence: 1, userId: 'user-1'),
         entry(sequence: 2, userId: 'user-2'),
       ]);
 
-      final found = await database.ohacPolicyEntryDao.findEntryForUser(
+      final found = await database.ohacDeliveryDao.findEntryForUser(
         'tenant-1',
         'terminal-1',
         2,
@@ -271,7 +271,7 @@ void main() {
       expect(found!.sequence, 2);
       expect(found.userId, 'user-2');
 
-      final unknown = await database.ohacPolicyEntryDao.findEntryForUser(
+      final unknown = await database.ohacDeliveryDao.findEntryForUser(
         'tenant-1',
         'terminal-1',
         2,
@@ -349,9 +349,9 @@ void main() {
         integrityClassification: 'EPOCH_CHAIN_BROKEN',
         localAuthorizationSequence: 12,
       );
-      await database.ohacTerminalStateDao.insertTerminalState(inserted);
+      await database.ohacDeliveryDao.insertTerminalState(inserted);
 
-      final read = await database.ohacTerminalStateDao.findTerminalState(
+      final read = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
@@ -361,16 +361,16 @@ void main() {
 
     test('insertTerminalState twice for the same terminal fails instead of '
         'overwriting', () async {
-      await database.ohacTerminalStateDao
+      await database.ohacDeliveryDao
           .insertTerminalState(terminalState(state: 'ACTIVE'));
 
       await expectLater(
-        database.ohacTerminalStateDao
+        database.ohacDeliveryDao
             .insertTerminalState(terminalState(state: 'ACK_SUBMITTING')),
         throwsA(isA<Exception>()),
       );
 
-      final stored = await database.ohacTerminalStateDao.findTerminalState(
+      final stored = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
@@ -382,10 +382,10 @@ void main() {
         'pair, and confirm restores it', () async {
       // The sentinels are the documented "absent" values: epoch sequences
       // start at 1 so 0 is not a sequence, and a digest is never empty.
-      await database.ohacTerminalStateDao
+      await database.ohacDeliveryDao
           .insertTerminalState(terminalState(state: 'ACTIVE', revision: 7));
 
-      final fresh = await database.ohacTerminalStateDao.findTerminalState(
+      final fresh = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
@@ -396,7 +396,7 @@ void main() {
               'floor');
       expect(fresh.serverFloorDigest, 'GENESIS');
 
-      final received = await database.ohacTerminalStateDao.receiveEpoch(
+      final received = await database.ohacDeliveryDao.receiveEpoch(
         'tenant-1',
         'terminal-1',
         7,
@@ -410,14 +410,14 @@ void main() {
       );
       expect(received, 1);
 
-      final carrying = await database.ohacTerminalStateDao.findTerminalState(
+      final carrying = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
       expect(carrying!.candidateSequence, 8);
       expect(carrying.candidateDigest, 'sha256:${'d' * 64}');
 
-      final confirmed = await database.ohacTerminalStateDao
+      final confirmed = await database.ohacDeliveryDao
           .confirmAcknowledgement(
         'tenant-1',
         'terminal-1',
@@ -426,7 +426,7 @@ void main() {
       );
       expect(confirmed, 1);
 
-      final restored = await database.ohacTerminalStateDao.findTerminalState(
+      final restored = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
@@ -441,10 +441,10 @@ void main() {
 
     test('receiveEpoch writes the pending state, the candidate pair and the '
         'negotiated facts', () async {
-      await database.ohacTerminalStateDao
+      await database.ohacDeliveryDao
           .insertTerminalState(terminalState(state: 'ACTIVE', revision: 7));
 
-      final received = await database.ohacTerminalStateDao.receiveEpoch(
+      final received = await database.ohacDeliveryDao.receiveEpoch(
         'tenant-1',
         'terminal-1',
         7,
@@ -458,7 +458,7 @@ void main() {
       );
       expect(received, 1);
 
-      final read = await database.ohacTerminalStateDao.findTerminalState(
+      final read = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
@@ -480,7 +480,7 @@ void main() {
         'defaulted', () async {
       // A receive over a row whose negotiated facts were already set must
       // overwrite every one of them, not leave stale values behind.
-      await database.ohacTerminalStateDao.insertTerminalState(terminalState(
+      await database.ohacDeliveryDao.insertTerminalState(terminalState(
         state: 'ACTIVE',
         revision: 7,
         negotiatedPosBuild: '1.0.0+1',
@@ -489,7 +489,7 @@ void main() {
         negotiatedAssertionSchema: 'ohac.assertion.v0',
       ));
 
-      final received = await database.ohacTerminalStateDao.receiveEpoch(
+      final received = await database.ohacDeliveryDao.receiveEpoch(
         'tenant-1',
         'terminal-1',
         7,
@@ -503,7 +503,7 @@ void main() {
       );
       expect(received, 1);
 
-      final read = await database.ohacTerminalStateDao.findTerminalState(
+      final read = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
@@ -515,14 +515,14 @@ void main() {
 
     test('submitAcknowledgement moves to ACK_SUBMITTING and leaves the '
         'candidate untouched', () async {
-      await database.ohacTerminalStateDao.insertTerminalState(terminalState(
+      await database.ohacDeliveryDao.insertTerminalState(terminalState(
         state: 'RECEIVE_PENDING',
         revision: 7,
         candidateSequence: 8,
         candidateDigest: 'sha256:${'d' * 64}',
       ));
 
-      final submitted = await database.ohacTerminalStateDao
+      final submitted = await database.ohacDeliveryDao
           .submitAcknowledgement(
         'tenant-1',
         'terminal-1',
@@ -531,7 +531,7 @@ void main() {
       );
       expect(submitted, 1);
 
-      final read = await database.ohacTerminalStateDao.findTerminalState(
+      final read = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
@@ -544,10 +544,10 @@ void main() {
     });
 
     test('recordServerFloor writes both halves of the floor', () async {
-      await database.ohacTerminalStateDao
+      await database.ohacDeliveryDao
           .insertTerminalState(terminalState(state: 'ACTIVE', revision: 7));
 
-      final recorded = await database.ohacTerminalStateDao.recordServerFloor(
+      final recorded = await database.ohacDeliveryDao.recordServerFloor(
         'tenant-1',
         'terminal-1',
         7,
@@ -557,7 +557,7 @@ void main() {
       );
       expect(recorded, 1);
 
-      final read = await database.ohacTerminalStateDao.findTerminalState(
+      final read = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
@@ -568,10 +568,10 @@ void main() {
 
     test('markIntegrityLoss sets the state and the classification, and the '
         'classification is readable afterwards', () async {
-      await database.ohacTerminalStateDao
+      await database.ohacDeliveryDao
           .insertTerminalState(terminalState(state: 'ACTIVE', revision: 7));
 
-      final marked = await database.ohacTerminalStateDao.markIntegrityLoss(
+      final marked = await database.ohacDeliveryDao.markIntegrityLoss(
         'tenant-1',
         'terminal-1',
         7,
@@ -580,7 +580,7 @@ void main() {
       );
       expect(marked, 1);
 
-      final read = await database.ohacTerminalStateDao.findTerminalState(
+      final read = await database.ohacDeliveryDao.findTerminalState(
         'tenant-1',
         'terminal-1',
       );
@@ -594,7 +594,7 @@ void main() {
       final candidateDigest = 'sha256:${'d' * 64}';
 
       Future<int?> receive(int expectedRevision) =>
-          database.ohacTerminalStateDao.receiveEpoch(
+          database.ohacDeliveryDao.receiveEpoch(
             'tenant-1',
             'terminal-1',
             expectedRevision,
@@ -607,21 +607,21 @@ void main() {
             '2026-01-02T00:00:00.000Z',
           );
       Future<int?> submit(int expectedRevision) =>
-          database.ohacTerminalStateDao.submitAcknowledgement(
+          database.ohacDeliveryDao.submitAcknowledgement(
             'tenant-1',
             'terminal-1',
             expectedRevision,
             '2026-01-02T00:00:00.000Z',
           );
       Future<int?> confirm(int expectedRevision) =>
-          database.ohacTerminalStateDao.confirmAcknowledgement(
+          database.ohacDeliveryDao.confirmAcknowledgement(
             'tenant-1',
             'terminal-1',
             expectedRevision,
             '2026-01-02T00:00:00.000Z',
           );
       Future<int?> floor(int expectedRevision) =>
-          database.ohacTerminalStateDao.recordServerFloor(
+          database.ohacDeliveryDao.recordServerFloor(
             'tenant-1',
             'terminal-1',
             expectedRevision,
@@ -630,7 +630,7 @@ void main() {
             '2026-01-02T00:00:00.000Z',
           );
       Future<int?> loss(int expectedRevision) =>
-          database.ohacTerminalStateDao.markIntegrityLoss(
+          database.ohacDeliveryDao.markIntegrityLoss(
             'tenant-1',
             'terminal-1',
             expectedRevision,
@@ -722,7 +722,7 @@ void main() {
 
       for (final (name, seeded, attempt, expectedAfterWin) in scenarios) {
         await database.database.delete('human_auth_terminal_state');
-        await database.ohacTerminalStateDao.insertTerminalState(seeded);
+        await database.ohacDeliveryDao.insertTerminalState(seeded);
 
         // A stale expectation loses the race and changes nothing. The seeded
         // revision is deliberately not 1, so a WHERE clause that compared the
@@ -730,7 +730,7 @@ void main() {
         // expectation would fail here rather than pass by coincidence.
         final stale = await attempt(seeded.revision + 100);
         expect(stale, 0, reason: name);
-        final afterStale = await database.ohacTerminalStateDao
+        final afterStale = await database.ohacDeliveryDao
             .findTerminalState(seeded.tenantId, seeded.terminalId);
         // Whole-row equality is what proves a stale transition did not
         // partially apply: the state and the candidate must be unchanged
@@ -740,7 +740,7 @@ void main() {
         // The current expectation wins exactly once and bumps the revision.
         final won = await attempt(seeded.revision);
         expect(won, 1, reason: name);
-        final afterWin = await database.ohacTerminalStateDao
+        final afterWin = await database.ohacDeliveryDao
             .findTerminalState(seeded.tenantId, seeded.terminalId);
         expectSameTerminalState(
           afterWin!,
@@ -751,7 +751,7 @@ void main() {
         // The revision the win consumed can never win again.
         final replayed = await attempt(seeded.revision);
         expect(replayed, 0, reason: name);
-        final afterReplay = await database.ohacTerminalStateDao
+        final afterReplay = await database.ohacDeliveryDao
             .findTerminalState(seeded.tenantId, seeded.terminalId);
         expectSameTerminalState(
           afterReplay!,
@@ -771,9 +771,9 @@ void main() {
       );
 
       final inserted = attemptState();
-      await database.ohacAttemptStateDao.insertAttemptState(inserted);
+      await database.ohacDeliveryDao.insertAttemptState(inserted);
 
-      final read = await database.ohacAttemptStateDao.findAttemptState(
+      final read = await database.ohacDeliveryDao.findAttemptState(
         'tenant-1',
         'terminal-1',
         'user-1',
@@ -796,9 +796,9 @@ void main() {
         userId: 'user-2',
         lockedUntil: '2026-01-01T01:00:00.000Z',
       );
-      await database.ohacAttemptStateDao.insertAttemptState(inserted);
+      await database.ohacDeliveryDao.insertAttemptState(inserted);
 
-      final read = await database.ohacAttemptStateDao.findAttemptState(
+      final read = await database.ohacDeliveryDao.findAttemptState(
         'tenant-1',
         'terminal-1',
         'user-2',
@@ -808,13 +808,13 @@ void main() {
 
     test('the revision compare-and-set is real, including lockedUntil',
         () async {
-      await database.ohacAttemptStateDao
+      await database.ohacDeliveryDao
           .insertAttemptState(attemptState(revision: 5));
 
       // A stale expectation loses the race and changes nothing. As above, the
       // seeded revision is deliberately not 1 so a hardcoded comparison could
       // not pass by coincidence.
-      final stale = await database.ohacAttemptStateDao
+      final stale = await database.ohacDeliveryDao
           .updateAttemptStateIfRevisionMatches(
         'tenant-1',
         'terminal-1',
@@ -827,7 +827,7 @@ void main() {
         '2026-02-01T00:00:00.000Z',
       );
       expect(stale, 0);
-      final afterStale = await database.ohacAttemptStateDao.findAttemptState(
+      final afterStale = await database.ohacDeliveryDao.findAttemptState(
         'tenant-1',
         'terminal-1',
         'user-1',
@@ -837,7 +837,7 @@ void main() {
 
       // The current expectation wins exactly once, clears the lock and bumps
       // the revision.
-      final won = await database.ohacAttemptStateDao
+      final won = await database.ohacDeliveryDao
           .updateAttemptStateIfRevisionMatches(
         'tenant-1',
         'terminal-1',
@@ -850,7 +850,7 @@ void main() {
         '2026-02-01T00:00:00.000Z',
       );
       expect(won, 1);
-      final afterWin = await database.ohacAttemptStateDao.findAttemptState(
+      final afterWin = await database.ohacDeliveryDao.findAttemptState(
         'tenant-1',
         'terminal-1',
         'user-1',
@@ -863,7 +863,7 @@ void main() {
       expect(afterWin.revision, 6);
 
       // The revision the first win consumed can never win again.
-      final replayed = await database.ohacAttemptStateDao
+      final replayed = await database.ohacDeliveryDao
           .updateAttemptStateIfRevisionMatches(
         'tenant-1',
         'terminal-1',
@@ -876,7 +876,7 @@ void main() {
         '2026-03-01T00:00:00.000Z',
       );
       expect(replayed, 0);
-      final afterReplay = await database.ohacAttemptStateDao.findAttemptState(
+      final afterReplay = await database.ohacDeliveryDao.findAttemptState(
         'tenant-1',
         'terminal-1',
         'user-1',
@@ -887,12 +887,12 @@ void main() {
 
     test('the clear-the-lock sentinel works from a real instant, and a real '
         'instant can be stored again', () async {
-      await database.ohacAttemptStateDao.insertAttemptState(
+      await database.ohacDeliveryDao.insertAttemptState(
         attemptState(lockedUntil: '2026-01-01T01:00:00.000Z'),
       );
 
       Future<String?> storedLock() async =>
-          (await database.ohacAttemptStateDao.findAttemptState(
+          (await database.ohacDeliveryDao.findAttemptState(
             'tenant-1',
             'terminal-1',
             'user-1',
@@ -904,7 +904,7 @@ void main() {
       // cannot distinguish.
       expect(await storedLock(), '2026-01-01T01:00:00.000Z');
 
-      final cleared = await database.ohacAttemptStateDao
+      final cleared = await database.ohacDeliveryDao
           .updateAttemptStateIfRevisionMatches(
         'tenant-1',
         'terminal-1',
@@ -923,7 +923,7 @@ void main() {
         reason: "an empty string must reach the column as NULL, not as ''",
       );
 
-      final relocked = await database.ohacAttemptStateDao
+      final relocked = await database.ohacDeliveryDao
           .updateAttemptStateIfRevisionMatches(
         'tenant-1',
         'terminal-1',
@@ -949,9 +949,9 @@ void main() {
       expect(await database.database.query('human_auth_local_events'), isEmpty);
 
       final inserted = event(id: 'event-42', createdAt: '2026-01-05T00:00:00.000Z');
-      await database.ohacLocalEventDao.appendEvent(inserted);
+      await database.ohacDeliveryDao.appendEvent(inserted);
 
-      final events = await database.ohacLocalEventDao.findEventsForTerminal(
+      final events = await database.ohacDeliveryDao.findEventsForTerminal(
         'tenant-1',
         'terminal-1',
       );
@@ -968,21 +968,21 @@ void main() {
 
     test('findEventsForTerminal orders by created_at and isolates terminals',
         () async {
-      await database.ohacLocalEventDao.appendEvent(
+      await database.ohacDeliveryDao.appendEvent(
         event(id: 'e-3', createdAt: '2026-01-03T00:00:00.000Z'),
       );
-      await database.ohacLocalEventDao.appendEvent(
+      await database.ohacDeliveryDao.appendEvent(
         event(id: 'e-1', createdAt: '2026-01-01T00:00:00.000Z'),
       );
-      await database.ohacLocalEventDao.appendEvent(
+      await database.ohacDeliveryDao.appendEvent(
         event(id: 'e-2', createdAt: '2026-01-02T00:00:00.000Z'),
       );
-      await database.ohacLocalEventDao.appendEvent(
+      await database.ohacDeliveryDao.appendEvent(
         event(id: 'other-1', terminalId: 'terminal-2',
             createdAt: '2026-01-01T00:00:00.000Z'),
       );
 
-      final events = await database.ohacLocalEventDao.findEventsForTerminal(
+      final events = await database.ohacDeliveryDao.findEventsForTerminal(
         'tenant-1',
         'terminal-1',
       );
@@ -994,12 +994,12 @@ void main() {
       const sharedInstant = '2026-01-01T00:00:00.000Z';
       // Inserted in reverse id order, so an absent tiebreak would return the
       // insertion order and this assertion would fail.
-      await database.ohacLocalEventDao
+      await database.ohacDeliveryDao
           .appendEvent(event(id: 'e-b', createdAt: sharedInstant));
-      await database.ohacLocalEventDao
+      await database.ohacDeliveryDao
           .appendEvent(event(id: 'e-a', createdAt: sharedInstant));
 
-      final events = await database.ohacLocalEventDao.findEventsForTerminal(
+      final events = await database.ohacDeliveryDao.findEventsForTerminal(
         'tenant-1',
         'terminal-1',
       );
@@ -1010,9 +1010,9 @@ void main() {
   group('append-only refusal at the DAO boundary', () {
     test('a direct update against each append-only table is refused',
         () async {
-      await database.ohacPolicyEpochDao.insertEpoch(epoch());
-      await database.ohacPolicyEntryDao.insertEntries([entry()]);
-      await database.ohacLocalEventDao.appendEvent(event());
+      await database.ohacDeliveryDao.insertEpoch(epoch());
+      await database.ohacDeliveryDao.insertEntries([entry()]);
+      await database.ohacDeliveryDao.appendEvent(event());
 
       for (final statement in [
         "UPDATE human_auth_policy_epochs SET payload = 'tampered'",
@@ -1045,9 +1045,9 @@ void main() {
 
     test('a direct delete against each append-only table is refused',
         () async {
-      await database.ohacPolicyEpochDao.insertEpoch(epoch());
-      await database.ohacPolicyEntryDao.insertEntries([entry()]);
-      await database.ohacLocalEventDao.appendEvent(event());
+      await database.ohacDeliveryDao.insertEpoch(epoch());
+      await database.ohacDeliveryDao.insertEntries([entry()]);
+      await database.ohacDeliveryDao.appendEvent(event());
 
       for (final statement in [
         'DELETE FROM human_auth_policy_epochs',
@@ -1079,9 +1079,9 @@ void main() {
       // The refusal assertions above only mean something if immutability was
       // not over-applied: both mutable tables must still accept an insert and
       // an update.
-      await database.ohacTerminalStateDao
+      await database.ohacDeliveryDao
           .insertTerminalState(terminalState(revision: 1));
-      final updated = await database.ohacTerminalStateDao
+      final updated = await database.ohacDeliveryDao
           .submitAcknowledgement(
         'tenant-1',
         'terminal-1',
@@ -1090,9 +1090,9 @@ void main() {
       );
       expect(updated, 1);
 
-      await database.ohacAttemptStateDao
+      await database.ohacDeliveryDao
           .insertAttemptState(attemptState(revision: 1));
-      final attemptUpdated = await database.ohacAttemptStateDao
+      final attemptUpdated = await database.ohacDeliveryDao
           .updateAttemptStateIfRevisionMatches(
         'tenant-1',
         'terminal-1',
@@ -1107,7 +1107,7 @@ void main() {
       expect(attemptUpdated, 1);
 
       expect(
-        (await database.ohacTerminalStateDao.findTerminalState(
+        (await database.ohacDeliveryDao.findTerminalState(
           'tenant-1',
           'terminal-1',
         ))!
@@ -1115,7 +1115,7 @@ void main() {
         'ACK_SUBMITTING',
       );
       expect(
-        (await database.ohacAttemptStateDao.findAttemptState(
+        (await database.ohacDeliveryDao.findAttemptState(
           'tenant-1',
           'terminal-1',
           'user-1',
