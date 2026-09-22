@@ -151,6 +151,43 @@
 # inside the CORRECT form, in current_setting('app.tenant_id'::text, true), so
 # the discriminator targets the column-side cast specifically.
 #
+# Why the tenant RLS coverage ratchet exists
+# -------------------------------------------
+# Issue #493. Every ratchet above starts from a table that is ALREADY visible:
+# forced-RLS tables, uuid tenant columns, policies that exist. The blind spot
+# was one level up: a tenant-bearing table with no ENABLE, no FORCE, and no
+# policy never appears in any of them, so a whole domain can ship without
+# tenant isolation and every existing invariant reports PASS. Staging proved
+# the class is real: the runtime role could count another tenant's
+# onboarding_sessions rows.
+#
+# The coverage ratchet closes that class. Every public base table must be
+# classified exactly once in the reviewed manifest
+# scripts/schema-rls-coverage-manifest.txt:
+#
+#   direct        — carries tenant_id, ENABLE RLS, FORCE RLS, and at least
+#                   one policy. Any of those missing fails the gate.
+#   parent-owned  — no tenant_id; isolation flows through a foreign key to a
+#                   tenant-bearing parent (policy work: issue #493 T3).
+#   global        — reviewed platform / pre-tenant / infrastructure exception.
+#   debt          — explicit temporary tenant isolation debt, permitted only
+#                   as a reviewed ratchet entry. A debt table that becomes
+#                   fully tenant-protected is STALE and fails until promoted
+#                   to direct, so fixing a table without deleting its debt
+#                   line is a failure, not a no-op.
+#
+# A table absent from the manifest is "unclassified" and fails: adding a table
+# without deciding its isolation class is impossible. The manifest itself is
+# judged fail-closed too: unknown classifications, malformed lines, and
+# duplicate entries fail rather than being skipped.
+#
+# The classification semantics live in ONE place:
+# src/core/database/tenant-rls-coverage.ts (the same module the unit and
+# migration-built DB specs exercise). The shell verifier never re-implements
+# the rules: it collects the structural catalog facts (which the DB spec uses
+# too) and hands them to the compiled module through dist, so the gate, the
+# specs, and any future caller judge the manifest with one vocabulary.
+#
 # Why the entity/schema consistency assertion is one-directional
 # ------------------------------------------------------------------
 # A table can be correct in the schema while the entity that maps it still
@@ -223,10 +260,17 @@ MANIFEST_TENANT_TYPES="${SCRIPT_DIR}/schema-tenant-type-manifest.txt"
 # ratchet, so an unshipped file cannot silently flag the whole baseline.
 MANIFEST_COLUMN_TYPES="${SCRIPT_DIR}/schema-column-type-manifest.txt"
 
+# Reviewed classification manifest for the tenant RLS coverage ratchet
+# (issue #493). Same contract as the other ratchets: a missing file is a
+# failure, never an empty gate, so an unshipped manifest cannot silently
+# report every public table as unclassified and bury the real problem.
+MANIFEST_RLS_COVERAGE="${SCRIPT_DIR}/schema-rls-coverage-manifest.txt"
+
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 
 [ -f "${MANIFEST_TENANT_TYPES}" ] || fail "FAIL: tenant-type manifest not found at ${MANIFEST_TENANT_TYPES}."
 [ -f "${MANIFEST_COLUMN_TYPES}" ] || fail "FAIL: column-type manifest not found at ${MANIFEST_COLUMN_TYPES}."
+[ -f "${MANIFEST_RLS_COVERAGE}" ] || fail "FAIL: RLS coverage manifest not found at ${MANIFEST_RLS_COVERAGE}."
 
 case "${SCRATCH_DB}" in
   *_schema_build_test|*_scratch) ;;
@@ -303,7 +347,10 @@ entity_column_types="$(mktemp)"
 schema_column_types="$(mktemp)"
 column_type_divergences="$(mktemp)"
 column_type_manifest="$(mktemp)"
-trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}" "${tenant_uuid_cast_issues}" "${schema_uuid_tenant_tables}" "${entity_tenant_types}" "${entity_column_types}" "${schema_column_types}" "${column_type_divergences}" "${column_type_manifest}"' EXIT
+rls_coverage_catalog="$(mktemp)"
+rls_coverage_output="$(mktemp)"
+rls_coverage_failures="$(mktemp)"
+trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}" "${tenant_uuid_cast_issues}" "${schema_uuid_tenant_tables}" "${entity_tenant_types}" "${entity_column_types}" "${schema_column_types}" "${column_type_divergences}" "${column_type_manifest}" "${rls_coverage_catalog}" "${rls_coverage_output}" "${rls_coverage_failures}"' EXIT
 
 # Entities declare their table two ways: @Entity('name') and
 # @Entity({ name: 'name' }). Missing the second form would silently under-count
@@ -893,6 +940,85 @@ report_column_type_diff() {
   fi
 }
 
+collect_rls_coverage() {
+  # Structural catalog facts for EVERY public base table: the same facts the
+  # migration-built DB spec collects for its scratch schema (tenant column,
+  # ENABLE, FORCE, policy count). No tenant data is ever read; the catalog is
+  # judged by src/core/database/tenant-rls-coverage.ts, compiled to dist by
+  # the build step above, so the shell gate and the Jest specs share one
+  # classification vocabulary and one fail-closed manifest parser.
+  psql_admin -d "${SCRATCH_DB}" -tAc \
+    "SELECT c.relname || '|' || EXISTS (SELECT 1 FROM information_schema.columns col WHERE col.table_schema = 'public' AND col.table_name = c.relname AND col.column_name = 'tenant_id') || '|' || c.relrowsecurity || '|' || c.relforcerowsecurity || '|' || (SELECT count(*) FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = c.relname) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname" \
+    | sed '/^[[:space:]]*$/d' | sort -u > "${rls_coverage_catalog}"
+
+  ( cd "${APP_DIR}" && \
+    RLS_COVERAGE_MODULE="${APP_DIR}/dist/core/database/tenant-rls-coverage.js" \
+    RLS_COVERAGE_MANIFEST="${MANIFEST_RLS_COVERAGE}" \
+    RLS_COVERAGE_CATALOG="${rls_coverage_catalog}" \
+    node -e '
+const fs = require("fs");
+const {
+  loadTenantRlsManifest,
+  evaluateTenantRlsCoverage,
+} = require(process.env.RLS_COVERAGE_MODULE);
+const manifest = loadTenantRlsManifest(process.env.RLS_COVERAGE_MANIFEST);
+const tables = fs
+  .readFileSync(process.env.RLS_COVERAGE_CATALOG, "utf8")
+  .split("\n")
+  .filter((line) => line.trim() !== "")
+  .map((line) => {
+    const [name, tenant, enabled, forced, policies] = line.split("|");
+    // SQL string concatenation renders booleans as true/false; psql -tA
+    // displays them as t/f. Accept both so the catalog spelling can never
+    // silently flip the structural facts of a table.
+    const isTrue = (value) => value === "t" || value === "true";
+    return {
+      name,
+      hasTenantIdColumn: isTrue(tenant),
+      rlsEnabled: isTrue(enabled),
+      rlsForced: isTrue(forced),
+      policyCount: Number(policies),
+    };
+  });
+const result = evaluateTenantRlsCoverage(manifest, tables);
+const counts = result.classifiedCounts;
+const classified = counts.direct + counts["parent-owned"] + counts.global + counts.debt;
+process.stdout.write(
+  "tables=" + tables.length +
+  " classified=" + classified +
+  " direct=" + counts.direct +
+  " parent-owned=" + counts["parent-owned"] +
+  " global=" + counts.global +
+  " debt=" + counts.debt +
+  " failures=" + result.failures.length +
+  "\n",
+);
+for (const failure of result.failures) {
+  process.stdout.write(failure.kind + "|" + failure.table + "|" + failure.detail + "\n");
+}
+  ' ) > "${rls_coverage_output}"
+}
+
+report_rls_coverage_diff() {
+  # First line: the deterministic counters. Remaining lines: kind|table|detail.
+  rls_coverage_summary="$(head -n 1 "${rls_coverage_output}")"
+  tail -n +2 "${rls_coverage_output}" > "${rls_coverage_failures}" || true
+  rls_coverage_failure_count="$(wc -l < "${rls_coverage_failures}" | tr -d ' ')"
+
+  printf 'coverage manifest tables : %s\n' "$(sed -n 's/.*tables=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
+  printf 'coverage classified      : %s\n' "$(sed -n 's/.*classified=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
+  printf 'coverage direct          : %s\n' "$(sed -n 's/.*direct=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
+  printf 'coverage parent-owned    : %s\n' "$(sed -n 's/.*parent-owned=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
+  printf 'coverage global          : %s\n' "$(sed -n 's/.*global=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
+  printf 'coverage debt            : %s\n' "$(sed -n 's/.*debt=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
+  printf 'coverage failures        : %s\n' "${rls_coverage_failure_count}"
+
+  if [ "${rls_coverage_failure_count}" -ne 0 ]; then
+    printf '\n%s\n' "Tenant RLS coverage gate failures (kind | table | detail):"
+    sed 's/^/  - /' "${rls_coverage_failures}"
+  fi
+}
+
 printf '\n%s\n' "==> Scenario 1: comparing against the entity declarations"
 collect_tables
 report_diff
@@ -908,6 +1034,8 @@ report_tenant_entity_diff
 collect_entity_column_types
 collect_schema_column_types
 report_column_type_diff
+collect_rls_coverage
+report_rls_coverage_diff
 
 printf '\n'
 if [ "${migration_status}" -ne 0 ]; then
@@ -943,8 +1071,11 @@ fi
 if [ "${stale_column_type_count}" -ne 0 ]; then
   fail "FAIL: ${stale_column_type_count} column-type manifest entry(ies) match no real divergence - delete the line if the column was fixed (see above)."
 fi
+if [ "${rls_coverage_failure_count}" -ne 0 ]; then
+  fail "FAIL: ${rls_coverage_failure_count} tenant RLS coverage gate failure(s) on the freshly built schema (see above): every public base table must be classified exactly once in scripts/schema-rls-coverage-manifest.txt, direct tables must carry tenant_id, ENABLE RLS, FORCE RLS, and at least one policy, global/parent-owned tables must not declare tenant_id, and debt entries must still carry real debt."
+fi
 
-printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database, and no forced-RLS table is left deny-all without a tenant-scoped policy."
+printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database, no forced-RLS table is left deny-all without a tenant-scoped policy, and every public base table carries a valid tenant RLS classification."
 
 # ---------------------------------------------------------------------------
 # Scenario 2: a developer database with a partial ledger. The tables already
@@ -985,6 +1116,8 @@ report_tenant_entity_diff
 collect_entity_column_types
 collect_schema_column_types
 report_column_type_diff
+collect_rls_coverage
+report_rls_coverage_diff
 
 printf '\n'
 if [ "${migration2_status}" -ne 0 ]; then
@@ -1020,6 +1153,9 @@ fi
 if [ "${stale_column_type_count}" -ne 0 ]; then
   fail "FAIL: ${stale_column_type_count} column-type manifest entry(ies) match no real divergence after the partial-ledger re-run - delete the line if the column was fixed (see above)."
 fi
+if [ "${rls_coverage_failure_count}" -ne 0 ]; then
+  fail "FAIL: ${rls_coverage_failure_count} tenant RLS coverage gate failure(s) after the partial-ledger re-run (see above): the migration set must leave every public base table classified exactly once with its structural contract intact."
+fi
 
 printf '%s\n' "PASS (scenario 2): the migration set re-applies cleanly over an existing schema with a partial ledger."
-printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, no non-uuid tenant column outside the reviewed manifest, no predicate on a uuid tenant column left in the text form, no entity declaring tenant_id with a non-uuid type where the schema column is uuid, and no entity-declared column type diverging from the built schema outside the reviewed column-type manifest."
+printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, no non-uuid tenant column outside the reviewed manifest, no predicate on a uuid tenant column left in the text form, no entity declaring tenant_id with a non-uuid type where the schema column is uuid, no entity-declared column type diverging from the built schema outside the reviewed column-type manifest, and no public base table without a valid tenant RLS classification."
