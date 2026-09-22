@@ -114,6 +114,43 @@ service binding on the same transaction/manager) has to land in the same release
 before any deploy. Deploy remains unauthorized while S3/S4 onboarding debt is
 open.
 
+#### Delivery record
+
+Delivered to `main` as a Feature Branch Chain under tracker PR #494:
+
+| Slice | PR | Content |
+|---|---|---|
+| Ratchet | #495 | Classifier, manifest, verifier gate, tests |
+| Session + idempotency | #496 | `1809220000000` policies plus both service bindings |
+| Template + import policies | #497 | `1809230000000` and `1809240000000` policies |
+| Bindings + activation proof | #498 | S4a-S4d bindings and the activation-attempt RLS proof |
+
+The chain merged in order into the tracker and the tracker merged to `main` as
+`dee3e66f`; issue #493 closed on that merge.
+
+Two CI-only defects were found while validating the chain, neither of which was
+visible in the local gates:
+
+1. **Lint was missing from the verification protocol.** CI runs `eslint --fix`
+   first and skips `build` when it fails. The autofix removes prettier and
+   redundant type assertions silently, so the reported errors were the
+   non-fixable residue, two of them cascades of a removed assertion that
+   orphaned an import. Fixes landed per originating slice (`e150cb45`,
+   `2819968e`, `e27cd3a8`) and were propagated forward by merge, not rebase, so
+   the commit identities recorded here stay valid. Run `npx eslint --fix` on a
+   single file and `npx eslint --no-fix` to verify; never run `npm run lint`
+   locally, because its repo-wide `--fix` rewrites unrelated files.
+2. **The migration-built fixture cannot run in parallel.** A clean-database
+   parallel e2e run failed 3/3 attempts while the serial control passed 60
+   suites / 491 tests. The fixture's stale sweep drops a live fixture's schema
+   or roles, `CREATE EXTENSION IF NOT EXISTS` races into a unique violation,
+   and concurrent `DROP ROLE`s raise `tuple concurrently updated`. The Admin
+   Backend CI E2E step therefore runs with `--runInBand` (PR #500,
+   `2c75bc34`) until issue #499 fixes the fixture properly. The local database
+   masked this class because its `public` schema already holds the same table
+   names and `search_path` is `<schema>, public`; only a database with an empty
+   `public` reproduces it.
+
 Implementation route: delegated direct. Trigger evidence: understanding the
 onboarding/activation path requires mapping more than four migration, service,
 repository, and DB-test surfaces before the bounded multi-file writer starts.
