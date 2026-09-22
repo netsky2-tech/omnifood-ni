@@ -758,9 +758,103 @@ tables (`onboarding_sessions`, `invoice_items`,
   add that defense in depth. RED was not re-observed by the verifier (only
   its diff-level consistency); the writer's observed RED stands as
   recorded.
-- Next step: T2.S4c — bind `ImportStagingService` (S4c) on the same
-  transaction/manager vocabulary with a migration-built application-path
-  proof; S4d follows; T2 remains in progress and deploy remains
+- Next step: ~~T2.S4c~~ completed in the worktree (evidence below); **T2.S4d**
+  follows; T2 remains in progress and deploy remains unauthorized.
+
+### T2.S4c — ImportStagingService tenant binding (independently verified)
+
+Status: implemented in the worktree, observed RED→GREEN, NOT committed (the
+parent owns terminal git actions); T2 remains in progress.
+
+- Scope honored: only the service, its unit spec, the mocked e2e spec, the
+  new migration-built e2e spec, and this record changed. Migrations, manifest,
+  schema verifier, template/session/idempotency/integrity services and
+  controllers untouched.
+- Behavioral RED (observed BEFORE the binding change, on committed migrations
+  `008749a` state): new spec
+  `apps/admin_backend/test/onboarding/import-staging.db.e2e-spec.ts` run on
+  the migration-built schema with the fixture's NOSUPERUSER/NOBYPASSRLS
+  runtime role → 4 failed / 2 passed — all three uploads failed with
+  `QueryFailedError: new row violates row-level security policy for table
+  "staging_importacion_productos"`, and the foreign-tenant preview failed
+  with `NotFoundException` from RLS-invisible staged rows. Compile/config
+  failures: none. The two passing tests (raw non-owner probe, blank-tenant
+  fail-closed) are the control group.
+- Service change: `uploadRawCsv`, `uploadBatch`, `commitImport`, `getPreview`
+  and `getFailedRows` now run entirely inside ONE `runInTenantTransaction` —
+  `app.tenant_id` bound on the transaction manager before the first protected
+  access. The pooled `productRepo.find` duplicate-detection reads moved
+  INSIDE the transaction (`manager.find(Product)`) so the RLS-debt `products`
+  table shares the bound manager for forward correctness (T3); staging,
+  session, receipt, and preview product reads are all manager-scoped. The
+  `pooledRepo.create(...)` + `manager.save(...)` pattern is gone: sessions and
+  receipts are created via `manager.create(...)`, so no write mixes
+  connections. Optional-dependency null-safety preserved (`sessionRepo`,
+  `receiptRepo`, `onboardingSessionService`, `onboardingStateReconciler`
+  guards unchanged; session/receipt writes still skipped when absent; the
+  founder decision stands — `ensureOnboardingStarted` + `reconcile` remain
+  AFTER the commit transaction, best-effort, not atomic).
+- Preserved semantics: READY/COMMITTED/PARTIALLY_COMMITTED lifecycle,
+  REPLACE/SKIP/FAIL duplicate policy, ALL_OR_NOTHING rollback, AC-24
+  zero-defaults, receipt payload/shape, preview payload, Spanish row error
+  messages, and every public signature. Known error-contract change (same as
+  S4a/S4b, intentional): blank-tenant callers now get
+  `TenantContextRequiredError` (HTTP 401) instead of `BadRequestException`
+  (400), failing fast before any SQL in every public method.
+- Unit spec 22/22: added bind-before-first-protected-access ordering via
+  `TENANT_CONTEXT_SET_CONFIG_SQL`, exactly-one-transaction/one-binding per
+  public method, zero pooled-repository use across all five flows,
+  manager-scoped session/receipt creation, blank-tenant fail-fast before any
+  SQL, binding-failure and transaction-open-failure propagation with zero
+  writes, and optional-dependency-absent behavior; existing behavior
+  re-covered through the transaction manager mock (`mockManager` gained the
+  `query` shape; getPreview/getFailedRows mocks moved from pooled repos to
+  `mockManager.find/findOne`).
+- Mocked e2e (`import-staging.e2e-spec.ts`): only added `query` to the mocked
+  transaction manager (3 lines) — all 11 tests pass unchanged.
+- Migration-built e2e 6/6 (GREEN): full batch journey (upload → preview →
+  commit → failed rows) with duplicate REPLACE (currentPrice 120 proves the
+  manager-scoped product read), AC-24 zero defaults, receipt written with the
+  commit, PARTIALLY_COMMITTED for error-bearing batches and COMMITTED for the
+  error-free CSV flow; raw-CSV journey; ALL_OR_NOTHING zero-write rollback;
+  foreign-tenant staging/session/product non-disclosure and non-mutation with
+  a disposable bound probe; blank-tenant fail-closed with zero writes.
+- Verification (all observed, one at a time): `npx jest
+  src/modules/onboarding/services/import-staging.service.spec.ts --runInBand`
+  → 22/22; `npx jest --config ./test/jest-e2e.json --runInBand
+  import-staging.db.e2e-spec` → RED 4 failed/2 passed pre-binding, then 6/6;
+  `npx jest --config ./test/jest-e2e.json --runInBand
+  onboarding-import-cutover` → 7/7; `... onboarding-security-isolation` →
+  6/6; `npm run test:db` → 45 suites / 256 tests passed; `npm run build` →
+  clean; `SCHEMA_CHECK_DB=omnifood_schema_build_test bash
+  scripts/verify-schema-build.sh` → PASS both scenarios (direct 40, debt 26,
+  total 79, failures 0); `git diff --check` → clean.
+- Authored lines: ~1120 across four files (DB e2e ~640, unit spec +330,
+  service net ~91 insertions/39 deletions ignoring re-indentation — the raw
+  diff is larger because moved blocks re-indent inside the transaction
+  callbacks; mocked e2e +3) plus this record.
+- Rollback boundary: the four code files plus this record; reverting restores
+  the committed S4b state (`008749a`) without touching schema, data, or any
+  S1–S4b artifact.
+- No side effects: migrations, manifest, schema verifier, template,
+  session/idempotency/integrity services and controllers untouched; no push,
+  PR, commit, deploy, staging mutation, provisioning, or Q80 operation.
+- Independent verification (VERIFIED): all nine gates green. Confirmed one
+  bind plus one transaction per public method with the bind first; zero
+  pooled-repository use for protected data; every optional collaborator
+  guarded; the five public signatures unchanged; `ALL_OR_NOTHING` rollback
+  proven positively by admin-side zero counts on products, receipts, and
+  staged rows with the session left READY rather than by absence of an
+  exception; and the founder decision honored (`ensureOnboardingStarted` and
+  `reconcile` still run after the commit transaction resolves). Residual
+  risks recorded, non-blocking: `products` remains RLS debt until T3 so its
+  reads are a no-op today under the bound manager, and there is no
+  same-name cross-tenant product collision test yet (T3 must add it); the
+  post-commit onboarding start/reconcile stays intentionally non-atomic, so
+  a post-commit failure leaves the commit persisted; and the blank-tenant
+  contract changed to `TenantContextRequiredError` as in S4a/S4b.
+- Next step: T2.S4d — bind `LegacyImportIntegrityReportService` on the same
+  transaction/manager vocabulary; T2 remains in progress and deploy remains
   unauthorized.
 
 ### T3 — Enforce first-business transaction-path isolation
@@ -794,7 +888,7 @@ Status: pending; depends on T2 and T3.
 | Task | Commit(s) | Verification | Result |
 |---|---|---|---|
 | T1 | `b23a8b7` | unit: `npx jest src/core/database/tenant-rls-coverage.spec.ts --runInBand` → 18/18 passed; DB: `npx jest --config ./test/jest-db.json --runInBand tenant-rls-coverage` → 5/5 passed; suite: `npm run test:db` → 45 suites / 256 tests passed; harness: `SCHEMA_CHECK_DB=omnifood_schema_build_test bash scripts/verify-schema-build.sh` → PASS both scenarios, coverage 79/79 classified (32 direct, 5 parent-owned, 8 global, 34 debt), failures 0; `git diff --check` → clean | RED observed: `onboarding_idempotency_records` and `onboarding_sessions` surfaced as unclassified tenant-bearing tables (1 failed, 4 passed). GREEN and independent verification observed; T1 complete. |
-| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b `25496f7`; S3a `f37b572`; S3b `7f14d63`; S4a `41a14a9`; S4b `008749a`; S4c–S4d pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding, then 8/8. S2b: unit `onboarding-idempotency.coordinator.spec.ts` → 17/17; DB e2e `onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding, then 6/6; legacy callers 6/6 and 9/9. S3a: unit `1809230000000-EnforceOnboardingTemplateRls.spec.ts` → 13/13; DB e2e `onboarding-template-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 37, debt 29, total 79, failures 0, ledger replay 29/29). S3b: unit `1809240000000-EnforceOnboardingImportRls.spec.ts` → 13/13; DB e2e `onboarding-import-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 40, debt 26, total 79, failures 0, ledger replay 30/30). S4a: units `industry-template.service.spec.ts`+`industry-template-safe-cutover.spec.ts` → 22/22, `template-preview.service.spec.ts` → 10/10; DB e2e `industry-template-application` → RED 6 failed/4 passed pre-binding, then 9/9; full DB 45 suites/256; build clean; harness PASS; `git diff --check` clean. S4b: unit `legacy-template-recipe-scan.service.spec.ts` → 8/8; DB e2e `legacy-template-recipe-scan` → RED 5 failed/2 passed pre-binding, then 7/7; siblings `onboarding-template-cutover` 5/5, `onboarding-w9` 4/4; full DB 45 suites/256; build clean; harness PASS; `git diff --check` clean | S1–S3b behavioral RED/GREEN observed, independently verified, and committed; S4a committed, S4b observed in the worktree (uncommitted, unverified independently); S4c–S4d pending |
+| T2 | S1 `5bbefe5`; S2a `26342d2`; S2b `25496f7`; S3a `f37b572`; S3b `7f14d63`; S4a `41a14a9`; S4b `008749a`; S4c worktree (uncommitted); S4d pending | S1: unit `npx jest src/migrations/1809220000000-EnforceOnboardingSessionRls.spec.ts --runInBand` → 13/13; DB e2e `npx jest --config ./test/jest-e2e.json --runInBand onboarding-session-rls` → RED 6 failed/3 passed pre-migration, then 9/9. S2a: unit `onboarding-session.service.spec.ts` → 18/18; DB e2e `onboarding-session.db.e2e-spec` → RED 7 failed/1 passed pre-binding, then 8/8. S2b: unit `onboarding-idempotency.coordinator.spec.ts` → 17/17; DB e2e `onboarding-idempotency.db.e2e-spec` → RED 4 failed/1 passed pre-binding, then 6/6; legacy callers 6/6 and 9/9. S3a: unit `1809230000000-EnforceOnboardingTemplateRls.spec.ts` → 13/13; DB e2e `onboarding-template-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 37, debt 29, total 79, failures 0, ledger replay 29/29). S3b: unit `1809240000000-EnforceOnboardingImportRls.spec.ts` → 13/13; DB e2e `onboarding-import-rls` → RED 6 failed/3 passed pre-migration, then 9/9; harness both scenarios PASS (direct 40, debt 26, total 79, failures 0, ledger replay 30/30). S4a: units `industry-template.service.spec.ts`+`industry-template-safe-cutover.spec.ts` → 22/22, `template-preview.service.spec.ts` → 10/10; DB e2e `industry-template-application` → RED 6 failed/4 passed pre-binding, then 9/9; full DB 45 suites/256; build clean; harness PASS; `git diff --check` clean. S4b: unit `legacy-template-recipe-scan.service.spec.ts` → 8/8; DB e2e `legacy-template-recipe-scan` → RED 5 failed/2 passed pre-binding, then 7/7; siblings `onboarding-template-cutover` 5/5, `onboarding-w9` 4/4; full DB 45 suites/256; build clean; harness PASS; `git diff --check` clean | S1–S3b behavioral RED/GREEN observed, independently verified, and committed; S4a committed, S4b observed in the worktree (uncommitted, unverified independently); S4c: unit `import-staging.service.spec.ts` → 22/22; DB e2e `import-staging.db.e2e-spec` → RED 4 failed/2 passed pre-binding (staging INSERT denied by RLS, preview NotFoundException from invisible rows), then 6/6; siblings `onboarding-import-cutover` 7/7, `onboarding-security-isolation` 6/6; full DB 45 suites/256; build clean; harness PASS; `git diff --check` clean — S4c observed in the worktree (uncommitted); S4d pending |
 | T3 | pending | pending | pending |
 | T4 | pending | pending | pending |
 

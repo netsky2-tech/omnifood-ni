@@ -10,6 +10,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import {
+  runInTenantTransaction,
+  resolveTenantContextId,
+} from '../../../core/database/tenant-transaction';
+import {
   ImportStaging,
   ImportStagingStatus,
 } from '../entities/import-staging.entity';
@@ -275,10 +279,10 @@ export class ImportStagingService {
     tenantId: string,
     dto: UploadRawCsvDto,
   ): Promise<UploadSummaryResponse> {
-    const trimmedTenant = tenantId?.trim();
-    if (!trimmedTenant) {
-      throw new BadRequestException('Tenant ID is required');
-    }
+    // Fail closed on a blank tenant before any SQL: the same
+    // TenantContextRequiredError contract as the other bound onboarding
+    // paths (T2.S2a/S2b/S4a/S4b).
+    const trimmedTenant = resolveTenantContextId(tenantId);
 
     const parsedResult = this.canonicalParser.parseRawCsv(dto.csvContent);
     if (parsedResult.totalRows === 0) {
@@ -288,116 +292,129 @@ export class ImportStagingService {
     }
 
     const sessionToken = dto.sessionToken || randomUUID();
-
-    // Check existing products for duplicate detection
-    const existingProducts =
-      (await this.productRepo.find({
-        where: { tenant_id: trimmedTenant },
-      })) || [];
-
-    const stagedEntities: ImportStaging[] = [];
     const errors: RowErrorDiagnostic[] = [];
 
-    for (const row of parsedResult.rows) {
-      const entity = new ImportStaging();
-      entity.tenant_id = trimmedTenant;
-      entity.token_sesion_importacion = sessionToken;
-      entity.row_ordinal = row.rowOrdinal;
-      entity.raw_nombre =
-        row.rawValues['nombre'] ||
-        row.rawValues['producto'] ||
-        row.normalizedValues.nombre;
-      entity.raw_sku = row.normalizedValues.sku;
-      entity.raw_precio_venta = String(row.normalizedValues.precioVenta);
-      entity.raw_costo_insumo = null;
-      entity.raw_categoria = row.normalizedValues.categoria;
-      entity.raw_porcentaje_iva = String(row.normalizedValues.porcentajeIva);
-      entity.raw_uom = row.normalizedValues.uom;
-      entity.raw_stock_inicial = null;
+    // ONE tenant-bound transaction: `app.tenant_id` is bound before the first
+    // protected access, and every protected-table read/write (staging rows,
+    // import session, and the RLS-debt `products` read for duplicate
+    // detection) is resolved from the transaction manager, so no write ever
+    // mixes pooled and transactional connections. The pooled constructor
+    // repositories stay part of the DI surface (S4a precedent) but are never
+    // used for protected data.
+    await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      async (manager: EntityManager) => {
+        // Check existing products for duplicate detection
+        const existingProducts =
+          (await manager.find(Product, {
+            where: { tenant_id: trimmedTenant },
+          })) || [];
 
-      entity.parsed_nombre = row.normalizedValues.nombre;
-      entity.parsed_sku = row.normalizedValues.sku;
-      entity.parsed_precio_venta = row.normalizedValues.precioVenta;
-      entity.parsed_costo_insumo = 0;
-      entity.parsed_categoria = row.normalizedValues.categoria;
-      entity.parsed_porcentaje_iva = row.normalizedValues.porcentajeIva;
-      entity.parsed_uom = row.normalizedValues.uom;
-      entity.parsed_stock_inicial = 0;
+        const stagedEntities: ImportStaging[] = [];
 
-      entity.unsupported_fields =
-        row.unsupportedFieldsDetected.length > 0
-          ? row.unsupportedFieldsDetected
-          : null;
-      entity.unknown_columns =
-        row.unknownColumns.length > 0 ? row.unknownColumns : null;
+        for (const row of parsedResult.rows) {
+          const entity = new ImportStaging();
+          entity.tenant_id = trimmedTenant;
+          entity.token_sesion_importacion = sessionToken;
+          entity.row_ordinal = row.rowOrdinal;
+          entity.raw_nombre =
+            row.rawValues['nombre'] ||
+            row.rawValues['producto'] ||
+            row.normalizedValues.nombre;
+          entity.raw_sku = row.normalizedValues.sku;
+          entity.raw_precio_venta = String(row.normalizedValues.precioVenta);
+          entity.raw_costo_insumo = null;
+          entity.raw_categoria = row.normalizedValues.categoria;
+          entity.raw_porcentaje_iva = String(
+            row.normalizedValues.porcentajeIva,
+          );
+          entity.raw_uom = row.normalizedValues.uom;
+          entity.raw_stock_inicial = null;
 
-      if (!row.isValid) {
-        entity.estado_fila = ImportStagingStatus.ERROR;
-        entity.mensaje_error_detalle = row.errors.join('; ');
-        errors.push({
-          rowNumber: row.rowOrdinal,
-          rawNombre: entity.raw_nombre || undefined,
-          rawSku: entity.raw_sku || undefined,
-          reason: entity.mensaje_error_detalle,
-        });
-      } else {
-        entity.estado_fila = ImportStagingStatus.VALIDO;
-        entity.mensaje_error_detalle = null;
+          entity.parsed_nombre = row.normalizedValues.nombre;
+          entity.parsed_sku = row.normalizedValues.sku;
+          entity.parsed_precio_venta = row.normalizedValues.precioVenta;
+          entity.parsed_costo_insumo = 0;
+          entity.parsed_categoria = row.normalizedValues.categoria;
+          entity.parsed_porcentaje_iva = row.normalizedValues.porcentajeIva;
+          entity.parsed_uom = row.normalizedValues.uom;
+          entity.parsed_stock_inicial = 0;
 
-        // Duplicate preview matching
-        const matchingProduct = existingProducts.find(
-          (p) =>
-            p.name.trim().toLowerCase() ===
-            row.normalizedValues.nombre.toLowerCase(),
-        );
+          entity.unsupported_fields =
+            row.unsupportedFieldsDetected.length > 0
+              ? row.unsupportedFieldsDetected
+              : null;
+          entity.unknown_columns =
+            row.unknownColumns.length > 0 ? row.unknownColumns : null;
 
-        if (matchingProduct) {
-          entity.matched_by = 'NORMALIZED_NAME';
-          entity.target_product_id = matchingProduct.id;
+          if (!row.isValid) {
+            entity.estado_fila = ImportStagingStatus.ERROR;
+            entity.mensaje_error_detalle = row.errors.join('; ');
+            errors.push({
+              rowNumber: row.rowOrdinal,
+              rawNombre: entity.raw_nombre || undefined,
+              rawSku: entity.raw_sku || undefined,
+              reason: entity.mensaje_error_detalle,
+            });
+          } else {
+            entity.estado_fila = ImportStagingStatus.VALIDO;
+            entity.mensaje_error_detalle = null;
 
-          const fieldsToChange: string[] = [];
-          if (
-            Number(matchingProduct.sellPrice) !==
-            row.normalizedValues.precioVenta
-          ) {
-            fieldsToChange.push('sellPrice');
+            // Duplicate preview matching
+            const matchingProduct = existingProducts.find(
+              (p) =>
+                p.name.trim().toLowerCase() ===
+                row.normalizedValues.nombre.toLowerCase(),
+            );
+
+            if (matchingProduct) {
+              entity.matched_by = 'NORMALIZED_NAME';
+              entity.target_product_id = matchingProduct.id;
+
+              const fieldsToChange: string[] = [];
+              if (
+                Number(matchingProduct.sellPrice) !==
+                row.normalizedValues.precioVenta
+              ) {
+                fieldsToChange.push('sellPrice');
+              }
+              if (matchingProduct.uom !== row.normalizedValues.uom) {
+                fieldsToChange.push('uom');
+              }
+              entity.fields_to_change = fieldsToChange;
+            }
           }
-          if (matchingProduct.uom !== row.normalizedValues.uom) {
-            fieldsToChange.push('uom');
-          }
-          entity.fields_to_change = fieldsToChange;
+
+          stagedEntities.push(entity);
         }
-      }
 
-      stagedEntities.push(entity);
-    }
+        // Save in chunks
+        for (let i = 0; i < stagedEntities.length; i += CHUNK_SIZE) {
+          const chunk = stagedEntities.slice(i, i + CHUNK_SIZE);
+          await manager.save(ImportStaging, chunk);
+        }
 
-    // Save in chunks
-    await this.dataSource.transaction(async (manager: EntityManager) => {
-      for (let i = 0; i < stagedEntities.length; i += CHUNK_SIZE) {
-        const chunk = stagedEntities.slice(i, i + CHUNK_SIZE);
-        await manager.save(ImportStaging, chunk);
-      }
-
-      if (this.sessionRepo) {
-        const session = this.sessionRepo.create({
-          id: sessionToken,
-          tenant_id: trimmedTenant,
-          onboarding_session_id: dto.onboardingSessionId || null,
-          status:
-            parsedResult.validRows > 0
-              ? ProductImportSessionStatus.READY
-              : ProductImportSessionStatus.FAILED,
-          parser_contract_version: parsedResult.contractVersion,
-          source_hash: parsedResult.sourceHash,
-          file_name: dto.fileName || null,
-          total_rows: parsedResult.totalRows,
-          valid_rows: parsedResult.validRows,
-          error_rows: parsedResult.errorRows,
-        });
-        await manager.save(ProductImportSession, session);
-      }
-    });
+        if (this.sessionRepo) {
+          const session = manager.create(ProductImportSession, {
+            id: sessionToken,
+            tenant_id: trimmedTenant,
+            onboarding_session_id: dto.onboardingSessionId || null,
+            status:
+              parsedResult.validRows > 0
+                ? ProductImportSessionStatus.READY
+                : ProductImportSessionStatus.FAILED,
+            parser_contract_version: parsedResult.contractVersion,
+            source_hash: parsedResult.sourceHash,
+            file_name: dto.fileName || null,
+            total_rows: parsedResult.totalRows,
+            valid_rows: parsedResult.validRows,
+            error_rows: parsedResult.errorRows,
+          });
+          await manager.save(ProductImportSession, session);
+        }
+      },
+    );
 
     return {
       sessionToken,
@@ -415,113 +432,122 @@ export class ImportStagingService {
     tenantId: string,
     sessionToken: string,
   ): Promise<ImportPreviewResponse> {
-    const trimmedTenant = tenantId?.trim();
-    if (!trimmedTenant) {
-      throw new BadRequestException('Tenant ID is required');
-    }
+    // Fail closed on a blank tenant before any SQL: the same
+    // TenantContextRequiredError contract as the other bound onboarding
+    // paths (T2.S2a/S2b/S4a/S4b).
+    const trimmedTenant = resolveTenantContextId(tenantId);
 
-    const stagedRows = await this.stagingRepo.find({
-      where: {
-        tenant_id: trimmedTenant,
-        token_sesion_importacion: sessionToken,
-      },
-      order: { row_ordinal: 'ASC' },
-    });
-
-    if (!stagedRows || stagedRows.length === 0) {
-      throw new NotFoundException(
-        `No se encontraron filas en staging para la sesión ${sessionToken}`,
-      );
-    }
-
-    let session: ProductImportSession | null = null;
-    if (this.sessionRepo) {
-      session = await this.sessionRepo.findOne({
-        where: { tenant_id: trimmedTenant, id: sessionToken },
-      });
-    }
-
-    const duplicateRows = stagedRows.filter((r) => r.matched_by !== null);
-    const duplicates: DuplicatePreviewItem[] = [];
-
-    const unsupportedHeadersSet = new Set<string>();
-    const unknownHeadersSet = new Set<string>();
-
-    for (const r of stagedRows) {
-      if (r.unsupported_fields) {
-        r.unsupported_fields.forEach((f) => unsupportedHeadersSet.add(f));
-      }
-      if (r.unknown_columns) {
-        r.unknown_columns.forEach((c) => unknownHeadersSet.add(c));
-      }
-    }
-
-    for (const r of duplicateRows) {
-      let currentPrice = 0;
-      let currentUom = 'UN';
-      let targetProductName = r.parsed_nombre || '';
-
-      if (r.target_product_id) {
-        const prod = await this.productRepo.findOne({
-          where: { tenant_id: trimmedTenant, id: r.target_product_id },
+    // ONE tenant-bound read transaction: staging rows, the import session and
+    // the duplicate target products all resolve from the transaction manager,
+    // so the whole preview shares one consistent, RLS-authorized snapshot.
+    return runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      async (manager: EntityManager) => {
+        const stagedRows = await manager.find(ImportStaging, {
+          where: {
+            tenant_id: trimmedTenant,
+            token_sesion_importacion: sessionToken,
+          },
+          order: { row_ordinal: 'ASC' },
         });
-        if (prod) {
-          currentPrice = Number(prod.sellPrice) || 0;
-          currentUom = prod.uom || 'UN';
-          targetProductName = prod.name;
+
+        if (!stagedRows || stagedRows.length === 0) {
+          throw new NotFoundException(
+            `No se encontraron filas en staging para la sesión ${sessionToken}`,
+          );
         }
-      }
 
-      duplicates.push({
-        rowOrdinal: r.row_ordinal,
-        productName: r.parsed_nombre || '',
-        sku: r.parsed_sku,
-        matchedBy:
-          (r.matched_by as 'NORMALIZED_NAME' | 'SKU') || 'NORMALIZED_NAME',
-        targetProductId: r.target_product_id || '',
-        targetProductName,
-        currentPrice,
-        newPrice: Number(r.parsed_precio_venta) || 0,
-        currentUom,
-        newUom: r.parsed_uom || 'UN',
-        fieldsToChange: r.fields_to_change || [],
-        isConflict: !!r.conflict_reason,
-        conflictReason: r.conflict_reason || null,
-      });
-    }
+        let session: ProductImportSession | null = null;
+        if (this.sessionRepo) {
+          session = await manager.findOne(ProductImportSession, {
+            where: { tenant_id: trimmedTenant, id: sessionToken },
+          });
+        }
 
-    const validRows = stagedRows.filter(
-      (r) => r.estado_fila === ImportStagingStatus.VALIDO,
-    ).length;
-    const errorRows = stagedRows.filter(
-      (r) => r.estado_fila === ImportStagingStatus.ERROR,
-    ).length;
-    const conflictsCount = duplicates.filter((d) => d.isConflict).length;
+        const duplicateRows = stagedRows.filter((r) => r.matched_by !== null);
+        const duplicates: DuplicatePreviewItem[] = [];
 
-    return {
-      sessionToken,
-      status: session?.status || 'READY',
-      parserContractVersion: session?.parser_contract_version || 'v1.0',
-      sourceHash: session?.source_hash || '',
-      totalRows: stagedRows.length,
-      validRows,
-      errorRows,
-      duplicatesCount: duplicates.length,
-      conflictsCount,
-      duplicates,
-      unsupportedColumns: Array.from(unsupportedHeadersSet),
-      unknownColumns: Array.from(unknownHeadersSet),
-    };
+        const unsupportedHeadersSet = new Set<string>();
+        const unknownHeadersSet = new Set<string>();
+
+        for (const r of stagedRows) {
+          if (r.unsupported_fields) {
+            r.unsupported_fields.forEach((f) => unsupportedHeadersSet.add(f));
+          }
+          if (r.unknown_columns) {
+            r.unknown_columns.forEach((c) => unknownHeadersSet.add(c));
+          }
+        }
+
+        for (const r of duplicateRows) {
+          let currentPrice = 0;
+          let currentUom = 'UN';
+          let targetProductName = r.parsed_nombre || '';
+
+          if (r.target_product_id) {
+            const prod = await manager.findOne(Product, {
+              where: { tenant_id: trimmedTenant, id: r.target_product_id },
+            });
+            if (prod) {
+              currentPrice = Number(prod.sellPrice) || 0;
+              currentUom = prod.uom || 'UN';
+              targetProductName = prod.name;
+            }
+          }
+
+          duplicates.push({
+            rowOrdinal: r.row_ordinal,
+            productName: r.parsed_nombre || '',
+            sku: r.parsed_sku,
+            matchedBy:
+              (r.matched_by as 'NORMALIZED_NAME' | 'SKU') || 'NORMALIZED_NAME',
+            targetProductId: r.target_product_id || '',
+            targetProductName,
+            currentPrice,
+            newPrice: Number(r.parsed_precio_venta) || 0,
+            currentUom,
+            newUom: r.parsed_uom || 'UN',
+            fieldsToChange: r.fields_to_change || [],
+            isConflict: !!r.conflict_reason,
+            conflictReason: r.conflict_reason || null,
+          });
+        }
+
+        const validRows = stagedRows.filter(
+          (r) => r.estado_fila === ImportStagingStatus.VALIDO,
+        ).length;
+        const errorRows = stagedRows.filter(
+          (r) => r.estado_fila === ImportStagingStatus.ERROR,
+        ).length;
+        const conflictsCount = duplicates.filter((d) => d.isConflict).length;
+
+        return {
+          sessionToken,
+          status: session?.status || 'READY',
+          parserContractVersion: session?.parser_contract_version || 'v1.0',
+          sourceHash: session?.source_hash || '',
+          totalRows: stagedRows.length,
+          validRows,
+          errorRows,
+          duplicatesCount: duplicates.length,
+          conflictsCount,
+          duplicates,
+          unsupportedColumns: Array.from(unsupportedHeadersSet),
+          unknownColumns: Array.from(unknownHeadersSet),
+        };
+      },
+    );
   }
 
   async uploadBatch(
     tenantId: string,
     dto: UploadBatchDto,
   ): Promise<UploadSummaryResponse> {
-    const trimmedTenant = tenantId?.trim();
-    if (!trimmedTenant) {
-      throw new BadRequestException('Tenant ID is required');
-    }
+    // Fail closed on a blank tenant before any SQL: the same
+    // TenantContextRequiredError contract as the other bound onboarding
+    // paths (T2.S2a/S2b/S4a/S4b).
+    const trimmedTenant = resolveTenantContextId(tenantId);
 
     if (!dto.rows || !Array.isArray(dto.rows) || dto.rows.length === 0) {
       throw new BadRequestException(
@@ -534,111 +560,121 @@ export class ImportStagingService {
     let validCount = 0;
     let errorCount = 0;
 
-    const existingProducts =
-      (await this.productRepo.find({
-        where: { tenant_id: trimmedTenant },
-      })) || [];
+    // ONE tenant-bound transaction: `app.tenant_id` is bound before the first
+    // protected access, and every protected-table read/write (staging rows,
+    // import session, and the RLS-debt `products` read for duplicate
+    // detection) is resolved from the transaction manager, so no write ever
+    // mixes pooled and transactional connections.
+    await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      async (manager: EntityManager) => {
+        const existingProducts =
+          (await manager.find(Product, {
+            where: { tenant_id: trimmedTenant },
+          })) || [];
 
-    const stagedEntities: ImportStaging[] = [];
+        const stagedEntities: ImportStaging[] = [];
 
-    for (let index = 0; index < dto.rows.length; index++) {
-      const row = dto.rows[index];
-      const validation = this.validateRow(row);
+        for (let index = 0; index < dto.rows.length; index++) {
+          const row = dto.rows[index];
+          const validation = this.validateRow(row);
 
-      if (validation.status === ImportStagingStatus.VALIDO) {
-        validCount++;
-      } else {
-        errorCount++;
-        errors.push({
-          rowNumber: index + 1,
-          rawNombre: row.nombre,
-          rawSku: row.sku,
-          reason: validation.errorMessage || 'Error desconocido de formato',
-        });
-      }
-
-      const entity = new ImportStaging();
-      entity.tenant_id = trimmedTenant;
-      entity.token_sesion_importacion = sessionToken;
-      entity.row_ordinal = index + 1;
-      entity.raw_nombre = row.nombre !== undefined ? String(row.nombre) : null;
-      entity.raw_sku = row.sku !== undefined ? String(row.sku) : null;
-      entity.raw_precio_venta =
-        row.precioVenta !== undefined ? String(row.precioVenta) : null;
-      entity.raw_costo_insumo =
-        row.costoInsumo !== undefined ? String(row.costoInsumo) : null;
-      entity.raw_categoria =
-        row.categoria !== undefined ? String(row.categoria) : null;
-      entity.raw_porcentaje_iva =
-        row.porcentajeIva !== undefined ? String(row.porcentajeIva) : null;
-      entity.raw_uom = row.uom !== undefined ? String(row.uom) : null;
-      entity.raw_stock_inicial =
-        row.stockInicial !== undefined ? String(row.stockInicial) : null;
-
-      entity.parsed_nombre = validation.parsedNombre;
-      entity.parsed_sku = validation.parsedSku;
-      entity.parsed_precio_venta = validation.parsedPrecioVenta;
-      entity.parsed_costo_insumo = 0; // AC-24: stock/cost writes neutralized
-      entity.parsed_categoria = validation.parsedCategoria;
-      entity.parsed_porcentaje_iva = validation.parsedPorcentajeIva;
-      entity.parsed_uom = validation.parsedUom;
-      entity.parsed_stock_inicial = 0; // AC-24: stock/cost writes neutralized
-
-      entity.estado_fila = validation.status;
-      entity.mensaje_error_detalle = validation.errorMessage;
-
-      if (
-        validation.status === ImportStagingStatus.VALIDO &&
-        validation.parsedNombre
-      ) {
-        const matching = existingProducts.find(
-          (p) =>
-            p.name.trim().toLowerCase() ===
-            validation.parsedNombre.trim().toLowerCase(),
-        );
-        if (matching) {
-          entity.matched_by = 'NORMALIZED_NAME';
-          entity.target_product_id = matching.id;
-          const fieldsToChange: string[] = [];
-          if (Number(matching.sellPrice) !== validation.parsedPrecioVenta) {
-            fieldsToChange.push('sellPrice');
+          if (validation.status === ImportStagingStatus.VALIDO) {
+            validCount++;
+          } else {
+            errorCount++;
+            errors.push({
+              rowNumber: index + 1,
+              rawNombre: row.nombre,
+              rawSku: row.sku,
+              reason: validation.errorMessage || 'Error desconocido de formato',
+            });
           }
-          if (matching.uom !== validation.parsedUom) {
-            fieldsToChange.push('uom');
+
+          const entity = new ImportStaging();
+          entity.tenant_id = trimmedTenant;
+          entity.token_sesion_importacion = sessionToken;
+          entity.row_ordinal = index + 1;
+          entity.raw_nombre =
+            row.nombre !== undefined ? String(row.nombre) : null;
+          entity.raw_sku = row.sku !== undefined ? String(row.sku) : null;
+          entity.raw_precio_venta =
+            row.precioVenta !== undefined ? String(row.precioVenta) : null;
+          entity.raw_costo_insumo =
+            row.costoInsumo !== undefined ? String(row.costoInsumo) : null;
+          entity.raw_categoria =
+            row.categoria !== undefined ? String(row.categoria) : null;
+          entity.raw_porcentaje_iva =
+            row.porcentajeIva !== undefined ? String(row.porcentajeIva) : null;
+          entity.raw_uom = row.uom !== undefined ? String(row.uom) : null;
+          entity.raw_stock_inicial =
+            row.stockInicial !== undefined ? String(row.stockInicial) : null;
+
+          entity.parsed_nombre = validation.parsedNombre;
+          entity.parsed_sku = validation.parsedSku;
+          entity.parsed_precio_venta = validation.parsedPrecioVenta;
+          entity.parsed_costo_insumo = 0; // AC-24: stock/cost writes neutralized
+          entity.parsed_categoria = validation.parsedCategoria;
+          entity.parsed_porcentaje_iva = validation.parsedPorcentajeIva;
+          entity.parsed_uom = validation.parsedUom;
+          entity.parsed_stock_inicial = 0; // AC-24: stock/cost writes neutralized
+
+          entity.estado_fila = validation.status;
+          entity.mensaje_error_detalle = validation.errorMessage;
+
+          if (
+            validation.status === ImportStagingStatus.VALIDO &&
+            validation.parsedNombre
+          ) {
+            const matching = existingProducts.find(
+              (p) =>
+                p.name.trim().toLowerCase() ===
+                validation.parsedNombre.trim().toLowerCase(),
+            );
+            if (matching) {
+              entity.matched_by = 'NORMALIZED_NAME';
+              entity.target_product_id = matching.id;
+              const fieldsToChange: string[] = [];
+              if (Number(matching.sellPrice) !== validation.parsedPrecioVenta) {
+                fieldsToChange.push('sellPrice');
+              }
+              if (matching.uom !== validation.parsedUom) {
+                fieldsToChange.push('uom');
+              }
+              entity.fields_to_change = fieldsToChange;
+            }
           }
-          entity.fields_to_change = fieldsToChange;
+
+          stagedEntities.push(entity);
         }
-      }
 
-      stagedEntities.push(entity);
-    }
+        // Process chunked storage (CHUNK_SIZE <= 100)
+        for (let i = 0; i < stagedEntities.length; i += CHUNK_SIZE) {
+          const chunk = stagedEntities.slice(i, i + CHUNK_SIZE);
+          await manager.save(ImportStaging, chunk);
+        }
 
-    // Process chunked storage (CHUNK_SIZE <= 100)
-    await this.dataSource.transaction(async (manager: EntityManager) => {
-      for (let i = 0; i < stagedEntities.length; i += CHUNK_SIZE) {
-        const chunk = stagedEntities.slice(i, i + CHUNK_SIZE);
-        await manager.save(ImportStaging, chunk);
-      }
-
-      if (this.sessionRepo) {
-        const session = this.sessionRepo.create({
-          id: sessionToken,
-          tenant_id: trimmedTenant,
-          onboarding_session_id: dto.onboardingSessionId || null,
-          status:
-            validCount > 0
-              ? ProductImportSessionStatus.READY
-              : ProductImportSessionStatus.FAILED,
-          parser_contract_version: 'v1.0',
-          source_hash: 'batch-json-' + randomUUID(),
-          file_name: null,
-          total_rows: dto.rows.length,
-          valid_rows: validCount,
-          error_rows: errorCount,
-        });
-        await manager.save(ProductImportSession, session);
-      }
-    });
+        if (this.sessionRepo) {
+          const session = manager.create(ProductImportSession, {
+            id: sessionToken,
+            tenant_id: trimmedTenant,
+            onboarding_session_id: dto.onboardingSessionId || null,
+            status:
+              validCount > 0
+                ? ProductImportSessionStatus.READY
+                : ProductImportSessionStatus.FAILED,
+            parser_contract_version: 'v1.0',
+            source_hash: 'batch-json-' + randomUUID(),
+            file_name: null,
+            total_rows: dto.rows.length,
+            valid_rows: validCount,
+            error_rows: errorCount,
+          });
+          await manager.save(ProductImportSession, session);
+        }
+      },
+    );
 
     return {
       sessionToken,
@@ -653,16 +689,25 @@ export class ImportStagingService {
     tenantId: string,
     dto: CommitImportDto,
   ): Promise<CommitSummaryResponse> {
-    const trimmedTenant = tenantId?.trim();
-    if (!trimmedTenant) {
-      throw new BadRequestException('Tenant ID is required');
-    }
+    // Fail closed on a blank tenant before any SQL: the same
+    // TenantContextRequiredError contract as the other bound onboarding
+    // paths (T2.S2a/S2b/S4a/S4b).
+    const trimmedTenant = resolveTenantContextId(tenantId);
 
     const mode: CommitMode = dto.mode || 'VALID_ONLY';
     const duplicateResolution: DuplicateResolution =
       dto.duplicatePolicy || dto.duplicateResolution || 'REPLACE';
 
-    const result = await this.dataSource.transaction(
+    // ONE tenant-bound transaction: `app.tenant_id` is bound before the first
+    // protected read, and the staging/product/session/receipt reads and
+    // writes all resolve from the transaction manager, so the commit and its
+    // audit receipt commit or roll back together under FORCED row-level
+    // security. The optional-dependency guards below only decide whether the
+    // session lifecycle and receipt writes happen at all — the writes
+    // themselves are manager-scoped.
+    const result = await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
       async (manager: EntityManager) => {
         const stagedRows = await manager.find(ImportStaging, {
           where: {
@@ -770,7 +815,7 @@ export class ImportStagingService {
 
         // Emit Audit Trail receipt for material catalog commit (ONB1.4I)
         if (this.receiptRepo) {
-          const receipt = this.receiptRepo.create({
+          const receipt = manager.create(LegacyOnboardingMigrationReceipt, {
             tenant_id: trimmedTenant,
             receipt_type: 'IMPORT_COMMIT',
             target_entity_type: 'PRODUCT_IMPORT_SESSION',
@@ -821,34 +866,41 @@ export class ImportStagingService {
     tenantId: string,
     sessionToken: string,
   ): Promise<RowErrorDiagnostic[]> {
-    const trimmedTenant = tenantId?.trim();
-    if (!trimmedTenant) {
-      throw new BadRequestException('Tenant ID is required');
-    }
+    // Fail closed on a blank tenant before any SQL: the same
+    // TenantContextRequiredError contract as the other bound onboarding
+    // paths (T2.S2a/S2b/S4a/S4b).
+    const trimmedTenant = resolveTenantContextId(tenantId);
 
-    const rows = await this.stagingRepo.find({
-      where: {
-        tenant_id: trimmedTenant,
-        token_sesion_importacion: sessionToken,
+    // ONE tenant-bound read transaction for the protected staging rows.
+    return runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      async (manager: EntityManager) => {
+        const rows = await manager.find(ImportStaging, {
+          where: {
+            tenant_id: trimmedTenant,
+            token_sesion_importacion: sessionToken,
+          },
+          order: { row_ordinal: 'ASC' },
+        });
+
+        if (!rows || rows.length === 0) {
+          throw new NotFoundException(
+            `No se encontraron filas para la sesión de importación '${sessionToken}'`,
+          );
+        }
+
+        const failedRows = rows.filter(
+          (r) => r.estado_fila === ImportStagingStatus.ERROR,
+        );
+
+        return failedRows.map((r, idx) => ({
+          rowNumber: r.row_ordinal || idx + 1,
+          rawNombre: r.raw_nombre || undefined,
+          rawSku: r.raw_sku || undefined,
+          reason: r.mensaje_error_detalle || 'Error no especificado',
+        }));
       },
-      order: { row_ordinal: 'ASC' },
-    });
-
-    if (!rows || rows.length === 0) {
-      throw new NotFoundException(
-        `No se encontraron filas para la sesión de importación '${sessionToken}'`,
-      );
-    }
-
-    const failedRows = rows.filter(
-      (r) => r.estado_fila === ImportStagingStatus.ERROR,
     );
-
-    return failedRows.map((r, idx) => ({
-      rowNumber: r.row_ordinal || idx + 1,
-      rawNombre: r.raw_nombre || undefined,
-      rawSku: r.raw_sku || undefined,
-      reason: r.mensaje_error_detalle || 'Error no especificado',
-    }));
   }
 }

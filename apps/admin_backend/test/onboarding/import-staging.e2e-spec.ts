@@ -118,6 +118,9 @@ describe('ImportStaging (Integration & E2E)', () => {
         createdAt: new Date(),
       }),
     ),
+    // The tenant-context binding SQL issued on the transaction manager before
+    // the first protected access (issue #493 T2.S4c).
+    query: jest.fn(async () => undefined),
     save: jest.fn((entityClass: unknown, item: unknown) => {
       const saveItem = (obj: Record<string, unknown>) => {
         const withId = {
