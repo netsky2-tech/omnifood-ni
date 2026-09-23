@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   CostingReadinessPort,
   CostingReadinessResult,
@@ -8,12 +8,14 @@ import {
 } from '../ports/costing-readiness.port';
 import { Product } from '../../inventory/entities/product.entity';
 import { InventoryMovement } from '../../inventory/entities/inventory-movement.entity';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 
 @Injectable()
 export class CostingReadinessAdapter implements CostingReadinessPort {
   constructor(
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
+    // Issue #512 slice 1 part A: the `products` read resolves its repository
+    // from the tenant-bound transaction manager.
+    private readonly dataSource: DataSource,
     @InjectRepository(InventoryMovement)
     private readonly movementRepository: Repository<InventoryMovement>,
   ) {}
@@ -33,15 +35,20 @@ export class CostingReadinessAdapter implements CostingReadinessPort {
       };
     }
 
-    const products = await this.productRepository.find({
-      where: {
-        tenant_id: trimmedTenant,
-        is_active: true,
-      },
-      order: {
-        created_at: 'ASC',
-      },
-    });
+    const products = await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      (manager) =>
+        manager.getRepository(Product).find({
+          where: {
+            tenant_id: trimmedTenant,
+            is_active: true,
+          },
+          order: {
+            created_at: 'ASC',
+          },
+        }),
+    );
 
     const items: ProductCostItem[] = [];
     let knownCostCount = 0;

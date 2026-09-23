@@ -257,7 +257,7 @@ describe('Activation Device Credential Provisioning (db)', () => {
       );
 
       const catalogService = new OnboardingCatalogService(
-        dataSource.getRepository(Product),
+        dataSource,
         dummySessionService,
         dummyReadiness,
         dummyReconciler,

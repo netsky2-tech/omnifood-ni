@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import { InventoryService } from './inventory.service';
 import { Insumo } from './entities/insumo.entity';
 import {
@@ -15,6 +16,9 @@ describe('InventoryService', () => {
   let service: InventoryService;
   let insumoRepo: { findOne: jest.Mock; save: jest.Mock };
   let movementRepo: { create: jest.Mock; save: jest.Mock };
+  // Transaction manager mock (issue #512): shared so specs can assert the
+  // tenant-context binding order against repository access.
+  let txManager: { query: jest.Mock; getRepository: jest.Mock };
 
   // Helper function to create a mock insumo with tenant_id
   const createMockInsumo = (overrides: Partial<Insumo> = {}): Insumo => {
@@ -41,6 +45,15 @@ describe('InventoryService', () => {
       create: jest.fn(),
       save: jest.fn(),
     };
+    txManager = {
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn(),
+    };
+    txManager.getRepository.mockImplementation((entity: unknown) => {
+      if (entity === Insumo) return insumoRepo;
+      if (entity === InventoryMovement) return movementRepo;
+      return null;
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -67,13 +80,7 @@ describe('InventoryService', () => {
               .fn()
               .mockImplementation(
                 (cb: (m: Record<string, unknown>) => Promise<unknown>) =>
-                  cb({
-                    getRepository: (entity: unknown) => {
-                      if (entity === Insumo) return insumoRepo;
-                      if (entity === InventoryMovement) return movementRepo;
-                      return null;
-                    },
-                  }),
+                  cb(txManager),
               ),
           },
         },
@@ -133,6 +140,27 @@ describe('InventoryService', () => {
 
       expect(result.stock).toBe(10);
       expect(result.averageCost).toBe(50);
+    });
+
+    it('binds the tenant context before the first insumos access and uses manager-scoped repos (issue #512)', async () => {
+      const existingInsumo = createMockInsumo();
+      jest.spyOn(insumoRepo, 'findOne').mockResolvedValue(existingInsumo);
+      jest
+        .spyOn(insumoRepo, 'save')
+        .mockImplementation((i: Insumo) => Promise.resolve(i));
+
+      await service.recordPurchase('ins-1', 5, 130, 'tenant-A');
+
+      // Binding order: transaction-local set_config runs before any read/write.
+      expect(txManager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-A'],
+      );
+      expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        insumoRepo.findOne.mock.invocationCallOrder[0],
+      );
+      // Repositories are resolved from the transaction manager, not pooled.
+      expect(txManager.getRepository).toHaveBeenCalledWith(Insumo);
     });
   });
 
@@ -224,6 +252,39 @@ describe('InventoryService', () => {
           }),
         }),
       );
+    });
+
+    it('binds the tenant context before the movement reconciliation reads (issue #512)', async () => {
+      const movements: CreateInventoryMovementDto[] = [
+        {
+          id: 'mov-1',
+          insumoId: 'ins-1',
+          type: MovementType.SALE,
+          quantity: 2,
+          previousStock: 10,
+          newStock: 8,
+          timestamp: '2026-05-05T10:00:00Z',
+        },
+      ];
+
+      jest
+        .spyOn(insumoRepo, 'findOne')
+        .mockResolvedValue(createMockInsumo({ id: 'ins-1' }));
+      jest
+        .spyOn(insumoRepo, 'save')
+        .mockImplementation((i: Insumo) => Promise.resolve(i));
+      jest.spyOn(movementRepo, 'save').mockResolvedValue([]);
+
+      await service.syncMovements(movements, 'tenant-A');
+
+      expect(txManager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-A'],
+      );
+      expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        insumoRepo.findOne.mock.invocationCallOrder[0],
+      );
+      expect(txManager.getRepository).toHaveBeenCalledWith(InventoryMovement);
     });
 
     it('rejects inbound synced movements that cannot freeze a cost snapshot', async () => {

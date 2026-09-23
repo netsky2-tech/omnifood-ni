@@ -231,14 +231,18 @@ export class InventoryMovementController {
   @Post('shrinkage')
   @UseGuards(SyncTransportGuard)
   @RequireSyncScopes('sync:push')
-  async recordShrinkage(@Body() dto: CreateShrinkageDto) {
-    // Device transport only: the tenant and terminal identity come from the
-    // device principal the guard validated, never from a human user. Neither
-    // shrinkage DTO carries a terminal field and ShrinkageService derives
-    // tenant_id from the affected rows inside its own transaction, so no
-    // additional binding is introduced in the handler.
+  async recordShrinkage(
+    @Body() dto: CreateShrinkageDto,
+    @GetTenantId() tenantId: string | undefined,
+  ) {
+    // Device transport only: the tenant identity comes from the device
+    // principal the guard validated, never from a human user or the body.
+    // Issue #512: the insumos/products tables are tenant-protected, so the
+    // shrinkage write runs inside a tenant-bound transaction; the bound
+    // tenant id must be threaded in here and fail closed when missing.
+    const boundTenantId = this.requireTenant(tenantId);
     if (dto.targetType === 'PRODUCT') {
-      return this.shrinkageService.recordProductShrinkage({
+      return this.shrinkageService.recordProductShrinkage(boundTenantId, {
         productId: dto.productId ?? '',
         quantity: dto.quantity,
         reason: dto.reason,
@@ -248,6 +252,7 @@ export class InventoryMovementController {
     }
 
     return this.shrinkageService.recordShrinkage(
+      boundTenantId,
       dto.insumoId,
       dto.quantity,
       dto.reason,

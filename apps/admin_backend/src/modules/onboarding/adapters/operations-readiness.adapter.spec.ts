@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { OperationsReadinessAdapter } from './operations-readiness.adapter';
 import { User } from '../../identity/entities/user.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
@@ -9,6 +10,9 @@ import { Product } from '../../inventory/entities/product.entity';
 
 describe('OperationsReadinessAdapter (Unit)', () => {
   let adapter: OperationsReadinessAdapter;
+  // Issue #512: the `products` categories read resolves from the
+  // tenant-bound transaction manager.
+  let txManager: { query: jest.Mock; getRepository: jest.Mock };
   let userRepo: jest.Mocked<Partial<Repository<User>>>;
   let recipeVersionRepo: jest.Mocked<Partial<Repository<RecipeVersion>>>;
   let supplierRepo: jest.Mocked<Partial<Repository<Supplier>>>;
@@ -28,6 +32,14 @@ describe('OperationsReadinessAdapter (Unit)', () => {
       createQueryBuilder: jest.fn(),
     };
 
+    txManager = {
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn().mockImplementation((entity: unknown) => {
+        if (entity === Product) return productRepo;
+        return null;
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OperationsReadinessAdapter,
@@ -44,8 +56,12 @@ describe('OperationsReadinessAdapter (Unit)', () => {
           useValue: supplierRepo,
         },
         {
-          provide: getRepositoryToken(Product),
-          useValue: productRepo,
+          provide: DataSource,
+          useValue: {
+            transaction: jest.fn((cb: (mgr: unknown) => Promise<unknown>) =>
+              cb(txManager),
+            ),
+          },
         },
       ],
     }).compile();
@@ -106,5 +122,29 @@ describe('OperationsReadinessAdapter (Unit)', () => {
     expect(result.details.hasPublishedRecipes).toBe(true);
     expect(result.details.hasSuppliers).toBe(true);
     expect(result.details.hasCategories).toBe(true);
+  });
+
+  it('binds the tenant context before the products categories read (issue #512)', async () => {
+    (userRepo.count as jest.Mock).mockResolvedValue(1);
+    (recipeVersionRepo.count as jest.Mock).mockResolvedValue(0);
+    (supplierRepo.count as jest.Mock).mockResolvedValue(0);
+    const qbMock: any = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    (productRepo.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+    await adapter.evaluateOperationsReadiness('tenant-A');
+
+    expect(txManager.query).toHaveBeenCalledWith(
+      TENANT_CONTEXT_SET_CONFIG_SQL,
+      ['tenant-A'],
+    );
+    expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      (productRepo.createQueryBuilder as jest.Mock).mock.invocationCallOrder[0],
+    );
+    expect(txManager.getRepository).toHaveBeenCalledWith(Product);
   });
 });

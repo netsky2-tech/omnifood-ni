@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   Logger,
   Optional,
   UnauthorizedException,
@@ -41,7 +42,6 @@ import {
   FiscalConfigSnapshot,
 } from '../../onboarding/dto/fiscal-config-version.dto';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
-import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import type { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
 import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
 import { StaffPolicyEpochAcknowledgementService } from '../../identity/human-authorization/services/staff-policy-epoch-acknowledgement.service';
@@ -93,10 +93,11 @@ export class InboundSyncService {
    * When `entityManager` is supplied (a transaction-bound manager, e.g. from
    * `runInTenantTransaction`), every repository read below resolves through
    * that manager so the queries run on the transaction's own connection and
-   * honor its transaction-local `app.tenant_id` RLS binding. Without it, the
-   * reads use the injected global repositories exactly as before — the
-   * device-credential `/v1/sync/inbound/*` path keeps its existing behavior
-   * untouched.
+   * honor its transaction-local `app.tenant_id` RLS binding. For the
+   * tenant-protected `products` and `insumos` tables the bound manager is
+   * mandatory (issue #512 slice 1 part A): calls without one fail closed with
+   * a 500 instead of silently reading through pooled repositories that lack
+   * the tenant binding. Untenant-protected tables keep the pooled fallback.
    */
   async getInboundDeltas(
     tenantId: string,
@@ -362,8 +363,17 @@ export class InboundSyncService {
     sinceDate: Date | null,
     entityManager?: EntityManager,
   ): Promise<InboundSyncProductDto[]> {
-    const productRepository =
-      entityManager?.getRepository(Product) ?? this.productRepository;
+    // Issue #512 slice 1 part A: `products` is tenant-protected, so the read
+    // must ride a tenant-bound transaction manager. All production callers
+    // (device-credential inbound controllers and terminal priming) supply
+    // one; failing closed beats silently reading through a pooled,
+    // unbound connection.
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound product sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const productRepository = entityManager.getRepository(Product);
     const qb = productRepository
       .createQueryBuilder('product')
       .where('product.tenant_id = :tenantId', { tenantId });
@@ -383,27 +393,14 @@ export class InboundSyncService {
 
     const items = await qb.getMany();
     const now = new Date();
-    // The mapping-version read follows the same optional-availability rule as
-    // the injected repository itself: when a bound manager is supplied AND a
-    // mapping repository is configured, the read rides the transaction
-    // connection (already tenant-bound, so the session-scoped set_config
-    // workaround below must not run against the pooled global manager).
-    const mappingVersionRepository =
-      entityManager && this.mappingVersionRepository
-        ? entityManager.getRepository(ProductInventoryMappingVersion)
-        : this.mappingVersionRepository;
-    if (!entityManager && this.mappingVersionRepository?.manager) {
-      try {
-        await bindTenantContext(
-          this.mappingVersionRepository.manager,
-          tenantId,
-        );
-      } catch (error) {
-        this.logger.debug(
-          `Could not set tenant session config for mapping versions: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
+    // The mapping-version read follows the same availability rule as before:
+    // when a mapping repository is configured, the read rides the bound
+    // transaction connection. The old session-scoped set_config workaround
+    // against the pooled manager is gone — the pooled fallback no longer
+    // exists for this table.
+    const mappingVersionRepository = this.mappingVersionRepository
+      ? entityManager.getRepository(ProductInventoryMappingVersion)
+      : undefined;
     const mappings = mappingVersionRepository
       ? await mappingVersionRepository
           .createQueryBuilder('m')
@@ -473,8 +470,14 @@ export class InboundSyncService {
     sinceDate: Date | null,
     entityManager?: EntityManager,
   ): Promise<InboundSyncInsumoDto[]> {
-    const insumoRepository =
-      entityManager?.getRepository(Insumo) ?? this.insumoRepository;
+    // Issue #512 slice 1 part A: `insumos` is tenant-protected — require the
+    // bound manager, same as fetchProductDeltas.
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound insumo sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const insumoRepository = entityManager.getRepository(Insumo);
     const qb = insumoRepository
       .createQueryBuilder('insumo')
       .where('insumo.tenant_id = :tenantId', { tenantId });
@@ -538,8 +541,12 @@ export class InboundSyncService {
     const recipeVersionRepository =
       entityManager?.getRepository(RecipeVersion) ??
       this.recipeVersionRepository;
-    const insumoRepository =
-      entityManager?.getRepository(Insumo) ?? this.insumoRepository;
+    // Issue #512 slice 1 part A: the insumo join read is tenant-protected,
+    // so it must ride the bound manager when one is supplied; without one
+    // the products/insumos fetches above would already have failed closed.
+    const insumoRepository = entityManager
+      ? entityManager.getRepository(Insumo)
+      : this.insumoRepository;
     const qb = recipeVersionRepository
       .createQueryBuilder('rv')
       .where('rv.tenant_id = :tenantId', { tenantId })

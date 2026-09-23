@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import { InventoryMovementService } from './inventory-movement.service';
 import {
   InventoryMovement,
@@ -22,6 +23,7 @@ describe('InventoryMovementService', () => {
     create: typeof createMock;
     update: jest.Mock;
     delete: jest.Mock;
+    query: jest.Mock;
   }
 
   const manager: TransactionManagerMock = {
@@ -30,6 +32,7 @@ describe('InventoryMovementService', () => {
     create: createMock,
     update: jest.fn(),
     delete: jest.fn(),
+    query: jest.fn(),
   };
 
   const transactionMock = jest.fn();
@@ -58,6 +61,7 @@ describe('InventoryMovementService', () => {
     createMock.mockImplementation(
       (_entity: unknown, payload: unknown) => payload,
     );
+    manager.query.mockResolvedValue(undefined);
 
     transactionMock.mockImplementation(
       (_iso: unknown, cb: TransactionCallback) => Promise.resolve(cb(manager)),
@@ -89,6 +93,35 @@ describe('InventoryMovementService', () => {
       expect.any(Function),
     );
     expect(setLockMock).toHaveBeenCalledWith('pessimistic_write');
+  });
+
+  it('binds the tenant context before the locked insumos read (issue #512)', async () => {
+    await service.postPurchaseMovement({
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      quantity: 2,
+      unitCostNio: 40,
+    });
+
+    expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-A',
+    ]);
+    expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      createQueryBuilderMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('fails closed on a blank tenant id before opening any transaction (issue #512)', async () => {
+    await expect(
+      service.postPurchaseMovement({
+        tenantId: '   ',
+        insumoId: 'ins-1',
+        quantity: 2,
+        unitCostNio: 40,
+      }),
+    ).rejects.toThrow('TENANT_CONTEXT_REQUIRED');
+    expect(transactionMock).not.toHaveBeenCalled();
+    expect(manager.query).not.toHaveBeenCalled();
   });
 
   it('appends purchase movement without mutating historical rows', async () => {

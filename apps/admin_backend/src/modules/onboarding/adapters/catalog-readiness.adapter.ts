@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import {
   CatalogReadinessPort,
   CatalogReadinessResult,
@@ -10,20 +10,27 @@ import { Product } from '../../inventory/entities/product.entity';
 @Injectable()
 export class CatalogReadinessAdapter implements CatalogReadinessPort {
   constructor(
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
+    // Issue #512 slice 1 part A: the `products` read rides the tenant-bound
+    // transaction manager, never pooled repositories.
+    private readonly dataSource: DataSource,
   ) {}
 
   async evaluateCatalogReadiness(
     tenantId: string,
   ): Promise<CatalogReadinessResult> {
-    const sellableCount = await this.productRepository
-      .createQueryBuilder('product')
-      .where('product.tenant_id = :tenantId', { tenantId })
-      .andWhere('product.is_active = true')
-      .andWhere('product.sellPrice > 0')
-      .andWhere("product.name IS NOT NULL AND TRIM(product.name) != ''")
-      .getCount();
+    const sellableCount = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager
+          .getRepository(Product)
+          .createQueryBuilder('product')
+          .where('product.tenant_id = :tenantId', { tenantId })
+          .andWhere('product.is_active = true')
+          .andWhere('product.sellPrice > 0')
+          .andWhere("product.name IS NOT NULL AND TRIM(product.name) != ''")
+          .getCount(),
+    );
 
     return {
       sellableProductCount: sellableCount,

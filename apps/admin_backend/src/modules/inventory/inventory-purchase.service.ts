@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { DataSource, QueryFailedError } from 'typeorm';
+import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import { Batch } from './entities/batch.entity';
 import { Insumo } from './entities/insumo.entity';
 import {
@@ -22,7 +22,10 @@ import {
 import { Supplier } from './entities/supplier.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
 import { CostCalculatorService } from './cost-calculator.service';
-import { bindTenantContext } from '../../core/database/tenant-transaction';
+import {
+  bindTenantContext,
+  runInTenantTransaction,
+} from '../../core/database/tenant-transaction';
 
 export const CURRENCY = {
   NIO: 'NIO',
@@ -97,7 +100,14 @@ export class InventoryPurchaseService {
     const tenantId = this.requireTenantId(input.tenantId);
     this.requireInvoiceNumber(input.invoiceNumber);
 
-    const insumo = await this.loadInsumo(tenantId, input.insumoId);
+    // Issue #512 slice 1 part A: the preview read of `insumos` rides one
+    // tenant-bound transaction and resolves the entity from that exact
+    // manager — the pooled `dataSource.getRepository` path is gone.
+    const insumo = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) => this.loadInsumo(manager, tenantId, input.insumoId),
+    );
     return this.buildPreview(input, insumo);
   }
 
@@ -567,10 +577,11 @@ export class InventoryPurchaseService {
   }
 
   private async loadInsumo(
+    manager: EntityManager,
     tenantId: string,
     insumoId: string,
   ): Promise<Insumo> {
-    const insumo = await this.dataSource.getRepository(Insumo).findOne({
+    const insumo = await manager.findOne(Insumo, {
       where: { id: insumoId, tenant_id: tenantId },
     });
 

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
 import {
   OnboardingSessionService,
@@ -19,8 +19,9 @@ import { computeJcsSha256 } from '../utils/canonical-jcs';
 @Injectable()
 export class OnboardingCatalogService {
   constructor(
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
+    // Issue #512 slice 1 part A: every `products` access below resolves its
+    // repository from the tenant-bound transaction manager.
+    private readonly dataSource: DataSource,
     private readonly sessionService: OnboardingSessionService,
     private readonly readinessEvaluator: OnboardingReadinessEvaluator,
     private readonly stateReconciler: OnboardingStateReconciler,
@@ -51,19 +52,27 @@ export class OnboardingCatalogService {
 
     // Create sellable product (AC-06).
     // stock=0, averageCost=0: initial stock and cost enter via Kardex only (AC-07, AC-24, AC-52).
-    const product = this.productRepository.create({
-      tenant_id: trimmedTenant,
-      name: trimmedName,
-      sellPrice: dto.sellPrice,
-      uom: dto.uom?.trim() || 'UN',
-      category_code: dto.category_code?.trim() || undefined,
-      product_type: ProductType.SIMPLE,
-      is_active: true,
-      stock: 0,
-      averageCost: 0,
-    });
-
-    const savedProduct = await this.productRepository.save(product);
+    // Issue #512 slice 1 part A: the insert runs inside one tenant-bound
+    // transaction that binds before the first access.
+    const savedProduct = await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      (manager) => {
+        const productRepository = manager.getRepository(Product);
+        const product = productRepository.create({
+          tenant_id: trimmedTenant,
+          name: trimmedName,
+          sellPrice: dto.sellPrice,
+          uom: dto.uom?.trim() || 'UN',
+          category_code: dto.category_code?.trim() || undefined,
+          product_type: ProductType.SIMPLE,
+          is_active: true,
+          stock: 0,
+          averageCost: 0,
+        });
+        return productRepository.save(product);
+      },
+    );
 
     // Integrate with session start & reconcile (AC-27, AC-50)
     await this.sessionService.ensureOnboardingStarted({
@@ -102,22 +111,32 @@ export class OnboardingCatalogService {
       throw new BadRequestException('Tenant context is required');
     }
 
-    const sellableCount = await this.productRepository
-      .createQueryBuilder('product')
-      .where('product.tenant_id = :tenantId', { tenantId: trimmedTenant })
-      .andWhere('product.is_active = true')
-      .andWhere('product.sellPrice > 0')
-      .andWhere("product.name IS NOT NULL AND TRIM(product.name) != ''")
-      .getCount();
+    const { sellableCount, sampleProducts } = await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      async (manager) => {
+        const productRepository = manager.getRepository(Product);
 
-    const sampleProducts = await this.productRepository.find({
-      where: {
-        tenant_id: trimmedTenant,
-        is_active: true,
+        const sellableCount = await productRepository
+          .createQueryBuilder('product')
+          .where('product.tenant_id = :tenantId', { tenantId: trimmedTenant })
+          .andWhere('product.is_active = true')
+          .andWhere('product.sellPrice > 0')
+          .andWhere("product.name IS NOT NULL AND TRIM(product.name) != ''")
+          .getCount();
+
+        const sampleProducts = await productRepository.find({
+          where: {
+            tenant_id: trimmedTenant,
+            is_active: true,
+          },
+          order: { created_at: 'DESC' },
+          take: 5,
+        });
+
+        return { sellableCount, sampleProducts };
       },
-      order: { created_at: 'DESC' },
-      take: 5,
-    });
+    );
 
     return {
       sellableProductCount: sellableCount,
@@ -146,9 +165,14 @@ export class OnboardingCatalogService {
     let product: Product | null = null;
     if (requestedProductId?.trim()) {
       const trimmedId = requestedProductId.trim();
-      product = await this.productRepository.findOne({
-        where: { id: trimmedId, tenant_id: trimmedTenant },
-      });
+      product = await runInTenantTransaction(
+        this.dataSource,
+        trimmedTenant,
+        (manager) =>
+          manager
+            .getRepository(Product)
+            .findOne({ where: { id: trimmedId, tenant_id: trimmedTenant } }),
+      );
       if (!product) {
         throw new BadRequestException(
           'Verification product not found or does not belong to tenant',
@@ -160,13 +184,18 @@ export class OnboardingCatalogService {
         );
       }
     } else {
-      product = await this.productRepository.findOne({
-        where: {
-          tenant_id: trimmedTenant,
-          is_active: true,
-        },
-        order: { created_at: 'ASC' },
-      });
+      product = await runInTenantTransaction(
+        this.dataSource,
+        trimmedTenant,
+        (manager) =>
+          manager.getRepository(Product).findOne({
+            where: {
+              tenant_id: trimmedTenant,
+              is_active: true,
+            },
+            order: { created_at: 'ASC' },
+          }),
+      );
       if (!product || Number(product.sellPrice) <= 0) {
         throw new BadRequestException(
           'No sellable verification product candidate found for tenant',

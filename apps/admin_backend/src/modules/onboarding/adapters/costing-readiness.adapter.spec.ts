@@ -1,12 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { CostingReadinessAdapter } from './costing-readiness.adapter';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
 import { InventoryMovement } from '../../inventory/entities/inventory-movement.entity';
 
 describe('CostingReadinessAdapter (Unit)', () => {
   let adapter: CostingReadinessAdapter;
+  // Issue #512: the `products` read resolves from the tenant-bound
+  // transaction manager.
+  let txManager: { query: jest.Mock; getRepository: jest.Mock };
   let productRepo: jest.Mocked<Partial<Repository<Product>>>;
   let movementRepo: jest.Mocked<Partial<Repository<InventoryMovement>>>;
 
@@ -18,12 +22,24 @@ describe('CostingReadinessAdapter (Unit)', () => {
       count: jest.fn(),
     };
 
+    txManager = {
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn().mockImplementation((entity: unknown) => {
+        if (entity === Product) return productRepo;
+        return null;
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CostingReadinessAdapter,
         {
-          provide: getRepositoryToken(Product),
-          useValue: productRepo,
+          provide: DataSource,
+          useValue: {
+            transaction: jest.fn((cb: (mgr: unknown) => Promise<unknown>) =>
+              cb(txManager),
+            ),
+          },
         },
         {
           provide: getRepositoryToken(InventoryMovement),
@@ -138,5 +154,21 @@ describe('CostingReadinessAdapter (Unit)', () => {
       reason: 'SERVICE_OR_NON_INVENTORIABLE',
       provenance: 'NONE',
     });
+  });
+
+  it('binds the tenant context before the products read (issue #512)', async () => {
+    (productRepo.find as jest.Mock).mockResolvedValue([]);
+    (movementRepo.count as jest.Mock).mockResolvedValue(0);
+
+    await adapter.evaluateCostingReadiness('tenant-A');
+
+    expect(txManager.query).toHaveBeenCalledWith(
+      TENANT_CONTEXT_SET_CONFIG_SQL,
+      ['tenant-A'],
+    );
+    expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      (productRepo.find as jest.Mock).mock.invocationCallOrder[0],
+    );
+    expect(txManager.getRepository).toHaveBeenCalledWith(Product);
   });
 });

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import { BadRequestException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
 import { RecipeService } from './recipe.service';
@@ -51,17 +52,12 @@ describe('RecipeService', () => {
     find: jest.fn(),
   };
 
-  const insumoRepo = {
-    findOne: jest.fn(),
-  };
-
-  const productRepo = {
-    findOne: jest.fn(),
-  };
-
-  const uomConversionRepo = {
-    findOne: jest.fn(),
-  };
+  // Issue #512 slice 1 part A: the ingest transaction resolves product /
+  // insumo / UOM repositories from the tenant-bound manager, so the spec
+  // keeps dedicated manager-scoped repo mocks.
+  const mgrProductRepo = { findOne: jest.fn() };
+  const mgrInsumoRepo = { findOne: jest.fn() };
+  const mgrUomConversionRepo = { findOne: jest.fn() };
 
   type CreatedRecord = Record<string, unknown>;
   const createdVersions: CreatedRecord[] = [];
@@ -77,6 +73,9 @@ describe('RecipeService', () => {
 
   const manager = {
     findOne: jest.fn(),
+    find: jest.fn(),
+    query: jest.fn(),
+    getRepository: jest.fn(),
     createQueryBuilder: jest.fn(() => productLockQueryBuilder),
     create: jest.fn((entity: unknown, value: CreatedRecord) => {
       if (entity === RecipeVersion) createdVersions.push(value);
@@ -102,6 +101,9 @@ describe('RecipeService', () => {
     transaction: jest.fn(
       <T>(cb: (m: typeof manager) => Promise<T>): Promise<T> => cb(manager),
     ),
+    // Issue #512 slice 1 part A: spy on the pooled repository path so specs
+    // can prove it is never used for products/insumos on bound routes.
+    getRepository: jest.fn(),
   };
 
   const buildTestingModule = async () => {
@@ -116,6 +118,15 @@ describe('RecipeService', () => {
       id: buildDto().productId,
       tenant_id: 'tenant-A',
     });
+    manager.getRepository.mockImplementation((entity: unknown) => {
+      if (entity === Product) return mgrProductRepo;
+      if (entity === Insumo) return mgrInsumoRepo;
+      if (entity === UomConversion) return mgrUomConversionRepo;
+      if (entity === RecipeVersion) return recipeVersionRepo;
+      if (entity === RecipeDetail) return recipeDetailRepo;
+      return null;
+    });
+    manager.query.mockResolvedValue(undefined);
     dataSource.transaction.mockImplementation(
       <T>(cb: (m: typeof manager) => Promise<T>): Promise<T> => cb(manager),
     );
@@ -130,12 +141,6 @@ describe('RecipeService', () => {
         {
           provide: getRepositoryToken(RecipeDetail),
           useValue: recipeDetailRepo,
-        },
-        { provide: getRepositoryToken(Insumo), useValue: insumoRepo },
-        { provide: getRepositoryToken(Product), useValue: productRepo },
-        {
-          provide: getRepositoryToken(UomConversion),
-          useValue: uomConversionRepo,
         },
         UomConversionCalculator,
         { provide: DataSource, useValue: dataSource },
@@ -238,8 +243,8 @@ describe('RecipeService', () => {
 
   describe('ingestPosVersion', () => {
     it('persists a new tenant-scoped version + details with per-sold-unit quantity', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         id: '00000000-0000-4000-8000-000000000ins',
         tenant_id: 'tenant-A',
         name: 'Arroz',
@@ -280,8 +285,8 @@ describe('RecipeService', () => {
     });
 
     it('deactivates the prior active version when ingesting a fresh document', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         name: 'Arroz',
         consumptionUom: 'kg',
@@ -303,8 +308,8 @@ describe('RecipeService', () => {
     });
 
     it('rejects a repost that would mutate a published effective version', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         name: 'Arroz',
         consumptionUom: 'kg',
@@ -330,8 +335,8 @@ describe('RecipeService', () => {
     });
 
     it('idempotently replaces details when the same pos_document_id is reposted', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         name: 'Arroz',
         consumptionUom: 'kg',
@@ -371,8 +376,8 @@ describe('RecipeService', () => {
     });
 
     it('locks the product row before mutating active recipe versions', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         name: 'Arroz',
         consumptionUom: 'kg',
@@ -413,8 +418,8 @@ describe('RecipeService', () => {
         { code: '23505' },
       );
 
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         name: 'Arroz',
         consumptionUom: 'kg',
@@ -447,7 +452,7 @@ describe('RecipeService', () => {
     });
 
     it('rejects invalid yield / gross / shrink values', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
       await expect(
         service.ingestPosVersion({
           tenantId: 'tenant-A',
@@ -474,7 +479,7 @@ describe('RecipeService', () => {
         }),
       ).rejects.toThrow(BadRequestException);
 
-      insumoRepo.findOne.mockResolvedValue({
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         consumptionUom: 'kg',
       });
@@ -498,8 +503,8 @@ describe('RecipeService', () => {
     });
 
     it('stores per-sold-unit quantity that BomExplosionService consumes correctly', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         consumptionUom: 'kg',
       });
@@ -521,7 +526,7 @@ describe('RecipeService', () => {
     });
 
     it('successfully ingests valid SUB_RECIPE component and persists with reference version', async () => {
-      productRepo.findOne.mockImplementation(
+      mgrProductRepo.findOne.mockImplementation(
         async ({ where }: { where: { id: string } }) => {
           return { id: where.id, tenant_id: 'tenant-A' };
         },
@@ -553,7 +558,7 @@ describe('RecipeService', () => {
 
     it('rejects self-referencing SUB_RECIPE components with circular dependency error', async () => {
       const rootId = buildDto().productId;
-      productRepo.findOne.mockResolvedValue({ id: rootId });
+      mgrProductRepo.findOne.mockResolvedValue({ id: rootId });
 
       await expect(
         service.ingestPosVersion({
@@ -574,8 +579,8 @@ describe('RecipeService', () => {
     });
 
     it('rejects when the insumo is not found for the tenant', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue(null);
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue(null);
 
       await expect(
         service.ingestPosVersion({
@@ -586,7 +591,7 @@ describe('RecipeService', () => {
     });
 
     it('rejects when the product is not found for the tenant', async () => {
-      productRepo.findOne.mockResolvedValue(null);
+      mgrProductRepo.findOne.mockResolvedValue(null);
 
       await expect(
         service.ingestPosVersion({
@@ -594,17 +599,17 @@ describe('RecipeService', () => {
           dto: buildDto(),
         }),
       ).rejects.toThrow('Product');
-      expect(insumoRepo.findOne).not.toHaveBeenCalled();
+      expect(mgrInsumoRepo.findOne).not.toHaveBeenCalled();
     });
 
     it('rejects an incompatible componentUom (no positive conversion)', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         name: 'Arroz',
         consumptionUom: 'kg',
       });
-      uomConversionRepo.findOne.mockResolvedValue(null);
+      mgrUomConversionRepo.findOne.mockResolvedValue(null);
 
       await expect(
         service.ingestPosVersion({
@@ -626,8 +631,8 @@ describe('RecipeService', () => {
     });
 
     it('rejects a missing componentUom to avoid silent unit corruption', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         name: 'Arroz',
         consumptionUom: 'kg',
@@ -653,13 +658,13 @@ describe('RecipeService', () => {
     });
 
     it('accepts a compatible componentUom when a positive conversion exists', async () => {
-      productRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      insumoRepo.findOne.mockResolvedValue({
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         name: 'Arroz',
         consumptionUom: 'kg',
       });
-      uomConversionRepo.findOne.mockResolvedValue({ factor: 0.453592 });
+      mgrUomConversionRepo.findOne.mockResolvedValue({ factor: 0.453592 });
       manager.findOne.mockResolvedValue(null);
 
       const result = await service.ingestPosVersion({
@@ -682,6 +687,61 @@ describe('RecipeService', () => {
       const detail = createdDetails[0] as unknown as RecipeDetail;
       expect(detail.component_uom).toBe('lb');
       expect(detail.quantity).toBe(0.2268);
+    });
+
+    it('binds the tenant context before the locked product read and keeps validation inside the transaction (issue #512)', async () => {
+      mgrProductRepo.findOne.mockResolvedValue({
+        id: buildDto().productId,
+      });
+      mgrInsumoRepo.findOne.mockResolvedValue({
+        tenant_id: 'tenant-A',
+        consumptionUom: 'kg',
+      });
+      manager.findOne.mockResolvedValue(null);
+
+      await service.ingestPosVersion({
+        tenantId: 'tenant-A',
+        dto: buildDto(),
+      });
+
+      // Binding order: transaction-local set_config first, then the
+      // pessimistic lock, then validation reads, all on the same manager.
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-A'],
+      );
+      expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        productLockQueryBuilder.getOne.mock.invocationCallOrder.slice(-1)[0],
+      );
+      expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        mgrProductRepo.findOne.mock.invocationCallOrder[0],
+      );
+      expect(manager.getRepository).toHaveBeenCalledWith(Product);
+      expect(manager.getRepository).toHaveBeenCalledWith(Insumo);
+    });
+
+    it('does not touch the pooled product/insumo repositories during ingest (issue #512)', async () => {
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000ins',
+        tenant_id: 'tenant-A',
+        name: 'Arroz',
+        consumptionUom: 'kg',
+      });
+      manager.findOne.mockResolvedValue(null);
+
+      await service.ingestPosVersion({
+        tenantId: 'tenant-A',
+        dto: buildDto(),
+      });
+
+      // The pooled DataSource-level repository path must never serve a
+      // products/insumos read on this route: everything resolves from the
+      // tenant-bound manager (whose manager-scoped resolution is asserted
+      // in the binding-order spec above).
+      expect(dataSource.getRepository).not.toHaveBeenCalled();
+      expect(manager.getRepository).toHaveBeenCalledWith(Product);
+      expect(manager.getRepository).toHaveBeenCalledWith(Insumo);
     });
   });
 });

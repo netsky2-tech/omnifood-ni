@@ -88,6 +88,7 @@ describe('InventoryController', () => {
           provide: ShrinkageService,
           useValue: {
             recordShrinkage: jest.fn(),
+            recordProductShrinkage: jest.fn(),
           },
         },
         {
@@ -386,9 +387,13 @@ describe('InventoryController', () => {
         reason: 'MALA_PREPARACION',
         observation: 'Prep loss confirmed',
       };
-      await controller.recordShrinkage(dto);
+      // Issue #512: the controller threads the device-principal tenant into
+      // the service; a direct handler call passes the resolved tenant id as
+      // the GetTenantId parameter.
+      await controller.recordShrinkage(dto, 'tenant-A');
 
       expect(shrinkageService.recordShrinkage).toHaveBeenCalledWith(
+        'tenant-A',
         'ins-123',
         5,
         'MALA_PREPARACION',

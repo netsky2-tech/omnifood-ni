@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import {
   OperationsReadinessPort,
   OperationsReadinessResult,
@@ -12,6 +12,7 @@ import {
 } from '../../inventory/entities/recipe-version.entity';
 import { Supplier } from '../../inventory/entities/supplier.entity';
 import { Product } from '../../inventory/entities/product.entity';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 
 @Injectable()
 export class OperationsReadinessAdapter implements OperationsReadinessPort {
@@ -22,8 +23,9 @@ export class OperationsReadinessAdapter implements OperationsReadinessPort {
     private readonly recipeVersionRepository: Repository<RecipeVersion>,
     @InjectRepository(Supplier)
     private readonly supplierRepository: Repository<Supplier>,
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
+    // Issue #512 slice 1 part A: the `products` categories read resolves its
+    // repository from the tenant-bound transaction manager.
+    private readonly dataSource: DataSource,
   ) {}
 
   async evaluateOperationsReadiness(
@@ -65,14 +67,20 @@ export class OperationsReadinessAdapter implements OperationsReadinessPort {
       where: { tenant_id: trimmedTenant, is_active: true },
     });
 
-    const categoriesRaw = await this.productRepository
-      .createQueryBuilder('product')
-      .select('DISTINCT product.category_code', 'category_code')
-      .where('product.tenant_id = :tenantId', { tenantId: trimmedTenant })
-      .andWhere(
-        "product.category_code IS NOT NULL AND TRIM(product.category_code) != ''",
-      )
-      .getRawMany();
+    const categoriesRaw = await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenant,
+      (manager) =>
+        manager
+          .getRepository(Product)
+          .createQueryBuilder('product')
+          .select('DISTINCT product.category_code', 'category_code')
+          .where('product.tenant_id = :tenantId', { tenantId: trimmedTenant })
+          .andWhere(
+            "product.category_code IS NOT NULL AND TRIM(product.category_code) != ''",
+          )
+          .getRawMany(),
+    );
 
     const categoryCount = categoriesRaw.length;
 

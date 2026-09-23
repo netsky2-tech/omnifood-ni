@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { InventoryReportsService } from './inventory-reports.service';
 import { Insumo } from '../entities/insumo.entity';
 import {
@@ -12,6 +12,13 @@ describe('InventoryReportsService', () => {
   let service: InventoryReportsService;
   let insumoRepo: jest.Mocked<Repository<Insumo>>;
   let movementRepo: jest.Mocked<Repository<InventoryMovement>>;
+  // Issue #512: the service must resolve its repositories from the
+  // tenant-bound transaction manager, so the DataSource mock hands back a
+  // manager exposing exactly those manager-scoped repositories.
+  let txManager: {
+    query: jest.Mock;
+    getRepository: jest.Mock;
+  };
 
   beforeEach(async () => {
     insumoRepo = {
@@ -22,21 +29,45 @@ describe('InventoryReportsService', () => {
       createQueryBuilder: jest.fn(),
     } as unknown as jest.Mocked<Repository<InventoryMovement>>;
 
+    txManager = {
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn().mockImplementation((entity: unknown) => {
+        if (entity === Insumo) return insumoRepo;
+        if (entity === InventoryMovement) return movementRepo;
+        return null;
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InventoryReportsService,
         {
-          provide: getRepositoryToken(Insumo),
-          useValue: insumoRepo,
-        },
-        {
-          provide: getRepositoryToken(InventoryMovement),
-          useValue: movementRepo,
+          provide: DataSource,
+          useValue: {
+            transaction: jest.fn((cb: (mgr: unknown) => Promise<unknown>) =>
+              cb(txManager),
+            ),
+          },
         },
       ],
     }).compile();
 
     service = module.get<InventoryReportsService>(InventoryReportsService);
+  });
+
+  it('binds the tenant context before the first report read (issue #512)', async () => {
+    (insumoRepo.find as jest.Mock).mockResolvedValue([]);
+
+    await service.getValuationReport('tenant-A');
+
+    expect(txManager.query).toHaveBeenCalledWith(
+      TENANT_CONTEXT_SET_CONFIG_SQL,
+      ['tenant-A'],
+    );
+    expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      (insumoRepo.find as jest.Mock).mock.invocationCallOrder[0],
+    );
+    expect(txManager.getRepository).toHaveBeenCalledWith(Insumo);
   });
 
   it('should be defined', () => {

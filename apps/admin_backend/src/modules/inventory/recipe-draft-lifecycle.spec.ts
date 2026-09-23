@@ -7,16 +7,12 @@ import {
   RecipeSuggestionState,
 } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
-import { Product } from './entities/product.entity';
-import { UomConversion } from './entities/uom-conversion.entity';
 import { UomConversionCalculator } from './uom-conversion-calculator';
 
 describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () => {
   let service: RecipeService;
   let recipeVersionRepo: jest.Mocked<Partial<Repository<RecipeVersion>>>;
   let recipeDetailRepo: jest.Mocked<Partial<Repository<RecipeDetail>>>;
-  let productRepo: jest.Mocked<Partial<Repository<Product>>>;
-  let uomConversionRepo: jest.Mocked<Partial<Repository<UomConversion>>>;
   let uomCalculator: UomConversionCalculator;
 
   beforeEach(() => {
@@ -31,20 +27,11 @@ describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () =
       create: jest.fn((e: any) => e) as any,
       save: jest.fn((e: any) => Promise.resolve(e)) as any,
     };
-    productRepo = {
-      findOne: jest.fn(),
-    };
-    uomConversionRepo = {
-      find: jest.fn().mockResolvedValue([]),
-    };
     uomCalculator = new UomConversionCalculator();
 
     service = new RecipeService(
       recipeVersionRepo as any,
       recipeDetailRepo as any,
-      {} as any, // insumoRepo
-      productRepo as any,
-      uomConversionRepo as any,
       uomCalculator,
       {} as any, // dataSource
     );

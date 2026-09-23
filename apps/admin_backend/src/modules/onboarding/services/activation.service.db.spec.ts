@@ -243,7 +243,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       } as unknown as OnboardingSessionService;
 
       const catalogService = new OnboardingCatalogService(
-        prodRepo,
+        dataSource,
         dummySessionService,
         dummyReadiness,
         dummyReconciler,
@@ -489,7 +489,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       } as unknown as OnboardingSessionService;
 
       const catalogService = new OnboardingCatalogService(
-        prodRepo,
+        dataSource,
         dummySessionService,
         dummyReadiness,
         dummyReconciler,
@@ -721,7 +721,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       } as unknown as OnboardingSessionService;
 
       const catalogService = new OnboardingCatalogService(
-        prodRepo,
+        dataSource,
         dummySessionService,
         dummyReadiness,
         dummyReconciler,

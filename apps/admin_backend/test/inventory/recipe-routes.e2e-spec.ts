@@ -89,9 +89,6 @@ async function withIsolatedSchema(
     const recipeService = new RecipeService(
       dataSource.getRepository(RecipeVersion),
       dataSource.getRepository(RecipeDetail),
-      dataSource.getRepository(Insumo),
-      dataSource.getRepository(Product),
-      dataSource.getRepository(UomConversion),
       new (
         await import('../../src/modules/inventory/uom-conversion-calculator')
       ).UomConversionCalculator(),
