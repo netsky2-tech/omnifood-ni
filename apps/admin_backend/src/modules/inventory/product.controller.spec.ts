@@ -329,7 +329,13 @@ describe('ProductController HTTP guards and route precedence', () => {
       .expect(201)
       // create() now serializes at the response boundary, so the body carries
       // the coerced numeric fields on top of the mocked entity.
-      .expect({ id: 'created', stock: 0, averageCost: 0, sellPrice: 0, tax_rate: 0 });
+      .expect({
+        id: 'created',
+        stock: 0,
+        averageCost: 0,
+        sellPrice: 0,
+        tax_rate: 0,
+      });
   });
 
   describe('numeric response contract (driver returns strings for numeric)', () => {
@@ -362,7 +368,7 @@ describe('ProductController HTTP guards and route precedence', () => {
         page: 1,
         pageSize: 25,
         totalPages: 1,
-      } as never);
+      });
 
       const res = await request(getHttpServer())
         .get('/products?page=1')
