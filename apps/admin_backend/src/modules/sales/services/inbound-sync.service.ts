@@ -94,10 +94,12 @@ export class InboundSyncService {
    * `runInTenantTransaction`), every repository read below resolves through
    * that manager so the queries run on the transaction's own connection and
    * honor its transaction-local `app.tenant_id` RLS binding. For the
-   * tenant-protected `products` and `insumos` tables the bound manager is
-   * mandatory (issue #512 slice 1 part A): calls without one fail closed with
-   * a 500 instead of silently reading through pooled repositories that lack
-   * the tenant binding. Untenant-protected tables keep the pooled fallback.
+   * tenant-protected `products`, `insumos`, `recipes`, `recipe_versions` and
+   * `recipe_details` tables the bound manager is mandatory (issue #512 slice
+   * 1 part A for `products`/`insumos`, slice 2 part A for the recipe
+   * tables): calls without one fail closed with a 500 instead of silently
+   * reading through pooled repositories that lack the tenant binding.
+   * Untenant-protected tables keep the pooled fallback.
    */
   async getInboundDeltas(
     tenantId: string,
@@ -509,8 +511,17 @@ export class InboundSyncService {
     sinceDate: Date | null,
     entityManager?: EntityManager,
   ): Promise<InboundSyncRecipeDto[]> {
-    const recipeRepository =
-      entityManager?.getRepository(Recipe) ?? this.recipeRepository;
+    // Issue #512 slice 2 part A: `recipes` is tenant-protected — require the
+    // bound manager, same as fetchProductDeltas. A missing manager fails
+    // closed with a 500 instead of silently reading through a pooled,
+    // unbound connection (under FORCE RLS an unbound read would return
+    // nothing instead of failing loudly).
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound recipe sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const recipeRepository = entityManager.getRepository(Recipe);
     const qb = recipeRepository
       .createQueryBuilder('recipe')
       .where('recipe.tenant_id = :tenantId', { tenantId });
@@ -538,15 +549,20 @@ export class InboundSyncService {
     now: Date,
     entityManager?: EntityManager,
   ): Promise<InboundSyncRecipeVersionDto[]> {
-    const recipeVersionRepository =
-      entityManager?.getRepository(RecipeVersion) ??
-      this.recipeVersionRepository;
-    // Issue #512 slice 1 part A: the insumo join read is tenant-protected,
-    // so it must ride the bound manager when one is supplied; without one
-    // the products/insumos fetches above would already have failed closed.
-    const insumoRepository = entityManager
-      ? entityManager.getRepository(Insumo)
-      : this.insumoRepository;
+    // Issue #512 slice 2 part A: `recipe_versions` (and the `recipe_details`
+    // component read inside this fetch) are tenant-protected — require the
+    // bound manager, same as fetchProductDeltas. A missing manager fails
+    // closed before any SQL instead of silently reading through pooled,
+    // unbound repositories.
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound recipe version sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const recipeVersionRepository = entityManager.getRepository(RecipeVersion);
+    // The insumo join read is tenant-protected too: it rides the same bound
+    // manager, now that one is mandatory for this fetch.
+    const insumoRepository = entityManager.getRepository(Insumo);
     const qb = recipeVersionRepository
       .createQueryBuilder('rv')
       .where('rv.tenant_id = :tenantId', { tenantId })
@@ -582,8 +598,7 @@ export class InboundSyncService {
 
     const versionIds = items.map((rv) => rv.id);
     const versionIdSet = new Set(versionIds);
-    const recipeDetailRepository =
-      entityManager?.getRepository(RecipeDetail) ?? this.recipeDetailRepository;
+    const recipeDetailRepository = entityManager.getRepository(RecipeDetail);
     const components = versionIds.length
       ? await recipeDetailRepository
           .createQueryBuilder('detail')

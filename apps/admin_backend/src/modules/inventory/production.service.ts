@@ -269,8 +269,16 @@ export class ProductionService {
     let totalConsumedValueNio = 0;
 
     await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+      // Issue #512 slice 2 part A: the SERIALIZABLE transaction binds
+      // app.tenant_id before its first protected access, and every read/write
+      // inside resolves from the bound manager. A blank or missing tenant
+      // fails closed (TenantContextRequiredError) before any SQL is issued;
+      // an unbound access under FORCE RLS would fail closed (zero rows /
+      // error), not leak across tenants.
+      await bindTenantContext(manager, input.tenantId);
+
       for (const [insumoId, requiredQuantity] of exploded.entries()) {
-        const candidates = await this.batchRepo.find({
+        const candidates = await manager.getRepository(Batch).find({
           where: { tenant_id: input.tenantId, insumo_id: insumoId },
           order: { batch_number: 'ASC' },
         });

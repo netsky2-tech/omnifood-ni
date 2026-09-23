@@ -1,4 +1,5 @@
 import { Repository } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import { RecipeService } from './recipe.service';
 import {
   RecipeVersion,
@@ -14,6 +15,13 @@ describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () =
   let recipeVersionRepo: jest.Mocked<Partial<Repository<RecipeVersion>>>;
   let recipeDetailRepo: jest.Mocked<Partial<Repository<RecipeDetail>>>;
   let uomCalculator: UomConversionCalculator;
+  // Issue #512 slice 2 part A: exposed so the binding guards can assert the
+  // protected reads ride the tenant-bound transaction (not the pooled repos).
+  let txManager: {
+    query: jest.Mock;
+    getRepository: jest.Mock;
+  };
+  let dataSource: { transaction: jest.Mock };
 
   beforeEach(() => {
     recipeVersionRepo = {
@@ -29,11 +37,31 @@ describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () =
     };
     uomCalculator = new UomConversionCalculator();
 
+    // Issue #512 slice 2 part A: RecipeService resolves recipe repositories
+    // from the tenant-bound transaction manager, so the fixture's dataSource
+    // runs the callback against a manager that exposes the mocked repos.
+    const txManagerLocal = {
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn((entity: unknown) => {
+        if (entity === RecipeVersion) return recipeVersionRepo;
+        if (entity === RecipeDetail) return recipeDetailRepo;
+        return null;
+      }),
+    };
+    txManager = txManagerLocal;
+    const dataSourceLocal = {
+      transaction: jest.fn(
+        <T>(cb: (m: typeof txManagerLocal) => Promise<T>): Promise<T> =>
+          cb(txManagerLocal),
+      ),
+    };
+    dataSource = dataSourceLocal;
+
     service = new RecipeService(
       recipeVersionRepo as any,
       recipeDetailRepo as any,
       uomCalculator,
-      {} as any, // dataSource
+      dataSourceLocal as any, // dataSource
     );
   });
 
@@ -116,5 +144,54 @@ describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () =
     expect(published.suggestion_state).toBe(RecipeSuggestionState.CONFIRMED);
     expect(published.published_at).toBeDefined();
     expect(recipeVersionRepo.save).toHaveBeenCalled();
+  });
+
+  // Issue #512 slice 2 part A binding guards: reverting findActiveVersion or
+  // publishDraftVersion to the pooled `this.recipeVersionRepo` would skip
+  // runInTenantTransaction entirely — no transaction opens and no
+  // transaction-local set_config binding runs — so the dataSource.transaction
+  // and set_config assertions below would fail, and the read would silently
+  // return zero rows under FORCE RLS instead of failing loudly.
+  it('routes the findActiveVersion read through the tenant-bound transaction (issue #512)', async () => {
+    recipeVersionRepo.findOne = jest.fn().mockResolvedValue(null);
+
+    await service.findActiveVersion('tenant-1', 'prod-1');
+
+    expect(dataSource.transaction).toHaveBeenCalled();
+    expect(txManager.getRepository).toHaveBeenCalledWith(RecipeVersion);
+    expect(txManager.query).toHaveBeenCalledWith(
+      TENANT_CONTEXT_SET_CONFIG_SQL,
+      ['tenant-1'],
+    );
+    // The binding precedes the first protected access.
+    expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      recipeVersionRepo.findOne.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('routes the publishDraftVersion lifecycle through the tenant-bound transaction (issue #512)', async () => {
+    const publishedDraft = {
+      id: 'draft-rv-1',
+      tenant_id: 'tenant-1',
+      product_id: 'prod-1',
+      version_number: 1,
+      is_active: true,
+      publication_state: RecipePublicationState.PUBLISHED,
+      suggestion_state: RecipeSuggestionState.CONFIRMED,
+    } as RecipeVersion;
+    recipeVersionRepo.findOne = jest.fn().mockResolvedValue(publishedDraft);
+
+    const result = await service.publishDraftVersion('tenant-1', 'draft-rv-1');
+
+    expect(result.is_active).toBe(true);
+    expect(dataSource.transaction).toHaveBeenCalled();
+    expect(txManager.getRepository).toHaveBeenCalledWith(RecipeVersion);
+    expect(txManager.query).toHaveBeenCalledWith(
+      TENANT_CONTEXT_SET_CONFIG_SQL,
+      ['tenant-1'],
+    );
+    expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      recipeVersionRepo.findOne.mock.invocationCallOrder[0],
+    );
   });
 });

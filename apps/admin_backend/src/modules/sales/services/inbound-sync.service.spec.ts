@@ -667,6 +667,39 @@ describe('InboundSyncService', () => {
       expect(mockInsumoRepo.createQueryBuilder).not.toHaveBeenCalled();
       expect(insumoQb.getMany).not.toHaveBeenCalled();
     });
+
+    it('fails closed when no manager is supplied for the protected recipes read (issue #512 slice 2)', async () => {
+      recipeQb.getMany.mockResolvedValue([]);
+
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'recipes' }),
+      ).rejects.toThrow(
+        'Inbound recipe sync requires a tenant-bound transaction manager',
+      );
+
+      // Fail closed means fail before any SQL: the pooled recipes read must
+      // never run without the tenant binding.
+      expect(mockRecipeRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(recipeQb.getMany).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when no manager is supplied for the protected recipe_versions read (issue #512 slice 2)', async () => {
+      recipeVersionQb.getMany.mockResolvedValue([]);
+
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'recipeversions' }),
+      ).rejects.toThrow(
+        'Inbound recipe version sync requires a tenant-bound transaction manager',
+      );
+
+      // Fail closed means fail before any SQL: the pooled recipe version,
+      // recipe detail and insumo reads inside this fetch must never run
+      // without the tenant binding.
+      expect(mockRecipeVersionRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockRecipeDetailRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockInsumoRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(recipeVersionQb.getMany).not.toHaveBeenCalled();
+    });
   });
   describe('OHAC delivery negotiation member', () => {
     const negotiationQuery = { ohacPosBuild: 'pos-build-1' };
