@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import {
   createMemoryRouter,
   Outlet,
@@ -64,6 +64,17 @@ describe("ErrorBoundary navigation reset", () => {
     useTenantContext.getState().clear();
   });
 
+  afterEach(() => {
+    // The spy above also swallows React act() warnings (they go through
+    // console.error). Fail loudly if any navigation escaped act scope so the
+    // flake this suite once showed under full-suite parallelism cannot
+    // silently return.
+    const actWarnings = consoleErrorSpy.mock.calls.filter((args: unknown[]) =>
+      args.some((a: unknown) => typeof a === "string" && a.includes("not wrapped in act")),
+    );
+    expect(actWarnings).toEqual([]);
+  });
+
   it("clears the fallback when navigating to a healthy route (real AppLayout wiring)", async () => {
     const queryClient = makeQueryClient();
     const router = createMemoryRouter(
@@ -88,8 +99,13 @@ describe("ErrorBoundary navigation reset", () => {
     // The throwing route shows the fallback.
     expect(await screen.findByText(FALLBACK_TEXT)).toBeTruthy();
 
-    // Navigate to the healthy route WITHOUT any reload.
-    router.navigate("/healthy");
+    // Navigate to the healthy route WITHOUT any reload. createMemoryRouter is
+    // a data router: navigate() returns a promise and the resulting state
+    // updates must be flushed inside act or React warns and the update can
+    // land outside the test's observation window (flake source).
+    await act(async () => {
+      await router.navigate("/healthy");
+    });
 
     // The fallback must disappear and the healthy content must render.
     expect(await screen.findByText("Sección sana")).toBeTruthy();
@@ -129,13 +145,17 @@ describe("ErrorBoundary navigation reset", () => {
     // Navigate to the SAME pathname with a different query string: this is the
     // gap case. A pathname-only reset key never changes here, so the fallback
     // would stay stuck and the healthy page would never render.
-    router.navigate("/products");
+    // Same act discipline: the query-only navigation is a data-router
+    // navigation returning a promise.
+    await act(async () => {
+      await router.navigate("/products");
+    });
 
     expect(await screen.findByText("Sección sana")).toBeTruthy();
     expect(screen.queryByText(FALLBACK_TEXT)).toBeNull();
   });
 
-  it("does NOT reset while resetKey stays the same (guards against reset loops)", () => {
+  it("does NOT reset while resetKey stays the same (guards against reset loops)", async () => {
     const queryClient = makeQueryClient();
     const router = createMemoryRouter(
       [
@@ -158,8 +178,11 @@ describe("ErrorBoundary navigation reset", () => {
 
     expect(screen.getByText(FALLBACK_TEXT)).toBeTruthy();
 
-    // Re-render with the SAME key (different sibling throwing route).
-    router.navigate("/broken-again");
+    // Re-render with the SAME key (different sibling throwing route),
+    // flushed inside act like every other navigation in this file.
+    await act(async () => {
+      await router.navigate("/broken-again");
+    });
 
     // The fallback must persist: same key means no reset.
     expect(screen.getByText(FALLBACK_TEXT)).toBeTruthy();
