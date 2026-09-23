@@ -12,6 +12,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { ProductService } from './product.service';
+import {
+  serializeProduct,
+  serializeProducts,
+} from './product-response';
 import { ProductType } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -74,7 +78,7 @@ export class ProductController {
         1,
         Math.min(100, parseInt(pageSize || '25', 10) || 25),
       );
-      return this.productService.listPaginated({
+      const result = await this.productService.listPaginated({
         tenantId: this.requireTenant(tenantId),
         productType: resolved,
         includeInactive: includeInactive === 'true',
@@ -84,20 +88,24 @@ export class ProductController {
         sortBy,
         sortOrder,
       });
+      return { ...result, data: serializeProducts(result.data) };
     }
 
-    return this.productService.list(
+    const products = await this.productService.list(
       this.requireTenant(tenantId),
       resolved,
       includeInactive === 'true',
     );
+    return serializeProducts(products);
   }
 
   @Get(':id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async findOne(@Param('id') id: string, @GetTenantId() tenantId?: string) {
-    return this.productService.findOne(id, this.requireTenant(tenantId));
+    return serializeProduct(
+      await this.productService.findOne(id, this.requireTenant(tenantId)),
+    );
   }
 
   @Post()
@@ -108,10 +116,12 @@ export class ProductController {
     @GetTenantId() tenantId?: string,
     @CurrentUser() user?: CurrentUserPayload,
   ) {
-    return this.productService.create(
-      this.requireTenant(tenantId),
-      dto,
-      user ? { userId: user.sub, userEmail: user.email } : undefined,
+    return serializeProduct(
+      await this.productService.create(
+        this.requireTenant(tenantId),
+        dto,
+        user ? { userId: user.sub, userEmail: user.email } : undefined,
+      ),
     );
   }
 
@@ -124,11 +134,13 @@ export class ProductController {
     @GetTenantId() tenantId?: string,
     @CurrentUser() user?: CurrentUserPayload,
   ) {
-    return this.productService.update(
-      id,
-      this.requireTenant(tenantId),
-      dto,
-      user ? { userId: user.sub, userEmail: user.email } : undefined,
+    return serializeProduct(
+      await this.productService.update(
+        id,
+        this.requireTenant(tenantId),
+        dto,
+        user ? { userId: user.sub, userEmail: user.email } : undefined,
+      ),
     );
   }
 

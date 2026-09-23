@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { ProductController } from './product.controller';
 import { ProductService } from './product.service';
-import { ProductType } from './entities/product.entity';
+import { Product, ProductType } from './entities/product.entity';
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '../identity/guards/auth.guard';
@@ -53,6 +53,7 @@ describe('ProductController', () => {
   beforeEach(async () => {
     service = {
       list: jest.fn(),
+      listPaginated: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -209,6 +210,7 @@ describe('ProductController HTTP guards and route precedence', () => {
   beforeAll(async () => {
     service = {
       list: jest.fn().mockResolvedValue([]),
+      listPaginated: jest.fn(),
       findOne: jest.fn().mockResolvedValue({ id: 'p1' }),
       create: jest.fn().mockResolvedValue({ id: 'created' }),
       update: jest.fn(),
@@ -325,6 +327,102 @@ describe('ProductController HTTP guards and route precedence', () => {
         product_type: 'SIMPLE',
       })
       .expect(201)
-      .expect({ id: 'created' });
+      // create() now serializes at the response boundary, so the body carries
+      // the coerced numeric fields on top of the mocked entity.
+      .expect({ id: 'created', stock: 0, averageCost: 0, sellPrice: 0, tax_rate: 0 });
+  });
+
+  describe('numeric response contract (driver returns strings for numeric)', () => {
+    // The untyped override bag is deliberate: the driver hands back strings
+    // where the Product entity declares numbers.
+    const makeProductEntity = (over: Record<string, unknown> = {}): Product =>
+      ({
+        id: 'p1',
+        tenant_id: 'tenant-A',
+        name: 'Tacos al Pastor',
+        uom: 'UN',
+        product_type: ProductType.SIMPLE,
+        category_code: null,
+        warehouse_id: null,
+        is_perishable: false,
+        stock: '0.0000',
+        averageCost: '0.00',
+        sellPrice: '50.00',
+        tax_rate: '0.1500',
+        is_active: true,
+        created_at: new Date('2026-01-01T00:00:00.000Z'),
+        updated_at: new Date('2026-01-01T00:00:00.000Z'),
+        ...over,
+      }) as unknown as Product;
+
+    it('GET /products?page=1 returns strict JSON numbers in the paginated branch', async () => {
+      service.listPaginated.mockResolvedValue({
+        data: [makeProductEntity()],
+        total: 1,
+        page: 1,
+        pageSize: 25,
+        totalPages: 1,
+      } as never);
+
+      const res = await request(getHttpServer())
+        .get('/products?page=1')
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-A' })}`,
+        )
+        .expect(200);
+
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].sellPrice).toBe(50);
+      expect(typeof res.body.data[0].sellPrice).toBe('number');
+      expect(res.body.data[0].stock).toBe(0);
+      expect(typeof res.body.data[0].stock).toBe('number');
+      expect(res.body.data[0].averageCost).toBe(0);
+      expect(typeof res.body.data[0].averageCost).toBe('number');
+      expect(res.body.data[0].tax_rate).toBe(0.15);
+      expect(typeof res.body.data[0].tax_rate).toBe('number');
+      // The string the driver returned must not leak over the wire.
+      expect(JSON.parse(JSON.stringify(res.body.data[0])).sellPrice).toBe(50);
+    });
+
+    it('GET /products returns strict JSON numbers in the plain list branch', async () => {
+      service.list.mockResolvedValue([makeProductEntity()]);
+
+      const res = await request(getHttpServer())
+        .get('/products')
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-A' })}`,
+        )
+        .expect(200);
+
+      expect(res.body).toHaveLength(1);
+      expect(res.body[0].sellPrice).toBe(50);
+      expect(typeof res.body[0].sellPrice).toBe('number');
+      expect(res.body[0].stock).toBe(0);
+      expect(typeof res.body[0].stock).toBe('number');
+      expect(JSON.parse(JSON.stringify(res.body[0])).averageCost).toBe(0);
+    });
+
+    it('GET /products/:id returns strict JSON numbers', async () => {
+      service.findOne.mockResolvedValue(makeProductEntity());
+
+      const res = await request(getHttpServer())
+        .get('/products/p1')
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.MANAGER, tenant_id: 'tenant-A' })}`,
+        )
+        .expect(200);
+
+      expect(res.body.id).toBe('p1');
+      expect(res.body.sellPrice).toBe(50);
+      expect(typeof res.body.sellPrice).toBe('number');
+      expect(res.body.stock).toBe(0);
+      expect(typeof res.body.stock).toBe('number');
+      expect(res.body.tax_rate).toBe(0.15);
+      expect(typeof res.body.tax_rate).toBe('number');
+      expect(JSON.parse(JSON.stringify(res.body)).sellPrice).toBe(50);
+    });
   });
 });
