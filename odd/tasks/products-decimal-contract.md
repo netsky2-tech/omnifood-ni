@@ -6,8 +6,8 @@ function`, and the error overlay survives navigation until a full page reload.
 
 **Branch:** `fix/products-decimal-contract-and-error-reset`
 **Base:** `main` @ `52620b59`
-**Status:** W1 done and independently verified (`ad72cc14`). W2 done and independently verified
-(`8c975561`). W3 done with one reviewer-found gap closed (uncommitted at the time of writing).
+**Status:** done — all five tasks closed and independently verified. Five work-unit commits on the
+feature branch, tree clean, no push or PR (both remain yours).
 
 ## Outcome
 
@@ -143,7 +143,7 @@ the POS uses the sync endpoints. Backend e2e assertions already normalize with `
 - **Acceptance:** a RED test proves the fallback survives navigation today; after the fix it resets
   on navigation and does not reset while the key is stable.
 - **Rollback:** revert the task commit; the pre-fix behaviour (reload required) returns.
-- **Commits:** pending
+- **Commits:** `2e55f3a6` (`fix(owner_dashboard): clear the section error when the user navigates`)
 - **Evidence:** RED captured first with the real `AppLayout`: navigating from a throwing route to a
   healthy one left the fallback mounted (`Unable to find an element with the text: Sección sana`).
   GREEN after the fix: 3/3. Independent verification reproduced GREEN and falsified the mechanism in
@@ -161,21 +161,41 @@ the POS uses the sync endpoints. Backend e2e assertions already normalize with `
 - **Acceptance:** the new case fails with `resetKey={location.pathname}` and passes with
   `location.key`.
 - **Rollback:** revert to `location.pathname`; the primary navigation case still passes.
-- **Commits:** pending
+- **Commits:** `2e55f3a6` (shipped together with Task 3)
 - **Evidence:** RED reproduced the reviewer's exact scenario — starting at `/products?crash=1` with
   the fallback mounted and navigating to `/products` left it stuck (`1 failed | 3 passed`). GREEN
-  after the change: 4/4. Full dashboard suite `npx vitest run` → 62 files, 814 passed / 4 skipped.
-  `npx tsc -b --noEmit` exit 0. `npm run lint` exit 0 with 3 non-fatal warnings, of which only
-  `react(no-did-update-set-state)` at `src/app/error-boundary.tsx:54` is introduced by this change
-  and is the deliberate, documented pattern for resetting boundary state on prop change.
+  after the change: 4/4. Independent verification falsified the key in an isolated /tmp copy:
+  `resetKey={location.pathname}` turns the query-only case red and a constant key turns both
+  navigation cases red. `npx tsc -b --noEmit` exit 0. `npm run lint` exit 0 with 3 non-fatal
+  warnings, of which only `react(no-did-update-set-state)` at `src/app/error-boundary.tsx:54` is
+  introduced by this change and is the deliberate, documented pattern for resetting boundary state
+  on prop change.
+- **Follow-up found by verification:** the same suite passed 10/10 in isolation but failed once in
+  five full-suite runs (`error-boundary-navigation-reset.test.tsx:95`). Root cause was act scope,
+  not the fix: `createMemoryRouter` is a data router, so `navigate()` returns a promise and the
+  updates landed outside the test's observation window. Fixed in `03aea7d9` by wrapping every
+  navigation in `act` and failing on any captured `not wrapped in act` warning; `asyncUtilTimeout`
+  was deliberately left at its default rather than masking the unflushed updates. After: 13/13
+  focused and 5/5 full-suite runs green.
 
 ### Task 5 — Focused verification and close
 
-- **Status:** in progress
+- **Status:** done
 - **Goal:** Both apps' suites plus typecheck/lint pass; failed or skipped checks reported.
 - **Acceptance:** evidence recorded here and in the Engram mirror.
-- **Commits:** pending
-- **Evidence:** pending
+- **Commits:** `bd8b4759` (`chore(inventory): satisfy lint on the products response contract`),
+  `03aea7d9` (`test(owner_dashboard): keep router navigation inside act`)
+- **Evidence:** Backend full unit suite `npm test` → exit 0, 254 suites passed / 3 skipped,
+  2486 passed / 8 skipped tests, zero failures. Backend focused jest 25/25; DB e2e 15/15 via
+  `npm run test:e2e -- test/inventory/product-routes.db.e2e-spec.ts`. Dashboard full suite
+  `npx vitest run` → 5/5 runs green, 62 files, 814 passed / 4 skipped. `tsc -b --noEmit` exit 0 in
+  the dashboard; the backend keeps 16 pre-existing errors confined to
+  `test/inventory/batch_6b_baseline_validation.spec.ts`. A non-mutating `npx eslint` on the touched
+  backend files (the only lint script in the repo is `eslint --fix`, which would rewrite 728
+  pre-existing errors) initially reported 3 branch-introduced errors, now clean.
+- **Known limitation:** the flake in `error-boundary-navigation-reset.test.tsx` could NOT be
+  reproduced on demand (0/5 pre-fix runs); the fix is justified by three directly captured
+  `not wrapped in act` warnings, one per unwrapped navigation, rather than by an observed red run.
 
 ## Known limitations and follow-ups
 
@@ -200,3 +220,12 @@ the POS uses the sync endpoints. Backend e2e assertions already normalize with `
 6. Pre-existing, untouched: 16 `tsc` errors in `test/inventory/batch_6b_baseline_validation.spec.ts`
    and two oxlint `react(incompatible-library)` warnings in `PromotionForm.tsx` and
    `fiscal-setup-form.tsx`.
+7. `sidebar.tsx:66` auto-closes the mobile drawer on `[location.pathname, ...]`, the same
+   navigation-identity shortcut this change removed from the ErrorBoundary. A query-only or
+   hash-only navigation leaves the drawer open. It is user-dismissable (X, Escape, backdrop) and is
+   a different, lower-severity symptom than the reload-requiring overlay; left as a follow-up rather
+   than widening this change.
+8. The repo has no non-mutating lint script: `npm run lint` is `eslint --fix` and would rewrite 728
+   pre-existing errors. The three lint errors this branch introduced were only visible through a
+   manual `npx eslint <files>` run. Worth adding a check-only lint script as an independent
+   follow-up.
