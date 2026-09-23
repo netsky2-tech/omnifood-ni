@@ -728,7 +728,7 @@ class SyncService {
   Map<String, Object?> _buildSalesRecord(Map<String, dynamic> aggregate) {
     return buildSalesSyncRecord(
       aggregate,
-      fallbackTerminalId: _auditRepository.deviceId,
+      fallbackTerminalId: () => _auditRepository.deviceId,
     );
   }
 
@@ -745,13 +745,13 @@ class SyncService {
   /// lockstep through this single builder; never fork the shape.
   static Map<String, Object?> buildSalesSyncRecord(
     Map<String, dynamic> aggregate, {
-    String? fallbackTerminalId,
+    String? Function()? fallbackTerminalId,
   }) {
     final invoiceId =
         aggregate['id']?.toString() ?? '00000000-0000-0000-0000-000000000000';
     final documentType = aggregate['documentType']?.toString() ?? 'SALE';
     final terminalId =
-        aggregate['terminalId']?.toString() ?? fallbackTerminalId;
+        aggregate['terminalId']?.toString() ?? fallbackTerminalId?.call();
     final sourceSequence =
         (aggregate['sourceSequence'] is int &&
             (aggregate['sourceSequence'] as int) > 0)
