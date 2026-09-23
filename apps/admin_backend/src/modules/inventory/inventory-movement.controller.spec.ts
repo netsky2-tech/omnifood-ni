@@ -53,17 +53,21 @@ const unauthenticatedContext = (request: Record<string, unknown> = {}) =>
   }) as unknown as ExecutionContext;
 
 /**
- * Exercise the shrinkage delegation directly against the handler.
+ * Exercise the shrinkage delegation directly against the handler. Since the
+ * tenant-bound transaction work (issue #512) the handler threads the tenant
+ * id bound by the device transport guard into the shrinkage services.
  */
 const callRecordShrinkage = (
   controller: InventoryMovementController,
   dto: CreateShrinkageDto,
+  tenantId: string,
 ): Promise<unknown> =>
   (
     controller.recordShrinkage as unknown as (
       dto: CreateShrinkageDto,
+      tenantId: string,
     ) => Promise<unknown>
-  )(dto);
+  )(dto, tenantId);
 
 describe('InventoryMovementController device transport routes', () => {
   let controller: InventoryMovementController;
@@ -278,9 +282,10 @@ describe('InventoryMovementController device transport routes', () => {
       } as CreateShrinkageDto;
       shrinkageService.recordShrinkage.mockResolvedValue({ id: 'insumo-1' });
 
-      await callRecordShrinkage(controller, dto);
+      await callRecordShrinkage(controller, dto, 'tenant-123');
 
       expect(shrinkageService.recordShrinkage).toHaveBeenCalledWith(
+        'tenant-123',
         'insumo-1',
         2,
         'SPOILAGE',
@@ -300,15 +305,18 @@ describe('InventoryMovementController device transport routes', () => {
         id: 'product-1',
       });
 
-      await callRecordShrinkage(controller, dto);
+      await callRecordShrinkage(controller, dto, 'tenant-123');
 
-      expect(shrinkageService.recordProductShrinkage).toHaveBeenCalledWith({
-        productId: 'product-1',
-        quantity: 1,
-        reason: 'SPOILAGE',
-        observation: 'expired batch',
-        recipeVersionId: undefined,
-      });
+      expect(shrinkageService.recordProductShrinkage).toHaveBeenCalledWith(
+        'tenant-123',
+        {
+          productId: 'product-1',
+          quantity: 1,
+          reason: 'SPOILAGE',
+          observation: 'expired batch',
+          recipeVersionId: undefined,
+        },
+      );
     });
   });
 });
