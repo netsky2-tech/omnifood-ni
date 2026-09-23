@@ -140,7 +140,15 @@ describe('ProductController E2E — real PostgreSQL', () => {
             expect(res.body.id).toBeDefined();
             expect(res.body.name).toBe('Taza de Capuccino');
             expect(res.body.product_type).toBe('COMPOUND');
-            expect(Number(res.body.sellPrice)).toBe(45);
+            // numeric columns must serialize as JSON numbers, not driver strings.
+            expect(res.body.sellPrice).toBe(45);
+            expect(typeof res.body.sellPrice).toBe('number');
+            expect(res.body.stock).toBe(0);
+            expect(typeof res.body.stock).toBe('number');
+            expect(res.body.averageCost).toBe(0);
+            expect(typeof res.body.averageCost).toBe('number');
+            expect(res.body.tax_rate).toBe(0.15);
+            expect(typeof res.body.tax_rate).toBe('number');
             expect(res.body.is_active).toBe(true);
           },
         );
@@ -218,6 +226,10 @@ describe('ProductController E2E — real PostgreSQL', () => {
 
             expect(res.body).toHaveLength(1);
             expect(res.body[0].name).toBe('Gaseosa');
+            expect(res.body[0].sellPrice).toBe(25);
+            expect(typeof res.body[0].sellPrice).toBe('number');
+            expect(res.body[0].stock).toBe(0);
+            expect(typeof res.body[0].stock).toBe('number');
           },
         );
       },
@@ -347,6 +359,8 @@ describe('ProductController E2E — real PostgreSQL', () => {
 
             expect(res.body.id).toBe(productId);
             expect(res.body.name).toBe('Find Me');
+            expect(res.body.sellPrice).toBe(30);
+            expect(typeof res.body.sellPrice).toBe('number');
           },
         );
       },
@@ -400,6 +414,8 @@ describe('ProductController E2E — real PostgreSQL', () => {
               .expect(200);
 
             expect(res.body.name).toBe('New Name');
+            expect(res.body.sellPrice).toBe(10);
+            expect(typeof res.body.sellPrice).toBe('number');
           },
         );
       },

@@ -63,7 +63,7 @@ export function AppLayout() {
           className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:p-8 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]"
         >
           <div className="mx-auto max-w-[1440px] w-full">
-            <ErrorBoundary>
+            <ErrorBoundary resetKey={location.key}>
               <Outlet />
             </ErrorBoundary>
           </div>

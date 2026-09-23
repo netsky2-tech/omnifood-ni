@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatLocalDate } from "@/lib/utils";
+import { toFiniteNumber } from "@/lib/numeric";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { StatCard } from "@/components/ui/stat-card";
@@ -183,7 +184,7 @@ function CogsTab({ startDate, endDate }: { startDate?: string; endDate?: string 
                   <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
                     {formatCurrency(item.totalCostNio)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{item.costPercentage.toFixed(1)}%</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{toFiniteNumber(item.costPercentage).toFixed(1)}%</td>
                 </tr>
               ))}
             </tbody>

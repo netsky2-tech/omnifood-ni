@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { toFiniteNumber } from "@/lib/numeric";
 import { toast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -125,10 +126,10 @@ function ProductTable({
                   <td className="px-4 py-3 font-medium text-foreground">{p.name}</td>
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.uom}</td>
                   <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
-                    C${p.sellPrice.toFixed(2)}
+                    C${toFiniteNumber(p.sellPrice).toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {p.stock.toFixed(2)}
+                    {toFiniteNumber(p.stock).toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <Badge variant={p.is_active ? "success" : "secondary"}>
@@ -223,7 +224,9 @@ function ProductDialog({
   const [categoryCode, setCategoryCode] = useState(
     product?.category_code ?? "",
   );
-  const [sellPrice, setSellPrice] = useState(product?.sellPrice ?? 0);
+  const [sellPrice, setSellPrice] = useState(
+    product ? toFiniteNumber(product.sellPrice) : 0,
+  );
   const [isPerishable, setIsPerishable] = useState(
     product?.is_perishable ?? false,
   );
@@ -235,7 +238,7 @@ function ProductDialog({
     ? name !== (product?.name ?? "") ||
       uom !== (product?.uom ?? "") ||
       categoryCode !== (product?.category_code ?? "") ||
-      sellPrice !== (product?.sellPrice ?? 0) ||
+      sellPrice !== (product ? toFiniteNumber(product.sellPrice) : 0) ||
       isPerishable !== (product?.is_perishable ?? false)
     : name.trim() !== "" ||
       uom.trim() !== "" ||

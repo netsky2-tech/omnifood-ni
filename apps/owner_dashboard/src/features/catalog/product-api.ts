@@ -1,10 +1,47 @@
 import { api, type ApiClientMethodOptions } from "@/lib/api";
+import { toFiniteNumber } from "@/lib/numeric";
 import type {
   Product,
   ProductType,
   CreateProductInput,
   UpdateProductInput,
 } from "./product-types";
+
+/**
+ * Honest wire type: Postgres `numeric` reaches the client as strings, so
+ * `stock`, `averageCost` and `sellPrice` are untrusted at this boundary even
+ * though `Product` declares them as `number`.
+ */
+export type RawProduct = Omit<
+  Product,
+  "stock" | "averageCost" | "sellPrice"
+> & {
+  stock: unknown;
+  averageCost: unknown;
+  sellPrice: unknown;
+};
+
+interface RawPaginatedProductsResponse {
+  data: RawProduct[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/** Mirrors the backend response boundary in `apps/admin_backend/src/modules/inventory/product-response.ts`. */
+export function normalizeProduct(raw: RawProduct): Product {
+  return {
+    ...raw,
+    stock: toFiniteNumber(raw.stock),
+    averageCost: toFiniteNumber(raw.averageCost),
+    sellPrice: toFiniteNumber(raw.sellPrice),
+  };
+}
+
+export function normalizeProductList(raws: RawProduct[]): Product[] {
+  return raws.map(normalizeProduct);
+}
 
 export interface FetchProductsParams {
   productType?: ProductType;
@@ -35,7 +72,9 @@ export function fetchProducts(
     if (params) query.set("productType", params);
     if (includeInactive) query.set("includeInactive", "true");
     const qs = query.toString();
-    return api.get<Product[]>(`/products${qs ? `?${qs}` : ""}`, opts);
+    return api
+      .get<RawProduct[]>(`/products${qs ? `?${qs}` : ""}`, opts)
+      .then<Product[], never>(normalizeProductList);
   }
 
   if (params.productType) query.set("productType", params.productType);
@@ -48,9 +87,16 @@ export function fetchProducts(
   const qs = query.toString();
 
   if (params.page !== undefined) {
-    return api.get<PaginatedProductsResponse>(`/products${qs ? `?${qs}` : ""}`, opts);
+    return api
+      .get<RawPaginatedProductsResponse>(`/products${qs ? `?${qs}` : ""}`, opts)
+      .then<PaginatedProductsResponse, never>((res) => ({
+        ...res,
+        data: normalizeProductList(res.data),
+      }));
   }
-  return api.get<Product[]>(`/products${qs ? `?${qs}` : ""}`, opts);
+  return api
+    .get<RawProduct[]>(`/products${qs ? `?${qs}` : ""}`, opts)
+    .then<Product[], never>(normalizeProductList);
 }
 
 export function fetchPaginatedProducts(
@@ -66,19 +112,26 @@ export function fetchPaginatedProducts(
   if (params.sortBy) query.set("sortBy", params.sortBy);
   if (params.sortOrder) query.set("sortOrder", params.sortOrder);
   const qs = query.toString();
-  return api.get<PaginatedProductsResponse>(`/products?${qs}`, opts);
+  return api
+    .get<RawPaginatedProductsResponse>(`/products?${qs}`, opts)
+    .then<PaginatedProductsResponse, never>((res) => ({
+      ...res,
+      data: normalizeProductList(res.data),
+    }));
 }
 
 export function fetchProduct(id: string, opts?: ApiClientMethodOptions) {
-  return api.get<Product>(`/products/${id}`, opts);
+  return api.get<RawProduct>(`/products/${id}`, opts).then(normalizeProduct);
 }
 
 export function createProduct(input: CreateProductInput, opts?: ApiClientMethodOptions) {
-  return api.post<Product>("/products", input, opts);
+  return api.post<RawProduct>("/products", input, opts).then(normalizeProduct);
 }
 
 export function updateProduct(id: string, input: UpdateProductInput, opts?: ApiClientMethodOptions) {
-  return api.patch<Product>(`/products/${id}`, input, opts);
+  return api
+    .patch<RawProduct>(`/products/${id}`, input, opts)
+    .then(normalizeProduct);
 }
 
 export function deactivateProduct(id: string, opts?: ApiClientMethodOptions) {
