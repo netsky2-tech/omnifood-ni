@@ -27,6 +27,7 @@ import {
   MovementType,
 } from '../../src/modules/inventory/entities/inventory-movement.entity';
 import { Supplier } from '../../src/modules/inventory/entities/supplier.entity';
+import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { ProductionService } from '../../src/modules/inventory/production.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
@@ -333,6 +334,13 @@ describe('Inventory purchase routes (integration)', () => {
     );
     manager.createQueryBuilder.mockReturnValue(queryBuilder);
     manager.findOne.mockImplementation((entity: unknown) => {
+      // The preview path (runInTenantTransaction) loads the insumo straight
+      // from the transaction's manager via findOne; the posting path loads it
+      // through the locked query builder below.
+      if (entity === Insumo) {
+        return Promise.resolve({ ...currentInsumo });
+      }
+
       if (entity === Supplier) {
         return Promise.resolve({
           id: validPurchasePayload.supplierId,
@@ -355,11 +363,28 @@ describe('Inventory purchase routes (integration)', () => {
       (_entity: unknown, payload: Record<string, unknown>) =>
         Promise.resolve(payload),
     );
+    // Production legitimately uses both call shapes: the single-callback
+    // form (runInTenantTransaction) and the ('SERIALIZABLE', callback) form
+    // (inventory-purchase.service). Support both, always handing the callback
+    // a manager that exposes `query` so bindTenantContext works.
     transaction.mockImplementation(
       (
-        _isolation: string,
-        handler: (entityManager: typeof manager) => unknown,
-      ) => handler(manager),
+        isolationOrCallback:
+          | string
+          | ((entityManager: typeof manager) => unknown),
+        maybeCallback?: (entityManager: typeof manager) => unknown,
+      ) => {
+        const callback =
+          typeof isolationOrCallback === 'function'
+            ? isolationOrCallback
+            : maybeCallback;
+        if (!callback) {
+          throw new Error(
+            'dataSource.transaction fake requires a callback handler',
+          );
+        }
+        return callback(manager);
+      },
     );
     getBcnRateByInvoiceDate.mockResolvedValue({
       invoiceDate: '2026-01-03',
@@ -566,12 +591,15 @@ describe('Inventory purchase routes (integration)', () => {
       projectedStock: 12,
       requiresBatchTracking: false,
     });
-    expect(repositoryFindOne).toHaveBeenCalledWith({
+    // Issue #512: the insumo lookup rides the tenant-bound transaction's
+    // manager, tenant-scoped; the pooled repository path is gone.
+    expect(manager.findOne).toHaveBeenCalledWith(Insumo, {
       where: {
         id: validPurchasePayload.insumoId,
         tenant_id: 'tenant-XYZ',
       },
     });
+    expect(dataSource.getRepository).not.toHaveBeenCalled();
   });
 
   it('returns 201 for purchase preview in official mode and resolves BCN FX by invoice date', async () => {
@@ -629,12 +657,15 @@ describe('Inventory purchase routes (integration)', () => {
       statusCode: 404,
     });
     expect(resolveBcnRateByDate).toHaveBeenCalledWith('2026-01-08');
-    expect(repositoryFindOne).toHaveBeenCalledWith({
+    // Issue #512: the insumo lookup rides the tenant-bound transaction's
+    // manager, tenant-scoped; the pooled repository path is gone.
+    expect(manager.findOne).toHaveBeenCalledWith(Insumo, {
       where: {
         id: officialModePurchasePayload.insumoId,
         tenant_id: 'tenant-A',
       },
     });
+    expect(dataSource.getRepository).not.toHaveBeenCalled();
   });
 
   // POST /inventory/purchases moved to device transport (ST-03, issue #478):
