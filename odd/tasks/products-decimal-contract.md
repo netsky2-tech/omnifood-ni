@@ -6,8 +6,8 @@ function`, and the error overlay survives navigation until a full page reload.
 
 **Branch:** `fix/products-decimal-contract-and-error-reset`
 **Base:** `main` @ `52620b59`
-**Status:** W1 done and independently verified (`ad72cc14`). W2 implemented and committed
-(uncommitted at the time of writing, pending commit). W3 in progress.
+**Status:** W1 done and independently verified (`ad72cc14`). W2 done and independently verified
+(`8c975561`). W3 done with one reviewer-found gap closed (uncommitted at the time of writing).
 
 ## Outcome
 
@@ -109,45 +109,94 @@ the POS uses the sync endpoints. Backend e2e assertions already normalize with `
 ### Task 2 — Dashboard: numeric normalization at the API boundary and hardened call sites
 
 - **Status:** done
-- **Goal:** `Product` values are true numbers at runtime, and no dashboard screen calls a numeric
-  method on an unvalidated API value.
+- **Goal:** `Product` values are true numbers at runtime, and no dashboard screen calls a *throwing*
+  numeric method on an unvalidated API decimal value.
 - **In scope:** `toFiniteNumber` helper, `normalizeProduct` in `product-api.ts` for all five
   endpoints, and the three fragile `.toFixed` call sites.
 - **Acceptance:** a RED rendering test that feeds string `sellPrice`/`stock` renders the row and
   never shows the error-boundary text; it fails before the fix.
 - **Rollback:** revert the task commit; the backend contract still delivers numbers.
-- **Commits:** pending
+- **Commits:** `8c975561` (`fix(owner_dashboard): normalize product decimals at the API boundary`)
 - **Evidence:** RED captured before any source change: `numeric.test.ts` failed to resolve
   `@/lib/numeric`, `w5-api.integration.test.ts` failed 5 cases with `expected 'string' to be
   'number'`, and `products-decimal-contract.test.tsx` failed by rendering the real ErrorBoundary
   fallback with `p.sellPrice.toFixed is not a function` — the reported production crash reproduced
-  in a test. RED total: 3 files failed, 7 failed / 13 passed. GREEN after the fix:
+  in a test. GREEN after the fix:
   `npx vitest run src/__tests__/numeric.test.ts src/__tests__/products-decimal-contract.test.tsx
   src/__tests__/w5-api.integration.test.ts src/__tests__/w5-products.test.tsx` → 4 files, 47/47.
-  `npx tsc -b --noEmit` exit 0; `npm run lint` exit 0 (2 pre-existing warnings in untouched files).
+  Independent verification reproduced 47/47 and falsified the set in an isolated /tmp copy:
+  neutralising `toFiniteNumber` turns 13 tests red, and restoring the original table call sites
+  reproduces the production message verbatim (`Error al cargar esta sección` /
+  `p.sellPrice.toFixed is not a function`). `npx tsc -b --noEmit` exit 0; `npm run lint` exit 0.
 - **Known gaps:** `null` and `""` coerce to `0` through `Number()`, so the `fallback` argument does
-  not apply to them; this mirrors the backend helper deliberately. Independent verification of this
-  task is batched with Task 3 so the whole dashboard diff is audited in one adversarial pass.
+  not apply to them; this mirrors the backend helper deliberately. The verifier's count of red
+  `w5-api.integration.test.ts` cases under falsification is 6, not the 5 recorded above; the
+  historical RED run is narration, the reproducible facts are 47/47 green and the falsification.
 
 ### Task 3 — Dashboard: ErrorBoundary resets on navigation
 
-- **Status:** pending
+- **Status:** done
 - **Goal:** Once the user navigates away from the failed route, the fallback is gone without a page
   reload; containment for the section itself is unchanged.
 - **In scope:** optional `resetKey` prop with `componentDidUpdate` reset, wiring in `app-layout.tsx`,
   focused tests.
-- **Acceptance:** a RED test proves the fallback survives a `resetKey` change today; after the fix it
-  resets on change and does not reset while the key is stable.
+- **Acceptance:** a RED test proves the fallback survives navigation today; after the fix it resets
+  on navigation and does not reset while the key is stable.
 - **Rollback:** revert the task commit; the pre-fix behaviour (reload required) returns.
 - **Commits:** pending
-- **Evidence:** pending
+- **Evidence:** RED captured first with the real `AppLayout`: navigating from a throwing route to a
+  healthy one left the fallback mounted (`Unable to find an element with the text: Sección sana`).
+  GREEN after the fix: 3/3. Independent verification reproduced GREEN and falsified the mechanism in
+  an isolated /tmp copy: removing the `componentDidUpdate` block turns the primary case red with
+  `fallbackMountedAfterNavigate=true, healthyMountedAfterNavigate=false`. The reviewer found that
+  only the primary case proves the behaviour; the other two are pass-with-and-without guards.
 
-### Task 4 — Focused verification and close
+### Task 4 — Dashboard: navigation identity must survive a query-only change
 
-- **Status:** pending
-- **Goal:** Both apps' focused suites plus typecheck/lint pass; failed or skipped checks reported.
-- **In scope:** `pnpm vitest run` (dashboard, focused files first), `npm test` + `npm run test:db`
-  (backend, focused files), `tsc -b --noEmit`.
+- **Status:** done
+- **Goal:** Close a reviewer-found gap: `location.pathname` does not change on a query-string-only or
+  hash-only navigation, so `resetKey` never changed and the fallback stayed stuck.
+- **In scope:** the reset key becomes `location.key` (react-router's canonical navigation identity)
+  plus a discriminating test for the same-pathname-different-query case.
+- **Acceptance:** the new case fails with `resetKey={location.pathname}` and passes with
+  `location.key`.
+- **Rollback:** revert to `location.pathname`; the primary navigation case still passes.
+- **Commits:** pending
+- **Evidence:** RED reproduced the reviewer's exact scenario — starting at `/products?crash=1` with
+  the fallback mounted and navigating to `/products` left it stuck (`1 failed | 3 passed`). GREEN
+  after the change: 4/4. Full dashboard suite `npx vitest run` → 62 files, 814 passed / 4 skipped.
+  `npx tsc -b --noEmit` exit 0. `npm run lint` exit 0 with 3 non-fatal warnings, of which only
+  `react(no-did-update-set-state)` at `src/app/error-boundary.tsx:54` is introduced by this change
+  and is the deliberate, documented pattern for resetting boundary state on prop change.
+
+### Task 5 — Focused verification and close
+
+- **Status:** in progress
+- **Goal:** Both apps' suites plus typecheck/lint pass; failed or skipped checks reported.
 - **Acceptance:** evidence recorded here and in the Engram mirror.
 - **Commits:** pending
 - **Evidence:** pending
+
+## Known limitations and follow-ups
+
+1. Normalizing at the API boundary moves malformed-payload failures earlier rather than adding shape
+   validation: a `null` body now rejects with `Cannot read properties of null` and a non-array
+   `data` with `raws.map is not a function`. React Query turns both into a query error instead of a
+   render crash, which is the better failure mode, but the boundary does not validate the envelope.
+   A non-object entry (e.g. a bare string in the array) is still silently accepted as a partial
+   object. Envelope validation is deliberately out of scope.
+2. Several dashboard currency/number formatters are still fed unvalidated API decimals
+   (`dashboard-page.tsx:9`, `sales-page.tsx:28`, `fiscal-page.tsx:27`, `inventory-page.tsx:26,34`,
+   `lib/utils.ts:8`). All use `Intl.NumberFormat.format()`, which coerces numeric strings silently,
+   so they render correctly and cannot throw; only the `toFixed` vector was a crash, and it is fully
+   swept. Feeding them normalized values would be consistency, not a bug fix.
+3. The DB suite pins the plain-list, findOne, create and update branches; the paginated branch the
+   dashboard actually calls is pinned by the falsified HTTP spec only. Serialization is pure
+   controller code, so the DB adds no separate evidence there.
+4. `npm run test:db` legitimately skips `*.db.e2e-spec.ts` files (`testMatch: **/*.db.spec.ts`,
+   `rootDir: ../src`); `npm run test:e2e` legitimately covers them via `testRegex: .e2e-spec.ts$`.
+5. `change_log` `from` value preservation is structural (`product.service.ts` byte-identical) rather
+   than round-trip executed.
+6. Pre-existing, untouched: 16 `tsc` errors in `test/inventory/batch_6b_baseline_validation.spec.ts`
+   and two oxlint `react(incompatible-library)` warnings in `PromotionForm.tsx` and
+   `fiscal-setup-form.tsx`.

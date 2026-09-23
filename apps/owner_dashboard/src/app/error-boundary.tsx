@@ -5,6 +5,14 @@ import { getApiErrorMessage } from "@/lib/api-error";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
+  /**
+   * Navigation identity (e.g. location.pathname). The boundary is mounted
+   * once in the layout route, so it must clear its own error state when the
+   * user navigates; otherwise the fallback keeps replacing <Outlet /> on
+   * every route change. When absent, the error state persists until the
+   * user clicks "Reintentar" (previous behaviour).
+   */
+  resetKey?: unknown;
 }
 
 interface ErrorBoundaryState {
@@ -32,6 +40,18 @@ class ErrorBoundaryInner extends Component<
     console.error("[ErrorBoundary caught]:", error, info);
     if (isChunkLoadError(error)) {
       triggerSafeChunkReload();
+    }
+  }
+
+  componentDidUpdate(prevProps: ErrorBoundaryProps) {
+    if (
+      this.state.hasError &&
+      prevProps.resetKey !== this.props.resetKey
+    ) {
+      // Navigation identity changed: the boundary lives once in the layout
+      // route, so it must clear itself instead of keeping the fallback
+      // mounted across sibling navigation.
+      this.setState({ hasError: false, error: null });
     }
   }
 
