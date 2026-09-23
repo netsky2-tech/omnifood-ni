@@ -25,8 +25,9 @@
 # the manifest is judged fail-closed, never silently filtered.
 
 # ---------------------------------------------------------------------------
-# direct — tenant_id + ENABLE + FORCE + at least one policy (42)
+# direct — tenant_id + ENABLE + FORCE + at least one policy (47)
 # ---------------------------------------------------------------------------
+batches|direct
 catalog_values|direct
 device_sync_credential_events|direct
 device_sync_credentials|direct
@@ -62,6 +63,9 @@ onboarding_template_seed_links|direct
 product_inventory_mapping_versions|direct
 products|direct
 production_batch_history|direct
+recipe_details|direct
+recipe_versions|direct
+recipes|direct
 sys_parametros_config|direct
 staging_importacion_productos|direct
 product_import_sessions|direct
@@ -69,6 +73,7 @@ legacy_import_integrity_reports|direct
 tenant_capability_event|direct
 tenant_fulfillment_records|direct
 tenant_topology_revisions|direct
+uom_conversions|direct
 
 # ---------------------------------------------------------------------------
 # parent-owned — no tenant_id; isolation through a tenant-bearing parent FK.
@@ -102,11 +107,10 @@ credit_note_provenance_rls_baseline|global
 # ---------------------------------------------------------------------------
 # debt — explicit temporary tenant isolation debt. Each entry must be
 # promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (24)
+# slice in T2/T3; a fully protected debt entry fails as stale. (19)
 # ---------------------------------------------------------------------------
 audit_integrity_alerts|debt
 audit_logs|debt
-batches|debt
 cash_movements|debt
 cash_shift_sessions|debt
 # Cash sessions carry user/terminal but neither tenant_id nor a tenant-bearing
@@ -122,11 +126,7 @@ loyalty_programs|debt
 loyalty_rewards|debt
 production_orders|debt
 promotions|debt
-recipe_details|debt
-recipe_versions|debt
-recipes|debt
 shrinkages|debt
 suppliers|debt
-uom_conversions|debt
 users|debt
 warehouses|debt
