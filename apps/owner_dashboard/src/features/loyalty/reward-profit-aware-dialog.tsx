@@ -8,6 +8,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { toFiniteNumber } from '@/lib/numeric';
 import { AlertCircle, Calendar, Info, TrendingUp } from 'lucide-react';
 import { useRewardProfitAware } from './use-loyalty';
 import type { ProfitAwareMetric, RewardDefinition } from './types';
@@ -18,14 +19,14 @@ interface RewardProfitAwareDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function formatCurrency(val?: number): string {
+function formatCurrency(val?: unknown): string {
   if (val === undefined || val === null) return '—';
-  return `C$ ${val.toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `C$ ${toFiniteNumber(val).toLocaleString('es-NI', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatPercent(val?: number): string {
+function formatPercent(val?: unknown): string {
   if (val === undefined || val === null) return '—';
-  return `${val.toFixed(2)}%`;
+  return `${toFiniteNumber(val).toFixed(2)}%`;
 }
 
 function formatReason(reason?: string): string {

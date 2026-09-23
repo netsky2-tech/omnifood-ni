@@ -7,6 +7,49 @@ import {
   deactivateCatalogValue,
   seedCatalogDefaults,
 } from "@/features/catalog/catalog-api";
+import {
+  fetchProducts,
+  fetchPaginatedProducts,
+  fetchProduct,
+  createProduct,
+  updateProduct,
+} from "@/features/catalog/product-api";
+
+/** Wire payload exactly as the backend sends it: Postgres `numeric` arrives as strings. */
+const RAW_PRODUCT_WIRE = {
+  id: "p1",
+  tenant_id: "t1",
+  name: "Café Artesanal",
+  uom: "un",
+  product_type: "SIMPLE",
+  category_code: null,
+  warehouse_id: null,
+  is_perishable: false,
+  stock: "0.0000",
+  averageCost: "12.50",
+  sellPrice: "45.00",
+  is_active: true,
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+function expectNormalizedProduct(result: unknown): void {
+  const product = result as Record<string, unknown>;
+  expect(typeof product.sellPrice).toBe("number");
+  expect(typeof product.stock).toBe("number");
+  expect(typeof product.averageCost).toBe("number");
+  expect(product.sellPrice).toBe(45);
+  expect(product.stock).toBe(0);
+  expect(product.averageCost).toBe(12.5);
+  // Every other field must pass through untouched.
+  expect(product.id).toBe("p1");
+  expect(product.name).toBe("Café Artesanal");
+  expect(product.uom).toBe("un");
+  expect(product.product_type).toBe("SIMPLE");
+  expect(product.category_code).toBeNull();
+  expect(product.is_active).toBe(true);
+  expect(product.created_at).toBe("2026-01-01T00:00:00Z");
+}
 
 describe("W5 — Catalog API integration (fetch-level)", () => {
   const originalFetch = globalThis.fetch;
@@ -238,5 +281,115 @@ describe("W5 — Catalog API integration (fetch-level)", () => {
       const headers = (call[1] as RequestInit)?.headers as Record<string, string>;
       expect(headers?.Authorization).toBe("Bearer test-at");
     }
+  });
+});
+
+describe("W5 — Product API decimal contract (fetch-level)", () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiModule.clearTokens();
+    apiModule.setTokens({ accessToken: "test-at", refreshToken: "test-rt" });
+    globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function mockJsonResponse(body: unknown): void {
+    vi.mocked(globalThis.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => body,
+    } as Response);
+  }
+
+  it("fetchPaginatedProducts normalizes string decimals to numbers", async () => {
+    mockJsonResponse({
+      data: [RAW_PRODUCT_WIRE],
+      total: 1,
+      page: 1,
+      pageSize: 25,
+      totalPages: 1,
+    });
+
+    const result = await fetchPaginatedProducts({ productType: "SIMPLE" });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/products?productType=SIMPLE&page=1&pageSize=25",
+      expect.anything(),
+    );
+    expect(result.data).toHaveLength(1);
+    expectNormalizedProduct(result.data[0]);
+    expect(typeof result.total).toBe("number");
+  });
+
+  it("fetchProducts (plain, non-paginated) normalizes string decimals to numbers", async () => {
+    mockJsonResponse([RAW_PRODUCT_WIRE]);
+
+    const result = await fetchProducts({ productType: "SIMPLE" });
+
+    expect(Array.isArray(result)).toBe(true);
+    expectNormalizedProduct((result as unknown[])[0]);
+  });
+
+  it("fetchProducts (string param) normalizes string decimals to numbers", async () => {
+    mockJsonResponse([RAW_PRODUCT_WIRE]);
+
+    const result = await fetchProducts("SIMPLE", true);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/products?productType=SIMPLE&includeInactive=true",
+      expect.anything(),
+    );
+    expect(Array.isArray(result)).toBe(true);
+    expectNormalizedProduct((result as unknown[])[0]);
+  });
+
+  it("fetchProduct normalizes string decimals to numbers", async () => {
+    mockJsonResponse(RAW_PRODUCT_WIRE);
+
+    const result = await fetchProduct("p1");
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/products/p1",
+      expect.anything(),
+    );
+    expectNormalizedProduct(result);
+  });
+
+  it("createProduct normalizes string decimals to numbers", async () => {
+    mockJsonResponse(RAW_PRODUCT_WIRE);
+
+    const result = await createProduct({
+      name: "Café Artesanal",
+      uom: "un",
+      product_type: "SIMPLE",
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/products",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expectNormalizedProduct(result);
+  });
+
+  it("updateProduct normalizes string decimals to numbers", async () => {
+    mockJsonResponse({ ...RAW_PRODUCT_WIRE, name: "Café Actualizado" });
+
+    const result = await updateProduct("p1", { name: "Café Actualizado" });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/api/products/p1",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    expect(typeof result.sellPrice).toBe("number");
+    expect(typeof result.stock).toBe("number");
+    expect(typeof result.averageCost).toBe("number");
+    expect(result.sellPrice).toBe(45);
+    expect(result.stock).toBe(0);
+    expect(result.averageCost).toBe(12.5);
+    expect(result.name).toBe("Café Actualizado");
   });
 });

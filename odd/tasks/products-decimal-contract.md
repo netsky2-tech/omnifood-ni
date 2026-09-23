@@ -6,7 +6,8 @@ function`, and the error overlay survives navigation until a full page reload.
 
 **Branch:** `fix/products-decimal-contract-and-error-reset`
 **Base:** `main` @ `52620b59`
-**Status:** in progress
+**Status:** W1 done and independently verified (`ad72cc14`). W2 implemented and committed
+(uncommitted at the time of writing, pending commit). W3 in progress.
 
 ## Outcome
 
@@ -80,20 +81,34 @@ the POS uses the sync endpoints. Backend e2e assertions already normalize with `
 
 ### Task 1 — Backend: numeric products response contract
 
-- **Status:** pending
+- **Status:** done
 - **Goal:** Every `ProductService` response (list, listPaginated, findOne, create, update) carries
-  `stock`, `averageCost` and `sellPrice` as JSON numbers.
+  `stock`, `averageCost`, `sellPrice` and `tax_rate` as JSON numbers.
 - **In scope:** a pure, unit-testable serializer plus its wiring; DB/e2e assertions that pin the
   numeric type; internal entity semantics and `change_log` payloads unchanged.
 - **Acceptance:** a RED unit test fails before the serializer exists; strict DB assertions
   (`expect(res.body.sellPrice).toBe(45)`, not `Number(...)`) pass.
 - **Rollback:** revert the task commit; no migration, no persisted shape change.
-- **Commits:** pending
-- **Evidence:** pending
+- **Commits:** `ad72cc14` (`fix(inventory): return product decimals as JSON numbers`)
+- **Evidence:** RED observed as `Cannot find module './product-response'`. GREEN: `npx jest
+  src/modules/inventory/product-response.spec.ts src/modules/inventory/product.controller.spec.ts`
+  → 2 suites, 25/25. DB suite via the canonical path `npm run test:e2e --
+  test/inventory/product-routes.db.e2e-spec.ts` → 1 suite, 15/15 against real PostgreSQL.
+  Independent verification reproduced both runs and falsified the assertions in an isolated /tmp
+  copy: neutralising only `toFiniteNumber` to raw passthrough turned 4 DB cases red with
+  `Expected: 45, Received: "45.00"` (plus 8 unit/HTTP cases red), proving the green run is caused
+  by the fix and not by the rewritten tests. `tsc --noEmit` reports zero errors in touched files
+  (16 pre-existing errors, all in `test/inventory/batch_6b_baseline_validation.spec.ts`).
+- **Known gaps:** the DB suite exercises the plain-list, findOne, create and update branches but
+  not the paginated branch the dashboard actually calls; that branch is pinned by the falsified
+  HTTP spec only. Serialization is pure controller code, so the DB adds no new evidence there.
+  `change_log` `from` preservation is structural (`product.service.ts` byte-identical) rather than
+  round-trip executed. `npm run test:db` legitimately skips `.db.e2e-spec.ts` files; `npm run
+  test:e2e` legitimately covers them.
 
 ### Task 2 — Dashboard: numeric normalization at the API boundary and hardened call sites
 
-- **Status:** pending
+- **Status:** done
 - **Goal:** `Product` values are true numbers at runtime, and no dashboard screen calls a numeric
   method on an unvalidated API value.
 - **In scope:** `toFiniteNumber` helper, `normalizeProduct` in `product-api.ts` for all five
@@ -102,7 +117,17 @@ the POS uses the sync endpoints. Backend e2e assertions already normalize with `
   never shows the error-boundary text; it fails before the fix.
 - **Rollback:** revert the task commit; the backend contract still delivers numbers.
 - **Commits:** pending
-- **Evidence:** pending
+- **Evidence:** RED captured before any source change: `numeric.test.ts` failed to resolve
+  `@/lib/numeric`, `w5-api.integration.test.ts` failed 5 cases with `expected 'string' to be
+  'number'`, and `products-decimal-contract.test.tsx` failed by rendering the real ErrorBoundary
+  fallback with `p.sellPrice.toFixed is not a function` — the reported production crash reproduced
+  in a test. RED total: 3 files failed, 7 failed / 13 passed. GREEN after the fix:
+  `npx vitest run src/__tests__/numeric.test.ts src/__tests__/products-decimal-contract.test.tsx
+  src/__tests__/w5-api.integration.test.ts src/__tests__/w5-products.test.tsx` → 4 files, 47/47.
+  `npx tsc -b --noEmit` exit 0; `npm run lint` exit 0 (2 pre-existing warnings in untouched files).
+- **Known gaps:** `null` and `""` coerce to `0` through `Number()`, so the `fallback` argument does
+  not apply to them; this mirrors the backend helper deliberately. Independent verification of this
+  task is batched with Task 3 so the whole dashboard diff is audited in one adversarial pass.
 
 ### Task 3 — Dashboard: ErrorBoundary resets on navigation
 
