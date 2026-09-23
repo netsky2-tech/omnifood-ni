@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { LoyaltyService } from './loyalty.service';
 import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import { TicketPaidHandler } from './ticket-paid.handler';
@@ -14,6 +14,37 @@ import { CustomerPointTransaction } from '../../customers/entities/customer-poin
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { LoyaltyTicketSnapshot } from '../domain/loyalty-ticket-snapshot';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
+
+/**
+ * Issue #512 slice 4: passthrough spy over `dataSource.transaction` that
+ * records the tenant-context binding SQL issued on each unit manager, without
+ * changing any observable behavior.
+ */
+function captureTenantBinding(source: DataSource): unknown[][] {
+  const actual = source.transaction.bind(source);
+  const bindingCalls: unknown[][] = [];
+  jest.spyOn(source, 'transaction').mockImplementation(((
+    ...args: unknown[]
+  ) => {
+    const cb = args[args.length - 1] as (
+      manager: EntityManager,
+    ) => Promise<unknown>;
+    return actual(async (manager: EntityManager) => {
+      const rawQuery = manager.query.bind(manager);
+      jest
+        .spyOn(manager, 'query')
+        .mockImplementation(async (sql: string, params?: unknown[]) => {
+          if (sql === TENANT_CONTEXT_SET_CONFIG_SQL) {
+            bindingCalls.push(params);
+          }
+          return rawQuery(sql, params);
+        });
+      return cb(manager);
+    });
+  }) as never);
+  return bindingCalls;
+}
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -110,17 +141,20 @@ async function createTestHarness() {
     dataSource.getRepository(RewardDefinition),
     dataSource.getRepository(CustomerLoyaltyAccountProjection),
     dataSource.getRepository(Customer),
+    dataSource,
   );
 
   const ledgerService = new LoyaltyLedgerService(
     dataSource.getRepository(CustomerPointTransaction),
     dataSource.getRepository(CustomerLoyaltyAccountProjection),
+    dataSource,
   );
 
   const ticketPaidHandler = new TicketPaidHandler(
     dataSource.getRepository(LoyaltyProgram),
     dataSource.getRepository(Customer),
     ledgerService,
+    dataSource,
   );
 
   const redemptionService = new RedemptionService(
@@ -130,6 +164,7 @@ async function createTestHarness() {
     dataSource.getRepository(CustomerPointTransaction),
     ledgerService,
     loyaltyService,
+    dataSource,
   );
 
   // Get the active customer ID
@@ -1181,6 +1216,38 @@ describe('LV1.3 — Redemption & Reversal (db)', () => {
       expect(
         results.find((r) => r.programId === progInactive.id),
       ).toBeUndefined();
+    });
+  });
+
+  describe('Tenant binding (issue #512 slice 4)', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('binds the createRedemptionIntent access through the tenant transaction (issue #512 slice 4)', async () => {
+      const { program, reward } = await setupProgramWithReward();
+      await earnPoints(h.customerId, program.id, 'ticket-guard', 100);
+
+      const bindingCalls = captureTenantBinding(h.dataSource);
+      const pooledCustomerRepo = h.dataSource.getRepository(Customer);
+      const pooledFindOneSpy = jest.spyOn(pooledCustomerRepo, 'findOne');
+
+      const intent = await h.redemptionService.createRedemptionIntent({
+        tenantId: 'tenant-1',
+        customerId: h.customerId,
+        ticketId: 'ticket-guard',
+        loyaltyProgramId: program.id,
+        rewardId: reward.id,
+      });
+
+      expect(intent.status).toBe('PENDING');
+      // A tenant transaction must be opened for the reads...
+      expect(h.dataSource.transaction).toHaveBeenCalled();
+      // ...with the transaction-local binding SQL issued on the unit manager
+      // with the trimmed tenant id before any protected access.
+      expect(bindingCalls).toContainEqual(['tenant-1']);
+      // The pooled repository properties must not be used for the reads.
+      expect(pooledFindOneSpy).not.toHaveBeenCalled();
     });
   });
 });

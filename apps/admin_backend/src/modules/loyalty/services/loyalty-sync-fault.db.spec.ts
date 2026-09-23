@@ -122,7 +122,7 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
     projRepo = dataSource.getRepository(CustomerLoyaltyAccountProjection);
     progRepo = dataSource.getRepository(LoyaltyProgram);
     custRepo = dataSource.getRepository(Customer);
-    ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
+    ledgerService = new LoyaltyLedgerService(txRepo, projRepo, dataSource);
 
     await dataSource.getRepository(Tenant).save({
       id: tenantId,

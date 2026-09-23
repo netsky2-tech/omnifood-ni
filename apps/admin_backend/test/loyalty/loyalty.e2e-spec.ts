@@ -7,6 +7,7 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
@@ -148,6 +149,40 @@ describe('Loyalty API (E2E / Integration)', () => {
     },
   };
 
+  // Issue #512 slice 4: the service resolves its repositories from the
+  // tenant-bound transaction manager; route the same mock repositories
+  // through it so binding is transparent to these in-memory fixtures.
+  const transactionsQb = {
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue([]),
+  };
+  const manager: Record<string, unknown> = {
+    getRepository: (entity: unknown) =>
+      entity === LoyaltyProgram
+        ? programRepo
+        : entity === RewardDefinition
+          ? rewardRepo
+          : entity === CustomerLoyaltyAccountProjection
+            ? projectionRepo
+            : entity === Customer
+              ? customerRepo
+              : undefined,
+    query: jest.fn(),
+    createQueryBuilder: jest.fn(() => transactionsQb),
+  };
+  manager['transaction'] = (cb: (m: unknown) => Promise<unknown>) =>
+    cb({
+      getRepository: manager.getRepository,
+      query: manager.query,
+      createQueryBuilder: manager.createQueryBuilder,
+    });
+  const mockDataSource = {
+    transaction: (cb: (m: unknown) => Promise<unknown>) => cb(manager),
+  };
+
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET = jwtSecret;
@@ -188,6 +223,7 @@ describe('Loyalty API (E2E / Integration)', () => {
           provide: getRepositoryToken(Customer),
           useValue: customerRepo,
         },
+        { provide: DataSource, useValue: mockDataSource },
         {
           provide: TicketPaidHandler,
           useValue: { handle: jest.fn().mockResolvedValue([]) },
