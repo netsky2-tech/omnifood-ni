@@ -134,9 +134,7 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
     await dataSource.initialize();
     await bootstrap.destroy();
 
-    const costAdapter = new TypeOrmInventoryCostQueryAdapter(
-      dataSource.getRepository(Product),
-    );
+    const costAdapter = new TypeOrmInventoryCostQueryAdapter(dataSource);
     profitAwareService = new LoyaltyProfitAwareService(
       dataSource.getRepository(RewardDefinition),
       dataSource.getRepository(LoyaltyProgram),

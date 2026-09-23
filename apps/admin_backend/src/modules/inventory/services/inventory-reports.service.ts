@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Insumo } from '../entities/insumo.entity';
 import {
   InventoryMovement,
@@ -25,19 +25,24 @@ const round4 = (value: number): number =>
 @Injectable()
 export class InventoryReportsService {
   constructor(
-    @InjectRepository(Insumo)
-    private readonly insumoRepo: Repository<Insumo>,
-    @InjectRepository(InventoryMovement)
-    private readonly movementRepo: Repository<InventoryMovement>,
+    // Issue #512 slice 1 part A: every read of `insumos` and
+    // `inventory_kardex` resolves its repository from the tenant-bound
+    // transaction manager, never from pooled global repositories.
+    private readonly dataSource: DataSource,
   ) {}
 
   async getValuationReport(
     tenantId: string,
   ): Promise<InventoryValuationReportDto> {
-    const insumos = await this.insumoRepo.find({
-      where: { tenant_id: tenantId, is_active: true },
-      order: { name: 'ASC' },
-    });
+    const insumos = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Insumo).find({
+          where: { tenant_id: tenantId, is_active: true },
+          order: { name: 'ASC' },
+        }),
+    );
 
     let totalValuationNio = 0;
     let itemsWithStockCount = 0;
@@ -109,23 +114,34 @@ export class InventoryReportsService {
       ? new Date(toDate)
       : new Date(new Date().setHours(23, 59, 59, 999));
 
-    const qb = this.movementRepo
-      .createQueryBuilder('mov')
-      .where('mov.tenant_id = :tenantId', { tenantId })
-      .andWhere('mov.type IN (:...types)', {
-        types: [
-          MovementType.SALE,
-          MovementType.SALE_CANCEL,
-          MovementType.SHRINKAGE,
-          MovementType.CREDIT_NOTE_RESTOCK,
-        ],
-      })
-      .andWhere('mov.timestamp BETWEEN :from AND :to', { from, to });
+    const { movements, insumos } = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const movementRepo = manager.getRepository(InventoryMovement);
+        const insumoRepo = manager.getRepository(Insumo);
 
-    const movements = await qb.getMany();
-    const insumos = await this.insumoRepo.find({
-      where: { tenant_id: tenantId },
-    });
+        const qb = movementRepo
+          .createQueryBuilder('mov')
+          .where('mov.tenant_id = :tenantId', { tenantId })
+          .andWhere('mov.type IN (:...types)', {
+            types: [
+              MovementType.SALE,
+              MovementType.SALE_CANCEL,
+              MovementType.SHRINKAGE,
+              MovementType.CREDIT_NOTE_RESTOCK,
+            ],
+          })
+          .andWhere('mov.timestamp BETWEEN :from AND :to', { from, to });
+
+        const movements = await qb.getMany();
+        const insumos = await insumoRepo.find({
+          where: { tenant_id: tenantId },
+        });
+
+        return { movements, insumos };
+      },
+    );
     const insumoMap = new Map(insumos.map((i) => [i.id, i]));
 
     let totalCogsNio = 0;
@@ -219,35 +235,50 @@ export class InventoryReportsService {
     tenantId: string,
     query: KardexFilterQueryDto,
   ): Promise<KardexReportDto> {
-    const qb = this.movementRepo
-      .createQueryBuilder('mov')
-      .where('mov.tenant_id = :tenantId', { tenantId });
+    const { movements, totalCount, insumos } = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const movementRepo = manager.getRepository(InventoryMovement);
+        const insumoRepo = manager.getRepository(Insumo);
 
-    if (query.from) {
-      qb.andWhere('mov.timestamp >= :from', { from: new Date(query.from) });
-    }
-    if (query.to) {
-      qb.andWhere('mov.timestamp <= :to', { to: new Date(query.to) });
-    }
-    if (query.insumoId) {
-      qb.andWhere('mov.insumoId = :insumoId', { insumoId: query.insumoId });
-    }
-    if (query.type) {
-      qb.andWhere('mov.type = :type', { type: query.type });
-    }
+        const qb = movementRepo
+          .createQueryBuilder('mov')
+          .where('mov.tenant_id = :tenantId', { tenantId });
 
-    qb.orderBy('mov.timestamp', 'DESC');
+        if (query.from) {
+          qb.andWhere('mov.timestamp >= :from', { from: new Date(query.from) });
+        }
+        if (query.to) {
+          qb.andWhere('mov.timestamp <= :to', { to: new Date(query.to) });
+        }
+        if (query.insumoId) {
+          qb.andWhere('mov.insumoId = :insumoId', {
+            insumoId: query.insumoId,
+          });
+        }
+        if (query.type) {
+          qb.andWhere('mov.type = :type', { type: query.type });
+        }
 
-    const limit = query.limit ? Math.min(Math.max(1, query.limit), 1000) : 200;
-    const offset = query.offset ? Math.max(0, query.offset) : 0;
+        qb.orderBy('mov.timestamp', 'DESC');
 
-    qb.take(limit).skip(offset);
+        const limit = query.limit
+          ? Math.min(Math.max(1, query.limit), 1000)
+          : 200;
+        const offset = query.offset ? Math.max(0, query.offset) : 0;
 
-    const [movements, totalCount] = await qb.getManyAndCount();
+        qb.take(limit).skip(offset);
 
-    const insumos = await this.insumoRepo.find({
-      where: { tenant_id: tenantId },
-    });
+        const [movements, totalCount] = await qb.getManyAndCount();
+
+        const insumos = await insumoRepo.find({
+          where: { tenant_id: tenantId },
+        });
+
+        return { movements, totalCount, insumos };
+      },
+    );
     const insumoMap = new Map(insumos.map((i) => [i.id, i]));
 
     const items: KardexReportItemDto[] = movements.map((mov) => {
@@ -297,10 +328,15 @@ export class InventoryReportsService {
   async getAlertsSummaryReport(
     tenantId: string,
   ): Promise<InventoryAlertsSummaryDto> {
-    const insumos = await this.insumoRepo.find({
-      where: { tenant_id: tenantId, is_active: true },
-      order: { name: 'ASC' },
-    });
+    const insumos = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Insumo).find({
+          where: { tenant_id: tenantId, is_active: true },
+          order: { name: 'ASC' },
+        }),
+    );
 
     let criticalCount = 0;
     let warningCount = 0;

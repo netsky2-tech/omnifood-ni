@@ -1,5 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import {
+  bindTenantContext,
+  resolveTenantContextId,
+} from '../../core/database/tenant-transaction';
 import { Insumo } from './entities/insumo.entity';
 import {
   InventoryMovement,
@@ -25,7 +29,16 @@ export class InventoryMovementService {
   async postPurchaseMovement(
     input: PostPurchaseMovementInput,
   ): Promise<Insumo> {
+    // Fail closed on a blank tenant id before a connection is borrowed or a
+    // transaction is opened (Unit 0b-3 convention, issue #512).
+    const tenantId = resolveTenantContextId(input.tenantId);
+
     return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+      // Issue #512 slice 1 part A: bind the tenant context before the locked
+      // `insumos` read so RLS authorizes the pessimistic_write SELECT and
+      // everything after it on this exact manager.
+      await bindTenantContext(manager, tenantId);
+
       const insumo = await manager
         .createQueryBuilder(Insumo, 'insumo')
         .setLock('pessimistic_write')

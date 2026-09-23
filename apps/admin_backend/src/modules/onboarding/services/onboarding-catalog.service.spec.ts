@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { OnboardingCatalogService } from './onboarding-catalog.service';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
 import {
@@ -13,7 +13,18 @@ import { CreateManualProductDto } from '../dto/onboarding-catalog.dto';
 
 describe('OnboardingCatalogService (Unit)', () => {
   let service: OnboardingCatalogService;
-  let productRepo: jest.Mocked<Repository<Product>>;
+  // Issue #512 slice 1 part A: every `products` access must resolve from the
+  // tenant-bound transaction manager, so the spec mocks a DataSource whose
+  // transaction hands back a manager exposing manager-scoped repositories.
+  let dataSource: { transaction: jest.Mock };
+  let manager: { query: jest.Mock; getRepository: jest.Mock };
+  let mgrProductRepo: {
+    create: jest.Mock;
+    save: jest.Mock;
+    find: jest.Mock;
+    findOne: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
   let sessionService: jest.Mocked<OnboardingSessionService>;
   let readinessEvaluator: jest.Mocked<OnboardingReadinessEvaluator>;
   let stateReconciler: jest.Mocked<OnboardingStateReconciler>;
@@ -56,13 +67,22 @@ describe('OnboardingCatalogService (Unit)', () => {
   };
 
   beforeEach(() => {
-    productRepo = {
+    mgrProductRepo = {
       create: jest.fn(),
       save: jest.fn(),
       find: jest.fn(),
-      count: jest.fn(),
+      findOne: jest.fn(),
       createQueryBuilder: jest.fn(),
-    } as unknown as jest.Mocked<Repository<Product>>;
+    };
+
+    manager = {
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn().mockReturnValue(mgrProductRepo),
+    };
+
+    dataSource = {
+      transaction: jest.fn((work: (mgr: unknown) => unknown) => work(manager)),
+    };
 
     sessionService = {
       ensureOnboardingStarted: jest.fn().mockResolvedValue(mockSession),
@@ -79,7 +99,7 @@ describe('OnboardingCatalogService (Unit)', () => {
     } as unknown as jest.Mocked<OnboardingStateReconciler>;
 
     service = new OnboardingCatalogService(
-      productRepo,
+      dataSource as unknown as never,
       sessionService,
       readinessEvaluator,
       stateReconciler,
@@ -126,8 +146,8 @@ describe('OnboardingCatalogService (Unit)', () => {
         updated_at: new Date(),
       } as unknown as Product;
 
-      productRepo.create.mockReturnValue(createdProduct);
-      productRepo.save.mockResolvedValue(createdProduct);
+      mgrProductRepo.create.mockReturnValue(createdProduct);
+      mgrProductRepo.save.mockResolvedValue(createdProduct);
 
       const result = await service.createManualProduct(
         'tenant-test',
@@ -135,7 +155,7 @@ describe('OnboardingCatalogService (Unit)', () => {
         'owner-user-id',
       );
 
-      expect(productRepo.create).toHaveBeenCalledWith(
+      expect(mgrProductRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           tenant_id: 'tenant-test',
           name: 'Café Latte',
@@ -164,6 +184,24 @@ describe('OnboardingCatalogService (Unit)', () => {
       expect(result.session).toBe(mockSession);
       expect(result.readiness).toBe(mockReadiness);
     });
+
+    it('binds the tenant context on the manager before the first products access (issue #512)', async () => {
+      const dto: CreateManualProductDto = { name: 'Café', sellPrice: 10 };
+      const createdProduct = { id: 'prod-uuid-1' } as unknown as Product;
+      mgrProductRepo.create.mockReturnValue(createdProduct);
+      mgrProductRepo.save.mockResolvedValue(createdProduct);
+
+      await service.createManualProduct('tenant-test', dto);
+
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-test'],
+      );
+      expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        mgrProductRepo.create.mock.invocationCallOrder[0],
+      );
+      expect(manager.getRepository).toHaveBeenCalledWith(Product);
+    });
   });
 
   describe('getCatalogSummary', () => {
@@ -173,9 +211,9 @@ describe('OnboardingCatalogService (Unit)', () => {
         andWhere: jest.fn().mockReturnThis(),
         getCount: jest.fn().mockResolvedValue(1),
       };
-      productRepo.createQueryBuilder.mockReturnValue(mockQb);
+      mgrProductRepo.createQueryBuilder.mockReturnValue(mockQb);
 
-      productRepo.find.mockResolvedValue([
+      mgrProductRepo.find.mockResolvedValue([
         {
           id: 'prod-1',
           name: 'Café Latte',
@@ -183,13 +221,35 @@ describe('OnboardingCatalogService (Unit)', () => {
           uom: 'UN',
           averageCost: 0,
           is_active: true,
-        } as unknown as Product,
+        },
       ]);
 
       const summary = await service.getCatalogSummary('tenant-test');
       expect(summary.sellableProductCount).toBe(1);
       expect(summary.hasSellableProduct).toBe(true);
       expect(summary.sampleProducts[0].costStatus).toBe('COST_PENDING');
+    });
+
+    it('binds the tenant context on the manager before the summary reads (issue #512)', async () => {
+      const mockQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(0),
+      };
+      mgrProductRepo.createQueryBuilder.mockReturnValue(mockQb);
+      mgrProductRepo.find.mockResolvedValue([]);
+
+      await service.getCatalogSummary('tenant-test');
+
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-test'],
+      );
+      expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        mgrProductRepo.createQueryBuilder.mock.invocationCallOrder[0],
+      );
+      // One transaction covers the count and the sample read together.
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -214,7 +274,7 @@ describe('OnboardingCatalogService (Unit)', () => {
         created_at: new Date('2026-09-01T10:00:00Z'),
       } as unknown as Product;
 
-      productRepo.findOne = jest.fn().mockResolvedValue(candidateProduct);
+      mgrProductRepo.findOne = jest.fn().mockResolvedValue(candidateProduct);
 
       const result =
         await service.getVerificationProductCandidate('tenant-test');
@@ -231,7 +291,7 @@ describe('OnboardingCatalogService (Unit)', () => {
     });
 
     it('throws BadRequestException if no sellable product exists for tenant', async () => {
-      productRepo.findOne = jest.fn().mockResolvedValue(null);
+      mgrProductRepo.findOne = jest.fn().mockResolvedValue(null);
 
       await expect(
         service.getVerificationProductCandidate('tenant-empty'),
@@ -252,7 +312,7 @@ describe('OnboardingCatalogService (Unit)', () => {
         is_active: true,
       } as unknown as Product;
 
-      productRepo.findOne = jest.fn().mockResolvedValue(requestedProduct);
+      mgrProductRepo.findOne = jest.fn().mockResolvedValue(requestedProduct);
 
       const result = await service.getVerificationProductCandidate(
         'tenant-test',
@@ -266,7 +326,7 @@ describe('OnboardingCatalogService (Unit)', () => {
     });
 
     it('rejects requestedProductId if belongs to another tenant (Tenant B cannot be accessed by Tenant A)', async () => {
-      productRepo.findOne = jest.fn().mockResolvedValue(null); // findOne filtered by tenant_id returns null
+      mgrProductRepo.findOne = jest.fn().mockResolvedValue(null); // findOne filtered by tenant_id returns null
 
       await expect(
         service.getVerificationProductCandidate(
@@ -290,7 +350,7 @@ describe('OnboardingCatalogService (Unit)', () => {
         is_active: false,
       } as unknown as Product;
 
-      productRepo.findOne = jest.fn().mockResolvedValue(inactiveProduct);
+      mgrProductRepo.findOne = jest.fn().mockResolvedValue(inactiveProduct);
 
       await expect(
         service.getVerificationProductCandidate('tenant-test', 'prod-inactive'),
@@ -309,7 +369,7 @@ describe('OnboardingCatalogService (Unit)', () => {
         is_active: true,
       } as unknown as Product;
 
-      productRepo.findOne = jest.fn().mockResolvedValue(zeroPriceProduct);
+      mgrProductRepo.findOne = jest.fn().mockResolvedValue(zeroPriceProduct);
 
       await expect(
         service.getVerificationProductCandidate('tenant-test', 'prod-zero'),

@@ -1,19 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { Product } from '../../inventory/entities/product.entity';
 import {
   CostQueryResult,
   InventoryCostQueryPort,
 } from '../domain/inventory-cost-query.port';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 
 @Injectable()
 export class TypeOrmInventoryCostQueryAdapter implements InventoryCostQueryPort {
   private readonly logger = new Logger(TypeOrmInventoryCostQueryAdapter.name);
 
   constructor(
-    @InjectRepository(Product)
-    private readonly productRepo: Repository<Product>,
+    // Issue #512 slice 1 part A: the `products` read resolves its repository
+    // from the tenant-bound transaction manager, never pooled repositories.
+    private readonly dataSource: DataSource,
   ) {}
 
   async getCurrentEstimatedCostAndPrice(
@@ -27,13 +28,30 @@ export class TypeOrmInventoryCostQueryAdapter implements InventoryCostQueryPort 
       };
     }
 
-    // Strictly read-only query filtered by tenantId
-    const product = await this.productRepo.findOne({
-      where: {
-        id: productId,
-        tenant_id: tenantId,
-      },
-    });
+    // Preserve the pre-binding not-found semantics for a blank tenant id:
+    // no product matches, so the port reports PRODUCT_NOT_FOUND instead of
+    // failing with a tenant-context error.
+    if (!tenantId?.trim()) {
+      return {
+        status: 'NOT_AVAILABLE',
+        reason: 'PRODUCT_NOT_FOUND',
+      };
+    }
+
+    // Strictly read-only query filtered by tenantId, issued on a
+    // tenant-bound transaction (issue #512 slice 1 part A): the binding is
+    // transaction-local and happens before the first access.
+    const product = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Product).findOne({
+          where: {
+            id: productId,
+            tenant_id: tenantId,
+          },
+        }),
+    );
 
     if (!product) {
       return {

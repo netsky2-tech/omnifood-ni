@@ -3,9 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  bindTenantContext,
+  runInTenantTransaction,
+} from '../../core/database/tenant-transaction';
 import { Insumo } from './entities/insumo.entity';
 import {
   InventoryMovement,
@@ -26,10 +29,6 @@ type SyncedInventoryMovement = CreateInventoryMovementDto & {
 @Injectable()
 export class InventoryService {
   constructor(
-    @InjectRepository(Insumo)
-    private readonly insumoRepo: Repository<Insumo>,
-    @InjectRepository(InventoryMovement)
-    private readonly movementRepo: Repository<InventoryMovement>,
     private readonly eventEmitter: EventEmitter2,
     private readonly dataSource: DataSource,
     private readonly costCalculator: CostCalculatorService,
@@ -41,25 +40,37 @@ export class InventoryService {
     cost: number,
     tenantId: string,
   ): Promise<Insumo> {
-    const insumo = await this.insumoRepo.findOne({
-      where: { id: insumoId, tenant_id: tenantId },
-    });
-    if (!insumo) {
-      throw new NotFoundException(`Insumo with ID ${insumoId} not found`);
-    }
+    // Issue #512 slice 1 part A: the read and the write of `insumos` ride one
+    // tenant-bound transaction. The binding (transaction-local set_config)
+    // is issued before the first access, and both repositories are resolved
+    // from that exact manager — never from the pooled global repositories.
+    const updatedInsumo = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const insumoRepo = manager.getRepository(Insumo);
 
-    const convertedQuantity = quantity * Number(insumo.conversionFactor);
-    const newAverageCost = this.costCalculator.calculateAverageCost(
-      insumo.stock,
-      insumo.averageCost,
-      convertedQuantity,
-      cost / Number(insumo.conversionFactor), // Adjust cost to stock unit
+        const insumo = await insumoRepo.findOne({
+          where: { id: insumoId, tenant_id: tenantId },
+        });
+        if (!insumo) {
+          throw new NotFoundException(`Insumo with ID ${insumoId} not found`);
+        }
+
+        const convertedQuantity = quantity * Number(insumo.conversionFactor);
+        const newAverageCost = this.costCalculator.calculateAverageCost(
+          insumo.stock,
+          insumo.averageCost,
+          convertedQuantity,
+          cost / Number(insumo.conversionFactor), // Adjust cost to stock unit
+        );
+
+        insumo.stock = Number(insumo.stock) + convertedQuantity;
+        insumo.averageCost = newAverageCost;
+
+        return insumoRepo.save(insumo);
+      },
     );
-
-    insumo.stock = Number(insumo.stock) + convertedQuantity;
-    insumo.averageCost = newAverageCost;
-
-    const updatedInsumo = await this.insumoRepo.save(insumo);
 
     if (
       updatedInsumo.parLevel &&
@@ -94,6 +105,11 @@ export class InventoryService {
     );
 
     await this.dataSource.transaction(async (manager) => {
+      // Issue #512 slice 1 part A: bind the tenant context before the first
+      // access to `insumos`/`inventory_kardex` on this transaction so RLS
+      // policies authorize every subsequent statement on the same manager.
+      await bindTenantContext(manager, tenantId);
+
       const insumoRepo = manager.getRepository(Insumo);
       const movementRepo = manager.getRepository(InventoryMovement);
 

@@ -2,6 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { ShrinkageService } from './shrinkage.service';
+import {
+  TENANT_CONTEXT_SET_CONFIG_SQL,
+  TenantContextRequiredError,
+} from '../../core/database/tenant-transaction';
 import { Insumo } from './entities/insumo.entity';
 import {
   InventoryMovement,
@@ -66,13 +70,25 @@ describe('ShrinkageService', () => {
 
   it('rejects non-whitelisted shrinkage types', async () => {
     await expect(
-      service.recordShrinkage('ins-1', 2.3456, 'UNKNOWN_TYPE', 'Spoiled'),
+      service.recordShrinkage(
+        'tenant-1',
+        'ins-1',
+        2.3456,
+        'UNKNOWN_TYPE',
+        'Spoiled',
+      ),
     ).rejects.toThrow('Invalid shrinkage type');
   });
 
   it('rejects shrinkage without an observation', async () => {
     await expect(
-      service.recordShrinkage('ins-1', 2.3456, 'DESECHO_COCINA', '  '),
+      service.recordShrinkage(
+        'tenant-1',
+        'ins-1',
+        2.3456,
+        'DESECHO_COCINA',
+        '  ',
+      ),
     ).rejects.toThrow('Merma observation is required');
   });
 
@@ -91,6 +107,7 @@ describe('ShrinkageService', () => {
       .mockResolvedValueOnce({ id: 'mov-1' });
 
     await service.recordShrinkage(
+      'tenant-1',
       'ins-1',
       2.3456,
       'MALA_PREPARACION',
@@ -141,7 +158,7 @@ describe('ShrinkageService', () => {
     });
     bomExplosionService.explode.mockReturnValue(new Map([['ins-beef', 1]]));
 
-    await service.recordProductShrinkage({
+    await service.recordProductShrinkage('tenant-1', {
       productId: 'prod-plate',
       quantity: 2,
       reason: 'DESECHO_COCINA',
@@ -164,5 +181,50 @@ describe('ShrinkageService', () => {
     expect(save).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'ins-beef', stock: -0.75 }),
     );
+  });
+
+  it('binds the tenant context on the manager before the first insumos read (issue #512)', async () => {
+    findOne.mockResolvedValue({
+      id: 'ins-1',
+      tenant_id: 'tenant-1',
+      name: 'Tomate',
+      stock: 100,
+      existenciaActual: 100,
+      averageCost: 800,
+    });
+    save.mockResolvedValue({ id: 'ins-1' });
+
+    await service.recordShrinkage(
+      'tenant-1',
+      'ins-1',
+      1,
+      'MALA_PREPARACION',
+      'Binding order check',
+    );
+
+    const bindCallOrder = query.mock.invocationCallOrder[0];
+    const firstReadOrder = findOne.mock.invocationCallOrder[0];
+    expect(bindCallOrder).toBeLessThan(firstReadOrder);
+    expect(query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-1',
+    ]);
+  });
+
+  it('fails closed on a blank tenant id before opening any transaction (issue #512)', async () => {
+    await expect(
+      service.recordShrinkage('  ', 'ins-1', 1, 'MALA_PREPARACION', 'x'),
+    ).rejects.toThrow(TenantContextRequiredError);
+    await expect(
+      service.recordProductShrinkage('', {
+        productId: 'prod-1',
+        quantity: 1,
+        reason: 'MALA_PREPARACION',
+        observation: 'x',
+      }),
+    ).rejects.toThrow(TenantContextRequiredError);
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+    expect(findOne).not.toHaveBeenCalled();
   });
 });

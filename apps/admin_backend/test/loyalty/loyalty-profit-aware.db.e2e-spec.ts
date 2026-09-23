@@ -175,14 +175,13 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
     await dataSource.initialize();
     await bootstrap.destroy();
 
-    const productRepo = dataSource.getRepository(Product);
     const programRepo = dataSource.getRepository(LoyaltyProgram);
     const rewardRepo = dataSource.getRepository(RewardDefinition);
     const txRepo = dataSource.getRepository(CustomerPointTransaction);
     const projRepo = dataSource.getRepository(CustomerLoyaltyAccountProjection);
     const custRepo = dataSource.getRepository(Customer);
 
-    const costAdapter = new TypeOrmInventoryCostQueryAdapter(productRepo);
+    const costAdapter = new TypeOrmInventoryCostQueryAdapter(dataSource);
     const profitAwareService = new LoyaltyProfitAwareService(
       rewardRepo,
       programRepo,

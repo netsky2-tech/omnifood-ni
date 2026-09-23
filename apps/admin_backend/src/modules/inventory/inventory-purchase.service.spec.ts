@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import {
   CURRENCY,
   FX_RATE_RESOLVER,
@@ -62,9 +63,9 @@ describe('InventoryPurchaseService', () => {
     manager.createQueryBuilder.mockReturnValue(queryBuilder);
     transaction.mockImplementation(
       (
-        _isolation: string,
-        handler: (entityManager: typeof manager) => unknown,
-      ) => handler(manager),
+        a: string | ((entityManager: typeof manager) => unknown),
+        b?: (entityManager: typeof manager) => unknown,
+      ) => (typeof a === 'string' ? b(manager) : a(manager)),
     );
     findOne.mockResolvedValue(perishableInsumo);
     queryBuilder.getOne.mockResolvedValue({ ...perishableInsumo });
@@ -75,6 +76,12 @@ describe('InventoryPurchaseService', () => {
 
       if (entity === PurchaseDocument) {
         return Promise.resolve(null);
+      }
+
+      // Issue #512: previewPurchase now loads the insumo through the
+      // tenant-bound transaction manager.
+      if (entity === Insumo) {
+        return Promise.resolve(perishableInsumo);
       }
 
       return Promise.resolve(null);
@@ -982,5 +989,29 @@ describe('InventoryPurchaseService', () => {
       expect(manager.query).not.toHaveBeenCalled();
     }
     expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('binds the tenant context on the manager before the preview insumos read (issue #512)', async () => {
+    await service.previewPurchase({
+      id: 'preview-doc-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-PREVIEW-1',
+      quantity: 2,
+      unitCost: 10,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-03',
+      entryTimestamp: '2026-01-03T08:15:00.000Z',
+    });
+
+    expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-A',
+    ]);
+    expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      manager.findOne.mock.invocationCallOrder[0],
+    );
+    // The pooled getRepository path must not be used for insumo reads.
+    expect(dataSource.getRepository).not.toHaveBeenCalled();
   });
 });

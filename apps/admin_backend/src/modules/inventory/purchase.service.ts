@@ -1,31 +1,39 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { Insumo } from './entities/insumo.entity';
 import { Supplier } from './entities/supplier.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
+import {
+  bindTenantContext,
+  resolveTenantContextId,
+} from '../../core/database/tenant-transaction';
 
 @Injectable()
 export class PurchaseService {
-  constructor(
-    @InjectRepository(Insumo)
-    private readonly insumoRepo: Repository<Insumo>,
-    @InjectRepository(Supplier)
-    private readonly supplierRepo: Repository<Supplier>,
-    @InjectRepository(InventoryMovement)
-    private readonly movementRepo: Repository<InventoryMovement>,
-    private readonly dataSource: DataSource,
-  ) {}
+  // Issue #512 slice 1 part A: pooled repository injections are gone. Every
+  // read/write inside recordPurchase resolves from the transaction manager
+  // after the transaction-local tenant binding.
+  constructor(private readonly dataSource: DataSource) {}
 
   async recordPurchase(
     insumoId: string,
     supplierId: string,
     quantity: number,
     cost: number,
+    tenantId: string,
   ): Promise<Insumo> {
+    // Fail closed before any SQL (and before a connection is borrowed) when
+    // the tenant id is missing or blank.
+    const normalizedTenantId = resolveTenantContextId(tenantId);
+
     return this.dataSource.transaction(async (manager) => {
+      // Issue #512 slice 1 part A: binding is the first operation of this
+      // transaction; the Insumo read below is the first protected access and
+      // must never run on an unbound manager under FORCE RLS.
+      await bindTenantContext(manager, normalizedTenantId);
+
       const insumo = await manager.findOne(Insumo, {
         where: { id: insumoId } as any,
       });

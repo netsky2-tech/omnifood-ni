@@ -9,6 +9,7 @@ import {
 import { InventoryService } from './inventory.service';
 import { CostCalculatorService } from './cost-calculator.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 
 describe('Batch 6b Baseline Validation', () => {
   let inventoryService: InventoryService;
@@ -17,6 +18,11 @@ describe('Batch 6b Baseline Validation', () => {
   let movementRepo: jest.Mocked<Partial<Repository<InventoryMovement>>>;
   let dataSource: jest.Mocked<Partial<DataSource>>;
   let eventEmitter: jest.Mocked<Partial<EventEmitter2>>;
+
+  // Tenant context bound on the current fake transaction, mirroring the
+  // transaction-local `set_config` binding `bindTenantContext` performs
+  // before any RLS-protected access. Reset per transaction call.
+  let boundTenantId: string | null;
 
   const mockTenantA = 'tenant-uuid-alpha';
   const mockTenantB = 'tenant-uuid-beta';
@@ -74,12 +80,23 @@ describe('Batch 6b Baseline Validation', () => {
     };
 
     dataSource = {
-      transaction: jest.fn().mockImplementation(async (callback) =>
-        callback({
+      transaction: jest.fn().mockImplementation(async (callback) => {
+        boundTenantId = null;
+        return callback({
+          // `bindTenantContext` binds the tenant through this exact SQL with
+          // the tenant id as a bound parameter before the first protected
+          // access; the fake records the binding so RLS semantics below can
+          // be modeled per transaction.
+          query: jest.fn(async (sql: string, parameters: unknown[]) => {
+            if (sql === TENANT_CONTEXT_SET_CONFIG_SQL) {
+              boundTenantId = (parameters?.[0] as string) ?? null;
+            }
+            return [];
+          }),
           getRepository: (entity: any) =>
             entity === Insumo ? insumoRepo : movementRepo,
-        }),
-      ),
+        });
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -266,6 +283,12 @@ describe('Batch 6b Baseline Validation', () => {
       });
 
       insumoRepo.findOne.mockImplementation(async (options: any) => {
+        // RLS simulation: this transaction is bound to its own tenant via
+        // `set_config`, so a transaction bound to Tenant B must observe no
+        // rows belonging to Tenant A regardless of the query's where clause.
+        if (boundTenantId !== mockTenantA) {
+          return null;
+        }
         if (
           options?.where?.id === 'ins-A' &&
           options?.where?.tenant_id === mockTenantA

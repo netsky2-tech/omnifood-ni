@@ -351,7 +351,7 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
       evaluate: async () => ({ saleReady: true }),
     };
     const onboardingCatalogService = new OnboardingCatalogService(
-      runtime.getRepository(Product),
+      runtime,
       { ensureOnboardingStarted: async () => undefined } as never,
       readinessStub as never,
       { reconcile: async () => undefined } as never,

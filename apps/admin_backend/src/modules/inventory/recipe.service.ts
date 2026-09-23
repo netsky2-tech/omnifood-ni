@@ -11,6 +11,7 @@ import {
   QueryFailedError,
   Repository,
 } from 'typeorm';
+import { runInTenantTransaction } from '../../core/database/tenant-transaction';
 import {
   RecipePublicationState,
   RecipeSuggestionState,
@@ -57,7 +58,6 @@ interface ResolvedRecipeComponent {
 interface PreparedRecipeVersionIngestion {
   tenantId: string;
   dto: SyncRecipeVersionDocumentDto;
-  resolvedComponents: ResolvedRecipeComponent[];
   yieldQuantity: number;
   publishedAt: Date | null;
   posCreatedAt: Date | null;
@@ -74,12 +74,6 @@ export class RecipeService {
     private readonly recipeVersionRepo: Repository<RecipeVersion>,
     @InjectRepository(RecipeDetail)
     private readonly recipeDetailRepo: Repository<RecipeDetail>,
-    @InjectRepository(Insumo)
-    private readonly insumoRepo: Repository<Insumo>,
-    @InjectRepository(Product)
-    private readonly productRepo: Repository<Product>,
-    @InjectRepository(UomConversion)
-    private readonly uomConversionRepo: Repository<UomConversion>,
     private readonly uomConversionCalculator: UomConversionCalculator,
     private readonly dataSource: DataSource,
   ) {}
@@ -288,18 +282,13 @@ export class RecipeService {
       );
     }
 
-    // Resolve INSUMO components + validate UOM before opening the transaction
-    // so rejections are cheap and the transaction never stages invalid rows.
-    await this.assertProductExistsForTenant(tenantId, dto.productId);
-    const resolvedComponents = await this.resolveAndValidateComponents(
-      tenantId,
-      dto,
-    );
-
+    // Resolve INSUMO components + validate UOM inside the tenant-bound
+    // transaction (issue #512 slice 1 part A): every touch of `products` and
+    // `insumos` must ride the bound manager, so the validation reads moved
+    // from the pooled pre-read phase into `persistPosVersion`.
     const preparedInput: PreparedRecipeVersionIngestion = {
       tenantId,
       dto,
-      resolvedComponents,
       yieldQuantity: normalizedYieldQuantity,
       publishedAt: this.parseDate(dto.publishedAt),
       posCreatedAt: this.parseDate(dto.createdAt),
@@ -341,21 +330,48 @@ export class RecipeService {
       pos_document_id: input.dto.id,
     };
 
-    return this.dataSource.transaction(async (manager) => {
-      await this.lockProductForVersionIngestion(
-        manager,
-        input.tenantId,
-        input.dto.productId,
-      );
+    // Issue #512 slice 1 part A: one tenant-bound transaction covers the
+    // pessimistic product lock, the validation reads (`products`, `insumos`,
+    // `uom_conversions`), and every version write. The binding is issued
+    // before the first access, and the lock stays the first row-level
+    // statement exactly as before.
+    return runInTenantTransaction(
+      this.dataSource,
+      input.tenantId,
+      async (manager) => {
+        // runInTenantTransaction has already bound the transaction-local
+        // tenant context on this manager before the first access.
+        await this.lockProductForVersionIngestion(
+          manager,
+          input.tenantId,
+          input.dto.productId,
+        );
 
-      const existing = await manager.findOne(RecipeVersion, { where });
+        await this.assertProductExistsForTenant(
+          manager,
+          input.tenantId,
+          input.dto.productId,
+        );
+        const resolvedComponents = await this.resolveAndValidateComponents(
+          input.tenantId,
+          input.dto,
+          manager,
+        );
 
-      if (existing) {
-        return this.replaceExistingVersion(manager, existing, input);
-      }
+        const existing = await manager.findOne(RecipeVersion, { where });
 
-      return this.createFreshVersion(manager, input);
-    });
+        if (existing) {
+          return this.replaceExistingVersion(
+            manager,
+            existing,
+            input,
+            resolvedComponents,
+          );
+        }
+
+        return this.createFreshVersion(manager, input, resolvedComponents);
+      },
+    );
   }
 
   private async lockProductForVersionIngestion(
@@ -381,6 +397,7 @@ export class RecipeService {
     manager: EntityManager,
     existing: RecipeVersion,
     input: PreparedRecipeVersionIngestion,
+    resolvedComponents: ResolvedRecipeComponent[],
   ): Promise<IngestPosVersionResult> {
     if (existing.product_id !== input.dto.productId) {
       throw new BadRequestException(
@@ -416,7 +433,12 @@ export class RecipeService {
       recipe_version_id: existing.id,
       tenant_id: input.tenantId,
     });
-    await this.saveRecipeDetails(manager, existing.id, input);
+    await this.saveRecipeDetails(
+      manager,
+      existing.id,
+      input,
+      resolvedComponents,
+    );
 
     return {
       recipeVersionId: existing.id,
@@ -427,6 +449,7 @@ export class RecipeService {
   private async createFreshVersion(
     manager: EntityManager,
     input: PreparedRecipeVersionIngestion,
+    resolvedComponents: ResolvedRecipeComponent[],
   ): Promise<IngestPosVersionResult> {
     const priorActive = await manager.findOne(RecipeVersion, {
       where: {
@@ -459,7 +482,7 @@ export class RecipeService {
     });
 
     const saved = await manager.save(RecipeVersion, created);
-    await this.saveRecipeDetails(manager, saved.id, input);
+    await this.saveRecipeDetails(manager, saved.id, input, resolvedComponents);
 
     return {
       recipeVersionId: saved.id,
@@ -471,8 +494,9 @@ export class RecipeService {
     manager: EntityManager,
     recipeVersionId: string,
     input: PreparedRecipeVersionIngestion,
+    resolvedComponents: ResolvedRecipeComponent[],
   ): Promise<void> {
-    const details = input.resolvedComponents.map((component) =>
+    const details = resolvedComponents.map((component) =>
       manager.create(RecipeDetail, {
         tenant_id: input.tenantId,
         recipe_version_id: recipeVersionId,
@@ -514,10 +538,11 @@ export class RecipeService {
   }
 
   private async assertProductExistsForTenant(
+    manager: EntityManager,
     tenantId: string,
     productId: string,
   ): Promise<void> {
-    const product = await this.productRepo.findOne({
+    const product = await manager.getRepository(Product).findOne({
       where: { id: productId, tenant_id: tenantId },
       select: { id: true },
     });
@@ -532,6 +557,7 @@ export class RecipeService {
   private async resolveAndValidateComponents(
     tenantId: string,
     dto: SyncRecipeVersionDocumentDto,
+    manager: EntityManager,
   ): Promise<ResolvedRecipeComponent[]> {
     const resolved: ResolvedRecipeComponent[] = [];
 
@@ -556,7 +582,7 @@ export class RecipeService {
       seenIngredientIds.add(component.ingredientId);
 
       if (component.ingredientType === 'SUB_RECIPE') {
-        const subProduct = await this.productRepo.findOne({
+        const subProduct = await manager.getRepository(Product).findOne({
           where: { id: component.ingredientId, tenant_id: tenantId },
         });
 
@@ -567,6 +593,7 @@ export class RecipeService {
         }
 
         await this.assertNoCircularDependency(
+          manager,
           tenantId,
           dto.productId,
           component.ingredientId,
@@ -585,7 +612,7 @@ export class RecipeService {
         continue;
       }
 
-      const insumo = await this.insumoRepo.findOne({
+      const insumo = await manager.getRepository(Insumo).findOne({
         where: { id: component.ingredientId, tenant_id: tenantId },
       });
 
@@ -603,6 +630,7 @@ export class RecipeService {
       }
 
       const grossQuantityInBase = await this.resolveGrossQuantityInBase(
+        manager,
         insumo,
         componentUom,
         component.grossQuantity,
@@ -625,6 +653,7 @@ export class RecipeService {
   }
 
   private async resolveGrossQuantityInBase(
+    manager: EntityManager,
     insumo: Insumo,
     componentUom: string,
     grossQuantity: number,
@@ -634,7 +663,7 @@ export class RecipeService {
       return round4(grossQuantity);
     }
 
-    const conversion = await this.uomConversionRepo.findOne({
+    const conversion = await manager.getRepository(UomConversion).findOne({
       where: {
         tenant_id: insumo.tenant_id,
         insumo_id: insumo.id,
@@ -655,6 +684,7 @@ export class RecipeService {
   }
 
   private async assertNoCircularDependency(
+    manager: EntityManager,
     tenantId: string,
     rootProductId: string,
     subRecipeProductId: string,
@@ -681,9 +711,17 @@ export class RecipeService {
       }
       visited.add(currentId);
 
-      const activeVersion = await this.findActiveVersion(tenantId, currentId);
+      const activeVersion = await manager.findOne(RecipeVersion, {
+        where: {
+          tenant_id: tenantId,
+          product_id: currentId,
+          is_active: true,
+          publication_state: RecipePublicationState.PUBLISHED,
+        },
+        order: { version_number: 'DESC' },
+      });
       if (activeVersion) {
-        const details = await this.recipeDetailRepo.find({
+        const details = await manager.find(RecipeDetail, {
           where: {
             recipe_version_id: activeVersion.id,
             tenant_id: tenantId,

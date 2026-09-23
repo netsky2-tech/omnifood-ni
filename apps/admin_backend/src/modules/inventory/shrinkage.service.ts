@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
+import { runInTenantTransaction } from '../../core/database/tenant-transaction';
 import { Insumo } from './entities/insumo.entity';
 import { Product } from './entities/product.entity';
 import {
@@ -52,6 +53,7 @@ export class ShrinkageService {
   ) {}
 
   async recordShrinkage(
+    tenantId: string,
     insumoId: string,
     quantity: number,
     reason: string,
@@ -67,52 +69,62 @@ export class ShrinkageService {
 
     const normalizedQuantity = round4(quantity);
 
-    return this.dataSource.transaction(async (manager) => {
-      const insumo = await manager.findOne(Insumo, {
-        where: { id: insumoId } as any,
-      });
-      if (!insumo) throw new NotFoundException(`Insumo ${insumoId} not found`);
+    // Issue #512: the insumos/products tables are tenant-protected, so the
+    // whole shrinkage write runs inside a tenant-bound transaction. The bind
+    // is the first statement on the manager and a blank tenant id fails
+    // closed before any connection is borrowed.
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const insumo = await manager.findOne(Insumo, {
+          where: { id: insumoId } as any,
+        });
+        if (!insumo)
+          throw new NotFoundException(`Insumo ${insumoId} not found`);
 
-      const previousStock = Number(insumo.stock);
-      const newStock = round4(previousStock - normalizedQuantity);
-      const unitCostNio = round4(Number(insumo.averageCost));
-      const totalCostNio = round4(normalizedQuantity * unitCostNio);
+        const previousStock = Number(insumo.stock);
+        const newStock = round4(previousStock - normalizedQuantity);
+        const unitCostNio = round4(Number(insumo.averageCost));
+        const totalCostNio = round4(normalizedQuantity * unitCostNio);
 
-      insumo.stock = newStock;
-      insumo.existenciaActual = newStock;
-      const updatedInsumo = await manager.save(insumo);
+        insumo.stock = newStock;
+        insumo.existenciaActual = newStock;
+        const updatedInsumo = await manager.save(insumo);
 
-      const movement = manager.create(InventoryMovement, {
-        tenant_id: insumo.tenant_id,
-        insumoId: insumo.id,
-        type: MovementType.SHRINKAGE,
-        quantity: -normalizedQuantity,
-        previousStock: previousStock,
-        newStock: newStock,
-        averageCostAfterNio: unitCostNio,
-        unitCostNio,
-        totalCostNio,
-        reason: canonicalReason,
-        observation: requiredObservation,
-        sourceDocumentType: 'SHRINKAGE',
-      });
-      await manager.save(movement);
+        const movement = manager.create(InventoryMovement, {
+          tenant_id: insumo.tenant_id,
+          insumoId: insumo.id,
+          type: MovementType.SHRINKAGE,
+          quantity: -normalizedQuantity,
+          previousStock: previousStock,
+          newStock: newStock,
+          averageCostAfterNio: unitCostNio,
+          unitCostNio,
+          totalCostNio,
+          reason: canonicalReason,
+          observation: requiredObservation,
+          sourceDocumentType: 'SHRINKAGE',
+        });
+        await manager.save(movement);
 
-      await this.createHighValueShrinkageAlertIfNeeded({
-        tenantId: insumo.tenant_id,
-        insumoId: insumo.id,
-        insumoName: insumo.name,
-        quantity: normalizedQuantity,
-        totalCostNio,
-        originDocumentRef: `shrinkage:${movement.id}`,
-        manager,
-      });
+        await this.createHighValueShrinkageAlertIfNeeded({
+          tenantId: insumo.tenant_id,
+          insumoId: insumo.id,
+          insumoName: insumo.name,
+          quantity: normalizedQuantity,
+          totalCostNio,
+          originDocumentRef: `shrinkage:${movement.id}`,
+          manager,
+        });
 
-      return updatedInsumo;
-    });
+        return updatedInsumo;
+      },
+    );
   }
 
   async recordProductShrinkage(
+    tenantId: string,
     input: RecordProductShrinkageInput,
   ): Promise<Product> {
     if (!input.productId.trim()) {
@@ -130,85 +142,92 @@ export class ShrinkageService {
     const requiredObservation = requireMermaObservation(input.observation);
     const normalizedQuantity = round4(input.quantity);
 
-    return this.dataSource.transaction(async (manager) => {
-      const product = await manager.findOne(Product, {
-        where: { id: input.productId },
-      });
-      if (!product) {
-        throw new NotFoundException(`Product ${input.productId} not found`);
-      }
-
-      const recipeVersionId =
-        input.recipeVersionId ??
-        (
-          await this.recipeService.findActiveVersion(
-            product.tenant_id,
-            product.id,
-          )
-        )?.id;
-      if (!recipeVersionId) {
-        throw new BadRequestException(
-          `Product ${product.id} does not have an active recipe for shrinkage explosion`,
-        );
-      }
-
-      const snapshot = await this.recipeService.getSnapshot(
-        recipeVersionId,
-        product.tenant_id,
-        product.id,
-      );
-      const exploded = this.bomExplosionService.explode({
-        snapshotComponents: snapshot.components,
-        orderQuantity: normalizedQuantity,
-      });
-
-      for (const [insumoId, explodedQuantity] of exploded.entries()) {
-        const normalizedIngredientQuantity = round4(explodedQuantity);
-        const insumo = await manager.findOne(Insumo, {
-          where: { id: insumoId },
+    // Issue #512: same tenant-bound transaction contract as recordShrinkage.
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const product = await manager.findOne(Product, {
+          where: { id: input.productId },
         });
-        if (!insumo) {
-          throw new NotFoundException(`Insumo ${insumoId} not found`);
+        if (!product) {
+          throw new NotFoundException(`Product ${input.productId} not found`);
         }
 
-        const previousStock = Number(insumo.stock);
-        const newStock = round4(previousStock - normalizedIngredientQuantity);
-        const unitCostNio = round4(Number(insumo.averageCost));
-        const totalCostNio = round4(normalizedIngredientQuantity * unitCostNio);
+        const recipeVersionId =
+          input.recipeVersionId ??
+          (
+            await this.recipeService.findActiveVersion(
+              product.tenant_id,
+              product.id,
+            )
+          )?.id;
+        if (!recipeVersionId) {
+          throw new BadRequestException(
+            `Product ${product.id} does not have an active recipe for shrinkage explosion`,
+          );
+        }
 
-        insumo.stock = newStock;
-        insumo.existenciaActual = newStock;
-        await manager.save(insumo);
-
-        const movement = manager.create(InventoryMovement, {
-          tenant_id: insumo.tenant_id,
-          insumoId: insumo.id,
-          type: MovementType.SHRINKAGE,
-          quantity: -normalizedIngredientQuantity,
-          previousStock,
-          newStock,
-          averageCostAfterNio: unitCostNio,
-          unitCostNio,
-          totalCostNio,
-          reason: canonicalReason,
-          observation: requiredObservation,
-          sourceDocumentType: 'SHRINKAGE',
+        const snapshot = await this.recipeService.getSnapshot(
+          recipeVersionId,
+          product.tenant_id,
+          product.id,
+        );
+        const exploded = this.bomExplosionService.explode({
+          snapshotComponents: snapshot.components,
+          orderQuantity: normalizedQuantity,
         });
-        await manager.save(movement);
 
-        await this.createHighValueShrinkageAlertIfNeeded({
-          tenantId: insumo.tenant_id,
-          insumoId: insumo.id,
-          insumoName: insumo.name,
-          quantity: normalizedIngredientQuantity,
-          totalCostNio,
-          originDocumentRef: `product-shrinkage:${product.id}:${movement.id}`,
-          manager,
-        });
-      }
+        for (const [insumoId, explodedQuantity] of exploded.entries()) {
+          const normalizedIngredientQuantity = round4(explodedQuantity);
+          const insumo = await manager.findOne(Insumo, {
+            where: { id: insumoId },
+          });
+          if (!insumo) {
+            throw new NotFoundException(`Insumo ${insumoId} not found`);
+          }
 
-      return product;
-    });
+          const previousStock = Number(insumo.stock);
+          const newStock = round4(previousStock - normalizedIngredientQuantity);
+          const unitCostNio = round4(Number(insumo.averageCost));
+          const totalCostNio = round4(
+            normalizedIngredientQuantity * unitCostNio,
+          );
+
+          insumo.stock = newStock;
+          insumo.existenciaActual = newStock;
+          await manager.save(insumo);
+
+          const movement = manager.create(InventoryMovement, {
+            tenant_id: insumo.tenant_id,
+            insumoId: insumo.id,
+            type: MovementType.SHRINKAGE,
+            quantity: -normalizedIngredientQuantity,
+            previousStock,
+            newStock,
+            averageCostAfterNio: unitCostNio,
+            unitCostNio,
+            totalCostNio,
+            reason: canonicalReason,
+            observation: requiredObservation,
+            sourceDocumentType: 'SHRINKAGE',
+          });
+          await manager.save(movement);
+
+          await this.createHighValueShrinkageAlertIfNeeded({
+            tenantId: insumo.tenant_id,
+            insumoId: insumo.id,
+            insumoName: insumo.name,
+            quantity: normalizedIngredientQuantity,
+            totalCostNio,
+            originDocumentRef: `product-shrinkage:${product.id}:${movement.id}`,
+            manager,
+          });
+        }
+
+        return product;
+      },
+    );
   }
 
   private async createHighValueShrinkageAlertIfNeeded(input: {

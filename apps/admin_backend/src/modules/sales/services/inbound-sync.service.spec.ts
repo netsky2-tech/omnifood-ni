@@ -173,6 +173,36 @@ describe('InboundSyncService', () => {
     jest.clearAllMocks();
   });
 
+  // Issue #512 slice 1 part A: `products` and `insumos` reads are
+  // tenant-protected and require a bound transaction manager. This stand-in
+  // maps every entity onto the existing repository mocks so generic tests
+  // keep exercising the same query builders through the bound path.
+  function buildDefaultBoundManager(
+    overrides: Map<unknown, unknown> = new Map(),
+  ) {
+    return {
+      getRepository: jest.fn((entity: unknown) => {
+        if (overrides.has(entity)) return overrides.get(entity);
+        if (entity === Product) return mockProductRepo;
+        if (entity === CatalogValue) return mockCatalogRepo;
+        if (entity === Insumo) return mockInsumoRepo;
+        if (entity === Recipe) return mockRecipeRepo;
+        if (entity === RecipeVersion) return mockRecipeVersionRepo;
+        if (entity === RecipeDetail) return mockRecipeDetailRepo;
+        if (entity === ProductInventoryMappingVersion)
+          return mockMappingVersionRepo;
+        if (entity === User) return mockUserRepo;
+        if (entity === ForensicAlert)
+          return {
+            createQueryBuilder: jest
+              .fn()
+              .mockReturnValue(createMockQueryBuilder([])),
+          };
+        return undefined;
+      }),
+    } as never;
+  }
+
   it('throws UnauthorizedException if tenantId is missing or empty', async () => {
     await expect(service.getInboundDeltas('', {})).rejects.toThrow(
       UnauthorizedException,
@@ -238,7 +268,12 @@ describe('InboundSyncService', () => {
     catalogQb.getMany.mockResolvedValue(mockCatalogValues);
     userQb.getMany.mockResolvedValue(mockUsers);
 
-    const response = await service.getInboundDeltas('tenant-abc', {});
+    const response = await service.getInboundDeltas(
+      'tenant-abc',
+      {},
+      undefined,
+      buildDefaultBoundManager(),
+    );
 
     expect(response.status).toBe('success');
     expect(response.deltas.products).toHaveLength(1);
@@ -345,7 +380,12 @@ describe('InboundSyncService', () => {
 
     productQb.getMany.mockResolvedValue(mockProducts);
 
-    const response = await service.getInboundDeltas('tenant-abc', {});
+    const response = await service.getInboundDeltas(
+      'tenant-abc',
+      {},
+      undefined,
+      buildDefaultBoundManager(),
+    );
 
     expect(response.deltas.products).toHaveLength(2);
 
@@ -362,7 +402,12 @@ describe('InboundSyncService', () => {
 
   it('filters deltas by ISO timestamp since string', async () => {
     const sinceIso = '2026-08-20T00:00:00.000Z';
-    await service.getInboundDeltas('tenant-abc', { since: sinceIso });
+    await service.getInboundDeltas(
+      'tenant-abc',
+      { since: sinceIso },
+      undefined,
+      buildDefaultBoundManager(),
+    );
 
     expect(productQb.andWhere).toHaveBeenCalledWith(
       expect.stringContaining('mapping_cursor'),
@@ -392,9 +437,12 @@ describe('InboundSyncService', () => {
 
   it('filters deltas by numeric timestamp sinceVersion', async () => {
     const sinceTimestamp = '1787745600000';
-    await service.getInboundDeltas('tenant-abc', {
-      sinceVersion: sinceTimestamp,
-    });
+    await service.getInboundDeltas(
+      'tenant-abc',
+      { sinceVersion: sinceTimestamp },
+      undefined,
+      buildDefaultBoundManager(),
+    );
 
     expect(productQb.andWhere).toHaveBeenCalledWith(
       expect.stringContaining('mapping_cursor'),
@@ -403,9 +451,12 @@ describe('InboundSyncService', () => {
   });
 
   it('filters by entity types when requested', async () => {
-    const response = await service.getInboundDeltas('tenant-abc', {
-      types: 'products,users',
-    });
+    const response = await service.getInboundDeltas(
+      'tenant-abc',
+      { types: 'products,users' },
+      undefined,
+      buildDefaultBoundManager(),
+    );
 
     expect(mockProductRepo.createQueryBuilder).toHaveBeenCalled();
     expect(mockUserRepo.createQueryBuilder).toHaveBeenCalled();
@@ -470,13 +521,18 @@ describe('InboundSyncService', () => {
       }
     });
 
-    it('binds the tenant context via the shared guard before reading mapping versions', async () => {
-      await service.getInboundDeltas('tenant-abc', { types: 'products' });
-
-      expect(mockMappingVersionRepo.manager.query).toHaveBeenCalledWith(
-        "SELECT set_config('app.tenant_id', $1, true)",
-        ['tenant-abc'],
+    it('reads mapping versions through the bound manager without session-scoped SQL (issue #512)', async () => {
+      await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildDefaultBoundManager(),
       );
+
+      // The mapping read rides the bound manager's own connection; the old
+      // session-scoped set_config against the pooled manager must never run.
+      expect(mockMappingVersionRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(mockMappingVersionRepo.manager.query).not.toHaveBeenCalled();
     });
   });
 
@@ -583,21 +639,33 @@ describe('InboundSyncService', () => {
       });
     });
 
-    it('keeps the global repositories as the default path when no manager is supplied', async () => {
+    it('fails closed when no manager is supplied for the protected products read (issue #512)', async () => {
       productQb.getMany.mockResolvedValue([boundProduct]);
 
-      const response = await service.getInboundDeltas('tenant-abc', {
-        types: 'products',
-      });
-
-      // Byte-for-byte the pre-existing device-path behavior: global repos,
-      // and the session-scoped mapping binding workaround still runs.
-      expect(mockProductRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
-      expect(mockMappingVersionRepo.manager.query).toHaveBeenCalledWith(
-        "SELECT set_config('app.tenant_id', $1, true)",
-        ['tenant-abc'],
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'products' }),
+      ).rejects.toThrow(
+        'Inbound product sync requires a tenant-bound transaction manager',
       );
-      expect(response.deltas.products).toHaveLength(1);
+
+      // Fail closed means fail before any SQL: neither the pooled product
+      // read nor the pooled session-scoped set_config workaround may run.
+      expect(mockProductRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockMappingVersionRepo.manager.query).not.toHaveBeenCalled();
+      expect(productQb.getMany).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when no manager is supplied for the protected insumos read (issue #512)', async () => {
+      insumoQb.getMany.mockResolvedValue([]);
+
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'insumos' }),
+      ).rejects.toThrow(
+        'Inbound insumo sync requires a tenant-bound transaction manager',
+      );
+
+      expect(mockInsumoRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(insumoQb.getMany).not.toHaveBeenCalled();
     });
   });
   describe('OHAC delivery negotiation member', () => {
@@ -615,6 +683,7 @@ describe('InboundSyncService', () => {
         'tenant-1',
         {},
         devicePrincipal,
+        buildDefaultBoundManager(),
       );
 
       expect(response).not.toHaveProperty('humanAuthorization');
@@ -629,13 +698,19 @@ describe('InboundSyncService', () => {
         'tenant-1',
         {},
         devicePrincipal,
+        buildDefaultBoundManager(),
       );
 
       expect(response).not.toHaveProperty('humanAuthorization');
     });
 
     it('omits the member when no device principal is present', async () => {
-      const response = await service.getInboundDeltas('tenant-1', {});
+      const response = await service.getInboundDeltas(
+        'tenant-1',
+        {},
+        undefined,
+        buildDefaultBoundManager(),
+      );
 
       expect(response).not.toHaveProperty('humanAuthorization');
       expect(deliveryMock.negotiate).not.toHaveBeenCalled();
@@ -653,6 +728,7 @@ describe('InboundSyncService', () => {
           'tenant-1',
           negotiationQuery,
           devicePrincipal,
+          buildDefaultBoundManager(),
         );
 
         expect(response.humanAuthorization).toEqual({ status });
@@ -671,6 +747,7 @@ describe('InboundSyncService', () => {
         'tenant-1',
         negotiationQuery,
         devicePrincipal,
+        buildDefaultBoundManager(),
       );
 
       expect(response.humanAuthorization).toEqual({
@@ -693,6 +770,7 @@ describe('InboundSyncService', () => {
           ohacFloorSequence: '4',
         },
         devicePrincipal,
+        buildDefaultBoundManager(),
       );
 
       expect(deliveryMock.negotiate).toHaveBeenCalledWith({
@@ -713,7 +791,12 @@ describe('InboundSyncService', () => {
       deliveryMock.negotiate.mockRejectedValue(failure);
 
       await expect(
-        service.getInboundDeltas('tenant-1', negotiationQuery, devicePrincipal),
+        service.getInboundDeltas(
+          'tenant-1',
+          negotiationQuery,
+          devicePrincipal,
+          buildDefaultBoundManager(),
+        ),
       ).rejects.toBe(failure);
     });
 
@@ -724,6 +807,7 @@ describe('InboundSyncService', () => {
         'tenant-1',
         { sinceVersion: '100' },
         devicePrincipal,
+        buildDefaultBoundManager(),
       );
 
       expect(response.status).toBe('success');
@@ -997,11 +1081,11 @@ describe('InboundSyncService', () => {
           .fn()
           .mockReturnValue(createMockQueryBuilder(boundAlertRows)),
       };
-      const manager = {
-        getRepository: jest.fn((entity: unknown) =>
-          entity === ForensicAlert ? alertRepo : undefined,
-        ),
-      };
+      // The default pull reads products/insumos on the manager too; only
+      // the alerts repository is overridden with the projection rows.
+      const manager = buildDefaultBoundManager(
+        new Map<unknown, unknown>([[ForensicAlert, alertRepo]]),
+      ) as { getRepository: jest.Mock };
 
       // The production POS pull sends no types parameter: the default type
       // set must include alerts or the terminal inbox would starve.
@@ -1026,9 +1110,12 @@ describe('InboundSyncService', () => {
           .mockReturnValue(createMockQueryBuilder(boundAlertRows)),
       };
       const manager = {
-        getRepository: jest.fn((entity: unknown) =>
-          entity === ForensicAlert ? alertRepo : undefined,
-        ),
+        getRepository: jest.fn((entity: unknown) => {
+          if (entity === ForensicAlert) return alertRepo;
+          // Issue #512: products reads ride the bound manager too.
+          if (entity === Product) return mockProductRepo;
+          return undefined;
+        }),
       };
 
       const response = await service.getInboundDeltas(
