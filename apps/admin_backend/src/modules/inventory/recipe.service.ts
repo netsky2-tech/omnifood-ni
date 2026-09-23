@@ -92,119 +92,152 @@ export class RecipeService {
       throw new BadRequestException('yieldQuantity must be > 0 after rounding');
     }
 
-    const activeVersion = await this.recipeVersionRepo.findOne({
-      where: {
-        tenant_id: input.tenantId,
-        product_id: input.productId,
-        is_active: true,
+    // Issue #512 slice 2 part A: the draft->active handoff (deactivate prior
+    // active version, insert version, insert details) rides one tenant-bound
+    // transaction. The context binding happens before the first protected
+    // access and repositories resolve from the bound manager. Under FORCE
+    // RLS an unbound access would fail closed (zero rows / error), never
+    // leak across tenants; the tenant_id predicates stay as defense in
+    // depth, not as an RLS substitute.
+    return runInTenantTransaction(
+      this.dataSource,
+      input.tenantId,
+      async (manager) => {
+        const recipeVersionRepo = manager.getRepository(RecipeVersion);
+        const recipeDetailRepo = manager.getRepository(RecipeDetail);
+
+        const activeVersion = await recipeVersionRepo.findOne({
+          where: {
+            tenant_id: input.tenantId,
+            product_id: input.productId,
+            is_active: true,
+          },
+          order: { version_number: 'DESC' },
+        });
+
+        if (activeVersion) {
+          activeVersion.is_active = false;
+          activeVersion.fecha_fin_vigencia = input.effectiveAt ?? new Date();
+          await recipeVersionRepo.save(activeVersion);
+        }
+
+        const nextVersionNumber = activeVersion
+          ? activeVersion.version_number + 1
+          : 1;
+
+        const version = recipeVersionRepo.create({
+          tenant_id: input.tenantId,
+          product_id: input.productId,
+          version_number: nextVersionNumber,
+          is_active: true,
+          fecha_inicio_vigencia: input.effectiveAt ?? new Date(),
+          yield_quantity: yieldQuantity,
+          technical_shrink_pct: round4(input.technicalShrinkPct),
+          version_note: input.versionNote ?? null,
+        });
+
+        const savedVersion = await recipeVersionRepo.save(version);
+
+        const details = input.components.map((component) => {
+          // RecipeDetail.quantity is consumption for one sold unit, not one batch.
+          const netUsableQuantity = round4(
+            (component.grossQuantity *
+              (1 - component.technicalShrinkPct / 100)) /
+              yieldQuantity,
+          );
+
+          return recipeDetailRepo.create({
+            tenant_id: input.tenantId,
+            recipe_version_id: savedVersion.id,
+            insumo_id: component.insumoId,
+            gross_quantity: round4(component.grossQuantity),
+            technical_shrink_pct: round4(component.technicalShrinkPct),
+            quantity: netUsableQuantity,
+          });
+        });
+
+        await recipeDetailRepo.save(details);
+
+        return savedVersion;
       },
-      order: { version_number: 'DESC' },
-    });
-
-    if (activeVersion) {
-      activeVersion.is_active = false;
-      activeVersion.fecha_fin_vigencia = input.effectiveAt ?? new Date();
-      await this.recipeVersionRepo.save(activeVersion);
-    }
-
-    const nextVersionNumber = activeVersion
-      ? activeVersion.version_number + 1
-      : 1;
-
-    const version = this.recipeVersionRepo.create({
-      tenant_id: input.tenantId,
-      product_id: input.productId,
-      version_number: nextVersionNumber,
-      is_active: true,
-      fecha_inicio_vigencia: input.effectiveAt ?? new Date(),
-      yield_quantity: yieldQuantity,
-      technical_shrink_pct: round4(input.technicalShrinkPct),
-      version_note: input.versionNote ?? null,
-    });
-
-    const savedVersion = await this.recipeVersionRepo.save(version);
-
-    const details = input.components.map((component) => {
-      // RecipeDetail.quantity is consumption for one sold unit, not one batch.
-      const netUsableQuantity = round4(
-        (component.grossQuantity * (1 - component.technicalShrinkPct / 100)) /
-          yieldQuantity,
-      );
-
-      return this.recipeDetailRepo.create({
-        tenant_id: input.tenantId,
-        recipe_version_id: savedVersion.id,
-        insumo_id: component.insumoId,
-        gross_quantity: round4(component.grossQuantity),
-        technical_shrink_pct: round4(component.technicalShrinkPct),
-        quantity: netUsableQuantity,
-      });
-    });
-
-    await this.recipeDetailRepo.save(details);
-
-    return savedVersion;
+    );
   }
 
   async findActiveVersion(
     tenantId: string,
     productId: string,
   ): Promise<RecipeVersion | null> {
-    return this.recipeVersionRepo.findOne({
-      where: {
-        tenant_id: tenantId,
-        product_id: productId,
-        is_active: true,
-        publication_state: RecipePublicationState.PUBLISHED,
-      },
-      order: { version_number: 'DESC' },
-    });
+    // Issue #512 slice 2 part A: bound read (fail closed, not leak, under
+    // FORCE RLS when unbound).
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      manager.getRepository(RecipeVersion).findOne({
+        where: {
+          tenant_id: tenantId,
+          product_id: productId,
+          is_active: true,
+          publication_state: RecipePublicationState.PUBLISHED,
+        },
+        order: { version_number: 'DESC' },
+      }),
+    );
   }
 
   async publishDraftVersion(
     tenantId: string,
     recipeVersionId: string,
   ): Promise<RecipeVersion> {
-    const draft = await this.recipeVersionRepo.findOne({
-      where: { id: recipeVersionId, tenant_id: tenantId },
-    });
+    // Issue #512 slice 2 part A: draft publication reads the draft,
+    // deactivates the prior active version and saves the published draft in
+    // one tenant-bound transaction with repositories resolved from the bound
+    // manager, preserving the draft/active lifecycle semantics.
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const recipeVersionRepo = manager.getRepository(RecipeVersion);
 
-    if (!draft) {
-      throw new NotFoundException(
-        `Recipe version ${recipeVersionId} not found`,
-      );
-    }
+        const draft = await recipeVersionRepo.findOne({
+          where: { id: recipeVersionId, tenant_id: tenantId },
+        });
 
-    if (
-      draft.publication_state === RecipePublicationState.PUBLISHED &&
-      draft.is_active
-    ) {
-      return draft;
-    }
+        if (!draft) {
+          throw new NotFoundException(
+            `Recipe version ${recipeVersionId} not found`,
+          );
+        }
 
-    // Deactivate prior active version for this product
-    const priorActive = await this.recipeVersionRepo.findOne({
-      where: {
-        tenant_id: tenantId,
-        product_id: draft.product_id,
-        is_active: true,
+        if (
+          draft.publication_state === RecipePublicationState.PUBLISHED &&
+          draft.is_active
+        ) {
+          return draft;
+        }
+
+        // Deactivate prior active version for this product
+        const priorActive = await recipeVersionRepo.findOne({
+          where: {
+            tenant_id: tenantId,
+            product_id: draft.product_id,
+            is_active: true,
+          },
+          order: { version_number: 'DESC' },
+        });
+
+        if (priorActive && priorActive.id !== draft.id) {
+          priorActive.is_active = false;
+          priorActive.fecha_fin_vigencia = new Date();
+          await recipeVersionRepo.save(priorActive);
+        }
+
+        draft.is_active = true;
+        draft.publication_state = RecipePublicationState.PUBLISHED;
+        draft.suggestion_state = RecipeSuggestionState.CONFIRMED;
+        draft.published_at = new Date();
+        draft.fecha_inicio_vigencia = draft.fecha_inicio_vigencia ?? new Date();
+
+        return recipeVersionRepo.save(draft);
       },
-      order: { version_number: 'DESC' },
-    });
-
-    if (priorActive && priorActive.id !== draft.id) {
-      priorActive.is_active = false;
-      priorActive.fecha_fin_vigencia = new Date();
-      await this.recipeVersionRepo.save(priorActive);
-    }
-
-    draft.is_active = true;
-    draft.publication_state = RecipePublicationState.PUBLISHED;
-    draft.suggestion_state = RecipeSuggestionState.CONFIRMED;
-    draft.published_at = new Date();
-    draft.fecha_inicio_vigencia = draft.fecha_inicio_vigencia ?? new Date();
-
-    return this.recipeVersionRepo.save(draft);
+    );
   }
 
   async getSnapshot(
@@ -215,31 +248,42 @@ export class RecipeService {
     recipeVersion: RecipeVersion;
     components: RecipeDetail[];
   }> {
-    const recipeVersion = await this.recipeVersionRepo.findOne({
-      where: { id: recipeVersionId, tenant_id: tenantId },
-    });
+    // Issue #512 slice 2 part A: snapshot reads (version + components) ride
+    // one tenant-bound transaction; unbound access under FORCE RLS fails
+    // closed (zero rows / error), it is not a cross-tenant leak.
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const recipeVersion = await manager
+          .getRepository(RecipeVersion)
+          .findOne({
+            where: { id: recipeVersionId, tenant_id: tenantId },
+          });
 
-    if (!recipeVersion) {
-      throw new NotFoundException(
-        `Recipe version ${recipeVersionId} not found`,
-      );
-    }
+        if (!recipeVersion) {
+          throw new NotFoundException(
+            `Recipe version ${recipeVersionId} not found`,
+          );
+        }
 
-    if (productId && recipeVersion.product_id !== productId) {
-      throw new BadRequestException(
-        `Recipe version ${recipeVersionId} does not belong to product ${productId}`,
-      );
-    }
+        if (productId && recipeVersion.product_id !== productId) {
+          throw new BadRequestException(
+            `Recipe version ${recipeVersionId} does not belong to product ${productId}`,
+          );
+        }
 
-    const components = await this.recipeDetailRepo.find({
-      where: {
-        recipe_version_id: recipeVersion.id,
-        tenant_id: tenantId,
+        const components = await manager.getRepository(RecipeDetail).find({
+          where: {
+            recipe_version_id: recipeVersion.id,
+            tenant_id: tenantId,
+          },
+          order: { insumo_id: 'ASC' },
+        });
+
+        return { recipeVersion, components };
       },
-      order: { insumo_id: 'ASC' },
-    });
-
-    return { recipeVersion, components };
+    );
   }
 
   /**
@@ -301,12 +345,20 @@ export class RecipeService {
         throw error;
       }
 
-      const existing = await this.recipeVersionRepo.findOne({
-        where: {
-          tenant_id: tenantId,
-          pos_document_id: dto.id,
-        },
-      });
+      // Issue #512 slice 2 part A: the error-recovery lookup is also a
+      // protected access, so it rides its own tenant-bound transaction
+      // instead of the pooled repository.
+      const existing = await runInTenantTransaction(
+        this.dataSource,
+        tenantId,
+        (manager) =>
+          manager.getRepository(RecipeVersion).findOne({
+            where: {
+              tenant_id: tenantId,
+              pos_document_id: dto.id,
+            },
+          }),
+      );
 
       if (!existing) {
         throw error;

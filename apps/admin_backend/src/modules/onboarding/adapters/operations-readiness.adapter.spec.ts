@@ -36,6 +36,9 @@ describe('OperationsReadinessAdapter (Unit)', () => {
       query: jest.fn().mockResolvedValue(undefined),
       getRepository: jest.fn().mockImplementation((entity: unknown) => {
         if (entity === Product) return productRepo;
+        // Issue #512 slice 2 part A: the recipe_versions readiness count also
+        // resolves from the tenant-bound transaction manager.
+        if (entity === RecipeVersion) return recipeVersionRepo;
         return null;
       }),
     };
@@ -146,5 +149,37 @@ describe('OperationsReadinessAdapter (Unit)', () => {
       (productRepo.createQueryBuilder as jest.Mock).mock.invocationCallOrder[0],
     );
     expect(txManager.getRepository).toHaveBeenCalledWith(Product);
+  });
+
+  // Issue #512 slice 2 part A binding guard: reverting the `recipe_versions`
+  // readiness count to the pooled `this.recipeVersionRepository` would skip
+  // runInTenantTransaction entirely — no transaction opens and no
+  // transaction-local set_config binding runs — so the txManager.query and
+  // txManager.getRepository assertions below would fail, and the count would
+  // silently return zero under FORCE RLS instead of failing loudly.
+  it('binds the recipe_versions readiness count through the transaction manager (issue #512 slice 2)', async () => {
+    (userRepo.count as jest.Mock).mockResolvedValue(1);
+    (recipeVersionRepo.count as jest.Mock).mockResolvedValue(2);
+    (supplierRepo.count as jest.Mock).mockResolvedValue(0);
+    const qbMock: any = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    (productRepo.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+    const result = await adapter.evaluateOperationsReadiness('tenant-bound');
+
+    expect(result.publishedRecipeCount).toBe(2);
+    expect(txManager.query).toHaveBeenCalledWith(
+      TENANT_CONTEXT_SET_CONFIG_SQL,
+      ['tenant-bound'],
+    );
+    expect(txManager.getRepository).toHaveBeenCalledWith(RecipeVersion);
+    // The binding precedes the first protected access (the count).
+    expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      (recipeVersionRepo.count as jest.Mock).mock.invocationCallOrder[0],
+    );
   });
 });

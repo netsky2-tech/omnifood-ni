@@ -55,34 +55,45 @@ export class OperationsReadinessAdapter implements OperationsReadinessPort {
     });
     const additionalStaffCount = Math.max(0, staffCount - 1);
 
-    const publishedRecipeCount = await this.recipeVersionRepository.count({
-      where: {
-        tenant_id: trimmedTenant,
-        publication_state: RecipePublicationState.PUBLISHED,
-        is_active: true,
-      },
-    });
+    // Issue #512 slice 2 part A: the recipe_versions readiness count reads
+    // through the tenant-bound transaction manager (same transaction as the
+    // categories read). Under FORCE RLS an unbound pooled read fails closed
+    // (zero rows / error), it is not a cross-tenant leak.
+    const { publishedRecipeCount, categoryCount } =
+      await runInTenantTransaction(
+        this.dataSource,
+        trimmedTenant,
+        async (manager) => {
+          const publishedRecipeCount = await manager
+            .getRepository(RecipeVersion)
+            .count({
+              where: {
+                tenant_id: trimmedTenant,
+                publication_state: RecipePublicationState.PUBLISHED,
+                is_active: true,
+              },
+            });
+
+          const categoriesRaw = await manager
+            .getRepository(Product)
+            .createQueryBuilder('product')
+            .select('DISTINCT product.category_code', 'category_code')
+            .where('product.tenant_id = :tenantId', { tenantId: trimmedTenant })
+            .andWhere(
+              "product.category_code IS NOT NULL AND TRIM(product.category_code) != ''",
+            )
+            .getRawMany();
+
+          return {
+            publishedRecipeCount,
+            categoryCount: categoriesRaw.length,
+          };
+        },
+      );
 
     const supplierCount = await this.supplierRepository.count({
       where: { tenant_id: trimmedTenant, is_active: true },
     });
-
-    const categoriesRaw = await runInTenantTransaction(
-      this.dataSource,
-      trimmedTenant,
-      (manager) =>
-        manager
-          .getRepository(Product)
-          .createQueryBuilder('product')
-          .select('DISTINCT product.category_code', 'category_code')
-          .where('product.tenant_id = :tenantId', { tenantId: trimmedTenant })
-          .andWhere(
-            "product.category_code IS NOT NULL AND TRIM(product.category_code) != ''",
-          )
-          .getRawMany(),
-    );
-
-    const categoryCount = categoriesRaw.length;
 
     const details = {
       hasAdditionalStaff: additionalStaffCount > 0,

@@ -67,6 +67,36 @@ recipes, shrinkages, suppliers, uom_conversions, users, warehouses.
    tenant threaded from `inventory-movement.controller.ts` (`requireTenant`)
    into `ShrinkageService.recordShrinkage/recordProductShrinkage`, which now
    run inside `runInTenantTransaction`.
+9. **Strict command-policy ratchet (new final slice).** After the policy
+   slices, the manifest declares an expected command set per `direct` table
+   (for example `direct:SIUD`, and a narrower declared set for genuinely
+   append-only tables such as the select+insert tables above) and the
+   classifier enforces exactly that set, so a table that silently loses a
+   command policy (or silently gains one) fails the gate. Evidence (observed
+   in the `omnifood_schema_build_test` scenario-1 catalog, `pg_policies`, 142
+   rows): 16 of the 42 `direct` tables currently have fewer than the four
+   per-command policies — `kardex_correction`, `kardex_recalculate_queue`,
+   `sys_parametros_config` (each carries exactly ONE `FOR ALL` policy row and
+   ZERO per-command SELECT/INSERT/UPDATE/DELETE policies while FORCE RLS is
+   on — an explicit keep-FOR-ALL-vs-per-command decision is required, not an
+   assumption); `device_sync_credential_events`,
+   `human_auth_policy_epochs`, `human_auth_policy_snapshots`,
+   `human_auth_recovery_events`, `human_auth_terminal_ack_history`,
+   `human_auth_verification_events`, `inventory_remediation_receipts`,
+   `tenant_topology_revisions` (SELECT+INSERT only);
+   `human_auth_recovery_tokens`, `human_auth_rollout_cohorts`,
+   `human_auth_tenant_publication_state`, `human_auth_terminal_ack_floor`,
+   `inventory_sync_outbox` (SELECT+INSERT+UPDATE only, no DELETE).
+   `sys_parametros_config` is referenced in production through
+   `SystemParametersConfigActiveView` (`fiscal-config-version.service.ts`,
+   `fiscal-setup.service.ts`) and is immutable by trigger
+   (`trg_sys_parametros_config_immutable` / `reject_sys_parametros_config_mutation`),
+   so its zero-per-command state needs a decided target set (likely
+   `direct:S`-style append-only or a documented FOR ALL equivalent), not a
+   default. This slice must land together with the review of those 16
+   tables: declared sets that are stricter than current reality go red on
+   their own, so the review decides each table's target and the ratchet is
+   born green.
 
 Then the policy slices: per-domain RLS migrations flip manifest entries from
 `debt` to `direct`, each validated by the schema verifier and the same-name
@@ -130,6 +160,123 @@ cross-tenant test.
   entries.
 
 Slice 1 (parts A + B) is complete: every check above passed.
+
+### Slice 2 part A — transaction bindings on the five recipe/production tables
+
+- **Mapping facts (part A keeps the `debt` classification).** All five
+  slice-2 tables — `recipes`, `recipe_versions`, `recipe_details`,
+  `uom_conversions`, `batches` — carry `tenant_id` DIRECTLY, so they are
+  eligible for the `direct` classification, but in part A all five stay
+  classified `debt` in the manifest; they become `direct` only in part B,
+  when their policy slice adds FORCE RLS and flips the manifest entries (the
+  manifest itself is NOT touched in this part).
+  `parent-owned` is reserved for child tables WITHOUT a `tenant_id` column
+  (today: `invoice_item_modifiers`, `invoice_payments`,
+  `production_order_lines`, `security_profiles`, `shrinkage_details`); none
+  of the five belongs there and none was reclassified.
+- **Fail-closed semantics.** Under FORCE RLS, an UNBOUND access does not
+  leak across tenants: `current_setting('app.tenant_id', true)` is NULL, so
+  the policy predicate evaluates false/NULL and the access fails CLOSED
+  (zero rows, or an error on write) — it is never a data leak. Binding makes
+  the legitimate path work; the `tenant_id` WHERE predicates in the queries
+  stay as defense in depth and are NOT an RLS substitute.
+- **Binding work (file:line).**
+  - `src/modules/inventory/recipe.service.ts:102` `createNewVersion` —
+    deactivate-prior-active + version insert + details insert now ride ONE
+    `runInTenantTransaction`; repositories resolve from the bound manager.
+  - `:172` `findActiveVersion` — bound read.
+  - `:193` `publishDraftVersion` — draft read, prior-active deactivation and
+    publication save in ONE bound transaction (draft/active lifecycle
+    semantics and error messages unchanged).
+  - `:255` `getSnapshot` — version + components reads in ONE bound
+    transaction (also serves `ProductionService.processOrder` and the
+    replay close path).
+  - `:352` `ingestPosVersion` error-recovery lookup — was the last pooled
+    `RecipeVersion` read; now bound.
+  - `:391` `persistPosVersion` — UNCHANGED (already bound in slice 1 part
+    A); product lock stays the first row-level statement.
+  - `src/modules/onboarding/adapters/operations-readiness.adapter.ts:62` —
+    the `recipe_versions` readiness count now reads through the bound
+    transaction manager (same transaction as the categories read).
+  - `src/modules/inventory/production.service.ts:277-281` `processOrder` —
+    the transaction keeps its requested `'SERIALIZABLE'` isolation;
+    `bindTenantContext(manager, input.tenantId)` runs inside it BEFORE the
+    first protected access, and the per-insumo `Batch` candidate reads moved
+    from the pooled `batchRepo` to `manager.getRepository(Batch)` (:281).
+    Blank or missing tenant fails closed (`TenantContextRequiredError`)
+    before any SQL; `getSnapshot` (itself bound) runs before the
+    transaction and fails closed for a blank tenant too.
+- **Injected pooled repositories kept.** The unused `@InjectRepository`
+  parameters on `RecipeService` (`recipeVersionRepo`, `recipeDetailRepo`),
+  `OperationsReadinessAdapter` (`recipeVersionRepository`) and
+  `ProductionService` (`batchRepo`) were deliberately kept: removing them
+  would change constructor signatures for no behavioral gain, and DI
+  fixtures keep providing the tokens.
+- **Binding regression guards (fixtures).** Each guard fails if the binding
+  is reverted, because the revert skips `runInTenantTransaction` entirely:
+  no transaction opens and no transaction-local `set_config` runs.
+  - `recipe-draft-lifecycle.spec.ts` — `findActiveVersion` and
+    `publishDraftVersion`: asserts `dataSource.transaction` was opened,
+    `txManager.getRepository(RecipeVersion)` resolved the read, and
+    `txManager.query(TENANT_CONTEXT_SET_CONFIG_SQL, ['tenant-1'])` preceded
+    the first repository call. Reverting to the pooled `this.recipeVersionRepo`
+    fails `expect(dataSource.transaction).toHaveBeenCalled()` first.
+  - `recipe.service.spec.ts` — `getSnapshot`: asserts the transaction opened,
+    `manager.getRepository` resolved `RecipeVersion` AND `RecipeDetail`, and
+    the `set_config` binding preceded `recipeVersionRepo.findOne`. Reverting
+    to the pooled repos fails the `dataSource.transaction` assertion.
+  - `recipe.service.spec.ts` — `createNewVersion` ("creates new immutable
+    recipe version and computes net usable quantity"): the previously
+    binding-agnostic expectations now also assert the bound behaviour —
+    `dataSource.transaction` opened, `manager.getRepository` resolved
+    `RecipeVersion` AND `RecipeDetail`, and
+    `manager.query(TENANT_CONTEXT_SET_CONFIG_SQL, ['tenant-A'])` preceded the
+    first protected access (`recipeVersionRepo.findOne`). Reverting
+    `createNewVersion` to the injected pooled repositories fails
+    `expect(dataSource.transaction).toHaveBeenCalled()` first. For
+    `createNewVersion` this unit guard is the SOLE protection until part B:
+    `recipe_versions`/`recipe_details` still have no FORCE RLS (they stay
+    `debt` until the part B policy slice), so a pooled revert is invisible to
+    the DB suites and e2e — only this guard catches it. The semantic
+    assertions the test already made (prior-active deactivation, new version
+    row, detail rows, number/`is_active` behaviour, error cases) are kept
+    unchanged; the guard was appended, nothing was deleted or relaxed.
+  - `operations-readiness.adapter.spec.ts` — `recipe_versions` readiness
+    count: asserts `txManager.query(set_config, ['tenant-bound'])` preceded
+    `recipeVersionRepo.count` and `txManager.getRepository` was called with
+    `RecipeVersion`. Reverting to the pooled repository fails both.
+- **Inbound-sync fail-closed (slice 2 part A).** `inbound-sync.service.ts`
+  removed the pooled fallback for `recipes` (`fetchRecipeDeltas`),
+  `recipe_versions` and `recipe_details` (`fetchRecipeVersionDeltas`,
+  including the component-detail and component-insumo reads): a missing
+  bound manager now throws `InternalServerErrorException` with the same
+  shape as slice 1 — `Inbound recipe sync requires a tenant-bound
+  transaction manager (app.tenant_id binding)` and `Inbound recipe version
+  sync requires a tenant-bound transaction manager (app.tenant_id binding)`
+  — before any SQL. Untenanted tables (catalog values, users, alerts) keep
+  their previous path. `inbound-sync.service.spec.ts` covers the fail-closed
+  case for `types=recipes` and `types=recipeversions` (asserting the pooled
+  recipe/version/detail/insumo query builders are never touched).
+- **Fixtures adapted (why).**
+  - `recipe-draft-lifecycle.spec.ts` — constructed `RecipeService` with `{}
+    as any` dataSource; the bound methods now open transactions, so the
+    fixture's dataSource runs the callback against a manager exposing the
+    mocked repos.
+  - `recipe.service.spec.ts` — the duplicate-`pos_document_id` retry test
+    now observes THREE transactions (failed persist, bound recovery lookup,
+    retry persist) instead of two.
+  - `operations-readiness.adapter.spec.ts` — the tx-manager mock maps
+    `RecipeVersion` to the recipe repo mock because the readiness count now
+    resolves from the manager.
+  - `production.service.spec.ts` — no change needed: its manager mock
+    already maps `Batch` and its `managerBatchRepo.find` delegates to
+    `batchRepo.find`, so processOrder keeps its assertions green.
+  - `inbound-sync.service.spec.ts`, `terminal-priming.db.spec.ts`,
+    `industry-template.service.spec.ts`,
+    `industry-template-safe-cutover.spec.ts`, `recipe-routes.e2e-spec.ts` —
+    verified NOT affected by the binding (they do not exercise the newly
+    bound code paths positionally, or run against a real database where
+    binding is transparent); left untouched.
 
 | Slice | PR / commit | Verification |
 | --- | --- | --- |

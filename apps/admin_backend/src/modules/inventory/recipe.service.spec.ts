@@ -198,6 +198,25 @@ describe('RecipeService', () => {
         quantity: 0.085,
       }),
     );
+
+    // Issue #512 slice 2 part A binding guard: reverting createNewVersion to
+    // the injected pooled repositories would skip runInTenantTransaction
+    // entirely — no transaction opens and no transaction-local set_config
+    // binding runs — so the dataSource.transaction and set_config assertions
+    // below would fail, and the deactivate/insert handoff would write through
+    // unbound pooled repos. The semantic assertions above cannot catch that
+    // revert on their own: the manager resolves these same repo mocks, so
+    // they stay green either way.
+    expect(dataSource.transaction).toHaveBeenCalled();
+    expect(manager.getRepository).toHaveBeenCalledWith(RecipeVersion);
+    expect(manager.getRepository).toHaveBeenCalledWith(RecipeDetail);
+    expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-A',
+    ]);
+    // The binding precedes the first protected access (the prior-active read).
+    expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      recipeVersionRepo.findOne.mock.invocationCallOrder[0],
+    );
   });
 
   it('rejects a yield that becomes nonpositive at persistence precision', async () => {
@@ -226,6 +245,34 @@ describe('RecipeService', () => {
 
     expect(recipeDetailRepo.find).toHaveBeenCalledWith(
       expect.objectContaining({ order: { insumo_id: 'ASC' } }),
+    );
+  });
+
+  // Issue #512 slice 2 part A binding guard: reverting getSnapshot to the
+  // pooled repositories would skip runInTenantTransaction entirely — no
+  // transaction opens and no transaction-local set_config binding runs — so
+  // the dataSource.transaction and set_config assertions below would fail,
+  // and the snapshot would silently return zero rows under FORCE RLS instead
+  // of failing loudly.
+  it('routes the getSnapshot reads through the tenant-bound transaction (issue #512)', async () => {
+    recipeVersionRepo.findOne.mockResolvedValue({
+      id: 'v3',
+      product_id: 'prod-1',
+    });
+    recipeDetailRepo.find.mockResolvedValue([{ insumo_id: 'ins-1' }]);
+
+    const snapshot = await service.getSnapshot('v3', 'tenant-A');
+
+    expect(snapshot.recipeVersion).toMatchObject({ id: 'v3' });
+    expect(dataSource.transaction).toHaveBeenCalled();
+    expect(manager.getRepository).toHaveBeenCalledWith(RecipeVersion);
+    expect(manager.getRepository).toHaveBeenCalledWith(RecipeDetail);
+    expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-A',
+    ]);
+    // The binding precedes the first protected access.
+    expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      recipeVersionRepo.findOne.mock.invocationCallOrder[0],
     );
   });
 
@@ -444,7 +491,10 @@ describe('RecipeService', () => {
       });
 
       expect(result).toEqual({ recipeVersionId: 'v-existing', replaced: true });
-      expect(dataSource.transaction).toHaveBeenCalledTimes(2);
+      // Issue #512 slice 2 part A: the error-recovery lookup is bound too, so
+      // the sequence is: failed persist tx, bound recovery lookup tx, retry
+      // persist tx.
+      expect(dataSource.transaction).toHaveBeenCalledTimes(3);
       expect(manager.delete).toHaveBeenCalledWith(RecipeDetail, {
         recipe_version_id: 'v-existing',
         tenant_id: 'tenant-A',
