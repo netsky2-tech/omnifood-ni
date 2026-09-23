@@ -22,6 +22,10 @@ export class OperationsReadinessAdapter implements OperationsReadinessPort {
     @InjectRepository(RecipeVersion)
     private readonly recipeVersionRepository: Repository<RecipeVersion>,
     @InjectRepository(Supplier)
+    // Issue #512 slice 3: the suppliers readiness count now resolves from
+    // the tenant-bound transaction manager; the pooled injection stays so
+    // the constructor signature (and the module wiring) is untouched, the
+    // slice-2 precedent for the unused recipe_versions injection.
     private readonly supplierRepository: Repository<Supplier>,
     // Issue #512 slice 1 part A: the `products` categories read resolves its
     // repository from the tenant-bound transaction manager.
@@ -59,7 +63,10 @@ export class OperationsReadinessAdapter implements OperationsReadinessPort {
     // through the tenant-bound transaction manager (same transaction as the
     // categories read). Under FORCE RLS an unbound pooled read fails closed
     // (zero rows / error), it is not a cross-tenant leak.
-    const { publishedRecipeCount, categoryCount } =
+    // Issue #512 slice 3 part A: the supplier count joins the same bound
+    // transaction, so the `suppliers` FORCE RLS policies see the tenant
+    // GUC instead of failing closed on a pooled read.
+    const { publishedRecipeCount, categoryCount, supplierCount } =
       await runInTenantTransaction(
         this.dataSource,
         trimmedTenant,
@@ -84,16 +91,17 @@ export class OperationsReadinessAdapter implements OperationsReadinessPort {
             )
             .getRawMany();
 
+          const supplierCount = await manager.getRepository(Supplier).count({
+            where: { tenant_id: trimmedTenant, is_active: true },
+          });
+
           return {
             publishedRecipeCount,
             categoryCount: categoriesRaw.length,
+            supplierCount,
           };
         },
       );
-
-    const supplierCount = await this.supplierRepository.count({
-      where: { tenant_id: trimmedTenant, is_active: true },
-    });
 
     const details = {
       hasAdditionalStaff: additionalStaffCount > 0,
