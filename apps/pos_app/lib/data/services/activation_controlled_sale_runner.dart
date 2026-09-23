@@ -16,6 +16,7 @@ import '../models/activation/activation_outbox_envelope_entity.dart';
 import '../models/activation/first_successful_sale_claim_entity.dart';
 import '../models/sales/invoice_entity.dart';
 import 'activation_clock_manager.dart';
+import 'sync_service.dart';
 import '../../domain/usecases/inventory/checkout_inventory_preparation_service.dart';
 
 class ControlledSaleParams {
@@ -276,17 +277,17 @@ class ActivationControlledSaleRunner {
       persistedItems.map(SalesMapper.toItemDomain).toList(growable: false),
       persistedPayments.map(SalesMapper.toPaymentDomain).toList(growable: false),
     );
-    final verificationSalePayload = <String, dynamic>{
-      'idempotencyKey': persistedInvoice.idempotencyKey,
-      'sourceDeviceId': persistedInvoice.terminalId,
-      'sourceSequence': persistedInvoice.sourceSequence,
-      'flowType': 'sales',
-      'documentType': 'SALE',
-      'invoiceId': persistedInvoice.id,
-      'terminalId': persistedInvoice.terminalId,
-      'invoice': persistedInvoicePayload,
-      'movements': <dynamic>[],
-    };
+    // Issue #506: this record MUST be byte-identical to the record the
+    // normal sales push path builds for the same invoice. The backend
+    // derives a payload hash over these exact fields; historically this
+    // path added a `movements: []` key the push path never sent, so the
+    // same idempotencyKey hashed differently and the backend answered
+    // IDEMPOTENCY_MISMATCH / CRITICAL_PAYLOAD_MISMATCH (retryable:false),
+    // leaving the ticket pending forever. Build through the single shared
+    // builder so the two paths can never drift again.
+    final verificationSalePayload = SyncService.buildSalesSyncRecord(
+      persistedInvoicePayload,
+    );
 
     // 5. Real Receipt / Printing Path Traversal
     final printerStatus = await _printerPort.checkStatus();

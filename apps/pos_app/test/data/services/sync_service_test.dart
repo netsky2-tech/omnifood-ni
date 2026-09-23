@@ -1058,6 +1058,72 @@ void main() {
   );
 
   test(
+    'surfaces per-record sales rejections that are not accepted (issue #506)',
+    () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'sale-terminal-ok',
+          'number': 'F001-OK',
+          'documentType': 'SALE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 20,
+          'idempotencyKey': 'sale:pos-terminal-1:sale-terminal-ok',
+        },
+        {
+          'id': 'sale-terminal-bad',
+          'number': 'F001-BAD',
+          'documentType': 'SALE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 21,
+          'idempotencyKey': 'sale:pos-terminal-1:sale-terminal-bad',
+        },
+      ];
+      respondToInventoryBatchWith(
+        (records) => {
+          'status': 'OK',
+          'received': records.length,
+          'results': [
+            {...records[0], 'status': 'ACCEPTED'},
+            {
+              ...records[1],
+              'status': 'IDEMPOTENCY_MISMATCH',
+              'retryable': false,
+              'code': 'CRITICAL_PAYLOAD_MISMATCH',
+              'message': 'payload hash mismatch',
+            },
+          ],
+        },
+      );
+
+      final rejections = <SalesRecordRejection>[];
+      final subscription = syncService.onSalesRecordRejected.listen(
+        rejections.add,
+      );
+
+      await syncService.triggerManualSync();
+      await Future<void>.delayed(Duration.zero);
+
+      // Acceptance semantics unchanged: only the accepted record is synced;
+      // the rejected one stays pending, but is now operator-visible with
+      // enough information to tell a terminal rejection from a transient
+      // failure.
+      expect(mockSalesRepository.syncedInvoiceIdBatches, [
+        ['sale-terminal-ok'],
+      ]);
+      expect(rejections, hasLength(1));
+      expect(rejections.single.invoiceId, 'sale-terminal-bad');
+      expect(rejections.single.idempotencyKey,
+          'sale:pos-terminal-1:sale-terminal-bad');
+      expect(rejections.single.status, 'IDEMPOTENCY_MISMATCH');
+      expect(rejections.single.code, 'CRITICAL_PAYLOAD_MISMATCH');
+      expect(rejections.single.retryable, isFalse);
+      expect(rejections.single.message, 'payload hash mismatch');
+
+      await subscription.cancel();
+    },
+  );
+
+  test(
     'syncs only the first sales batch envelope and leaves unsent aggregates pending',
     () async {
       mockSalesRepository.unsyncedAggregates = List.generate(501, (index) {

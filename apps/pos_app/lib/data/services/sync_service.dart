@@ -35,6 +35,33 @@ typedef SyncRole = String;
 
 enum CloudSyncStatus { idle, syncing, offline, error, success }
 
+/// A per-record sales result that was NOT accepted by the backend
+/// (anything other than ACCEPTED/APPLIED/DUPLICATE/SUCCESS).
+///
+/// Surfaced so operators can distinguish a terminal per-record rejection
+/// (e.g. `retryable: false` with `code: CRITICAL_PAYLOAD_MISMATCH`) from a
+/// transient transport failure: the record intentionally stays pending and
+/// no retry loop is driven here (issue #506).
+class SalesRecordRejection {
+  final String invoiceId;
+  final String idempotencyKey;
+  final String status;
+  final String? code;
+  final String? message;
+
+  /// Raw `retryable` flag returned by the backend, when present.
+  final bool? retryable;
+
+  const SalesRecordRejection({
+    required this.invoiceId,
+    required this.idempotencyKey,
+    required this.status,
+    required this.retryable,
+    this.code,
+    this.message,
+  });
+}
+
 class InboundSyncResult {
   final int productsCount;
   final int catalogValuesCount;
@@ -92,6 +119,16 @@ class SyncService {
       StreamController<CloudSyncStatus>.broadcast();
 
   Stream<CloudSyncStatus> get onStatusChanged => _statusController.stream;
+
+  final StreamController<SalesRecordRejection> _salesRejectionController =
+      StreamController<SalesRecordRejection>.broadcast();
+
+  /// Per-record sales results that were NOT accepted by the backend.
+  /// Emits for every non-accepted per-record result so terminal rejections
+  /// (retryable:false, e.g. CRITICAL_PAYLOAD_MISMATCH) surface to the
+  /// operator panel instead of failing silently (issue #506).
+  Stream<SalesRecordRejection> get onSalesRecordRejected =>
+      _salesRejectionController.stream;
 
   CloudSyncStatus _status = CloudSyncStatus.idle;
   CloudSyncStatus get status => _status;
@@ -531,6 +568,27 @@ class SyncService {
             } else {
               legacyAcceptedIds.add(invoiceId);
             }
+          } else if (result != null) {
+            // Issue #506: a per-record result that is neither accepted nor
+            // retried must not stay silent. Do NOT change acceptance
+            // semantics here: the record intentionally stays pending.
+            final rejection = SalesRecordRejection(
+              invoiceId: invoiceId,
+              idempotencyKey: idempotencyKey,
+              status: result.status,
+              code: result.code,
+              message: result.message,
+              retryable: result.retryable,
+            );
+            developer.log(
+              '[SYNC_SALES_REJECTED] per-record rejection (record stays '
+              'pending): invoiceId=$invoiceId status=${result.status} '
+              'code=${result.code ?? '<none>'} '
+              'retryable=${result.retryable ?? '<absent>'} '
+              'message=${result.message ?? ''}',
+              name: 'SyncService',
+            );
+            _salesRejectionController.add(rejection);
           }
         }
 
@@ -668,16 +726,39 @@ class SyncService {
   }
 
   Map<String, Object?> _buildSalesRecord(Map<String, dynamic> aggregate) {
+    return buildSalesSyncRecord(
+      aggregate,
+      fallbackTerminalId: _auditRepository.deviceId,
+    );
+  }
+
+  /// Builds the sales record sent to `/v1/sync/batch` for one sale aggregate.
+  ///
+  /// Issue #506: the activation verification-sale path
+  /// (ActivationControlledSaleRunner) MUST build its record through this
+  /// exact function. The backend derives a payload hash over these fields;
+  /// if the two paths send a different shape under the same idempotencyKey
+  /// (historically a stray `movements: []` key only present on the
+  /// activation path), the backend answers IDEMPOTENCY_MISMATCH /
+  /// CRITICAL_PAYLOAD_MISMATCH with retryable:false and the local ticket
+  /// stays pending forever while HTTP stays 200. Keep both paths in
+  /// lockstep through this single builder; never fork the shape.
+  static Map<String, Object?> buildSalesSyncRecord(
+    Map<String, dynamic> aggregate, {
+    String? fallbackTerminalId,
+  }) {
     final invoiceId =
         aggregate['id']?.toString() ?? '00000000-0000-0000-0000-000000000000';
     final documentType = aggregate['documentType']?.toString() ?? 'SALE';
     final terminalId =
-        aggregate['terminalId']?.toString() ?? _auditRepository.deviceId;
+        aggregate['terminalId']?.toString() ?? fallbackTerminalId;
     final sourceSequence =
         (aggregate['sourceSequence'] is int &&
             (aggregate['sourceSequence'] as int) > 0)
         ? aggregate['sourceSequence'] as int
         : 1;
+    // Byte-identical record shape for both the push path and the
+    // activation verification-sale path (see doc comment above).
     final idempotencyKey =
         (aggregate['idempotencyKey'] is String &&
             (aggregate['idempotencyKey'] as String).isNotEmpty)
@@ -1968,6 +2049,7 @@ class _SyncBatchResultItem {
     required this.flowType,
     required this.sourceSequence,
     required this.status,
+    this.retryable,
     this.code,
     this.message,
     this.inventoryOutcome,
@@ -1983,6 +2065,9 @@ class _SyncBatchResultItem {
   final String? message;
   final String? inventoryOutcome;
   final List<String>? acknowledgedMovementCorrelationIds;
+
+  /// Raw `retryable` flag returned by the backend, when present.
+  final bool? retryable;
 
   static _SyncBatchResultItem? tryFromJson(Map<String, dynamic> json) {
     final idempotencyKey = json['idempotencyKey'];
@@ -2020,6 +2105,7 @@ class _SyncBatchResultItem {
       status: status,
       code: code,
       message: message,
+      retryable: json['retryable'] is bool ? json['retryable'] as bool : null,
       inventoryOutcome: inventoryOutcome,
       acknowledgedMovementCorrelationIds: acknowledgedMovementCorrelationIds,
     );
