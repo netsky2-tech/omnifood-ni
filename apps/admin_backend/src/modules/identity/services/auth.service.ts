@@ -40,7 +40,7 @@ const isUserRole = (value?: string): value is UserRole =>
  * cost as the wrong-password path, so slug probing cannot be distinguished
  * from credential probing by timing alone (issue #556, generic-failure rule).
  */
-const DUMMY_PASSWORD_HASH =
+export const DUMMY_PASSWORD_HASH =
   '$2b$10$kSsyBHKukSJaWaZM7Q0tBeZQ13hT9NzWEJxbETy0pENCsyfe1ROBO';
 
 interface TenantQueryResult {
@@ -129,8 +129,20 @@ export class AuthService {
           email,
           pass,
           resolvedTenantId,
+          { equalizeFailureTiming: true },
         ),
     );
+  }
+
+  /**
+   * Burns exactly one bcrypt compare against the dummy digest so a generic
+   * failure costs the same as the wrong-password path: response timing must
+   * never distinguish unknown slug / inactive tenant / unknown user /
+   * inactive user / cross-tenant user from a plain wrong password (issue
+   * #556 F1, verification remediation).
+   */
+  private async burnDummyPasswordCompare(pass: string): Promise<void> {
+    await bcrypt.compare(pass, DUMMY_PASSWORD_HASH);
   }
 
   private async resolveTenantIdBySlugForLogin(
@@ -151,7 +163,7 @@ export class AuthService {
 
     if (!tenant || !tenant.is_active) {
       // Generic failure with equalized timing: no tenant enumeration.
-      await bcrypt.compare(pass, DUMMY_PASSWORD_HASH);
+      await this.burnDummyPasswordCompare(pass);
       throw new UnauthorizedException('Credenciales inválidas');
     }
     return tenant.id;
@@ -170,7 +182,10 @@ export class AuthService {
     rawEmail: string,
     pass: string,
     expectedTenantId?: string,
+    options?: { equalizeFailureTiming?: boolean },
   ) {
+    const equalizeFailureTiming =
+      options?.equalizeFailureTiming === true;
     let user: Pick<
       User,
       | 'id'
@@ -208,15 +223,29 @@ export class AuthService {
     ) {
       // Generic failure with equalized timing: the email exists but belongs
       // to another tenant; never reveal that through a distinct error.
-      await bcrypt.compare(pass, DUMMY_PASSWORD_HASH);
+      if (equalizeFailureTiming) {
+        await this.burnDummyPasswordCompare(pass);
+      }
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    if (
-      !user ||
-      !user.is_active ||
-      !(await bcrypt.compare(pass, user.password_hash))
-    ) {
+    if (!user) {
+      // F1 (issue #556 verification): on the slug path a valid slug with an
+      // unknown email must cost the same one bcrypt compare as an unknown
+      // slug or a wrong password, or response timing enumerates slugs.
+      if (equalizeFailureTiming) {
+        await this.burnDummyPasswordCompare(pass);
+      }
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+    if (!user.is_active) {
+      if (equalizeFailureTiming) {
+        await this.burnDummyPasswordCompare(pass);
+      }
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+    if (!(await bcrypt.compare(pass, user.password_hash))) {
+      // The wrong-password exit already burns exactly one compare.
       throw new UnauthorizedException('Credenciales inválidas');
     }
 

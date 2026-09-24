@@ -17,6 +17,7 @@ import {
 } from '../../inventory/entities/system-parameters-config.entity';
 import { FiscalRegime } from '../dto/fiscal-setup.dto';
 import { computeJcsSha256 } from '../utils/canonical-jcs';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
   let service: FiscalConfigVersionService;
@@ -31,7 +32,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
   const mockTenant: Tenant = {
     id: tenantId,
     name: 'Restaurante El Volcán',
-    slug: 'restaurante-el-volcan',
+    slug: normalizeTenantSlug('Restaurante El Volcán'),
     ruc: 'J0310000000001',
     is_active: true,
     created_at: new Date('2026-01-01'),

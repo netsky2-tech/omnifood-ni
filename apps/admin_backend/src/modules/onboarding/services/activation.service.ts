@@ -1275,16 +1275,6 @@ export class ActivationService {
   }
 
   /**
-   * DSI-3: Provisions device sync credentials for a PASS or PASS_WITH_WARNING ActivationAttempt.
-   *
-   * Security & Canonical Identity Rules:
-   * 1. Tenant authority is strictly scoped to the authenticated human caller session.
-   * 2. Canonical device is ActivationAttempt.trustedTerminalId, which must match candidate terminal evidence.
-   * 3. Where topology authority exists for the tenant, canonical device must match an entry in devices[].deviceId.
-   * 4. Delegates atomic generation and PROVISIONED event logging to DeviceSyncCredentialService.
-   * 5. Never serializes renewalSecretHash or entity internals in the response.
-   */
-  /**
    * Reads the persisted provisioning slug for the tenant (issue #556 slice
    * 11, OD-03). `tenants` is a global (non-RLS) table; the slug is the
    * stable provisioning identifier the POS stores for the stage-2 optional
@@ -1300,9 +1290,8 @@ export class ActivationService {
       ? (rows as unknown[])[0]
       : undefined;
     const slug =
-      firstRow &&
-      typeof (firstRow as Record<string, unknown>).slug === 'string'
-        ? ((firstRow as { slug: string }).slug)
+      firstRow && typeof (firstRow as Record<string, unknown>).slug === 'string'
+        ? (firstRow as { slug: string }).slug
         : undefined;
     if (!slug) {
       throw new NotFoundException(
@@ -1312,6 +1301,16 @@ export class ActivationService {
     return slug;
   }
 
+  /**
+   * DSI-3: Provisions device sync credentials for a PASS or PASS_WITH_WARNING ActivationAttempt.
+   *
+   * Security & Canonical Identity Rules:
+   * 1. Tenant authority is strictly scoped to the authenticated human caller session.
+   * 2. Canonical device is ActivationAttempt.trustedTerminalId, which must match candidate terminal evidence.
+   * 3. Where topology authority exists for the tenant, canonical device must match an entry in devices[].deviceId.
+   * 4. Delegates atomic generation and PROVISIONED event logging to DeviceSyncCredentialService.
+   * 5. Never serializes renewalSecretHash or entity internals in the response.
+   */
   async provisionDeviceCredential(
     tenantId: string,
     attemptId: string,

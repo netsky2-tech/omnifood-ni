@@ -7,7 +7,7 @@ import {
 } from '@nestjs/jwt';
 import { DataSource, type EntityManager } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { AuthService } from './auth.service';
+import { AuthService, DUMMY_PASSWORD_HASH } from './auth.service';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { User, UserRole } from '../entities/user.entity';
 import {
@@ -1746,5 +1746,121 @@ describe('AuthService tenant-slug login context (issue #556 slice 11)', () => {
     });
     // The persisted slug, not an ad-hoc recomputation from the current name.
     expect(result.tenant?.slug).not.toBe('renamed-tenant');
+  });
+});
+
+describe('AuthService slug-path timing equalization (F1 regression, issue #556)', () => {
+  let service: AuthService;
+  let mockUserRepository: {
+    createQueryBuilder: jest.Mock;
+    findOne: jest.Mock;
+    update: jest.Mock;
+  };
+  let mockJwtService: {
+    signAsync: jest.Mock;
+    verifyAsync: jest.Mock;
+  };
+  let mockDataSource: {
+    transaction: jest.Mock<unknown, [TransactionCallback]>;
+    query: jest.Mock;
+  };
+
+  beforeEach(async () => {
+    mockUserRepository = {
+      createQueryBuilder: jest.fn(),
+      findOne: jest.fn(),
+      update: jest.fn(),
+    };
+    mockJwtService = {
+      signAsync: jest.fn(),
+      verifyAsync: jest.fn(),
+    };
+    mockDataSource = {
+      transaction: jest.fn<unknown, [TransactionCallback]>(),
+      query: jest.fn().mockResolvedValue([]),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: getRepositoryToken(User), useValue: mockUserRepository },
+        { provide: JwtService, useValue: mockJwtService },
+        { provide: DataSource, useValue: mockDataSource },
+        { provide: IDENTITY_JWT_CONFIG, useValue: jwtConfig },
+      ],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('burns exactly one bcrypt compare on a valid slug with a nonexistent email', async () => {
+    // Valid, ACTIVE tenant slug resolves; the email does not exist. The
+    // generic failure must still cost one bcrypt compare, otherwise
+    // response timing enumerates active tenant slugs.
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback({
+        query: jest.fn().mockResolvedValue([]),
+        getRepository: jest.fn().mockReturnValue({
+          findOne: jest.fn().mockResolvedValue(null),
+          update: jest.fn(),
+        }),
+      } as unknown as EntityManager),
+    );
+    const compareSpy = jest
+      .spyOn(bcrypt, 'compare')
+      .mockResolvedValue(false as never);
+
+    await expect(
+      service.login('ghost@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+    expect(compareSpy).toHaveBeenCalledWith(
+      'Password123!',
+      DUMMY_PASSWORD_HASH,
+    );
+  });
+
+  it('burns exactly one bcrypt compare when the slug-path user is inactive', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback({
+        query: jest.fn().mockResolvedValue([]),
+        getRepository: jest.fn().mockReturnValue({
+          findOne: jest.fn().mockResolvedValue({
+            id: 'inactive-user',
+            email: 'inactive@omnifood.ni',
+            name: 'Inactive',
+            password_hash: 'stored-hash',
+            role: UserRole.CASHIER,
+            tenant_id: 'tenant-resolved',
+            is_active: false,
+          }),
+          update: jest.fn(),
+        }),
+      } as unknown as EntityManager),
+    );
+    const compareSpy = jest
+      .spyOn(bcrypt, 'compare')
+      .mockResolvedValue(false as never);
+
+    await expect(
+      service.login('inactive@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+    expect(compareSpy).toHaveBeenCalledWith(
+      'Password123!',
+      DUMMY_PASSWORD_HASH,
+    );
   });
 });

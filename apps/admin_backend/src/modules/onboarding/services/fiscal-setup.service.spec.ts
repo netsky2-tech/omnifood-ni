@@ -6,6 +6,7 @@ import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-tra
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { SystemParametersConfig } from '../../inventory/entities/system-parameters-config.entity';
 import { FiscalSetupDto } from '../dto/fiscal-setup.dto';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 describe('FiscalSetupService (Unit & Triangulation)', () => {
   let service: FiscalSetupService;
@@ -20,7 +21,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
   const mockTenant: Tenant = {
     id: tenantId,
     name: 'Mi Cafetería Original',
-    slug: 'mi-cafeteria-original',
+    slug: normalizeTenantSlug('Mi Cafetería Original'),
     ruc: null,
     is_active: true,
     created_at: new Date('2026-01-01'),
