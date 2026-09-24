@@ -126,7 +126,8 @@ void main() {
 
       expect(find.text('Factura: 001-001-01-00000001'), findsOneWidget);
       expect(find.text('Café Espresso'), findsOneWidget);
-      expect(find.text('REALIZAR DEVOLUCIÓN'), findsOneWidget);
+      // D-14/#553: no credit-note affordance in the POS.
+      expect(find.text('REALIZAR DEVOLUCIÓN'), findsNothing);
     });
 
     testWidgets('renders single column and navigates to detail page on Sunmi V2s handheld (360x720dp)', (tester) async {
@@ -148,7 +149,8 @@ void main() {
 
       expect(find.text('Factura: 001-001-01-00000001'), findsOneWidget);
       expect(find.text('Café Espresso'), findsOneWidget);
-      expect(find.text('REALIZAR DEVOLUCIÓN'), findsOneWidget);
+      // D-14/#553: no credit-note affordance in the POS.
+      expect(find.text('REALIZAR DEVOLUCIÓN'), findsNothing);
 
       // Back navigation
       await tester.tap(find.byType(BackButton));

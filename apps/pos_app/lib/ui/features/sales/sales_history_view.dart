@@ -338,18 +338,10 @@ class InvoiceDetailsPanel extends StatelessWidget {
           const SizedBox(height: 24),
           
           if (!invoice.isCanceled && invoice.type == InvoiceType.regular) ...[
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.assignment_return),
-                label: const Text('REALIZAR DEVOLUCIÓN'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.errorContainer,
-                  foregroundColor: colorScheme.onErrorContainer,
-                ),
-                onPressed: () => _showReturnConfirmation(context),
-              ),
-            ),
+            // D-14/#553: the credit-note action (REALIZAR DEVOLUCIÓN) was
+            // REMOVED, not hidden — the Backoffice is the emitter for
+            // cross-day corrections until DSI-6 re-enables POS-side
+            // issuance. ANULAR is the only correction action in the POS.
             // D-15: the void action is permission-gated (SalesPermission),
             // never a role-label check. The dialog collects the mandatory
             // controlled reason (AC-6) before invoking the view model.
@@ -470,57 +462,4 @@ class InvoiceDetailsPanel extends StatelessWidget {
     );
   }
 
-  void _showReturnConfirmation(BuildContext context) {
-    final controller = TextEditingController(text: 'Devolución de cliente');
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Confirmar Devolución'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('¿Está seguro de emitir una Nota de Crédito para la factura ${invoice.number}?'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Motivo de devolución'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCELAR')),
-          ElevatedButton(
-            onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              final registered = await context
-                  .read<SaleViewModel>()
-                  .processReturn(invoice.number, controller.text);
-              if (!context.mounted) return;
-              if (registered) {
-                Navigator.pop(dialogContext);
-                messenger.showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Nota de Crédito registrada. Pendiente de validación al sincronizar.',
-                    ),
-                  ),
-                );
-                context.read<SalesHistoryViewModel>().loadInvoices();
-              } else {
-                // Keep the dialog open so the typed reason is not lost,
-                // and surface the error returned by the view model.
-                final error =
-                    context.read<SaleViewModel>().errorMessage ??
-                        'No se pudo registrar la Nota de Crédito.';
-                messenger.showSnackBar(
-                  SnackBar(content: Text(error)),
-                );
-              }
-            }, 
-            child: const Text('PROCESAR'),
-          ),
-        ],
-      ),
-    );
-  }
 }
