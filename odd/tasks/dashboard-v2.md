@@ -6,7 +6,8 @@
 
 **Branch:** `feat/dashboard-v2`
 **Base:** `main` @ `a9a381d4`
-**Status:** in progress
+**Status:** in progress — Tasks 1-2 done (`c197ca9c`, evidence pass committed). Task 3: distilling
+the PRD decision set for the owner.
 
 ## Governing constraint
 
@@ -30,25 +31,24 @@ discipline: evidence first, decisions second, PRD third, implementation batches 
 
 - **Status:** done
 - **Goal:** The audit document is versioned as the entry artifact of this feature.
-- **Commits:** pending
-- **Evidence:** pending
+- **Commits:** `c197ca9c` (`docs(dashboard): import the owner dashboard V2 gap audit baseline`)
+- **Evidence:** `docs/dashboard/owner_dashboard_v2_gap_audit.md` (1303 lines, PROPOSED / AUDIT
+  BASELINE). Zone.Identifier Windows metadata stream removed before commit; file verified UTF-8,
+  no CRLF, 34,698 bytes.
 
 ### Task 2 — Evidence pass (audit §31 DoD, code-level)
 
-- **Status:** in progress
-- **Goal:** Verify every audit claim against the real codebase: current dashboard API response
-  shape, backend reporting routes that exist (hourly, top-products, cashier), freshness semantics
-  actually implemented, tax-regime availability to the dashboard, tip data path POS→sync→backend,
-  COGS/merma report availability, tenant isolation of the aggregate routes, design-system tokens
-  actually present.
-- **In scope:** read-only mapping; a written evidence record appended to this file or as
-  `docs/dashboard/audit_evidence_pass.md`.
-- **Acceptance:** every DG-* item gets a verdict: confirmed / already-exists (audit wrong) /
-  requires-backend-work / requires-contract-decision. Known already: #545 proves tips do NOT reach
-  the backend (audit §8's "implemented in the platform" is POS-only — a §31 classification error to
-  record); #544 proves `SalesDashboardReportDto` carries no regime.
-- **Commits:** pending
-- **Evidence:** pending
+- **Status:** done
+- **Goal:** Verify every audit claim against the real codebase; produce verdicts per DG-* item.
+- **Commits:** pending (with the evidence document)
+- **Evidence:** `docs/dashboard/audit_evidence_pass.md` — complete verdict table. Headlines: the
+  regime-aware slot (DG-04) is frontend-only (`GET /onboarding/fiscal-setup` exposes `regime`);
+  hourly/top-products/cashier endpoints and hooks exist but were never wired into the dashboard;
+  freshness is cosmetic and its contract needs backend schema+endpoint; tips are POS-only (audit
+  §8 classification error, blocked by #545); gross margin computable client-side from two existing
+  endpoints (alignment caveat on COGS date params); Recharts not installed; `KpiCard` already
+  supports `trend`; all routes tenant-safe with RLS. Corrections recorded against audit §8, §13,
+  §23.
 
 ### Task 3 — Distill PRD decisions for the product owner
 
