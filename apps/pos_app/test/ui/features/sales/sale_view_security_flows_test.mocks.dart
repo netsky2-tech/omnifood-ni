@@ -1053,7 +1053,7 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as _i18.Future<bool>);
 
   @override
-  _i18.Future<void> processReturn(
+  _i18.Future<bool> processReturn(
     String? invoiceNumber,
     String? reason, {
     _i21.RefundReasonPolicy? refundReasonPolicy =
@@ -1072,9 +1072,9 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
             #lines: lines,
           },
         ),
-        returnValue: _i18.Future<void>.value(),
-        returnValueForMissingStub: _i18.Future<void>.value(),
-      ) as _i18.Future<void>);
+        returnValue: _i18.Future<bool>.value(false),
+        returnValueForMissingStub: _i18.Future<bool>.value(false),
+      ) as _i18.Future<bool>);
 
   @override
   _i18.Future<void> voidInvoice(

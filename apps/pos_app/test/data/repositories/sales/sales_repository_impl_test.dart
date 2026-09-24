@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
@@ -1070,6 +1072,119 @@ void main() {
         ).called(1);
       },
     );
+  });
+
+  group('SalesRepositoryImpl - voidInvoice audit metadata JSON encoding', () {
+    // The audit metadata used to be built by raw string interpolation, so a
+    // free-text reason containing a double quote or a backslash produced
+    // invalid JSON that was persisted into the hash-chained audit row.
+    // These tests force the reason through characters that break naive
+    // interpolation and require the stored metadata to be parseable JSON
+    // that round-trips the exact original reason.
+    Future<String> captureVoidAuditMetadata({
+      required String invoiceId,
+      required String reason,
+    }) async {
+      final entity = InvoiceEntity(
+        id: invoiceId,
+        number: '001',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        userId: 'user1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        isCanceled: false,
+        syncStatus: 'synced',
+        paymentStatus: 'paid',
+        type: 'regular',
+      );
+      final itemEntities = [
+        InvoiceItemEntity(
+          id: 'item-$invoiceId',
+          invoiceId: invoiceId,
+          productId: 'prod-1',
+          productName: 'Product 1',
+          quantity: 1,
+          unitPrice: 100,
+          originalTaxRate: 15,
+          appliedTaxRate: 15,
+          taxAmount: 15,
+          total: 115,
+        ),
+      ];
+      final preparedAudit = AuditLog(
+        userId: 'user1',
+        action: 'SALE_VOIDED',
+        timestamp: DateTime.now(),
+        deviceId: 'dev-1',
+        metadata: 'unused-by-this-test',
+        sequenceNo: 7,
+        prevHash: 'GENESIS',
+        entryHash: 'hash-7',
+      );
+
+      when(mockInvoiceDao.getInvoiceById(invoiceId)).thenAnswer(
+        (_) async => entity,
+      );
+      when(mockItemDao.getItemsByInvoiceId(invoiceId)).thenAnswer(
+        (_) async => itemEntities,
+      );
+      when(mockReverseInventoryUseCase.execute(any, any)).thenAnswer(
+        (_) async => [],
+      );
+      when(
+        mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async => preparedAudit);
+      when(
+        mockTransactionDao.executeVoidTransaction(any, any, any, any),
+      ).thenAnswer((_) async {});
+
+      await repository.voidInvoice(invoiceId, reason);
+
+      final captured = verify(
+        mockAuditRepository.prepareLog(any, metadata: captureAnyNamed('metadata')),
+      ).captured;
+      expect(captured, hasLength(1));
+      return captured.single as String;
+    }
+
+    void expectMetadataRoundTrips(String metadata, String invoiceId, String reason) {
+      final Map<String, dynamic> decoded;
+      try {
+        decoded = jsonDecode(metadata) as Map<String, dynamic>;
+      } on FormatException catch (e) {
+        fail('Audit metadata is not valid JSON: $metadata\nError: $e');
+      }
+      expect(decoded['invoice_id'], invoiceId);
+      expect(decoded['reason'], reason);
+    }
+
+    test('escapes a reason containing a double quote', () async {
+      const reason = 'Cliente dijo "no pagó"';
+      final metadata = await captureVoidAuditMetadata(
+        invoiceId: 'inv-meta-quote',
+        reason: reason,
+      );
+      expectMetadataRoundTrips(metadata, 'inv-meta-quote', reason);
+    });
+
+    test('escapes a reason containing a backslash', () async {
+      const reason = 'Ruta C:\\facturas\\anulada';
+      final metadata = await captureVoidAuditMetadata(
+        invoiceId: 'inv-meta-backslash',
+        reason: reason,
+      );
+      expectMetadataRoundTrips(metadata, 'inv-meta-backslash', reason);
+    });
+
+    test('escapes a reason containing a quote, a backslash and a newline', () async {
+      const reason = 'Dice "fue" el \\ error\nde synchronize';
+      final metadata = await captureVoidAuditMetadata(
+        invoiceId: 'inv-meta-mixed',
+        reason: reason,
+      );
+      expectMetadataRoundTrips(metadata, 'inv-meta-mixed', reason);
+    });
   });
 
   group('SalesRepositoryImpl - credit note refund policy', () {
