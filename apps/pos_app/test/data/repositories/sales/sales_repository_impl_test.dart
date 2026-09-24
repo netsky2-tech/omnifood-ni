@@ -1926,6 +1926,32 @@ void main() {
         mockSessionDao.getActiveSessionForUserAndTerminal('user1', 'pos-user1'),
       ).called(1);
     });
+
+    test('records the local calendar issue date of the sale at checkout',
+        () async {
+      arrangeHappyPath();
+
+      // Local DateTime (not UTC-parsed): the fiscal day is the device-local
+      // calendar date at issuance, stored now and never recomputed (D-12).
+      await repository.saveSale(
+        invoice: Invoice(
+          id: 'inv-issue-date-1',
+          number: 'draft',
+          createdAt: DateTime(2026, 9, 23, 21, 40),
+          userId: 'user1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          paymentStatus: PaymentStatus.paid,
+          syncStatus: SyncStatus.pending,
+          type: InvoiceType.regular,
+        ),
+        items: const [],
+        payments: [],
+      );
+
+      expect(capturedInvoice().localIssueDate, '2026-09-23');
+    });
   });
 
   group('#548: full-column preservation on invoice rewrites', () {
@@ -1969,6 +1995,7 @@ void main() {
       'commercial_rate': 38.9876,
       'total_usd': 3.21,
       'shift_id': 'shift-preserve',
+      'local_issue_date': '2026-09-23',
     };
 
     late AppDatabase preservationDatabase;

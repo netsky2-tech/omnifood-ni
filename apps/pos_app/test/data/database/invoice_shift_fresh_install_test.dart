@@ -23,15 +23,19 @@ void main() {
     await database.close();
   });
 
-  test('onCreate gives invoices a nullable shift_id column', () async {
+  test('onCreate gives invoices nullable shift_id and local_issue_date columns',
+      () async {
     final db = database.database;
     final columns = await db.rawQuery('PRAGMA table_info(invoices)');
     final colNames = columns.map((c) => c['name'] as String).toSet();
     expect(colNames, contains('shift_id'));
+    expect(colNames, contains('local_issue_date'));
 
-    final shiftColumn = columns.firstWhere((c) => c['name'] == 'shift_id');
-    expect(shiftColumn['notnull'], 0);
-    expect(shiftColumn['dflt_value'], isNull);
+    for (final name in ['shift_id', 'local_issue_date']) {
+      final column = columns.firstWhere((c) => c['name'] == name);
+      expect(column['notnull'], 0, reason: name);
+      expect(column['dflt_value'], isNull, reason: name);
+    }
   });
 
   test('onCreate declares the shift_id foreign key to cashier_sessions',
@@ -62,5 +66,6 @@ void main() {
     );
     final indexNames = indexes.map((row) => row['name'] as String).toSet();
     expect(indexNames, contains('idx_invoices_shift_id'));
+    expect(indexNames, contains('idx_invoices_local_issue_date'));
   });
 }

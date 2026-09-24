@@ -77,7 +77,8 @@ void main() {
     return db;
   }
 
-  test('migration54_55 adds the nullable shift_id column', () async {
+  test('migration54_55 adds the nullable shift_id and local_issue_date columns',
+      () async {
     final db = await openV54Database();
 
     await migration54_55.migrate(db);
@@ -85,13 +86,15 @@ void main() {
     final columns = await db.rawQuery('PRAGMA table_info(invoices)');
     final colNames = columns.map((c) => c['name'] as String).toSet();
     expect(colNames, contains('shift_id'));
+    expect(colNames, contains('local_issue_date'));
 
-    final shiftColumn =
-        columns.firstWhere((c) => c['name'] == 'shift_id');
-    // Nullable is mandatory: no NOT NULL, no default. Existing rows keep a
-    // null shiftId forever.
-    expect(shiftColumn['notnull'], 0);
-    expect(shiftColumn['dflt_value'], isNull);
+    for (final name in ['shift_id', 'local_issue_date']) {
+      final column = columns.firstWhere((c) => c['name'] == name);
+      // Nullable is mandatory: no NOT NULL, no default. Existing rows keep
+      // nulls forever (no backfill, #526 AC-11).
+      expect(column['notnull'], 0, reason: name);
+      expect(column['dflt_value'], isNull, reason: name);
+    }
 
     await db.close();
   });
@@ -113,7 +116,8 @@ void main() {
     await db.close();
   });
 
-  test('migration54_55 creates the shift_id lookup index', () async {
+  test('migration54_55 creates the shift_id and local_issue_date lookup indexes',
+      () async {
     final db = await openV54Database();
 
     await migration54_55.migrate(db);
@@ -124,6 +128,7 @@ void main() {
     );
     final indexNames = indexes.map((row) => row['name'] as String).toSet();
     expect(indexNames, contains('idx_invoices_shift_id'));
+    expect(indexNames, contains('idx_invoices_local_issue_date'));
 
     await db.close();
   });

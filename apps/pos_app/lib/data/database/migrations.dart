@@ -2475,6 +2475,18 @@ final migration54_55 = Migration(54, 55, (database) async {
   await database.execute(
     'CREATE INDEX IF NOT EXISTS idx_invoices_shift_id ON invoices (shift_id)',
   );
+  // D-12 (added in place, never as migration55_56: migration54_55 shipped
+  // only on this branch and no device ever ran it). Same guarded pattern;
+  // the sqlite_master guard above covers this statement too.
+  if (!names.contains('local_issue_date')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN local_issue_date TEXT',
+    );
+  }
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_invoices_local_issue_date '
+    'ON invoices (local_issue_date)',
+  );
 });
 
 final allMigrations = [

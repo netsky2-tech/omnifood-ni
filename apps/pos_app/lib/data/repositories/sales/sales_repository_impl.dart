@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
+import 'package:pos_app/domain/usecases/sales/issue_date.dart';
 import 'package:pos_app/data/mappers/inventory_mapper.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
@@ -166,7 +167,12 @@ class SalesRepositoryImpl implements SalesRepository {
       terminalId,
     );
     final invoiceEntity = SalesMapper.toInvoiceEntity(updatedInvoice)
-      ..shiftId = openShiftSession?.id;
+      ..shiftId = openShiftSession?.id
+      // D-12: the local calendar issue date is fixed at issuance. Stored,
+      // never recomputed at void time from the epoch createdAt — deriving it
+      // then would re-interpret the ticket under the device's CURRENT
+      // timezone, and that boundary is what decides voidability.
+      ..localIssueDate = localCalendarDate(updatedInvoice.createdAt);
     final itemEntities = resolvedItems.map(SalesMapper.toItemEntity).toList();
     final paymentEntities = payments.map(SalesMapper.toPaymentEntity).toList();
     final movementEntities = isFrozenSale
@@ -528,6 +534,7 @@ class SalesRepositoryImpl implements SalesRepository {
       commercialRate: entity.commercialRate,
       totalUsd: entity.totalUsd,
       shiftId: entity.shiftId,
+      localIssueDate: entity.localIssueDate,
     );
   }
 

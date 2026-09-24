@@ -30,6 +30,10 @@ import 'cashier_session_entity.dart';
       unique: true,
     ),
     Index(value: ['shift_id'], name: 'idx_invoices_shift_id'),
+    Index(
+      value: ['local_issue_date'],
+      name: 'idx_invoices_local_issue_date',
+    ),
   ],
 )
 class InvoiceEntity {
@@ -104,6 +108,24 @@ class InvoiceEntity {
   @ColumnInfo(name: 'shift_id')
   String? shiftId;
 
+  /// D-12: local calendar issue date (ISO YYYY-MM-DD) of the sale, fixed at
+  /// issuance next to shift membership. Stored, never recomputed from
+  /// `createdAt`: createdAt is epoch millis, so deriving the local date at
+  /// void time would re-interpret the ticket under whatever timezone the
+  /// device reports THEN — and that boundary is exactly what decides
+  /// voidability (a ticket issued 23/09 21:40 on a shift that crossed
+  /// midnight must not become voidable by a timezone change, or by the
+  /// device clock drifting). A fiscal fact is fixed at issuance, same
+  /// reasoning as the reprint-snapshot ruling. Null only on pre-migration
+  /// rows; the read-time fallback derives it from createdAt, so no backfill
+  /// is needed (and #526 AC-11 forbids one).
+  ///
+  /// Mutable on purpose (same precedent as `number` and `shiftId`): it is
+  /// assigned at the checkout construction site, because the domain
+  /// `Invoice` model deliberately does not carry fiscal-day facts.
+  @ColumnInfo(name: 'local_issue_date')
+  String? localIssueDate;
+
   InvoiceEntity({
     required this.id,
     required this.number,
@@ -136,5 +158,6 @@ class InvoiceEntity {
     this.commercialRate = 36.50,
     this.totalUsd = 0.0,
     this.shiftId,
+    this.localIssueDate,
   });
 }
