@@ -188,6 +188,27 @@
 # too) and hands them to the compiled module through dist, so the gate, the
 # specs, and any future caller judge the manifest with one vocabulary.
 #
+# Why the per-command command-set ratchet exists
+# -----------------------------------------------
+# Issue #512 T3 slice 10. The coverage ratchet above only demanded "at least
+# one policy" per direct table, so a FOR ALL policy silently kept every
+# command open on append-only tables, and a stray DELETE policy could exist
+# on a table whose lifecycle never deletes. The command ratchet closes that
+# class: every `direct` entry in the coverage manifest now carries a compound
+# classification `direct:<SET>` (letters S/I/U/D of SELECT/INSERT/UPDATE/
+# DELETE), and the gate enforces the declared set EXACTLY against pg_policies:
+# every declared command must have at least one policy, and no policy command
+# may exist outside the set (a FOR ALL policy counts as covering all four,
+# defensively). The comparison lives in the same single module as the rest of
+# the classification vocabulary (src/core/database/tenant-rls-coverage.ts);
+# the shell verifier only collects the pg_policies (tablename, cmd) facts and
+# hands them over, so the gate, the unit specs, and the DB specs judge the
+# declared sets with one vocabulary. The manifest was born GREEN: 46 direct:SIUD
+# + 10 direct:SI + 6 direct:SIU = 62 direct tables, declared exactly as their
+# migrations build them (the three FOR ALL tables were split by migration
+# 1809340000000 in this slice). A legacy bare `direct` entry would carry no
+# command ratchet, so any bare entry in the manifest fails the run.
+#
 # Why the entity/schema consistency assertion is one-directional
 # ------------------------------------------------------------------
 # A table can be correct in the schema while the entity that maps it still
@@ -348,9 +369,10 @@ schema_column_types="$(mktemp)"
 column_type_divergences="$(mktemp)"
 column_type_manifest="$(mktemp)"
 rls_coverage_catalog="$(mktemp)"
+rls_coverage_policies="$(mktemp)"
 rls_coverage_output="$(mktemp)"
 rls_coverage_failures="$(mktemp)"
-trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}" "${tenant_uuid_cast_issues}" "${schema_uuid_tenant_tables}" "${entity_tenant_types}" "${entity_column_types}" "${schema_column_types}" "${column_type_divergences}" "${column_type_manifest}" "${rls_coverage_catalog}" "${rls_coverage_output}" "${rls_coverage_failures}"' EXIT
+trap 'rm -f "${entities}" "${applied}" "${entity_columns}" "${db_columns}" "${forced_rls_tables}" "${rls_policies}" "${rls_policy_exprs_missing_tenant}" "${tenant_type_manifest}" "${tenant_type_actual}" "${tenant_uuid_cast_issues}" "${schema_uuid_tenant_tables}" "${entity_tenant_types}" "${entity_column_types}" "${schema_column_types}" "${column_type_divergences}" "${column_type_manifest}" "${rls_coverage_catalog}" "${rls_coverage_policies}" "${rls_coverage_output}" "${rls_coverage_failures}"' EXIT
 
 # Entities declare their table two ways: @Entity('name') and
 # @Entity({ name: 'name' }). Missing the second form would silently under-count
@@ -951,10 +973,15 @@ collect_rls_coverage() {
     "SELECT c.relname || '|' || EXISTS (SELECT 1 FROM information_schema.columns col WHERE col.table_schema = 'public' AND col.table_name = c.relname AND col.column_name = 'tenant_id') || '|' || c.relrowsecurity || '|' || c.relforcerowsecurity || '|' || (SELECT count(*) FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = c.relname) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY c.relname" \
     | sed '/^[[:space:]]*$/d' | sort -u > "${rls_coverage_catalog}"
 
+  psql_admin -d "${SCRATCH_DB}" -tAc \
+    "SELECT p.tablename || '|' || p.cmd FROM pg_policies p WHERE p.schemaname = 'public' ORDER BY 1" \
+    | sed '/^[[:space:]]*$/d' | sort -u > "${rls_coverage_policies}"
+
   ( cd "${APP_DIR}" && \
     RLS_COVERAGE_MODULE="${APP_DIR}/dist/core/database/tenant-rls-coverage.js" \
     RLS_COVERAGE_MANIFEST="${MANIFEST_RLS_COVERAGE}" \
     RLS_COVERAGE_CATALOG="${rls_coverage_catalog}" \
+    RLS_COVERAGE_POLICIES="${rls_coverage_policies}" \
     node -e '
 const fs = require("fs");
 const {
@@ -980,9 +1007,31 @@ const tables = fs
       policyCount: Number(policies),
     };
   });
-const result = evaluateTenantRlsCoverage(manifest, tables);
+// Per-command pg_policies facts (tablename|cmd) for the declared command-set
+// ratchet (issue #512 T3 slice 10).
+const policyCommands = fs
+  .readFileSync(process.env.RLS_COVERAGE_POLICIES, "utf8")
+  .split("\n")
+  .filter((line) => line.trim() !== "")
+  .map((line) => {
+    const [table, command] = line.split("|");
+    return { table, command };
+  });
+const result = evaluateTenantRlsCoverage(manifest, tables, policyCommands);
 const counts = result.classifiedCounts;
 const classified = counts.direct + counts["parent-owned"] + counts.global + counts.debt;
+const COMMAND_FAILURE_KINDS = [
+  "missing-declared-command-policy",
+  "undeclared-command-policy",
+  "policy-command-evidence-missing",
+];
+const commandFailures = result.failures.filter((failure) =>
+  COMMAND_FAILURE_KINDS.includes(failure.kind),
+);
+const commandLine =
+  "command-coverage declared=" + result.declaredCommandDirectEntries +
+  " legacy=" + result.legacyDirectEntries +
+  " failures=" + commandFailures.length;
 process.stdout.write(
   "tables=" + tables.length +
   " classified=" + classified +
@@ -993,6 +1042,7 @@ process.stdout.write(
   " failures=" + result.failures.length +
   "\n",
 );
+process.stdout.write(commandLine + "\n");
 for (const failure of result.failures) {
   process.stdout.write(failure.kind + "|" + failure.table + "|" + failure.detail + "\n");
 }
@@ -1000,10 +1050,14 @@ for (const failure of result.failures) {
 }
 
 report_rls_coverage_diff() {
-  # First line: the deterministic counters. Remaining lines: kind|table|detail.
+  # Line 1: the deterministic classification counters. Line 2: the per-command
+  # coverage summary (issue #512 T3 slice 10). Remaining lines: kind|table|detail.
   rls_coverage_summary="$(head -n 1 "${rls_coverage_output}")"
-  tail -n +2 "${rls_coverage_output}" > "${rls_coverage_failures}" || true
+  rls_command_summary="$(sed -n '2p' "${rls_coverage_output}")"
+  tail -n +3 "${rls_coverage_output}" > "${rls_coverage_failures}" || true
   rls_coverage_failure_count="$(wc -l < "${rls_coverage_failures}" | tr -d ' ')"
+  rls_command_legacy_count="$(sed -n 's/.*legacy=\([0-9]*\).*/\1/p' <<< "${rls_command_summary}")"
+  rls_command_failure_count="$(sed -n 's/.*failures=\([0-9]*\).*/\1/p' <<< "${rls_command_summary}")"
 
   printf 'coverage manifest tables : %s\n' "$(sed -n 's/.*tables=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
   printf 'coverage classified      : %s\n' "$(sed -n 's/.*classified=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
@@ -1012,6 +1066,7 @@ report_rls_coverage_diff() {
   printf 'coverage global          : %s\n' "$(sed -n 's/.*global=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
   printf 'coverage debt            : %s\n' "$(sed -n 's/.*debt=\([0-9]*\).*/\1/p' <<< "${rls_coverage_summary}")"
   printf 'coverage failures        : %s\n' "${rls_coverage_failure_count}"
+  printf 'command coverage         : %s\n' "${rls_command_summary#command-coverage }"
 
   if [ "${rls_coverage_failure_count}" -ne 0 ]; then
     printf '\n%s\n' "Tenant RLS coverage gate failures (kind | table | detail):"
@@ -1072,10 +1127,13 @@ if [ "${stale_column_type_count}" -ne 0 ]; then
   fail "FAIL: ${stale_column_type_count} column-type manifest entry(ies) match no real divergence - delete the line if the column was fixed (see above)."
 fi
 if [ "${rls_coverage_failure_count}" -ne 0 ]; then
-  fail "FAIL: ${rls_coverage_failure_count} tenant RLS coverage gate failure(s) on the freshly built schema (see above): every public base table must be classified exactly once in scripts/schema-rls-coverage-manifest.txt, direct tables must carry tenant_id, ENABLE RLS, FORCE RLS, and at least one policy, global/parent-owned tables must not declare tenant_id, and debt entries must still carry real debt."
+  fail "FAIL: ${rls_coverage_failure_count} tenant RLS coverage gate failure(s) on the freshly built schema (see above): every public base table must be classified exactly once in scripts/schema-rls-coverage-manifest.txt, direct tables must carry tenant_id, ENABLE RLS, FORCE RLS, and a policy set covering EXACTLY their declared command set, global/parent-owned tables must not declare tenant_id, and debt entries must still carry real debt."
+fi
+if [ "${rls_command_legacy_count}" -ne 0 ]; then
+  fail "FAIL: ${rls_command_legacy_count} legacy bare direct manifest entry(ies) on the freshly built schema: every direct entry must declare its command set (direct:<S/I/U/D...>); a bare direct entry carries no per-command ratchet and cannot widen the gate silently."
 fi
 
-printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database, no forced-RLS table is left deny-all without a tenant-scoped policy, and every public base table carries a valid tenant RLS classification."
+printf '%s\n' "PASS (scenario 1): the migration set builds every entity table and column from an empty database, no forced-RLS table is left deny-all without a tenant-scoped policy, and every public base table carries a valid tenant RLS classification with its declared per-command policy set."
 
 # ---------------------------------------------------------------------------
 # Scenario 2: a developer database with a partial ledger. The tables already
@@ -1088,11 +1146,15 @@ printf '%s\n' "PASS (scenario 1): the migration set builds every entity table an
 # ---------------------------------------------------------------------------
 printf '\n%s\n' "==> Scenario 2: re-running against the same database with a partial ledger"
 
-partial_ledger_names="CreateBaseCashierSessions1759000000000,CreateBootstrapIdentityTables1759000000001,CreateBootstrapInventorySalesTables1759000000002,CreateBootstrapExtensions1759000000003,CreateBootstrapLoyaltyTables1759000000004,CreateBootstrapSalesTables1759000000005,AddTenantCapabilityEvent1785000000000,CreateTenantTopologyRevisions1794000000000,AddTenantTopologyRevisionsRls1794000000001,CreateTenantFulfillmentRecords1795000000000,CreateCatalogValues1768000000000,CreateInventoryPurchaseDocuments1776000000000,AddDeterministicSyncSequencing1780000000000,AddCreditNoteProvenance1782000000000,CreateSystemParametersConfig1784000000000,CreateProductionBatchHistory1781000000000,AddBatch6bCostingLifecycle1785000000000,CreateProductInventoryMappingVersions1802000000000,CreateInventoryRemediationReceipts1806000000000,CreateDeviceSyncCredentials1807000000000,RepairTenantTopologyRevisions1808000000000,CreateHumanAuthorizationCore1809000000000,EnforceOnboardingFiscalTenantRls1809000000001,CreateHumanAuthorizationRecovery1809010000000,CreateHumanAuthorizationObservability1809020000000,CreateHumanAuthorizationTenantPublicationState1809040000000,CreateHumanAuthorizationPolicySnapshots1809050000000,EnforceOnboardingSessionRls1809220000000,EnforceOnboardingTemplateRls1809230000000,EnforceOnboardingImportRls1809240000000,EnforceCatalogRls1809250000000,EnforceRecipeCatalogRls1809260000000,EnforceInventoryRls1809270000000,EnforceCustomerLoyaltyRls1809280000000,EnforceCashShiftRls1809290000000,EnforcePromotionsRls1809300000000,EnforceChangeLogForensicRls1809310000000,EnforceDatafonosRls1809320000000,EnforceParentOwnedRls1809330000000"
+partial_ledger_names="CreateBaseCashierSessions1759000000000,CreateBootstrapIdentityTables1759000000001,CreateBootstrapInventorySalesTables1759000000002,CreateBootstrapExtensions1759000000003,CreateBootstrapLoyaltyTables1759000000004,CreateBootstrapSalesTables1759000000005,AddTenantCapabilityEvent1785000000000,CreateTenantTopologyRevisions1794000000000,AddTenantTopologyRevisionsRls1794000000001,CreateTenantFulfillmentRecords1795000000000,CreateCatalogValues1768000000000,CreateInventoryPurchaseDocuments1776000000000,AddDeterministicSyncSequencing1780000000000,AddCreditNoteProvenance1782000000000,CreateSystemParametersConfig1784000000000,CreateProductionBatchHistory1781000000000,AddBatch6bCostingLifecycle1785000000000,CreateProductInventoryMappingVersions1802000000000,CreateInventoryRemediationReceipts1806000000000,CreateDeviceSyncCredentials1807000000000,RepairTenantTopologyRevisions1808000000000,CreateHumanAuthorizationCore1809000000000,EnforceOnboardingFiscalTenantRls1809000000001,CreateHumanAuthorizationRecovery1809010000000,CreateHumanAuthorizationObservability1809020000000,CreateHumanAuthorizationTenantPublicationState1809040000000,CreateHumanAuthorizationPolicySnapshots1809050000000,EnforceOnboardingSessionRls1809220000000,EnforceOnboardingTemplateRls1809230000000,EnforceOnboardingImportRls1809240000000,EnforceCatalogRls1809250000000,EnforceRecipeCatalogRls1809260000000,EnforceInventoryRls1809270000000,EnforceCustomerLoyaltyRls1809280000000,EnforceCashShiftRls1809290000000,EnforcePromotionsRls1809300000000,EnforceChangeLogForensicRls1809310000000,EnforceDatafonosRls1809320000000,EnforceParentOwnedRls1809330000000,ConvertKardexAndConfigForAllPolicies1809340000000"
 deleted_rows="$(psql_admin -d "${SCRATCH_DB}" -tAc \
   "WITH removed AS (DELETE FROM migrations WHERE name = ANY (string_to_array('${partial_ledger_names}', ',')) RETURNING 1) SELECT count(*) FROM removed" \
   | tr -d ' ')"
-expected_deleted_rows=39
+expected_deleted_rows=40
+# Derivation: the list above holds exactly 40 migration names (the pre-slice-10
+# 39 plus this slice's ConvertKardexAndConfigForAllPolicies1809340000000), and
+# the run below proves the count against the real ledger (39 -> 40 would fail
+# here if the set and the ledger ever disagreed).
 printf 'ledger rows removed    : %s (expected %s)\n' "${deleted_rows}" "${expected_deleted_rows}"
 if [ "${deleted_rows}" -ne "${expected_deleted_rows}" ]; then
   fail "FAIL: expected to remove ${expected_deleted_rows} ledger rows to simulate the partial ledger, removed ${deleted_rows}."
@@ -1154,8 +1216,11 @@ if [ "${stale_column_type_count}" -ne 0 ]; then
   fail "FAIL: ${stale_column_type_count} column-type manifest entry(ies) match no real divergence after the partial-ledger re-run - delete the line if the column was fixed (see above)."
 fi
 if [ "${rls_coverage_failure_count}" -ne 0 ]; then
-  fail "FAIL: ${rls_coverage_failure_count} tenant RLS coverage gate failure(s) after the partial-ledger re-run (see above): the migration set must leave every public base table classified exactly once with its structural contract intact."
+  fail "FAIL: ${rls_coverage_failure_count} tenant RLS coverage gate failure(s) after the partial-ledger re-run (see above): the migration set must leave every public base table classified exactly once with its structural contract and declared per-command policy set intact."
+fi
+if [ "${rls_command_legacy_count}" -ne 0 ]; then
+  fail "FAIL: ${rls_command_legacy_count} legacy bare direct manifest entry(ies) after the partial-ledger re-run: every direct entry must declare its command set (direct:<S/I/U/D...>)."
 fi
 
 printf '%s\n' "PASS (scenario 2): the migration set re-applies cleanly over an existing schema with a partial ledger."
-printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, no non-uuid tenant column outside the reviewed manifest, no predicate on a uuid tenant column left in the text form, no entity declaring tenant_id with a non-uuid type where the schema column is uuid, no entity-declared column type diverging from the built schema outside the reviewed column-type manifest, and no public base table without a valid tenant RLS classification."
+printf '%s\n' "PASS: the migration set builds every entity table and column from an empty database, survives a partial-ledger re-run, and leaves no forced-RLS table deny-all, no defined policy expression without the app.tenant_id predicate, no non-uuid tenant column outside the reviewed manifest, no predicate on a uuid tenant column left in the text form, no entity declaring tenant_id with a non-uuid type where the schema column is uuid, no entity-declared column type diverging from the built schema outside the reviewed column-type manifest, and no public base table without a valid tenant RLS classification and declared per-command policy set."
