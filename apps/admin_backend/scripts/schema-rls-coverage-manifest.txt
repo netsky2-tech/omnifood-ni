@@ -25,9 +25,11 @@
 # the manifest is judged fail-closed, never silently filtered.
 
 # ---------------------------------------------------------------------------
-# direct — tenant_id + ENABLE + FORCE + at least one policy (56)
+# direct — tenant_id + ENABLE + FORCE + at least one policy (58)
 # ---------------------------------------------------------------------------
 batches|direct
+cash_movements|direct
+cash_shift_sessions|direct
 catalog_values|direct
 customer_loyalty_account_projection|direct
 customer_point_transactions|direct
@@ -116,14 +118,16 @@ credit_note_provenance_rls_baseline|global
 # ---------------------------------------------------------------------------
 # debt — explicit temporary tenant isolation debt. Each entry must be
 # promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (10)
+# slice in T2/T3; a fully protected debt entry fails as stale. (8)
 # ---------------------------------------------------------------------------
 audit_integrity_alerts|debt
 audit_logs|debt
-cash_movements|debt
-cash_shift_sessions|debt
-# Cash sessions carry user/terminal but neither tenant_id nor a tenant-bearing
-# FK; they are tenant business data, so the missing isolation is real debt.
+# cashier_sessions stays in debt (issue #512 T3 slice 5, founder decision):
+# it has no TypeORM entity, and the schema-build gate fails any built-schema
+# base table whose tenant_id is uuid while no entity declares it — adding
+# tenant_id uuid there would create exactly the state the gate forbids. It
+# becomes direct only when the POS cash-session sync receiver and its entity
+# actually land.
 cashier_sessions|debt
 change_log|debt
 datafonos_equipos|debt
