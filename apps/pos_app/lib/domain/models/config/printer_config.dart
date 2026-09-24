@@ -36,6 +36,23 @@ class PrinterConfig with _$PrinterConfig {
     /// Never written by [PrinterConfigService.savePrinterConfig].
     String? fiscalRuc,
 
+    /// D-17 (P0): fiscal authorization number printed at the bottom-right of
+    /// the invoice (DT 09-2007 QUINTO). Read from local_configs
+    /// ['dgi_authorization_code']; written by the operator from the business
+    /// profile, like [fiscalRuc]. Never written by
+    /// [PrinterConfigService.savePrinterConfig]. Null when unconfigured —
+    /// absence on paper is the honest state, never a blank-looking value.
+    String? dgiAuthorizationCode,
+
+    /// D-17: backing date (fecha de respaldo) of the authorization. Stored
+    /// only, never printed. Same write rules as [dgiAuthorizationCode].
+    String? dgiAuthorizationDate,
+
+    /// D-17: backing document (documento de respaldo, e.g. the DGI
+    /// resolution). Stored only, never printed. Same write rules as
+    /// [dgiAuthorizationCode].
+    String? dgiAuthorizationDocument,
+
     /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
     String? headerRuc,
     String? headerAddress,

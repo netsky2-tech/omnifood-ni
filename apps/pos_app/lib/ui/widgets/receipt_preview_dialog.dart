@@ -26,6 +26,12 @@ class ReceiptPreviewDialog extends StatefulWidget {
   final int initialPaperWidthMm;
   final PrinterPort? printerPort;
 
+  /// D-17: fiscal authorization number from the loaded [PrinterConfig]. The
+  /// preview must show what the paper will show. The current call site
+  /// (hardware_settings_view.dart) does not pass it yet — see the B1d
+  /// follow-up before treating the preview as the printing truth.
+  final String? fiscalAuthorizationNumber;
+
   const ReceiptPreviewDialog({
     super.key,
     this.invoice,
@@ -34,6 +40,7 @@ class ReceiptPreviewDialog extends StatefulWidget {
     this.initialTaxRegime = TaxRegime.regimenGeneral,
     this.initialPaperWidthMm = 58,
     this.printerPort,
+    this.fiscalAuthorizationNumber,
   });
 
   /// Helper to show this dialog from any BuildContext.
@@ -45,6 +52,7 @@ class ReceiptPreviewDialog extends StatefulWidget {
     TaxRegime initialTaxRegime = TaxRegime.regimenGeneral,
     int initialPaperWidthMm = 58,
     PrinterPort? printerPort,
+    String? fiscalAuthorizationNumber,
   }) {
     return showDialog<void>(
       context: context,
@@ -56,6 +64,7 @@ class ReceiptPreviewDialog extends StatefulWidget {
         initialTaxRegime: initialTaxRegime,
         initialPaperWidthMm: initialPaperWidthMm,
         printerPort: printerPort,
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
       ),
     );
   }
@@ -72,6 +81,13 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
 
   final _calculator = const InvoiceFiscalCalculator();
 
+  /// SAMPLE DATA ONLY — demo-mode placeholder for the D-17 fiscal
+  /// authorization number, sitting next to the other sample header literals
+  /// below. It never reads or writes configuration; do not grep this value
+  /// as if it were a real authorization number.
+  static const String _sampleFiscalAuthorizationNumber =
+      'AUT-DGI-2026-9876';
+
   @override
   void initState() {
     super.initState();
@@ -87,6 +103,7 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
         items: widget.items ?? const [],
         payments: widget.payments ?? const [],
         taxRegime: _taxRegime,
+        fiscalAuthorizationNumber: widget.fiscalAuthorizationNumber,
       );
     }
 
@@ -129,6 +146,7 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
       customerRuc: '001-150885-0002Y',
       cashGivenNio: 200.0,
       footerMessage: '*** GRACIAS POR SU COMPRA ***\nCONSERVE ESTE COMPROBANTE',
+      fiscalAuthorizationNumber: _sampleFiscalAuthorizationNumber,
     );
   }
 

@@ -99,6 +99,61 @@ void main() {
       expect(savedRucWrites, isEmpty);
     });
 
+    group('D-17: fiscal authorization number (and backing date/document)', () {
+      test('getPrinterConfig reads the three authorization keys', () async {
+        when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+        when(mockDao.getConfigByKey('dgi_authorization_code')).thenAnswer(
+            (_) async =>
+                LocalConfigEntity(key: 'dgi_authorization_code', value: 'AUT-DGI-2026-9876'));
+        when(mockDao.getConfigByKey('dgi_authorization_date')).thenAnswer(
+            (_) async =>
+                LocalConfigEntity(key: 'dgi_authorization_date', value: '2026-09-23'));
+        when(mockDao.getConfigByKey('dgi_authorization_document')).thenAnswer(
+            (_) async => LocalConfigEntity(
+                key: 'dgi_authorization_document', value: 'Resolución DGI 098-2026'));
+
+        final config = await service.getPrinterConfig();
+
+        expect(config.dgiAuthorizationCode, 'AUT-DGI-2026-9876');
+        expect(config.dgiAuthorizationDate, '2026-09-23');
+        expect(config.dgiAuthorizationDocument, 'Resolución DGI 098-2026');
+      });
+
+      test('absent authorization keys yield nulls, not empty strings', () async {
+        when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+
+        final config = await service.getPrinterConfig();
+
+        // An empty string would print as a blank-looking value on paper
+        // (the #548 fabrication failure mode); absent means null.
+        expect(config.dgiAuthorizationCode, isNull);
+        expect(config.dgiAuthorizationDate, isNull);
+        expect(config.dgiAuthorizationDocument, isNull);
+      });
+
+      test(
+          'savePrinterConfig never writes the authorization keys (business-profile data, fiscalRuc precedent)',
+          () async {
+        const newConfig = PrinterConfig(
+          driverType: PrinterDriverType.mock,
+          headerBusinessName: 'Mi Restaurante',
+          dgiAuthorizationCode: 'AUT-DGI-2026-9876',
+          dgiAuthorizationDate: '2026-09-23',
+          dgiAuthorizationDocument: 'Resolución DGI 098-2026',
+        );
+
+        await service.savePrinterConfig(newConfig);
+
+        final savedKeys = verify(mockDao.saveConfig(captureAny)).captured
+            .whereType<LocalConfigEntity>()
+            .map((e) => e.key)
+            .toSet();
+        expect(savedKeys, isNot(contains('dgi_authorization_code')));
+        expect(savedKeys, isNot(contains('dgi_authorization_date')));
+        expect(savedKeys, isNot(contains('dgi_authorization_document')));
+      });
+    });
+
     test('savePrinterConfig persists all values and emits on stream', () async {
       // L1-08b setup adaptation: the profile keys must already exist for
       // savePrinterConfig to keep persisting them (assertions unchanged).

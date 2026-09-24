@@ -130,4 +130,46 @@ void main() {
       debugPrint = debugPrintSynchronously;
     }
   });
+
+  testWidgets('D-17: saving the profile persists the authorization backing date and document keys', (tester) async {
+    when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+    when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
+
+    await tester.pumpWidget(buildWidget());
+    await tester.pumpAndSettle();
+
+    // Fill the fields the form requires before its validators let the save
+    // through (the authorization inputs themselves are optional).
+    Future<void> fillField(String label, String text) async {
+      await tester.enterText(
+        find.widgetWithText(TextFormField, label),
+        text,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await fillField('Nombre Comercial / Razón Social', 'Mi Restaurante');
+    await fillField('RUC (Nicaragua)', 'A0011234567890');
+    await fillField(
+        'Tipo de Cambio Comercial (POS / Atención al Cliente)', '36.50');
+    await fillField(
+        'Tipo de Cambio Oficial BCN (Base Fiscal DGI)', '36.62');
+    await fillField('Fecha de Respaldo de la Autorización', '23/09/2026');
+    await fillField(
+        'Documento de Respaldo', 'Resolución DGI 098-2026');
+
+    await tester.ensureVisible(find.text('GUARDAR CONFIGURACIÓN'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('GUARDAR CONFIGURACIÓN'));
+    await tester.pumpAndSettle();
+
+    final saved = verify(() => mockDao.saveConfig(captureAny())).captured
+        .whereType<LocalConfigEntity>()
+        .toList();
+    final byKey = {for (final e in saved) e.key: e.value};
+    expect(byKey['dgi_authorization_date'], '23/09/2026');
+    expect(byKey['dgi_authorization_document'], 'Resolución DGI 098-2026');
+    // The existing authorization-code input must not be clobbered by the save.
+    expect(byKey.containsKey('dgi_authorization_code'), isTrue);
+  });
 }

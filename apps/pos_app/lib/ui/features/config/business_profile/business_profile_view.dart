@@ -377,6 +377,35 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       ),
                     ),
 
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            key: const Key('dgi_authorization_date_input'),
+                            controller: _controllers['dgi_authorization_date'],
+                            decoration: const InputDecoration(
+                              labelText: 'Fecha de Respaldo de la Autorización',
+                              hintText: 'Ej: 23/09/2026',
+                              helperText: 'Fecha de la resolución DGI que respalda la autorización',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            key: const Key('dgi_authorization_document_input'),
+                            controller: _controllers['dgi_authorization_document'],
+                            decoration: const InputDecoration(
+                              labelText: 'Documento de Respaldo',
+                              hintText: 'Ej: Resolución DGI 098-2026',
+                              helperText: 'Documento (resolución) que respalda la autorización',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
                     const SizedBox(height: 48),
                     Row(
                       children: [

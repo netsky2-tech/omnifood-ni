@@ -1445,4 +1445,49 @@ void main() {
       });
     });
   });
+
+  group('D-17: fiscal authorization number through buildReceiptDocument', () {
+    final cart = [
+      const CartItem(
+        productId: 'latte-01',
+        productName: 'Café Latte 12oz',
+        quantity: 1,
+        unitPrice: 110.00,
+        taxRate: 0.15,
+      ),
+    ];
+
+    ReceiptDocument buildDoc({String? fiscalAuthorizationNumber}) {
+      final result = calculator.calculate(
+        cart: cart,
+        taxRegime: TaxRegime.regimenGeneral,
+      );
+      return calculator.buildReceiptDocument(
+        calculation: result,
+        invoiceNumber: '001-001-01-00000100',
+        businessName: 'Mi Café',
+        businessRuc: 'A0011234567890',
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+      );
+    }
+
+    test('carries the authorization number into the rendered document', () {
+      final formatter = ReceiptLayoutFormatter.format80mm();
+      final text = formatter
+          .formatReceiptDocumentText(buildDoc(fiscalAuthorizationNumber: 'AUT-DGI-2026-9876'));
+      // The calculator is a second producer of receipt text, so it inherits
+      // the same D-17 contract as the formatter path: number rendered
+      // bottom-right when configured.
+      expect(text, contains('Autorización DGI'));
+      expect(text, contains('AUT-DGI-2026-9876'));
+    });
+
+    test('renders NOTHING when the number is null (no fabricated value)', () {
+      final formatter = ReceiptLayoutFormatter.format58mm();
+      final text = formatter
+          .formatReceiptDocumentText(buildDoc(fiscalAuthorizationNumber: null));
+      expect(text, isNot(contains('Autorización DGI')));
+      expect(text, isNot(contains('AUT-DGI')));
+    });
+  });
 }

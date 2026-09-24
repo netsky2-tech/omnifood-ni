@@ -93,6 +93,23 @@ class ReceiptLayoutFormatter {
   String sectionHeader(String title, [String char = '-']) =>
       metrics.sectionHeader(title, char);
 
+  /// D-17 (DT 09-2007 QUINTO): the fiscal authorization number prints at
+  /// the bottom-right of the printed document. One right-aligned line when
+  /// it fits at the current width; otherwise the label sits above a wrapped
+  /// value block ([formatKeyValue] idiom). Empty value renders nothing —
+  /// absence on paper is the honest state until the business fills the
+  /// field (#548: never fabricate presence).
+  List<String> fiscalAuthorizationLines(String? number) {
+    final value = sanitizeInlineText(number ?? '');
+    if (value.isEmpty) return const [];
+    const label = 'Autorización DGI:';
+    final oneLine = '$label $value';
+    if (oneLine.length <= maxCols) {
+      return [oneLine.padLeft(maxCols)];
+    }
+    return formatKeyValue(label, value);
+  }
+
   /// Formats two strings on the same line, with [leftText] aligned to the left
   /// and [rightText] strictly aligned to the right, strictly fitting in [width] columns.
   String formatTwoColumns(String leftText, String rightText, [int? width]) {
@@ -746,6 +763,12 @@ class ReceiptLayoutFormatter {
     // 8. FOOTER
     buffer.writeln(doubleDivider());
 
+    // D-17 fiscal authorization number: bottom-right of the document
+    // (DT 09-2007 QUINTO). Nothing prints when unconfigured.
+    for (final line in fiscalAuthorizationLines(doc.fiscalAuthorizationNumber)) {
+      buffer.writeln(line);
+    }
+
     // Cuota Fija Notice
     if (doc.taxRegime.isCuotaFija) {
       buffer.writeln(center('CONTRIBUYENTE DE CUOTA FIJA'));
@@ -1255,6 +1278,18 @@ class ReceiptLayoutFormatter {
     // 8. Footer
     marginTextLine(builder, doubleDivider()).align(EscPosAlign.center);
 
+    // D-17 fiscal authorization number: bottom-right of the document
+    // (DT 09-2007 QUINTO). Nothing prints when unconfigured.
+    final authorizationLines =
+        fiscalAuthorizationLines(doc.fiscalAuthorizationNumber);
+    if (authorizationLines.isNotEmpty) {
+      builder.align(EscPosAlign.right);
+      for (final line in authorizationLines) {
+        marginTextLine(builder, line.trim());
+      }
+      builder.align(EscPosAlign.left);
+    }
+
     if (doc.taxRegime.isCuotaFija) {
       marginTextLine(
         builder,
@@ -1298,6 +1333,7 @@ class ReceiptLayoutFormatter {
     String? customerName,
     String? customerRuc,
     String? footerMessage,
+    String? fiscalAuthorizationNumber,
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     PostPaidFeedback? loyaltyFeedback,
@@ -1319,6 +1355,7 @@ class ReceiptLayoutFormatter {
           taxRegime: taxRegime,
           isTaxExempt: isTaxExempt,
           footerMessage: footerMessage,
+          fiscalAuthorizationNumber: fiscalAuthorizationNumber,
         ),
       );
     }
@@ -1596,6 +1633,11 @@ class ReceiptLayoutFormatter {
 
     buffer.writeln(drawLine('='));
 
+    // D-17 fiscal authorization number: bottom-right (DT 09-2007 QUINTO).
+    for (final line in fiscalAuthorizationLines(fiscalAuthorizationNumber)) {
+      buffer.writeln(line);
+    }
+
     // Loyalty block — inserted before GRACIAS, fiscal data never affected
     if (loyaltyFeedback != null && loyaltyFeedback.hasContent) {
       for (final line in formatLoyaltyBlock(feedback: loyaltyFeedback)) {
@@ -1627,6 +1669,7 @@ class ReceiptLayoutFormatter {
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     List<int>? logoRasterBytes,
+    String? fiscalAuthorizationNumber,
     PostPaidFeedback? loyaltyFeedback,
   }) {
     final builder = EscPosBuilder();
@@ -1879,6 +1922,16 @@ class ReceiptLayoutFormatter {
       for (final line in formatLoyaltyBlock(feedback: loyaltyFeedback)) {
         builder.textLine(line);
       }
+    }
+
+    // D-17 fiscal authorization number: bottom-right (DT 09-2007 QUINTO).
+    final authLines = fiscalAuthorizationLines(fiscalAuthorizationNumber);
+    if (authLines.isNotEmpty) {
+      builder.align(EscPosAlign.right);
+      for (final line in authLines) {
+        builder.textLine(line.trim());
+      }
+      builder.align(EscPosAlign.left);
     }
 
     builder
