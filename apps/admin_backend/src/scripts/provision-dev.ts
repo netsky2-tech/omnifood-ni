@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { Tenant } from '../modules/tenant/entities/tenant.entity';
 import { User, UserRole } from '../modules/identity/entities/user.entity';
 import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
+import { bindTenantContext } from '../core/database/tenant-transaction';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -32,6 +33,11 @@ async function provision() {
       tenant.is_active = true;
       const savedTenant = await manager.save(tenant);
       console.log(`Tenant created: ${savedTenant.id}`);
+
+      // Bind the transaction-local tenant context before any protected-table
+      // write: FORCE RLS on parent-owned/direct tables denies unbound writes
+      // from the non-owner runtime role.
+      await bindTenantContext(manager, savedTenant.id);
 
       const user = new User();
       user.name = OWNER_NAME;
