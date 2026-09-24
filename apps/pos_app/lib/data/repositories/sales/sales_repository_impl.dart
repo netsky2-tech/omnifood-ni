@@ -193,8 +193,11 @@ class SalesRepositoryImpl implements SalesRepository {
 
       await auditRepository.log(
         'SALE_CREATED',
-        metadata:
-            '{"invoice_id": "${updatedInvoice.id}", "number": "${updatedInvoice.number}", "total": "${updatedInvoice.total.toStringAsFixed(2)}"}',
+        metadata: jsonEncode(<String, String>{
+        'invoice_id': updatedInvoice.id,
+        'number': updatedInvoice.number,
+        'total': updatedInvoice.total.toStringAsFixed(2),
+      }),
       );
     } catch (e) {
       rethrow;
@@ -538,7 +541,10 @@ class SalesRepositoryImpl implements SalesRepository {
     // user, mirroring auditRepository.log().
     final preparedAudit = await auditRepository.prepareLog(
       'SALE_VOIDED',
-      metadata: '{"invoice_id": "$invoiceId", "reason": "$reason"}',
+      metadata: jsonEncode(<String, String>{
+        'invoice_id': invoiceId,
+        'reason': reason,
+      }),
     );
     final auditEntity = preparedAudit == null
         ? null
@@ -715,8 +721,12 @@ class SalesRepositoryImpl implements SalesRepository {
 
     final preparedAudit = await auditRepository.prepareLog(
       'CREDIT_NOTE_CREATED',
-      metadata:
-          '{"original_id": "$originalInvoiceId", "new_id": "$creditNoteId", "refundReasonPolicy": "${refundReasonPolicy.backendName}", "authorizedByUserId": "$authorizedByUserId"}',
+      metadata: jsonEncode(<String, String>{
+        'original_id': originalInvoiceId,
+        'new_id': creditNoteId,
+        'refundReasonPolicy': refundReasonPolicy.backendName,
+        'authorizedByUserId': authorizedByUserId,
+      }),
     );
     final auditEntity = preparedAudit == null
         ? null

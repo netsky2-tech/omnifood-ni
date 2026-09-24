@@ -1053,7 +1053,7 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as _i18.Future<bool>);
 
   @override
-  _i18.Future<void> processReturn(
+  _i18.Future<bool> processReturn(
     String? invoiceNumber,
     String? reason, {
     _i21.RefundReasonPolicy? refundReasonPolicy =
@@ -1072,9 +1072,9 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
             #lines: lines,
           },
         ),
-        returnValue: _i18.Future<void>.value(),
-        returnValueForMissingStub: _i18.Future<void>.value(),
-      ) as _i18.Future<void>);
+        returnValue: _i18.Future<bool>.value(false),
+        returnValueForMissingStub: _i18.Future<bool>.value(false),
+      ) as _i18.Future<bool>);
 
   @override
   _i18.Future<void> voidInvoice(
@@ -1403,6 +1403,15 @@ class MockSyncService extends _i1.Mock implements _i9.SyncService {
         returnValue: _i18.Stream<_i9.CloudSyncStatus>.empty(),
         returnValueForMissingStub: _i18.Stream<_i9.CloudSyncStatus>.empty(),
       ) as _i18.Stream<_i9.CloudSyncStatus>);
+
+  @override
+  _i18.Stream<_i9.SalesRecordRejection> get onSalesRecordRejected =>
+      (super.noSuchMethod(
+        Invocation.getter(#onSalesRecordRejected),
+        returnValue: _i18.Stream<_i9.SalesRecordRejection>.empty(),
+        returnValueForMissingStub:
+            _i18.Stream<_i9.SalesRecordRejection>.empty(),
+      ) as _i18.Stream<_i9.SalesRecordRejection>);
 
   @override
   _i9.CloudSyncStatus get status => (super.noSuchMethod(

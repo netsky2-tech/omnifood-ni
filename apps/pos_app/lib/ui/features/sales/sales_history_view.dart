@@ -375,13 +375,30 @@ class InvoiceDetailsPanel extends StatelessWidget {
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCELAR')),
           ElevatedButton(
             onPressed: () async {
-              await context.read<SaleViewModel>().processReturn(invoice.number, controller.text);
-              if (context.mounted) {
+              final messenger = ScaffoldMessenger.of(context);
+              final registered = await context
+                  .read<SaleViewModel>()
+                  .processReturn(invoice.number, controller.text);
+              if (!context.mounted) return;
+              if (registered) {
                 Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Nota de Crédito emitida correctamente')),
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Nota de Crédito registrada. Pendiente de validación al sincronizar.',
+                    ),
+                  ),
                 );
                 context.read<SalesHistoryViewModel>().loadInvoices();
+              } else {
+                // Keep the dialog open so the typed reason is not lost,
+                // and surface the error returned by the view model.
+                final error =
+                    context.read<SaleViewModel>().errorMessage ??
+                        'No se pudo registrar la Nota de Crédito.';
+                messenger.showSnackBar(
+                  SnackBar(content: Text(error)),
+                );
               }
             }, 
             child: const Text('PROCESAR'),

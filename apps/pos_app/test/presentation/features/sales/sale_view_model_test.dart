@@ -317,7 +317,7 @@ void main() {
     },
   );
 
-  test('processReturn denies cashier role with generic message', () async {
+  test('processReturn denies cashier role with generic message and reports failure', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(
         id: 'u-1',
@@ -328,9 +328,11 @@ void main() {
       ),
     );
 
-    await viewModel.processReturn('INV-001', 'Error de cobro');
+    final registered =
+        await viewModel.processReturn('INV-001', 'Error de cobro');
 
     expect(viewModel.errorMessage, 'Acceso denegado.');
+    expect(registered, isFalse);
     verifyNever(mockSalesRepo.getInvoiceByNumber(any));
   });
 
@@ -374,7 +376,7 @@ void main() {
         CreditNoteRefundLine(originInvoiceItemId: 'line-1', quantity: 0.5),
       ];
 
-      await viewModel.processReturn(
+      final registered = await viewModel.processReturn(
         'F001-000123',
         'Damaged item',
         refundReasonPolicy: RefundReasonPolicy.wasteNoRestock,
@@ -392,8 +394,38 @@ void main() {
         ),
       ).called(1);
       expect(viewModel.errorMessage, isNull);
+      expect(registered, isTrue);
     },
   );
+
+  test('processReturn reports failure when the invoice is not found', () async {
+    when(mockAuthRepo.getCurrentUser()).thenAnswer(
+      (_) async => const User(
+        id: 'manager-1',
+        name: 'Manager',
+        role: UserRole.manager,
+        isActive: true,
+      ),
+    );
+    when(mockSalesRepo.getInvoiceByNumber('F001-000404')).thenAnswer(
+      (_) async => null,
+    );
+
+    final registered = await viewModel.processReturn('F001-000404', 'Error');
+
+    expect(registered, isFalse);
+    expect(viewModel.errorMessage, 'Factura no encontrada: F001-000404');
+    verifyNever(
+      mockSalesRepo.createCreditNote(
+        originalInvoiceId: anyNamed('originalInvoiceId'),
+        reason: anyNamed('reason'),
+        authorizedByUserId: anyNamed('authorizedByUserId'),
+        authorizedByRole: anyNamed('authorizedByRole'),
+        refundReasonPolicy: anyNamed('refundReasonPolicy'),
+        lines: anyNamed('lines'),
+      ),
+    );
+  });
 
   test('voidInvoice denies cashier role with generic message', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
