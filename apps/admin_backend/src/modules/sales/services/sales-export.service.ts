@@ -5,11 +5,13 @@ import {
   FindOptionsWhere,
   LessThanOrEqual,
   MoreThanOrEqual,
+  DataSource,
   Repository,
 } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import PDFDocument = require('pdfkit');
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Invoice } from '../entities/invoice.entity';
 import { CashShiftSession } from '../entities/cash-shift.entity';
 import {
@@ -49,6 +51,10 @@ export class SalesExportService {
     private readonly invoiceRepo: Repository<Invoice>,
     @InjectRepository(CashShiftSession)
     private readonly shiftRepo: Repository<CashShiftSession>,
+    // Issue #512 slice 5: cash_shift_sessions is tenant-RLS protected, so its
+    // read must run inside the tenant-bound transaction manager; the pooled
+    // repositories stay declared for Nest DI compatibility only.
+    private readonly dataSource: DataSource,
   ) {}
 
   async exportSalesBook(
@@ -136,8 +142,12 @@ export class SalesExportService {
       }
 
       const dateStr = inv.created_at
-        ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(new Date(inv.created_at))
-        : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(new Date());
+        ? new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Managua',
+          }).format(new Date(inv.created_at))
+        : new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Managua',
+          }).format(new Date());
 
       return {
         date: dateStr,
@@ -168,7 +178,9 @@ export class SalesExportService {
 
     const datePrefix =
       query?.startDate ||
-      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(new Date());
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(
+        new Date(),
+      );
 
     if (format === 'csv') {
       return {
@@ -233,10 +245,19 @@ export class SalesExportService {
       whereClause.opened_at = LessThanOrEqual(end);
     }
 
-    const shifts = await this.shiftRepo.find({
-      where: whereClause,
-      order: { opened_at: 'ASC' },
-    });
+    // The only cash-shift access in this service: one read-only logical unit
+    // inside its own tenant-bound transaction. The explicit tenant_id filter
+    // stays in the where clause — binding is additive, never a replacement.
+    // The Invoice reads elsewhere in this service are untouched pooled access.
+    const shifts = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(CashShiftSession).find({
+          where: whereClause,
+          order: { opened_at: 'ASC' },
+        }),
+    );
 
     const records: ZReportRowDto[] = shifts.map((s) => ({
       shiftId: s.id,
@@ -275,7 +296,9 @@ export class SalesExportService {
 
     const datePrefix =
       query?.startDate ||
-      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(new Date());
+      new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' }).format(
+        new Date(),
+      );
 
     if (format === 'csv') {
       return {

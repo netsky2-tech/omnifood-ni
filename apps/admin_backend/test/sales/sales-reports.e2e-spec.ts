@@ -1,6 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
@@ -68,6 +69,16 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
   let mockUserRepo: {
     find: jest.Mock;
   };
+  // The tenant-bound transaction fake, copied from
+  // sales-export.service.spec.ts: the manager hands back the same repository
+  // mocks the pooled tokens provide, so SalesExportService's trailing
+  // DataSource dependency resolves and its tenant-bound read observes the
+  // same fixtures as the pooled reads.
+  let transactionalManager: {
+    query: jest.Mock;
+    getRepository: jest.Mock;
+  };
+  let transactionalDataSource: { transaction: jest.Mock };
 
   const sampleUsers: Partial<User>[] = [
     {
@@ -224,6 +235,19 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
     mockShiftRepo = { find: jest.fn() };
     mockUserRepo = { find: jest.fn() };
 
+    transactionalManager = {
+      query: jest.fn(async () => []),
+      getRepository: jest.fn((entity: unknown) =>
+        entity === Invoice ? mockInvoiceRepo : mockShiftRepo,
+      ),
+    };
+    transactionalDataSource = {
+      transaction: jest.fn(
+        async (work: (manager: unknown) => Promise<unknown>) =>
+          work(transactionalManager),
+      ),
+    };
+
     mockInvoiceRepo.find.mockImplementation(
       (opts?: { where?: { isCanceled?: boolean } }) => {
         let result = sampleInvoices;
@@ -271,6 +295,7 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
           provide: getRepositoryToken(CashShiftSession),
           useValue: mockShiftRepo,
         },
+        { provide: DataSource, useValue: transactionalDataSource },
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepo,
