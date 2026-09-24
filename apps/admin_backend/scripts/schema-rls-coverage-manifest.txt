@@ -25,7 +25,7 @@
 # the manifest is judged fail-closed, never silently filtered.
 
 # ---------------------------------------------------------------------------
-# direct — tenant_id + ENABLE + FORCE + at least one policy (58)
+# direct — tenant_id + ENABLE + FORCE + at least one policy (59)
 # ---------------------------------------------------------------------------
 batches|direct
 cash_movements|direct
@@ -118,7 +118,7 @@ credit_note_provenance_rls_baseline|global
 # ---------------------------------------------------------------------------
 # debt — explicit temporary tenant isolation debt. Each entry must be
 # promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (8)
+# slice in T2/T3; a fully protected debt entry fails as stale. (7)
 # ---------------------------------------------------------------------------
 audit_integrity_alerts|debt
 audit_logs|debt
@@ -132,5 +132,5 @@ cashier_sessions|debt
 change_log|debt
 datafonos_equipos|debt
 forensic_alerts|debt
-promotions|debt
+promotions|direct
 users|debt
