@@ -1,4 +1,5 @@
-# Schema RLS coverage manifest (issue #493, task T1).
+# Schema RLS coverage manifest (issue #493, task T1; command ratchet added by
+# issue #512 T3 slice 10).
 #
 # The authoritative classification ratchet for every migration-built public
 # base table. It is evaluated by src/core/database/tenant-rls-coverage.ts (the
@@ -9,86 +10,124 @@
 # Format (one entry per table, table names only):
 #   <table_name>|<classification>
 #
-#   direct        — table carries tenant_id, ENABLE RLS, FORCE RLS, and at
-#                   least one policy. Any of those missing fails the gate.
+#   direct:<SET>  — table carries tenant_id, ENABLE RLS, FORCE RLS, and a set
+#                   of per-command policies that covers EXACTLY the declared
+#                   command set <SET>: every declared command has at least one
+#                   policy, and no policy command may exist outside the set.
+#                   <SET> is one or more of the letters S (SELECT), I
+#                   (INSERT), U (UPDATE), D (DELETE), for example direct:SIUD.
+#                   A FOR ALL policy covers all four commands and therefore
+#                   only satisfies a declared set of direct:SIUD (defensive:
+#                   after slice 10 no direct table should carry one).
+#   direct        — LEGACY bare spelling, kept only so the in-code fixture
+#                   manifests of the DB specs keep parsing. It carries NO
+#                   per-command ratchet; the production manifest must not use
+#                   it and the verifier fails the run if any bare direct entry
+#                   appears here.
 #   parent-owned  — no tenant_id column; isolation flows through a foreign
 #                   key to a tenant-bearing parent. Policy work for this class
-#                   lands in issue #493 T3.
+#                   landed in issue #512 T3 slice 9. No command set: the class
+#                   contract is the absence of a tenant_id column.
 #   global        — reviewed platform / pre-tenant / infrastructure exception.
-#                   A tenant-bearing global entry fails the gate.
+#                   A tenant-bearing global entry fails the gate. No command
+#                   set.
 #   debt          — explicit temporary tenant isolation debt. A debt entry
 #                   that becomes fully tenant-protected is STALE and fails the
 #                   gate until it is promoted to direct (ratchet tightens).
+#                   No command set.
+#
+# The three declared command sets, and why each group is declared as it is:
+#
+#   direct:SIUD (46) — ordinary business tables whose lifecycle reads, inserts,
+#                   updates AND deletes rows; their write paths mutate and
+#                   remove state as part of normal operation.
+#   direct:SI    (10) — append-only ledgers (sync credential events, human-auth
+#                   epochs/snapshots/recovery events/terminal ack history/
+#                   verification events, remediation receipts, topology
+#                   revisions, kardex_correction and sys_parametros_config
+#                   after slice 10 split their FOR ALL policies): rows are
+#                   written once and never mutated, and the immutability
+#                   triggers plus the missing UPDATE/DELETE policies both
+#                   enforce that.
+#   direct:SIU   (6)  — queue/state tables that mutate rows in place but never
+#                   delete them (recovery tokens, rollout cohorts, tenant
+#                   publication state, terminal ack floor, inventory_sync_outbox,
+#                   kardex_recalculate_queue after slice 10 split its FOR ALL
+#                   policy): workers claim and advance rows, nothing prunes
+#                   them by policy.
 #
 # Every public base table absent from this list is unclassified and FAILS.
-# Unknown classifications, malformed lines, and duplicate entries also fail:
-# the manifest is judged fail-closed, never silently filtered.
+# Unknown classifications, malformed lines, unknown command letters, empty or
+# duplicated command sets, and duplicate entries also fail: the manifest is
+# judged fail-closed, never silently filtered.
 
 # ---------------------------------------------------------------------------
-# direct — tenant_id + ENABLE + FORCE + at least one policy (62)
+# direct — tenant_id + ENABLE + FORCE + a declared per-command policy set
+# (62 entries: 46 direct:SIUD + 10 direct:SI + 6 direct:SIU; entry ORDER is
+# unchanged from the pre-slice-10 manifest)
 # ---------------------------------------------------------------------------
-batches|direct
-cash_movements|direct
-cash_shift_sessions|direct
-catalog_values|direct
-change_log|direct
-customer_loyalty_account_projection|direct
-customer_point_transactions|direct
-customers|direct
-datafonos_equipos|direct
-device_sync_credential_events|direct
-device_sync_credentials|direct
-fiscal_config_revisions|direct
-forensic_alerts|direct
-human_auth_policy_epochs|direct
-human_auth_policy_snapshots|direct
-human_auth_recovery_events|direct
-human_auth_recovery_tokens|direct
-human_auth_rollout_cohorts|direct
-human_auth_tenant_publication_state|direct
-human_auth_terminal_ack_floor|direct
-human_auth_terminal_ack_history|direct
-human_auth_verification_events|direct
-inventory_kardex|direct
-inventory_purchase_documents|direct
-inventory_remediation_receipts|direct
-inventory_sync_outbox|direct
-inventory_sync_receipts|direct
-insumos|direct
-invoice_items|direct
-invoices|direct
-kardex_correction|direct
-kardex_recalculate_queue|direct
-legacy_onboarding_migration_receipts|direct
-loyalty_programs|direct
-loyalty_rewards|direct
-onboarding_activation_attempts|direct
-onboarding_activation_check_results|direct
-onboarding_activation_follow_ups|direct
-onboarding_idempotency_records|direct
-onboarding_sessions|direct
-onboarding_telemetry_events|direct
-onboarding_template_applications|direct
-onboarding_template_seed_links|direct
-product_inventory_mapping_versions|direct
-products|direct
-production_batch_history|direct
-production_orders|direct
-recipe_details|direct
-recipe_versions|direct
-recipes|direct
-shrinkages|direct
-sys_parametros_config|direct
-staging_importacion_productos|direct
-suppliers|direct
-product_import_sessions|direct
-legacy_import_integrity_reports|direct
-promotions|direct
-tenant_capability_event|direct
-tenant_fulfillment_records|direct
-tenant_topology_revisions|direct
-warehouses|direct
-uom_conversions|direct
+batches|direct:SIUD
+cash_movements|direct:SIUD
+cash_shift_sessions|direct:SIUD
+catalog_values|direct:SIUD
+change_log|direct:SIUD
+customer_loyalty_account_projection|direct:SIUD
+customer_point_transactions|direct:SIUD
+customers|direct:SIUD
+datafonos_equipos|direct:SIUD
+device_sync_credential_events|direct:SI
+device_sync_credentials|direct:SIUD
+fiscal_config_revisions|direct:SIUD
+forensic_alerts|direct:SIUD
+human_auth_policy_epochs|direct:SI
+human_auth_policy_snapshots|direct:SI
+human_auth_recovery_events|direct:SI
+human_auth_recovery_tokens|direct:SIU
+human_auth_rollout_cohorts|direct:SIU
+human_auth_tenant_publication_state|direct:SIU
+human_auth_terminal_ack_floor|direct:SIU
+human_auth_terminal_ack_history|direct:SI
+human_auth_verification_events|direct:SI
+inventory_kardex|direct:SIUD
+inventory_purchase_documents|direct:SIUD
+inventory_remediation_receipts|direct:SI
+inventory_sync_outbox|direct:SIU
+inventory_sync_receipts|direct:SIUD
+insumos|direct:SIUD
+invoice_items|direct:SIUD
+invoices|direct:SIUD
+kardex_correction|direct:SI
+kardex_recalculate_queue|direct:SIU
+legacy_onboarding_migration_receipts|direct:SIUD
+loyalty_programs|direct:SIUD
+loyalty_rewards|direct:SIUD
+onboarding_activation_attempts|direct:SIUD
+onboarding_activation_check_results|direct:SIUD
+onboarding_activation_follow_ups|direct:SIUD
+onboarding_idempotency_records|direct:SIUD
+onboarding_sessions|direct:SIUD
+onboarding_telemetry_events|direct:SIUD
+onboarding_template_applications|direct:SIUD
+onboarding_template_seed_links|direct:SIUD
+product_inventory_mapping_versions|direct:SIUD
+products|direct:SIUD
+production_batch_history|direct:SIUD
+production_orders|direct:SIUD
+recipe_details|direct:SIUD
+recipe_versions|direct:SIUD
+recipes|direct:SIUD
+shrinkages|direct:SIUD
+sys_parametros_config|direct:SI
+staging_importacion_productos|direct:SIUD
+suppliers|direct:SIUD
+product_import_sessions|direct:SIUD
+legacy_import_integrity_reports|direct:SIUD
+promotions|direct:SIUD
+tenant_capability_event|direct:SIUD
+tenant_fulfillment_records|direct:SIUD
+tenant_topology_revisions|direct:SI
+warehouses|direct:SIUD
+uom_conversions|direct:SIUD
 
 # ---------------------------------------------------------------------------
 # parent-owned — no tenant_id; isolation through a tenant-bearing parent FK.
