@@ -67,7 +67,9 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
     manager.getRepository.mockImplementation((entity: unknown) => {
       if (entity === User) return userRepository;
       if (entity === SecurityProfile) return securityProfileRepository;
-      throw new Error(`Unexpected repository request: ${String(entity)}`);
+      throw new Error(
+        `Unexpected repository request: ${(entity as { name?: string })?.name ?? typeof entity}`,
+      );
     });
     dataSource.transaction.mockImplementation(
       (work: (transactionManager: typeof manager) => Promise<unknown>) =>

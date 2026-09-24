@@ -112,8 +112,7 @@ describe('EnforceParentOwnedRls1809330000000', () => {
           expect(sql).toContain(`CREATE POLICY "${policyName}" ON "${table}"`);
           expect(sql).toContain(`FOR ${command.toUpperCase()}`);
           createCount +=
-            sql.split(`CREATE POLICY "${policyName}" ON "${table}"`).length -
-            1;
+            sql.split(`CREATE POLICY "${policyName}" ON "${table}"`).length - 1;
         }
       }
       // 5 tables x 4 commands = exactly 20 policies, no extras.
@@ -135,7 +134,7 @@ describe('EnforceParentOwnedRls1809330000000', () => {
     });
 
     it('builds every predicate on the PARENT tenant_id with the uuid-cast setting form, never on a child column', async () => {
-      const { sql } = await collectSql('up');
+      await collectSql('up');
 
       // The gate's forced-RLS policy check demands app.tenant_id inside each
       // defined expression; here it must arrive via the parent walk.
@@ -143,9 +142,7 @@ describe('EnforceParentOwnedRls1809330000000', () => {
         EnforceParentOwnedRls1809330000000.PREDICATES,
       )) {
         expect(predicate).toContain('EXISTS');
-        expect(predicate).toContain(
-          `tenant_id = ${UUID_TENANT_SETTING}`,
-        );
+        expect(predicate).toContain(`tenant_id = ${UUID_TENANT_SETTING}`);
         expect(predicate).toContain('app.tenant_id');
       }
       // The child tables carry no tenant_id column: a predicate comparing a
@@ -163,21 +160,17 @@ describe('EnforceParentOwnedRls1809330000000', () => {
     });
 
     it('uses the two-hop grandparent predicate only for invoice_item_modifiers', async () => {
-      const { sql } = await collectSql('up');
+      await collectSql('up');
 
       // The two-hop shape: child -> invoice_items -> invoices.
       const twoHop =
-        EnforceParentOwnedRls1809330000000.PREDICATES[
-          'invoice_item_modifiers'
-        ];
+        EnforceParentOwnedRls1809330000000.PREDICATES['invoice_item_modifiers'];
       expect(twoHop).toContain('FROM invoice_items');
       expect(twoHop).toContain('JOIN invoices i ON i.id = ii.invoice_id');
       expect(twoHop).toContain(
         'ii.id = invoice_item_modifiers.invoice_item_id',
       );
-      expect(twoHop).toContain(
-        `i.tenant_id = ${UUID_TENANT_SETTING}`,
-      );
+      expect(twoHop).toContain(`i.tenant_id = ${UUID_TENANT_SETTING}`);
 
       // The other four predicates must be one-hop: a single parent table, no
       // JOIN, the FK compared directly to the child's foreign key column.
