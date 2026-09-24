@@ -932,4 +932,179 @@ void main() {
       );
     },
   );
+
+group('DeviceSyncBootstrapCoordinator - Tenant Slug Capture (issue #556)', () {
+  test(
+    'write-through: captures the provisioned slug via onTenantSlugCaptured after a successful provision+confirm',
+    () async {
+      final slugRecord = pendingRecordV1.copyWith(slug: 'omnifood-managua');
+      final confirmedSlugRecord = activeRecordV1.copyWith(slug: 'omnifood-managua');
+
+      DeviceSyncCredentialRecord? staged;
+      when(() => mockStore.stageCandidate(any())).thenAnswer((inv) async {
+        staged = inv.positionalArguments[0] as DeviceSyncCredentialRecord;
+      });
+      when(() => mockStore.readCandidate()).thenAnswer((_) async => staged);
+      when(
+        () => mockActivationSyncPort.provisionDeviceSyncCredential(
+          attemptId: testAttemptId,
+          expectedDeviceId: canonicalDeviceId,
+        ),
+      ).thenAnswer((_) async => slugRecord);
+      when(
+        () => mockActivationSyncPort.confirmDeviceSyncCredential(
+          attemptId: testAttemptId,
+          credentialId: slugRecord.credentialId,
+          deviceId: canonicalDeviceId,
+          credentialVersion: slugRecord.credentialVersion,
+          renewalSecret: slugRecord.renewalSecret,
+        ),
+      ).thenAnswer((_) async => confirmedSlugRecord);
+
+      final capturedSlugs = <String>[];
+      final coordinator = DeviceSyncBootstrapCoordinator(
+        store: mockStore,
+        activationSyncPort: mockActivationSyncPort,
+        resolveDeviceId: () async => canonicalDeviceId,
+        resolveAttemptId: () async => testAttemptId,
+        credentialCoordinator: credentialCoordinator,
+        nowUtc: () => DateTime.utc(2026, 6, 1, 12, 0, 0),
+        onTenantSlugCaptured: (slug) async => capturedSlugs.add(slug),
+      );
+
+      final result = await coordinator.bootstrap(user: ownerUser);
+
+      expect(
+        result.status,
+        equals(DeviceSyncBootstrapStatus.provisionedAndConfirmed),
+      );
+      expect(capturedSlugs, ['omnifood-managua']);
+    },
+  );
+
+  test(
+    'captures the slug on the confirmed-staged-candidate retry path as well',
+    () async {
+      final candidateSlugRecord = pendingRecordV1.copyWith(slug: 'omnifood-leon');
+      final confirmedSlugRecord = activeRecordV1.copyWith(slug: 'omnifood-leon');
+
+      when(() => mockStore.readCandidate()).thenAnswer((_) async => candidateSlugRecord);
+      when(
+        () => mockActivationSyncPort.confirmDeviceSyncCredential(
+          attemptId: testAttemptId,
+          credentialId: candidateSlugRecord.credentialId,
+          deviceId: canonicalDeviceId,
+          credentialVersion: candidateSlugRecord.credentialVersion,
+          renewalSecret: candidateSlugRecord.renewalSecret,
+        ),
+      ).thenAnswer((_) async => confirmedSlugRecord);
+
+      final capturedSlugs = <String>[];
+      final coordinator = DeviceSyncBootstrapCoordinator(
+        store: mockStore,
+        activationSyncPort: mockActivationSyncPort,
+        resolveDeviceId: () async => canonicalDeviceId,
+        resolveAttemptId: () async => testAttemptId,
+        credentialCoordinator: credentialCoordinator,
+        nowUtc: () => DateTime.utc(2026, 6, 1, 12, 0, 0),
+        onTenantSlugCaptured: (slug) async => capturedSlugs.add(slug),
+      );
+
+      final result = await coordinator.bootstrap(user: ownerUser);
+
+      expect(
+        result.status,
+        equals(DeviceSyncBootstrapStatus.confirmedStagedCandidate),
+      );
+      expect(capturedSlugs, ['omnifood-leon']);
+    },
+  );
+
+  test(
+    'never captures when the record carries no slug (legacy backend response)',
+    () async {
+      DeviceSyncCredentialRecord? staged;
+      when(() => mockStore.stageCandidate(any())).thenAnswer((inv) async {
+        staged = inv.positionalArguments[0] as DeviceSyncCredentialRecord;
+      });
+      when(() => mockStore.readCandidate()).thenAnswer((_) async => staged);
+      when(
+        () => mockActivationSyncPort.provisionDeviceSyncCredential(
+          attemptId: testAttemptId,
+          expectedDeviceId: canonicalDeviceId,
+        ),
+      ).thenAnswer((_) async => pendingRecordV1);
+      when(
+        () => mockActivationSyncPort.confirmDeviceSyncCredential(
+          attemptId: testAttemptId,
+          credentialId: pendingRecordV1.credentialId,
+          deviceId: canonicalDeviceId,
+          credentialVersion: pendingRecordV1.credentialVersion,
+          renewalSecret: pendingRecordV1.renewalSecret,
+        ),
+      ).thenAnswer((_) async => activeRecordV1);
+
+      var sinkCalls = 0;
+      final coordinator = DeviceSyncBootstrapCoordinator(
+        store: mockStore,
+        activationSyncPort: mockActivationSyncPort,
+        resolveDeviceId: () async => canonicalDeviceId,
+        resolveAttemptId: () async => testAttemptId,
+        credentialCoordinator: credentialCoordinator,
+        nowUtc: () => DateTime.utc(2026, 6, 1, 12, 0, 0),
+        onTenantSlugCaptured: (slug) async => sinkCalls++,
+      );
+
+      await coordinator.bootstrap(user: ownerUser);
+
+      expect(sinkCalls, 0);
+    },
+  );
+
+  test(
+    'slug capture failure never breaks the bootstrap lifecycle',
+    () async {
+      final slugRecord = pendingRecordV1.copyWith(slug: 'omnifood-granada');
+      final confirmedSlugRecord = activeRecordV1.copyWith(slug: 'omnifood-granada');
+
+      DeviceSyncCredentialRecord? staged;
+      when(() => mockStore.stageCandidate(any())).thenAnswer((inv) async {
+        staged = inv.positionalArguments[0] as DeviceSyncCredentialRecord;
+      });
+      when(() => mockStore.readCandidate()).thenAnswer((_) async => staged);
+      when(
+        () => mockActivationSyncPort.provisionDeviceSyncCredential(
+          attemptId: testAttemptId,
+          expectedDeviceId: canonicalDeviceId,
+        ),
+      ).thenAnswer((_) async => slugRecord);
+      when(
+        () => mockActivationSyncPort.confirmDeviceSyncCredential(
+          attemptId: testAttemptId,
+          credentialId: slugRecord.credentialId,
+          deviceId: canonicalDeviceId,
+          credentialVersion: slugRecord.credentialVersion,
+          renewalSecret: slugRecord.renewalSecret,
+        ),
+      ).thenAnswer((_) async => confirmedSlugRecord);
+
+      final coordinator = DeviceSyncBootstrapCoordinator(
+        store: mockStore,
+        activationSyncPort: mockActivationSyncPort,
+        resolveDeviceId: () async => canonicalDeviceId,
+        resolveAttemptId: () async => testAttemptId,
+        credentialCoordinator: credentialCoordinator,
+        nowUtc: () => DateTime.utc(2026, 6, 1, 12, 0, 0),
+        onTenantSlugCaptured: (slug) async => throw StateError('config store unavailable'),
+      );
+
+      final result = await coordinator.bootstrap(user: ownerUser);
+
+      expect(
+        result.status,
+        equals(DeviceSyncBootstrapStatus.provisionedAndConfirmed),
+      );
+    },
+  );
+});
 }

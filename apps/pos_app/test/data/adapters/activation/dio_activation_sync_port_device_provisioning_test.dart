@@ -69,6 +69,7 @@ void main() {
           jsonEncode({
             'credentialId': 'cred-q80-1234',
             'tenantId': 'tenant-test',
+            'slug': 'tenant-omnifood-managua',
             'deviceId': 'terminal-q80-matched',
             'scopes': ['sync:push', 'sync:pull'],
             'credentialVersion': 1,
@@ -95,6 +96,7 @@ void main() {
           jsonEncode({
             'credentialId': 'cred-q80-1234',
             'tenantId': 'tenant-test',
+            'slug': 'tenant-omnifood-managua',
             'deviceId': 'terminal-q80-matched',
             'scopes': ['sync:push', 'sync:pull'],
             'credentialVersion': 1,
@@ -151,6 +153,7 @@ void main() {
       expect(record.renewalSecret, 'sec_high_entropy_secret_1234567890');
       expect(record.credentialVersion, 1);
       expect(record.scopes, ['sync:push', 'sync:pull']);
+      expect(record.slug, 'tenant-omnifood-managua');
 
       verifyNever(() => coordinator.provision(any()));
     },
@@ -190,6 +193,7 @@ void main() {
       );
       expect(record.credentialId, 'cred-q80-1234');
       expect(record.renewalSecret, 'sec_high_entropy_secret_1234567890');
+      expect(record.slug, 'tenant-omnifood-managua');
     },
   );
 

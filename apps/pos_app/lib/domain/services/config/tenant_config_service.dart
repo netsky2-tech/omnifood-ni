@@ -12,6 +12,7 @@ class TenantConfigService {
   static const String operationModeKey = 'operation_mode';
   static const String tenantIdKey = 'tenant_id';
   static const String tenantNameKey = 'tenant_name';
+  static const String tenantSlugKey = 'tenant_slug';
   static const String buzzerPagerRequiredKey = 'buzzer_pager_required';
   static const String tableServiceEnabledKey = 'table_service_enabled';
   static const String autoPrintKitchenTicketKey = 'auto_print_kitchen_ticket';
@@ -50,6 +51,7 @@ class TenantConfigService {
     final mode = await getOperationMode();
     final tenantIdEntity = await _configDao.getConfigByKey(tenantIdKey);
     final tenantNameEntity = await _configDao.getConfigByKey(tenantNameKey);
+    final tenantSlugEntity = await _configDao.getConfigByKey(tenantSlugKey);
     final buzzerEntity = await _configDao.getConfigByKey(buzzerPagerRequiredKey);
     final tableEntity = await _configDao.getConfigByKey(tableServiceEnabledKey);
     final printEntity = await _configDao.getConfigByKey(autoPrintKitchenTicketKey);
@@ -61,6 +63,7 @@ class TenantConfigService {
       operationMode: mode,
       tenantId: tenantIdEntity?.value ?? '',
       tenantName: tenantNameEntity?.value ?? '',
+      tenantSlug: tenantSlugEntity?.value ?? '',
       buzzerPagerRequired: buzzerRequired,
       tableServiceEnabled: tableEntity != null
           ? tableServiceExplicit
@@ -86,6 +89,15 @@ class TenantConfigService {
         description: 'Tenant display name',
       ),
     );
+    if (config.tenantSlug.isNotEmpty) {
+      await _configDao.saveConfig(
+        LocalConfigEntity(
+          key: tenantSlugKey,
+          value: config.tenantSlug,
+          description: 'Tenant slug from device provisioning (pre-auth routing hint)',
+        ),
+      );
+    }
     await _configDao.saveConfig(
       LocalConfigEntity(
         key: buzzerPagerRequiredKey,
@@ -105,6 +117,27 @@ class TenantConfigService {
         key: autoPrintKitchenTicketKey,
         value: config.autoPrintKitchenTicket.toString(),
         description: 'Whether kitchen tickets are auto-printed on order park/sale',
+      ),
+    );
+  }
+
+  /// Reads the stored tenant slug (empty for legacy installs without one).
+  Future<String> getTenantSlug() async {
+    final entity = await _configDao.getConfigByKey(tenantSlugKey);
+    return entity?.value ?? '';
+  }
+
+  /// Write-through persistence for the tenant slug captured from the device
+  /// provisioning/confirm response (issue #556). Blank slugs are ignored so
+  /// legacy installs keep an absent key and the legacy wire contract.
+  Future<void> persistTenantSlug(String slug) async {
+    final trimmed = slug.trim();
+    if (trimmed.isEmpty) return;
+    await _configDao.saveConfig(
+      LocalConfigEntity(
+        key: tenantSlugKey,
+        value: trimmed,
+        description: 'Tenant slug from device provisioning (pre-auth routing hint)',
       ),
     );
   }

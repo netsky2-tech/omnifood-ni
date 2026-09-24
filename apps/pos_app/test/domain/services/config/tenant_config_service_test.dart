@@ -87,6 +87,7 @@ void main() {
       expect(config.operationMode, TenantOperationMode.foodparkQsr);
       expect(config.tenantId, isEmpty);
       expect(config.tenantName, isEmpty);
+      expect(config.tenantSlug, isEmpty);
       expect(config.buzzerPagerRequired, isFalse);
       expect(config.tableServiceEnabled, isFalse);
       expect(config.autoPrintKitchenTicket, isFalse);
@@ -100,6 +101,7 @@ void main() {
         operationMode: TenantOperationMode.hybrid,
         tenantId: 'tenant-foodpark-01',
         tenantName: 'El Rincón Pinolero',
+        tenantSlug: 'omnifood-managua',
         buzzerPagerRequired: true,
         tableServiceEnabled: true,
         autoPrintKitchenTicket: true,
@@ -112,6 +114,7 @@ void main() {
       expect(reconstructed.operationMode, TenantOperationMode.hybrid);
       expect(reconstructed.supportsTables, isTrue);
       expect(reconstructed.supportsBuzzerPager, isTrue);
+      expect(reconstructed.tenantSlug, 'omnifood-managua');
     });
   });
 
@@ -168,6 +171,7 @@ void main() {
         operationMode: TenantOperationMode.hybrid,
         tenantId: 'tenant-managua-01',
         tenantName: 'Café & Bistro Managua',
+        tenantSlug: 'omnifood-managua',
         buzzerPagerRequired: true,
         tableServiceEnabled: true,
         autoPrintKitchenTicket: true,
@@ -179,11 +183,36 @@ void main() {
       expect(loadedConfig.operationMode, TenantOperationMode.hybrid);
       expect(loadedConfig.tenantId, 'tenant-managua-01');
       expect(loadedConfig.tenantName, 'Café & Bistro Managua');
+      expect(loadedConfig.tenantSlug, 'omnifood-managua');
       expect(loadedConfig.buzzerPagerRequired, isTrue);
       expect(loadedConfig.tableServiceEnabled, isTrue);
       expect(loadedConfig.autoPrintKitchenTicket, isTrue);
       expect(loadedConfig.supportsTables, isTrue);
       expect(loadedConfig.supportsBuzzerPager, isTrue);
+    });
+
+    test('tenantSlug defaults to empty when legacy install has no stored slug', () async {
+      final config = await service.getTenantConfig();
+      expect(config.tenantSlug, isEmpty);
+      expect(await service.getTenantSlug(), isEmpty);
+    });
+
+    test('persistTenantSlug writes through and getTenantConfig picks it up', () async {
+      await service.persistTenantSlug('omnifood-granada');
+
+      final persistedEntity = await database.localConfigDao.getConfigByKey('tenant_slug');
+      expect(persistedEntity?.value, 'omnifood-granada');
+      expect(await service.getTenantSlug(), 'omnifood-granada');
+
+      final config = await service.getTenantConfig();
+      expect(config.tenantSlug, 'omnifood-granada');
+    });
+
+    test('persistTenantSlug with blank slug is a no-op (legacy wire contract preserved)', () async {
+      await service.persistTenantSlug('   ');
+
+      expect(await database.localConfigDao.getConfigByKey('tenant_slug'), isNull);
+      expect(await service.getTenantSlug(), isEmpty);
     });
 
     test('corrupted or invalid operation_mode in database falls back gracefully without crashing', () async {
