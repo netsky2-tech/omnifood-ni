@@ -6,6 +6,7 @@ import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/sales/invoice.dart';
 import '../../../domain/models/sales/invoice_item.dart';
 import '../../../domain/usecases/sales/void_decision.dart';
+// ReprintReasonCodes and the snapshot-unavailable copy live in the same module.
 import '../../design_system/design_system.dart';
 
 class SalesHistoryView extends StatefulWidget {
@@ -337,6 +338,21 @@ class InvoiceDetailsPanel extends StatelessWidget {
           
           const SizedBox(height: 24),
           
+          // D-13: REIMPRIMIR is available for ANY invoice row — canceled
+          // included; the paper then carries ANULADO and REIMPRESIÓN
+          // together (#547). Permission-gated (SalesPermission).
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('reprint_invoice_button'),
+              icon: const Icon(Icons.print_outlined),
+              label: const Text('REIMPRIMIR'),
+              onPressed: context.watch<SaleViewModel>().canReprint
+                  ? () => _showReprintDialog(context)
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 12),
           if (!invoice.isCanceled && invoice.type == InvoiceType.regular) ...[
             // D-14/#553: the credit-note action (REALIZAR DEVOLUCIÓN) was
             // REMOVED, not hidden — the Backoffice is the emitter for
@@ -359,6 +375,104 @@ class InvoiceDetailsPanel extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// Neutral Spanish labels for the D-13 reprint reason codes.
+  String _reprintReasonLabel(String code) => switch (code) {
+        ReprintReasonCodes.papelAtascado => 'Papel atascado',
+        ReprintReasonCodes.clientePerdioTicket => 'El cliente perdió su ticket',
+        ReprintReasonCodes.verificacion => 'Verificación',
+        ReprintReasonCodes.otro => 'Otro',
+        _ => code,
+      };
+
+  /// D-13: reprint reason dialog — mandatory controlled code + optional
+  /// detail. On success the SnackBar claims only the print outcome; the
+  /// list is NOT reloaded (a reprint writes no invoice data).
+  void _showReprintDialog(BuildContext context) {
+    String? selectedCode;
+    final detailController = TextEditingController();
+    var submitting = false;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Reimprimir Comprobante'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Seleccione el motivo de la reimpresión de ${invoice.number}:'),
+              const SizedBox(height: 8),
+              ...ReprintReasonCodes.all.map(
+                (code) => RadioListTile<String>(
+                  value: code,
+                  groupValue: selectedCode,
+                  title: Text(_reprintReasonLabel(code)),
+                  onChanged: (value) =>
+                      setDialogState(() => selectedCode = value),
+                ),
+              ),
+              TextField(
+                controller: detailController,
+                decoration: const InputDecoration(
+                  labelText: 'Detalle (opcional)',
+                  hintText: 'Describa el motivo si lo considera necesario',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCELAR'),
+            ),
+            ElevatedButton(
+              key: const Key('confirm_reprint_button'),
+              onPressed: selectedCode == null || submitting
+                  ? null
+                  : () async {
+                      setDialogState(() => submitting = true);
+                      final saleViewModel = context.read<SaleViewModel>();
+                      final messenger = ScaffoldMessenger.of(context);
+                      final detail = detailController.text.trim();
+                      final ok = await saleViewModel.reprintInvoice(
+                        invoice.id,
+                        selectedCode!,
+                        reasonDetail: detail.isEmpty ? null : detail,
+                      );
+                      final printed = saleViewModel.lastReprintPrintSucceeded;
+                      if (!context.mounted) return;
+                      if (ok) {
+                        Navigator.pop(dialogContext);
+                        // Honesty rule: only claim the print if it happened.
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              printed
+                                  ? 'Comprobante REIMPRESIÓN impreso.'
+                                  : 'Comprobante REIMPRESIÓN no pudo imprimirse.',
+                            ),
+                          ),
+                        );
+                        // No list reload: a reprint writes no invoice data.
+                      } else {
+                        setDialogState(() => submitting = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              saleViewModel.errorMessage ??
+                                  'No se pudo reimprimir el comprobante.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+              child: const Text('REIMPRIMIR'),
+            ),
+          ],
+        ),
       ),
     );
   }

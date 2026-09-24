@@ -15,6 +15,7 @@ import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/usecases/sales/void_decision.dart';
+import 'dart:convert';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
@@ -262,6 +263,7 @@ void main() {
       );
       arrangeCommittedVoid();
       final vm = buildViewModel();
+      await Future<void>.delayed(Duration.zero);
       await vm.loadCompanyTaxRegime();
 
       final ok = await vm.voidInvoice('inv-void-target', 'CLIENTE_DESISTE',
@@ -290,6 +292,7 @@ void main() {
       arrangeCommittedVoid();
       printer.shouldFail = true;
       final vm = buildViewModel();
+      await Future<void>.delayed(Duration.zero);
       await vm.loadCompanyTaxRegime();
 
       final ok = await vm.voidInvoice('inv-void-target', 'ERROR_DE_CAPTURA');
@@ -309,6 +312,7 @@ void main() {
               reasonDetail: anyNamed('reasonDetail')))
           .thenThrow(StateError('already canceled'));
       final vm = buildViewModel();
+      await Future<void>.delayed(Duration.zero);
       await vm.loadCompanyTaxRegime();
 
       final ok = await vm.voidInvoice('inv-void-target', 'OTRO');
@@ -354,7 +358,147 @@ void main() {
       expect(ownerVm.canVoidInvoice, isTrue);
     });
   });
+  group('B1r slice 2: reprintInvoice from the immutable snapshot', () {
+    const snapshotHeader = {
+      'businessName': 'Café Original',
+      'ruc': 'A0011234567890',
+      'fiscalAuthorizationNumber': 'AUT-DGI-2026-0001',
+    };
+
+    void arrangeReprintableOwner({bool printerFails = false}) {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'u-2',
+          name: 'Owner',
+          role: UserRole.owner,
+          isActive: true,
+          tenantId: 'tenant-test',
+        ),
+      );
+      printer.shouldFail = printerFails;
+      when(mockItemDao.getItemsByInvoiceId(any)).thenAnswer((_) async => []);
+      when(mockPaymentDao.getPaymentsByInvoiceId(any))
+          .thenAnswer((_) async => []);
+      when(
+        mockSalesRepo.prepareReprintInvoice(
+          'inv-void-target',
+          'PAPEL_ATASCADO',
+          reasonDetail: anyNamed('reasonDetail'),
+        ),
+      ).thenAnswer(
+        (_) async => ReprintPreparation(
+          invoice: Invoice(
+            id: 'inv-void-target',
+            number: '001-001-01-00000077',
+            createdAt: DateTime(2026, 9, 24, 12, 0),
+            userId: 'u-1',
+            subtotal: 100,
+            totalTax: 15,
+            total: 115,
+            isCanceled: true,
+            paymentStatus: PaymentStatus.paid,
+            syncStatus: SyncStatus.pending,
+            type: InvoiceType.regular,
+          ),
+          fiscalHeader: snapshotHeader,
+          items: const [],
+          payments: const [],
+        ),
+      );
+      when(mockSalesRepo.voidInvoice(any, any,
+              reasonDetail: anyNamed('reasonDetail')))
+          .thenAnswer((_) async {});
+    }
+
+    test('prints the canceled document with ANULADO and REIMPRESIÓN together '
+        'and the snapshot header (D-13 heart through the VM)', () async {
+      arrangeReprintableOwner();
+      final vm = buildViewModel();
+      await vm.loadCompanyTaxRegime();
+
+      final ok = await vm.reprintInvoice('inv-void-target', 'PAPEL_ATASCADO',
+          reasonDetail: 'Segunda impresión');
+      expect(ok, isTrue);
+      if (!vm.lastReprintPrintSucceeded) {
+        fail('print failed: ' + (vm.lastPrintError ?? 'null') +
+            ' history=' + printer.printHistory.length.toString());
+      }
+      expect(vm.errorMessage, isNull);
+      expect(vm.lastReprintPrintSucceeded, isTrue);
+      expect(printer.printHistory, hasLength(1));
+      final printed = printer.printHistory.single.printedText ?? '';
+      expect(printed, contains('*** DOCUMENTO ANULADO ***'));
+      expect(printed, contains('*** REIMPRESIÓN ***'));
+      // D-13 heart: the paper carries the SNAPSHOT header, not live config.
+      expect(printed, contains('Café Original'));
+      expect(printed, contains('AUT-DGI-2026-0001'));
+    });
+
+    test('denies a waiter with the permission message, engine untouched',
+        () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'u-9',
+          name: 'Waiter',
+          role: UserRole.waiter,
+          isActive: true,
+          tenantId: 'tenant-test',
+        ),
+      );
+      final vm = buildViewModel();
+
+      final ok = await vm.reprintInvoice('inv-void-target', 'OTRO');
+
+      expect(ok, isFalse);
+      expect(vm.errorMessage, 'No tiene permiso para reimprimir comprobantes.');
+      verifyNever(mockSalesRepo.prepareReprintInvoice(any, any,
+          reasonDetail: anyNamed('reasonDetail')));
+    });
+
+    test('snapshot-unavailable denial maps to the actionable Spanish message',
+        () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'u-2',
+          name: 'Owner',
+          role: UserRole.owner,
+          isActive: true,
+          tenantId: 'tenant-test',
+        ),
+      );
+      when(
+        mockSalesRepo.prepareReprintInvoice(any, any,
+            reasonDetail: anyNamed('reasonDetail')),
+      ).thenThrow(
+        StateError(
+          'REPRINT_SNAPSHOT_UNAVAILABLE: invoice predates the fiscal header snapshot',
+        ),
+      );
+      final vm = buildViewModel();
+
+      final ok = await vm.reprintInvoice('inv-void-target', 'VERIFICACION');
+
+      expect(ok, isFalse);
+      expect(vm.errorMessage, reprintSnapshotUnavailableMessage);
+    });
+
+    test('a failed print keeps the accepted reprint and reports it honestly',
+        () async {
+      arrangeReprintableOwner(printerFails: true);
+      final vm = buildViewModel();
+      await Future<void>.delayed(Duration.zero);
+      await vm.loadCompanyTaxRegime();
+
+      final ok = await vm.reprintInvoice('inv-void-target', 'PAPEL_ATASCADO');
+
+      expect(ok, isTrue, reason: 'the request was accepted and audited');
+      expect(vm.lastReprintPrintSucceeded, isFalse);
+    });
+  });
+
 }
+
+
 
 class FakeTenantConfigService extends TenantConfigService {
   FakeTenantConfigService(super.localConfigDao);
