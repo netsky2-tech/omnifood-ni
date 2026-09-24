@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { NotFoundException } from '@nestjs/common';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { PromotionsService } from './promotions.service';
 import { Promotion, PromotionType } from '../entities/promotion.entity';
 
@@ -12,6 +14,15 @@ describe('PromotionsService', () => {
     create: jest.Mock;
     save: jest.Mock;
   };
+  // The tenant-bound transaction fake: the manager hands back the same
+  // repository mock the pooled token provides, so the existing behavior
+  // assertions keep working unchanged while the guard test below proves the
+  // binding itself with isolated instrumented fakes.
+  let transactionalManager: {
+    query: jest.Mock;
+    getRepository: jest.Mock;
+  };
+  let transactionalDataSource: { transaction: jest.Mock };
 
   const mockPromotion = (overrides: Partial<Promotion> = {}): Promotion =>
     ({
@@ -40,6 +51,17 @@ describe('PromotionsService', () => {
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
     };
 
+    transactionalManager = {
+      query: jest.fn(async () => []),
+      getRepository: jest.fn(() => repo),
+    };
+    transactionalDataSource = {
+      transaction: jest.fn(
+        async (work: (manager: unknown) => Promise<unknown>) =>
+          work(transactionalManager),
+      ),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PromotionsService,
@@ -47,10 +69,15 @@ describe('PromotionsService', () => {
           provide: getRepositoryToken(Promotion),
           useValue: repo,
         },
+        { provide: DataSource, useValue: transactionalDataSource },
       ],
     }).compile();
 
     service = module.get<PromotionsService>(PromotionsService);
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
   });
 
   it('should find all active promotions for a tenant', async () => {
@@ -104,5 +131,112 @@ describe('PromotionsService', () => {
     await service.remove('tenant-1', 'promo-uuid-1');
     expect(promo.is_active).toBe(false);
     expect(repo.save).toHaveBeenCalledWith(promo);
+  });
+
+  // Issue #512 T3 slice 6: the promotions table is now tenant-RLS
+  // protected, so every promotions access must run inside a tenant-bound
+  // transaction. This guard has RUNTIME teeth: it injects a fake DataSource
+  // whose transaction() hands back a manager that records the set_config
+  // binding and hands out instrumented repositories, while the pooled
+  // repository stands beside it as a tripwire. If any bound access is
+  // reverted to the pooled repository (while the constructor keeps
+  // declaring dataSource), the pooled tripwire records a call and this
+  // test fails at runtime, not at compile time.
+  describe('tenant transaction binding', () => {
+    it('binds the promotions access through the tenant transaction (issue #512 slice 6)', async () => {
+      // Pooled tripwires: any call here means an access escaped the bound
+      // transaction and would hit RLS on a connection with no tenant bound.
+      const pooledPromotion = {
+        find: jest.fn(),
+        findOne: jest.fn(),
+        create: jest.fn(),
+        save: jest.fn(),
+      };
+
+      // Bound instrumented repository handed out by the transaction manager.
+      const boundPromotion = {
+        find: jest.fn(),
+        findOne: jest.fn(),
+        create: jest.fn(),
+        save: jest.fn(async (entity: unknown) => entity),
+      };
+
+      const setConfigCalls: Array<[string, string[]]> = [];
+      const boundManager = {
+        query: jest.fn(async (sql: string, params: string[]) => {
+          setConfigCalls.push([sql, params]);
+          return [];
+        }),
+        getRepository: jest.fn(() => boundPromotion),
+      };
+      const boundDataSource = {
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            work(boundManager),
+        ),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          PromotionsService,
+          {
+            provide: getRepositoryToken(Promotion),
+            useValue: pooledPromotion,
+          },
+          { provide: DataSource, useValue: boundDataSource },
+        ],
+      }).compile();
+      const bound = module.get<PromotionsService>(PromotionsService);
+
+      // Exercise every public method: the two read-only lookups plus the
+      // three logical write units (create, update, remove), each of which
+      // must be its own transaction.
+      boundPromotion.find.mockResolvedValueOnce([]); // findAll
+      await bound.findAll('tenant-1');
+
+      boundPromotion.findOne.mockResolvedValueOnce(mockPromotion()); // findOne
+      await bound.findOne('tenant-1', 'promo-uuid-1');
+
+      boundPromotion.create.mockReturnValueOnce(
+        mockPromotion({ id: 'promo-new' }),
+      );
+      await bound.create('tenant-1', {
+        name: 'Nueva promo',
+        type: PromotionType.FIXED_DISCOUNT,
+      });
+
+      boundPromotion.findOne.mockResolvedValueOnce(mockPromotion()); // update
+      await bound.update('tenant-1', 'promo-uuid-1', { priority: 20 });
+
+      boundPromotion.findOne.mockResolvedValueOnce(mockPromotion()); // remove
+      await bound.remove('tenant-1', 'promo-uuid-1');
+
+      // FIVE logical units, FIVE transactions, each binding the tenant
+      // context exactly once with the production set_config SQL.
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(5);
+      expect(setConfigCalls).toHaveLength(5);
+      for (const [sql, params] of setConfigCalls) {
+        expect(sql).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
+        expect(params).toEqual(['tenant-1']);
+      }
+
+      // Every access resolved through the bound manager's repository:
+      // findAll's find, the three findOne lookups (public findOne plus the
+      // update and remove units reusing the manager-based helper), create's
+      // create, and the three saves (create + update + remove).
+      expect(boundPromotion.find).toHaveBeenCalledTimes(1);
+      expect(boundPromotion.findOne).toHaveBeenCalledTimes(3);
+      expect(boundPromotion.create).toHaveBeenCalledTimes(1);
+      expect(boundPromotion.save).toHaveBeenCalledTimes(3);
+      // ...and the manager handed out only tenant-bound repositories.
+      expect(boundManager.getRepository).toHaveBeenCalledTimes(8);
+
+      // RUNTIME TEETH: the pooled tripwire stayed silent. A reverted access
+      // lands here and fails this assertion — no compile error involved.
+      expect(pooledPromotion.find).not.toHaveBeenCalled();
+      expect(pooledPromotion.findOne).not.toHaveBeenCalled();
+      expect(pooledPromotion.create).not.toHaveBeenCalled();
+      expect(pooledPromotion.save).not.toHaveBeenCalled();
+    });
   });
 });
