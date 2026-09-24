@@ -1366,4 +1366,147 @@ void main() {
       expect(ticket, contains('C\$ 143,750.00'));
     });
   });
+
+  group('Cancelled receipt (ANULADO) presentation (#525 AC-9)', () {
+
+    final baseInvoice = Invoice(
+      id: 'inv-cancel-1',
+      number: '001-001-01-00004521',
+      createdAt: DateTime(2026, 8, 26, 14, 30),
+      userId: 'cashier-1',
+      subtotal: 300.00,
+      totalTax: 45.00,
+      total: 345.00,
+      terminalId: 'POS-SUNMI-01',
+    );
+
+    final items = [
+      InvoiceItem(
+        id: 'item-1',
+        invoiceId: 'inv-cancel-1',
+        productId: 'prod-1',
+        productName: 'Hamburguesa Doble Queso',
+        quantity: 1,
+        unitPrice: 200.00,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 30.00,
+        total: 230.00,
+      ),
+    ];
+
+    test('cancelled invoice renders a dominant ANULADO banner with the void reason', () {
+      final cancelled = baseInvoice.copyWith(
+        isCanceled: true,
+        voidReason: 'Error de captura del cajero',
+      );
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final ticket = f58.formatInvoiceText(
+        cancelled,
+        items: items,
+        payments: const [],
+        businessName: 'OMNIFOOD NI',
+        taxRegime: TaxRegime.regimenGeneral,
+      );
+
+      // Banner: repeated rules + unmistakable heading.
+      expect(ticket, contains('========'));
+      expect(ticket, contains('DOCUMENTO ANULADO'));
+      // Original invoice number still printed (DGI: the doc is not deleted).
+      expect(ticket, contains('001-001-01-00004521'));
+      // Void reason printed.
+      expect(ticket, contains('Motivo:'));
+      expect(ticket, contains('Error de captura del cajero'));
+      // Banner must dominate: appears before the item detail, not in a footer.
+      final bannerIndex = ticket.indexOf('DOCUMENTO ANULADO');
+      final itemsIndex = ticket.indexOf('Hamburguesa Doble Queso');
+      expect(bannerIndex, lessThan(itemsIndex));
+      // No premature REIMPRESION artwork (that belongs to unit B1r).
+      expect(ticket.contains('REIMPRESION'), isFalse);
+    });
+
+    test('cancelled invoice without a reason prints a visible placeholder, not an empty line', () {
+      final cancelled = baseInvoice.copyWith(isCanceled: true);
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final ticket = f58.formatInvoiceText(
+        cancelled,
+        items: items,
+        payments: const [],
+        businessName: 'OMNIFOOD NI',
+        taxRegime: TaxRegime.regimenGeneral,
+      );
+
+      expect(ticket, contains('SIN MOTIVO REGISTRADO'));
+      // No dangling empty 'Motivo:' label.
+      expect(ticket, isNot(contains('Motivo: \n')));
+    });
+
+    test('non-cancelled invoice output carries no cancellation artwork', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final ticket = f58.formatInvoiceText(
+        baseInvoice,
+        items: items,
+        payments: const [],
+        businessName: 'OMNIFOOD NI',
+        taxRegime: TaxRegime.regimenGeneral,
+      );
+
+      expect(ticket.contains('ANULADO'), isFalse);
+      expect(ticket.contains('Motivo:'), isFalse);
+      expect(ticket.contains('SIN MOTIVO REGISTRADO'), isFalse);
+    });
+
+    test('cancelled document banner fits the 80mm (40-column) width', () {
+      final doc = ReceiptDocument(
+        businessName: 'TEST',
+        taxRegime: TaxRegime.regimenGeneral,
+        documentTitle: 'FACTURA DE VENTA',
+        documentNumber: '001-001-01-00004521',
+        date: DateTime(2026),
+        lines: const [],
+        subtotal: 300.00,
+        totalTax: 45.00,
+        total: 345.00,
+        totalUsd: 0,
+        isCanceled: true,
+        voidReason: 'Error de captura del cajero',
+      );
+      final f80 = ReceiptLayoutFormatter.format80mm();
+      final ticket = f80.formatReceiptDocumentText(doc);
+      final lines = ticket.split('\n');
+      for (final line in lines) {
+        expect(
+          line.length,
+          lessThanOrEqualTo(40),
+          reason: 'Line exceeds 40: "$line" (${line.length})',
+        );
+      }
+      expect(ticket, contains('DOCUMENTO ANULADO'));
+      expect(ticket, contains('Error de captura del cajero'));
+    });
+
+    test('cancelled document ESC/POS stream carries the ANULADO banner text', () {
+      final doc = ReceiptDocument(
+        businessName: 'TEST',
+        taxRegime: TaxRegime.regimenGeneral,
+        documentTitle: 'FACTURA DE VENTA',
+        documentNumber: '001-001-01-00004521',
+        date: DateTime(2026),
+        lines: const [],
+        subtotal: 300.00,
+        totalTax: 45.00,
+        total: 345.00,
+        totalUsd: 0,
+        isCanceled: true,
+        voidReason: 'Error de captura del cajero',
+      );
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final bytes = f58.formatReceiptDocumentEscPos(doc);
+
+      final decoded = String.fromCharCodes(bytes);
+      expect(decoded, contains('ANULADO'));
+      expect(decoded, contains('Motivo:'));
+      expect(decoded, contains('Error de captura del cajero'));
+    });
+  });
 }

@@ -221,6 +221,13 @@ class ReceiptDocument {
   final bool isTaxExempt;
   final bool globalTaxOverride;
 
+  /// True when the source invoice was voided (anulada). Voided documents are
+  /// never deleted (DGI DT 09-2007): they print with an ANULADO banner instead.
+  final bool isCanceled;
+
+  /// Reason recorded when the invoice was voided. Null for active invoices.
+  final String? voidReason;
+
   const ReceiptDocument({
     required this.businessName,
     this.legalName,
@@ -252,6 +259,8 @@ class ReceiptDocument {
     this.logoRasterBytes,
     this.isTaxExempt = false,
     this.globalTaxOverride = false,
+    this.isCanceled = false,
+    this.voidReason,
   }) : grossSubtotal = grossSubtotal ?? (discountTotal > 0 ? (subtotal + discountTotal) : subtotal);
 
   bool get isCuotaFija => taxRegime.isCuotaFija;
@@ -289,6 +298,8 @@ class ReceiptDocument {
         logoRasterBytes: logoBytes,
         isTaxExempt: isTaxExempt,
         globalTaxOverride: globalTaxOverride,
+        isCanceled: isCanceled,
+        voidReason: voidReason,
       );
   String get regimeHeader => taxRegime.receiptRegimeHeader;
   String? get fiscalNotice => taxRegime.fiscalNotice;
@@ -403,6 +414,8 @@ class ReceiptDocument {
       isTaxExempt: taxRegime.isRegimenGeneral &&
           (isTaxExempt || invoice.globalTaxOverride || (computedExempt > 0 && computedTaxable == 0)),
       globalTaxOverride: invoice.globalTaxOverride,
+      isCanceled: invoice.isCanceled,
+      voidReason: invoice.voidReason,
     );
   }
 

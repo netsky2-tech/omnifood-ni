@@ -354,4 +354,96 @@ void main() {
       expect(bytes, containsAllInOrder([0x1D, 0x56, 0x42, 0x00]));
     });
   });
+
+  group('Cancelled invoice 58mm ANULADO presentation (#525 AC-9)', () {
+    final baseInvoice = Invoice(
+      id: 'inv-cancel-58',
+      number: '001-001-01-00004521',
+      createdAt: DateTime(2026, 8, 26, 14, 30),
+      userId: 'cashier-1',
+      subtotal: 300.00,
+      totalTax: 45.00,
+      total: 345.00,
+      terminalId: 'POS-SUNMI-01',
+    );
+    final cancelledInvoice = baseInvoice.copyWith(
+      isCanceled: true,
+      voidReason: 'Error de captura del cajero',
+    );
+    final items = [
+      InvoiceItem(
+        id: 'item-1',
+        invoiceId: 'inv-cancel-58',
+        productId: 'prod-1',
+        productName: 'Hamburguesa Doble Queso',
+        quantity: 1,
+        unitPrice: 200.00,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 30.00,
+        total: 230.00,
+      ),
+    ];
+    const payments = [
+      Payment(
+        id: 'pay-1',
+        invoiceId: 'inv-cancel-58',
+        method: PaymentMethod.cash,
+        amount: 345.00,
+        currency: 'NIO',
+      ),
+    ];
+
+    test('formatInvoiceText renders ANULADO banner and reason within 32 columns', () {
+      final receipt = Receipt58mmFormatter.formatInvoiceText(
+        cancelledInvoice,
+        items: items,
+        payments: payments,
+        businessName: 'OMNIFOOD NICARAGUA S.A.',
+        ruc: 'J0310000000001',
+        cashierName: 'Juan Perez',
+      );
+
+      final lines = receipt.split('\n');
+      for (final line in lines) {
+        final cleanLine = line.replaceAll('\r', '');
+        expect(
+          cleanLine.length,
+          lessThanOrEqualTo(Receipt58mmFormatter.lineWidth),
+          reason: 'Line exceeds ${Receipt58mmFormatter.lineWidth} chars: "$cleanLine" (length ${cleanLine.length})',
+        );
+      }
+
+      expect(receipt, contains('DOCUMENTO ANULADO'));
+      expect(receipt, contains('001-001-01-00004521'));
+      expect(receipt, contains('Motivo:'));
+      expect(receipt, contains('Error de captura del cajero'));
+    });
+
+    test('formatInvoiceText without a reason prints the visible placeholder', () {
+      final noReasonInvoice = baseInvoice.copyWith(isCanceled: true);
+      final receipt = Receipt58mmFormatter.formatInvoiceText(
+        noReasonInvoice,
+        items: items,
+        payments: payments,
+        businessName: 'OMNIFOOD NICARAGUA S.A.',
+      );
+
+      expect(receipt, contains('DOCUMENTO ANULADO'));
+      expect(receipt, contains('SIN MOTIVO REGISTRADO'));
+    });
+
+    test('formatInvoiceEscPos carries the ANULADO banner bytes', () {
+      final bytes = Receipt58mmFormatter.formatInvoiceEscPos(
+        cancelledInvoice,
+        items: items,
+        payments: payments,
+        businessName: 'OMNIFOOD NICARAGUA S.A.',
+      );
+
+      final decoded = String.fromCharCodes(bytes);
+      expect(decoded, contains('ANULADO'));
+      expect(decoded, contains('Motivo:'));
+    });
+  });
 }
