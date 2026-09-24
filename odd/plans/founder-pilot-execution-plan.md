@@ -102,6 +102,59 @@ Recommendation: implement D-3 as "regime is the single source of IVA treatment, 
 | ID | Unit | Issue |
 |---|---|---|
 | B1a | Void reachable + mandatory reason + **"ANULADO" print** + **loyalty reversal in the same transaction** | #525 V1,V2,V3 · #530 L2,L3 |
+
+**D-11 — the accountant's void rule, relayed by the owner (2026-09-24). This is the specification for B1a-2; it supersedes every option el Gentleman proposed.** Quotted verbatim because it is compliance-relevant wording:
+
+> El cajero puede anular directamente una factura emitida por él durante su turno actual y en la misma fecha fiscal. Debe proporcionar un motivo obligatorio. La factura original permanece inmutable y marcada ANULADA; su numeración nunca se reutiliza. La operación revierte de forma atómica los efectos asociados de inventario, Loyalty y venta/caja, y genera Audit Trail completo con voidedByUserId, timestamp y reason.
+> No permitir edición de la factura original.
+> No permitir self-void de facturas de días anteriores. Esas operaciones pasan a un flujo administrativo separado.
+> Supervisor/OWNER no es requisito DGI para el void ordinario del mismo día; puede incorporarse posteriormente como política configurable de control interno.
+> Y haría una mejora adicional: no limitaría esto permanentemente a role == CASHIER. Lo modelaría como permiso `VOID_OWN_CURRENT_SHIFT_SALE`. Así mañana SOHO puede decidir quitarle ese permiso a un cajero concreto o exigir supervisor sin tener que cambiar código.
+
+What that resolves at once: the D-10 single-operator case (no supervisor required for same-shift self-void, so the cashier is never stranded), the permission-vs-role question (a named permission, not a role check), the cross-day case (a separate administrative flow, which is the credit note), and atomicity (inventory **+** loyalty **+** cash, which is exactly what `voidInvoice` is missing today).
+
+**Implementation mapping — every clause lands on something that already exists:**
+
+| Her clause | Maps to | Status |
+|---|---|---|
+| emitted by him | `invoice.userId == currentUser.id` | column exists, populated |
+| during his current shift | `invoice.shiftId == openSession.id` | **needs the D-9 migration** — `InvoiceEntity` has no shift FK |
+| same fiscal date | — | **OPEN QUESTION, see below** |
+| mandatory reason | non-empty trimmed `voidReason` at the repository boundary | exists as a column, unvalidated |
+| original immutable | append-only trigger + never UPDATE | already enforced at DB level |
+| number never reused | void is a flag flip, sequence never rewinds | already true; B0.4's unique index now protects it |
+| atomic inventory+loyalty+cash | one Floor `@transaction` | **inventory yes, loyalty no** — the L2 gap |
+| audit with voidedByUserId, timestamp, reason | `SALE_VOIDED` hash-chained entry | exists; `authorizedByUserId`/`authorizedByRole` columns exist and are unused |
+| permission not role | `BohPermission`-style string constant + resolver | pattern exists at `boh_permissions.dart:3-39`, sales-level equivalent must be created |
+
+**One phrase I will not invent an implementation for: "misma fecha fiscal".** `grep fiscalDate\|fiscal_date apps/pos_app/lib` returns **zero** hits — there is no fiscal-date concept in the POS data model. What exists is `CashierSession.openedAt/closedAt` and `InvoiceEntity.createdAt`. "Same shift" already implies "same day" except for a shift that crosses midnight, so B1a-2 will gate on **shift identity as the hard predicate** and treat fiscal date as an open question for the accountant: *does a shift that crosses midnight belong to one fiscal day or two, and who closes the day?* That is a DGI day-boundary question, not an engineering choice, and guessing it wrong writes the wrong legal date onto tickets.
+
+**Owner decisions taken while scoping B1a (2026-09-24).** D-11 below closes D-9 and D-10; they are kept because they record why the rule is shaped the way it is.
+
+- **D-9 — the void needs a shift FK, so it gets one.** When told "same shift" is impossible because `InvoiceEntity` has no link to `CashierSession`, the owner chose **add the FK now** over calendar-day-only. So B1a-4 becomes: Floor migration adding shift membership to invoices, written on every new sale, plus a guard comparing the invoice's shift against the open session. **The owner accepted the backfill problem explicitly**: old tickets have no recorded shift and the data cannot be reconstructed, so the guard must define its behaviour for shift-unknown invoices rather than silently excluding them.
+- **D-10 — supervisor-PIN-only is not a valid answer for this deployment.** The owner rejected the framing of the role question: at a food-park kiosk the owner may be present to enter a PIN, **or may not be** — the cashier is sometimes alone. A rule that requires a supervisor to void is a rule that strands the single-operator case, which is the common case in the target market. D-11 resolves it: supervisor is not a DGI requirement for the ordinary same-shift void.
+
+**Scout completed (task `muev5927-5-n7bo`, 27 turns / 87 tool calls, read-only). Six findings that re-shape the unit:**
+
+
+| # | Finding | Evidence | Consequence |
+|---|---|---|---|
+| 1 | **`voidInvoice` is dead code.** Zero UI callers under `apps/pos_app/lib/ui/`. The only production caller is the activation cleanup runner. | `grep voidInvoice apps/pos_app/lib/ui` → 0 matches | V1 is genuinely a UI task, as #525 always claimed. The engine needs no work. |
+| 2 | **`canVoidInvoice` already exists and is read by nobody but generated mocks.** Owner/manager only. | `sale_view_model.dart:626-627`; only readers are `*.test.mocks.dart` | Third member of the `dgi_authorization_code` class: wired, invisible. Do **not** re-create a permission system. |
+| 3 | **A supervisor-override pattern already ships** for cash-restricted actions — `grantSupervisorOverride()` at `:637`, used from `sale_view.dart:324,327,437,443,564`. | read `sale_view_model.dart:630-654` | This is the third option for the role question. A cashier voids **with a supervisor PIN**, reusing a mechanism the café already knows, instead of choosing between "cashier can" and "cashier can't". |
+| 4 | **`InvoiceEntity` has no shift/session foreign key.** `CashierSession` exists with `openedAt`/`closedAt`, but nothing links an invoice to it. | `invoice_entity.dart:20-80`; grep `shiftId\|sessionId\|cashierSession` → 0 | **#539 S2.1 cannot be "same shift" without a schema migration.** Offline, the only recoverable fact is calendar day. Inference by `userId + terminalId + createdAt` against session windows is possible but fragile. |
+| 5 | **V3 is pure greenfield and purely additive** — no `isCanceled` field on `ReceiptDocument`, and `fromInvoice()` never reads it, so a cancelled invoice prints identically to an active one. | `receipt_document.dart:187-280,298-380,397-408`; zero `isCanceled\|void\|cancel\|anulado` matches in the whole printer domain layer | ANULADO printing is 4 additive edits, no existing code modified. |
+| 6 | **The credit-note false success is confirmed and permanent.** `sales_history_view.dart:370-381` shows `"Nota de Crédito emitida correctamente"` unconditionally after `await processReturn()`; `processReturn` (`:1589-1621`) *catches* backend rejection into `_errorMessage` and never throws, and the caller never reads it. Rejected notes stay `pending` and retry the same payload forever (`sync_service.dart:565-591`). | as listed | Not introduced by void, but it is the reason AC-13 exists. Cheapest honest fix in the batch (~15-30 lines). |
+
+**Slices, ranked by value-per-review-line:**
+
+| Slice | Contents | Est. lines | Why this grouping |
+|---|---|---|---|
+| **B1a-1** | audit-JSON fix + credit-note false-success fix | ~20-35 | Both are correctness fixes with zero interaction with void. Ship first, independently. |
+| **B1a-2** | V1 (UI + reason validation) **+** L2/L3 (loyalty reversal) | ~180-270 | **Inseparable.** `voidInvoice` touches only inventory reversal + flag + audit; loyalty is granted inside `try{}catch(_){}` at `:1277-1288` and `:1300-1311` and never reversed. Shipping V1 alone turns a theoretical bug into a live one on the first click. |
+| **B1a-3** | V3 ("ANULADO" print) | ~60-100 | Additive, no existing code touched. #533 F2 makes it a legal requirement, not polish. |
+| **B1a-4** | S2 same-day guard | ~40-60 | Blocked on the schema question from finding 4 — calendar-day now, or a migration to store shift membership. |
+
 | B1b | Template recipes: correct `product_type` + published state, apply-version, honest message | #523 D1,D2,D3 |
 | B1c | Stop showing numbers we know are wrong: honest `stock` read, inventory screens annotated | #521 F1 · #531 G2.1 |
 | B1d | Print the **DGI authorization number** bottom-right on every ticket — **re-scoped by D-4: the field already exists and is client-editable, so this is "wire the orphan", not "add a field"** | #539 S1 · #540 · #531 G1.6 |
