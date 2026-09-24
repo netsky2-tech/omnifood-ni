@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { SalesExportService } from './sales-export.service';
 import { Invoice } from '../entities/invoice.entity';
 import {
@@ -16,10 +18,31 @@ describe('SalesExportService', () => {
   let mockShiftRepo: {
     find: jest.Mock;
   };
+  // The tenant-bound transaction fake: the manager hands back the same
+  // repository mocks the pooled tokens provide, so the existing behavior
+  // assertions keep working unchanged while the guard test below proves the
+  // binding itself with isolated instrumented fakes.
+  let transactionalManager: {
+    query: jest.Mock;
+    getRepository: jest.Mock;
+  };
+  let transactionalDataSource: { transaction: jest.Mock };
 
   const tenantId = 'tenant-export-101';
 
   beforeEach(async () => {
+    transactionalManager = {
+      query: jest.fn(async () => []),
+      getRepository: jest.fn((entity: unknown) =>
+        entity === Invoice ? mockInvoiceRepo : mockShiftRepo,
+      ),
+    };
+    transactionalDataSource = {
+      transaction: jest.fn(
+        async (work: (manager: unknown) => Promise<unknown>) =>
+          work(transactionalManager),
+      ),
+    };
     mockInvoiceRepo = {
       find: jest.fn(),
     };
@@ -38,6 +61,7 @@ describe('SalesExportService', () => {
           provide: getRepositoryToken(CashShiftSession),
           useValue: mockShiftRepo,
         },
+        { provide: DataSource, useValue: transactionalDataSource },
       ],
     }).compile();
 
@@ -235,6 +259,101 @@ describe('SalesExportService', () => {
       expect(pdfResult.contentType).toBe('application/pdf');
       expect(pdfResult.buffer).toBeDefined();
       expect(pdfResult.buffer.length).toBeGreaterThan(100);
+    });
+  });
+
+  // Issue #512 slice 5: the cash_shift_sessions table is now tenant-RLS
+  // protected, so the Z-report export read must run inside a tenant-bound
+  // transaction. RUNTIME teeth: the pooled shift repository stands as a
+  // tripwire; a reverted access lands on it and fails the "never called"
+  // assertion at runtime, not at compile time.
+  describe('tenant transaction binding', () => {
+    it('binds the cash shift export read through the tenant transaction (issue #512 slice 5)', async () => {
+      const pooledShift = { find: jest.fn() };
+      const boundShift = {
+        find: jest.fn().mockResolvedValue([
+          {
+            id: 'shift-1',
+            tenant_id: tenantId,
+            terminal_id: 'POS-01',
+            cashier_name: 'Carlos Cajero',
+            opened_at: new Date('2026-08-26T08:00:00.000Z'),
+            closed_at: new Date('2026-08-26T17:00:00.000Z'),
+            status: CashShiftStatus.CLOSED,
+            initial_float_nio: 1000,
+            initial_float_usd: 50,
+            expected_cash_nio: 6500,
+            expected_cash_usd: 120,
+            final_counted_nio: 6500,
+            final_counted_usd: 120,
+            difference_nio: 0,
+            difference_usd: 0,
+            z_report_sequence: 14,
+          },
+        ]),
+      };
+
+      const setConfigCalls: Array<[string, string[]]> = [];
+      const boundManager = {
+        query: jest.fn(async (sql: string, params: string[]) => {
+          setConfigCalls.push([sql, params]);
+          return [];
+        }),
+        getRepository: jest.fn((entity: unknown) =>
+          entity === CashShiftSession ? boundShift : { find: jest.fn() },
+        ),
+      };
+      const boundDataSource = {
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            work(boundManager),
+        ),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          SalesExportService,
+          {
+            provide: getRepositoryToken(Invoice),
+            useValue: { find: jest.fn().mockResolvedValue([]) },
+          },
+          {
+            provide: getRepositoryToken(CashShiftSession),
+            useValue: pooledShift,
+          },
+          { provide: DataSource, useValue: boundDataSource },
+        ],
+      }).compile();
+      const bound = module.get<SalesExportService>(SalesExportService);
+
+      const result = await bound.exportZReports(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'json',
+      });
+
+      expect(result.data.totalRecords).toBe(1);
+
+      // ONE logical read unit, ONE transaction, bound exactly once with the
+      // production set_config SQL carrying the tenant id as a parameter.
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(setConfigCalls).toEqual([
+        [TENANT_CONTEXT_SET_CONFIG_SQL, [tenantId]],
+      ]);
+
+      // The read went through the bound manager's repository, and the
+      // explicit tenant_id filter survived the binding (additive, never a
+      // replacement).
+      expect(boundShift.find).toHaveBeenCalledTimes(1);
+      const findArgs = boundShift.find.mock.calls[0][0];
+      expect(findArgs.where).toEqual({
+        tenant_id: tenantId,
+        opened_at: expect.anything(),
+      });
+
+      // RUNTIME TEETH: the pooled tripwire stayed silent. A reverted access
+      // lands here and fails this assertion — no compile error involved.
+      expect(pooledShift.find).not.toHaveBeenCalled();
     });
   });
 });
