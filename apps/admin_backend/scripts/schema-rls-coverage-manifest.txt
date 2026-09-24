@@ -92,7 +92,11 @@ uom_conversions|direct
 
 # ---------------------------------------------------------------------------
 # parent-owned — no tenant_id; isolation through a tenant-bearing parent FK.
-# Policy work for this class is issue #493 T3. (5)
+# Policy work for this class is issue #512 T3 slice 9: every entry below now
+# carries ENABLE + FORCE RLS and four per-command tenant policies that walk
+# the parent FK (two-hop via invoice_items for invoice_item_modifiers). The
+# entries REMAIN parent-owned — policies are additive and gate-silent, and
+# the class contract is still "no tenant_id column". (5)
 # ---------------------------------------------------------------------------
 invoice_item_modifiers|parent-owned
 invoice_payments|parent-owned
