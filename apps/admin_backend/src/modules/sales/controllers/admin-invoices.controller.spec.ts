@@ -17,7 +17,10 @@ import { ADMIN_CREDIT_NOTE_FORGED_AUTHORIZER } from '../dto/admin-credit-note.dt
  */
 describe('AdminInvoicesController', () => {
   let app: INestApplication;
-  let serviceMock: { createAdminCreditNote: jest.Mock };
+  let serviceMock: {
+    createAdminCreditNote: jest.Mock;
+    findAll?: jest.Mock;
+  };
 
   const buildPrincipal = (role: string) => ({
     sub: 'principal-1',
@@ -44,6 +47,7 @@ describe('AdminInvoicesController', () => {
 
   beforeAll(async () => {
     serviceMock = {
+      findAll: jest.fn().mockResolvedValue([]),
       createAdminCreditNote: jest
         .fn()
         .mockResolvedValue({
@@ -177,5 +181,48 @@ describe('AdminInvoicesController', () => {
 
     expect(res.status).toBe(400);
     expect(serviceMock.createAdminCreditNote).not.toHaveBeenCalled();
+  });
+
+  describe('GET /sales/admin/invoices (the issuance picker)', () => {
+    it('serves the tenant invoice list to a permitted principal', async () => {
+      const findAll = jest.fn().mockResolvedValue([
+        {
+          id: 'inv-1',
+          number: '001-001-01-00000010',
+          created_at: '2026-09-24T12:00:00Z',
+          total: 115,
+          type: 'regular',
+          isCanceled: false,
+          customerId: 'cust-1',
+          items: [{ id: 'item-1', quantity: 2 }],
+        },
+      ]);
+      serviceMock.findAll = findAll;
+      injectedUser = buildPrincipal('OWNER');
+
+      const res = await request(app.getHttpServer())
+        .get('/sales/admin/invoices')
+        .send();
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      expect(res.body[0]).toMatchObject({
+        id: 'inv-1',
+        number: '001-001-01-00000010',
+        type: 'regular',
+        isCanceled: false,
+      });
+      expect(findAll).toHaveBeenCalledWith('tenant-1');
+    });
+
+    it('rejects 403 without the permission (cashier cannot browse invoices)', async () => {
+      injectedUser = buildPrincipal('CASHIER');
+
+      const res = await request(app.getHttpServer())
+        .get('/sales/admin/invoices')
+        .send();
+
+      expect(res.status).toBe(403);
+    });
   });
 });

@@ -10,7 +10,10 @@ export type AppAction =
   | "customers.export"
   | "users.manage"
   | "fiscal.export"
-  | "settings.configure";
+  | "settings.configure"
+  // Mirrors the backend permission 'sales:issue_credit_note'
+  // (AppPermission.SALES_ISSUE_CREDIT_NOTE, B1c-2 slice A).
+  | "creditNotes.issue";
 
 /**
  * Route access policy aligned with the authoritative NestJS backend guards:
@@ -53,6 +56,7 @@ export const ACTION_ROLE_PERMISSIONS: Record<AppAction, UserRole[]> = {
   "users.manage": ["OWNER"],
   "fiscal.export": ["OWNER", "MANAGER"],
   "settings.configure": ["OWNER", "MANAGER"],
+  "creditNotes.issue": ["OWNER", "MANAGER"],
 };
 
 export function canAccessRoute(role: UserRole | undefined | null, path: string): boolean {

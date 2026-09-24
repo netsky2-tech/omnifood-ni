@@ -92,4 +92,19 @@ export class AdminInvoicesController {
     const tenantId = this.requireTenantId(request.user);
     return this.invoicesService.findAll(tenantId);
   }
+
+  /**
+   * The invoice picker for the issuance flow. Reuses ISSUE_CREDIT_NOTE
+   * instead of a separate read permission: reading invoices to issue
+   * against them is intrinsic to issuing, and the repo's permission model
+   * has no standalone invoice-read capability to piggyback on. Unpaginated
+   * (findAll orders by created_at DESC); the dashboard caps display.
+   */
+  @Get('invoices')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.SALES_ISSUE_CREDIT_NOTE)
+  async listInvoices(@Req() request: AdminRequest) {
+    const tenantId = this.requireTenantId(request.user);
+    return this.invoicesService.findAll(tenantId);
+  }
 }
