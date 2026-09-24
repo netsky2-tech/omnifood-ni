@@ -20,7 +20,12 @@ export class ChangeLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  // Issue #512 T3 slice 7: the DB column is uuid
+  // (1794000000000-CreateChangeLogTable.ts:11) and change_log is becoming
+  // tenant-RLS protected, so the annotation must state the real type: the
+  // schema build gate fails an entity whose tenant_id type disagrees with a
+  // uuid built-schema column.
+  @Column({ type: 'uuid' })
   tenant_id: string;
 
   @ManyToOne(() => Tenant)
