@@ -30,6 +30,8 @@ import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
 import 'package:pos_app/domain/services/sales/customer_identification_service.dart';
 import 'package:pos_app/domain/services/sales/loyalty_reward_interaction_service.dart';
 import 'package:pos_app/domain/services/sales/loyalty_evaluation_service.dart';
+import 'package:pos_app/domain/usecases/sales/void_decision.dart';
+import 'package:pos_app/ui/features/sales/sales_permissions.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_evaluation.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_program.dart';
 import 'package:pos_app/domain/models/loyalty/reward_definition.dart';
@@ -194,6 +196,12 @@ class SaleViewModel extends ChangeNotifier {
 
   Invoice? _lastProcessedInvoice;
   Invoice? get lastProcessedInvoice => _lastProcessedInvoice;
+
+  /// Whether the LAST void's ANULADO copy actually printed. The success
+  /// SnackBar branches on this: claiming a print that did not happen would
+  /// be the same fabrication failure #548 called out.
+  bool _lastVoidPrintSucceeded = false;
+  bool get lastVoidPrintSucceeded => _lastVoidPrintSucceeded;
 
   PostPaidFeedback? _lastPostPaidFeedback;
   PostPaidFeedback? get lastPostPaidFeedback => _lastPostPaidFeedback;
@@ -623,9 +631,13 @@ class SaleViewModel extends ChangeNotifier {
   bool get canManageCashDrawer =>
       _currentUserRole == UserRole.owner ||
       _currentUserRole == UserRole.manager;
+
+  /// D-15: the void gate is permission-based (SalesPermission resolver),
+  /// never a role-label check. Owner/manager hold sales.void.any, cashier
+  /// holds sales.void.own_current_shift, waiter holds nothing. The actual
+  /// three-predicate evaluation happens in [voidInvoice].
   bool get canVoidInvoice =>
-      _currentUserRole == UserRole.owner ||
-      _currentUserRole == UserRole.manager;
+      resolveSalesPermissions(_currentUserRole).isNotEmpty;
 
   bool _isSupervisorOverrideActive = false;
   bool get isSupervisorOverrideActive => _isSupervisorOverrideActive;
@@ -1475,13 +1487,20 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
-  /// Manually triggers a reprint of the last successfully processed invoice.
-  Future<bool> reprintLastInvoice() async {
-    if (_lastProcessedInvoice == null) return false;
+  /// Prints a committed invoice copy on the SAME printer path the sale used
+  /// (config + resolver + printInvoice). Shared by the reprint and the
+  /// ANULADO copy — never build a second printer path. [cashierName] is the
+  /// document identity: the void passes the VOIDER's name (AC-9); reprints
+  /// pass null and keep the historical behavior. B1d's chain rule: the
+  /// fiscal authorization number rides this call site too.
+  Future<bool> _printInvoiceCopy(
+    Invoice invoice, {
+    String? cashierName,
+  }) async {
     try {
       final config = await _printerConfigService.getPrinterConfig();
       final items = await _database.invoiceItemDao.getItemsByInvoiceId(
-        _lastProcessedInvoice!.id,
+        invoice.id,
       );
       final domainItems = items
           .map(
@@ -1504,7 +1523,7 @@ class SaleViewModel extends ChangeNotifier {
           .toList();
 
       final payments = await _database.paymentDao.getPaymentsByInvoiceId(
-        _lastProcessedInvoice!.id,
+        invoice.id,
       );
       final domainPayments = payments
           .map(
@@ -1535,7 +1554,8 @@ class SaleViewModel extends ChangeNotifier {
           final rawBytes = base64Decode(config.logoBase64!);
           if (ThermalLogoProcessor.isPng(rawBytes)) {
             logoRasterBytes = rawBytes;
-          } else if (config.logoWidth != null && config.logoHeight != null) {
+          } else if (config.logoWidth != null &&
+              config.logoHeight != null) {
             logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
               raw1BitBitmap: rawBytes,
               width: config.logoWidth!,
@@ -1559,7 +1579,7 @@ class SaleViewModel extends ChangeNotifier {
       }
 
       final res = await activePrinterPort.printInvoice(
-        _lastProcessedInvoice!,
+        invoice,
         items: domainItems,
         payments: domainPayments,
         businessName: config.headerBusinessName,
@@ -1567,10 +1587,10 @@ class SaleViewModel extends ChangeNotifier {
         ruc: config.fiscalRuc,
         address: config.headerAddress,
         phone: config.headerPhone,
+        cashierName: cashierName,
         logoRasterBytes: logoRasterBytes,
         taxRegime: _companyTaxRegime!,
-        isTaxExempt:
-            _lastProcessedInvoice?.globalTaxOverride ?? _isGlobalTaxExempt,
+        isTaxExempt: invoice.globalTaxOverride,
         paperWidthMm: config.paperWidthMm,
         fiscalAuthorizationNumber: config.dgiAuthorizationCode,
       );
@@ -1586,6 +1606,12 @@ class SaleViewModel extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  /// Manually triggers a reprint of the last successfully processed invoice.
+  Future<bool> reprintLastInvoice() async {
+    if (_lastProcessedInvoice == null) return false;
+    return _printInvoiceCopy(_lastProcessedInvoice!);
   }
 
   /// Returns true only when the credit note was created locally. A locally
@@ -1640,22 +1666,89 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> voidInvoice(String invoiceId, String reason) async {
+  /// D-15: voids an invoice under the three-predicate guard (own invoice +
+  /// open current shift + same local calendar date). Returns true only when
+  /// the void is committed locally (the processReturn precedent: nothing
+  /// more is claimed). Every policy denial sets [errorMessage] to the
+  /// guard's specific Spanish message and returns false; repository
+  /// invariant errors (double void, loyalty) surface as the honest generic
+  /// message because they are bugs reaching the UI, not policy.
+  Future<bool> voidInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async {
     final currentUser = await _authRepository.getCurrentUser();
-    final role = currentUser?.role;
-    if (role == UserRole.cashier || role == UserRole.waiter) {
-      _errorMessage = 'Acceso denegado.';
+    if (currentUser == null) {
+      _errorMessage = 'Debe iniciar sesión para anular facturas.';
       notifyListeners();
-      return;
+      return false;
     }
 
     _isLoading = true;
     notifyListeners();
     try {
-      await _salesRepository.voidInvoice(invoiceId, reason);
+      // Guard inputs come from the data layer: the domain Invoice
+      // deliberately does not carry shift membership or the local issue
+      // date (B1a-4 Option A).
+      final entity = await _database.invoiceDao.getInvoiceById(invoiceId);
+      if (entity == null) {
+        _errorMessage = 'No se encontró la factura solicitada.';
+        return false;
+      }
+
+      // Ratified terminal fallback: the shift that owns the ticket lives on
+      // the ticket's terminal (same convention as the checkout site).
+      final session = await _database.cashierSessionDao
+          .getActiveSessionForUserAndTerminal(
+        currentUser.id,
+        entity.terminalId ?? 'pos-${currentUser.id}',
+      );
+      final decision = evaluateVoidRequest(
+        actorCanVoidAny: hasSalesPermission(
+            currentUser.role, SalesPermission.voidAnyInvoice),
+        actorCanVoidOwnCurrentShift: hasSalesPermission(
+            currentUser.role, SalesPermission.voidOwnCurrentShiftSale),
+        actorUserId: currentUser.id,
+        invoiceUserId: entity.userId,
+        invoiceShiftId: entity.shiftId,
+        invoiceLocalIssueDate: entity.localIssueDate,
+        invoiceCreatedAt:
+            DateTime.fromMillisecondsSinceEpoch(entity.createdAt),
+        currentShiftId: session?.id,
+        comparedTo: DateTime.now(),
+      );
+      if (!decision.isAllowed) {
+        _errorMessage = decision.uiMessage;
+        return false;
+      }
+
+      await _salesRepository.voidInvoice(
+        invoiceId,
+        reasonCode,
+        reasonDetail: reasonDetail,
+      );
+
+      // AC-10: print the ANULADO copy on the same printer path the sale
+      // used, with the VOIDER's name as the document identity (AC-9).
+      _lastVoidPrintSucceeded = false;
+      final voided = await _salesRepository.getInvoiceById(invoiceId);
+      if (voided != null) {
+        _lastProcessedInvoice = voided;
+        _lastVoidPrintSucceeded = await _printInvoiceCopy(
+          voided,
+          cashierName: currentUser.name,
+        );
+      }
+
       _errorMessage = null;
+      return true;
+    } on StateError {
+      _errorMessage = 'No se pudo anular la factura.';
+      return false;
     } catch (e) {
-      _errorMessage = 'Error al anular factura: $e';
+      _errorMessage = 'No se pudo anular la factura.';
+      return false;
     } finally {
       _isLoading = false;
       notifyListeners();

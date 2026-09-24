@@ -116,6 +116,12 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
   }
 
   @override
+  bool get lastVoidPrintSucceeded => (super.noSuchMethod(
+        Invocation.getter(#lastVoidPrintSucceeded),
+        returnValue: false,
+      ) as bool);
+
+  @override
   _i9.TenantOperationMode get operationMode => (super.noSuchMethod(
         Invocation.getter(#operationMode),
         returnValue: _i9.TenantOperationMode.foodparkQsr,
@@ -942,21 +948,22 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as _i16.Future<bool>);
 
   @override
-  _i16.Future<void> voidInvoice(
+  _i16.Future<bool> voidInvoice(
     String? invoiceId,
-    String? reason,
-  ) =>
+    String? reasonCode, {
+    String? reasonDetail,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #voidInvoice,
           [
             invoiceId,
-            reason,
+            reasonCode,
           ],
+          {#reasonDetail: reasonDetail},
         ),
-        returnValue: _i16.Future<void>.value(),
-        returnValueForMissingStub: _i16.Future<void>.value(),
-      ) as _i16.Future<void>);
+        returnValue: _i16.Future<bool>.value(false),
+      ) as _i16.Future<bool>);
 
   @override
   void dispose() => super.noSuchMethod(
