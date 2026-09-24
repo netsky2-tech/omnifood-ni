@@ -25,7 +25,7 @@
 # the manifest is judged fail-closed, never silently filtered.
 
 # ---------------------------------------------------------------------------
-# direct — tenant_id + ENABLE + FORCE + at least one policy (61)
+# direct — tenant_id + ENABLE + FORCE + at least one policy (62)
 # ---------------------------------------------------------------------------
 batches|direct
 cash_movements|direct
@@ -35,6 +35,7 @@ change_log|direct
 customer_loyalty_account_projection|direct
 customer_point_transactions|direct
 customers|direct
+datafonos_equipos|direct
 device_sync_credential_events|direct
 device_sync_credentials|direct
 fiscal_config_revisions|direct
@@ -121,7 +122,7 @@ credit_note_provenance_rls_baseline|global
 # ---------------------------------------------------------------------------
 # debt — explicit temporary tenant isolation debt. Each entry must be
 # promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (5)
+# slice in T2/T3; a fully protected debt entry fails as stale. (4)
 # ---------------------------------------------------------------------------
 # audit_integrity_alerts stays in debt (issue #512 T3 slice 7, founder
 # decision): its single writer is the pooled multi-tenant nightly integrity
@@ -143,5 +144,13 @@ audit_logs|debt
 # becomes direct only when the POS cash-session sync receiver and its entity
 # actually land.
 cashier_sessions|debt
-datafonos_equipos|debt
+# users stays in debt (issue #512 T3 slice 8, founder decision): the pre-auth
+# login flow looks the user up by email across ALL tenants before any
+# principal or tenant context exists (auth.service.ts login, no guards, no
+# tenant binding), refreshTokens reads the user row on an unbound manager,
+# and uq_users_email is globally unique rather than per tenant — FORCE RLS
+# deny-by-default would break login before a tenant could ever be bound. It
+# becomes direct only through the login redesign decision (tenant in the
+# login DTO plus a POS change, or an explicitly exempted pre-auth read
+# path); tracked as its own follow-up issue.
 users|debt
