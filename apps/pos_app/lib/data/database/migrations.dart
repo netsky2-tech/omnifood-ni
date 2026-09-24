@@ -2438,6 +2438,45 @@ final migration53_54 = Migration(53, 54, (database) async {
   await addColumn('local_authorization_sequence INTEGER NOT NULL DEFAULT 0');
 });
 
+final migration54_55 = Migration(54, 55, (database) async {
+  // B1a-4 (D-11): shift (turno) membership for invoices. Nullable and
+  // permanent: historical rows cannot be backfilled because the data was
+  // never recorded (D-9, owner-accepted). New sales get the id of the
+  // cashier's own open session (user + terminal) at checkout; sales with no
+  // matching open session persist null.
+  //
+  // Tradeoff, do not "fix" the missing FK here: SQLite's ALTER TABLE ADD
+  // COLUMN cannot attach a FOREIGN KEY to an existing column without a full
+  // table rebuild. Recreating the fiscal `invoices` table (unique indexes,
+  // DGI numbering sequence, append-only #526 AC-11 policy) is not worth it
+  // for this advisory guard column, so upgraded databases carry shift_id
+  // without the FK while fresh installs get it from the Floor-generated DDL.
+  // Same guarded pattern as migration53_54 (SQLite has no ADD COLUMN IF NOT
+  // EXISTS), so the migration is safe to re-run.
+  // Same pattern as the authority-immutability guard above (and 20 other
+  // sqlite_master checks in this file): the fiscal table can legitimately
+  // be absent on synthetic legacy upgrade paths (e.g. the sync_service
+  // regression DB opens at version 24 and creates only the tables it
+  // needs). Skip both statements when the table does not exist: a v54
+  // database without `invoices` cannot contain invoice rows to migrate,
+  // and fresh installs create the column from the Floor-generated DDL.
+  // Real v54 installs always have the table (created in onCreate; no
+  // migration ever drops invoices), so the guard cannot silently skip a
+  // migration that should have run.
+  final invoicesTables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'invoices'",
+  );
+  if (invoicesTables.isEmpty) return;
+  final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+  final names = columns.map((column) => column['name'] as String).toSet();
+  if (!names.contains('shift_id')) {
+    await database.execute('ALTER TABLE invoices ADD COLUMN shift_id TEXT');
+  }
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_invoices_shift_id ON invoices (shift_id)',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2483,6 +2522,7 @@ final allMigrations = [
   migration51_52,
   migration52_53,
   migration53_54,
+  migration54_55,
 ];
 
 /// Catalog mapping identity is additive: historical products remain usable.

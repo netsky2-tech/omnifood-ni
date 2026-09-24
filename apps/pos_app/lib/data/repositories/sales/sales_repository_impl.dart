@@ -156,7 +156,17 @@ class SalesRepositoryImpl implements SalesRepository {
       ),
     );
 
-    final invoiceEntity = SalesMapper.toInvoiceEntity(updatedInvoice);
+    // B1a-4 (D-11): bind the sale to the cashier's own open shift, resolved
+    // from the sale's own user + terminal (offline lookup, no network). When
+    // no matching open session exists, persist null rather than inventing a
+    // shift: B1a-2's guard treats null as "unknown", never as "different".
+    final openShiftSession = await database.cashierSessionDao
+        .getActiveSessionForUserAndTerminal(
+      updatedInvoice.userId,
+      terminalId,
+    );
+    final invoiceEntity = SalesMapper.toInvoiceEntity(updatedInvoice)
+      ..shiftId = openShiftSession?.id;
     final itemEntities = resolvedItems.map(SalesMapper.toItemEntity).toList();
     final paymentEntities = payments.map(SalesMapper.toPaymentEntity).toList();
     final movementEntities = isFrozenSale
@@ -472,35 +482,59 @@ class SalesRepositoryImpl implements SalesRepository {
     await invoiceDao.updateSyncStatusForIds(invoiceIds, 'synced');
   }
 
+  /// #548: the single copy point for invoice rewrites. Carries EVERY column
+  /// of [InvoiceEntity]; only the named overrides differ from [entity].
+  /// The pre-#548 voidInvoice/markAsFailed rebuilt the entity from a partial
+  /// field list, which fabricated data: non-nullable columns (the BCN and
+  /// commercial rates) silently fell back to constructor defaults, and
+  /// nullable columns (inventory provenance, shift membership) to null.
+  /// Adding a column to InvoiceEntity means adding it here; the full-column
+  /// preservation tests in sales_repository_impl_test.dart enforce it.
+  InvoiceEntity _copyInvoiceEntity(
+    InvoiceEntity entity, {
+    bool? isCanceled,
+    String? voidReason,
+    String? syncStatus,
+  }) {
+    return InvoiceEntity(
+      id: entity.id,
+      number: entity.number,
+      createdAt: entity.createdAt,
+      userId: entity.userId,
+      subtotal: entity.subtotal,
+      totalTax: entity.totalTax,
+      total: entity.total,
+      isCanceled: isCanceled ?? entity.isCanceled,
+      voidReason: voidReason ?? entity.voidReason,
+      syncStatus: syncStatus ?? entity.syncStatus,
+      paymentStatus: entity.paymentStatus,
+      type: entity.type,
+      customerId: entity.customerId,
+      globalTaxOverride: entity.globalTaxOverride,
+      relatedInvoiceId: entity.relatedInvoiceId,
+      originInvoiceId: entity.originInvoiceId,
+      refundReasonPolicy: entity.refundReasonPolicy,
+      refundReasonCode: entity.refundReasonCode,
+      authorizedByUserId: entity.authorizedByUserId,
+      authorizedByRole: entity.authorizedByRole,
+      terminalId: entity.terminalId,
+      sourceSequence: entity.sourceSequence,
+      idempotencyKey: entity.idempotencyKey,
+      payloadHash: entity.payloadHash,
+      inventoryPolicyVersion: entity.inventoryPolicyVersion,
+      inventoryOutcome: entity.inventoryOutcome,
+      inventoryOutcomeReason: entity.inventoryOutcomeReason,
+      bcnOfficialRate: entity.bcnOfficialRate,
+      commercialRate: entity.commercialRate,
+      totalUsd: entity.totalUsd,
+      shiftId: entity.shiftId,
+    );
+  }
+
   Future<void> markAsFailed(String invoiceId) async {
     final entity = await invoiceDao.getInvoiceById(invoiceId);
     if (entity != null) {
-      final updated = InvoiceEntity(
-        id: entity.id,
-        number: entity.number,
-        createdAt: entity.createdAt,
-        userId: entity.userId,
-        subtotal: entity.subtotal,
-        totalTax: entity.totalTax,
-        total: entity.total,
-        isCanceled: entity.isCanceled,
-        voidReason: entity.voidReason,
-        syncStatus: 'failed',
-        paymentStatus: entity.paymentStatus,
-        type: entity.type,
-        customerId: entity.customerId,
-        globalTaxOverride: entity.globalTaxOverride,
-        relatedInvoiceId: entity.relatedInvoiceId,
-        originInvoiceId: entity.originInvoiceId,
-        refundReasonPolicy: entity.refundReasonPolicy,
-        refundReasonCode: entity.refundReasonCode,
-        authorizedByUserId: entity.authorizedByUserId,
-        authorizedByRole: entity.authorizedByRole,
-        terminalId: entity.terminalId,
-        sourceSequence: entity.sourceSequence,
-        idempotencyKey: entity.idempotencyKey,
-        payloadHash: entity.payloadHash,
-      );
+      final updated = _copyInvoiceEntity(entity, syncStatus: 'failed');
       await invoiceDao.updateInvoice(updated);
     }
   }
@@ -552,32 +586,14 @@ class SalesRepositoryImpl implements SalesRepository {
 
     // DGI forbids deleting invoices — cancellation is a flag flip, never
     // a row deletion. syncStatus is reset to 'pending' so the cancelled
-    // invoice re-syncs upstream.
-    final canceledInvoice = InvoiceEntity(
-      id: entity.id,
-      number: entity.number,
-      createdAt: entity.createdAt,
-      userId: entity.userId,
-      subtotal: entity.subtotal,
-      totalTax: entity.totalTax,
-      total: entity.total,
+    // invoice re-syncs upstream. #548: copied through the full-column
+    // helper so no fiscal/provenance column (rates, inventory outcome,
+    // shift membership) is fabricated during the rewrite.
+    final canceledInvoice = _copyInvoiceEntity(
+      entity,
       isCanceled: true,
       voidReason: reason,
       syncStatus: 'pending',
-      paymentStatus: entity.paymentStatus,
-      type: entity.type,
-      customerId: entity.customerId,
-      globalTaxOverride: entity.globalTaxOverride,
-      relatedInvoiceId: entity.relatedInvoiceId,
-      originInvoiceId: entity.originInvoiceId,
-      refundReasonPolicy: entity.refundReasonPolicy,
-      refundReasonCode: entity.refundReasonCode,
-      authorizedByUserId: entity.authorizedByUserId,
-      authorizedByRole: entity.authorizedByRole,
-      terminalId: entity.terminalId,
-      sourceSequence: entity.sourceSequence,
-      idempotencyKey: entity.idempotencyKey,
-      payloadHash: entity.payloadHash,
     );
 
     // Persist EVERYTHING in a single Floor @transaction:

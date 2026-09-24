@@ -1,7 +1,21 @@
 import 'package:floor/floor.dart';
 
+import 'cashier_session_entity.dart';
+
 @Entity(
   tableName: 'invoices',
+  foreignKeys: [
+    // B1a-4 (D-11): shift (turno) membership. FK targets the cashier session
+    // the sale was made in. NO_ACTION (the default) is deliberate:
+    // SET_NULL/CASCADE would UPDATE or DELETE invoice rows, which violates
+    // the fiscal append-only policy (#526 AC-11). Session rows are closed,
+    // never deleted, so no-action is safe.
+    ForeignKey(
+      childColumns: ['shift_id'],
+      parentColumns: ['id'],
+      entity: CashierSessionEntity,
+    ),
+  ],
   indices: [
     Index(value: ['invoice_number'], unique: true),
     Index(value: ['origin_invoice_id'], name: 'idx_invoices_origin_invoice_id'),
@@ -15,6 +29,7 @@ import 'package:floor/floor.dart';
       name: 'idx_invoices_idempotency_key',
       unique: true,
     ),
+    Index(value: ['shift_id'], name: 'idx_invoices_shift_id'),
   ],
 )
 class InvoiceEntity {
@@ -76,6 +91,19 @@ class InvoiceEntity {
   @ColumnInfo(name: 'total_usd')
   final double totalUsd;
 
+  /// B1a-4 (D-11): id of the cashier session (shift/turno) this sale was
+  /// made in, looked up at checkout from the sale's own user + terminal.
+  /// Nullable and permanent: historical rows cannot be backfilled because
+  /// the data was never recorded (D-9, owner-accepted). Null also means the
+  /// sale was made with no matching open session; the void guard (B1a-2)
+  /// must treat null as "unknown", never as "different shift".
+  ///
+  /// Mutable on purpose (same precedent as `number`): it is assigned at the
+  /// checkout construction site after `SalesMapper.toInvoiceEntity`, because
+  /// the domain `Invoice` model deliberately does not carry shift membership.
+  @ColumnInfo(name: 'shift_id')
+  String? shiftId;
+
   InvoiceEntity({
     required this.id,
     required this.number,
@@ -107,5 +135,6 @@ class InvoiceEntity {
     this.bcnOfficialRate = 36.6241,
     this.commercialRate = 36.50,
     this.totalUsd = 0.0,
+    this.shiftId,
   });
 }
