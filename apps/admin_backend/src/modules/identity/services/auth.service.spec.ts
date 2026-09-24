@@ -8,6 +8,7 @@ import {
 import { DataSource, type EntityManager } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { User, UserRole } from '../entities/user.entity';
 import {
   IDENTITY_JWT_CONFIG,
@@ -118,8 +119,13 @@ describe('AuthService', () => {
       transaction: jest.fn<unknown, [TransactionCallback]>(),
       query: jest.fn(),
     };
+    // Default transaction fake: hands back a manager whose repository for
+    // User is the same mock the pooled token provides, so existing behavior
+    // assertions keep working unchanged. `query` accepts the tenant-context
+    // set_config binding issued at the start of every tenant transaction.
     mockDataSource.transaction.mockImplementation((callback) =>
       callback({
+        query: jest.fn().mockResolvedValue(undefined),
         getRepository: jest.fn().mockReturnValue(mockUserRepository),
       } as unknown as EntityManager),
     );
@@ -1336,6 +1342,80 @@ describe('AuthService', () => {
       await expect(service.getMe('user-1')).rejects.toThrow(
         'Usuario no encontrado o inactivo',
       );
+    });
+  });
+
+  // Issue #512 T3 slice 9 rework: security_profiles is now tenant-RLS
+  // FORCE-protected, so the staff-sync JOIN must run inside the
+  // tenant-bound transaction manager or the joined side collapses to null.
+  // This guard has RUNTIME teeth: the pooled repository stands beside the
+  // bound one as a tripwire, and any reverted access fails at runtime.
+  describe('staff sync tenant transaction binding', () => {
+    it('binds the staff JOIN through the tenant transaction; the pooled repository stays silent', async () => {
+      const getMany = jest.fn().mockResolvedValue([]);
+      const boundQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany,
+      };
+      const boundUserRepository = {
+        createQueryBuilder: jest.fn().mockReturnValue(boundQb),
+      };
+      // Pooled tripwire: any createQueryBuilder call here means the JOIN
+      // escaped the bound transaction.
+      const pooledUserRepository = { createQueryBuilder: jest.fn() };
+
+      const setConfigCalls: Array<[string, string[]]> = [];
+      const boundManager = {
+        query: jest.fn(async (sql: string, params: string[]) => {
+          setConfigCalls.push([sql, params]);
+          return [];
+        }),
+        getRepository: jest.fn(() => boundUserRepository),
+      };
+      const boundDataSource = {
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            work(boundManager),
+        ),
+        query: jest.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AuthService,
+          {
+            provide: getRepositoryToken(User),
+            useValue: pooledUserRepository,
+          },
+          { provide: JwtService, useValue: mockJwtService },
+          { provide: DataSource, useValue: boundDataSource },
+          { provide: IDENTITY_JWT_CONFIG, useValue: jwtConfig },
+        ],
+      }).compile();
+      const bound = module.get<AuthService>(AuthService);
+
+      await bound.getStaffForSync('tenant-1', UserRole.OWNER);
+
+      // ONE transaction for the staff-sync read unit, binding the tenant
+      // context exactly once with the production set_config SQL.
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(setConfigCalls).toHaveLength(1);
+      expect(setConfigCalls[0][0]).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
+      expect(setConfigCalls[0][1]).toEqual(['tenant-1']);
+
+      // The JOIN resolved through the bound manager's repository.
+      expect(boundUserRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
+      expect(boundQb.leftJoinAndSelect).toHaveBeenCalledWith(
+        'user.security_profile',
+        'security_profile',
+      );
+
+      // RUNTIME TEETH: the pooled tripwire stayed silent.
+      expect(pooledUserRepository.createQueryBuilder).not.toHaveBeenCalled();
     });
   });
 });

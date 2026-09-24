@@ -12,6 +12,7 @@ import {
   IDENTITY_JWT_CONFIG,
   type IdentityJwtConfig,
 } from '../config/identity-jwt.config';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import {
   JWT_TOKEN_TYPES,
   isRefreshTokenPayloadForSubject,
@@ -372,30 +373,44 @@ export class AuthService {
       (resolvedRequesterRole === UserRole.CASHIER ||
         resolvedRequesterRole === UserRole.WAITER);
 
-    const qb = this.userRepository
-      .createQueryBuilder('user')
-      .leftJoinAndSelect('user.security_profile', 'security_profile')
-      .select([
-        'user.id',
-        'user.name',
-        'user.role',
-        'user.is_active',
-        'user.email',
-        'user.tenant_id',
-        'security_profile.user_id',
-        'security_profile.is_totp_enabled',
-        'security_profile.is_pin_enabled',
-      ])
-      .where('user.tenant_id = :tenantId', { tenantId })
-      .andWhere('user.is_active = :isActive', { isActive: true });
+    // Issue #512 T3 slice 9 rework: the users LEFT JOIN security_profiles
+    // query must run inside the tenant-bound transaction manager — on a
+    // pooled connection the FORCE RLS policy silently masks the joined
+    // security_profiles side, dropping pin_hash/totp_secret_seed from the
+    // offline-auth sync payload. The tenant id comes from the JWT via the
+    // controller (@GetTenantId()). Wrapping the whole JOIN (not just the
+    // mapping) is what keeps the joined side visible.
+    const users = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) => {
+        const qb = manager
+          .getRepository(User)
+          .createQueryBuilder('user')
+          .leftJoinAndSelect('user.security_profile', 'security_profile')
+          .select([
+            'user.id',
+            'user.name',
+            'user.role',
+            'user.is_active',
+            'user.email',
+            'user.tenant_id',
+            'security_profile.user_id',
+            'security_profile.is_totp_enabled',
+            'security_profile.is_pin_enabled',
+          ])
+          .where('user.tenant_id = :tenantId', { tenantId })
+          .andWhere('user.is_active = :isActive', { isActive: true });
 
-    if (canReadSensitiveProfile || scopedContinuityAllowed) {
-      qb.addSelect('security_profile.pin_hash').addSelect(
-        'security_profile.totp_secret_seed',
-      );
-    }
+        if (canReadSensitiveProfile || scopedContinuityAllowed) {
+          qb.addSelect('security_profile.pin_hash').addSelect(
+            'security_profile.totp_secret_seed',
+          );
+        }
 
-    const users = await qb.getMany();
+        return qb.getMany();
+      },
+    );
 
     const staff = users.map((user): StaffSyncItem => ({
       id: user.id,

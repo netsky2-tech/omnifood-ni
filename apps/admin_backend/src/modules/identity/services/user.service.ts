@@ -23,6 +23,7 @@ import {
 } from '../dto/permission-matrix.dto';
 import { AuthService } from './auth.service';
 import { bindRlsTenantContext } from '../human-authorization/rls/tenant-context';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { markTenantPublicationDirty } from '../human-authorization/services/tenant-publication-marker';
 
 /**
@@ -304,33 +305,41 @@ export class UserService {
     userId: string,
     tenantId: string,
   ): Promise<UserEffectivePermissionsDto> {
-    const user = await this.userRepository.findOne({
-      where: { id: userId, tenant_id: tenantId, is_active: true },
+    // Issue #512 T3 slice 9 rework: the security_profiles read is denied by
+    // its FORCE RLS policy on a pooled connection, so the user lookup and
+    // the dependent profile lookup run in one tenant-bound transaction (the
+    // tenant id arrives from the JWT via the controller, @GetTenantId()).
+    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
+      const user = await manager.getRepository(User).findOne({
+        where: { id: userId, tenant_id: tenantId, is_active: true },
+      });
+      if (!user) {
+        throw new NotFoundException('Usuario no encontrado');
+      }
+
+      const profile = await manager
+        .getRepository(SecurityProfile)
+        .findOne({
+          where: { user_id: user.id },
+        });
+
+      const customPermissions = (profile?.custom_permissions ??
+        []) as AppPermission[];
+      const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
+        []) as AppPermission[];
+      const effectivePermissions = resolveEffectivePermissions(
+        user.role,
+        customPermissions,
+      );
+
+      return {
+        user_id: user.id,
+        role: user.role,
+        role_permissions: rolePermissions,
+        custom_permissions: customPermissions,
+        effective_permissions: effectivePermissions,
+      };
     });
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
-
-    const profile = await this.securityProfileRepository.findOne({
-      where: { user_id: user.id },
-    });
-
-    const customPermissions = (profile?.custom_permissions ??
-      []) as AppPermission[];
-    const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
-      []) as AppPermission[];
-    const effectivePermissions = resolveEffectivePermissions(
-      user.role,
-      customPermissions,
-    );
-
-    return {
-      user_id: user.id,
-      role: user.role,
-      role_permissions: rolePermissions,
-      custom_permissions: customPermissions,
-      effective_permissions: effectivePermissions,
-    };
   }
 
   async setCustomPermissions(

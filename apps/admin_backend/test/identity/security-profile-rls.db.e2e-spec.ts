@@ -1,6 +1,9 @@
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
+import { User } from '../../src/modules/identity/entities/user.entity';
+import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
+import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
 
 /**
@@ -182,12 +185,17 @@ describe('security_profiles tenant RLS (Real PostgreSQL DB, migration-built sche
     );
 
     // The fixture's runtime role: NOSUPERUSER NOBYPASSRLS, non-owner, exact
-    // ordinary DML grants. Production-shaped for RLS evaluation.
+    // ordinary DML grants. Production-shaped for RLS evaluation. The
+    // identity entities are registered so the bound transaction query-shape
+    // regressions below can exercise the exact repository/QueryBuilder
+    // shapes the services use — never raw SQL stand-ins. Metadata only:
+    // no synchronize and no migrations on this connection.
     runtime = new DataSource({
       type: 'postgres',
       ...postgresConnection,
       username: fixture.runtimeRoleName,
       password: fixture.runtimeRolePassword,
+      entities: [User, SecurityProfile, Tenant],
       ...poolCleanupExtra,
     });
     await runtime.initialize();
@@ -451,6 +459,131 @@ describe('security_profiles tenant RLS (Real PostgreSQL DB, migration-built sche
             [userB2Id],
           ),
         ).rejects.toThrow(/row-level security/i);
+      });
+    });
+  });
+
+  // Issue #512 T3 slice 9 REWORK regression coverage: the first slice
+  // shipped FORCE RLS without binding the three production read paths that
+  // query security_profiles through pooled repositories, and an unbind
+  // would have been invisible to this suite. Each test below runs the
+  // EXACT query shape a service uses — the supervisor-override-shaped
+  // findOne, the staff-sync-shaped users JOIN security_profiles, and the
+  // permissions-shaped user-then-profile findOne — through the manager of
+  // a tenant-bound transaction against the migration-built schema, and
+  // proves both sides of the tenant contract: rows for the owning tenant,
+  // nothing (or a masked JOIN side) for a foreign one. A future revert of
+  // the binding makes the owning-tenant assertions fail here at the db
+  // level, not only in production.
+  describe('bound transaction query shapes (slice 9 rework regression)', () => {
+    it('supervisor-override-shaped bound findOne returns the owning profile and nothing for a foreign user', async () => {
+      await asRuntimeRole(runtime, tenantAId, async (runner) => {
+        const manager = runner.manager;
+
+        // SupervisorOverrideService.authorizeOverride shape: the bound
+        // manager's SecurityProfile repository, keyed by user_id, with the
+        // production select list.
+        const own = await manager.getRepository(SecurityProfile).findOne({
+          where: { user_id: userA1Id },
+          select: [
+            'id',
+            'user_id',
+            'pin_hash',
+            'totp_secret_seed',
+            'is_pin_enabled',
+            'is_totp_enabled',
+            'custom_permissions',
+          ],
+        });
+        expect(own).not.toBeNull();
+        expect(own?.user_id).toBe(userA1Id);
+
+        // The same shape keyed by a FOREIGN user resolves to nothing.
+        const foreign = await manager
+          .getRepository(SecurityProfile)
+          .findOne({ where: { user_id: userB1Id } });
+        expect(foreign).toBeNull();
+      });
+    });
+
+    it('permissions-shaped bound findOne (user then dependent profile) returns rows for the owning tenant and nothing for a foreign one', async () => {
+      await asRuntimeRole(runtime, tenantAId, async (runner) => {
+        const manager = runner.manager;
+
+        // UserService.getUserEffectivePermissions shape: User findOne by
+        // (id, tenant_id, is_active), then the dependent SecurityProfile
+        // findOne by user_id — both through the bound manager.
+        const user = await manager.getRepository(User).findOne({
+          where: { id: userA1Id, tenant_id: tenantAId, is_active: true },
+        });
+        expect(user).not.toBeNull();
+
+        const profile = await manager
+          .getRepository(SecurityProfile)
+          .findOne({ where: { user_id: user!.id } });
+        expect(profile).not.toBeNull();
+        expect(profile?.user_id).toBe(userA1Id);
+
+        // The user lookup itself is tenant-scoped by its where clause:
+        // a foreign user never satisfies (id, foreign-tenant, active).
+        const foreignUser = await manager.getRepository(User).findOne({
+          where: { id: userB1Id, tenant_id: tenantAId, is_active: true },
+        });
+        expect(foreignUser).toBeNull();
+      });
+    });
+
+    it('staff-sync-shaped bound JOIN keeps the security_profiles side visible for the owning tenant and masked for a foreign one', async () => {
+      await asRuntimeRole(runtime, tenantAId, async (runner) => {
+        const manager = runner.manager;
+
+        // AuthService.getStaffForSync shape: the bound manager's User
+        // repository QueryBuilder with the LEFT JOIN security_profiles.
+        // This is the offline-first critical path: an unbound (or
+        // foreign-bound) JOIN collapses the profile side to null.
+        const own = await manager
+          .getRepository(User)
+          .createQueryBuilder('user')
+          .leftJoinAndSelect('user.security_profile', 'security_profile')
+          .select([
+            'user.id',
+            'user.name',
+            'user.role',
+            'user.is_active',
+            'user.email',
+            'user.tenant_id',
+            'security_profile.user_id',
+            'security_profile.is_totp_enabled',
+            'security_profile.is_pin_enabled',
+          ])
+          .where('user.tenant_id = :tenantId', { tenantId: tenantAId })
+          .andWhere('user.is_active = :isActive', { isActive: true })
+          .getMany();
+
+        const ownWithProfile = own.find((u) => u.id === userA1Id);
+        expect(ownWithProfile).toBeDefined();
+        // The joined side SURVIVED RLS: without the bound transaction the
+        // FORCE policy filters every security_profiles row and this is null.
+        expect(ownWithProfile?.security_profile?.user_id).toBe(userA1Id);
+        // The profiled user's unprofiled tenant-mate has no profile row —
+        // LEFT JOIN, not an INNER JOIN through the policy.
+        const ownWithoutProfile = own.find((u) => u.id === userA2Id);
+        expect(ownWithoutProfile).toBeDefined();
+        expect(ownWithoutProfile?.security_profile).toBeNull();
+
+        // Foreign shape: A-bound session reading B's users. users has no
+        // RLS so the user rows return, but the security_profiles side is
+        // masked by the policy — proving the JOIN is not an RLS bypass.
+        const foreign = await manager
+          .getRepository(User)
+          .createQueryBuilder('user')
+          .leftJoinAndSelect('user.security_profile', 'security_profile')
+          .where('user.tenant_id = :tenantId', { tenantId: tenantBId })
+          .getMany();
+        expect(foreign.map((u) => u.id).sort()).toEqual(
+          [userB1Id, userB2Id].sort(),
+        );
+        expect(foreign.every((u) => u.security_profile === null)).toBe(true);
       });
     });
   });
