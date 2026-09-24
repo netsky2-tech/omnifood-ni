@@ -112,6 +112,10 @@ The owner asked for reprint support "que no existe actualmente". Verified 2026-0
 
 **Planned as unit B1r**, deliberately after B1a-3: the ANULADO banner and the REIMPRESIÓN banner are the same rendering slot, and pre-building a reprint banner with no call site would manufacture a fourth member of the wired-but-invisible class.
 
+**Status update: tracked as issue #547.** B1a-3 shipped in `ff9b59fa` with the banner as a shared rendering slot, so the reprint artwork now has somewhere to live once B1r has a call site. #547 records the required behaviour (reprint any specific invoice, marked REIMPRESIÓN, never create an invoice row / consume a folio / write a Kardex movement, actor + mandatory reason audited) and the two open items: question n.9 above, and the rule that a reprint of a cancelled invoice must carry ANULADO **and** REIMPRESIÓN together.
+
+**One correction to the delegation report, recorded because it was believed briefly.** The B1a-3 writer reported that whoever voids an invoice "is not recorded" and that AC-9's identity requirement "needs a schema/data widening". That is wrong: `prepareLog()` resolves the acting user and `_buildAuditEntity(user, …)` stamps both the user id and an ISO-8601 timestamp into the hash-chained audit row (`audit_repository_impl.dart:78-100`), and `6dcadf13` already made that row's metadata valid JSON. What is missing is that the *printed document* does not receive that identity — a print-model wiring gap in B1a-2, not a migration. Left uncorrected, this would have put an unnecessary schema change into the critical path for day 1.
+
 
 
 ## Batch 1 — Day-1 operability (what the cashier sees)
