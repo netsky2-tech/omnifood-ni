@@ -6,9 +6,9 @@
 
 **Branch:** `feat/dashboard-v2`
 **Base:** `main` @ `a9a381d4`
-**Status:** in progress — Tasks 1-2b done (`c197ca9c`, `78532c4d`, `39c179df`). Task 3: the v0.2's
-remaining gate is the owner's approval of the baseline; PRD decisions (§27, 22 items) come with the
-PRD drafting.
+**Status:** in progress — audit chain closed through v0.3 (`e61fe291`); PRD v1.0 + architecture
+spec v0.2 imported as inputs (`735a429b`); Tasks 2c and 4 done: gates verified and spec issued at
+v0.3 (GATE-VERIFIED / READY FOR EXECUTION ROADMAP). Task 5 (execution roadmap) pending.
 
 ## Governing constraint
 
@@ -68,31 +68,45 @@ discipline: evidence first, decisions second, PRD third, implementation batches 
   decision 1 of §27). Pre-discount base is derivable client-side as
   `netTaxableSales + totalDiscounts` (pre-tax) for the discount ratio.
 
+### Task 2c — Architecture spec gate pass (AG-01..AG-08)
+
+- **Status:** done — explorer pass + adversarial verification
+- **Goal:** Close or narrow the eight gates of architecture spec §35 with targeted code evidence.
+- **Commits:** this commit
+- **Evidence:** `docs/dashboard/arch_spec_gate_pass.md` — verified dispositions: AG-01 and AG-04
+  CLOSED (deterministic line allocation already exists; the sales stream already carries the
+  `source_sequence` watermark), AG-02 NARROWED to the sales-invoice movement timestamp (generic
+  inventory sync/counts/production already stamp business time), AG-05 NARROWED to a read endpoint
+  (mode lives in topology JSON), AG-03/AG-06/AG-07/AG-08 OPEN as prescribed build-out. Two explorer
+  findings corrected by adversarial verification: the AG-02 "no timestamp override" premise was
+  refuted (per-flow), and AG-08's mechanism was restated — cash over-tender with unnetted
+  `changeGiven`, not tips (tips never reach payments; `grandTotalWithTip` is display-only).
+  Downstream: #545's reconciliation motivation needs restating; the over-tender defect is new and
+  not covered by #545.
+
 ### Task 3 — Distill PRD decisions for the product owner
 
-- **Status:** pending
-- **Goal:** Convert audit §29's 16 decisions into a minimal decision set: which have obvious answers
-  from code/conventions, which genuinely need the owner (KPI naming, comparison defaults, tip
-  semantics, drill-down destinations, OWNER vs OWNER/MANAGER visibility, default date preset).
-- **Acceptance:** the owner answers in one sitting; no open product decision blocks the PRD.
-- **Commits:** pending
-- **Evidence:** pending
+- **Status:** done (superseded) — the owner authored and approved the PRD v1.0 externally
+  (`owner_dashboard_v2_prd_v1.0.md`, imported at `735a429b`).
 
-### Task 4 — Write `owner_dashboard_v2_prd.md`
+### Task 4 — Architecture spec final version
 
-- **Status:** pending
-- **Goal:** Authoritative product contract: KPI dictionary with formulas, regime presentation
-  rules, comparison semantics, freshness contract, composition (audit §26), states, acceptance
-  criteria. No DB/query architecture decisions (audit §24 stays open until after PRD).
-- **Commits:** pending
-- **Evidence:** pending
+- **Status:** done (v0.3 issued; APPROVED promotion gated on §36 build-out items)
+- **Goal:** Promote the spec on verified evidence without overstating.
+- **Commits:** this commit
+- **Evidence:** `owner_dashboard_v2_architecture_spec_v0.3.md` — status GATE-VERIFIED / READY FOR
+  EXECUTION ROADMAP; §35 dispositions replaced with the verified ones; §36 marked `[x]` only where
+  evidence closes the item; §37 rewritten. APPROVED promotion remains gated on the four OPEN gates
+  (AG-03 registry, AG-06 cost permission, AG-07 severity, AG-08 reporting net).
 
-### Task 5 — Implementation batches (P0 slice first)
+### Task 5 — Execution roadmap (`owner_dashboard_v2_execution_roadmap.md`)
 
 - **Status:** pending
-- **Goal:** Reviewable batches: (a) regime-aware KPI strip + freshness contract, (b) comparison +
-  trend chart, (c) performance explanation widgets (hourly, top products, payment mix), (d)
-  attention-required panel + empty states. Each batch with tests, design-system compliance (§21-22)
-  and tenant-isolation proof for any new query path (§25).
+- **Goal:** Convert the approved architecture into small evidence-gated slices per spec §38:
+  semantic/reporting normalization → freshness foundation (AG-03/AG-04) → frontend executive
+  composition (regime-aware strip, trend, hourly, top products, payment mix) → attention summaries
+  (AG-07) → tip data-path remediation (#545) → pilot/acceptance/hardening. Sequence AG-06 (cost
+  permission) before any margin widget; include the AG-08 over-tender net fix in the reporting
+  normalization slice.
 - **Commits:** pending
 - **Evidence:** pending
