@@ -23,6 +23,7 @@ import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
+import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
@@ -547,9 +548,35 @@ class SalesRepositoryImpl implements SalesRepository {
   }
 
   @override
-  Future<void> voidInvoice(String invoiceId, String reason) async {
+  Future<void> voidInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async {
+    // D-15/#525 AC-6: the reason is mandatory at the repository boundary.
+    // This throws BEFORE any read or write: an unreasoned void must never
+    // reach the fiscal engine, not even partially.
+    final trimmedCode = reasonCode.trim();
+    if (trimmedCode.isEmpty) {
+      throw ArgumentError(
+        'A void reason code is mandatory (D-15, #525 AC-6).',
+      );
+    }
+    final trimmedDetail = reasonDetail?.trim();
+    final effectiveReason = (trimmedDetail == null || trimmedDetail.isEmpty)
+        ? trimmedCode
+        : '$trimmedCode \u2014 $trimmedDetail';
+
     final entity = await invoiceDao.getInvoiceById(invoiceId);
     if (entity == null) return;
+    // D-15/#525 AC-3: a canceled invoice can never be voided again. This is
+    // an invariant violation (caller bug), not an operator-facing policy
+    // denial — hence StateError instead of a VoidDecision case.
+    if (entity.isCanceled) {
+      throw StateError(
+        'Invoice \$invoiceId is already canceled; void cannot re-run (AC-3).',
+      );
+    }
 
     // Build the compensating inventory reversal BEFORE opening the write
     // transaction. The versioned reversal can throw (e.g. a missing
@@ -576,15 +603,65 @@ class SalesRepositoryImpl implements SalesRepository {
         )
         .toList();
 
+    // B1a-2 (D-15): the loyalty reversal rides the SAME transaction. The
+    // sale granted/consumed points through customer_point_transactions (the
+    // view model's try/catch is not trustworthy evidence) — the void
+    // compensates the NET points of the invoice with one 'adjust'
+    // transaction and a relative balance update, atomic with the flag flip.
+    // No customer or no point transactions → clean no-op. The idempotency
+    // key documents the reversal; note the idempotency_key index on
+    // customer_point_transactions is NOT unique, so data-layer uniqueness is
+    // not enforced — protection is the double-void guard above plus the
+    // transaction's all-or-nothing rollback.
+    CustomerPointTransactionEntity? loyaltyReversal;
+    int? loyaltyReversalUpdatedAt;
+    if (entity.customerId != null && entity.customerId!.trim().isNotEmpty) {
+      final pointTxs = await database.customerPointTransactionDao
+          .getTransactionsByInvoice(invoiceId);
+      if (pointTxs.isNotEmpty) {
+        final reversalDelta =
+            -pointTxs.fold<double>(0, (sum, tx) => sum + tx.points);
+        final customer =
+            await database.customerDao.getCustomerById(entity.customerId!);
+        if (customer != null && reversalDelta != 0) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          loyaltyReversal = CustomerPointTransactionEntity(
+            id: const Uuid().v4(),
+            customerId: entity.customerId!,
+            invoiceId: invoiceId,
+            type: 'adjust',
+            points: reversalDelta,
+            // Snapshot of the expected post-reversal balance, from the same
+            // fresh read the sale path uses. The row update itself is
+            // relative (points_balance = points_balance + delta) inside the
+            // transaction, so a concurrent adjustment cannot be lost.
+            balanceAfter: customer.pointsBalance + reversalDelta,
+            conversionRate: pointTxs.first.conversionRate,
+            reason: 'Reversal by void',
+            createdAt: now,
+            syncStatus: 'pending',
+            reversalOfTransactionId: pointTxs.first.id,
+            idempotencyKey: 'void-reversal:$invoiceId',
+          );
+          loyaltyReversalUpdatedAt = now;
+        }
+      }
+    }
+
     // Prepare the forensic hash-chained audit entry WITHOUT inserting,
     // so the audit row is persisted in the same atomic unit as the
     // cancellation (see below). Returns null when there is no current
-    // user, mirroring auditRepository.log().
+    // user, mirroring auditRepository.log(). The structured reason is the
+    // D-15 metrics hook: reason_code/reason_detail ride the existing keys
+    // (#548 lesson: jsonEncode, never raw interpolation).
     final preparedAudit = await auditRepository.prepareLog(
       'SALE_VOIDED',
       metadata: jsonEncode(<String, String>{
         'invoice_id': invoiceId,
-        'reason': reason,
+        'reason': effectiveReason,
+        'reason_code': trimmedCode,
+        if (trimmedDetail != null && trimmedDetail.isNotEmpty)
+          'reason_detail': trimmedDetail,
       }),
     );
     final auditEntity = preparedAudit == null
@@ -599,12 +676,13 @@ class SalesRepositoryImpl implements SalesRepository {
     final canceledInvoice = _copyInvoiceEntity(
       entity,
       isCanceled: true,
-      voidReason: reason,
+      voidReason: effectiveReason,
       syncStatus: 'pending',
     );
 
     // Persist EVERYTHING in a single Floor @transaction:
-    //   reversal movements + insumo stock + isCanceled flag + audit log.
+    //   reversal movements + insumo stock + isCanceled flag + loyalty
+    //   reversal + audit log.
     // A DAO failure after any inner write rolls back the whole unit, so
     // no partial reversal/cancellation/audit state can be committed.
     await transactionDao.executeVoidTransaction(
@@ -612,6 +690,8 @@ class SalesRepositoryImpl implements SalesRepository {
       canceledInvoice,
       auditEntity,
       false,
+      loyaltyReversal,
+      loyaltyReversalUpdatedAt,
     );
   }
 

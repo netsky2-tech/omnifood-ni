@@ -817,15 +817,17 @@ class MockSalesRepository extends _i1.Mock implements _i55.SalesRepository {
   @override
   _i52.Future<void> voidInvoice(
     String? invoiceId,
-    String? reason,
-  ) =>
+    String? reasonCode, {
+    String? reasonDetail,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #voidInvoice,
           [
             invoiceId,
-            reason,
+            reasonCode,
           ],
+          {#reasonDetail: reasonDetail},
         ),
         returnValue: _i52.Future<void>.value(),
         returnValueForMissingStub: _i52.Future<void>.value(),

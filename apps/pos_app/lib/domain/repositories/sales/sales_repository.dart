@@ -55,7 +55,16 @@ abstract class SalesRepository {
     required List<String> acknowledgedCorrelationIds,
   });
   Future<int> getInventoryEnrichmentPendingCount();
-  Future<void> voidInvoice(String invoiceId, String reason);
+  /// D-15: [reasonCode] is a mandatory controlled code (VoidReasonCodes)
+  /// and [reasonDetail] optional free text. The repository validates the
+  /// code BEFORE any write (AC-6) and stores `code — detail` on the invoice
+  /// plus structured reason_code/reason_detail audit metadata (D-15 metrics
+  /// hook). Throws StateError if the invoice is already canceled (AC-3).
+  Future<void> voidInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  });
   Future<void> createCreditNote({
     required String originalInvoiceId,
     required String reason,
