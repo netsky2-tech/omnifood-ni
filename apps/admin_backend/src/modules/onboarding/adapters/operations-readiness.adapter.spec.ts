@@ -39,6 +39,9 @@ describe('OperationsReadinessAdapter (Unit)', () => {
         // Issue #512 slice 2 part A: the recipe_versions readiness count also
         // resolves from the tenant-bound transaction manager.
         if (entity === RecipeVersion) return recipeVersionRepo;
+        // Issue #512 slice 3 part A: the supplier readiness count also
+        // resolves from the tenant-bound transaction manager.
+        if (entity === Supplier) return supplierRepo;
         return null;
       }),
     };
@@ -180,6 +183,41 @@ describe('OperationsReadinessAdapter (Unit)', () => {
     // The binding precedes the first protected access (the count).
     expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
       (recipeVersionRepo.count as jest.Mock).mock.invocationCallOrder[0],
+    );
+  });
+
+  // Issue #512 slice 3 part A binding guard: reverting the supplier readiness
+  // count to the pooled `this.supplierRepository` would skip
+  // runInTenantTransaction entirely — no transaction opens and no
+  // transaction-local set_config binding runs — so the txManager.query and
+  // txManager.getRepository assertions below would fail, and the count would
+  // silently return zero under FORCE RLS instead of failing loudly. The
+  // pooled and transaction-manager mocks for suppliers resolve to the same
+  // object, so the transaction/ordering assertions are the reliable revert
+  // detectors, not the count value itself.
+  it('binds the supplier readiness count through the transaction manager (issue #512 slice 3)', async () => {
+    (userRepo.count as jest.Mock).mockResolvedValue(1);
+    (recipeVersionRepo.count as jest.Mock).mockResolvedValue(0);
+    (supplierRepo.count as jest.Mock).mockResolvedValue(2);
+    const qbMock: any = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    (productRepo.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+    const result = await adapter.evaluateOperationsReadiness('tenant-bound');
+
+    expect(result.supplierCount).toBe(2);
+    expect(txManager.query).toHaveBeenCalledWith(
+      TENANT_CONTEXT_SET_CONFIG_SQL,
+      ['tenant-bound'],
+    );
+    expect(txManager.getRepository).toHaveBeenCalledWith(Supplier);
+    // The binding precedes the supplier count.
+    expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+      (supplierRepo.count as jest.Mock).mock.invocationCallOrder[0],
     );
   });
 });

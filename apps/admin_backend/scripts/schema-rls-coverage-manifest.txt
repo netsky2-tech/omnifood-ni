@@ -25,7 +25,7 @@
 # the manifest is judged fail-closed, never silently filtered.
 
 # ---------------------------------------------------------------------------
-# direct — tenant_id + ENABLE + FORCE + at least one policy (47)
+# direct — tenant_id + ENABLE + FORCE + at least one policy (51)
 # ---------------------------------------------------------------------------
 batches|direct
 catalog_values|direct
@@ -63,16 +63,20 @@ onboarding_template_seed_links|direct
 product_inventory_mapping_versions|direct
 products|direct
 production_batch_history|direct
+production_orders|direct
 recipe_details|direct
 recipe_versions|direct
 recipes|direct
+shrinkages|direct
 sys_parametros_config|direct
 staging_importacion_productos|direct
+suppliers|direct
 product_import_sessions|direct
 legacy_import_integrity_reports|direct
 tenant_capability_event|direct
 tenant_fulfillment_records|direct
 tenant_topology_revisions|direct
+warehouses|direct
 uom_conversions|direct
 
 # ---------------------------------------------------------------------------
@@ -107,7 +111,7 @@ credit_note_provenance_rls_baseline|global
 # ---------------------------------------------------------------------------
 # debt — explicit temporary tenant isolation debt. Each entry must be
 # promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (19)
+# slice in T2/T3; a fully protected debt entry fails as stale. (15)
 # ---------------------------------------------------------------------------
 audit_integrity_alerts|debt
 audit_logs|debt
@@ -124,9 +128,5 @@ datafonos_equipos|debt
 forensic_alerts|debt
 loyalty_programs|debt
 loyalty_rewards|debt
-production_orders|debt
 promotions|debt
-shrinkages|debt
-suppliers|debt
 users|debt
-warehouses|debt
