@@ -25,10 +25,13 @@
 # the manifest is judged fail-closed, never silently filtered.
 
 # ---------------------------------------------------------------------------
-# direct — tenant_id + ENABLE + FORCE + at least one policy (51)
+# direct — tenant_id + ENABLE + FORCE + at least one policy (56)
 # ---------------------------------------------------------------------------
 batches|direct
 catalog_values|direct
+customer_loyalty_account_projection|direct
+customer_point_transactions|direct
+customers|direct
 device_sync_credential_events|direct
 device_sync_credentials|direct
 fiscal_config_revisions|direct
@@ -52,6 +55,8 @@ invoices|direct
 kardex_correction|direct
 kardex_recalculate_queue|direct
 legacy_onboarding_migration_receipts|direct
+loyalty_programs|direct
+loyalty_rewards|direct
 onboarding_activation_attempts|direct
 onboarding_activation_check_results|direct
 onboarding_activation_follow_ups|direct
@@ -111,7 +116,7 @@ credit_note_provenance_rls_baseline|global
 # ---------------------------------------------------------------------------
 # debt — explicit temporary tenant isolation debt. Each entry must be
 # promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (15)
+# slice in T2/T3; a fully protected debt entry fails as stale. (10)
 # ---------------------------------------------------------------------------
 audit_integrity_alerts|debt
 audit_logs|debt
@@ -121,12 +126,7 @@ cash_shift_sessions|debt
 # FK; they are tenant business data, so the missing isolation is real debt.
 cashier_sessions|debt
 change_log|debt
-customer_loyalty_account_projection|debt
-customer_point_transactions|debt
-customers|debt
 datafonos_equipos|debt
 forensic_alerts|debt
-loyalty_programs|debt
-loyalty_rewards|debt
 promotions|debt
 users|debt
