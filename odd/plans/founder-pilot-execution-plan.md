@@ -15,12 +15,26 @@ Every unit below maps to acceptance criteria (`AC-n`) in its issue body. An item
 
 ## Owner directives — 2026-09-24 (binding; they re-shape this plan)
 
-Eight decisions issued after the #535 questions were drafted. These are **engineering posture**, not the accountant's answers: #535 Q1–Q7 still need her data. Directive 7 paid for itself immediately — it refuted two claims published in this plan's own evidence base (see *Retractions* below).
+Eight decisions issued in reply to the #535 questions. **These are the accountant's answers, relayed by the owner** — not owner-only engineering posture, which is what an earlier draft of this section claimed. That distinction matters for what stays open: they close every question of *interpretation*, so no batch is blocked on a legal reading anymore. Three questions of *fact* remain, and no amount of code reading answers them — the range DGI actually authorized for SOHO, the authorization letter's number and date, and the filing procedure for a dead terminal. D-8 names the first of those as a blocker on purpose.
+
+Directive 7 paid for itself immediately — it refuted two claims published in this plan's own evidence base (see *Retractions* below).
+
+| Question | Answered by | Still open |
+|---|---|---|
+| Q1 authorized range + exhaustion procedure | D-1 (range is tenant configuration, never a default) + D-8 (no auto-renewal) | **the actual authorized numbers** — document request, not a judgment call |
+| Q2 one series per terminal? | D-2 — differentiated series is required for **sucursales/agencias**, not per device | whether a second register in the *same* premises is a sucursal |
+| Q3 document type + IVA break-out | D-3 — separate `CUOTA_FIJA` / `REGIMEN_GENERAL` profiles, Cuota Fija transfers no IVA, never hardcode 15% | which specific document SOHO issues (Simplificada vs Consumidor Final vs Ticket) |
+| Q4 is DT 09-2007 current / does it bind Cuota Fija | — | **unanswered.** #539's three gaps are conditional on it |
+| Q5 filing when a terminal dies | D-6 — replacement never restarts a series; undetermined last folio → `FISCAL_SEQUENCE_RECOVERY_REQUIRED` | **what is filed, where, and by when** — the incident procedure's uncited deadline |
+| Q6 inventory-shortfall proof | D-7 — verify the code first (it refuted me), plus a 6-field operational minimum per merma | the *prueba en contrario* standard an inspector accepts; scope of the 10-day destruction notice |
+| Q7 authorization number + manuals | D-4 — add `fiscalAuthorizationNumber`, no go-live without it where required. D-5 — Spanish manuals are pending compliance deliverables | **the letter's number and date** |
+
+Practical consequence for B0.3: the seven-question message is no longer needed as a *criterio* request. What remains is a **two-line document request** (range resolution + authorization letter) and Q4, which is still a real question. Don't send the long version to collect what D-1…D-8 already settled.
 
 | # | Directive | Effect on this plan |
 |---|---|---|
 | **D-1** | Delete 1–1000 as a default fiscal range; forbid bootstrap/reinstall from overwriting a persisted fiscal sequence. Range/series become configuration sourced from the tenant's DGI documentation. | Absorbs #520 D1/D2 into **B2a** as one unit. Kills three competing hardcoded defaults (below). The *values* still come from Q1 — D-1 fixes who owns them, not what they are. |
-| **D-2** | Do **not** model "one mandatory series per device" as a legal requirement. Differentiated series is expressly required for **sucursales/agencias**. Multiple offline emitters in one premises → sequence strategy is fiscal **configuration gated on approval** before enabling a terminal. | Reframes **B5a** and **#532 T4**: the gate is an approval workflow, not a legal constant. Does **not** close #535 Q2 — Q2 asks whether a second register in the same premises *is* a sucursal, which is exactly what D-2 leaves to her. |
+| **D-2** | Do **not** model "one mandatory series per device" as a legal requirement. Differentiated series is expressly required for **sucursales/agencias**. Multiple offline emitters in one premises → sequence strategy is fiscal **configuration gated on approval** before enabling a terminal. | Reframes **B5a** and **#532 T4**: the gate is an approval workflow, not a legal constant. This is the answer to #535 Q2 as written — and it answers it by *narrowing* the claim: we asked whether a second register needs its own informed series, and the requirement attaches to sucursales. |
 | **D-3** | Support at least `CUOTA_FIJA` and `REGIMEN_GENERAL` as distinct fiscal profiles. Cuota Fija does not transfer IVA; **never hardcode 15%**. | **Larger than it sounds, smaller than it looks.** Dual-regime already exists and already drives `effectiveTaxRate = 0.0` (`apps/pos_app/lib/domain/models/printer/receipt_document.dart:77-78`), so this is not new architecture. But 15% **is** hardcoded in ~8 places, and the Business Profile default regime is `REGIMEN_GENERAL` for a Cuota Fija client. See *Litigation against D-3* below. |
 | **D-4** | Add `fiscalAuthorizationNumber` to the fiscal profile and the computerized-invoice renderer. No fiscal go-live if the client requires computerized authorization and the datum/document is unavailable. | **B1d changes from "add a field" to "wire an existing orphan"** — see Retractions. The go-live gate is new: it is the first *blocking* condition in this plan that is not a code check. |
 | **D-5** | Technical manual and user manual in Spanish are **pending compliance deliverables** (DT 09-2007 ordinal SEGUNDO 1.5). | New. **No issue exists for either deliverable and no batch carries them.** They are not code, so no exit check currently catches their absence. Tracked as B6 below. |
