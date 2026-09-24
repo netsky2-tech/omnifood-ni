@@ -251,6 +251,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
 
       const changeLogService = new ChangeLogService(
         dataSource.getRepository(ChangeLog),
+        // Issue #512 slice 7: change_log is tenant-RLS protected, so the
+        // service binds its own tenant transactions through the DataSource.
+        dataSource,
       );
 
       const activationService = new ActivationService(
@@ -497,6 +500,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
 
       const changeLogService = new ChangeLogService(
         dataSource.getRepository(ChangeLog),
+        // Issue #512 slice 7: change_log is tenant-RLS protected, so the
+        // service binds its own tenant transactions through the DataSource.
+        dataSource,
       );
 
       const activationService = new ActivationService(
@@ -727,7 +733,12 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         dummyReconciler,
       );
 
-      const changeLogService = new ChangeLogService(changeLogRepo);
+      const changeLogService = new ChangeLogService(
+        changeLogRepo,
+        // Issue #512 slice 7: change_log is tenant-RLS protected, so the
+        // service binds its own tenant transactions through the DataSource.
+        dataSource,
+      );
 
       const activationService = new ActivationService(
         attemptRepo,

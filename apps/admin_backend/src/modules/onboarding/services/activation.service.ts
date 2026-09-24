@@ -1093,21 +1093,27 @@ export class ActivationService {
         }
       }
 
-      await this.changeLogService.log({
-        tenantId: trimmedTenant,
-        actor: actorUserId
-          ? { userId: actorUserId }
-          : { ref: 'SUPPORT_OPERATOR' },
-        action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
-        targetType: 'ActivationAttempt',
-        targetId: attempt.id,
-        changes: {
-          overrideAction: dto.overrideAction,
-          reason,
-          evidenceRef: dto.evidenceRef || null,
-          notes: dto.notes || null,
+      // Issue #512 slice 7: the audit entry rides the caller's tenant-bound
+      // transaction manager so the override and its audit log commit
+      // atomically inside the same bound transaction.
+      await this.changeLogService.log(
+        {
+          tenantId: trimmedTenant,
+          actor: actorUserId
+            ? { userId: actorUserId }
+            : { ref: 'SUPPORT_OPERATOR' },
+          action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
+          targetType: 'ActivationAttempt',
+          targetId: attempt.id,
+          changes: {
+            overrideAction: dto.overrideAction,
+            reason,
+            evidenceRef: dto.evidenceRef || null,
+            notes: dto.notes || null,
+          },
         },
-      });
+        manager,
+      );
 
       return {
         attempt,
@@ -1202,10 +1208,13 @@ export class ActivationService {
 
         let auditTrail: ChangeLog[] = [];
         try {
+          // Issue #512 slice 7: the read rides the tenant-bound transaction
+          // manager this diagnostic already runs inside.
           auditTrail = await this.changeLogService.findByTarget(
             trimmedTenant,
             'ActivationAttempt',
             attempt.id,
+            manager,
           );
         } catch {
           // Table not present or query error; ignore

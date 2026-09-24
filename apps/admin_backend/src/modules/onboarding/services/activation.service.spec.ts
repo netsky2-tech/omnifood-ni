@@ -36,6 +36,10 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
   let fiscalConfigVersionService: any;
   let onboardingCatalogService: any;
   let dataSource: any;
+  // The manager the tenant-bound transaction hands back: audit writes and
+  // reads issued inside an activation transaction must ride THIS manager
+  // (issue #512 slice 7), never the pooled repositories.
+  let transactionalManager: any;
   let changeLogService: any;
 
   const tenantId = 'tenant-founder-01';
@@ -104,21 +108,21 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       }),
     };
 
+    transactionalManager = {
+      // Transaction-local tenant context binding (RLS pre-policy).
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: (entityClass: any) => {
+        if (entityClass === ActivationAttempt) return attemptRepo;
+        if (entityClass === OnboardingSession) return sessionRepo;
+        if (entityClass === ActivationCheckResult) return checkRepo;
+        if (entityClass === ActivationFollowUp) return followUpRepo;
+        if (entityClass === Invoice) return invoiceRepo;
+        return null;
+      },
+    };
+
     dataSource = {
-      transaction: jest.fn((cb) =>
-        cb({
-          // Transaction-local tenant context binding (RLS pre-policy).
-          query: jest.fn().mockResolvedValue(undefined),
-          getRepository: (entityClass: any) => {
-            if (entityClass === ActivationAttempt) return attemptRepo;
-            if (entityClass === OnboardingSession) return sessionRepo;
-            if (entityClass === ActivationCheckResult) return checkRepo;
-            if (entityClass === ActivationFollowUp) return followUpRepo;
-            if (entityClass === Invoice) return invoiceRepo;
-            return null;
-          },
-        }),
-      ),
+      transaction: jest.fn((cb) => cb(transactionalManager)),
     };
 
     changeLogService = {
@@ -977,7 +981,9 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       expect(result.attempt.failureCode).toBe('SUPPORT_OVERRIDE_FAIL');
       expect(session.lifecycleState).toBe(OnboardingLifecycleState.SALE_READY);
 
-      // Audit logged
+      // Audit logged, riding the tenant-bound transaction's manager
+      // (issue #512 slice 7): the override write and its audit entry share
+      // the same bound transaction.
       expect(changeLogService.log).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId,
@@ -985,6 +991,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
           action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
           targetType: 'ActivationAttempt',
         }),
+        transactionalManager,
       );
     });
 
@@ -1067,6 +1074,15 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       ]);
 
       const diag = await service.getActivationDiagnostics(tenantId, attemptId);
+
+      // The audit-trail read rides the tenant-bound transaction's manager
+      // (issue #512 slice 7), never the pooled repository.
+      expect(changeLogService.findByTarget).toHaveBeenCalledWith(
+        tenantId,
+        'ActivationAttempt',
+        attemptId,
+        transactionalManager,
+      );
 
       expect(diag.attempt.id).toBe(attemptId);
       expect(diag.session.lifecycleState).toBe(
