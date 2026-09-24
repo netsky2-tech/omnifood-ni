@@ -2487,6 +2487,13 @@ final migration54_55 = Migration(54, 55, (database) async {
     'CREATE INDEX IF NOT EXISTS idx_invoices_local_issue_date '
     'ON invoices (local_issue_date)',
   );
+  // B1r (D-13, third in-place extension — still never shipped): the
+  // immutable fiscal header snapshot for faithful reprints.
+  if (!names.contains('fiscal_header_snapshot')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN fiscal_header_snapshot TEXT',
+    );
+  }
 });
 
 final allMigrations = [

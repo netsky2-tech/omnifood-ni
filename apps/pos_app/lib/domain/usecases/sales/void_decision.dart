@@ -123,3 +123,31 @@ class VoidReasonCodes {
     otro,
   ];
 }
+
+/// D-13/#547: reprint reason codes (mandatory, controlled) — the void
+/// dialog pattern. Lives beside [VoidReasonCodes] because both are the
+/// shared "controlled correction codes" module for the sales domain.
+class ReprintReasonCodes {
+  static const papelAtascado = 'PAPEL_ATASCADO';
+  static const clientePerdioTicket = 'CLIENTE_PERDIO_TICKET';
+  static const verificacion = 'VERIFICACION';
+  static const otro = 'OTRO';
+
+  static const all = <String>[
+    papelAtascado,
+    clientePerdioTicket,
+    verificacion,
+    otro,
+  ];
+}
+
+/// D-13: named fail-closed denial for reprints of documents issued before
+/// the fiscal header snapshot existed. There is NO fallback to live config:
+/// reprinting under today's header would fabricate a legal document (the
+/// 36.6241 failure mode applied to a legal document). No backfill either —
+/// the historical values were never recorded.
+const String reprintSnapshotUnavailableCode = 'REPRINT_SNAPSHOT_UNAVAILABLE';
+
+/// Operator-facing Spanish message for [reprintSnapshotUnavailableCode].
+const String reprintSnapshotUnavailableMessage =
+    'Este documento es anterior al registro de cabecera fiscal; no puede reimprimirse fielmente.';

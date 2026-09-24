@@ -126,6 +126,30 @@ class InvoiceEntity {
   @ColumnInfo(name: 'local_issue_date')
   String? localIssueDate;
 
+  /// D-13/#547: immutable fiscal header snapshot taken at issuance — JSON of
+  /// exactly the header values the print path read from live config at
+  /// checkout (businessName, ruc, address, phone,
+  /// fiscalAuthorizationNumber). A reprint reproduces the document AS
+  /// ISSUED and NEVER reads current fiscal data: deriving the header at
+  /// reprint time would reprint under whatever the business config says NOW
+  /// (the 36.6241 failure mode applied to a legal document).
+  ///
+  /// Lines and totals are deliberately NOT duplicated here: the
+  /// invoice_items child rows are their own immutable record —
+  /// InvoiceItemDao exposes only a SELECT and the checkout INSERT (zero
+  /// update/delete paths; verified by grep, B1r slice 1), so nothing can
+  /// rewrite a line after issuance.
+  ///
+  /// Nullable and permanent: pre-snapshot rows fail closed at reprint
+  /// (REPRINT_SNAPSHOT_UNAVAILABLE); no backfill — it would be fabricated
+  /// data. Does NOT travel to the cloud (#551 family).
+  ///
+  /// Mutable on purpose (same precedent as shiftId): assigned at the
+  /// checkout construction site; rides _copyInvoiceEntity so no later
+  /// rewrite can drop it (#548 tripwire).
+  @ColumnInfo(name: 'fiscal_header_snapshot')
+  String? fiscalHeaderSnapshot;
+
   InvoiceEntity({
     required this.id,
     required this.number,
@@ -159,5 +183,6 @@ class InvoiceEntity {
     this.totalUsd = 0.0,
     this.shiftId,
     this.localIssueDate,
+    this.fiscalHeaderSnapshot,
   });
 }

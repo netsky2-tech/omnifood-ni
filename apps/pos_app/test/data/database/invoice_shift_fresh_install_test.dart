@@ -30,8 +30,9 @@ void main() {
     final colNames = columns.map((c) => c['name'] as String).toSet();
     expect(colNames, contains('shift_id'));
     expect(colNames, contains('local_issue_date'));
+    expect(colNames, contains('fiscal_header_snapshot'));
 
-    for (final name in ['shift_id', 'local_issue_date']) {
+    for (final name in ['shift_id', 'local_issue_date', 'fiscal_header_snapshot']) {
       final column = columns.firstWhere((c) => c['name'] == name);
       expect(column['notnull'], 0, reason: name);
       expect(column['dflt_value'], isNull, reason: name);

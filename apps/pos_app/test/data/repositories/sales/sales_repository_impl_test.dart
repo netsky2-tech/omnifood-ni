@@ -8,6 +8,8 @@ import 'package:pos_app/data/daos/sales/invoice_dao.dart';
 import 'package:pos_app/data/daos/sales/invoice_item_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
+import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -68,6 +70,15 @@ class _StubFulfillmentTopologyDao implements FulfillmentTopologyDao {
   ) async => [];
 }
 
+class _StubLocalConfigDao implements LocalConfigDao {
+  @override
+  Future<LocalConfigEntity?> getConfigByKey(String key) async => null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('Not used by this test');
+}
+
 class _StubCashierSessionDao implements CashierSessionDao {
   @override
   Future<CashierSessionEntity?> getActiveSessionForUserAndTerminal(
@@ -87,6 +98,8 @@ class _FulfillmentAppDatabase extends Fake implements AppDatabase {
   final FulfillmentTopologyDao fulfillmentTopologyDao;
   @override
   final CashierSessionDao cashierSessionDao = _StubCashierSessionDao();
+  @override
+  final LocalConfigDao localConfigDao = _StubLocalConfigDao();
 }
 
 class _FulfillmentSalesTransactionDao extends Fake
@@ -122,10 +135,12 @@ class _FulfillmentSalesTransactionDao extends Fake
   ProcessSaleInventoryUseCase,
   ReverseSaleInventoryUseCase,
   InventoryRepository,
+  LocalConfigDao,
 ])
 void main() {
   late SalesRepositoryImpl repository;
   late MockAppDatabase mockDatabase;
+  late MockLocalConfigDao mockLocalConfigDao;
   late MockInvoiceDao mockInvoiceDao;
   late MockInvoiceItemDao mockItemDao;
   late MockPaymentDao mockPaymentDao;
@@ -140,6 +155,7 @@ void main() {
 
   setUp(() {
     mockDatabase = MockAppDatabase();
+    mockLocalConfigDao = MockLocalConfigDao();
     mockInvoiceDao = MockInvoiceDao();
     mockItemDao = MockInvoiceItemDao();
     mockPaymentDao = MockPaymentDao();
@@ -173,6 +189,8 @@ void main() {
     // so the sale persists a null shiftId unless a test overrides it.
     mockSessionDao = MockCashierSessionDao();
     when(mockDatabase.cashierSessionDao).thenReturn(mockSessionDao);
+    when(mockDatabase.localConfigDao).thenReturn(mockLocalConfigDao);
+    when(mockLocalConfigDao.getConfigByKey(any)).thenAnswer((_) async => null);
     when(
       mockSessionDao.getActiveSessionForUserAndTerminal(any, any),
     ).thenAnswer((_) async => null);
@@ -1962,6 +1980,113 @@ void main() {
     });
   });
 
+  group('B1r: fiscal header snapshot at checkout (D-13)', () {
+    InvoiceEntity capturedSnapshotInvoice() {
+      final result = verify(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          captureAny,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      );
+      result.called(1);
+      return result.captured.first as InvoiceEntity;
+    }
+
+    Invoice invoiceWithUser(String id, String userId) => Invoice(
+          id: id,
+          number: 'draft',
+          createdAt: DateTime(2026, 9, 24, 12, 0),
+          userId: userId,
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          paymentStatus: PaymentStatus.paid,
+          syncStatus: SyncStatus.pending,
+          type: InvoiceType.regular,
+        );
+
+    void arrangeSnapshotPath() {
+      when(
+        mockNumberingService.isRangeExhausted(),
+      ).thenAnswer((_) async => false);
+      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '001');
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).thenAnswer((_) async {});
+      when(mockNumberingService.incrementNumber()).thenAnswer((_) async {});
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+    }
+
+    test('writes the header JSON from issuance-time config with fallback resolution',
+        () async {
+      // printer_header_* wins over the business-profile fallbacks.
+      when(mockLocalConfigDao.getConfigByKey('printer_header_business_name'))
+          .thenAnswer(
+              (_) async => LocalConfigEntity(key: 'printer_header_business_name', value: 'Café Emisor S.A.'));
+      when(mockLocalConfigDao.getConfigByKey('ruc')).thenAnswer(
+          (_) async => LocalConfigEntity(key: 'ruc', value: 'A0011234567890'));
+      when(mockLocalConfigDao.getConfigByKey('dgi_authorization_code'))
+          .thenAnswer((_) async => LocalConfigEntity(
+              key: 'dgi_authorization_code', value: 'AUT-DGI-2026-0001'));
+      // Fallback path exercised: no printer_header_address, only 'address'.
+      when(mockLocalConfigDao.getConfigByKey('address')).thenAnswer(
+          (_) async => LocalConfigEntity(key: 'address', value: 'Calle Original 456'));
+
+      arrangeSnapshotPath();
+      await repository.saveSale(
+        invoice: invoiceWithUser('inv-snap-1', 'user1'),
+        items: const [],
+        payments: [],
+      );
+
+      final persisted = capturedSnapshotInvoice();
+      expect(persisted.fiscalHeaderSnapshot, isNotNull);
+      final snapshot =
+          jsonDecode(persisted.fiscalHeaderSnapshot!) as Map<String, dynamic>;
+      expect(snapshot, {
+        'businessName': 'Café Emisor S.A.',
+        'ruc': 'A0011234567890',
+        'address': 'Calle Original 456',
+        'fiscalAuthorizationNumber': 'AUT-DGI-2026-0001',
+      });
+      // Blank/absent values are omitted, never fabricated.
+      expect(snapshot.containsKey('phone'), isFalse);
+    });
+
+    test('stores null when the business has no header config at all',
+        () async {
+      arrangeSnapshotPath();
+
+      await repository.saveSale(
+        invoice: invoiceWithUser('inv-snap-2', 'user1'),
+        items: const [],
+        payments: [],
+      );
+
+      expect(capturedSnapshotInvoice().fiscalHeaderSnapshot, isNull);
+    });
+  });
+
   group('#548: full-column preservation on invoice rewrites', () {
     // Every column of the live `invoices` schema, seeded with a DISTINCT,
     // non-default value. A partial entity rebuild cannot reproduce these
@@ -2004,6 +2129,7 @@ void main() {
       'total_usd': 3.21,
       'shift_id': 'shift-preserve',
       'local_issue_date': '2026-09-23',
+      'fiscal_header_snapshot': '{"businessName":"Café Original"}',
     };
 
     late AppDatabase preservationDatabase;

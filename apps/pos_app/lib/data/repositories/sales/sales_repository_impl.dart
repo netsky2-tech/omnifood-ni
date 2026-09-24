@@ -6,6 +6,8 @@ import 'package:crypto/crypto.dart';
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/usecases/sales/issue_date.dart';
+import 'package:pos_app/domain/usecases/sales/void_decision.dart'
+    show reprintSnapshotUnavailableCode;
 import 'package:pos_app/data/mappers/inventory_mapper.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
@@ -23,6 +25,7 @@ import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
@@ -173,7 +176,15 @@ class SalesRepositoryImpl implements SalesRepository {
       // never recomputed at void time from the epoch createdAt — deriving it
       // then would re-interpret the ticket under the device's CURRENT
       // timezone, and that boundary is what decides voidability.
-      ..localIssueDate = localCalendarDate(updatedInvoice.createdAt);
+      ..localIssueDate = localCalendarDate(updatedInvoice.createdAt)
+      // D-13: immutable fiscal header snapshot, taken at issuance from the
+      // same config the print path reads. Key resolution MIRRORS
+      // printer_config_service exactly (printer_header_* first, then the
+      // business-profile fallbacks; ruc = the fiscal ruc key) — do not
+      // "simplify" the fallbacks: they decide which key feeds legal
+      // documents. Only non-blank values enter the JSON; a blank config
+      // stores null and reprints fail closed later.
+      ..fiscalHeaderSnapshot = await _buildFiscalHeaderSnapshot();
     final itemEntities = resolvedItems.map(SalesMapper.toItemEntity).toList();
     final paymentEntities = payments.map(SalesMapper.toPaymentEntity).toList();
     final movementEntities = isFrozenSale
@@ -536,6 +547,119 @@ class SalesRepositoryImpl implements SalesRepository {
       totalUsd: entity.totalUsd,
       shiftId: entity.shiftId,
       localIssueDate: entity.localIssueDate,
+      fiscalHeaderSnapshot: entity.fiscalHeaderSnapshot,
+    );
+  }
+
+  /// D-13: builds the immutable fiscal header snapshot from the same config
+  /// keys (and fallback order) printer_config_service reads for the live
+  /// print path. Null when every value is blank: an unconfigured business
+  /// has no header to reproduce, and reprints of such rows fail closed
+  /// instead of printing a fabricated default header.
+  Future<String?> _buildFiscalHeaderSnapshot() async {
+    Future<LocalConfigEntity?> read(String key) =>
+        database.localConfigDao.getConfigByKey(key);
+
+    String? nonBlank(LocalConfigEntity? entity) {
+      final value = entity?.value.trim() ?? '';
+      return value.isEmpty ? null : value;
+    }
+
+    final businessName = nonBlank(await read('printer_header_business_name')) ??
+        nonBlank(await read('business_name'));
+    final ruc = nonBlank(await read('ruc'));
+    final address =
+        nonBlank(await read('printer_header_address')) ?? nonBlank(await read('address'));
+    final phone =
+        nonBlank(await read('printer_header_phone')) ?? nonBlank(await read('phone'));
+    final fiscalAuthorizationNumber = nonBlank(await read('dgi_authorization_code'));
+
+    final snapshot = <String, String>{};
+    void put(String key, String? value) {
+      if (value != null) snapshot[key] = value;
+    }
+
+    put('businessName', businessName);
+    put('ruc', ruc);
+    put('address', address);
+    put('phone', phone);
+    put('fiscalAuthorizationNumber', fiscalAuthorizationNumber);
+    return snapshot.isEmpty ? null : jsonEncode(snapshot);
+  }
+
+  /// D-13: assembles a faithful reprint of the document AS ISSUED. The
+  /// header comes from the immutable fiscal snapshot taken at checkout —
+  /// NEVER from current config. Writes the REPRINT_REQUESTED audit entry at
+  /// request acceptance (before any printing happens; a failed print does
+  /// not un-audit the request — the void precedent). Print-only: nothing in
+  /// this path consumes a correlativo.
+  @override
+  Future<ReprintPreparation> prepareReprintInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async {
+    final trimmedCode = reasonCode.trim();
+    if (trimmedCode.isEmpty) {
+      throw ArgumentError(
+        'A reprint reason code is mandatory (D-13).',
+      );
+    }
+    final trimmedDetail = reasonDetail?.trim();
+
+    final entity = await invoiceDao.getInvoiceById(invoiceId);
+    if (entity == null) {
+      throw StateError('Invoice $invoiceId not found');
+    }
+
+    // Fail closed: pre-snapshot rows cannot be reproduced faithfully, and
+    // there is no fallback to live config (that would fabricate a legal
+    // document). No backfill either — the values were never recorded.
+    final rawSnapshot = entity.fiscalHeaderSnapshot?.trim() ?? '';
+    if (rawSnapshot.isEmpty) {
+      throw StateError(
+        '$reprintSnapshotUnavailableCode: invoice $invoiceId predates the fiscal header snapshot',
+      );
+    }
+    final Map<String, dynamic> snapshot;
+    try {
+      snapshot = jsonDecode(rawSnapshot) as Map<String, dynamic>;
+    } catch (_) {
+      throw StateError(
+        '$reprintSnapshotUnavailableCode: the stored fiscal header snapshot of invoice $invoiceId is corrupted',
+      );
+    }
+    final header = snapshot.map(
+      (key, value) => MapEntry(key, value is String ? value : ''),
+    );
+
+    final items =
+        (await itemDao.getItemsByInvoiceId(invoiceId))
+            .map(SalesMapper.toItemDomain)
+            .toList();
+    final payments =
+        (await paymentDao.getPaymentsByInvoiceId(invoiceId))
+            .map(SalesMapper.toPaymentDomain)
+            .toList();
+    final invoice = SalesMapper.toInvoiceDomain(entity);
+
+    await auditRepository.log(
+      'REPRINT_REQUESTED',
+      metadata: jsonEncode(<String, String>{
+        'invoice_id': invoiceId,
+        'number': entity.number,
+        'reason_code': trimmedCode,
+        if (trimmedDetail != null && trimmedDetail.isNotEmpty)
+          'reason_detail': trimmedDetail,
+        'reprint_at': DateTime.now().toIso8601String(),
+      }),
+    );
+
+    return ReprintPreparation(
+      invoice: invoice,
+      fiscalHeader: header,
+      items: items,
+      payments: payments,
     );
   }
 

@@ -424,6 +424,22 @@ class ReceiptLayoutFormatter {
         buffer.writeln(l);
       }
     }
+
+    // D-13: reprints identify themselves and carry the reprint datetime.
+    // Shares the banner slot with ANULADO: a canceled reprint shows both.
+    // First-issuance documents render neither.
+    if (doc.isReprint) {
+      for (final l in centerLines('*** REIMPRESIÓN ***')) {
+        buffer.writeln(l);
+      }
+      for (final l in formatKeyValue(
+        'Reimpresión:',
+        dateFormat.format(doc.reprintAt ?? DateTime.now()),
+      )) {
+        buffer.writeln(l);
+      }
+    }
+
     for (final l in formatKeyValue('Fecha:', dateFormat.format(doc.date))) {
       buffer.writeln(l);
     }
@@ -843,6 +859,21 @@ class ReceiptLayoutFormatter {
           .fontSize(EscPosFontSize.normal)
           .textLine(marginLine('*** DOCUMENTO ANULADO ***'))
           .bold(false)
+          .align(EscPosAlign.left);
+    }
+
+    // D-13: reprints identify themselves and carry the reprint datetime.
+    // Shares the banner slot with ANULADO: a canceled reprint shows both.
+    // First-issuance documents render neither.
+    if (doc.isReprint) {
+      builder
+          .align(EscPosAlign.center)
+          .textLine(marginLine('*** REIMPRESIÓN ***'))
+          .textLine(
+            marginLine(
+              'Reimpresión: ${dateFormat.format(doc.reprintAt ?? DateTime.now())}',
+            ),
+          )
           .align(EscPosAlign.left);
     }
     builder

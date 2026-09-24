@@ -83,6 +83,7 @@ import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart'
 import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart'
     as _i90;
 import 'package:pos_app/data/models/inventory/movement_entity.dart' as _i62;
+import 'package:pos_app/data/models/local_config_entity.dart' as _i91;
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart' as _i59;
 import 'package:pos_app/data/models/sales/invoice_entity.dart' as _i56;
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart' as _i57;
@@ -3318,4 +3319,44 @@ class MockInventoryRepository extends _i1.Mock
                 _i51.Future<List<_i90.KardexRecalculateQueueEntity>>.value(
                     <_i90.KardexRecalculateQueueEntity>[]),
           ) as _i51.Future<List<_i90.KardexRecalculateQueueEntity>>);
+}
+
+/// A class which mocks [LocalConfigDao].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockLocalConfigDao extends _i1.Mock implements _i5.LocalConfigDao {
+  MockLocalConfigDao() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i51.Future<_i91.LocalConfigEntity?> getConfigByKey(String? key) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getConfigByKey,
+          [key],
+        ),
+        returnValue: _i51.Future<_i91.LocalConfigEntity?>.value(),
+      ) as _i51.Future<_i91.LocalConfigEntity?>);
+
+  @override
+  _i51.Future<void> saveConfig(_i91.LocalConfigEntity? config) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #saveConfig,
+          [config],
+        ),
+        returnValue: _i51.Future<void>.value(),
+        returnValueForMissingStub: _i51.Future<void>.value(),
+      ) as _i51.Future<void>);
+
+  @override
+  _i51.Future<void> deleteConfig(String? key) => (super.noSuchMethod(
+        Invocation.method(
+          #deleteConfig,
+          [key],
+        ),
+        returnValue: _i51.Future<void>.value(),
+        returnValueForMissingStub: _i51.Future<void>.value(),
+      ) as _i51.Future<void>);
 }

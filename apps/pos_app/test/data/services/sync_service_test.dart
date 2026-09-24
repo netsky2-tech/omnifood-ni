@@ -125,6 +125,14 @@ class MockSalesRepository implements SalesRepository {
   }) async => throw UnimplementedError();
 
   @override
+  Future<ReprintPreparation> prepareReprintInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async =>
+      throw UnimplementedError();
+
+  @override
   Future<void> voidInvoice(String invoiceId, String reasonCode,
       {String? reasonDetail}) async => throw UnimplementedError();
 }
