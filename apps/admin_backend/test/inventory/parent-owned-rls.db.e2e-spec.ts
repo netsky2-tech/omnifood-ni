@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 9: tenant isolation for the `parent-owned` inventory
@@ -142,7 +143,7 @@ describe('parent-owned inventory children tenant RLS (Real PostgreSQL DB, migrat
 
     // Real tenant rows first: the parent tables carry real FKs to tenants(id).
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'inventory-children-rls-tenant-a',
@@ -152,6 +153,10 @@ describe('parent-owned inventory children tenant RLS (Real PostgreSQL DB, migrat
         'inventory-children-rls-tenant-c',
         tenantDId,
         'inventory-children-rls-tenant-d',
+                normalizeTenantSlug('inventory-children-rls-tenant-a'),
+        normalizeTenantSlug('inventory-children-rls-tenant-b'),
+        normalizeTenantSlug('inventory-children-rls-tenant-c'),
+        normalizeTenantSlug('inventory-children-rls-tenant-d'),
       ],
     );
 

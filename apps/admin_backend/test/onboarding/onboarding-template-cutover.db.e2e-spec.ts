@@ -56,6 +56,7 @@ import {
   CurrentUserAuthorizationService,
 } from '../../src/modules/identity/services/current-user-authorization.service';
 import { JwtAccessPayload } from '../../src/modules/identity/security/jwt-token.types';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -139,12 +140,12 @@ async function withTemplateCutoverIsolatedSchema(
     const tenantBId = randomUUID();
 
     await dataSource.query(
-      `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-      [tenantAId, 'Tenant A — Café Central'],
+      `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+      [tenantAId, 'Tenant A — Café Central', normalizeTenantSlug('Tenant A — Café Central')],
     );
     await dataSource.query(
-      `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-      [tenantBId, 'Tenant B — Panadería Real'],
+      `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+      [tenantBId, 'Tenant B — Panadería Real', normalizeTenantSlug('Tenant B — Panadería Real')],
     );
 
     // Seed Industry Template

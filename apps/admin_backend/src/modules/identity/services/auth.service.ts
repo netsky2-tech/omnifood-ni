@@ -34,9 +34,19 @@ const USER_ROLE_VALUES = new Set<string>(Object.values(UserRole));
 const isUserRole = (value?: string): value is UserRole =>
   typeof value === 'string' && USER_ROLE_VALUES.has(value);
 
+/**
+ * Constant bcrypt digest used to equalize failure timing on the tenant-slug
+ * login path: an unknown/inactive slug must burn the same password-compare
+ * cost as the wrong-password path, so slug probing cannot be distinguished
+ * from credential probing by timing alone (issue #556, generic-failure rule).
+ */
+const DUMMY_PASSWORD_HASH =
+  '$2b$10$kSsyBHKukSJaWaZM7Q0tBeZQ13hT9NzWEJxbETy0pENCsyfe1ROBO';
+
 interface TenantQueryResult {
   id: string;
   name: string;
+  slug: string;
   ruc?: string | null;
   is_active: boolean;
 }
@@ -52,6 +62,7 @@ const isTenantQueryResult = (value: unknown): value is TenantQueryResult => {
   return (
     typeof candidate.id === 'string' &&
     typeof candidate.name === 'string' &&
+    typeof candidate.slug === 'string' &&
     (candidate.ruc === undefined ||
       candidate.ruc === null ||
       typeof candidate.ruc === 'string') &&
@@ -72,7 +83,94 @@ export class AuthService {
     @Inject(IDENTITY_JWT_CONFIG) private readonly jwtConfig: IdentityJwtConfig,
   ) {}
 
-  async login(email: string, pass: string) {
+  async login(email: string, pass: string, tenantSlug?: string) {
+    // Issue #556 slice 11 (OD-03 founder design): an optional tenantSlug is
+    // pre-auth CONTEXT, never authority. When present, the server resolves
+    // slug -> tenant, binds the transaction context (SET LOCAL app.tenant_id)
+    // and only then queries the user by email. Post-login authority stays the
+    // JWT tenant_id. The legacy no-slug path below is unchanged during the
+    // migration window.
+    if (tenantSlug !== undefined) {
+      return this.loginWithTenantSlug(email, pass, tenantSlug);
+    }
+
+    return this.authenticateAndIssueTokens(
+      this.userRepository,
+      email ? email.trim().toLowerCase() : '',
+      email,
+      pass,
+    );
+  }
+
+  /**
+   * Slug-context login: resolve the global tenants row by slug (pooled read
+   * on a global table, pre-bind), bind the tenant transaction, and run the
+   * shared authentication flow through the bound manager. Unknown/inactive
+   * slug and user/tenant mismatch return the SAME generic failure as the
+   * wrong-password path, with the same password-compare timing.
+   */
+  private async loginWithTenantSlug(
+    email: string,
+    pass: string,
+    tenantSlug: string,
+  ) {
+    const resolvedTenantId = await this.resolveTenantIdBySlugForLogin(
+      tenantSlug,
+      pass,
+    );
+
+    return runInTenantTransaction(
+      this.dataSource,
+      resolvedTenantId,
+      async (manager) =>
+        this.authenticateAndIssueTokens(
+          manager.getRepository(User),
+          email ? email.trim().toLowerCase() : '',
+          email,
+          pass,
+          resolvedTenantId,
+        ),
+    );
+  }
+
+  private async resolveTenantIdBySlugForLogin(
+    tenantSlug: string,
+    pass: string,
+  ): Promise<string> {
+    const rows: unknown = await this.dataSource.query(
+      'SELECT id, slug, is_active FROM tenants WHERE slug = $1',
+      [tenantSlug?.trim() ?? ''],
+    );
+    const firstRow = isUnknownArray(rows) ? rows[0] : undefined;
+    const tenant =
+      firstRow &&
+      typeof (firstRow as Record<string, unknown>).id === 'string' &&
+      typeof (firstRow as Record<string, unknown>).is_active === 'boolean'
+        ? (firstRow as { id: string; is_active: boolean })
+        : null;
+
+    if (!tenant || !tenant.is_active) {
+      // Generic failure with equalized timing: no tenant enumeration.
+      await bcrypt.compare(pass, DUMMY_PASSWORD_HASH);
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+    return tenant.id;
+  }
+
+  /**
+   * Shared login flow: email lookup, generic-failure checks, password verify,
+   * token issue, refresh persistence. The legacy path passes the pooled
+   * repository with no expected tenant; the slug path passes the bound
+   * transaction manager and the resolved tenant id, and treats a user whose
+   * tenant does not match as a generic invalid-credentials failure.
+   */
+  private async authenticateAndIssueTokens(
+    repository: Pick<Repository<User>, 'findOne' | 'update'>,
+    cleanEmail: string,
+    rawEmail: string,
+    pass: string,
+    expectedTenantId?: string,
+  ) {
     let user: Pick<
       User,
       | 'id'
@@ -86,9 +184,8 @@ export class AuthService {
     > | null = null;
 
     try {
-      const cleanEmail = email ? email.trim().toLowerCase() : '';
-      user = await this.userRepository.findOne({
-        where: [{ email: cleanEmail }, { email: email ? email.trim() : '' }],
+      user = await repository.findOne({
+        where: [{ email: cleanEmail }, { email: rawEmail ? rawEmail.trim() : '' }],
         select: [
           'id',
           'name',
@@ -102,6 +199,17 @@ export class AuthService {
       });
     } catch {
       user = null;
+    }
+
+    if (
+      user &&
+      expectedTenantId !== undefined &&
+      user.tenant_id !== expectedTenantId
+    ) {
+      // Generic failure with equalized timing: the email exists but belongs
+      // to another tenant; never reveal that through a distinct error.
+      await bcrypt.compare(pass, DUMMY_PASSWORD_HASH);
+      throw new UnauthorizedException('Credenciales inválidas');
     }
 
     if (
@@ -126,6 +234,7 @@ export class AuthService {
       user.id,
       tokens.refresh_token,
       refreshTokenFamilyId,
+      repository,
     );
 
     return {
@@ -151,7 +260,7 @@ export class AuthService {
     }
 
     const rawTenants: unknown = await this.dataSource.query(
-      'SELECT id, name, ruc, is_active FROM tenants WHERE id = $1',
+      'SELECT id, name, slug, ruc, is_active FROM tenants WHERE id = $1',
       [user.tenant_id],
     );
 
@@ -172,7 +281,9 @@ export class AuthService {
         ? {
             id: tenant.id,
             name: tenant.name,
-            slug: tenant.name.toLowerCase().replace(/\s+/g, '-'),
+            // Issue #556 slice 11: the PERSISTED provisioning slug (stable
+            // even when the display name changes), not a recomputation.
+            slug: tenant.slug,
             ruc: tenant.ruc ?? null,
             active: tenant.is_active,
           }
@@ -180,7 +291,7 @@ export class AuthService {
     };
   }
 
-  async refreshTokens(userId: string, refreshToken: string) {
+  async refreshTokens(userId: string, refreshToken: string, tenantSlug?: string) {
     let refreshPayload: JwtRefreshPayload;
     try {
       const payload = await this.jwtService.verifyAsync<
@@ -201,78 +312,160 @@ export class AuthService {
       throw new UnauthorizedException('Acceso denegado');
     }
 
-    const outcome = await this.dataSource.transaction(async (manager) => {
-      const repository = manager.getRepository(User);
-      const user = await repository.findOne({
-        where: { id: userId },
-        lock: { mode: 'pessimistic_write' },
-        select: [
-          'id',
-          'email',
-          'tenant_id',
-          'role',
-          'is_active',
-          'security_version',
-          'hashed_refresh_token',
-          'refresh_token_family_id',
-          'refresh_token_revoked_at',
-        ],
-      });
-
-      if (
-        !user ||
-        !user.is_active ||
-        !user.hashed_refresh_token ||
-        user.refresh_token_revoked_at
-      ) {
-        return null;
-      }
-
-      const isCurrentFamily =
-        (typeof user.refresh_token_family_id === 'string' &&
-          refreshPayload.refresh_token_family_id ===
-            user.refresh_token_family_id) ||
-        (refreshPayload.refresh_token_family_id === undefined &&
-          user.refresh_token_family_id == null);
-      const refreshTokenMatches =
-        await refreshTokenVerifier.compareRefreshTokenVerifier(
-          refreshToken,
-          user.hashed_refresh_token,
-        );
-
-      if (isCurrentFamily && refreshTokenMatches) {
-        const familyId = user.refresh_token_family_id ?? randomUUID();
-        const tokens = await this.getTokens(
-          user.id,
-          user.email,
-          user.tenant_id,
-          user.role,
-          user.is_active,
-          user.security_version,
-          familyId,
-        );
-        await this.updateRefreshToken(
-          user.id,
-          tokens.refresh_token,
-          familyId,
-          repository,
-        );
-        return { tokens };
-      }
-
-      if (
-        typeof user.refresh_token_family_id === 'string' &&
-        refreshPayload.refresh_token_family_id === user.refresh_token_family_id
-      ) {
-        await this.revokeRefreshSessionForUser(manager, user.id, new Date());
-      }
-      return null;
-    });
+    // Issue #556 slice 11: optional tenantSlug on refresh follows the same
+    // staged contract as login — when present, the tenant is resolved and the
+    // transaction bound BEFORE the user row is read (with the resolved tenant
+    // id in the WHERE clause). Unknown/inactive slug fails generically. The
+    // legacy no-slug path below stays unchanged during the migration window;
+    // this pre-clears the second users-RLS blocker named in the coverage
+    // manifest for the stage-3 FORCE RLS enablement.
+    const outcome =
+      tenantSlug !== undefined
+        ? await this.refreshWithTenantSlug(
+            userId,
+            refreshPayload,
+            refreshToken,
+            tenantSlug,
+          )
+        : await this.dataSource.transaction(async (manager) =>
+            this.rotateRefreshSession(
+              manager,
+              userId,
+              refreshPayload,
+              refreshToken,
+            ),
+          );
 
     if (!outcome) {
       throw new UnauthorizedException('Acceso denegado');
     }
     return outcome.tokens;
+  }
+
+  private async refreshWithTenantSlug(
+    userId: string,
+    refreshPayload: JwtRefreshPayload,
+    refreshToken: string,
+    tenantSlug: string,
+  ) {
+    const resolvedTenantId =
+      await this.resolveTenantIdBySlugForRefresh(tenantSlug);
+    return runInTenantTransaction(
+      this.dataSource,
+      resolvedTenantId,
+      (manager) =>
+        this.rotateRefreshSession(
+          manager,
+          userId,
+          refreshPayload,
+          refreshToken,
+          resolvedTenantId,
+        ),
+    );
+  }
+
+  private async resolveTenantIdBySlugForRefresh(
+    tenantSlug: string,
+  ): Promise<string> {
+    const rows: unknown = await this.dataSource.query(
+      'SELECT id, slug, is_active FROM tenants WHERE slug = $1',
+      [tenantSlug?.trim() ?? ''],
+    );
+    const firstRow = isUnknownArray(rows) ? rows[0] : undefined;
+    const tenant =
+      firstRow &&
+      typeof (firstRow as Record<string, unknown>).id === 'string' &&
+      typeof (firstRow as Record<string, unknown>).is_active === 'boolean'
+        ? (firstRow as { id: string; is_active: boolean })
+        : null;
+
+    if (!tenant || !tenant.is_active) {
+      // Same generic refresh rejection as an invalid token: no tenant enumeration.
+      throw new UnauthorizedException('Acceso denegado');
+    }
+    return tenant.id;
+  }
+
+  /**
+   * Shared refresh-rotation body. With `expectedTenantId` the user read is
+   * filtered by the resolved tenant inside the bound transaction; without it
+   * the legacy unbound read-then-continue behavior is preserved.
+   */
+  private async rotateRefreshSession(
+    manager: EntityManager,
+    userId: string,
+    refreshPayload: JwtRefreshPayload,
+    refreshToken: string,
+    expectedTenantId?: string,
+  ): Promise<{ tokens: Awaited<ReturnType<AuthService['getTokens']>> } | null> {
+    const repository = manager.getRepository(User);
+    const user = await repository.findOne({
+      where:
+        expectedTenantId === undefined
+          ? { id: userId }
+          : { id: userId, tenant_id: expectedTenantId },
+      lock: { mode: 'pessimistic_write' },
+      select: [
+        'id',
+        'email',
+        'tenant_id',
+        'role',
+        'is_active',
+        'security_version',
+        'hashed_refresh_token',
+        'refresh_token_family_id',
+        'refresh_token_revoked_at',
+      ],
+    });
+
+    if (
+      !user ||
+      !user.is_active ||
+      !user.hashed_refresh_token ||
+      user.refresh_token_revoked_at
+    ) {
+      return null;
+    }
+
+    const isCurrentFamily =
+      (typeof user.refresh_token_family_id === 'string' &&
+        refreshPayload.refresh_token_family_id ===
+          user.refresh_token_family_id) ||
+      (refreshPayload.refresh_token_family_id === undefined &&
+        user.refresh_token_family_id == null);
+    const refreshTokenMatches =
+      await refreshTokenVerifier.compareRefreshTokenVerifier(
+        refreshToken,
+        user.hashed_refresh_token,
+      );
+
+    if (isCurrentFamily && refreshTokenMatches) {
+      const familyId = user.refresh_token_family_id ?? randomUUID();
+      const tokens = await this.getTokens(
+        user.id,
+        user.email,
+        user.tenant_id,
+        user.role,
+        user.is_active,
+        user.security_version,
+        familyId,
+      );
+      await this.updateRefreshToken(
+        user.id,
+        tokens.refresh_token,
+        familyId,
+        repository,
+      );
+      return { tokens };
+    }
+
+    if (
+      typeof user.refresh_token_family_id === 'string' &&
+      refreshPayload.refresh_token_family_id === user.refresh_token_family_id
+    ) {
+      await this.revokeRefreshSessionForUser(manager, user.id, new Date());
+    }
+    return null;
   }
 
   async updateRefreshToken(

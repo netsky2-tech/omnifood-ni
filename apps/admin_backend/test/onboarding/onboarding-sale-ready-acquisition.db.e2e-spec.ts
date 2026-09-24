@@ -215,7 +215,11 @@ async function withAcquisitionIsolatedSchema(
 
     await dataSource.getRepository(Tenant).save({
       id: tenantId,
+      // Whitespace-only name is intentional for this scenario; the slug is a
+      // valid canonical fallback (the tenant id is itself a valid slug form)
+      // because normalizeTenantSlug intentionally rejects blank names.
       name: '   ',
+      slug: tenantId,
       ruc: null,
       is_active: true,
     });

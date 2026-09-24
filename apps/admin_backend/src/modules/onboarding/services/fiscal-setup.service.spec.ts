@@ -20,6 +20,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
   const mockTenant: Tenant = {
     id: tenantId,
     name: 'Mi Cafetería Original',
+    slug: 'mi-cafeteria-original',
     ruc: null,
     is_active: true,
     created_at: new Date('2026-01-01'),

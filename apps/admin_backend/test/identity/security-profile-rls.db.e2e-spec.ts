@@ -5,6 +5,7 @@ import { User } from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 9: tenant isolation for the `parent-owned` identity
@@ -153,7 +154,7 @@ describe('security_profiles tenant RLS (Real PostgreSQL DB, migration-built sche
 
     // Real tenant rows first: users carry a real FK to tenants(id).
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'security-profile-rls-tenant-a',
@@ -163,6 +164,10 @@ describe('security_profiles tenant RLS (Real PostgreSQL DB, migration-built sche
         'security-profile-rls-tenant-c',
         tenantDId,
         'security-profile-rls-tenant-d',
+                normalizeTenantSlug('security-profile-rls-tenant-a'),
+        normalizeTenantSlug('security-profile-rls-tenant-b'),
+        normalizeTenantSlug('security-profile-rls-tenant-c'),
+        normalizeTenantSlug('security-profile-rls-tenant-d'),
       ],
     );
 

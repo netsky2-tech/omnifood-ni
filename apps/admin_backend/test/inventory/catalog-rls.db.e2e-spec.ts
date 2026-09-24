@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3.S1 part B: tenant isolation for the catalog tables
@@ -140,7 +141,7 @@ describe('catalog products/insumos tenant RLS (Real PostgreSQL DB, migration-bui
 
     // Real tenant rows first: both catalog tables FK to tenants(id).
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'catalog-rls-tenant-a',
@@ -150,6 +151,10 @@ describe('catalog products/insumos tenant RLS (Real PostgreSQL DB, migration-bui
         'catalog-rls-tenant-c',
         tenantDId,
         'catalog-rls-tenant-d',
+                normalizeTenantSlug('catalog-rls-tenant-a'),
+        normalizeTenantSlug('catalog-rls-tenant-b'),
+        normalizeTenantSlug('catalog-rls-tenant-c'),
+        normalizeTenantSlug('catalog-rls-tenant-d'),
       ],
     );
 

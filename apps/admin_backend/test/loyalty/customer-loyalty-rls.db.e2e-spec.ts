@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 4 part B: tenant isolation for the customer/loyalty
@@ -170,7 +171,7 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
     // Real tenant rows first: loyalty_programs and loyalty_rewards FK to
     // tenants(id).
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'customer-loyalty-rls-tenant-a',
@@ -180,6 +181,10 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
         'customer-loyalty-rls-tenant-c',
         tenantDId,
         'customer-loyalty-rls-tenant-d',
+                normalizeTenantSlug('customer-loyalty-rls-tenant-a'),
+        normalizeTenantSlug('customer-loyalty-rls-tenant-b'),
+        normalizeTenantSlug('customer-loyalty-rls-tenant-c'),
+        normalizeTenantSlug('customer-loyalty-rls-tenant-d'),
       ],
     );
 

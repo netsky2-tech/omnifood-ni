@@ -31,6 +31,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
   const mockTenant: Tenant = {
     id: tenantId,
     name: 'Restaurante El Volcán',
+    slug: 'restaurante-el-volcan',
     ruc: 'J0310000000001',
     is_active: true,
     created_at: new Date('2026-01-01'),

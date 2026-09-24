@@ -27,12 +27,16 @@ export class AuthController {
 
   @Post('login')
   async login(@Body() body: LoginDto) {
-    return this.authService.login(body.email, body.pass);
+    return this.authService.login(body.email, body.pass, body.tenantSlug);
   }
 
   @Post('refresh')
   async refresh(@Body() body: RefreshTokenDto) {
-    return this.authService.refreshTokens(body.userId, body.refreshToken);
+    return this.authService.refreshTokens(
+      body.userId,
+      body.refreshToken,
+      body.tenantSlug,
+    );
   }
 
   @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)

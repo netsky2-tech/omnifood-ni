@@ -9,6 +9,7 @@ import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity'
 import { FiscalConfigVersionService } from './fiscal-config-version.service';
 import { FiscalRegime } from '../dto/fiscal-setup.dto';
 import { ConflictException } from '@nestjs/common';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -104,8 +105,8 @@ async function seedTenant(
   ruc: string | null = null,
 ): Promise<void> {
   await dataSource.query(
-    `INSERT INTO tenants (id, name, ruc, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
-    [tenantId, name, ruc],
+    `INSERT INTO tenants (id, name, ruc, is_active, created_at, updated_at, slug) VALUES ($1, $2, $3, true, now(), now(), $4)`,
+    [tenantId, name, ruc, normalizeTenantSlug(name)],
   );
 }
 

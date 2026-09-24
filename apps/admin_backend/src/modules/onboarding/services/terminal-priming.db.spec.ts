@@ -21,6 +21,7 @@ import {
 } from './terminal-priming.service';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { resolveTenantRlsPredicate } from '../../../core/database/tenant-rls-policy';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 /**
  * Real-database coverage for the L1-10a terminal priming path's tenant
@@ -335,8 +336,8 @@ async function seedTenant(
   ruc: string,
 ): Promise<void> {
   await admin.query(
-    `INSERT INTO "${schema}".tenants (id, name, ruc, is_active) VALUES ($1, $2, $3, true)`,
-    [tenantId, name, ruc],
+    `INSERT INTO "${schema}".tenants (id, name, ruc, is_active, slug) VALUES ($1, $2, $3, true, $4)`,
+    [tenantId, name, ruc, normalizeTenantSlug(name)],
   );
 }
 

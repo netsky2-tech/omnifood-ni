@@ -5,6 +5,7 @@ import { Tenant } from '../modules/tenant/entities/tenant.entity';
 import { User, UserRole } from '../modules/identity/entities/user.entity';
 import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
 import { bindTenantContext } from '../core/database/tenant-transaction';
+import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 import * as bcrypt from 'bcrypt';
 import * as readline from 'readline';
 
@@ -41,6 +42,9 @@ async function provision() {
       // 1. Create Tenant
       const tenant = new Tenant();
       tenant.name = tenantName;
+      // Issue #556 slice 11: the stable provisioning slug, derived with the
+      // canonical normalization rule (src/modules/tenant/tenant-slug.ts).
+      tenant.slug = normalizeTenantSlug(tenantName);
       tenant.ruc = ruc || null;
       tenant.is_active = true;
       const savedTenant = await manager.save(tenant);

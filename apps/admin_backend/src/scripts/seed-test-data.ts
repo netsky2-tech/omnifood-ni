@@ -11,6 +11,7 @@ import {
 } from '../modules/inventory/entities/insumo.entity';
 import { UomConversion } from '../modules/inventory/entities/uom-conversion.entity';
 import { bindTenantContext } from '../core/database/tenant-transaction';
+import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -375,6 +376,9 @@ async function seed() {
         tenant = manager.create(Tenant, {
           id: TENANT_ID,
           name: TENANT_NAME,
+          // Issue #556 slice 11: the stable provisioning slug, derived with
+          // the canonical normalization rule.
+          slug: normalizeTenantSlug(TENANT_NAME),
           is_active: true,
         });
         await manager.save(tenant);

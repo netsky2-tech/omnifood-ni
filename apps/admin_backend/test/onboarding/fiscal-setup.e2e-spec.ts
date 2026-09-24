@@ -233,6 +233,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       {
         id: 'tenant-A',
         name: 'Restaurante Managua',
+        slug: 'restaurante-managua',
         ruc: null,
         is_active: true,
         created_at: new Date('2026-01-01'),
@@ -241,6 +242,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       {
         id: 'tenant-B',
         name: 'Café Granada',
+        slug: 'cafe-granada',
         ruc: null,
         is_active: true,
         created_at: new Date('2026-01-01'),

@@ -37,6 +37,7 @@ import {
   signDeviceSyncAccessToken,
   type ProvisionedDeviceSyncCredential,
 } from '../support/device-sync-e2e.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   applyForcedTenantRls,
   createRlsTestRole,
@@ -169,8 +170,8 @@ async function withIsolatedSchema(
 
     const tenantId = randomUUID();
     await admin.query(
-      `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-      [tenantId, `E2E Tenant ${schemaPrefix}`],
+      `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+      [tenantId, `E2E Tenant ${schemaPrefix}`, normalizeTenantSlug(`E2E Tenant ${schemaPrefix}`)],
     );
 
     // Provision an ACTIVE device sync credential (plus its PASS activation
@@ -493,8 +494,8 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
           async ({ app, admin, deviceToken, tenantId }) => {
             const otherTenantId = randomUUID();
             await admin.query(
-              `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-              [otherTenantId, 'Other Tenant'],
+              `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+              [otherTenantId, 'Other Tenant', normalizeTenantSlug('Other Tenant')],
             );
 
             const tokenA = deviceToken;
@@ -683,8 +684,8 @@ describe('InboundSyncController E2E — real PostgreSQL', () => {
             const token = deviceToken;
             const otherTenantId = randomUUID();
             await admin.query(
-              `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-              [otherTenantId, 'Other Tenant'],
+              `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+              [otherTenantId, 'Other Tenant', normalizeTenantSlug('Other Tenant')],
             );
 
             await admin.query(

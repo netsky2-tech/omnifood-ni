@@ -56,6 +56,17 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty({ message: 'La contraseña es requerida' })
   pass: string;
+
+  /**
+   * Optional pre-auth tenant CONTEXT (issue #556 slice 11, OD-03 founder
+   * design): the server resolves it to a tenant id and binds the transaction
+   * BEFORE the user lookup. Never authority — post-login authority stays the
+   * JWT tenant_id. Legacy POS payloads without this field are unchanged.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  tenantSlug?: string;
 }
 
 export class RefreshTokenDto {
@@ -66,6 +77,16 @@ export class RefreshTokenDto {
   @IsString()
   @IsNotEmpty()
   refreshToken: string;
+
+  /**
+   * Optional pre-auth tenant CONTEXT: same contract as LoginDto.tenantSlug —
+   * resolved and bound server-side before the user row is read, never
+   * trusted as authority. Legacy payloads without this field are unchanged.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  tenantSlug?: string;
 }
 
 export class CreateAuditLogDto {

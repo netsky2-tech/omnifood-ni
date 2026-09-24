@@ -4,7 +4,9 @@ import { plainToInstance } from 'class-transformer';
 import {
   ActivateCapabilityDto,
   CreateAuditLogDto,
+  LoginDto,
   PushAuditLogsDto,
+  RefreshTokenDto,
 } from './identity.dto';
 
 const validAuditLog = {
@@ -177,5 +179,70 @@ describe('ActivateCapabilityDto', () => {
     ],
   ])('rejects a %s activation reason payload', async (_, input) => {
     await expect(transformActivateCapability(input)).rejects.toThrow();
+  });
+});
+
+describe('LoginDto / RefreshTokenDto optional tenantSlug', () => {
+  const pipe = new ValidationPipe({
+    transform: true,
+    whitelist: true,
+    forbidNonWhitelisted: true,
+  });
+
+  const transformLogin = async (input: Record<string, unknown>) =>
+    pipe.transform({ ...input }, { type: 'body', metatype: LoginDto });
+
+  const transformRefresh = async (input: Record<string, unknown>) =>
+    pipe.transform({ ...input }, { type: 'body', metatype: RefreshTokenDto });
+
+  const validLogin = {
+    email: 'cashier@omnifood.ni',
+    pass: 'Password123!',
+  };
+
+  const validRefresh = {
+    userId: 'd6df2e11-9a37-4fc9-a512-2b89a43a9a42',
+    refreshToken: 'token',
+  };
+
+  it('accepts login without tenantSlug (legacy POS payload)', async () => {
+    const dto = (await transformLogin(validLogin)) as LoginDto;
+    expect(dto.tenantSlug).toBeUndefined();
+  });
+
+  it('accepts a tenantSlug up to 50 chars on login', async () => {
+    const dto = (await transformLogin({
+      ...validLogin,
+      tenantSlug: 'm'.repeat(50),
+    })) as LoginDto;
+    expect(dto.tenantSlug).toBe('m'.repeat(50));
+  });
+
+  it('rejects a tenantSlug longer than 50 chars on login', async () => {
+    await expect(
+      transformLogin({ ...validLogin, tenantSlug: 'm'.repeat(51) }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a non-string tenantSlug on login', async () => {
+    await expect(
+      transformLogin({ ...validLogin, tenantSlug: 42 }),
+    ).rejects.toThrow();
+  });
+
+  it('accepts refresh without tenantSlug and with an optional tenantSlug', async () => {
+    const legacy = (await transformRefresh(validRefresh)) as RefreshTokenDto;
+    expect(legacy.tenantSlug).toBeUndefined();
+    const dto = (await transformRefresh({
+      ...validRefresh,
+      tenantSlug: 'mi-negocio',
+    })) as RefreshTokenDto;
+    expect(dto.tenantSlug).toBe('mi-negocio');
+  });
+
+  it('rejects a tenantSlug longer than 50 chars on refresh', async () => {
+    await expect(
+      transformRefresh({ ...validRefresh, tenantSlug: 'm'.repeat(51) }),
+    ).rejects.toThrow();
   });
 });
