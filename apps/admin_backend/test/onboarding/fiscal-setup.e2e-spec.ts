@@ -26,6 +26,7 @@ import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 const API_PREFIX = '/api/onboarding/fiscal-setup';
 
@@ -233,6 +234,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       {
         id: 'tenant-A',
         name: 'Restaurante Managua',
+        slug: 'restaurante-managua',
         ruc: null,
         is_active: true,
         created_at: new Date('2026-01-01'),
@@ -241,6 +243,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       {
         id: 'tenant-B',
         name: 'Café Granada',
+        slug: normalizeTenantSlug('Café Granada'),
         ruc: null,
         is_active: true,
         created_at: new Date('2026-01-01'),

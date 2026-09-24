@@ -64,6 +64,7 @@ describe('DSI-3: Activation Device Credential Provisioning', () => {
       const mockResult: DeviceSyncCredentialResponseDto = {
         credentialId: 'cred-uuid-1',
         tenantId,
+        slug: 'tenant-dsi3-test',
         deviceId: q80DeviceId,
         scopes: ['sync:push', 'sync:pull'],
         credentialVersion: 1,
@@ -130,6 +131,7 @@ describe('DSI-3: Activation Device Credential Provisioning', () => {
       const mockResult: DeviceSyncCredentialResponseDto = {
         credentialId: 'cred-uuid-1',
         tenantId,
+        slug: 'tenant-dsi3-test',
         deviceId: q80DeviceId,
         scopes: ['sync:push', 'sync:pull'],
         credentialVersion: 1,
@@ -172,6 +174,7 @@ describe('DSI-3: Activation Device Credential Provisioning', () => {
       const mockResult: DeviceSyncCredentialResponseDto = {
         credentialId: 'cred-uuid-1',
         tenantId,
+        slug: 'tenant-dsi3-test',
         deviceId: q80DeviceId,
         scopes: ['sync:push', 'sync:pull'],
         credentialVersion: 1,
@@ -226,6 +229,7 @@ describe('DSI-3: Activation Device Credential Provisioning', () => {
       const mockResult: DeviceSyncCredentialResponseDto = {
         credentialId: 'cred-uuid-boot-1',
         tenantId,
+        slug: 'tenant-dsi3-test',
         deviceId: q80DeviceId,
         scopes: ['sync:push', 'sync:pull'],
         credentialVersion: 1,
@@ -277,6 +281,7 @@ describe('DSI-3: Activation Device Credential Provisioning', () => {
       const mockResult: DeviceSyncCredentialResponseDto = {
         credentialId: 'cred-uuid-boot-1',
         tenantId,
+        slug: 'tenant-dsi3-test',
         deviceId: q80DeviceId,
         scopes: ['sync:push', 'sync:pull'],
         credentialVersion: 1,
@@ -482,6 +487,9 @@ describe('DSI-3: Activation Device Credential Provisioning', () => {
       // on the transaction manager before repository access; the mock must
       // execute the transaction callback with a capable manager.
       dataSource = {
+        // Issue #556 slice 11: provisioning/confirm responses read the
+        // persisted tenant slug from the global tenants table.
+        query: jest.fn().mockResolvedValue([{ slug: 'tenant-dsi3-test' }]),
         transaction: jest.fn((cb: (manager: any) => Promise<unknown>) =>
           cb({
             query: jest.fn().mockResolvedValue(undefined),
@@ -582,6 +590,8 @@ describe('DSI-3: Activation Device Credential Provisioning', () => {
       expect(result).toEqual({
         credentialId: 'cred-q80-1',
         tenantId,
+        // Issue #556 slice 11: persisted slug exposed to the POS.
+        slug: 'tenant-dsi3-test',
         deviceId: q80DeviceId,
         scopes: ['sync:push', 'sync:pull'],
         credentialVersion: 1,

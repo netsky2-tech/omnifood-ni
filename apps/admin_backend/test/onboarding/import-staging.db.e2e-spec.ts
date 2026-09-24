@@ -15,6 +15,7 @@ import {
   RowErrorDiagnostic,
 } from '../../src/modules/onboarding/dto/import-staging.dto';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #493 T2.S4c: the PRODUCTION import application paths
@@ -115,7 +116,7 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
     // Tenants: products carries FK to tenants(id), so real (synthetic-UUID)
     // tenant rows are seeded as admin. Names are unique per run.
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantMainId,
         `Import Main (S4c) ${tenantMainId}`,
@@ -125,6 +126,10 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
         `Import Rollback (S4c) ${tenantRollbackId}`,
         tenantForeignId,
         `Import Foreign (S4c) ${tenantForeignId}`,
+        normalizeTenantSlug(`Import Main (S4c) ${tenantMainId}`),
+        normalizeTenantSlug(`Import Csv (S4c) ${tenantCsvId}`),
+        normalizeTenantSlug(`Import Rollback (S4c) ${tenantRollbackId}`),
+        normalizeTenantSlug(`Import Foreign (S4c) ${tenantForeignId}`),
       ],
     );
 

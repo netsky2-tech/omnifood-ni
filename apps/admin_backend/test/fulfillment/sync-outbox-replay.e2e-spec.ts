@@ -45,6 +45,7 @@ import {
   type ProvisionedDeviceSyncCredential,
 } from '../support/device-sync-e2e.helper';
 import { SyncBatchRecordDto } from '../../src/modules/sales/dto/sync-batch.dto';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
   let app: INestApplication<App>;
@@ -136,11 +137,11 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
 
     // Seed tenants and users in public tables for auth & AuthoritativeCurrentUserGuard
     await runner.query(
-      `INSERT INTO tenants (id, name, created_at, updated_at) VALUES
-       ($1, 'Tenant A', now(), now()),
-       ($2, 'Tenant B', now(), now())
+      `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
+       ($1, 'Tenant A', $3, now(), now()),
+       ($2, 'Tenant B', $4, now(), now())
        ON CONFLICT (id) DO NOTHING`,
-      [tenantAId, tenantBId],
+      [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
     );
 
     const cashierAEmail = `cashier.a.${randomUUID()}@test.com`;

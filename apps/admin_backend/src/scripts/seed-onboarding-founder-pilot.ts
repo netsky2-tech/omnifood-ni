@@ -11,6 +11,7 @@ import {
   canonicalFiscalId,
   isValidRuc,
 } from '../modules/onboarding/utils/nicaragua-fiscal.validator';
+import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 
 /** The physical Q80 terminal identity, not its Wi-Fi ADB transport serial. */
 export const Q80_TERMINAL_ID = 'Q802024120001';
@@ -38,6 +39,8 @@ type FixtureEnvironment = Record<string, string | undefined>;
 export interface FounderPilotFixture {
   runId: string;
   tenantName: string;
+  /** Stable provisioning slug (issue #556): normalized from the tenant name, or the explicit ONBOARDING_FOUNDER_TENANT_SLUG override. */
+  tenantSlug: string;
   terminalId: string;
   ruc: string;
   owner: {
@@ -67,6 +70,18 @@ export function buildFounderPilotFixture(
     );
   }
 
+  // Tenant slug (issue #556 slice 11): derived with the canonical
+  // normalization rule, or taken verbatim from the explicit operator
+  // override when one is supplied.
+  const tenantName = `Founder Pilot Q80 ${runId}`;
+  const slugOverride = env.ONBOARDING_FOUNDER_TENANT_SLUG?.trim();
+  const tenantSlug = slugOverride ?? normalizeTenantSlug(tenantName);
+  if (!/^[a-z0-9-]+$/.test(tenantSlug) || tenantSlug.length > 50) {
+    throw new Error(
+      'ONBOARDING_FOUNDER_TENANT_SLUG must match [a-z0-9-] and be at most 50 characters',
+    );
+  }
+
   if (!/^\d{6}$/.test(offlinePin)) {
     throw new Error('ONBOARDING_FOUNDER_OWNER_PIN must contain exactly six digits');
   }
@@ -76,7 +91,8 @@ export function buildFounderPilotFixture(
 
   return {
     runId,
-    tenantName: `Founder Pilot Q80 ${runId}`,
+    tenantName,
+    tenantSlug,
     terminalId: Q80_TERMINAL_ID,
     ruc,
     owner: {
@@ -110,6 +126,7 @@ async function seedFounderPilot(): Promise<void> {
       const tenant = await manager.save(
         manager.create(Tenant, {
           name: fixture.tenantName,
+          slug: fixture.tenantSlug,
           ruc: fixture.ruc,
           is_active: true,
         }),
@@ -150,6 +167,7 @@ async function seedFounderPilot(): Promise<void> {
         tenant: {
           id: ids.tenantId,
           name: fixture.tenantName,
+          slug: fixture.tenantSlug,
           ruc: fixture.ruc,
         },
         owner: {

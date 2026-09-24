@@ -7,7 +7,7 @@ import {
 } from '@nestjs/jwt';
 import { DataSource, type EntityManager } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { AuthService } from './auth.service';
+import { AuthService, DUMMY_PASSWORD_HASH } from './auth.service';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { User, UserRole } from '../entities/user.entity';
 import {
@@ -1275,6 +1275,7 @@ describe('AuthService', () => {
         {
           id: 'tenant-123',
           name: 'Central Kitchen',
+          slug: 'central-kitchen-provisioned',
           ruc: 'J0310000000000',
           is_active: true,
         },
@@ -1293,7 +1294,8 @@ describe('AuthService', () => {
       expect(result.tenant).toEqual({
         id: 'tenant-123',
         name: 'Central Kitchen',
-        slug: 'central-kitchen',
+        // Issue #556 slice 11: the persisted provisioning slug.
+        slug: 'central-kitchen-provisioned',
         ruc: 'J0310000000000',
         active: true,
       });
@@ -1417,5 +1419,448 @@ describe('AuthService', () => {
       // RUNTIME TEETH: the pooled tripwire stayed silent.
       expect(pooledUserRepository.createQueryBuilder).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('AuthService tenant-slug login context (issue #556 slice 11)', () => {
+  let service: AuthService;
+  let mockUserRepository: {
+    createQueryBuilder: jest.Mock;
+    findOne: jest.Mock;
+    update: jest.Mock;
+  };
+  let mockJwtService: {
+    signAsync: jest.Mock;
+    verifyAsync: jest.Mock;
+  };
+  let mockDataSource: {
+    transaction: jest.Mock<unknown, [TransactionCallback]>;
+    query: jest.Mock;
+  };
+
+  const boundFindOne = jest.fn();
+  const boundUpdate = jest.fn();
+  const boundManagerQueries: Array<{ sql: string; parameters?: unknown[] }> = [];
+
+  const useTenantBoundManager = () => {
+    const manager = {
+      query: jest.fn((sql: string, parameters?: unknown[]) => {
+        boundManagerQueries.push({ sql, parameters });
+        return Promise.resolve([]);
+      }),
+      getRepository: jest.fn().mockReturnValue({
+        findOne: boundFindOne,
+        update: boundUpdate,
+      }),
+    } as unknown as EntityManager;
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback(manager),
+    );
+    return manager;
+  };
+
+  const slugUser = (overrides: Record<string, unknown> = {}) => ({
+    id: 'slug-user-1',
+    email: 'cashier@omnifood.ni',
+    name: 'Cashier',
+    password_hash: 'stored-hash',
+    role: UserRole.CASHIER,
+    tenant_id: 'tenant-resolved',
+    is_active: true,
+    security_version: 1,
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    mockUserRepository = {
+      createQueryBuilder: jest.fn(),
+      findOne: jest.fn(),
+      update: jest.fn(),
+    };
+    mockJwtService = {
+      signAsync: jest.fn(),
+      verifyAsync: jest.fn(),
+    };
+    mockDataSource = {
+      transaction: jest.fn<unknown, [TransactionCallback]>(),
+      query: jest.fn().mockResolvedValue([]),
+    };
+    boundFindOne.mockReset();
+    boundUpdate.mockReset();
+    boundManagerQueries.length = 0;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        {
+          provide: getRepositoryToken(User),
+          useValue: mockUserRepository,
+        },
+        { provide: JwtService, useValue: mockJwtService },
+        { provide: DataSource, useValue: mockDataSource },
+        { provide: IDENTITY_JWT_CONFIG, useValue: jwtConfig },
+      ],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('resolves the tenant by slug, binds app.tenant_id, and looks the user up through the bound manager', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    const manager = useTenantBoundManager();
+    boundFindOne.mockResolvedValue(slugUser());
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed-refresh' as never);
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    const result = await service.login(
+      'cashier@omnifood.ni',
+      'Password123!',
+      'mi-negocio',
+    );
+
+    // Server-side slug resolution on the global tenants table, pre-bind.
+    expect(mockDataSource.query).toHaveBeenCalledWith(
+      expect.stringContaining('FROM tenants'),
+      ['mi-negocio'],
+    );
+    // Bind BEFORE the user lookup: set_config runs first through the manager.
+    expect(boundManagerQueries[0]).toEqual({
+      sql: TENANT_CONTEXT_SET_CONFIG_SQL,
+      parameters: ['tenant-resolved'],
+    });
+    expect(manager.getRepository).toHaveBeenCalledWith(User);
+    expect(boundFindOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.arrayContaining([
+          expect.objectContaining({ email: 'cashier@omnifood.ni' }),
+        ]),
+      }),
+    );
+    // Response shape unchanged: no slug added to the login response.
+    expect(result.user).toMatchObject({
+      id: 'slug-user-1',
+      tenant_id: 'tenant-resolved',
+    });
+    expect(Object.keys(result)).toEqual(
+      expect.arrayContaining(['access_token', 'refresh_token', 'user']),
+    );
+    expect(Object.keys(result.user)).not.toContain('slug');
+  });
+
+  it('never touches the pooled user repository on the slug path (pooled tripwire)', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    useTenantBoundManager();
+    boundFindOne.mockResolvedValue(slugUser());
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await service.login('cashier@omnifood.ni', 'Password123!', 'mi-negocio');
+
+    expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
+    expect(mockUserRepository.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('returns the generic invalid-credentials failure for an unknown slug', async () => {
+    mockDataSource.query.mockResolvedValue([]);
+    useTenantBoundManager();
+
+    await expect(
+      service.login('cashier@omnifood.ni', 'Password123!', 'no-such-tenant'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+    expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('returns the generic invalid-credentials failure for an inactive tenant slug', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: false },
+    ]);
+    useTenantBoundManager();
+
+    await expect(
+      service.login('cashier@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+    expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('returns the generic invalid-credentials failure when the user does not belong to the resolved tenant', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    useTenantBoundManager();
+    boundFindOne.mockResolvedValue(
+      slugUser({ tenant_id: 'another-tenant' }),
+    );
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+
+    await expect(
+      service.login('cashier@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('keeps the legacy no-slug login on the pooled repository exactly as before', async () => {
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      email: 'cashier@omnifood.ni',
+      name: 'Cashier',
+      password_hash: 'stored-hash',
+      role: UserRole.CASHIER,
+      tenant_id: 'tenant-1',
+      is_active: true,
+    });
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed-refresh' as never);
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    const result = await service.login('cashier@omnifood.ni', 'Password123!');
+
+    expect(result.access_token).toBe('access-token');
+    expect(mockUserRepository.findOne).toHaveBeenCalled();
+    expect(mockUserRepository.update).toHaveBeenCalled();
+    // No transaction, no tenant binding, no slug resolution on the legacy path.
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+    expect(mockDataSource.query).not.toHaveBeenCalled();
+  });
+
+  it('refresh with tenantSlug binds the tenant and filters the user read by the resolved tenant id', async () => {
+    jest.useFakeTimers();
+    try {
+      const refreshPayload = {
+        sub: 'slug-user-1',
+        token_type: JWT_TOKEN_TYPES.REFRESH,
+        refresh_token_family_id: 'family-1',
+      };
+      mockJwtService.verifyAsync.mockResolvedValue(refreshPayload);
+      mockDataSource.query.mockResolvedValue([
+        { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+      ]);
+      const manager = useTenantBoundManager();
+      boundFindOne.mockResolvedValue({
+        id: 'slug-user-1',
+        email: 'cashier@omnifood.ni',
+        tenant_id: 'tenant-resolved',
+        role: UserRole.CASHIER,
+        is_active: true,
+        security_version: 1,
+        hashed_refresh_token: 'active-hash',
+        refresh_token_family_id: 'family-1',
+        refresh_token_revoked_at: null,
+      });
+      jest
+        .spyOn(refreshTokenVerifier, 'compareRefreshTokenVerifier')
+        .mockResolvedValue(true);
+      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed-refresh' as never);
+      mockJwtService.signAsync
+        .mockResolvedValueOnce('access-token')
+        .mockResolvedValueOnce('refresh-token');
+
+      const result = await service.refreshTokens(
+        'slug-user-1',
+        'refresh-token',
+        'mi-negocio',
+      );
+
+      expect(result.access_token).toBe('access-token');
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('FROM tenants'),
+        ['mi-negocio'],
+      );
+      expect(boundManagerQueries[0]).toEqual({
+        sql: TENANT_CONTEXT_SET_CONFIG_SQL,
+        parameters: ['tenant-resolved'],
+      });
+      expect(boundFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'slug-user-1',
+            tenant_id: 'tenant-resolved',
+          }),
+        }),
+      );
+      expect(manager.getRepository).toHaveBeenCalledWith(User);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('refresh with an unknown slug fails with the generic refresh rejection before any transaction', async () => {
+    mockJwtService.verifyAsync.mockResolvedValue({
+      sub: 'slug-user-1',
+      token_type: JWT_TOKEN_TYPES.REFRESH,
+    });
+    mockDataSource.query.mockResolvedValue([]);
+    useTenantBoundManager();
+
+    await expect(
+      service.refreshTokens('slug-user-1', 'refresh-token', 'no-such-tenant'),
+    ).rejects.toThrow('Acceso denegado');
+
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('getMe returns the persisted slug from the tenants row', async () => {
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      name: 'Jane Doe',
+      email: 'jane@example.com',
+      role: UserRole.MANAGER,
+      tenant_id: 'tenant-123',
+      is_active: true,
+    });
+    mockDataSource.query.mockResolvedValue([
+      {
+        id: 'tenant-123',
+        name: 'Renamed Tenant',
+        slug: 'stored-provisioned-slug',
+        ruc: 'J0310000000000',
+        is_active: true,
+      },
+    ]);
+
+    const result = await service.getMe('user-1');
+
+    expect(result.tenant).toMatchObject({
+      id: 'tenant-123',
+      slug: 'stored-provisioned-slug',
+    });
+    // The persisted slug, not an ad-hoc recomputation from the current name.
+    expect(result.tenant?.slug).not.toBe('renamed-tenant');
+  });
+});
+
+describe('AuthService slug-path timing equalization (F1 regression, issue #556)', () => {
+  let service: AuthService;
+  let mockUserRepository: {
+    createQueryBuilder: jest.Mock;
+    findOne: jest.Mock;
+    update: jest.Mock;
+  };
+  let mockJwtService: {
+    signAsync: jest.Mock;
+    verifyAsync: jest.Mock;
+  };
+  let mockDataSource: {
+    transaction: jest.Mock<unknown, [TransactionCallback]>;
+    query: jest.Mock;
+  };
+
+  beforeEach(async () => {
+    mockUserRepository = {
+      createQueryBuilder: jest.fn(),
+      findOne: jest.fn(),
+      update: jest.fn(),
+    };
+    mockJwtService = {
+      signAsync: jest.fn(),
+      verifyAsync: jest.fn(),
+    };
+    mockDataSource = {
+      transaction: jest.fn<unknown, [TransactionCallback]>(),
+      query: jest.fn().mockResolvedValue([]),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: getRepositoryToken(User), useValue: mockUserRepository },
+        { provide: JwtService, useValue: mockJwtService },
+        { provide: DataSource, useValue: mockDataSource },
+        { provide: IDENTITY_JWT_CONFIG, useValue: jwtConfig },
+      ],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('burns exactly one bcrypt compare on a valid slug with a nonexistent email', async () => {
+    // Valid, ACTIVE tenant slug resolves; the email does not exist. The
+    // generic failure must still cost one bcrypt compare, otherwise
+    // response timing enumerates active tenant slugs.
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback({
+        query: jest.fn().mockResolvedValue([]),
+        getRepository: jest.fn().mockReturnValue({
+          findOne: jest.fn().mockResolvedValue(null),
+          update: jest.fn(),
+        }),
+      } as unknown as EntityManager),
+    );
+    const compareSpy = jest
+      .spyOn(bcrypt, 'compare')
+      .mockResolvedValue(false as never);
+
+    await expect(
+      service.login('ghost@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+    expect(compareSpy).toHaveBeenCalledWith(
+      'Password123!',
+      DUMMY_PASSWORD_HASH,
+    );
+  });
+
+  it('burns exactly one bcrypt compare when the slug-path user is inactive', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback({
+        query: jest.fn().mockResolvedValue([]),
+        getRepository: jest.fn().mockReturnValue({
+          findOne: jest.fn().mockResolvedValue({
+            id: 'inactive-user',
+            email: 'inactive@omnifood.ni',
+            name: 'Inactive',
+            password_hash: 'stored-hash',
+            role: UserRole.CASHIER,
+            tenant_id: 'tenant-resolved',
+            is_active: false,
+          }),
+          update: jest.fn(),
+        }),
+      } as unknown as EntityManager),
+    );
+    const compareSpy = jest
+      .spyOn(bcrypt, 'compare')
+      .mockResolvedValue(false as never);
+
+    await expect(
+      service.login('inactive@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+    expect(compareSpy).toHaveBeenCalledWith(
+      'Password123!',
+      DUMMY_PASSWORD_HASH,
+    );
   });
 });

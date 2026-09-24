@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 7: tenant isolation for the `change_log` and
@@ -154,7 +155,7 @@ describe('change_log and forensic_alerts tenant RLS (Real PostgreSQL DB, migrati
     // Real tenant rows first: the change_log FK and both policies compare
     // against them.
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'audit-rls-tenant-a',
@@ -164,6 +165,10 @@ describe('change_log and forensic_alerts tenant RLS (Real PostgreSQL DB, migrati
         'audit-rls-tenant-c',
         tenantDId,
         'audit-rls-tenant-d',
+        normalizeTenantSlug('audit-rls-tenant-a'),
+        normalizeTenantSlug('audit-rls-tenant-b'),
+        normalizeTenantSlug('audit-rls-tenant-c'),
+        normalizeTenantSlug('audit-rls-tenant-d'),
       ],
     );
 

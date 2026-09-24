@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 10: the command-policy ratchet for the three tables
@@ -148,7 +149,7 @@ describe('kardex/config command-policy ratchet (Real PostgreSQL DB, migration-bu
 
     // Real tenant rows first: the tables carry tenant_id uuid NOT NULL.
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $7), ($3, $4, $8), ($5, $6, $9)`,
       [
         tenantAId,
         'kardex-ratchet-tenant-a',
@@ -156,6 +157,9 @@ describe('kardex/config command-policy ratchet (Real PostgreSQL DB, migration-bu
         'kardex-ratchet-tenant-b',
         tenantCId,
         'kardex-ratchet-tenant-c',
+        normalizeTenantSlug('kardex-ratchet-tenant-a'),
+        normalizeTenantSlug('kardex-ratchet-tenant-b'),
+        normalizeTenantSlug('kardex-ratchet-tenant-c'),
       ],
     );
 

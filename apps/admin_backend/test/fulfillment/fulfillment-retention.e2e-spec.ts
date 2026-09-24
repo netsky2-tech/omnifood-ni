@@ -48,6 +48,7 @@ import {
   type ProvisionedDeviceSyncCredential,
 } from '../support/device-sync-e2e.helper';
 import { SyncBatchRecordDto } from '../../src/modules/sales/dto/sync-batch.dto';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #429: this HTTP E2E builds its schema exclusively from the FULL
@@ -132,8 +133,15 @@ describe('FulfillmentRetention (e2e - Real PostgreSQL, migration-built schema, r
     const seedRunner = adminSource.createQueryRunner();
     await seedRunner.connect();
     await seedRunner.query(
-      `INSERT INTO tenants (id, name, is_active) VALUES ($1, $2, true), ($3, $4, true)`,
-      [tenantAId, tenantAName, tenantBId, tenantBName],
+      `INSERT INTO tenants (id, name, slug, is_active) VALUES ($1, $2, $5, true), ($3, $4, $6, true)`,
+      [
+        tenantAId,
+        tenantAName,
+        tenantBId,
+        tenantBName,
+        normalizeTenantSlug(tenantAName),
+        normalizeTenantSlug(tenantBName),
+      ],
     );
 
     const ownerAEmail = `owner.a.${randomUUID()}@test.com`;

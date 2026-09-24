@@ -217,6 +217,9 @@ export class FiscalSetupService {
 
         tenant.name = dto.businessName.trim();
         tenant.ruc = trimmedRuc;
+        // NOTE: tenant.slug is intentionally NOT updated here (issue #556,
+        // founder decision): the slug is a stable provisioning identifier,
+        // not a display name, so a business rename leaves it unchanged.
         await manager.save(Tenant, tenant);
 
         // 2. Upsert / Version System Parameters

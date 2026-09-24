@@ -16,6 +16,7 @@ import { OnboardingRolloutController } from '../../src/modules/onboarding/contro
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -64,8 +65,8 @@ describe('ONB1.10E: Feature Rollout & Cutover Sequence Verification (PostgreSQL 
     const cashierUserId = randomUUID();
 
     await dataSource.getRepository(Tenant).save([
-      { id: tenantAId, name: 'Tenant Rollout A', is_active: true },
-      { id: tenantBId, name: 'Tenant Rollout B', is_active: true },
+      { id: tenantAId, name: 'Tenant Rollout A', slug: normalizeTenantSlug('Tenant Rollout A'), is_active: true },
+      { id: tenantBId, name: 'Tenant Rollout B', slug: normalizeTenantSlug('Tenant Rollout B'), is_active: true },
     ]);
 
     await dataSource.getRepository(User).save([

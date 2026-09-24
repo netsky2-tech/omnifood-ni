@@ -5,6 +5,7 @@ import { Product, ProductType } from './entities/product.entity';
 import { ProductService } from './product.service';
 import { ChangeLogService } from '../audit/change-log.service';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { normalizeTenantSlug } from '../tenant/tenant-slug';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -69,8 +70,8 @@ async function seedTenant(
   name: string,
 ): Promise<void> {
   await dataSource.query(
-    `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-    [tenantId, name],
+    `INSERT INTO tenants (id, name, is_active, created_at, updated_at, slug) VALUES ($1, $2, true, now(), now(), $3)`,
+    [tenantId, name, normalizeTenantSlug(name)],
   );
 }
 

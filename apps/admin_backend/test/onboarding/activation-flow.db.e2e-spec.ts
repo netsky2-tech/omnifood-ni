@@ -55,6 +55,7 @@ import { OnboardingReadinessEvaluator } from '../../src/modules/onboarding/servi
 import { OnboardingStateReconciler } from '../../src/modules/onboarding/services/onboarding-state.reconciler';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -162,6 +163,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     await dataSource.getRepository(Tenant).save({
       id: tenantId,
       name: 'OmniFood Founder Restaurant',
+      slug: normalizeTenantSlug('OmniFood Founder Restaurant'),
       ruc: 'J0310000004321',
       is_active: true,
     });
@@ -582,6 +584,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     await dataSource.getRepository(Tenant).save({
       id: tenantWarnId,
       name: 'OmniFood Warning Branch',
+      slug: normalizeTenantSlug('OmniFood Warning Branch'),
       ruc: 'J0310000005555',
       is_active: true,
     });
@@ -736,6 +739,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     await dataSource.getRepository(Tenant).save({
       id: tenantConvId,
       name: 'Restaurante Reconciler Convergencia',
+      slug: normalizeTenantSlug('Restaurante Reconciler Convergencia'),
       ruc: 'J0310000007777',
       is_active: true,
     });

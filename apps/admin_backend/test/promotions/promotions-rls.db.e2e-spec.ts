@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 6: tenant isolation for the `promotions` table.
@@ -138,7 +139,7 @@ describe('promotions tenant RLS (Real PostgreSQL DB, migration-built schema)', (
 
     // Real tenant rows first: they are the policy comparison values.
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'promotions-rls-tenant-a',
@@ -148,6 +149,10 @@ describe('promotions tenant RLS (Real PostgreSQL DB, migration-built schema)', (
         'promotions-rls-tenant-c',
         tenantDId,
         'promotions-rls-tenant-d',
+                normalizeTenantSlug('promotions-rls-tenant-a'),
+        normalizeTenantSlug('promotions-rls-tenant-b'),
+        normalizeTenantSlug('promotions-rls-tenant-c'),
+        normalizeTenantSlug('promotions-rls-tenant-d'),
       ],
     );
 

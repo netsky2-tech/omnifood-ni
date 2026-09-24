@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 9: tenant isolation for the `parent-owned` sales
@@ -147,7 +148,7 @@ describe('parent-owned sales children tenant RLS (Real PostgreSQL DB, migration-
 
     // Real tenant rows first: invoices carry a real FK to tenants(id).
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'parent-owned-rls-tenant-a',
@@ -157,6 +158,10 @@ describe('parent-owned sales children tenant RLS (Real PostgreSQL DB, migration-
         'parent-owned-rls-tenant-c',
         tenantDId,
         'parent-owned-rls-tenant-d',
+                normalizeTenantSlug('parent-owned-rls-tenant-a'),
+        normalizeTenantSlug('parent-owned-rls-tenant-b'),
+        normalizeTenantSlug('parent-owned-rls-tenant-c'),
+        normalizeTenantSlug('parent-owned-rls-tenant-d'),
       ],
     );
 

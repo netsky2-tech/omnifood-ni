@@ -23,6 +23,7 @@ import { Payment } from '../entities/payment.entity';
 import type { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { InvoicesService } from './invoices.service';
 import { createMigrationBuiltSchemaFixture } from '../../../../test/support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -248,11 +249,11 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
         `);
         await dataSource.query(
           `
-          INSERT INTO tenants (id, name, created_at, updated_at) VALUES
-            ($1, 'Tenant A', now(), now()),
-            ($2, 'Tenant B', now(), now());
+          INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
+            ($1, 'Tenant A', $3, now(), now()),
+            ($2, 'Tenant B', $4, now(), now());
         `,
-          [tenantAId, tenantBId],
+          [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
         );
         await dataSource.query(
           `
@@ -416,10 +417,10 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           GRANT SELECT, INSERT, UPDATE ON inventory_sync_outbox TO "${tenantRole}";
         `);
         await dataSource.query(
-          `INSERT INTO tenants (id, name, created_at, updated_at) VALUES
-             ($1, 'Tenant A', now(), now()),
-             ($2, 'Tenant B', now(), now())`,
-          [tenantAId, tenantBId],
+          `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
+             ($1, 'Tenant A', $3, now(), now()),
+             ($2, 'Tenant B', $4, now(), now())`,
+          [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
         );
         await dataSource.query(
           `INSERT INTO invoices (
@@ -640,10 +641,10 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           GRANT SELECT, INSERT, UPDATE ON inventory_sync_outbox TO "${tenantRole}";
         `);
         await dataSource.query(
-          `INSERT INTO tenants (id, name, created_at, updated_at) VALUES
-             ($1, 'Tenant A', now(), now()),
-             ($2, 'Tenant B', now(), now())`,
-          [tenantAId, tenantBId],
+          `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
+             ($1, 'Tenant A', $3, now(), now()),
+             ($2, 'Tenant B', $4, now(), now())`,
+          [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
         );
         await dataSource.query(
           `INSERT INTO invoices (
@@ -883,6 +884,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           dataSource.getRepository(Tenant).create({
             id: tenantId,
             name: 'Tenant Restock Replay',
+            slug: normalizeTenantSlug('Tenant Restock Replay'),
           }),
         );
         await dataSource.getRepository(Insumo).save(

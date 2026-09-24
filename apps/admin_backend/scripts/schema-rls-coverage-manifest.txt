@@ -187,13 +187,16 @@ audit_logs|debt
 # becomes direct only when the POS cash-session sync receiver and its entity
 # actually land.
 cashier_sessions|debt
-# users stays in debt (issue #512 T3 slice 8, founder decision): the pre-auth
-# login flow looks the user up by email across ALL tenants before any
-# principal or tenant context exists (auth.service.ts login, no guards, no
-# tenant binding), refreshTokens reads the user row on an unbound manager,
-# and uq_users_email is globally unique rather than per tenant — FORCE RLS
-# deny-by-default would break login before a tenant could ever be bound. It
-# becomes direct only through the login redesign decision (tenant in the
-# login DTO plus a POS change, or an explicitly exempted pre-auth read
-# path); tracked as its own follow-up issue.
+# users stays in debt (issue #512 T3 slices 8 and 11, founder decision).
+# Stage 1 of the login redesign (issue #556, OD-03) has landed: login and
+# refresh accept an OPTIONAL tenantSlug; when present, auth.service.ts
+# resolves slug -> tenant on the global tenants table, binds the transaction
+# context (SET LOCAL app.tenant_id) and only then reads the user through the
+# bound manager, so both entry points already have a bound path for the
+# future FORCE RLS world. The legacy no-slug paths (pooled email lookup on
+# login, unbound user read on refresh) remain UNCHANGED for the migration
+# window, and uq_users_email is still globally unique rather than per
+# tenant. FORCE RLS enablement is stage 3, gated on POS adoption E2E
+# (slice 11-B ships the tenantSlug contract to the POS); users becomes
+# direct only when the legacy window closes.
 users|debt

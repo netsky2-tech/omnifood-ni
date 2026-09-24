@@ -1275,6 +1275,33 @@ export class ActivationService {
   }
 
   /**
+   * Reads the persisted provisioning slug for the tenant (issue #556 slice
+   * 11, OD-03). `tenants` is a global (non-RLS) table; the slug is the
+   * stable provisioning identifier the POS stores for the stage-2 optional
+   * cloud login context. It is NOT recomputed from the display name: a
+   * tenant rename leaves the slug stable by design.
+   */
+  private async readPersistedTenantSlug(tenantId: string): Promise<string> {
+    const rows: unknown = await this.dataSource.query(
+      'SELECT slug FROM tenants WHERE id = $1',
+      [tenantId],
+    );
+    const firstRow: unknown = Array.isArray(rows)
+      ? (rows as unknown[])[0]
+      : undefined;
+    const slug =
+      firstRow && typeof (firstRow as Record<string, unknown>).slug === 'string'
+        ? (firstRow as { slug: string }).slug
+        : undefined;
+    if (!slug) {
+      throw new NotFoundException(
+        `Tenant '${tenantId}' has no provisioning slug`,
+      );
+    }
+    return slug;
+  }
+
+  /**
    * DSI-3: Provisions device sync credentials for a PASS or PASS_WITH_WARNING ActivationAttempt.
    *
    * Security & Canonical Identity Rules:
@@ -1373,6 +1400,7 @@ export class ActivationService {
     return {
       credentialId: result.credential.id,
       tenantId: result.credential.tenantId,
+      slug: await this.readPersistedTenantSlug(trimmedTenant),
       deviceId: canonicalDeviceId,
       scopes: [...result.credential.scopes],
       credentialVersion: result.credential.version,
@@ -1482,6 +1510,7 @@ export class ActivationService {
     return {
       credentialId: confirmed.id,
       tenantId: confirmed.tenantId,
+      slug: await this.readPersistedTenantSlug(trimmedTenant),
       deviceId: canonicalDeviceId,
       scopes: [...confirmed.scopes],
       credentialVersion: confirmed.version,

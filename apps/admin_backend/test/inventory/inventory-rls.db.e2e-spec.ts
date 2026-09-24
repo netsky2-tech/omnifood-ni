@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 3: tenant isolation for the inventory tables
@@ -153,7 +154,7 @@ describe('inventory tenant RLS (Real PostgreSQL DB, migration-built schema)', ()
 
     // Real tenant rows first: all four tables FK to tenants(id).
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'inventory-rls-tenant-a',
@@ -163,6 +164,10 @@ describe('inventory tenant RLS (Real PostgreSQL DB, migration-built schema)', ()
         'inventory-rls-tenant-c',
         tenantDId,
         'inventory-rls-tenant-d',
+                normalizeTenantSlug('inventory-rls-tenant-a'),
+        normalizeTenantSlug('inventory-rls-tenant-b'),
+        normalizeTenantSlug('inventory-rls-tenant-c'),
+        normalizeTenantSlug('inventory-rls-tenant-d'),
       ],
     );
 

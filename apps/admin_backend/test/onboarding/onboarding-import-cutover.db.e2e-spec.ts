@@ -30,6 +30,7 @@ import { LegacyImportIntegrityReportService } from '../../src/modules/onboarding
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -94,12 +95,12 @@ async function withImportCutoverIsolatedSchema(
     const tenantBId = randomUUID();
 
     await dataSource.query(
-      `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-      [tenantAId, 'Tenant A — Taquería Central'],
+      `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+      [tenantAId, 'Tenant A — Taquería Central', normalizeTenantSlug('Tenant A — Taquería Central')],
     );
     await dataSource.query(
-      `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-      [tenantBId, 'Tenant B — Repostería Bella'],
+      `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+      [tenantBId, 'Tenant B — Repostería Bella', normalizeTenantSlug('Tenant B — Repostería Bella')],
     );
 
     // Seed existing product in Tenant A for duplicate preview testing

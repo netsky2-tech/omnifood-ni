@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 8: tenant isolation for the `datafonos_equipos`
@@ -144,7 +145,7 @@ describe('datafonos_equipos tenant RLS (Real PostgreSQL DB, migration-built sche
 
     // Real tenant rows first, mirroring every other slice's harness.
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'datafonos-rls-tenant-a',
@@ -154,6 +155,10 @@ describe('datafonos_equipos tenant RLS (Real PostgreSQL DB, migration-built sche
         'datafonos-rls-tenant-c',
         tenantDId,
         'datafonos-rls-tenant-d',
+                normalizeTenantSlug('datafonos-rls-tenant-a'),
+        normalizeTenantSlug('datafonos-rls-tenant-b'),
+        normalizeTenantSlug('datafonos-rls-tenant-c'),
+        normalizeTenantSlug('datafonos-rls-tenant-d'),
       ],
     );
 

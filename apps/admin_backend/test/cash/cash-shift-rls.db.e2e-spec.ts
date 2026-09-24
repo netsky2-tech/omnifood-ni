@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 5: tenant isolation for the cash tables
@@ -141,7 +142,7 @@ describe('cash shift tenant RLS (Real PostgreSQL DB, migration-built schema)', (
 
     // Real tenant rows first: they are the policy comparison values.
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'cash-shift-rls-tenant-a',
@@ -151,6 +152,10 @@ describe('cash shift tenant RLS (Real PostgreSQL DB, migration-built schema)', (
         'cash-shift-rls-tenant-c',
         tenantDId,
         'cash-shift-rls-tenant-d',
+                normalizeTenantSlug('cash-shift-rls-tenant-a'),
+        normalizeTenantSlug('cash-shift-rls-tenant-b'),
+        normalizeTenantSlug('cash-shift-rls-tenant-c'),
+        normalizeTenantSlug('cash-shift-rls-tenant-d'),
       ],
     );
 

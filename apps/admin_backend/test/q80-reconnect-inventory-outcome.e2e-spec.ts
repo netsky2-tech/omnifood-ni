@@ -46,6 +46,7 @@ import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
 } from './support/identity-jwt-test.fixture';
+import { normalizeTenantSlug } from '../src/modules/tenant/tenant-slug';
 import {
   ensurePublicDeviceSyncTables,
   provisionDeviceSyncCredential,
@@ -141,8 +142,8 @@ async function withIsolatedSchema(
 
     const tenantId = randomUUID();
     await dataSource.query(
-      `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-      [tenantId, `E2E Tenant ${schemaPrefix}`],
+      `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+      [tenantId, `E2E Tenant ${schemaPrefix}`, normalizeTenantSlug(`E2E Tenant ${schemaPrefix}`)],
     );
 
     // The /v1/sync transport is device-only: provision an ACTIVE device sync

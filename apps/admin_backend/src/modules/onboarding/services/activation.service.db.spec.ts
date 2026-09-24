@@ -38,6 +38,7 @@ import { OnboardingSessionService } from './onboarding-session.service';
 import { OnboardingReadinessEvaluator } from './onboarding-readiness.evaluator';
 import { OnboardingStateReconciler } from './onboarding-state.reconciler';
 import { ConflictException, BadRequestException } from '@nestjs/common';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -183,6 +184,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       await tenantRepo.save({
         id: tenantId,
         name: 'Restaurante El Fundador',
+        slug: normalizeTenantSlug('Restaurante El Fundador'),
         ruc: 'J0310000001234',
         is_active: true,
       });
@@ -445,6 +447,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       await tenantRepo.save({
         id: tenantId,
         name: 'Sucursal Warning/Fail',
+        slug: normalizeTenantSlug('Sucursal Warning/Fail'),
         ruc: 'J0310000009999',
         is_active: true,
       });
@@ -674,6 +677,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       await tenantRepo.save({
         id: tenantId,
         name: 'Restaurante Convergencia Real',
+        slug: normalizeTenantSlug('Restaurante Convergencia Real'),
         ruc: 'J0310000009999',
         is_active: true,
       });
