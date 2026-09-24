@@ -275,8 +275,9 @@ class MockAuthRepository extends _i1.Mock implements _i11.AuthRepository {
   @override
   _i9.Future<_i12.User?> loginOnline(
     String? email,
-    String? password,
-  ) =>
+    String? password, {
+    String? tenantSlug,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #loginOnline,
@@ -284,6 +285,7 @@ class MockAuthRepository extends _i1.Mock implements _i11.AuthRepository {
             email,
             password,
           ],
+          {#tenantSlug: tenantSlug},
         ),
         returnValue: _i9.Future<_i12.User?>.value(),
         returnValueForMissingStub: _i9.Future<_i12.User?>.value(),

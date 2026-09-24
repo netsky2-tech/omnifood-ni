@@ -137,14 +137,22 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<User?> loginOnline(String email, String password) async {
+  Future<User?> loginOnline(String email, String password, {String? tenantSlug}) async {
     _capabilityCache?.clear();
     _lastAuthError = null;
     debugPrint('[AuthRepository] POST /identity/login with email: $email');
     try {
+      // Legacy/absent slug -> omit the key entirely so the wire contract for
+      // unprovisioned installs is unchanged (issue #556).
+      final cleanTenantSlug = tenantSlug?.trim() ?? '';
+      final loginPayload = <String, dynamic>{
+        'email': email,
+        'pass': password,
+        if (cleanTenantSlug.isNotEmpty) 'tenantSlug': cleanTenantSlug,
+      };
       final response = await _dio.post(
         '/identity/login',
-        data: {'email': email, 'pass': password},
+        data: loginPayload,
       );
 
       final user = User.fromJson(response.data['user']);

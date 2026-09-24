@@ -21,7 +21,7 @@ class _FakeAuthRepository implements AuthRepository {
   @override
   Future<User?> loginOffline(String userId, String pin) async => null;
   @override
-  Future<User?> loginOnline(String email, String password) async => null;
+  Future<User?> loginOnline(String email, String password, {String? tenantSlug}) async => null;
   @override
   Future<User?> getCurrentUser() async => null;
   @override

@@ -34,7 +34,7 @@ class FakeAuthRepository implements AuthRepository {
   String? get lastAuthError => null;
 
   @override
-  Future<User?> loginOnline(String email, String password) async => null;
+  Future<User?> loginOnline(String email, String password, {String? tenantSlug}) async => null;
   @override
   Future<bool> authorizeOverride({required String supervisorId, String? pin, String? totpCode}) async => false;
   @override

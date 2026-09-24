@@ -1144,8 +1144,9 @@ class MockAuthRepository extends _i1.Mock implements _i23.AuthRepository {
   @override
   _i18.Future<_i24.User?> loginOnline(
     String? email,
-    String? password,
-  ) =>
+    String? password, {
+    String? tenantSlug,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #loginOnline,
@@ -1153,6 +1154,7 @@ class MockAuthRepository extends _i1.Mock implements _i23.AuthRepository {
             email,
             password,
           ],
+          {#tenantSlug: tenantSlug},
         ),
         returnValue: _i18.Future<_i24.User?>.value(),
         returnValueForMissingStub: _i18.Future<_i24.User?>.value(),
@@ -1403,6 +1405,15 @@ class MockSyncService extends _i1.Mock implements _i9.SyncService {
         returnValue: _i18.Stream<_i9.CloudSyncStatus>.empty(),
         returnValueForMissingStub: _i18.Stream<_i9.CloudSyncStatus>.empty(),
       ) as _i18.Stream<_i9.CloudSyncStatus>);
+
+  @override
+  _i18.Stream<_i9.SalesRecordRejection> get onSalesRecordRejected =>
+      (super.noSuchMethod(
+        Invocation.getter(#onSalesRecordRejected),
+        returnValue: _i18.Stream<_i9.SalesRecordRejection>.empty(),
+        returnValueForMissingStub:
+            _i18.Stream<_i9.SalesRecordRejection>.empty(),
+      ) as _i18.Stream<_i9.SalesRecordRejection>);
 
   @override
   _i9.CloudSyncStatus get status => (super.noSuchMethod(

@@ -161,6 +161,9 @@ void main() async {
   );
   final refreshDio = Dio(productionTransportOptions(baseUrl));
 
+  // Tenant configuration store (slug write-through from provisioning, issue #556)
+  final tenantConfigService = TenantConfigService(database.localConfigDao);
+
   // Dedicated Device Sync Infrastructure
   final deviceSyncExchangeDio = Dio(productionTransportOptions(baseUrl));
   final deviceSyncStore = ResilientDeviceSyncCredentialStore(
@@ -190,6 +193,7 @@ void main() async {
     activationSyncPort: activationSyncPort,
     resolveDeviceId: () async => deviceId,
     credentialCoordinator: deviceSyncCoordinator,
+    onTenantSlugCaptured: (slug) => tenantConfigService.persistTenantSlug(slug),
   );
 
   final authRepository = AuthRepositoryImpl(
@@ -344,7 +348,12 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => LoginViewModel(authRepository)),
+        ChangeNotifierProvider(
+          create: (_) => LoginViewModel(
+            authRepository,
+            resolveTenantSlug: () => tenantConfigService.getTenantSlug(),
+          ),
+        ),
         ChangeNotifierProvider(
           create: (_) => LockScreenViewModel(authRepository, database.userDao),
         ),
@@ -486,7 +495,7 @@ void main() async {
         ),
         Provider<NetworkConnectivityService>.value(value: connectivityService),
         Provider<TenantConfigService>(
-          create: (_) => TenantConfigService(database.localConfigDao),
+          create: (_) => tenantConfigService,
         ),
         Provider<PrinterConfigService>(
           create: (_) => PrinterConfigService(database.localConfigDao),

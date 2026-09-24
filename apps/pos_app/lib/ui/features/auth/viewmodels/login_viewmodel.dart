@@ -4,7 +4,12 @@ import '../../../../domain/repositories/auth_repository.dart';
 class LoginViewModel extends ChangeNotifier {
   final AuthRepository _authRepository;
 
-  LoginViewModel(this._authRepository);
+  /// Resolves the locally stored tenant slug (pre-auth routing hint, issue
+  /// #556). Null/absent resolver means legacy behavior: no slug is sent.
+  final Future<String?> Function()? _resolveTenantSlug;
+
+  LoginViewModel(this._authRepository, {Future<String?> Function()? resolveTenantSlug})
+      : _resolveTenantSlug = resolveTenantSlug;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -17,7 +22,20 @@ class LoginViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    final onlineUser = await _authRepository.loginOnline(email, password);
+    // Slug is pre-auth context, never authority: resolver failures never
+    // block or alter the login flow.
+    String? tenantSlug;
+    final resolveTenantSlug = _resolveTenantSlug;
+    if (resolveTenantSlug != null) {
+      try {
+        tenantSlug = await resolveTenantSlug();
+      } catch (_) {
+        tenantSlug = null;
+      }
+    }
+
+    final onlineUser =
+        await _authRepository.loginOnline(email, password, tenantSlug: tenantSlug);
     final user = onlineUser ?? await _authRepository.loginOffline(email, password);
     
     _isLoading = false;

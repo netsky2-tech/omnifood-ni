@@ -11,6 +11,9 @@ import 'device_sync_exceptions.dart';
 /// - [credentialVersion]: monotonically increasing version number (prevents stale overwrites)
 /// - [expiresAt]: UTC expiration timestamp for the renewal credential itself
 /// - [scopes]: granted device-sync scopes (e.g. `['sync:push', 'sync:pull']`)
+/// - [slug]: OPTIONAL tenant slug echoed by the provisioning/confirm response
+///   (issue #556). Pre-auth routing context only — never authority, never a
+///   secret. Not part of credential identity (excluded from ==/hashCode).
 ///
 /// Under no circumstances may this record store human tokens, passwords, PIN hashes,
 /// TOTP seeds, or user session data.
@@ -27,6 +30,7 @@ class DeviceSyncCredentialRecord {
     required this.credentialVersion,
     required this.expiresAt,
     List<String>? scopes,
+    this.slug = '',
   })  : scopes = List.unmodifiable(_validateScopes(scopes ?? defaultScopes)) {
     if (credentialId.trim().isEmpty) {
       throw ArgumentError.value(credentialId, 'credentialId', 'Must not be empty');
@@ -77,6 +81,10 @@ class DeviceSyncCredentialRecord {
   final DateTime expiresAt;
   final List<String> scopes;
 
+  /// Optional tenant slug echoed by the backend provisioning/confirm/bootstrap
+  /// responses. Empty for legacy responses that do not include it.
+  final String slug;
+
   static const Set<String> _allowedKeys = {
     'credentialId',
     'tenantId',
@@ -85,6 +93,7 @@ class DeviceSyncCredentialRecord {
     'credentialVersion',
     'expiresAt',
     'scopes',
+    'slug',
   };
 
   static const Set<String> _prohibitedKeys = {
@@ -126,6 +135,7 @@ class DeviceSyncCredentialRecord {
         'credentialVersion': credentialVersion,
         'expiresAt': expiresAt.toUtc().toIso8601String(),
         'scopes': scopes,
+        'slug': slug,
       };
 
   factory DeviceSyncCredentialRecord.fromJson(Map<String, dynamic> json) {
@@ -160,6 +170,7 @@ class DeviceSyncCredentialRecord {
       credentialVersion: (json['credentialVersion'] as num?)?.toInt() ?? 0,
       expiresAt: parsedExpiresAt,
       scopes: scopesList,
+      slug: json['slug'] as String? ?? '',
     );
   }
 
@@ -171,6 +182,7 @@ class DeviceSyncCredentialRecord {
     int? credentialVersion,
     DateTime? expiresAt,
     List<String>? scopes,
+    String? slug,
   }) {
     return DeviceSyncCredentialRecord(
       credentialId: credentialId ?? this.credentialId,
@@ -180,6 +192,7 @@ class DeviceSyncCredentialRecord {
       credentialVersion: credentialVersion ?? this.credentialVersion,
       expiresAt: expiresAt ?? this.expiresAt,
       scopes: scopes ?? this.scopes,
+      slug: slug ?? this.slug,
     );
   }
 

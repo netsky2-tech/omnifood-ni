@@ -1704,8 +1704,9 @@ class MockAuthRepository extends _i1.Mock implements _i79.AuthRepository {
   @override
   _i52.Future<_i60.User?> loginOnline(
     String? email,
-    String? password,
-  ) =>
+    String? password, {
+    String? tenantSlug,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #loginOnline,
@@ -1713,6 +1714,7 @@ class MockAuthRepository extends _i1.Mock implements _i79.AuthRepository {
             email,
             password,
           ],
+          {#tenantSlug: tenantSlug},
         ),
         returnValue: _i52.Future<_i60.User?>.value(),
         returnValueForMissingStub: _i52.Future<_i60.User?>.value(),
@@ -2563,6 +2565,34 @@ class MockPrinterConfigService extends _i1.Mock
         returnValue: _i52.Stream<_i54.PrinterConfig>.empty(),
         returnValueForMissingStub: _i52.Stream<_i54.PrinterConfig>.empty(),
       ) as _i52.Stream<_i54.PrinterConfig>);
+
+  @override
+  _i52.Future<bool> isPrinterProfileConfigured() => (super.noSuchMethod(
+        Invocation.method(
+          #isPrinterProfileConfigured,
+          [],
+        ),
+        returnValue: _i52.Future<bool>.value(false),
+        returnValueForMissingStub: _i52.Future<bool>.value(false),
+      ) as _i52.Future<bool>);
+
+  @override
+  _i52.Future<void> confirmPrinterProfile({
+    required _i54.PrinterDriverType? driverType,
+    required int? paperWidthMm,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #confirmPrinterProfile,
+          [],
+          {
+            #driverType: driverType,
+            #paperWidthMm: paperWidthMm,
+          },
+        ),
+        returnValue: _i52.Future<void>.value(),
+        returnValueForMissingStub: _i52.Future<void>.value(),
+      ) as _i52.Future<void>);
 
   @override
   _i52.Future<_i54.PrinterConfig> getPrinterConfig() => (super.noSuchMethod(
