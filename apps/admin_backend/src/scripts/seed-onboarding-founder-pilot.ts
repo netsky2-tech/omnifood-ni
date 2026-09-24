@@ -6,6 +6,7 @@ import { AppModule } from '../core/app/app.module';
 import { User, UserRole } from '../modules/identity/entities/user.entity';
 import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
 import { Tenant } from '../modules/tenant/entities/tenant.entity';
+import { bindTenantContext } from '../core/database/tenant-transaction';
 import {
   canonicalFiscalId,
   isValidRuc,
@@ -113,6 +114,10 @@ async function seedFounderPilot(): Promise<void> {
           is_active: true,
         }),
       );
+      // Bind the transaction-local tenant context before any protected-table
+      // write: FORCE RLS on parent-owned/direct tables denies unbound writes
+      // from the non-owner runtime role.
+      await bindTenantContext(manager, tenant.id);
       const owner = await manager.save(
         manager.create(User, {
           tenant_id: tenant.id,

@@ -28,7 +28,11 @@ interface SourceRow {
 /**
  * Loads the tenant's staff records as the projector's source shape.
  *
- * `users` and `security_profiles` have no RLS, so the tenant predicate is
+ * `security_profiles` has FORCE row level security (issue #512 T3 slice 9),
+ * so this read MUST run on a manager whose transaction already bound the
+ * tenant context (`app.tenant_id`) — on a pooled connection the joined
+ * profile side silently collapses to null. `users` has no RLS yet (it
+ * remains classified `debt`), so the tenant predicate on `users` stays
  * explicit and cast: `users.tenant_id` is uuid while the OHAC tables are
  * varchar. LEFT JOIN (not INNER JOIN) so a user with no security profile
  * maps to a null pin hash instead of being silently dropped, and the

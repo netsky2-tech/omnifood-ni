@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from './user.service';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { User, UserRole } from '../entities/user.entity';
 import {
   ALL_APP_PERMISSIONS,
@@ -668,9 +669,95 @@ describe('UserService', () => {
       await service.getUserEffectivePermissions('user-1', 'tenant-1');
       await service.findById('user-1');
 
-      expect(dataSource.transaction).not.toHaveBeenCalled();
-      expect(bindCount()).toBe(0);
+      // Issue #512 T3 slice 9 rework: the effective-permissions read is
+      // itself security_profiles access under FORCE RLS, so it opens its
+      // own bound transaction — but it stays a READ: exactly one
+      // transaction, one bind, and never a publication mark.
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(bindCount()).toBe(1);
       expect(markCount()).toBe(0);
+    });
+
+    it('binds the effective-permissions read through the tenant transaction; pooled repos stay silent (issue #512 T3 slice 9)', async () => {
+      // Pooled tripwires: any call here means a read escaped the bound
+      // transaction and would hit RLS on a connection with no tenant bound.
+      const pooledUser = { findOne: jest.fn() };
+      const pooledProfile = { findOne: jest.fn() };
+
+      const boundUser = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 'user-cashier',
+          role: UserRole.CASHIER,
+          tenant_id: 'tenant-1',
+          is_active: true,
+        }),
+      };
+      const boundProfile = {
+        findOne: jest.fn().mockResolvedValue({
+          user_id: 'user-cashier',
+          custom_permissions: [],
+        }),
+      };
+
+      const setConfigCalls: Array<[string, string[]]> = [];
+      const boundManager = {
+        query: jest.fn(async (sql: string, params: string[]) => {
+          setConfigCalls.push([sql, params]);
+          return [];
+        }),
+        getRepository: jest.fn((entity: unknown) =>
+          entity === User
+            ? boundUser
+            : entity === SecurityProfile
+              ? boundProfile
+              : null,
+        ),
+      };
+      const boundDataSource = {
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            work(boundManager),
+        ),
+      };
+
+      const boundModule: TestingModule = await Test.createTestingModule({
+        providers: [
+          UserService,
+          { provide: getRepositoryToken(User), useValue: pooledUser },
+          {
+            provide: getRepositoryToken(AuditLog),
+            useValue: { findOne: jest.fn(), save: jest.fn() },
+          },
+          {
+            provide: getRepositoryToken(SecurityProfile),
+            useValue: pooledProfile,
+          },
+          { provide: DataSource, useValue: boundDataSource },
+          { provide: AuthService, useValue: authService },
+        ],
+      }).compile();
+      const bound = boundModule.get<UserService>(UserService);
+
+      const effective = await bound.getUserEffectivePermissions(
+        'user-cashier',
+        'tenant-1',
+      );
+      expect(effective.user_id).toBe('user-cashier');
+
+      // ONE transaction, binding the tenant context exactly once with the
+      // production set_config SQL.
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(setConfigCalls).toHaveLength(1);
+      expect(setConfigCalls[0][0]).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
+      expect(setConfigCalls[0][1]).toEqual(['tenant-1']);
+
+      // Both reads resolved through the bound manager's repositories.
+      expect(boundUser.findOne).toHaveBeenCalledTimes(1);
+      expect(boundProfile.findOne).toHaveBeenCalledTimes(1);
+
+      // RUNTIME TEETH: the pooled tripwires stayed silent.
+      expect(pooledUser.findOne).not.toHaveBeenCalled();
+      expect(pooledProfile.findOne).not.toHaveBeenCalled();
     });
 
     it('findByTenant requests is_active along with other core fields', async () => {
