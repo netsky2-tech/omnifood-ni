@@ -6,8 +6,9 @@
 
 **Branch:** `feat/dashboard-v2`
 **Base:** `main` @ `a9a381d4`
-**Status:** in progress — Tasks 1-2 done (`c197ca9c`, evidence pass committed). Task 3: distilling
-the PRD decision set for the owner.
+**Status:** in progress — Tasks 1-2b done (`c197ca9c`, `78532c4d`, `39c179df`). Task 3: the v0.2's
+remaining gate is the owner's approval of the baseline; PRD decisions (§27, 22 items) come with the
+PRD drafting.
 
 ## Governing constraint
 
@@ -38,9 +39,9 @@ discipline: evidence first, decisions second, PRD third, implementation batches 
 
 ### Task 2 — Evidence pass (audit §31 DoD, code-level)
 
-- **Status:** done
+- **Status:** done. Superseded-in-part by the owner's re-audit v0.2 (Task 2b).
 - **Goal:** Verify every audit claim against the real codebase; produce verdicts per DG-* item.
-- **Commits:** pending (with the evidence document)
+- **Commits:** `78532c4d`
 - **Evidence:** `docs/dashboard/audit_evidence_pass.md` — complete verdict table. Headlines: the
   regime-aware slot (DG-04) is frontend-only (`GET /onboarding/fiscal-setup` exposes `regime`);
   hourly/top-products/cashier endpoints and hooks exist but were never wired into the dashboard;
@@ -49,6 +50,23 @@ discipline: evidence first, decisions second, PRD third, implementation batches 
   endpoints (alignment caveat on COGS date params); Recharts not installed; `KpiCard` already
   supports `trend`; all routes tenant-safe with RLS. Corrections recorded against audit §8, §13,
   §23.
+
+### Task 2b — Re-audit v0.2 reconciliation
+
+- **Status:** done
+- **Goal:** Verify the owner-provided scoped re-audit (`owner_dashboard_v2_gap_audit_v0.2.md`)
+  against the evidence pass; confirm or refute its claims; record any new finding.
+- **Commits:** `39c179df`
+- **Evidence:** v0.2 incorporates all three evidence-pass corrections faithfully (tips
+  BLOCKED/DATA GAP, freshness = backend feature, inventory as separate bounded context). Its DoD
+  checklist (§29) is fully checked except the product-approval gate. Consistency spot-checks
+  passed (`reconciliationStatus` exists per-payment only; regime endpoint; -06:00 anchoring).
+  **New finding from the spot-check:** `grossSales` is computed as Σ `inv.total`
+  (`sales-reports.service.ts:88`) — post-discount, **post-tax** — while `netTaxableSales` is Σ
+  `inv.subtotal` (post-discount, pre-tax, L89). The current "Ventas Brutas" label therefore
+  includes IVA; the KPI dictionary must resolve the naming/semantics mismatch (feeds §7.1 and
+  decision 1 of §27). Pre-discount base is derivable client-side as
+  `netTaxableSales + totalDiscounts` (pre-tax) for the discount ratio.
 
 ### Task 3 — Distill PRD decisions for the product owner
 
