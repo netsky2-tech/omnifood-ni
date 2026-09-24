@@ -1,6 +1,9 @@
 import { ConflictException } from '@nestjs/common';
 import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import { PointTransactionType } from '../../customers/entities/customer-point-transaction.entity';
+import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
+import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 
 /**
  * Unit harness for the writer contract: `transaction_type` must go through the
@@ -35,12 +38,54 @@ const makeService = () => {
     save: jest.fn(async (value: Record<string, unknown>) => value),
   };
 
+  // Issue #512 slice 4: pooled-repo sentinels — the binding guard proves the
+  // service never touches them for the protected access.
+  const pooledTxRepo = {
+    findOne: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    createQueryBuilder: jest.fn(),
+  };
+  const pooledProjectionRepo = {
+    findOne: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+
+  const managerGetRepository = jest.fn((entity: unknown) => {
+    if (entity === CustomerPointTransaction) return txRepo;
+    if (entity === CustomerLoyaltyAccountProjection) return projectionRepo;
+    return null;
+  });
+  const manager = {
+    getRepository: managerGetRepository,
+    query: jest.fn(),
+    transaction: jest.fn((cb: (m: unknown) => Promise<unknown>) =>
+      cb({ getRepository: managerGetRepository, query: manager.query }),
+    ),
+  };
+  const dataSource = {
+    transaction: jest.fn((cb: (m: unknown) => Promise<unknown>) => cb(manager)),
+    getRepository: jest.fn(),
+  };
+
   const service = new LoyaltyLedgerService(
     txRepo as never,
     projectionRepo as never,
+    dataSource as never,
   );
 
-  return { service, saved, txRepo, projectionRepo };
+  return {
+    service,
+    saved,
+    txRepo,
+    projectionRepo,
+    pooledTxRepo,
+    pooledProjectionRepo,
+    manager,
+    managerGetRepository,
+    dataSource,
+  };
 };
 
 const baseDto = {
@@ -102,5 +147,26 @@ describe('LoyaltyLedgerService.appendTransaction: transaction_type writer mappin
         idempotencyKey: 'key-1',
       }),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('binds the appendTransaction access through the tenant transaction (issue #512 slice 4)', async () => {
+    const { service, dataSource, manager, managerGetRepository, pooledTxRepo } =
+      makeService();
+
+    await service.appendTransaction({ ...baseDto, transactionType: 'EARN' });
+
+    // A tenant transaction must be opened for the access...
+    expect(dataSource.transaction).toHaveBeenCalled();
+    // ...with the transaction-local binding SQL issued on the unit manager
+    // with the trimmed tenant id before any protected access.
+    expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-1',
+    ]);
+    // The protected access must resolve its repository from the bound manager.
+    expect(managerGetRepository).toHaveBeenCalledWith(CustomerPointTransaction);
+    // The pooled repository properties must not be used.
+    expect(pooledTxRepo.findOne).not.toHaveBeenCalled();
+    expect(pooledTxRepo.save).not.toHaveBeenCalled();
+    expect(pooledTxRepo.createQueryBuilder).not.toHaveBeenCalled();
   });
 });

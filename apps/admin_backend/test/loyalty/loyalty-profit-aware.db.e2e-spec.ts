@@ -187,12 +187,14 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
       programRepo,
       txRepo,
       costAdapter,
+      dataSource,
     );
     const loyaltyService = new LoyaltyService(
       programRepo,
       rewardRepo,
       projRepo,
       custRepo,
+      dataSource,
     );
 
     const moduleRef: TestingModule = await Test.createTestingModule({

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { LoyaltyService } from './loyalty.service';
 import {
   LoyaltyProgram,
@@ -15,6 +15,37 @@ import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-a
 import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
+
+/**
+ * Issue #512 slice 4: passthrough spy over `dataSource.transaction` that
+ * records the tenant-context binding SQL issued on each unit manager, without
+ * changing any observable behavior.
+ */
+function captureTenantBinding(source: DataSource): unknown[][] {
+  const actual = source.transaction.bind(source);
+  const bindingCalls: unknown[][] = [];
+  jest.spyOn(source, 'transaction').mockImplementation(((
+    ...args: unknown[]
+  ) => {
+    const cb = args[args.length - 1] as (
+      manager: EntityManager,
+    ) => Promise<unknown>;
+    return actual(async (manager: EntityManager) => {
+      const rawQuery = manager.query.bind(manager);
+      jest
+        .spyOn(manager, 'query')
+        .mockImplementation(async (sql: string, params?: unknown[]) => {
+          if (sql === TENANT_CONTEXT_SET_CONFIG_SQL) {
+            bindingCalls.push(params);
+          }
+          return rawQuery(sql, params);
+        });
+      return cb(manager);
+    });
+  }) as never);
+  return bindingCalls;
+}
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -108,6 +139,7 @@ async function createTestHarness() {
     dataSource.getRepository(RewardDefinition),
     dataSource.getRepository(CustomerLoyaltyAccountProjection),
     dataSource.getRepository(Customer),
+    dataSource,
   );
 
   return {
@@ -505,6 +537,35 @@ describe('LoyaltyService (db)', () => {
       await expect(
         harness.service.findOneReward('tenant-1', randomUUID()),
       ).rejects.toThrow('not found');
+    });
+  });
+
+  describe('Tenant binding (issue #512 slice 4)', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('binds the createProgram access through the tenant transaction (issue #512 slice 4)', async () => {
+      const bindingCalls = captureTenantBinding(harness.dataSource);
+      const pooledProgramRepo =
+        harness.dataSource.getRepository(LoyaltyProgram);
+      const pooledSaveSpy = jest.spyOn(pooledProgramRepo, 'save');
+
+      const program = await harness.service.createProgram('tenant-guard', {
+        name: 'Guarded Program',
+        program_type: LoyaltyProgramType.SPEND_POINTS,
+        earning_rule: { spendBlockNio: 10, pointsPerBlock: 1 },
+        eligibility_rule: {},
+      });
+
+      expect(program.id).toBeDefined();
+      // A tenant transaction must be opened for the access...
+      expect(harness.dataSource.transaction).toHaveBeenCalled();
+      // ...with the transaction-local binding SQL issued on the unit manager
+      // with the trimmed tenant id before any protected access.
+      expect(bindingCalls).toContainEqual(['tenant-guard']);
+      // The pooled repository property must not be used.
+      expect(pooledSaveSpy).not.toHaveBeenCalled();
     });
   });
 });

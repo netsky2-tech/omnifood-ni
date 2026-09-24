@@ -130,12 +130,13 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
     txRepo = dataSource.getRepository(CustomerPointTransaction);
     projRepo = dataSource.getRepository(CustomerLoyaltyAccountProjection);
 
-    ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
+    ledgerService = new LoyaltyLedgerService(txRepo, projRepo, dataSource);
     loyaltyService = new LoyaltyService(
       progRepo,
       rewardRepo,
       projRepo,
       custRepo,
+      dataSource,
     );
     redemptionService = new RedemptionService(
       progRepo,
@@ -144,6 +145,7 @@ describe('LV1.7E — Loyalty Audit & Antifraud Suite (Real PostgreSQL)', () => {
       txRepo,
       ledgerService,
       loyaltyService,
+      dataSource,
     );
 
     await tenantRepo.save({

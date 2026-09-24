@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import {
   LoyaltyProgram,
   LoyaltyProgramStatus,
@@ -23,22 +24,41 @@ export class TicketPaidHandler {
     @InjectRepository(Customer)
     private readonly customerRepo: Repository<Customer>,
     private readonly ledgerService: LoyaltyLedgerService,
+    // Issue #512 slice 4: the tenant-bound transaction manager is the only
+    // access path to the customers/loyalty tables; the pooled repositories
+    // above stay declared for Nest DI compatibility only.
+    private readonly dataSource: DataSource,
   ) {}
 
   async handle(snapshot: LoyaltyTicketSnapshot): Promise<EarningResult[]> {
     if (!snapshot.customerId) return [];
 
-    const customer = await this.customerRepo.findOne({
-      where: { id: snapshot.customerId, tenant_id: snapshot.tenantId },
-    });
-    if (!customer || !customer.is_active) return [];
+    // Unit A: the customer read and the active-programs read share one bound
+    // transaction. Each per-program ledger append below opens its own unit so
+    // one failed reversal/earn never poisons the rest (per-iteration catch).
+    const { customer, activePrograms } = await runInTenantTransaction(
+      this.dataSource,
+      snapshot.tenantId,
+      async (manager) => {
+        const customer = await manager.getRepository(Customer).findOne({
+          where: { id: snapshot.customerId, tenant_id: snapshot.tenantId },
+        });
+        if (!customer || !customer.is_active)
+          return { customer: null, activePrograms: [] };
 
-    const activePrograms = await this.programRepo.find({
-      where: {
-        tenant_id: snapshot.tenantId,
-        status: LoyaltyProgramStatus.ACTIVE,
+        const activePrograms = await manager
+          .getRepository(LoyaltyProgram)
+          .find({
+            where: {
+              tenant_id: snapshot.tenantId,
+              status: LoyaltyProgramStatus.ACTIVE,
+            },
+          });
+        return { customer, activePrograms };
       },
-    });
+    );
+
+    if (!customer) return [];
 
     const results: EarningResult[] = [];
 

@@ -1,12 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { CustomersService } from './customers.service';
 import { Customer } from '../entities/customer.entity';
 import {
   CustomerPointTransaction,
   PointTransactionType,
 } from '../entities/customer-point-transaction.entity';
+import { CustomerLoyaltyAccountProjection } from '../../loyalty/entities/customer-loyalty-account-projection.entity';
 
 describe('CustomersService', () => {
   let service: CustomersService;
@@ -20,6 +23,44 @@ describe('CustomersService', () => {
     find: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
+  };
+
+  // Issue #512 slice 4: the tenant-bound transaction manager is the only
+  // permitted access path, so the binding guard keeps manager-scoped repo
+  // mocks distinct from the pooled ones to prove the pooled path is unused.
+  const mgrCustomerRepo = {
+    createQueryBuilder: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+  const mgrPointTxRepo = {
+    find: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+  const mgrProjectionRepo = {
+    findOne: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+  };
+
+  const managerGetRepository = jest.fn((entity: unknown) => {
+    if (entity === Customer) return mgrCustomerRepo;
+    if (entity === CustomerPointTransaction) return mgrPointTxRepo;
+    if (entity === CustomerLoyaltyAccountProjection) return mgrProjectionRepo;
+    return null;
+  });
+  const manager = {
+    getRepository: managerGetRepository,
+    query: jest.fn(),
+    transaction: jest.fn((cb: (m: unknown) => Promise<unknown>) =>
+      cb({ getRepository: managerGetRepository, query: manager.query }),
+    ),
+  };
+  const dataSource = {
+    transaction: jest.fn((cb: (m: unknown) => Promise<unknown>) => cb(manager)),
+    getRepository: jest.fn(),
   };
 
   const mockCustomer = (overrides: Partial<Customer> = {}): Customer =>
@@ -64,15 +105,31 @@ describe('CustomersService', () => {
       getManyAndCount: jest.fn().mockResolvedValue([[mockCustomer()], 1]),
     };
 
+    mgrCustomerRepo.createQueryBuilder.mockReturnValue(qb);
+    mgrCustomerRepo.findOne.mockReset();
+    mgrCustomerRepo.create
+      .mockReset()
+      .mockImplementation((data: unknown) => data as Customer);
+    mgrCustomerRepo.save
+      .mockReset()
+      .mockImplementation((entity: unknown) => Promise.resolve(entity));
+    mgrPointTxRepo.find.mockReset();
+    mgrPointTxRepo.create
+      .mockReset()
+      .mockImplementation((data: unknown) => data as CustomerPointTransaction);
+    mgrPointTxRepo.save
+      .mockReset()
+      .mockImplementation((entity: unknown) => Promise.resolve(entity));
+
     repo = {
-      createQueryBuilder: jest.fn().mockReturnValue(qb),
+      createQueryBuilder: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn((data: unknown) => data as Customer),
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
     };
 
     pointTxRepo = {
-      find: jest.fn().mockResolvedValue([mockPointTx()]),
+      find: jest.fn(),
       create: jest.fn((data: unknown) => data as CustomerPointTransaction),
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
     };
@@ -88,6 +145,7 @@ describe('CustomersService', () => {
           provide: getRepositoryToken(CustomerPointTransaction),
           useValue: pointTxRepo,
         },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -101,14 +159,14 @@ describe('CustomersService', () => {
   });
 
   it('should find customer by id and tenant', async () => {
-    repo.findOne.mockResolvedValue(mockCustomer());
+    mgrCustomerRepo.findOne.mockResolvedValue(mockCustomer());
     const customer = await service.findOne('tenant-1', 'cust-uuid-1');
     expect(customer.id).toBe('cust-uuid-1');
     expect(customer.tenant_id).toBe('tenant-1');
   });
 
   it('should throw NotFoundException when customer does not exist', async () => {
-    repo.findOne.mockResolvedValue(null);
+    mgrCustomerRepo.findOne.mockResolvedValue(null);
     await expect(service.findOne('tenant-1', 'non-existent')).rejects.toThrow(
       NotFoundException,
     );
@@ -128,7 +186,7 @@ describe('CustomersService', () => {
   });
 
   it('should update customer details', async () => {
-    repo.findOne.mockResolvedValue(mockCustomer());
+    mgrCustomerRepo.findOne.mockResolvedValue(mockCustomer());
     const updated = await service.update('tenant-1', 'cust-uuid-1', {
       phone: '8777-6655',
     });
@@ -137,18 +195,19 @@ describe('CustomersService', () => {
 
   it('should soft delete customer by setting is_active to false', async () => {
     const customer = mockCustomer();
-    repo.findOne.mockResolvedValue(customer);
+    mgrCustomerRepo.findOne.mockResolvedValue(customer);
     await service.remove('tenant-1', 'cust-uuid-1');
     expect(customer.is_active).toBe(false);
-    expect(repo.save).toHaveBeenCalledWith(customer);
+    expect(mgrCustomerRepo.save).toHaveBeenCalledWith(customer);
   });
 
   it('should get point transactions history for customer', async () => {
-    repo.findOne.mockResolvedValue(mockCustomer());
+    mgrCustomerRepo.findOne.mockResolvedValue(mockCustomer());
+    mgrPointTxRepo.find.mockResolvedValue([mockPointTx()]);
     const txs = await service.getPointTransactions('tenant-1', 'cust-uuid-1');
     expect(txs.length).toBe(1);
     expect(txs[0].points).toBe(20);
-    expect(pointTxRepo.find).toHaveBeenCalledWith({
+    expect(mgrPointTxRepo.find).toHaveBeenCalledWith({
       where: { tenant_id: 'tenant-1', customer_id: 'cust-uuid-1' },
       order: { created_at: 'DESC' },
     });
@@ -156,7 +215,7 @@ describe('CustomersService', () => {
 
   it('should adjust customer points and save transaction in ledger', async () => {
     const customer = mockCustomer({ points_balance: 100 });
-    repo.findOne.mockResolvedValue(customer);
+    mgrCustomerRepo.findOne.mockResolvedValue(customer);
 
     const result = await service.adjustPoints('tenant-1', 'cust-uuid-1', {
       points_delta: 50,
@@ -167,7 +226,32 @@ describe('CustomersService', () => {
     expect(result.transaction.points).toBe(50);
     expect(result.transaction.balance_after).toBe(150);
     expect(result.transaction.reason).toBe('Bono de fidelidad por aniversario');
-    expect(pointTxRepo.save).toHaveBeenCalled();
-    expect(repo.save).toHaveBeenCalledWith(customer);
+    expect(mgrPointTxRepo.save).toHaveBeenCalled();
+    expect(mgrCustomerRepo.save).toHaveBeenCalledWith(customer);
+  });
+
+  it('binds the findOne access through the tenant transaction (issue #512 slice 4)', async () => {
+    // Reset call history so the pooled-unused assertion is meaningful.
+    repo.findOne.mockClear();
+    mgrCustomerRepo.findOne.mockClear();
+    mgrCustomerRepo.findOne.mockResolvedValue(mockCustomer());
+    managerGetRepository.mockClear();
+    manager.query.mockClear();
+    dataSource.transaction.mockClear();
+
+    const customer = await service.findOne('tenant-a', 'cust-uuid-1');
+
+    expect(customer.id).toBe('cust-uuid-1');
+    // A tenant transaction must be opened for the access...
+    expect(dataSource.transaction).toHaveBeenCalled();
+    // ...and the transaction-local binding SQL must be issued on the unit
+    // manager with the trimmed tenant id before any protected access.
+    expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-a',
+    ]);
+    // The protected access must resolve its repository from the bound manager.
+    expect(managerGetRepository).toHaveBeenCalledWith(Customer);
+    // The pooled repository property must not be used.
+    expect(repo.findOne).not.toHaveBeenCalled();
   });
 });

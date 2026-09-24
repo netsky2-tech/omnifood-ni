@@ -145,12 +145,13 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
     txRepo = dataSource.getRepository(CustomerPointTransaction);
     projRepo = dataSource.getRepository(CustomerLoyaltyAccountProjection);
 
-    ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
+    ledgerService = new LoyaltyLedgerService(txRepo, projRepo, dataSource);
     loyaltyService = new LoyaltyService(
       progRepo,
       rewardRepo,
       projRepo,
       custRepo,
+      dataSource,
     );
     redemptionService = new RedemptionService(
       progRepo,
@@ -159,6 +160,7 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
       txRepo,
       ledgerService,
       loyaltyService,
+      dataSource,
     );
 
     // Setup Tenant Alpha and Tenant Beta

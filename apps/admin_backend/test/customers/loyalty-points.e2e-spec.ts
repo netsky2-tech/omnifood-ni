@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
+import { DataSource } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
@@ -79,6 +80,24 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
     }),
   };
 
+  // Issue #512 slice 4: the service resolves its repositories from the
+  // tenant-bound transaction manager; route the same mock repositories
+  // through it so binding is transparent to these in-memory fixtures.
+  const manager: Record<string, unknown> = {
+    getRepository: (entity: unknown) =>
+      entity === Customer
+        ? customerRepo
+        : entity === CustomerPointTransaction
+          ? pointTxRepo
+          : undefined,
+    query: jest.fn(),
+  };
+  manager['transaction'] = (cb: (m: unknown) => Promise<unknown>) =>
+    cb({ getRepository: manager.getRepository, query: manager.query });
+  const mockDataSource = {
+    transaction: (cb: (m: unknown) => Promise<unknown>) => cb(manager),
+  };
+
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET = jwtSecret;
@@ -111,6 +130,7 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
           provide: getRepositoryToken(CustomerPointTransaction),
           useValue: pointTxRepo,
         },
+        { provide: DataSource, useValue: mockDataSource },
       ],
     }).compile();
 

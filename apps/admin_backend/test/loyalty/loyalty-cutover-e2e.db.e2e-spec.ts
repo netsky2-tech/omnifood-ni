@@ -205,23 +205,30 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
     });
     rewardId = reward.id;
 
-    const ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
+    const ledgerService = new LoyaltyLedgerService(
+      txRepo,
+      projRepo,
+      dataSource,
+    );
     const loyaltyService = new LoyaltyService(
       progRepo,
       rewardRepo,
       projRepo,
       custRepo,
+      dataSource,
     );
     const ticketPaidHandler = new TicketPaidHandler(
       progRepo,
       custRepo,
       ledgerService,
+      dataSource,
     );
     const legacyClassificationService = new LegacyClassificationService(
       progRepo,
       txRepo,
       projRepo,
       custRepo,
+      dataSource,
     );
     const redemptionService = new RedemptionService(
       progRepo,
@@ -230,6 +237,7 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
       txRepo,
       ledgerService,
       loyaltyService,
+      dataSource,
     );
     const profitAwareService = new LoyaltyProfitAwareService(
       rewardRepo,
@@ -242,8 +250,9 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
           canonicalBasePriceNio: 25,
         }),
       },
+      dataSource,
     );
-    const customersService = new CustomersService(custRepo, txRepo);
+    const customersService = new CustomersService(custRepo, txRepo, dataSource);
 
     // Initial seed: 100 units in customer account
     await ledgerService.appendTransaction({
