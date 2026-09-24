@@ -688,9 +688,10 @@ export class InboundSyncService {
 
   /**
    * One-way cloud-to-POS projection of `forensic_alerts` (ST-05, issue #314).
-   * The table carries no row-level security policy and no `updated_at`, so
-   * tenant isolation comes from the explicit `tenant_id` predicate and the
-   * incremental cursor is `created_at` alone. The read must ride the bound
+   * The table carries a tenant RLS policy (issue #512 T3 slice 7) and no
+   * `updated_at`, so tenant isolation comes from the bound transaction, the
+   * explicit `tenant_id` predicate, and the incremental cursor is
+   * `created_at` alone. The read must ride the bound
    * transaction manager: without one there is no repository to read through
    * (the entity is deliberately not registered forFeature — no module owns
    * it), and an unbound pooled read would bypass tenant isolation. Every

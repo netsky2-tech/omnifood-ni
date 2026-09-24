@@ -25,18 +25,20 @@
 # the manifest is judged fail-closed, never silently filtered.
 
 # ---------------------------------------------------------------------------
-# direct — tenant_id + ENABLE + FORCE + at least one policy (59)
+# direct — tenant_id + ENABLE + FORCE + at least one policy (61)
 # ---------------------------------------------------------------------------
 batches|direct
 cash_movements|direct
 cash_shift_sessions|direct
 catalog_values|direct
+change_log|direct
 customer_loyalty_account_projection|direct
 customer_point_transactions|direct
 customers|direct
 device_sync_credential_events|direct
 device_sync_credentials|direct
 fiscal_config_revisions|direct
+forensic_alerts|direct
 human_auth_policy_epochs|direct
 human_auth_policy_snapshots|direct
 human_auth_recovery_events|direct
@@ -80,6 +82,7 @@ staging_importacion_productos|direct
 suppliers|direct
 product_import_sessions|direct
 legacy_import_integrity_reports|direct
+promotions|direct
 tenant_capability_event|direct
 tenant_fulfillment_records|direct
 tenant_topology_revisions|direct
@@ -118,9 +121,20 @@ credit_note_provenance_rls_baseline|global
 # ---------------------------------------------------------------------------
 # debt — explicit temporary tenant isolation debt. Each entry must be
 # promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (7)
+# slice in T2/T3; a fully protected debt entry fails as stale. (5)
 # ---------------------------------------------------------------------------
+# audit_integrity_alerts stays in debt (issue #512 T3 slice 7, founder
+# decision): its single writer is the pooled multi-tenant nightly integrity
+# cron, which iterates every tenant's rows on one unbound connection. Its
+# writes become bindable only when the cron gains per-tenant iteration (one
+# tenant-bound transaction per tenant); promoting it before that would
+# deny-all the nightly scan.
 audit_integrity_alerts|debt
+# audit_logs stays in debt (issue #512 T3 slice 7, founder decision): the
+# table is append-only behind an immutability trigger, the POS bulk pushLogs
+# contract depends on its current write shape, and 3 of its 5 write sites
+# still run unbound. It becomes direct only when its write surface is bound
+# to the tenant transaction as a unit.
 audit_logs|debt
 # cashier_sessions stays in debt (issue #512 T3 slice 5, founder decision):
 # it has no TypeORM entity, and the schema-build gate fails any built-schema
@@ -129,8 +143,5 @@ audit_logs|debt
 # becomes direct only when the POS cash-session sync receiver and its entity
 # actually land.
 cashier_sessions|debt
-change_log|debt
 datafonos_equipos|debt
-forensic_alerts|debt
-promotions|direct
 users|debt

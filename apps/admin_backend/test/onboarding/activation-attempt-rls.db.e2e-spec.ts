@@ -365,7 +365,9 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
       onboardingCatalogService,
       readinessStub as never,
       runtime,
-      new ChangeLogService(runtime.getRepository(ChangeLog)),
+      // Issue #512 slice 7: change_log is tenant-RLS protected, so the
+      // service binds its own tenant transactions through the DataSource.
+      new ChangeLogService(runtime.getRepository(ChangeLog), runtime),
     );
 
     // ---- Fixture seeding (admin, superuser, bypasses the FORCED RLS) ----
