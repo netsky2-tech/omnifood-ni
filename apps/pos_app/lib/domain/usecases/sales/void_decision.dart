@@ -59,12 +59,14 @@ enum VoidDecision {
 /// (scoped to the acting user + terminal). Permission flags are resolved by
 /// the caller from [SalesPermission] so this domain file does not import UI.
 ///
-/// Evaluation order (ratified): notPermitted → void.any bypass → ownInvoice
-/// → crossDay (D-14 is categorical and independent of shift state) →
-/// shiftUnknown → otherShift → allowed. Owner/manager with the broader gate
-/// bypass the shift and date predicates; their audit duty is preserved
-/// downstream (hash-chained audit row + printed ANULADO copy), never the
-/// predicates.
+/// Evaluation order (D-14 binding, JD-B-001/A-004): notPermitted →
+/// crossDay (CATEGORICAL, every actor — D-14 prohibits voiding a previous-
+/// date invoice outright; cross-day corrections are Backoffice credit
+/// notes, so the broader void.any gate cannot override this predicate) →
+/// void.any bypass (owner/manager keep bypassing the OWN-INVOICE and SHIFT
+/// predicates for same-date invoices; their audit duty is preserved
+/// downstream: hash-chained audit row + printed ANULADO copy) → ownInvoice
+/// → shiftUnknown → otherShift → allowed.
 VoidDecision evaluateVoidRequest({
   required bool actorCanVoidAny,
   required bool actorCanVoidOwnCurrentShift,
@@ -79,12 +81,9 @@ VoidDecision evaluateVoidRequest({
   if (!actorCanVoidAny && !actorCanVoidOwnCurrentShift) {
     return VoidDecision.deniedNotPermitted;
   }
-  if (actorCanVoidAny) {
-    return VoidDecision.allowed;
-  }
-  if (invoiceUserId == null || invoiceUserId != actorUserId) {
-    return VoidDecision.deniedOwnInvoice;
-  }
+  // D-14 is categorical: previous-date void is prohibited for EVERY actor.
+  // This predicate sits BEFORE the void.any bypass on purpose — the
+  // Backoffice credit note (not a broader role) is the cross-day path.
   final dateCheck = classifyIssueDate(
     localIssueDate: invoiceLocalIssueDate,
     createdAt: invoiceCreatedAt,
@@ -92,6 +91,12 @@ VoidDecision evaluateVoidRequest({
   );
   if (dateCheck == IssueDateComparison.differentDate) {
     return VoidDecision.deniedCrossDay;
+  }
+  if (actorCanVoidAny) {
+    return VoidDecision.allowed;
+  }
+  if (invoiceUserId == null || invoiceUserId != actorUserId) {
+    return VoidDecision.deniedOwnInvoice;
   }
   final membership = classifyShiftMembership(
     invoiceShiftId: invoiceShiftId,

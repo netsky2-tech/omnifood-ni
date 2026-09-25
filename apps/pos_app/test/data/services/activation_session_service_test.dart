@@ -219,6 +219,7 @@ class _NoopSalesRepository implements SalesRepository {
     required UserRole authorizedByRole,
     RefundReasonPolicy refundReasonPolicy = RefundReasonPolicy.restockOriginalBom,
     List<CreditNoteRefundLine>? lines,
+    String? terminalId,
   }) =>
       Future.value();
 

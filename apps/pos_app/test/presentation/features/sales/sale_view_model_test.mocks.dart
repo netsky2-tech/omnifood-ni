@@ -865,6 +865,7 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
     _i2.RefundReasonPolicy? refundReasonPolicy =
         _i2.RefundReasonPolicy.restockOriginalBom,
     List<_i2.CreditNoteRefundLine>? lines,
+    String? terminalId,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -877,6 +878,7 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
             #authorizedByRole: authorizedByRole,
             #refundReasonPolicy: refundReasonPolicy,
             #lines: lines,
+            #terminalId: terminalId,
           },
         ),
         returnValue: _i53.Future<void>.value(),

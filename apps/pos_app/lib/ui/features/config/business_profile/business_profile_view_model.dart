@@ -43,12 +43,15 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'bcn_official_exchange_rate': '36.6241',
     'checkout_fx_mode': 'COMMERCIAL',
     'operation_mode': 'FOODPARK_QSR',
-    'dgi_prefix': '001-001-01-',
-    // D-16: the fiscal range is NOT prefilled — an unconfigured sequence is
-    // a first-class state until SOHO's authorization letter documents it.
+    // D-16 (JD-A-001): NONE of the sequence keys is prefilled — the prefix
+    // and cursor are real fiscal configuration from SOHO's authorization
+    // letter. Blank here + the saveConfig skip below means an untouched
+    // profile leaves the sequence UNCONFIGURED (the numbering service fails
+    // closed) and the activation runner provisions it at the approved gate.
+    'dgi_prefix': '',
     'dgi_range_start': '',
     'dgi_range_end': '',
-    'dgi_current_number': '1',
+    'dgi_current_number': '',
     'dgi_authorization_code': '',
     'dgi_authorization_date': '',
     'dgi_authorization_document': '',
@@ -208,6 +211,7 @@ class BusinessProfileViewModel extends ChangeNotifier {
   /// value in the form means "not configured" — it is never written over an
   /// existing sequence row.
   static const Set<String> _sequenceKeys = {
+    'dgi_prefix',
     'dgi_range_start',
     'dgi_range_end',
     'dgi_current_number',

@@ -93,6 +93,7 @@ class MockSalesRepository implements SalesRepository {
     required UserRole authorizedByRole,
     RefundReasonPolicy refundReasonPolicy =
         RefundReasonPolicy.restockOriginalBom,
+    String? terminalId,
     List<CreditNoteRefundLine>? lines,
   }) async => throw UnimplementedError();
 

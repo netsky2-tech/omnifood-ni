@@ -305,11 +305,14 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                             controller: _controllers['dgi_prefix'],
                             decoration: const InputDecoration(
                               labelText: 'Prefijo Fiscal DGI',
-                              hintText: '001-001-01-',
+                              hintText: 'Sin configurar',
                               prefixIcon: Icon(Icons.receipt_long),
-                              helperText: 'Prefijo oficial asignado por la DGI',
+                              helperText: 'Prefijo oficial asignado por la DGI; déjelo vacío si aún no fue autorizado',
                             ),
-                            validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+                            // D-16 (JD-A-001): optional — the prefix is real
+                            // fiscal configuration, not a default. Blank =
+                            // sequence stays unconfigured (fail-closed).
+                            validator: null,
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -321,12 +324,14 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                               labelText: 'Siguiente Factura a Emitir',
-                              hintText: '1',
+                              hintText: 'Sin configurar',
                               prefixIcon: Icon(Icons.pin),
-                              helperText: 'Número inicial o de continuidad de facturación',
+                              helperText: 'Déjelo vacío si la serie aún no fue autorizada',
                             ),
+                            // D-16 (JD-A-001): optional — blank cursor means
+                            // the sequence stays unconfigured (fail-closed).
                             validator: (v) {
-                              if (v == null || v.isEmpty) return 'Requerido';
+                              if (v == null || v.isEmpty) return null;
                               final val = int.tryParse(v);
                               if (val == null || val <= 0) return 'Número inválido';
                               return null;

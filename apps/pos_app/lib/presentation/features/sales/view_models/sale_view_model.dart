@@ -991,6 +991,12 @@ class SaleViewModel extends ChangeNotifier {
     final session = CashierSession(
       id: const Uuid().v4(),
       userId: user.id,
+      // D-15 (JD-A-002): the session MUST carry the same terminal the sale
+      // path stamps on invoices — otherwise
+      // getActiveSessionForUserAndTerminal never matches and every cashier
+      // void degrades to deniedShiftUnknown. Mirrors the effectiveTerminalId
+      // resolution below (and CashShiftViewModel's opener).
+      terminalId: _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01',
       openedAt: DateTime.now(),
       tipoModelo: tipoModelo,
       openingBalance: balance,
@@ -1516,6 +1522,7 @@ class SaleViewModel extends ChangeNotifier {
     Invoice invoice, {
     String? cashierName,
     Map<String, String>? fiscalHeader,
+    TaxRegime? snapshotRegimeProvided,
 
     /// D-13: when a fiscal snapshot is provided the header comes from it —
     /// NEVER from live config. A reprint reproduces the document as issued.
@@ -1596,17 +1603,33 @@ class SaleViewModel extends ChangeNotifier {
           ? _printerPort
           : PrinterResolver.resolve(config);
 
-      if (_companyTaxRegime == null) {
-        _lastPrintError =
-            'Empresa sin régimen fiscal DGI configurado. No se puede reimprimir.';
-        notifyListeners();
-        return false;
-      }
-
-      // D-13: reprint => header from the immutable snapshot (missing
-      // snapshot keys stay absent — no live-config fallback). Sale/reprint
-      // of a live document => header from current config.
+      // D-13 (JD-B-003/R2-5): when a fiscal snapshot is provided it is
+      // AUTHORITATIVE — its regime governs and the live-regime guard does
+      // NOT apply (a complete snapshot must reprint even with absent live
+      // config). The live guard only governs the non-snapshot path.
       final fromSnapshot = fiscalHeader != null;
+      final TaxRegime effectiveRegime;
+      if (fromSnapshot) {
+        // R2-6: consume the engine-parsed regime; fall back to parsing the
+        // header only for direct callers that pass raw header values.
+        final snapshotRegime = snapshotRegimeProvided ??
+            TaxRegime.fromString(fiscalHeader['taxRegime']);
+        if (snapshotRegime == null) {
+          _lastPrintError =
+              'Empresa sin régimen fiscal DGI configurado. No se puede reimprimir.';
+          notifyListeners();
+          return false;
+        }
+        effectiveRegime = snapshotRegime;
+      } else {
+        if (_companyTaxRegime == null) {
+          _lastPrintError =
+              'Empresa sin régimen fiscal DGI configurado. No se puede reimprimir.';
+          notifyListeners();
+          return false;
+        }
+        effectiveRegime = _companyTaxRegime!;
+      }
       final res = await activePrinterPort.printInvoice(
         invoice,
         items: domainItems,
@@ -1621,7 +1644,7 @@ class SaleViewModel extends ChangeNotifier {
         phone: fromSnapshot ? fiscalHeader['phone'] : config.headerPhone,
         cashierName: cashierName,
         logoRasterBytes: logoRasterBytes,
-        taxRegime: _companyTaxRegime!,
+        taxRegime: effectiveRegime,
         isTaxExempt: invoice.globalTaxOverride,
         paperWidthMm: config.paperWidthMm,
         fiscalAuthorizationNumber: fromSnapshot
@@ -1681,6 +1704,7 @@ class SaleViewModel extends ChangeNotifier {
       _lastReprintPrintSucceeded = await _printInvoiceCopy(
         preparation.invoice,
         fiscalHeader: preparation.fiscalHeader,
+        snapshotRegimeProvided: preparation.taxRegime,
         isReprint: true,
         reprintAt: DateTime.now(),
       );
@@ -1754,6 +1778,8 @@ class SaleViewModel extends ChangeNotifier {
         authorizedByRole: role ?? UserRole.cashier,
         refundReasonPolicy: refundReasonPolicy,
         lines: lines,
+        // JD-B-002/R2-3: the issuing terminal — same source as the sale path.
+        terminalId: _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01',
       );
 
       _errorMessage = null;

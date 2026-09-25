@@ -289,7 +289,9 @@ void main() {
           fiscalHeader: const {
             'businessName': 'OMNIFOOD SUNMI E2E',
             'ruc': 'J0310000055555',
+            'taxRegime': 'REGIMEN_GENERAL',
           },
+          taxRegime: TaxRegime.regimenGeneral,
           items: const [],
           payments: const [],
         ),

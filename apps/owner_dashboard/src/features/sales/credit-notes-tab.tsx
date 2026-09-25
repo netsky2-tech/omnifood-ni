@@ -22,26 +22,30 @@ import { useQuery } from "@tanstack/react-query";
  * correction today is the administrative procedure.
  */
 
+// D-20/JD-A-005: the hints are FISCAL-ONLY and honest. This document
+// registers the fiscal correction; the server does not execute any
+// inventory effect here (appendCreditNoteCompensation is the device path,
+// #519). Never claim stock movements this endpoint does not perform.
 const REFUND_POLICIES: { value: string; label: string; hint: string }[] = [
   {
     value: "RESTOCK_ORIGINAL_BOM",
-    label: "Reincorporar a inventario",
-    hint: "Los insumos vendidos vuelven al inventario.",
+    label: "Reincorporación a inventario",
+    hint: "La nota registra la corrección fiscal marcada para reincorporación de inventario.",
   },
   {
     value: "FINANCIAL_ONLY",
     label: "Solo contable",
-    hint: "No afecta el inventario; registra únicamente la corrección contable.",
+    hint: "La nota registra únicamente la corrección contable, sin efecto de inventario.",
   },
   {
     value: "WASTE_NO_RESTOCK",
     label: "Merma",
-    hint: "Los insumos se descartan; no vuelven al inventario.",
+    hint: "La nota registra la corrección fiscal marcada como merma, sin reincorporación.",
   },
   {
     value: "MANAGER_REVIEW_HOLD",
     label: "En revisión de gerencia",
-    hint: "La reincorporación queda pendiente de revisión de gerencia.",
+    hint: "La nota queda registrada y el efecto de inventario queda pendiente de revisión de gerencia.",
   },
 ];
 

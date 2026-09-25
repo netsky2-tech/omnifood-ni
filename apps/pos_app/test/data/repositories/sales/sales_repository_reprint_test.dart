@@ -34,6 +34,7 @@ void main() {
     'address': 'Plaza Original 123',
     'phone': '555-0101',
     'fiscalAuthorizationNumber': 'AUT-DGI-2026-0001',
+    'taxRegime': 'REGIMEN_GENERAL',
   };
 
   setUpAll(() {
@@ -111,6 +112,9 @@ void main() {
     await database.localConfigDao.saveConfig(
       LocalConfigEntity(key: 'ruc', value: 'B999888777000'),
     );
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'),
+    );
   }
 
   setUp(() async {
@@ -182,6 +186,10 @@ void main() {
       expect(paper, contains('A0011234567890'));
       expect(paper, isNot(contains('Café Renombrado S.A.')));
       expect(paper, isNot(contains('B999888777000')));
+      // The regime is AS ISSUED: GENERAL on the paper even though the live
+      // config now says CUOTA_FIJA.
+      expect(paper, contains('REGIMEN: GENERAL'));
+      expect(paper, isNot(contains('REGIMEN: CUOTA FIJA')));
       expect(paper, contains('*** REIMPRESIÓN ***'));
       expect(paper, contains('Reimpresión:'));
       expect(paper, contains('25/09/2026 09:30'));
@@ -225,6 +233,69 @@ void main() {
       expect(paper, contains('*** DOCUMENTO ANULADO ***'));
       expect(paper, contains('*** REIMPRESIÓN ***'));
     });
+  });
+
+  test('JD-B-003: a snapshot without the tax regime is INCOMPLETE and denies',
+      () async {
+    await database.cashierSessionDao.insertSession(
+      CashierSessionEntity(
+        id: 'shift-1',
+        userId: 'cashier-1',
+        terminalId: 'term-1',
+        openedAt: 1700000000000,
+        isClosed: false,
+      ),
+    );
+    final withoutRegime = Map<String, String>.from(originalHeader)
+      ..remove('taxRegime');
+    await database.invoiceDao.insertInvoice(
+      invoice(fiscalHeaderSnapshot: jsonEncode(withoutRegime)),
+    );
+    await database.invoiceItemDao.insertItems([originItem()]);
+
+    await expectLater(
+      repository.prepareReprintInvoice('inv-reprint-1', 'VERIFICACION'),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('corrupted or incomplete'),
+        ),
+      ),
+    );
+    verifyNever(auditRepository.log(any, metadata: anyNamed('metadata')));
+  });
+
+  test('R2-7: a non-string regime maps to the named denial, never a TypeError',
+      () async {
+    await database.cashierSessionDao.insertSession(
+      CashierSessionEntity(
+        id: 'shift-1',
+        userId: 'cashier-1',
+        terminalId: 'term-1',
+        openedAt: 1700000000000,
+        isClosed: false,
+      ),
+    );
+    await database.invoiceDao.insertInvoice(
+      invoice(
+        fiscalHeaderSnapshot:
+            jsonEncode({...originalHeader, 'taxRegime': 42}),
+      ),
+    );
+    await database.invoiceItemDao.insertItems([originItem()]);
+
+    await expectLater(
+      repository.prepareReprintInvoice('inv-reprint-1', 'VERIFICACION'),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('REPRINT_SNAPSHOT_UNAVAILABLE'),
+        ),
+      ),
+    );
+    verifyNever(auditRepository.log(any, metadata: anyNamed('metadata')));
   });
 
   group('fail-closed: pre-snapshot and corrupted rows deny reprint', () {
