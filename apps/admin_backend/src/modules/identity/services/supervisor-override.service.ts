@@ -56,9 +56,10 @@ export class SupervisorOverrideService {
     // same bound manager because the dependent security_profiles findOne is
     // denied without the transaction-local tenant binding (FORCE RLS).
     // The tenant id comes from the JWT via the controller (@GetTenantId()).
-    // Everything after this block is CPU work, JWT signing, and pooled
-    // audit writes: audit rows are written OUTSIDE the transaction so a
-    // rejection branch that throws does not roll its audit entry back.
+    // Everything after this block is CPU work, JWT signing, and audit
+    // writes: audit rows are written OUTSIDE the read transaction so a
+    // rejection branch that throws does not roll its audit entry back —
+    // each write opens its own tenant-bound transaction (issue #581).
     const { supervisor, profile } = await runInTenantTransaction(
       this.dataSource,
       tenantId,
@@ -71,20 +72,18 @@ export class SupervisorOverrideService {
           return { supervisor: null, profile: null };
         }
 
-        const profile = await manager
-          .getRepository(SecurityProfile)
-          .findOne({
-            where: { user_id: supervisor.id },
-            select: [
-              'id',
-              'user_id',
-              'pin_hash',
-              'totp_secret_seed',
-              'is_pin_enabled',
-              'is_totp_enabled',
-              'custom_permissions',
-            ],
-          });
+        const profile = await manager.getRepository(SecurityProfile).findOne({
+          where: { user_id: supervisor.id },
+          select: [
+            'id',
+            'user_id',
+            'pin_hash',
+            'totp_secret_seed',
+            'is_pin_enabled',
+            'is_totp_enabled',
+            'custom_permissions',
+          ],
+        });
 
         return { supervisor, profile };
       },
@@ -258,6 +257,14 @@ export class SupervisorOverrideService {
       ...metadata,
     };
 
-    await this.auditRepository.save(log);
+    // Issue #581: `audit_logs` is a debt table today but becomes
+    // direct:SIUD RLS in #512 T3 slice 7, so the write is bound. Every call
+    // site sits OUTSIDE the authorizeOverride read transaction by design
+    // (a rejection branch must not roll its audit entry back), so the
+    // minimal correct binding is a dedicated tenant-bound transaction per
+    // audit write, not reusing the already-committed read manager.
+    await runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      manager.getRepository(AuditLog).save(log),
+    );
   }
 }
