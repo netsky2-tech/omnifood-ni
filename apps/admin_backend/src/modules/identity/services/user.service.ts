@@ -54,14 +54,25 @@ export class UserService {
   ) {}
 
   async findByTenant(tenantId: string): Promise<User[]> {
-    return this.userRepository.find({
-      where: { tenant_id: tenantId, is_active: true },
-      select: ['id', 'email', 'name', 'role', 'created_at', 'is_active'],
-    });
+    // Issue #556 stage 12d: users is FORCE-RLS-protected, so the staff list
+    // read runs through the tenant-bound transaction manager (the tenant id
+    // arrives from the JWT via the controller, @GetTenantId()).
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      manager.getRepository(User).find({
+        where: { tenant_id: tenantId, is_active: true },
+        select: ['id', 'email', 'name', 'role', 'created_at', 'is_active'],
+      }),
+    );
   }
 
-  async findById(id: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { id, is_active: true } });
+  async findById(id: string, tenantId: string): Promise<User | null> {
+    // Issue #556 stage 12d: defensive bound read (no production callers
+    // today); the tenant id keeps the read tenant-scoped under FORCE RLS.
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      manager
+        .getRepository(User)
+        .findOne({ where: { id, tenant_id: tenantId, is_active: true } }),
+    );
   }
 
   async create(
@@ -309,37 +320,39 @@ export class UserService {
     // its FORCE RLS policy on a pooled connection, so the user lookup and
     // the dependent profile lookup run in one tenant-bound transaction (the
     // tenant id arrives from the JWT via the controller, @GetTenantId()).
-    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
-      const user = await manager.getRepository(User).findOne({
-        where: { id: userId, tenant_id: tenantId, is_active: true },
-      });
-      if (!user) {
-        throw new NotFoundException('Usuario no encontrado');
-      }
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const user = await manager.getRepository(User).findOne({
+          where: { id: userId, tenant_id: tenantId, is_active: true },
+        });
+        if (!user) {
+          throw new NotFoundException('Usuario no encontrado');
+        }
 
-      const profile = await manager
-        .getRepository(SecurityProfile)
-        .findOne({
+        const profile = await manager.getRepository(SecurityProfile).findOne({
           where: { user_id: user.id },
         });
 
-      const customPermissions = (profile?.custom_permissions ??
-        []) as AppPermission[];
-      const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
-        []) as AppPermission[];
-      const effectivePermissions = resolveEffectivePermissions(
-        user.role,
-        customPermissions,
-      );
+        const customPermissions = (profile?.custom_permissions ??
+          []) as AppPermission[];
+        const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
+          []) as AppPermission[];
+        const effectivePermissions = resolveEffectivePermissions(
+          user.role,
+          customPermissions,
+        );
 
-      return {
-        user_id: user.id,
-        role: user.role,
-        role_permissions: rolePermissions,
-        custom_permissions: customPermissions,
-        effective_permissions: effectivePermissions,
-      };
-    });
+        return {
+          user_id: user.id,
+          role: user.role,
+          role_permissions: rolePermissions,
+          custom_permissions: customPermissions,
+          effective_permissions: effectivePermissions,
+        };
+      },
+    );
   }
 
   async setCustomPermissions(

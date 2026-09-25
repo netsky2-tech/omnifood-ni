@@ -182,7 +182,7 @@ describe('ActivateCapabilityDto', () => {
   });
 });
 
-describe('LoginDto / RefreshTokenDto optional tenantSlug', () => {
+describe('LoginDto / RefreshTokenDto required tenantSlug (issue #556 stage 12d)', () => {
   const pipe = new ValidationPipe({
     transform: true,
     whitelist: true,
@@ -198,16 +198,31 @@ describe('LoginDto / RefreshTokenDto optional tenantSlug', () => {
   const validLogin = {
     email: 'cashier@omnifood.ni',
     pass: 'Password123!',
+    tenantSlug: 'mi-negocio',
   };
 
   const validRefresh = {
     userId: 'd6df2e11-9a37-4fc9-a512-2b89a43a9a42',
     refreshToken: 'token',
+    tenantSlug: 'mi-negocio',
   };
 
-  it('accepts login without tenantSlug (legacy POS payload)', async () => {
-    const dto = (await transformLogin(validLogin)) as LoginDto;
-    expect(dto.tenantSlug).toBeUndefined();
+  it('rejects login without tenantSlug (the legacy window is closed)', async () => {
+    await expect(
+      transformLogin({
+        email: validLogin.email,
+        pass: validLogin.pass,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a blank tenantSlug on login', async () => {
+    await expect(
+      transformLogin({ ...validLogin, tenantSlug: '   ' }),
+    ).rejects.toThrow();
+    await expect(
+      transformLogin({ ...validLogin, tenantSlug: '' }),
+    ).rejects.toThrow();
   });
 
   it('accepts a tenantSlug up to 50 chars on login', async () => {
@@ -230,13 +245,17 @@ describe('LoginDto / RefreshTokenDto optional tenantSlug', () => {
     ).rejects.toThrow();
   });
 
-  it('accepts refresh without tenantSlug and with an optional tenantSlug', async () => {
-    const legacy = (await transformRefresh(validRefresh)) as RefreshTokenDto;
-    expect(legacy.tenantSlug).toBeUndefined();
-    const dto = (await transformRefresh({
-      ...validRefresh,
-      tenantSlug: 'mi-negocio',
-    })) as RefreshTokenDto;
+  it('rejects refresh without tenantSlug (the legacy window is closed)', async () => {
+    await expect(
+      transformRefresh({
+        userId: validRefresh.userId,
+        refreshToken: validRefresh.refreshToken,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('accepts refresh with a tenantSlug', async () => {
+    const dto = (await transformRefresh(validRefresh)) as RefreshTokenDto;
     expect(dto.tenantSlug).toBe('mi-negocio');
   });
 

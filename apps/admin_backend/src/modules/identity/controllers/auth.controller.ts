@@ -57,8 +57,13 @@ export class AuthController {
   @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @UseInterceptors(TenantInterceptor)
   @Get('me')
-  async getMe(@Req() req: { user?: { sub?: string } }) {
-    return this.authService.getMe(req.user?.sub || '');
+  async getMe(@Req() req: { user?: { sub?: string; tenant_id?: string } }) {
+    // Issue #556 stage 12d: the tenant id comes from the JWT (never from
+    // the client body) so the self read binds the matching tenant context.
+    return this.authService.getMe(
+      req.user?.sub || '',
+      req.user?.tenant_id || '',
+    );
   }
 
   @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)

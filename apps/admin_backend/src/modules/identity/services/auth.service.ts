@@ -84,36 +84,19 @@ export class AuthService {
   ) {}
 
   async login(email: string, pass: string, tenantSlug?: string) {
-    // Issue #556 slice 11 (OD-03 founder design): an optional tenantSlug is
-    // pre-auth CONTEXT, never authority. When present, the server resolves
-    // slug -> tenant, binds the transaction context (SET LOCAL app.tenant_id)
-    // and only then queries the user by email. Post-login authority stays the
-    // JWT tenant_id. The legacy no-slug path below is unchanged during the
-    // migration window.
-    if (tenantSlug !== undefined) {
-      return this.loginWithTenantSlug(email, pass, tenantSlug);
+    // Issue #556 stage 12d (founder design): the migration window is CLOSED.
+    // tenantSlug is REQUIRED pre-auth CONTEXT, never authority: the server
+    // resolves slug -> tenant, binds the transaction context (SET LOCAL
+    // app.tenant_id) and only then queries the user by email through the
+    // bound manager. Post-login authority stays the JWT tenant_id. The
+    // legacy no-slug pooled path is removed; old POS builds fail login by
+    // design (backend+POS deploy in sync). Missing slug fails generically
+    // with equalized timing so its absence cannot be probed.
+    if (!tenantSlug?.trim()) {
+      await this.burnDummyPasswordCompare(pass);
+      throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    return this.authenticateAndIssueTokens(
-      this.userRepository,
-      email ? email.trim().toLowerCase() : '',
-      email,
-      pass,
-    );
-  }
-
-  /**
-   * Slug-context login: resolve the global tenants row by slug (pooled read
-   * on a global table, pre-bind), bind the tenant transaction, and run the
-   * shared authentication flow through the bound manager. Unknown/inactive
-   * slug and user/tenant mismatch return the SAME generic failure as the
-   * wrong-password path, with the same password-compare timing.
-   */
-  private async loginWithTenantSlug(
-    email: string,
-    pass: string,
-    tenantSlug: string,
-  ) {
     const resolvedTenantId = await this.resolveTenantIdBySlugForLogin(
       tenantSlug,
       pass,
@@ -129,10 +112,17 @@ export class AuthService {
           email,
           pass,
           resolvedTenantId,
-          { equalizeFailureTiming: true },
         ),
     );
   }
+
+  /**
+   * Slug-context login: resolve the global tenants row by slug (pooled read
+   * on a global table, pre-bind), bind the tenant transaction, and run the
+   * shared authentication flow through the bound manager. Unknown/inactive
+   * slug and user/tenant mismatch return the SAME generic failure as the
+   * wrong-password path, with the same password-compare timing.
+   */
 
   /**
    * Burns exactly one bcrypt compare against the dummy digest so a generic
@@ -171,21 +161,21 @@ export class AuthService {
 
   /**
    * Shared login flow: email lookup, generic-failure checks, password verify,
-   * token issue, refresh persistence. The legacy path passes the pooled
-   * repository with no expected tenant; the slug path passes the bound
-   * transaction manager and the resolved tenant id, and treats a user whose
-   * tenant does not match as a generic invalid-credentials failure.
+   * token issue, refresh persistence. Always runs through the bound
+   * transaction manager with the resolved tenant id: a user whose tenant
+   * does not match is a generic invalid-credentials failure, and EVERY
+   * failure burns exactly one bcrypt compare (dummy digest or the real
+   * wrong-password compare) so response timing never distinguishes unknown
+   * slug / inactive tenant / unknown user / inactive user / cross-tenant
+   * user from a plain wrong password.
    */
   private async authenticateAndIssueTokens(
     repository: Pick<Repository<User>, 'findOne' | 'update'>,
     cleanEmail: string,
     rawEmail: string,
     pass: string,
-    expectedTenantId?: string,
-    options?: { equalizeFailureTiming?: boolean },
+    expectedTenantId: string,
   ) {
-    const equalizeFailureTiming =
-      options?.equalizeFailureTiming === true;
     let user: Pick<
       User,
       | 'id'
@@ -200,7 +190,10 @@ export class AuthService {
 
     try {
       user = await repository.findOne({
-        where: [{ email: cleanEmail }, { email: rawEmail ? rawEmail.trim() : '' }],
+        where: [
+          { email: cleanEmail },
+          { email: rawEmail ? rawEmail.trim() : '' },
+        ],
         select: [
           'id',
           'name',
@@ -216,32 +209,22 @@ export class AuthService {
       user = null;
     }
 
-    if (
-      user &&
-      expectedTenantId !== undefined &&
-      user.tenant_id !== expectedTenantId
-    ) {
+    if (user && user.tenant_id !== expectedTenantId) {
       // Generic failure with equalized timing: the email exists but belongs
       // to another tenant; never reveal that through a distinct error.
-      if (equalizeFailureTiming) {
-        await this.burnDummyPasswordCompare(pass);
-      }
+      await this.burnDummyPasswordCompare(pass);
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
     if (!user) {
-      // F1 (issue #556 verification): on the slug path a valid slug with an
-      // unknown email must cost the same one bcrypt compare as an unknown
-      // slug or a wrong password, or response timing enumerates slugs.
-      if (equalizeFailureTiming) {
-        await this.burnDummyPasswordCompare(pass);
-      }
+      // A valid slug with an unknown email costs the same one bcrypt compare
+      // as an unknown slug or a wrong password, or response timing
+      // enumerates slugs.
+      await this.burnDummyPasswordCompare(pass);
       throw new UnauthorizedException('Credenciales inválidas');
     }
     if (!user.is_active) {
-      if (equalizeFailureTiming) {
-        await this.burnDummyPasswordCompare(pass);
-      }
+      await this.burnDummyPasswordCompare(pass);
       throw new UnauthorizedException('Credenciales inválidas');
     }
     if (!(await bcrypt.compare(pass, user.password_hash))) {
@@ -278,11 +261,20 @@ export class AuthService {
     };
   }
 
-  async getMe(userId: string) {
-    const user = await this.userRepository.findOne({
-      where: { id: userId },
-      select: ['id', 'name', 'email', 'role', 'tenant_id', 'is_active'],
-    });
+  async getMe(userId: string, tenantId: string) {
+    // Issue #556 stage 12d: the users row is RLS-FORCE-protected, so the
+    // self read runs inside the tenant-bound transaction (the tenant id
+    // arrives from the JWT via the controller). The user is additionally
+    // filtered by tenant_id: post-login authority stays the JWT tenant_id.
+    const user = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(User).findOne({
+          where: { id: userId, tenant_id: tenantId },
+          select: ['id', 'name', 'email', 'role', 'tenant_id', 'is_active'],
+        }),
+    );
 
     if (!user || !user.is_active) {
       throw new UnauthorizedException('Usuario no encontrado o inactivo');
@@ -320,7 +312,11 @@ export class AuthService {
     };
   }
 
-  async refreshTokens(userId: string, refreshToken: string, tenantSlug?: string) {
+  async refreshTokens(
+    userId: string,
+    refreshToken: string,
+    tenantSlug?: string,
+  ) {
     let refreshPayload: JwtRefreshPayload;
     try {
       const payload = await this.jwtService.verifyAsync<
@@ -341,29 +337,20 @@ export class AuthService {
       throw new UnauthorizedException('Acceso denegado');
     }
 
-    // Issue #556 slice 11: optional tenantSlug on refresh follows the same
-    // staged contract as login — when present, the tenant is resolved and the
-    // transaction bound BEFORE the user row is read (with the resolved tenant
-    // id in the WHERE clause). Unknown/inactive slug fails generically. The
-    // legacy no-slug path below stays unchanged during the migration window;
-    // this pre-clears the second users-RLS blocker named in the coverage
-    // manifest for the stage-3 FORCE RLS enablement.
-    const outcome =
-      tenantSlug !== undefined
-        ? await this.refreshWithTenantSlug(
-            userId,
-            refreshPayload,
-            refreshToken,
-            tenantSlug,
-          )
-        : await this.dataSource.transaction(async (manager) =>
-            this.rotateRefreshSession(
-              manager,
-              userId,
-              refreshPayload,
-              refreshToken,
-            ),
-          );
+    // Issue #556 stage 12d: the migration window is CLOSED. tenantSlug is
+    // REQUIRED: the tenant is resolved and the transaction bound BEFORE the
+    // user row is read (with the resolved tenant id in the WHERE clause).
+    // The legacy unbound branch is removed; missing/unknown/inactive slug
+    // fails with the same generic refresh rejection (no tenant enumeration).
+    if (!tenantSlug?.trim()) {
+      throw new UnauthorizedException('Acceso denegado');
+    }
+    const outcome = await this.refreshWithTenantSlug(
+      userId,
+      refreshPayload,
+      refreshToken,
+      tenantSlug,
+    );
 
     if (!outcome) {
       throw new UnauthorizedException('Acceso denegado');
@@ -416,23 +403,21 @@ export class AuthService {
   }
 
   /**
-   * Shared refresh-rotation body. With `expectedTenantId` the user read is
-   * filtered by the resolved tenant inside the bound transaction; without it
-   * the legacy unbound read-then-continue behavior is preserved.
+   * Shared refresh-rotation body. The user read is filtered by the resolved
+   * tenant inside the bound transaction; the unbound read-then-continue
+   * behavior was removed with the legacy refresh branch (issue #556 stage
+   * 12d).
    */
   private async rotateRefreshSession(
     manager: EntityManager,
     userId: string,
     refreshPayload: JwtRefreshPayload,
     refreshToken: string,
-    expectedTenantId?: string,
+    expectedTenantId: string,
   ): Promise<{ tokens: Awaited<ReturnType<AuthService['getTokens']>> } | null> {
     const repository = manager.getRepository(User);
     const user = await repository.findOne({
-      where:
-        expectedTenantId === undefined
-          ? { id: userId }
-          : { id: userId, tenant_id: expectedTenantId },
+      where: { id: userId, tenant_id: expectedTenantId },
       lock: { mode: 'pessimistic_write' },
       select: [
         'id',
@@ -500,8 +485,8 @@ export class AuthService {
   async updateRefreshToken(
     userId: string,
     refreshToken: string,
-    familyId?: string,
-    repository: Pick<Repository<User>, 'update'> = this.userRepository,
+    familyId: string | undefined,
+    repository: Pick<Repository<User>, 'update'>,
   ) {
     const hashedRefreshToken =
       await refreshTokenVerifier.hashRefreshTokenVerifier(refreshToken);
@@ -634,49 +619,51 @@ export class AuthService {
       },
     );
 
-    const staff = users.map((user): StaffSyncItem => ({
-      id: user.id,
-      name: user.name,
-      role: user.role,
-      is_active: user.is_active,
-      email: user.email,
-      tenant_id: user.tenant_id,
-      permissions: resolveInventoryBohPermissions(user.role),
-      security_profile: user.security_profile
-        ? (() => {
-            const isSelf = scopedContinuityAllowed && user.id === requesterId;
-            const isAuthorizerRole =
-              user.role === UserRole.OWNER || user.role === UserRole.MANAGER;
-            const canReadScopedPin =
-              canReadSensitiveProfile || isSelf || isAuthorizerRole;
-            const canReadScopedTotp =
-              canReadSensitiveProfile ||
-              (scopedContinuityAllowed && isAuthorizerRole);
-            const scope = scopedContinuityAllowed
-              ? isSelf
-                ? 'self'
-                : isAuthorizerRole
-                  ? 'authorizer'
-                  : 'masked'
-              : canReadSensitiveProfile
-                ? 'full'
-                : 'masked';
+    const staff = users.map(
+      (user): StaffSyncItem => ({
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        is_active: user.is_active,
+        email: user.email,
+        tenant_id: user.tenant_id,
+        permissions: resolveInventoryBohPermissions(user.role),
+        security_profile: user.security_profile
+          ? (() => {
+              const isSelf = scopedContinuityAllowed && user.id === requesterId;
+              const isAuthorizerRole =
+                user.role === UserRole.OWNER || user.role === UserRole.MANAGER;
+              const canReadScopedPin =
+                canReadSensitiveProfile || isSelf || isAuthorizerRole;
+              const canReadScopedTotp =
+                canReadSensitiveProfile ||
+                (scopedContinuityAllowed && isAuthorizerRole);
+              const scope = scopedContinuityAllowed
+                ? isSelf
+                  ? 'self'
+                  : isAuthorizerRole
+                    ? 'authorizer'
+                    : 'masked'
+                : canReadSensitiveProfile
+                  ? 'full'
+                  : 'masked';
 
-            return {
-              user_id: user.security_profile.user_id,
-              pin_hash: canReadScopedPin
-                ? user.security_profile.pin_hash
-                : null,
-              totp_secret_seed: canReadScopedTotp
-                ? user.security_profile.totp_secret_seed
-                : null,
-              is_totp_enabled: user.security_profile.is_totp_enabled,
-              is_pin_enabled: user.security_profile.is_pin_enabled,
-              scope,
-            };
-          })()
-        : null,
-    }));
+              return {
+                user_id: user.security_profile.user_id,
+                pin_hash: canReadScopedPin
+                  ? user.security_profile.pin_hash
+                  : null,
+                totp_secret_seed: canReadScopedTotp
+                  ? user.security_profile.totp_secret_seed
+                  : null,
+                is_totp_enabled: user.security_profile.is_totp_enabled,
+                is_pin_enabled: user.security_profile.is_pin_enabled,
+                scope,
+              };
+            })()
+          : null,
+      }),
+    );
 
     if (continuityScopeRequested) {
       return {

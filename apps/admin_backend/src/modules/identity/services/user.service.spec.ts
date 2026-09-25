@@ -667,14 +667,14 @@ describe('UserService', () => {
       });
 
       await service.getUserEffectivePermissions('user-1', 'tenant-1');
-      await service.findById('user-1');
+      await service.findById('user-1', 'tenant-1');
 
-      // Issue #512 T3 slice 9 rework: the effective-permissions read is
-      // itself security_profiles access under FORCE RLS, so it opens its
-      // own bound transaction — but it stays a READ: exactly one
-      // transaction, one bind, and never a publication mark.
-      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
-      expect(bindCount()).toBe(1);
+      // Issue #512 T3 slice 9 rework + issue #556 stage 12d: the
+      // effective-permissions read and the findById read each run in their
+      // own bound transaction — but both stay READS: two transactions, two
+      // binds, and never a publication mark.
+      expect(dataSource.transaction).toHaveBeenCalledTimes(2);
+      expect(bindCount()).toBe(2);
       expect(markCount()).toBe(0);
     });
 
@@ -760,7 +760,7 @@ describe('UserService', () => {
       expect(pooledProfile.findOne).not.toHaveBeenCalled();
     });
 
-    it('findByTenant requests is_active along with other core fields', async () => {
+    it('findByTenant reads through the bound transaction and requests is_active along with other core fields', async () => {
       const mockUsers = [
         {
           id: 'user-1',
@@ -779,6 +779,11 @@ describe('UserService', () => {
         where: { tenant_id: 'tenant-1', is_active: true },
         select: ['id', 'email', 'name', 'role', 'created_at', 'is_active'],
       });
+      // Issue #556 stage 12d: the staff list read is bound under FORCE RLS.
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-1'],
+      );
     });
 
     it('logAction chains sequence_no and entry_hash from latest active log', async () => {
@@ -789,14 +794,23 @@ describe('UserService', () => {
         role: UserRole.CASHIER,
         security_version: 1,
       });
-      userRepository.save.mockImplementation((u: unknown) => Promise.resolve(u));
+      userRepository.save.mockImplementation((u: unknown) =>
+        Promise.resolve(u),
+      );
       auditRepository.findOne.mockResolvedValue({
         sequence_no: 5,
         entry_hash: 'hash-of-entry-5',
       });
-      auditRepository.save.mockImplementation((log: unknown) => Promise.resolve(log));
+      auditRepository.save.mockImplementation((log: unknown) =>
+        Promise.resolve(log),
+      );
 
-      await service.update('user-1', { name: 'New Name' }, 'tenant-1', 'admin-1');
+      await service.update(
+        'user-1',
+        { name: 'New Name' },
+        'tenant-1',
+        'admin-1',
+      );
 
       expect(auditRepository.findOne).toHaveBeenCalledWith({
         where: {
