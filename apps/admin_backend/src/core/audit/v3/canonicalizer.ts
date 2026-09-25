@@ -10,7 +10,7 @@ class Writer {
   exceeded = false;
 
   write(text: string): void {
-    for (let start = 0; start < text.length && !this.exceeded; ) {
+    for (let start = 0; start < text.length && !this.exceeded;) {
       let end = Math.min(start + CHUNK_UNITS, text.length);
       if (
         end < text.length &&

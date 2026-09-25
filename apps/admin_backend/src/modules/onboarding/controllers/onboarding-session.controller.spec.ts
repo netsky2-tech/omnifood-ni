@@ -187,20 +187,14 @@ describe('OnboardingSessionController (Unit)', () => {
         decision: LegacyMigrationDecision.LEGACY_BASELINE_CLOSED,
       });
 
-      const req: any = {
-        user: { tenantId: 'tenant-123', sub: 'user-admin-1' },
-      };
-      const receipt = await controller.reconcileLegacyBaseline(
-        req,
-        'tenant-123',
-      );
+      const req: any = { user: { tenantId: 'tenant-123', sub: 'user-admin-1' } };
+      const receipt = await controller.reconcileLegacyBaseline(req, 'tenant-123');
 
-      expect(receipt.decision).toBe(
-        LegacyMigrationDecision.LEGACY_BASELINE_CLOSED,
+      expect(receipt.decision).toBe(LegacyMigrationDecision.LEGACY_BASELINE_CLOSED);
+      expect(integrityService.reconcileLegacyBaselineSession).toHaveBeenCalledWith(
+        'tenant-123',
+        'user-admin-1',
       );
-      expect(
-        integrityService.reconcileLegacyBaselineSession,
-      ).toHaveBeenCalledWith('tenant-123', 'user-admin-1');
     });
   });
 });

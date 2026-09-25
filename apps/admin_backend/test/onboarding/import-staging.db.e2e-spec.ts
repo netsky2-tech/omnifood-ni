@@ -88,10 +88,10 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
   const tokenForeign = randomUUID();
 
   async function countAdmin(table: string, where: string, params: unknown[]) {
-    const rows = await admin.query(
+    const rows = (await admin.query(
       `SELECT count(*)::int AS count FROM ${table} WHERE ${where}`,
       params,
-    );
+    )) as Array<{ count: number }>;
     return rows[0].count;
   }
 
@@ -297,11 +297,17 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
         [tenantMainId, tokenMain],
       ),
     ).toBe(3);
-    const sessions = await admin.query(
+    const sessions = (await admin.query(
       `SELECT status, total_rows, valid_rows, error_rows, parser_contract_version
          FROM product_import_sessions WHERE tenant_id = $1 AND id = $2`,
       [tenantMainId, tokenMain],
-    );
+    )) as Array<{
+      status: string;
+      total_rows: number;
+      valid_rows: number;
+      error_rows: number;
+      parser_contract_version: string;
+    }>;
     expect(sessions[0]).toMatchObject({
       status: 'READY',
       total_rows: 3,
@@ -358,30 +364,46 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
     expect(commit.committedAt).toBeInstanceOf(Date);
 
     // AC-24: the created product carries zero stock and zero averageCost.
-    const created = await admin.query(
+    const created = (await admin.query(
       `SELECT name, "sellPrice", "averageCost", stock, uom FROM products WHERE tenant_id = $1 AND name = 'Refresco Natural'`,
       [tenantMainId],
-    );
+    )) as Array<{
+      name: string;
+      sellPrice: string;
+      averageCost: string;
+      stock: string;
+      uom: string;
+    }>;
     expect(created).toHaveLength(1);
     expect(Number(created[0].sellPrice)).toBe(45);
     expect(Number(created[0].averageCost)).toBe(0);
     expect(Number(created[0].stock)).toBe(0);
 
     // AC-52: REPLACE updates only the Product Master denylisted-free fields.
-    const replaced = await admin.query(
+    const replaced = (await admin.query(
       `SELECT name, "sellPrice", "averageCost", stock FROM products WHERE tenant_id = $1 AND name = 'Tacos al Pastor'`,
       [tenantMainId],
-    );
+    )) as Array<{
+      sellPrice: string;
+      averageCost: string;
+      stock: string;
+    }>;
     expect(Number(replaced[0].sellPrice)).toBe(150);
     expect(Number(replaced[0].averageCost)).toBe(60);
     expect(Number(replaced[0].stock)).toBe(25);
 
     // The IMPORT_COMMIT receipt is written with the commit, same transaction.
-    const receipts = await admin.query(
+    const receipts = (await admin.query(
       `SELECT receipt_type, decision, target_entity_id, evidence_json, reason
          FROM legacy_onboarding_migration_receipts WHERE tenant_id = $1`,
       [tenantMainId],
-    );
+    )) as Array<{
+      receipt_type: string;
+      decision: string;
+      target_entity_id: string;
+      evidence_json: Record<string, unknown>;
+      reason: string;
+    }>;
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
       receipt_type: 'IMPORT_COMMIT',
@@ -403,11 +425,18 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
     // Session lifecycle persisted with the commit. The batch carries one
     // ERROR row, so the preserved lifecycle semantic is PARTIALLY_COMMITTED
     // (the error-free COMMITTED proof lives in the raw-CSV journey below).
-    const committedSession = await admin.query(
+    const committedSession = (await admin.query(
       `SELECT status, commit_mode, duplicate_policy, committed_rows, skipped_rows, committed_at
          FROM product_import_sessions WHERE tenant_id = $1 AND id = $2`,
       [tenantMainId, tokenMain],
-    );
+    )) as Array<{
+      status: string;
+      commit_mode: string;
+      duplicate_policy: string;
+      committed_rows: number;
+      skipped_rows: number;
+      committed_at: Date | null;
+    }>;
     expect(committedSession[0]).toMatchObject({
       status: 'PARTIALLY_COMMITTED',
       commit_mode: 'VALID_ONLY',
@@ -418,13 +447,13 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
     expect(committedSession[0].committed_at).not.toBeNull();
 
     // Staging rows flipped to COMMITTED for the valid rows.
-    const estados = await admin.query(
+    const estados = (await admin.query(
       `SELECT estado_fila, count(*)::int AS count
          FROM staging_importacion_productos
         WHERE tenant_id = $1 AND token_sesion_importacion = $2
         GROUP BY estado_fila ORDER BY estado_fila`,
       [tenantMainId, tokenMain],
-    );
+    )) as Array<{ estado_fila: string; count: number }>;
     expect(estados).toEqual([
       { estado_fila: 'COMMITTED', count: 2 },
       { estado_fila: 'ERROR', count: 1 },
@@ -461,10 +490,15 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
       errors: [],
     });
 
-    const session = await admin.query(
+    const session = (await admin.query(
       `SELECT status, file_name, total_rows, valid_rows FROM product_import_sessions WHERE tenant_id = $1 AND id = $2`,
       [tenantCsvId, tokenCsv],
-    );
+    )) as Array<{
+      status: string;
+      file_name: string;
+      total_rows: number;
+      valid_rows: number;
+    }>;
     expect(session[0]).toMatchObject({
       status: 'READY',
       file_name: 'catalogo.csv',
@@ -485,10 +519,10 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
     });
 
     // AC-24: every created product carries zero stock/averageCost outside Kardex.
-    const created = await admin.query(
+    const created = (await admin.query(
       `SELECT name, "averageCost", stock FROM products WHERE tenant_id = $1 AND name IN ('Café Americano', 'Pan Simple') ORDER BY name`,
       [tenantCsvId],
-    );
+    )) as Array<{ name: string; averageCost: string; stock: string }>;
     expect(created).toHaveLength(2);
     for (const product of created) {
       expect(Number(product.averageCost)).toBe(0);
@@ -504,10 +538,10 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
     ).toBe(1);
 
     // Error-free commit reaches the full COMMITTED lifecycle state.
-    const csvSession = await admin.query(
+    const csvSession = (await admin.query(
       `SELECT status, committed_rows FROM product_import_sessions WHERE tenant_id = $1 AND id = $2`,
       [tenantCsvId, tokenCsv],
-    );
+    )) as Array<{ status: string; committed_rows: number }>;
     expect(csvSession[0]).toMatchObject({
       status: 'COMMITTED',
       committed_rows: 2,
@@ -547,18 +581,18 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
         [tenantRollbackId],
       ),
     ).toBe(0);
-    const session = await admin.query(
+    const session = (await admin.query(
       `SELECT status FROM product_import_sessions WHERE tenant_id = $1 AND id = $2`,
       [tenantRollbackId, tokenRollback],
-    );
+    )) as Array<{ status: string }>;
     expect(session[0].status).toBe('READY');
-    const estados = await admin.query(
+    const estados = (await admin.query(
       `SELECT estado_fila, count(*)::int AS count
          FROM staging_importacion_productos
         WHERE tenant_id = $1 AND token_sesion_importacion = $2
         GROUP BY estado_fila ORDER BY estado_fila`,
       [tenantRollbackId, tokenRollback],
-    );
+    )) as Array<{ estado_fila: string; count: number }>;
     expect(estados).toEqual([
       { estado_fila: 'ERROR', count: 1 },
       { estado_fila: 'VALIDO', count: 1 },
@@ -580,10 +614,10 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
         tenantForeignId,
       ]),
     ).toBe(1);
-    const foreignProduct = await admin.query(
+    const foreignProduct = (await admin.query(
       `SELECT "sellPrice", "averageCost", stock FROM products WHERE tenant_id = $1 AND name = 'Producto Extranjero'`,
       [tenantForeignId],
-    );
+    )) as Array<{ sellPrice: string; averageCost: string; stock: string }>;
     expect(Number(foreignProduct[0].sellPrice)).toBe(90);
     expect(Number(foreignProduct[0].averageCost)).toBe(40);
     expect(Number(foreignProduct[0].stock)).toBe(5);
@@ -608,13 +642,13 @@ describe('import staging application paths under migrated RLS (Real PostgreSQL D
         await manager.query(`SELECT set_config('app.tenant_id', $1, true)`, [
           tenantForeignId,
         ]);
-        const visibleStaging = await manager.query(
+        const visibleStaging = (await manager.query(
           `SELECT count(*)::int AS count FROM staging_importacion_productos`,
-        );
+        )) as Array<{ count: number }>;
         expect(visibleStaging[0].count).toBe(1);
-        const visibleSessions = await manager.query(
+        const visibleSessions = (await manager.query(
           `SELECT count(*)::int AS count FROM product_import_sessions`,
-        );
+        )) as Array<{ count: number }>;
         expect(visibleSessions[0].count).toBe(1);
       });
     } finally {

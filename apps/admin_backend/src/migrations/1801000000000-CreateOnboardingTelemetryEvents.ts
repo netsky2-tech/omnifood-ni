@@ -1,6 +1,13 @@
-import { MigrationInterface, QueryRunner, Table, TableIndex } from 'typeorm';
+import {
+  MigrationInterface,
+  QueryRunner,
+  Table,
+  TableIndex,
+} from 'typeorm';
 
-export class CreateOnboardingTelemetryEvents1801000000000 implements MigrationInterface {
+export class CreateOnboardingTelemetryEvents1801000000000
+  implements MigrationInterface
+{
   name = 'CreateOnboardingTelemetryEvents1801000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

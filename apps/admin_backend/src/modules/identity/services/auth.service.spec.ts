@@ -1440,8 +1440,7 @@ describe('AuthService tenant-slug login context (issue #556 slice 11)', () => {
 
   const boundFindOne = jest.fn();
   const boundUpdate = jest.fn();
-  const boundManagerQueries: Array<{ sql: string; parameters?: unknown[] }> =
-    [];
+  const boundManagerQueries: Array<{ sql: string; parameters?: unknown[] }> = [];
 
   const useTenantBoundManager = () => {
     const manager = {
@@ -1606,7 +1605,9 @@ describe('AuthService tenant-slug login context (issue #556 slice 11)', () => {
       { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
     ]);
     useTenantBoundManager();
-    boundFindOne.mockResolvedValue(slugUser({ tenant_id: 'another-tenant' }));
+    boundFindOne.mockResolvedValue(
+      slugUser({ tenant_id: 'another-tenant' }),
+    );
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
 
     await expect(

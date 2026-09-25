@@ -14,9 +14,7 @@ function readPostgresPort(): number {
   const value = process.env.DB_PORT?.trim() ?? '5432';
   const port = Number(value);
   if (!Number.isInteger(port)) {
-    throw new Error(
-      'DB_PORT must be a valid integer for DB-backed migration tests',
-    );
+    throw new Error('DB_PORT must be a valid integer for DB-backed migration tests');
   }
   return port;
 }
@@ -86,32 +84,27 @@ describe('CreateInventoryRemediationReceipts1806000000000 (db)', () => {
   const migration = new CreateInventoryRemediationReceipts1806000000000();
 
   it('creates table, enforces RLS, blocks update/delete via trigger, and protects evidence on down', async () => {
-    await withIsolatedSchema(
-      'mig_1806',
-      async ({ queryRunner, schema, tenantRole }) => {
-        // 1. Run migration up
-        await migration.up(queryRunner);
+    await withIsolatedSchema('mig_1806', async ({ queryRunner, schema, tenantRole }) => {
+      // 1. Run migration up
+      await migration.up(queryRunner);
 
-        // Grant permissions to tenantRole
-        await queryRunner.query(`
+      // Grant permissions to tenantRole
+      await queryRunner.query(`
         GRANT USAGE ON SCHEMA "${schema}" TO "${tenantRole}";
         GRANT SELECT, INSERT, UPDATE, DELETE ON inventory_remediation_receipts TO "${tenantRole}";
       `);
 
-        const receiptId1 = randomUUID();
-        const invoiceId1 = randomUUID();
-        const receiptSyncId1 = randomUUID();
-        const recipeVersionId1 = randomUUID();
-        const auditEventId1 = randomUUID();
+      const receiptId1 = randomUUID();
+      const invoiceId1 = randomUUID();
+      const receiptSyncId1 = randomUUID();
+      const recipeVersionId1 = randomUUID();
+      const auditEventId1 = randomUUID();
 
-        // 2. Insert as tenant-a under tenantRole
-        await queryRunner.query(`SET ROLE "${tenantRole}"`);
-        await queryRunner.query(
-          `SELECT set_config('app.tenant_id', $1, false)`,
-          ['tenant-a'],
-        );
+      // 2. Insert as tenant-a under tenantRole
+      await queryRunner.query(`SET ROLE "${tenantRole}"`);
+      await queryRunner.query(`SELECT set_config('app.tenant_id', $1, false)`, ['tenant-a']);
 
-        await queryRunner.query(`
+      await queryRunner.query(`
         INSERT INTO inventory_remediation_receipts (
           id, tenant_id, idempotency_key, command_type, request_hash,
           source_invoice_id, source_inventory_receipt_id, recipe_version_id,
@@ -123,26 +116,19 @@ describe('CreateInventoryRemediationReceipts1806000000000 (db)', () => {
         )
       `);
 
-        // 3. Query as tenant-a -> returns 1 row
-        const tenantARows = await queryRunner.query(
-          `SELECT * FROM inventory_remediation_receipts`,
-        );
-        expect(tenantARows).toHaveLength(1);
-        expect(tenantARows[0].id).toBe(receiptId1);
+      // 3. Query as tenant-a -> returns 1 row
+      const tenantARows = await queryRunner.query(`SELECT * FROM inventory_remediation_receipts`);
+      expect(tenantARows).toHaveLength(1);
+      expect(tenantARows[0].id).toBe(receiptId1);
 
-        // 4. Query as tenant-b -> returns 0 rows (RLS isolation)
-        await queryRunner.query(
-          `SELECT set_config('app.tenant_id', $1, false)`,
-          ['tenant-b'],
-        );
-        const tenantBRows = await queryRunner.query(
-          `SELECT * FROM inventory_remediation_receipts`,
-        );
-        expect(tenantBRows).toHaveLength(0);
+      // 4. Query as tenant-b -> returns 0 rows (RLS isolation)
+      await queryRunner.query(`SELECT set_config('app.tenant_id', $1, false)`, ['tenant-b']);
+      const tenantBRows = await queryRunner.query(`SELECT * FROM inventory_remediation_receipts`);
+      expect(tenantBRows).toHaveLength(0);
 
-        // 5. Insert as tenant-b with spoofed tenant_id 'tenant-a' fails RLS WITH CHECK
-        await expect(
-          queryRunner.query(`
+      // 5. Insert as tenant-b with spoofed tenant_id 'tenant-a' fails RLS WITH CHECK
+      await expect(
+        queryRunner.query(`
           INSERT INTO inventory_remediation_receipts (
             id, tenant_id, idempotency_key, command_type, request_hash,
             source_invoice_id, source_inventory_receipt_id, recipe_version_id,
@@ -153,29 +139,22 @@ describe('CreateInventoryRemediationReceipts1806000000000 (db)', () => {
             'user-1', 'owner', 'remediation test', 'APPLIED', '{}', '${randomUUID()}'
           )
         `),
-        ).rejects.toThrow();
+      ).rejects.toThrow();
 
-        // 6. UPDATE is denied by append-only trigger
-        await queryRunner.query(
-          `SELECT set_config('app.tenant_id', $1, false)`,
-          ['tenant-a'],
-        );
-        await expect(
-          queryRunner.query(
-            `UPDATE inventory_remediation_receipts SET status = 'FAILED' WHERE id = '${receiptId1}'`,
-          ),
-        ).rejects.toThrow(/append-only/i);
+      // 6. UPDATE is denied by append-only trigger
+      await queryRunner.query(`SELECT set_config('app.tenant_id', $1, false)`, ['tenant-a']);
+      await expect(
+        queryRunner.query(`UPDATE inventory_remediation_receipts SET status = 'FAILED' WHERE id = '${receiptId1}'`),
+      ).rejects.toThrow(/append-only/i);
 
-        // 7. DELETE is denied by append-only trigger
-        await expect(
-          queryRunner.query(
-            `DELETE FROM inventory_remediation_receipts WHERE id = '${receiptId1}'`,
-          ),
-        ).rejects.toThrow(/append-only/i);
+      // 7. DELETE is denied by append-only trigger
+      await expect(
+        queryRunner.query(`DELETE FROM inventory_remediation_receipts WHERE id = '${receiptId1}'`),
+      ).rejects.toThrow(/append-only/i);
 
-        // 8. Duplicate idempotency key within tenant is rejected
-        await expect(
-          queryRunner.query(`
+      // 8. Duplicate idempotency key within tenant is rejected
+      await expect(
+        queryRunner.query(`
           INSERT INTO inventory_remediation_receipts (
             id, tenant_id, idempotency_key, command_type, request_hash,
             source_invoice_id, source_inventory_receipt_id, recipe_version_id,
@@ -186,11 +165,11 @@ describe('CreateInventoryRemediationReceipts1806000000000 (db)', () => {
             'user-1', 'owner', 'remediation test', 'APPLIED', '{}', '${randomUUID()}'
           )
         `),
-        ).rejects.toThrow();
+      ).rejects.toThrow();
 
-        // 9. Duplicate remediation for the same source invoice and command type is rejected
-        await expect(
-          queryRunner.query(`
+      // 9. Duplicate remediation for the same source invoice and command type is rejected
+      await expect(
+        queryRunner.query(`
           INSERT INTO inventory_remediation_receipts (
             id, tenant_id, idempotency_key, command_type, request_hash,
             source_invoice_id, source_inventory_receipt_id, recipe_version_id,
@@ -201,16 +180,13 @@ describe('CreateInventoryRemediationReceipts1806000000000 (db)', () => {
             'user-1', 'owner', 'remediation test', 'APPLIED', '{}', '${randomUUID()}'
           )
         `),
-        ).rejects.toThrow();
+      ).rejects.toThrow();
 
-        // Reset role to superuser for down migration
-        await queryRunner.query('RESET ROLE');
+      // Reset role to superuser for down migration
+      await queryRunner.query('RESET ROLE');
 
-        // 10. Down migration refuses to run while historical evidence exists
-        await expect(migration.down(queryRunner)).rejects.toThrow(
-          /historical remediation receipts exist/i,
-        );
-      },
-    );
+      // 10. Down migration refuses to run while historical evidence exists
+      await expect(migration.down(queryRunner)).rejects.toThrow(/historical remediation receipts exist/i);
+    });
   });
 });

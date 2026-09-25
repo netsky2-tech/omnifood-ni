@@ -324,8 +324,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         TENANT_CONTEXT_SET_CONFIG_SQL,
         [tenantId],
       );
-      const queryOrder = (mockManager.query as jest.Mock).mock
-        .invocationCallOrder[0];
+      const queryOrder =
+        (mockManager.query as jest.Mock).mock.invocationCallOrder[0];
       const firstProtected = Math.min(
         ...(mockManager.findOne as jest.Mock).mock.invocationCallOrder,
         ...(mockManager.find as jest.Mock).mock.invocationCallOrder,
@@ -348,9 +348,9 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
     });
 
     it('fails fast with TenantContextRequiredError on a blank tenant and issues no set_config SQL (Unit 0b-3)', async () => {
-      await expect(service.applyTemplate('   ', 'CAFETERIA')).rejects.toThrow(
-        TenantContextRequiredError,
-      );
+      await expect(
+        service.applyTemplate('   ', 'CAFETERIA'),
+      ).rejects.toThrow(TenantContextRequiredError);
 
       // The transaction itself must never be opened for a blank tenant.
       expect(dataSource.transaction).not.toHaveBeenCalled();
