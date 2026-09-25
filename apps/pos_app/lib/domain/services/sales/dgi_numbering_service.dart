@@ -29,15 +29,13 @@ class FiscalSequenceUnconfiguredError implements Exception {
 abstract class DgiNumberingService {
   /// Provisions the series. [start] is the consecutivo inicial seed; it only
   /// takes effect when no cursor is persisted yet (D-1: never overwrite a
-  /// persisted fiscal sequence). [end] is RETIRED by D-21 — computerized
-  /// systems have no range; the parameter is accepted for source
-  /// compatibility and completely ignored, and the `dgi_range_end` key is
-  /// never read or written. Never called by the boot sequence (D-1: boot
-  /// never writes).
+  /// persisted fiscal sequence). D-21: there is no range end — computerized
+  /// systems issue an unbounded consecutivo, so the retired `end` parameter
+  /// and the `dgi_range_end` key no longer exist. Never called by the boot
+  /// sequence (D-1: boot never writes).
   Future<void> initializeRange({
     required String prefix,
     required int start,
-    int? end,
   });
 
   /// Returns the next fiscal number. Throws

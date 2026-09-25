@@ -64,10 +64,7 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   Future<void> initializeRange({
     required String prefix,
     required int start,
-    int? end,
   }) async {
-    // D-21: [end] is retired and ignored — computerized systems have no
-    // range; the `dgi_range_end` key is never read or written.
     await _configDao.saveConfig(
       LocalConfigEntity(key: _keyPrefix, value: prefix),
     );

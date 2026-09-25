@@ -159,10 +159,14 @@ abstract class SalesTransactionDao {
     if (sequence == null || sequence < 1) {
       throw StateError('DGI current number is not configured.');
     }
-    final prefix =
-        await getDgiConfig('dgi_prefix') ??
+    // Folio format authority: DgiNumberingServiceImpl (D-21). Empty/blank
+    // prefix → plain unpadded decimal folio; present → prefix + 8-digit pad.
+    final resolvedPrefix =
+        (await getDgiConfig('dgi_prefix'))?.trim() ??
         invoice.number.replaceFirst(RegExp(r'\d+$'), '');
-    invoice.number = '$prefix${sequence.toString().padLeft(8, '0')}';
+    invoice.number = resolvedPrefix.isEmpty
+        ? sequence.toString()
+        : '$resolvedPrefix${sequence.toString().padLeft(8, '0')}';
     await _persistSale(
       invoice,
       items,
@@ -223,10 +227,14 @@ abstract class SalesTransactionDao {
     if (sequence == null || sequence < 1) {
       throw StateError('DGI current number is not configured.');
     }
-    final prefix =
-        await getDgiConfig('dgi_prefix') ??
+    // Folio format authority: DgiNumberingServiceImpl (D-21). Empty/blank
+    // prefix → plain unpadded decimal folio; present → prefix + 8-digit pad.
+    final resolvedPrefix =
+        (await getDgiConfig('dgi_prefix'))?.trim() ??
         invoice.number.replaceFirst(RegExp(r'\d+$'), '');
-    invoice.number = '$prefix${sequence.toString().padLeft(8, '0')}';
+    invoice.number = resolvedPrefix.isEmpty
+        ? sequence.toString()
+        : '$resolvedPrefix${sequence.toString().padLeft(8, '0')}';
     await _persistSale(invoice, items, modifiers, payments, movements, auditLog, false);
     await advanceDgiCurrentNumber((sequence + 1).toString());
     await insertFulfillment(fulfillment);

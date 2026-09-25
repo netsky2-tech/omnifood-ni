@@ -126,9 +126,10 @@ void main() {
 
     // B2a (D-16): this DB models a post-activation device — provision the
     // pilot series explicitly instead of relying on the removed boot
-    // self-heal (D-1).
+    // self-heal (D-1). D-21: purely numeric consecutive — EMPTY prefix, no
+    // range end (the retired `end` parameter no longer exists).
     await DgiNumberingServiceImpl(database.localConfigDao, database.invoiceDao)
-        .initializeRange(prefix: '001-001-01-', start: 1, end: 1000);
+        .initializeRange(prefix: '', start: 1);
 
     syncService = SyncService(
       auditRepo,
@@ -206,7 +207,7 @@ void main() {
 
         final invoice = Invoice(
           id: invoiceId,
-          number: '001-001-01-0000000${i + 1}',
+          number: '',
           subtotal: 40.0,
           totalTax: 0.0,
           total: 40.0,
@@ -265,9 +266,9 @@ void main() {
       final pendingInvoices = await database.invoiceDao.getInvoicesBySyncStatus('pending');
       expect(pendingInvoices.length, equals(3));
       expect(pendingInvoices.map((inv) => inv.number).toList(), [
-        '001-001-01-00000001',
-        '001-001-01-00000002',
-        '001-001-01-00000003',
+        '1',
+        '2',
+        '3',
       ]);
 
       // Stock de café grano descontado: 100 - (3 * 10g) = 70g

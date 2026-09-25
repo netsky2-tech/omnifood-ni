@@ -88,17 +88,22 @@ class ActivationControlledSaleRunner {
     final trimmedCashierId = params.cashierUserId.trim();
 
     // D-2/D-16: activation is the APPROVED provisioning gate for the pilot
-    // fiscal series. The boot never writes (D-1); the range is provisioned
-    // ONCE here — only when absent — before the verification sale. The real
-    // documented range replaces it when SOHO's authorization letter arrives
-    // (#554 / server-side series).
+    // fiscal series. The boot never writes (D-1); the series is provisioned
+    // ONCE here — only when absent — before the verification sale, because
+    // the self-test sale cannot emit a number from nothing. B2a provisioned
+    // an invented prefix and a 1..1000 range as a documented exception; D-21
+    // retires both (there is no range for computarizados, and single branch
+    // + 1 caja uses a purely numeric consecutive), so what remains is the
+    // exception's real purpose: consecutivo inicial = 1 with an EMPTY
+    // prefix. The tenant's real fiscal configuration replaces it via the
+    // Business Profile form / server-side series (#554).
     final existingSeries =
         await _database.localConfigDao.getConfigByKey('dgi_prefix');
     if (existingSeries == null) {
       await DgiNumberingServiceImpl(
         _database.localConfigDao,
         _database.invoiceDao,
-      ).initializeRange(prefix: '001-001-01-', start: 1, end: 1000);
+      ).initializeRange(prefix: '', start: 1);
     }
 
     // 1. Fetch Attempt & Assert Pre-Condition: RUNNING or already LOCAL_ACTIVATION_EVIDENCE_COMPLETE
