@@ -16,6 +16,11 @@ class CloudAuthInterceptor extends Interceptor {
   /// coordinator cannot recover (e.g. Keystore hung on cold start).
   final Future<String?> Function()? tokenFallback;
 
+  /// Resolves the provisioned tenant slug (issue #556) sent on the token
+  /// refresh payload. Returns null/blank for legacy unprovisioned installs,
+  /// in which case the key is omitted and the legacy wire contract holds.
+  final Future<String?> Function()? tenantSlugResolver;
+
   Completer<String?>? _inFlightRefresh;
 
   static const Set<String> _publicAllowlist = {
@@ -42,6 +47,7 @@ class CloudAuthInterceptor extends Interceptor {
     required this.clientDio,
     this.onReauthenticationRequired,
     this.tokenFallback,
+    this.tenantSlugResolver,
   });
 
   @override
@@ -168,9 +174,23 @@ class CloudAuthInterceptor extends Interceptor {
         return null;
       }
 
+      // Legacy/absent slug -> omit the key entirely so the wire contract for
+      // unprovisioned installs is unchanged (issue #556).
+      String cleanTenantSlug = '';
+      if (tenantSlugResolver != null) {
+        try {
+          cleanTenantSlug = (await tenantSlugResolver!())?.trim() ?? '';
+        } catch (_) {
+          cleanTenantSlug = '';
+        }
+      }
       final refreshResponse = await refreshDio.post<Map<String, dynamic>>(
         '/identity/refresh',
-        data: {'userId': creds.userId, 'refreshToken': creds.refreshToken},
+        data: {
+          'userId': creds.userId,
+          'refreshToken': creds.refreshToken,
+          if (cleanTenantSlug.isNotEmpty) 'tenantSlug': cleanTenantSlug,
+        },
       );
 
       if (refreshResponse.statusCode == 200 ||

@@ -223,6 +223,7 @@ void main() async {
       refreshDio: refreshDio,
       clientDio: dio,
       tokenFallback: () => authRepository.getAccessToken(),
+      tenantSlugResolver: () => tenantConfigService.getTenantSlug(),
       onReauthenticationRequired: () {
         debugPrint(
           "[CloudAuth] Reautenticación requerida: sesión cloud expirada o revocada.",
