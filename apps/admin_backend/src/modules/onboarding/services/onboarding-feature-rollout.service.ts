@@ -127,7 +127,10 @@ export const CUTOVER_STAGES: CutoverStageDefinition[] = [
 @Injectable()
 export class OnboardingFeatureRolloutService {
   // Tenant-specific in-memory store (for testing and runtime orchestration)
-  private readonly tenantFlags = new Map<string, Map<OnboardingFeatureFlag, boolean>>();
+  private readonly tenantFlags = new Map<
+    string,
+    Map<OnboardingFeatureFlag, boolean>
+  >();
 
   isEnabled(tenantId: string, flag: OnboardingFeatureFlag): boolean {
     const trimmed = tenantId?.trim();
@@ -137,7 +140,11 @@ export class OnboardingFeatureRolloutService {
     return flags.get(flag) ?? false;
   }
 
-  setFlag(tenantId: string, flag: OnboardingFeatureFlag, enabled: boolean): void {
+  setFlag(
+    tenantId: string,
+    flag: OnboardingFeatureFlag,
+    enabled: boolean,
+  ): void {
     const trimmed = tenantId?.trim();
     if (!trimmed) throw new BadRequestException('tenantId is required');
 
@@ -149,30 +156,56 @@ export class OnboardingFeatureRolloutService {
     flags.set(flag, enabled);
   }
 
-  validateCutoverOrder(activeFlags: Set<OnboardingFeatureFlag>): CutoverValidationResult {
+  validateCutoverOrder(
+    activeFlags: Set<OnboardingFeatureFlag>,
+  ): CutoverValidationResult {
     const violations: string[] = [];
 
     // Dependency rules based on ONB1.10E:
     // 1. All sub-features require onboarding.session_v1
-    if (activeFlags.has(OnboardingFeatureFlag.SETUP_CENTER_V1) && !activeFlags.has(OnboardingFeatureFlag.SESSION_V1)) {
-      violations.push('onboarding.setup_center_v1 requires onboarding.session_v1');
+    if (
+      activeFlags.has(OnboardingFeatureFlag.SETUP_CENTER_V1) &&
+      !activeFlags.has(OnboardingFeatureFlag.SESSION_V1)
+    ) {
+      violations.push(
+        'onboarding.setup_center_v1 requires onboarding.session_v1',
+      );
     }
-    if (activeFlags.has(OnboardingFeatureFlag.TEMPLATE_SAFE_V1) && !activeFlags.has(OnboardingFeatureFlag.SESSION_V1)) {
-      violations.push('onboarding.template_safe_v1 requires onboarding.session_v1');
+    if (
+      activeFlags.has(OnboardingFeatureFlag.TEMPLATE_SAFE_V1) &&
+      !activeFlags.has(OnboardingFeatureFlag.SESSION_V1)
+    ) {
+      violations.push(
+        'onboarding.template_safe_v1 requires onboarding.session_v1',
+      );
     }
-    if (activeFlags.has(OnboardingFeatureFlag.IMPORT_CONTRACT_V1) && !activeFlags.has(OnboardingFeatureFlag.SESSION_V1)) {
-      violations.push('onboarding.import_contract_v1 requires onboarding.session_v1');
+    if (
+      activeFlags.has(OnboardingFeatureFlag.IMPORT_CONTRACT_V1) &&
+      !activeFlags.has(OnboardingFeatureFlag.SESSION_V1)
+    ) {
+      violations.push(
+        'onboarding.import_contract_v1 requires onboarding.session_v1',
+      );
     }
-    if (activeFlags.has(OnboardingFeatureFlag.REQUIRED_CONFIG_V1) && !activeFlags.has(OnboardingFeatureFlag.SESSION_V1)) {
-      violations.push('onboarding.required_config_v1 requires onboarding.session_v1');
+    if (
+      activeFlags.has(OnboardingFeatureFlag.REQUIRED_CONFIG_V1) &&
+      !activeFlags.has(OnboardingFeatureFlag.SESSION_V1)
+    ) {
+      violations.push(
+        'onboarding.required_config_v1 requires onboarding.session_v1',
+      );
     }
     // 2. activation_v1 strictly requires session_v1 AND required_config_v1
     if (activeFlags.has(OnboardingFeatureFlag.ACTIVATION_V1)) {
       if (!activeFlags.has(OnboardingFeatureFlag.SESSION_V1)) {
-        violations.push('onboarding.activation_v1 requires onboarding.session_v1');
+        violations.push(
+          'onboarding.activation_v1 requires onboarding.session_v1',
+        );
       }
       if (!activeFlags.has(OnboardingFeatureFlag.REQUIRED_CONFIG_V1)) {
-        violations.push('onboarding.activation_v1 requires onboarding.required_config_v1');
+        violations.push(
+          'onboarding.activation_v1 requires onboarding.required_config_v1',
+        );
       }
     }
 
@@ -184,7 +217,9 @@ export class OnboardingFeatureRolloutService {
 
   applyCutoverStage(tenantId: string, stage: number): void {
     if (stage < 1 || stage > 10) {
-      throw new BadRequestException(`Cutover stage must be between 1 and 10. Received: ${stage}`);
+      throw new BadRequestException(
+        `Cutover stage must be between 1 and 10. Received: ${stage}`,
+      );
     }
 
     const stageDef = CUTOVER_STAGES.find((s) => s.stage === stage);

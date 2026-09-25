@@ -20,7 +20,11 @@ export type Result<T> =
   | { readonly ok: false; readonly error: AuditV3Error };
 
 export type AuditV3Value =
-  AuditV3Null | AuditV3Boolean | AuditV3String | AuditV3Array | AuditV3Object;
+  | AuditV3Null
+  | AuditV3Boolean
+  | AuditV3String
+  | AuditV3Array
+  | AuditV3Object;
 export interface AuditV3Null {
   readonly kind: 'null';
 }

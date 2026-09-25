@@ -96,11 +96,19 @@ async function withImportCutoverIsolatedSchema(
 
     await dataSource.query(
       `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
-      [tenantAId, 'Tenant A — Taquería Central', normalizeTenantSlug('Tenant A — Taquería Central')],
+      [
+        tenantAId,
+        'Tenant A — Taquería Central',
+        normalizeTenantSlug('Tenant A — Taquería Central'),
+      ],
     );
     await dataSource.query(
       `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
-      [tenantBId, 'Tenant B — Repostería Bella', normalizeTenantSlug('Tenant B — Repostería Bella')],
+      [
+        tenantBId,
+        'Tenant B — Repostería Bella',
+        normalizeTenantSlug('Tenant B — Repostería Bella'),
+      ],
     );
 
     // Seed existing product in Tenant A for duplicate preview testing

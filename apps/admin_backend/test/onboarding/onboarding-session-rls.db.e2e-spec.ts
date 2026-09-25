@@ -25,7 +25,10 @@ import { createMigrationBuiltSchemaFixture } from '../support/migration-built-sc
  * transaction — the statement returning a row IS the WITH CHECK passing.
  */
 
-const TABLES = ['onboarding_sessions', 'onboarding_idempotency_records'] as const;
+const TABLES = [
+  'onboarding_sessions',
+  'onboarding_idempotency_records',
+] as const;
 
 const postgresConnection = {
   host: process.env.DB_HOST?.trim() ?? '127.0.0.1',
@@ -45,7 +48,9 @@ const poolCleanupExtra = { extra: { allowExitOnIdle: true } };
 async function asRuntimeRole<T>(
   runtime: DataSource,
   tenantId: string | null,
-  assertion: (runner: ReturnType<DataSource['createQueryRunner']>) => Promise<T>,
+  assertion: (
+    runner: ReturnType<DataSource['createQueryRunner']>,
+  ) => Promise<T>,
 ): Promise<T> {
   const runner = runtime.createQueryRunner();
   await runner.connect();
@@ -66,7 +71,9 @@ async function asRuntimeRole<T>(
  * `[rows, affectedRowCount]` while SELECTs arrive as a plain rows array.
  * Normalizes both shapes to the rows array so assertions read on `id`.
  */
-function returningRows(result: unknown): Array<{ id: string; tenant_id?: string }> {
+function returningRows(
+  result: unknown,
+): Array<{ id: string; tenant_id?: string }> {
   if (Array.isArray(result) && Array.isArray(result[0])) {
     return result[0] as Array<{ id: string }>;
   }
@@ -156,16 +163,18 @@ describe('onboarding session/idempotency tenant RLS (Real PostgreSQL DB, migrati
   });
 
   it('seeds both tenants through the superuser and proves the runtime role is a table non-owner that cannot bypass RLS', async () => {
-    const seeded = (await admin.query(
+    const seeded = await admin.query(
       `SELECT (SELECT count(*)::int FROM onboarding_sessions) AS sessions,
               (SELECT count(*)::int FROM onboarding_idempotency_records) AS idempotency`,
-    )) as Array<{ sessions: number; idempotency: number }>;
+    );
     expect(seeded[0]).toEqual({ sessions: 2, idempotency: 2 });
 
-    const role = (await admin.query(
-      `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1`, [
-      fixture.runtimeRoleName,
-    ]))[0];
+    const role = (
+      await admin.query(
+        `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1`,
+        [fixture.runtimeRoleName],
+      )
+    )[0];
     expect(role).toBeDefined();
     expect(role.rolsuper).toBe(false);
     expect(role.rolbypassrls).toBe(false);
@@ -199,7 +208,11 @@ describe('onboarding session/idempotency tenant RLS (Real PostgreSQL DB, migrati
     )) as Array<{ relname: string; rls_enabled: boolean; rls_forced: boolean }>;
 
     expect(facts).toEqual([
-      { relname: 'onboarding_idempotency_records', rls_enabled: true, rls_forced: true },
+      {
+        relname: 'onboarding_idempotency_records',
+        rls_enabled: true,
+        rls_forced: true,
+      },
       { relname: 'onboarding_sessions', rls_enabled: true, rls_forced: true },
     ]);
 

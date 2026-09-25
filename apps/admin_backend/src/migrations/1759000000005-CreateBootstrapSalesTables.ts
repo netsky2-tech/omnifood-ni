@@ -17,9 +17,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * including constraints and foreign keys — is skipped when the table is
  * already present, and every index uses `IF NOT EXISTS`.
  */
-export class CreateBootstrapSalesTables1759000000005
-  implements MigrationInterface
-{
+export class CreateBootstrapSalesTables1759000000005 implements MigrationInterface {
   name = 'CreateBootstrapSalesTables1759000000005';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

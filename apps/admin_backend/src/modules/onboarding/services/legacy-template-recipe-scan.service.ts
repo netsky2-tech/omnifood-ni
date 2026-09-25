@@ -142,10 +142,7 @@ export class LegacyTemplateRecipeScanService {
           } else {
             // Check historical sales/usage
             const usageCount = await invoiceItemRepo.count({
-              where: [
-                { recipeVersionId: rv.id },
-                { productId: rv.product_id },
-              ],
+              where: [{ recipeVersionId: rv.id }, { productId: rv.product_id }],
             });
             const hasUsage = usageCount > 0 || isOperational;
 

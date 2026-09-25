@@ -52,7 +52,13 @@ describe('PurchaseService.recordPurchase', () => {
   });
 
   it('binds app.tenant_id before the first protected read and keeps every access on the transaction manager', async () => {
-    const result = await service.recordPurchase('ins-1', 'sup-1', 5, 130, 'tenant-A');
+    const result = await service.recordPurchase(
+      'ins-1',
+      'sup-1',
+      5,
+      130,
+      'tenant-A',
+    );
 
     expect(result).toMatchObject({ id: 'ins-1', stock: 15 });
     expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [

@@ -5,7 +5,10 @@ import {
 } from '../core/database/tenant-rls-policy';
 import { EnforceOnboardingSessionRls1809220000000 } from './1809220000000-EnforceOnboardingSessionRls';
 
-const TABLES = ['onboarding_sessions', 'onboarding_idempotency_records'] as const;
+const TABLES = [
+  'onboarding_sessions',
+  'onboarding_idempotency_records',
+] as const;
 
 const COMMANDS = ['select', 'insert', 'update', 'delete'] as const;
 
@@ -37,8 +40,7 @@ describe('EnforceOnboardingSessionRls1809220000000', () => {
             resolvedTables.push(table);
             return Promise.resolve([
               {
-                data_type:
-                  tenantIdDataTypeByTable[table] ?? 'uuid',
+                data_type: tenantIdDataTypeByTable[table] ?? 'uuid',
               },
             ]) as unknown as Promise<QueryResult>;
           }

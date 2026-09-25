@@ -1,5 +1,8 @@
 export type MetricStatus =
-  'AVAILABLE' | 'NOT_AVAILABLE' | 'STALE' | 'NOT_APPLICABLE';
+  | 'AVAILABLE'
+  | 'NOT_AVAILABLE'
+  | 'STALE'
+  | 'NOT_APPLICABLE';
 
 export interface ProfitAwareMetric<T> {
   status: MetricStatus;

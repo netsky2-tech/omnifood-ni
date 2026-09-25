@@ -1,10 +1,12 @@
-import { ExecutionContext, INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  ExecutionContext,
+  INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Reflector } from '@nestjs/core';
 import * as request from 'supertest';
 import { AuthGuard } from '../../identity/guards/auth.guard';
-import { RolesGuard } from '../../identity/guards/roles.guard';
-import { PermissionsGuard } from '../../identity/guards/permissions.guard';
 import { InvoicesService } from '../services/invoices.service';
 import { AdminInvoicesController } from './admin-invoices.controller';
 import { ADMIN_CREDIT_NOTE_FORGED_AUTHORIZER } from '../dto/admin-credit-note.dto';
@@ -33,30 +35,26 @@ describe('AdminInvoicesController', () => {
     refundReasonCode: 'ERROR_DE_CAPTURA',
     refundReasonPolicy: 'FINANCIAL_ONLY',
     items: [
-      { originInvoiceItemId: '22222222-2222-4222-8222-222222222222', quantity: 1 },
+      {
+        originInvoiceItemId: '22222222-2222-4222-8222-222222222222',
+        quantity: 1,
+      },
     ],
     ...extra,
   });
 
   let injectedUser: Record<string, unknown> | null;
 
-  const issueRequest = (body: Record<string, unknown>) =>
-    request(app.getHttpServer())
-      .post('/sales/admin/credit-notes')
-      .send(body as never);
-
   beforeAll(async () => {
     serviceMock = {
       findAll: jest.fn().mockResolvedValue([]),
-      createAdminCreditNote: jest
-        .fn()
-        .mockResolvedValue({
-          id: 'cn-1',
-          number: 'NC-40',
-          originInvoiceId: 'origin-1',
-          originInvoiceNumber: '001-001-01-00000010',
-          total: -57.5,
-        }),
+      createAdminCreditNote: jest.fn().mockResolvedValue({
+        id: 'cn-1',
+        number: 'NC-40',
+        originInvoiceId: 'origin-1',
+        originInvoiceNumber: '001-001-01-00000010',
+        total: -57.5,
+      }),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -103,7 +101,9 @@ describe('AdminInvoicesController', () => {
       .send(buildBody());
 
     if (res.status !== 201) {
-      throw new Error(`EXPECTED 201, GOT ${res.status}: ${JSON.stringify(res.body)}`);
+      throw new Error(
+        `EXPECTED 201, GOT ${res.status}: ${JSON.stringify(res.body)}`,
+      );
     }
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({

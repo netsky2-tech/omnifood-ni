@@ -116,18 +116,13 @@ describe('OnboardingSessionService (Unit)', () => {
   describe('tenant context binding (RLS)', () => {
     const protectedOperations: Array<[string, () => Promise<unknown>]> = [
       ['getSession', () => service.getSession(tenantId)],
-      [
-        'saveSession',
-        () => service.saveSession({ ...existingSession }),
-      ],
+      ['saveSession', () => service.saveSession({ ...existingSession })],
       [
         'updateSessionWithOptimisticLock',
         () =>
-          service.updateSessionWithOptimisticLock(
-            { ...existingSession },
-            1,
-            { lifecycleState: OnboardingLifecycleState.SALE_READY },
-          ),
+          service.updateSessionWithOptimisticLock({ ...existingSession }, 1, {
+            lifecycleState: OnboardingLifecycleState.SALE_READY,
+          }),
       ],
       [
         'ensureOnboardingStarted',
@@ -158,9 +153,9 @@ describe('OnboardingSessionService (Unit)', () => {
           TENANT_CONTEXT_SET_CONFIG_SQL,
           [tenantId],
         );
-        expect(
-          mockManager.query.mock.invocationCallOrder[0],
-        ).toBeLessThan(firstRepositoryAccessOrder());
+        expect(mockManager.query.mock.invocationCallOrder[0]).toBeLessThan(
+          firstRepositoryAccessOrder(),
+        );
       },
     );
 
@@ -209,9 +204,7 @@ describe('OnboardingSessionService (Unit)', () => {
     });
 
     it('prevents protected access when the tenant binding fails inside the transaction', async () => {
-      mockManager.query.mockRejectedValue(
-        new Error('set_config unavailable'),
-      );
+      mockManager.query.mockRejectedValue(new Error('set_config unavailable'));
 
       await expect(service.getSession(tenantId)).rejects.toThrow(
         'set_config unavailable',
@@ -236,9 +229,9 @@ describe('OnboardingSessionService (Unit)', () => {
       await expect(service.getSession(tenantId)).rejects.toThrow(
         'connection pool exhausted',
       );
-      await expect(
-        service.saveSession({ ...existingSession }),
-      ).rejects.toThrow('connection pool exhausted');
+      await expect(service.saveSession({ ...existingSession })).rejects.toThrow(
+        'connection pool exhausted',
+      );
 
       expect(mockManager.query).not.toHaveBeenCalled();
       expect(managerRepo.findOne).not.toHaveBeenCalled();
@@ -286,9 +279,7 @@ describe('OnboardingSessionService (Unit)', () => {
       expect(session.onboardingStartedAt).toEqual(
         existingSession.onboardingStartedAt,
       );
-      expect(
-        session.lastActivityAt?.getTime(),
-      ).toBeGreaterThanOrEqual(
+      expect(session.lastActivityAt?.getTime()).toBeGreaterThanOrEqual(
         existingSession.onboardingStartedAt?.getTime() ?? 0,
       );
       expect(session.optimisticVersion).toBe(2);
@@ -301,7 +292,7 @@ describe('OnboardingSessionService (Unit)', () => {
         id: 'session-uuid-3',
         lifecycleState: OnboardingLifecycleState.SALE_READY,
         saleReadyFirstAt: new Date('2026-09-02T12:00:00Z'),
-      } as OnboardingSession);
+      });
 
       const session = await service.ensureOnboardingStarted({
         tenantId,
@@ -330,7 +321,7 @@ describe('OnboardingSessionService (Unit)', () => {
         optimisticVersion: 5,
         createdAt: activatedAt,
         updatedAt: activatedAt,
-      } as OnboardingSession);
+      });
 
       const session = await service.ensureOnboardingStarted({
         tenantId,
@@ -371,7 +362,11 @@ describe('OnboardingSessionService (Unit)', () => {
       managerRepo.findOne.mockResolvedValue(updatedSession);
 
       const result = await service.updateSessionWithOptimisticLock(
-        { id: 'session-uuid-opt', tenantId, optimisticVersion: 1 } as OnboardingSession,
+        {
+          id: 'session-uuid-opt',
+          tenantId,
+          optimisticVersion: 1,
+        } as OnboardingSession,
         1,
         { lifecycleState: OnboardingLifecycleState.SALE_READY },
       );
