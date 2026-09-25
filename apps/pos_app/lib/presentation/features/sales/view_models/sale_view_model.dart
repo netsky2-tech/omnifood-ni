@@ -1434,6 +1434,7 @@ class SaleViewModel extends ChangeNotifier {
             isTaxExempt: _isGlobalTaxExempt,
             paperWidthMm: printerConfig.paperWidthMm,
             loyaltyFeedback: _lastPostPaidFeedback,
+            fiscalAuthorizationNumber: printerConfig.dgiAuthorizationCode,
           );
 
           if (!printResult.isSuccess) {
@@ -1571,6 +1572,7 @@ class SaleViewModel extends ChangeNotifier {
         isTaxExempt:
             _lastProcessedInvoice?.globalTaxOverride ?? _isGlobalTaxExempt,
         paperWidthMm: config.paperWidthMm,
+        fiscalAuthorizationNumber: config.dgiAuthorizationCode,
       );
 
       if (!res.isSuccess) {

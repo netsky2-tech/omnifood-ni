@@ -228,6 +228,11 @@ class ReceiptDocument {
   /// Reason recorded when the invoice was voided. Null for active invoices.
   final String? voidReason;
 
+  /// D-17 (P0): fiscal authorization number, printed at the bottom-right of
+  /// the document (DT 09-2007 QUINTO). Null when the business has not
+  /// configured it — null prints nothing, never a placeholder.
+  final String? fiscalAuthorizationNumber;
+
   const ReceiptDocument({
     required this.businessName,
     this.legalName,
@@ -261,6 +266,7 @@ class ReceiptDocument {
     this.globalTaxOverride = false,
     this.isCanceled = false,
     this.voidReason,
+    this.fiscalAuthorizationNumber,
   }) : grossSubtotal = grossSubtotal ?? (discountTotal > 0 ? (subtotal + discountTotal) : subtotal);
 
   bool get isCuotaFija => taxRegime.isCuotaFija;
@@ -300,6 +306,7 @@ class ReceiptDocument {
         globalTaxOverride: globalTaxOverride,
         isCanceled: isCanceled,
         voidReason: voidReason,
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
       );
   String get regimeHeader => taxRegime.receiptRegimeHeader;
   String? get fiscalNotice => taxRegime.fiscalNotice;
@@ -322,6 +329,7 @@ class ReceiptDocument {
     bool isTaxExempt = false,
     String? footerMessage,
     List<int>? logoRasterBytes,
+    String? fiscalAuthorizationNumber,
   }) {
     final receiptLines = items
         .map((item) => ReceiptLine.fromInvoiceItem(item, taxRegime: taxRegime))
@@ -416,6 +424,12 @@ class ReceiptDocument {
       globalTaxOverride: invoice.globalTaxOverride,
       isCanceled: invoice.isCanceled,
       voidReason: invoice.voidReason,
+      // D-17: trimmed and dropped when blank, so a blank-looking value can
+      // never reach the paper (same honesty rule as the other header facts).
+      fiscalAuthorizationNumber:
+          (fiscalAuthorizationNumber != null && fiscalAuthorizationNumber.trim().isNotEmpty)
+              ? fiscalAuthorizationNumber.trim()
+              : null,
     );
   }
 

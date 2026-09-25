@@ -57,6 +57,10 @@ void main() {
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_current_number', value: '550'));
       when(() => mockConfigDao.getConfigByKey('dgi_authorization_code'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_code', value: 'AUT-2026'));
+      when(() => mockConfigDao.getConfigByKey('dgi_authorization_date'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_date', value: '23/09/2026'));
+      when(() => mockConfigDao.getConfigByKey('dgi_authorization_document'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_document', value: 'Resolución DGI 098-2026'));
       when(() => mockConfigDao.getConfigByKey('tax_regime'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'));
 

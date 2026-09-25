@@ -198,6 +198,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
     bool? isTaxExempt = false,
     int? paperWidthMm = 58,
     _i11.PostPaidFeedback? loyaltyFeedback,
+    String? fiscalAuthorizationNumber,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -217,6 +218,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
             #isTaxExempt: isTaxExempt,
             #paperWidthMm: paperWidthMm,
             #loyaltyFeedback: loyaltyFeedback,
+            #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
           },
         ),
         returnValue: _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
@@ -238,6 +240,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #isTaxExempt: isTaxExempt,
               #paperWidthMm: paperWidthMm,
               #loyaltyFeedback: loyaltyFeedback,
+              #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
             },
           ),
         )),
@@ -261,6 +264,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #isTaxExempt: isTaxExempt,
               #paperWidthMm: paperWidthMm,
               #loyaltyFeedback: loyaltyFeedback,
+              #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
             },
           ),
         )),

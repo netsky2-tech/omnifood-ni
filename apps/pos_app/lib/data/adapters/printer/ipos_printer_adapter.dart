@@ -84,6 +84,7 @@ class IPosPrinterAdapter implements PrinterPort {
     bool isTaxExempt = false,
     int paperWidthMm = 58,
     PostPaidFeedback? loyaltyFeedback,
+    String? fiscalAuthorizationNumber,
   }) async {
     final status = await checkStatus();
     if (status == PrinterStatus.outOfPaper) {
@@ -117,6 +118,7 @@ class IPosPrinterAdapter implements PrinterPort {
         taxRegime: taxRegime,
         isTaxExempt: isTaxExempt,
         loyaltyFeedback: loyaltyFeedback,
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
       );
     } else {
       final document = ReceiptDocument.fromInvoice(
@@ -132,6 +134,7 @@ class IPosPrinterAdapter implements PrinterPort {
         taxRegime: taxRegime,
         isTaxExempt: isTaxExempt,
         logoRasterBytes: logoRasterBytes,
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
       );
       formattedText = formatter.formatReceiptDocumentText(document);
     }
