@@ -2054,7 +2054,6 @@ class MockDgiNumberingService extends _i1.Mock
   _i51.Future<void> initializeRange({
     required String? prefix,
     required int? start,
-    int? end,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -2063,7 +2062,6 @@ class MockDgiNumberingService extends _i1.Mock
           {
             #prefix: prefix,
             #start: start,
-            #end: end,
           },
         ),
         returnValue: _i51.Future<void>.value(),

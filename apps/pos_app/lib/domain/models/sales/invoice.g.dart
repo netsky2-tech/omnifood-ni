@@ -34,6 +34,8 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       authorizedByUserId: json['authorizedByUserId'] as String?,
       authorizedByRole: json['authorizedByRole'] as String?,
       terminalId: json['terminalId'] as String?,
+      shiftId: json['shiftId'] as String?,
+      localIssueDate: json['localIssueDate'] as String?,
       sourceSequence: json['sourceSequence'] as int?,
       idempotencyKey: json['idempotencyKey'] as String?,
       payloadHash: json['payloadHash'] as String?,
@@ -41,7 +43,7 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       inventoryOutcome: json['inventoryOutcome'] as String?,
       inventoryOutcomeReason: json['inventoryOutcomeReason'] as String?,
       bcnOfficialRate: (json['bcnOfficialRate'] as num?)?.toDouble() ?? 36.6241,
-      commercialRate: (json['commercialRate'] as num?)?.toDouble() ?? 36.50,
+      commercialRate: (json['commercialRate'] as num?)?.toDouble() ?? 36.5,
       totalUsd: (json['totalUsd'] as num?)?.toDouble() ?? 0.0,
     );
 
@@ -68,6 +70,8 @@ Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
       'authorizedByUserId': instance.authorizedByUserId,
       'authorizedByRole': instance.authorizedByRole,
       'terminalId': instance.terminalId,
+      'shiftId': instance.shiftId,
+      'localIssueDate': instance.localIssueDate,
       'sourceSequence': instance.sourceSequence,
       'idempotencyKey': instance.idempotencyKey,
       'payloadHash': instance.payloadHash,
