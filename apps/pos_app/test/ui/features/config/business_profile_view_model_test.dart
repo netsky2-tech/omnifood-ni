@@ -59,6 +59,10 @@ void main() {
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_code', value: 'AUT-2026'));
       when(() => mockConfigDao.getConfigByKey('dgi_authorization_date'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_date', value: '23/09/2026'));
+      when(() => mockConfigDao.getConfigByKey('dgi_range_start'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_range_start', value: ''));
+      when(() => mockConfigDao.getConfigByKey('dgi_range_end'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_range_end', value: ''));
       when(() => mockConfigDao.getConfigByKey('dgi_authorization_document'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_document', value: 'Resolución DGI 098-2026'));
       when(() => mockConfigDao.getConfigByKey('tax_regime'))
@@ -344,6 +348,75 @@ void main() {
       expect(printedLogs.any((log) => log.contains('MALFORMED_JSON_SYNTAX')), isFalse);
       expect(printedLogs.any((log) => log.contains('FormatException')), isFalse);
       expect(printedLogs.any((log) => log.contains('Exception')), isFalse);
+    });
+  });
+  group('B2a (D-16/D-1): the fiscal range is nullable and never rewritten', () {
+    test('the defaults map carries NO invented range fiction', () {
+      // D-16 regression: the old defaults prefilled 1..10000.
+      expect(
+        BusinessProfileViewModel(mockConfigDao).config['dgi_range_start'],
+        '',
+      );
+      expect(
+        BusinessProfileViewModel(mockConfigDao).config['dgi_range_end'],
+        '',
+      );
+    });
+
+    test('saving with blank range values never writes the sequence keys (D-1)',
+        () async {
+      when(() => mockConfigDao.getConfigByKey(any()))
+          .thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      // A persisted sequence exists (set by a previous provisioning).
+      final persisted = LocalConfigEntity(
+        key: 'dgi_range_start',
+        value: '500',
+      );
+      when(() => mockConfigDao.getConfigByKey('dgi_range_start'))
+          .thenAnswer((_) async => persisted);
+
+      final vm = BusinessProfileViewModel(mockConfigDao);
+      await vm.saveConfig({
+        'business_name': 'Mi Negocio',
+        'ruc': 'A0011234567890',
+        // Blank range values in the form = not configured.
+        'dgi_range_start': '',
+        'dgi_range_end': '',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final byKey = {for (final e in written) e.key: e.value};
+      // Other profile fields persist; the sequence keys are SKIPPED — the
+      // persisted 500 cannot be resurrected as blank or rewritten.
+      expect(byKey['business_name'], 'Mi Negocio');
+      expect(byKey.containsKey('dgi_range_start'), isFalse);
+      expect(byKey.containsKey('dgi_range_end'), isFalse);
+      expect(byKey.containsKey('dgi_current_number'), isFalse);
+    });
+
+    test('saving explicit range values still persists them', () async {
+      when(() => mockConfigDao.getConfigByKey(any()))
+          .thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      final vm = BusinessProfileViewModel(mockConfigDao);
+      await vm.saveConfig({
+        'dgi_range_start': '500',
+        'dgi_range_end': '600',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final byKey = {for (final e in written) e.key: e.value};
+      expect(byKey['dgi_range_start'], '500');
+      expect(byKey['dgi_range_end'], '600');
     });
   });
 }

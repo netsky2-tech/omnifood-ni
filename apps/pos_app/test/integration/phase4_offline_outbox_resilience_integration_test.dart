@@ -124,6 +124,12 @@ void main() {
       inventoryRepository: inventoryRepo,
     );
 
+    // B2a (D-16): this DB models a post-activation device — provision the
+    // pilot series explicitly instead of relying on the removed boot
+    // self-heal (D-1).
+    await DgiNumberingServiceImpl(database.localConfigDao, database.invoiceDao)
+        .initializeRange(prefix: '001-001-01-', start: 1, end: 1000);
+
     syncService = SyncService(
       auditRepo,
       salesRepo,

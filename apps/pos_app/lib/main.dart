@@ -268,12 +268,12 @@ void main() async {
     database.localConfigDao,
     database.invoiceDao,
   );
-  // Provision initial DGI range for Pilot (Coffee Shop)
-  await numberingService.initializeRange(
-    prefix: '001-001-01-',
-    start: 1,
-    end: 1000,
-  );
+  // D-1/D-16: the boot sequence NEVER writes fiscal numbering. The
+  // 1-1000 pilot provisioning that ran here on every boot manufactured the
+  // duplicate invoice numbers B0.4 fails closed on. An unconfigured
+  // sequence stays absent: the first sale fails with
+  // FISCAL_SEQUENCE_UNCONFIGURED and directs configuration instead of
+  // materializing a fiction.
 
   final processInventoryUseCase = ProcessSaleInventoryUseCase(movementEngine);
   final reverseInventoryUseCase = ReverseSaleInventoryUseCase(movementEngine);

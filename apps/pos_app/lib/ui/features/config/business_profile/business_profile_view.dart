@@ -345,9 +345,19 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                               labelText: 'Rango Inicial DGI',
-                              hintText: '1',
+                              hintText: 'Sin configurar',
+                              helperText: 'Deje vacío si el rango aún no fue autorizado',
                             ),
-                            validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+                            // D-16: optional — an unconfigured sequence is a
+                            // legitimate state, not a form error.
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return null;
+                              final parsed = int.tryParse(v);
+                              if (parsed == null || parsed < 1) {
+                                return 'Debe ser un entero mayor o igual a 1';
+                              }
+                              return null;
+                            },
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -358,9 +368,25 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
                               labelText: 'Rango Final DGI',
-                              hintText: '10000',
+                              hintText: 'Sin configurar',
+                              helperText: 'Debe ser mayor o igual al rango inicial',
                             ),
-                            validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+                            // D-16: optional; when both bounds are present,
+                            // end >= start (never a decreasing range).
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return null;
+                              final parsedEnd = int.tryParse(v);
+                              if (parsedEnd == null || parsedEnd < 1) {
+                                return 'Debe ser un entero mayor o igual a 1';
+                              }
+                              final startValue =
+                                  _controllers['dgi_range_start']?.text;
+                              final parsedStart = int.tryParse(startValue ?? '');
+                              if (parsedStart != null && parsedEnd < parsedStart) {
+                                return 'Debe ser mayor o igual al rango inicial';
+                              }
+                              return null;
+                            },
                           ),
                         ),
                       ],

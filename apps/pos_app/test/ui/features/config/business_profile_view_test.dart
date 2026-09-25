@@ -131,6 +131,26 @@ void main() {
     }
   });
 
+  testWidgets('B2a (D-16): the fiscal range fields render the no-configurado state',
+      (tester) async {
+    when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+    when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
+
+    await tester.pumpWidget(buildWidget());
+    await tester.pumpAndSettle();
+
+    // D-16: absence looks like absence — the range inputs start empty
+    // (no prefilled 1..10000 fiction); the current-number cursor is real
+    // config and is not part of this assertion.
+    String textOf(String key) => tester
+        .widget<TextFormField>(find.byKey(Key(key)))
+        .controller!
+        .text;
+    expect(textOf('dgi_range_start_input'), isEmpty);
+    expect(textOf('dgi_range_end_input'), isEmpty);
+    expect(find.text('Sin configurar'), findsNWidgets(2));
+  });
+
   testWidgets('D-17: saving the profile persists the authorization backing date and document keys', (tester) async {
     when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
     when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});

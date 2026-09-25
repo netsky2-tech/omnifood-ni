@@ -44,8 +44,10 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'checkout_fx_mode': 'COMMERCIAL',
     'operation_mode': 'FOODPARK_QSR',
     'dgi_prefix': '001-001-01-',
-    'dgi_range_start': '1',
-    'dgi_range_end': '10000',
+    // D-16: the fiscal range is NOT prefilled — an unconfigured sequence is
+    // a first-class state until SOHO's authorization letter documents it.
+    'dgi_range_start': '',
+    'dgi_range_end': '',
     'dgi_current_number': '1',
     'dgi_authorization_code': '',
     'dgi_authorization_date': '',
@@ -201,11 +203,26 @@ class BusinessProfileViewModel extends ChangeNotifier {
     }
   }
 
+  /// D-1 extension to the form: saving OTHER profile fields must never
+  /// resurrect or rewrite the persisted fiscal sequence. A blank range
+  /// value in the form means "not configured" — it is never written over an
+  /// existing sequence row.
+  static const Set<String> _sequenceKeys = {
+    'dgi_range_start',
+    'dgi_range_end',
+    'dgi_current_number',
+  };
+
   Future<void> saveConfig(Map<String, String> newConfig) async {
     _isLoading = true;
     notifyListeners();
     try {
       for (final entry in newConfig.entries) {
+        if (_sequenceKeys.contains(entry.key) &&
+            entry.value.trim().isEmpty) {
+          // Blank sequence value = leave the persisted row untouched.
+          continue;
+        }
         await _configDao.saveConfig(LocalConfigEntity(
           key: entry.key,
           value: entry.value,

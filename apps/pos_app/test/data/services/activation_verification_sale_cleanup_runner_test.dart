@@ -152,7 +152,7 @@ void main() {
 
     Future<String> executeInitialVerificationSale() async {
       await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'));
-      await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_current_seq', value: '1'));
+      await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_current_number', value: '1'));
       await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_range_end', value: '1000'));
       await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
 
