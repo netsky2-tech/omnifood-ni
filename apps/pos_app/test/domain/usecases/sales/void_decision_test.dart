@@ -8,16 +8,37 @@ import 'package:pos_app/ui/features/sales/sales_permissions.dart';
 /// of the contract: the UI renders each one differently.
 void main() {
   group('SalesPermission resolver', () {
-    test('owner and manager hold the full-void capability', () {
+    test('owner and manager hold the full-void capability and reprint (D-13)',
+        () {
       expect(resolveSalesPermissions(UserRole.owner),
-          [SalesPermission.voidAnyInvoice]);
+          [SalesPermission.voidAnyInvoice, SalesPermission.reprintDocument]);
       expect(resolveSalesPermissions(UserRole.manager),
-          [SalesPermission.voidAnyInvoice]);
+          [SalesPermission.voidAnyInvoice, SalesPermission.reprintDocument]);
     });
 
-    test('cashier holds only the own-current-shift capability (D-15)', () {
-      expect(resolveSalesPermissions(UserRole.cashier),
-          [SalesPermission.voidOwnCurrentShiftSale]);
+    test('cashier holds the own-current-shift capability and reprint (D-15/D-13)',
+        () {
+      expect(resolveSalesPermissions(UserRole.cashier), [
+        SalesPermission.voidOwnCurrentShiftSale,
+        SalesPermission.reprintDocument,
+      ]);
+    });
+
+    test('reprint permission value and grant matrix (D-13: solo-operator kiosks)',
+        () {
+      expect(SalesPermission.reprintDocument, 'sales.reprint.document');
+      expect(
+          hasSalesPermission(UserRole.cashier, SalesPermission.reprintDocument),
+          isTrue);
+      expect(
+          hasSalesPermission(UserRole.owner, SalesPermission.reprintDocument),
+          isTrue);
+      expect(
+          hasSalesPermission(UserRole.manager, SalesPermission.reprintDocument),
+          isTrue);
+      expect(
+          hasSalesPermission(UserRole.waiter, SalesPermission.reprintDocument),
+          isFalse);
     });
 
     test('waiter and anonymous hold nothing', () {

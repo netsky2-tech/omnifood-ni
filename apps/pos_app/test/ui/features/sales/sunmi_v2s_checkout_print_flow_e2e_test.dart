@@ -263,7 +263,8 @@ void main() {
       expect(invoicePrint.printedText, contains('AUTH5544'));
     });
 
-    testWidgets('manual reprintLastInvoice sends ticket to printer', (tester) async {
+    testWidgets('reprintInvoice prints from the immutable snapshot (D-13)',
+        (tester) async {
       // Mock invoice items & payments DAO calls
       final mockItemDao = MockInvoiceItemDao();
       final mockPaymentDao = MockPaymentDao();
@@ -277,13 +278,35 @@ void main() {
 
       mockPrinter.printHistory.clear();
 
-      final reprintOk = await viewModel.reprintLastInvoice();
+      // D-13: the reprint header comes from the issuance snapshot, not live
+      // config — the snapshot here pins the projected fiscal RUC (FR-6).
+      when(
+        mockSalesRepo.prepareReprintInvoice(any, any,
+            reasonDetail: anyNamed('reasonDetail')),
+      ).thenAnswer(
+        (_) async => ReprintPreparation(
+          invoice: viewModel.lastProcessedInvoice!,
+          fiscalHeader: const {
+            'businessName': 'OMNIFOOD SUNMI E2E',
+            'ruc': 'J0310000055555',
+          },
+          items: const [],
+          payments: const [],
+        ),
+      );
+
+      final reprintOk = await viewModel.reprintInvoice(
+        viewModel.lastProcessedInvoice!.id,
+        'VERIFICACION',
+      );
       expect(reprintOk, isTrue);
       expect(mockPrinter.printHistory.length, 1);
       expect(mockPrinter.lastPrintedText, contains('OMNIFOOD SUNMI E2E'));
-      // Reprint fiscal RUC must also come from the projection (FR-6).
+      // The snapshot RUC feeds the reprint; the decorative header RUC
+      // (J0310000999999) must never shadow it (FR-6/D-13).
       expect(mockPrinter.lastPrintedText, contains('RUC: J0310000055555'));
       expect(mockPrinter.lastPrintedText, isNot(contains('J0310000999999')));
+      expect(mockPrinter.lastPrintedText, contains('*** REIMPRESIÓN ***'));
     });
   });
 }

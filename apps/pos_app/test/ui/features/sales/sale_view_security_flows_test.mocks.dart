@@ -157,6 +157,13 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as bool);
 
   @override
+  bool get lastReprintPrintSucceeded => (super.noSuchMethod(
+        Invocation.getter(#lastReprintPrintSucceeded),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   _i11.TenantOperationMode get operationMode => (super.noSuchMethod(
         Invocation.getter(#operationMode),
         returnValue: _i11.TenantOperationMode.foodparkQsr,
@@ -331,6 +338,13 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
   @override
   bool get canVoidInvoice => (super.noSuchMethod(
         Invocation.getter(#canVoidInvoice),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
+  bool get canReprint => (super.noSuchMethod(
+        Invocation.getter(#canReprint),
         returnValue: false,
         returnValueForMissingStub: false,
       ) as bool);
@@ -1050,10 +1064,19 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as _i18.Future<void>);
 
   @override
-  _i18.Future<bool> reprintLastInvoice() => (super.noSuchMethod(
+  _i18.Future<bool> reprintInvoice(
+    String? invoiceId,
+    String? reasonCode, {
+    String? reasonDetail,
+  }) =>
+      (super.noSuchMethod(
         Invocation.method(
-          #reprintLastInvoice,
-          [],
+          #reprintInvoice,
+          [
+            invoiceId,
+            reasonCode,
+          ],
+          {#reasonDetail: reasonDetail},
         ),
         returnValue: _i18.Future<bool>.value(false),
         returnValueForMissingStub: _i18.Future<bool>.value(false),

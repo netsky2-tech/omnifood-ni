@@ -199,6 +199,8 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
     int? paperWidthMm = 58,
     _i11.PostPaidFeedback? loyaltyFeedback,
     String? fiscalAuthorizationNumber,
+    bool? isReprint = false,
+    DateTime? reprintAt,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -219,6 +221,8 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
             #paperWidthMm: paperWidthMm,
             #loyaltyFeedback: loyaltyFeedback,
             #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+            #isReprint: isReprint,
+            #reprintAt: reprintAt,
           },
         ),
         returnValue: _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
@@ -241,6 +245,8 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #paperWidthMm: paperWidthMm,
               #loyaltyFeedback: loyaltyFeedback,
               #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+              #isReprint: isReprint,
+              #reprintAt: reprintAt,
             },
           ),
         )),
@@ -265,6 +271,8 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #paperWidthMm: paperWidthMm,
               #loyaltyFeedback: loyaltyFeedback,
               #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+              #isReprint: isReprint,
+              #reprintAt: reprintAt,
             },
           ),
         )),

@@ -82,6 +82,8 @@ class SunmiPrinterAdapter implements PrinterPort {
     int paperWidthMm = 58,
     PostPaidFeedback? loyaltyFeedback,
     String? fiscalAuthorizationNumber,
+    bool isReprint = false,
+    DateTime? reprintAt,
   }) async {
     final status = await checkStatus();
     if (status == PrinterStatus.outOfPaper) {
@@ -150,6 +152,8 @@ class SunmiPrinterAdapter implements PrinterPort {
         isTaxExempt: isTaxExempt,
         logoRasterBytes: logoEscPosBytes,
         fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+        isReprint: isReprint,
+        reprintAt: reprintAt,
       );
       formattedText = layoutFormatter.formatReceiptDocumentText(document);
       rawBytes = layoutFormatter.formatReceiptDocumentEscPos(document);

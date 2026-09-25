@@ -87,8 +87,9 @@ void main() {
     final colNames = columns.map((c) => c['name'] as String).toSet();
     expect(colNames, contains('shift_id'));
     expect(colNames, contains('local_issue_date'));
+    expect(colNames, contains('fiscal_header_snapshot'));
 
-    for (final name in ['shift_id', 'local_issue_date']) {
+    for (final name in ['shift_id', 'local_issue_date', 'fiscal_header_snapshot']) {
       final column = columns.firstWhere((c) => c['name'] == name);
       // Nullable is mandatory: no NOT NULL, no default. Existing rows keep
       // nulls forever (no backfill, #526 AC-11).

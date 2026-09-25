@@ -12,16 +12,32 @@ class SalesPermission {
   /// and date predicates while keeping the audit duty (D-10/D-11).
   static const voidAnyInvoice = 'sales.void.any';
 
-  static const all = <String>[voidOwnCurrentShiftSale, voidAnyInvoice];
+  /// D-13/#547: faithful reprint of an issued document from its immutable
+  /// fiscal snapshot. Granted to owner, manager AND cashier — a printer jam
+  /// at a solo-operator kiosk cannot wait for a manager (D-10's logic).
+  /// Waiter: never.
+  static const reprintDocument = 'sales.reprint.document';
+
+  static const all = <String>[
+    voidOwnCurrentShiftSale,
+    voidAnyInvoice,
+    reprintDocument,
+  ];
 }
 
 List<String> resolveSalesPermissions(UserRole? role) {
   switch (role) {
     case UserRole.owner:
     case UserRole.manager:
-      return const <String>[SalesPermission.voidAnyInvoice];
+      return const <String>[
+        SalesPermission.voidAnyInvoice,
+        SalesPermission.reprintDocument,
+      ];
     case UserRole.cashier:
-      return const <String>[SalesPermission.voidOwnCurrentShiftSale];
+      return const <String>[
+        SalesPermission.voidOwnCurrentShiftSale,
+        SalesPermission.reprintDocument,
+      ];
     case UserRole.waiter:
     case null:
       return const <String>[];

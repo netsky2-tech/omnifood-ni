@@ -55,6 +55,18 @@ abstract class SalesRepository {
     required List<String> acknowledgedCorrelationIds,
   });
   Future<int> getInventoryEnrichmentPendingCount();
+  /// D-13: assembles the faithful reprint payload for [invoiceId] from the
+  /// immutable fiscal snapshot taken at issuance (header) plus the stored
+  /// items/payments. Throws [ArgumentError] on a blank reason code and
+  /// [StateError] (code REPRINT_SNAPSHOT_UNAVAILABLE) when the invoice
+  /// predates the snapshot. Writes the REPRINT_REQUESTED audit entry at
+  /// acceptance; printing happens in the view model afterwards.
+  Future<ReprintPreparation> prepareReprintInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  });
+
   /// D-15: [reasonCode] is a mandatory controlled code (VoidReasonCodes)
   /// and [reasonDetail] optional free text. The repository validates the
   /// code BEFORE any write (AC-6) and stores `code — detail` on the invoice
@@ -80,4 +92,23 @@ abstract class SalesRepository {
   // Reporting
   Future<List<Invoice>> getInvoicesBySessionId(String sessionId);
   Future<List<Payment>> getPaymentsBySessionId(String sessionId);
+}
+
+/// D-13: everything the print path needs to reproduce a document AS ISSUED.
+/// [fiscalHeader] carries the immutable header values from the checkout
+/// snapshot (businessName/ruc/address/phone/fiscalAuthorizationNumber when
+/// recorded); lines and totals come from the insert-only invoice_items child
+/// rows, not from a duplicate.
+class ReprintPreparation {
+  final Invoice invoice;
+  final Map<String, String> fiscalHeader;
+  final List<InvoiceItem> items;
+  final List<Payment> payments;
+
+  const ReprintPreparation({
+    required this.invoice,
+    required this.fiscalHeader,
+    required this.items,
+    required this.payments,
+  });
 }

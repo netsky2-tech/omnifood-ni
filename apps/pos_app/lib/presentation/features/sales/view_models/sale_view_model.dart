@@ -203,6 +203,11 @@ class SaleViewModel extends ChangeNotifier {
   bool _lastVoidPrintSucceeded = false;
   bool get lastVoidPrintSucceeded => _lastVoidPrintSucceeded;
 
+  /// Whether the LAST reprint's copy actually printed (D-13 honesty rule:
+  /// the SnackBar claims only what happened; the audit stands either way).
+  bool _lastReprintPrintSucceeded = false;
+  bool get lastReprintPrintSucceeded => _lastReprintPrintSucceeded;
+
   PostPaidFeedback? _lastPostPaidFeedback;
   PostPaidFeedback? get lastPostPaidFeedback => _lastPostPaidFeedback;
 
@@ -638,6 +643,10 @@ class SaleViewModel extends ChangeNotifier {
   /// three-predicate evaluation happens in [voidInvoice].
   bool get canVoidInvoice =>
       resolveSalesPermissions(_currentUserRole).isNotEmpty;
+
+  /// D-13: reprint capability (owner/manager/cashier; never waiter).
+  bool get canReprint => hasSalesPermission(
+      _currentUserRole, SalesPermission.reprintDocument);
 
   bool _isSupervisorOverrideActive = false;
   bool get isSupervisorOverrideActive => _isSupervisorOverrideActive;
@@ -1496,6 +1505,12 @@ class SaleViewModel extends ChangeNotifier {
   Future<bool> _printInvoiceCopy(
     Invoice invoice, {
     String? cashierName,
+    Map<String, String>? fiscalHeader,
+
+    /// D-13: when a fiscal snapshot is provided the header comes from it —
+    /// NEVER from live config. A reprint reproduces the document as issued.
+    bool isReprint = false,
+    DateTime? reprintAt,
   }) async {
     try {
       final config = await _printerConfigService.getPrinterConfig();
@@ -1578,21 +1593,32 @@ class SaleViewModel extends ChangeNotifier {
         return false;
       }
 
+      // D-13: reprint => header from the immutable snapshot (missing
+      // snapshot keys stay absent — no live-config fallback). Sale/reprint
+      // of a live document => header from current config.
+      final fromSnapshot = fiscalHeader != null;
       final res = await activePrinterPort.printInvoice(
         invoice,
         items: domainItems,
         payments: domainPayments,
-        businessName: config.headerBusinessName,
-        legalName: config.headerLegalName,
-        ruc: config.fiscalRuc,
-        address: config.headerAddress,
-        phone: config.headerPhone,
+        businessName: fromSnapshot
+            ? fiscalHeader['businessName']
+            : config.headerBusinessName,
+        legalName:
+            fromSnapshot ? null : config.headerLegalName,
+        ruc: fromSnapshot ? fiscalHeader['ruc'] : config.fiscalRuc,
+        address: fromSnapshot ? fiscalHeader['address'] : config.headerAddress,
+        phone: fromSnapshot ? fiscalHeader['phone'] : config.headerPhone,
         cashierName: cashierName,
         logoRasterBytes: logoRasterBytes,
         taxRegime: _companyTaxRegime!,
         isTaxExempt: invoice.globalTaxOverride,
         paperWidthMm: config.paperWidthMm,
-        fiscalAuthorizationNumber: config.dgiAuthorizationCode,
+        fiscalAuthorizationNumber: fromSnapshot
+            ? fiscalHeader['fiscalAuthorizationNumber']
+            : config.dgiAuthorizationCode,
+        isReprint: isReprint,
+        reprintAt: reprintAt,
       );
 
       if (!res.isSuccess) {
@@ -1608,10 +1634,66 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
-  /// Manually triggers a reprint of the last successfully processed invoice.
-  Future<bool> reprintLastInvoice() async {
-    if (_lastProcessedInvoice == null) return false;
-    return _printInvoiceCopy(_lastProcessedInvoice!);
+  /// D-13: reprints ANY issued invoice from its immutable fiscal snapshot.
+  /// Honest return: true = the reprint request was accepted by the engine
+  /// (audit committed); the print outcome is reported separately through
+  /// [lastReprintPrintSucceeded] — a failed print does not un-happen the
+  /// accepted request (the void precedent). Policy denials set
+  /// [errorMessage] to the specific Spanish message.
+  Future<bool> reprintInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async {
+    // The role is resolved from the freshly fetched principal (same pattern
+    // as the void guard) so the check never depends on the async initial
+    // role load.
+    final currentUser = await _authRepository.getCurrentUser();
+    if (!hasSalesPermission(
+      currentUser?.role,
+      SalesPermission.reprintDocument,
+    )) {
+      _errorMessage = 'No tiene permiso para reimprimir comprobantes.';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final preparation = await _salesRepository.prepareReprintInvoice(
+        invoiceId,
+        reasonCode,
+        reasonDetail: reasonDetail,
+      );
+
+      _lastReprintPrintSucceeded = false;
+      _lastReprintPrintSucceeded = await _printInvoiceCopy(
+        preparation.invoice,
+        fiscalHeader: preparation.fiscalHeader,
+        isReprint: true,
+        reprintAt: DateTime.now(),
+      );
+
+      _errorMessage = null;
+      return true;
+    } on StateError catch (error) {
+      // Named engine denials carry the operator-facing Spanish copy.
+      _errorMessage = error.message.contains(reprintSnapshotUnavailableCode)
+          ? reprintSnapshotUnavailableMessage
+          : 'No se pudo reimprimir el comprobante.';
+      // ignore: avoid_print
+      print('REPRINT-DEBUG StateError: ' + error.message);
+      return false;
+    } catch (error) {
+      // ignore: avoid_print
+      print('REPRINT-DEBUG generic: ' + error.toString());
+      _errorMessage = 'No se pudo reimprimir el comprobante.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   /// PARKED BY DESIGN (D-14 / #553 Part 1, B1c-1): POS-side credit-note
