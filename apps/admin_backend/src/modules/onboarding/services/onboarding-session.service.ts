@@ -51,7 +51,9 @@ export class OnboardingSessionService {
 
   async getSession(tenantId: string): Promise<OnboardingSession | null> {
     return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
-      manager.getRepository(OnboardingSession).findOne({ where: { tenantId } }),
+      manager
+        .getRepository(OnboardingSession)
+        .findOne({ where: { tenantId } }),
     );
   }
 
@@ -132,11 +134,8 @@ export class OnboardingSessionService {
         // Existing session: enforce write-once for onboardingStartedAt
         if (!existing.onboardingStartedAt) {
           existing.onboardingStartedAt = now;
-          if (
-            existing.lifecycleState === OnboardingLifecycleState.PROVISIONED
-          ) {
-            existing.lifecycleState =
-              OnboardingLifecycleState.SETUP_IN_PROGRESS;
+          if (existing.lifecycleState === OnboardingLifecycleState.PROVISIONED) {
+            existing.lifecycleState = OnboardingLifecycleState.SETUP_IN_PROGRESS;
           }
         }
 

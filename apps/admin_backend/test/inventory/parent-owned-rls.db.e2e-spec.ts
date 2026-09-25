@@ -153,7 +153,7 @@ describe('parent-owned inventory children tenant RLS (Real PostgreSQL DB, migrat
         'inventory-children-rls-tenant-c',
         tenantDId,
         'inventory-children-rls-tenant-d',
-        normalizeTenantSlug('inventory-children-rls-tenant-a'),
+                normalizeTenantSlug('inventory-children-rls-tenant-a'),
         normalizeTenantSlug('inventory-children-rls-tenant-b'),
         normalizeTenantSlug('inventory-children-rls-tenant-c'),
         normalizeTenantSlug('inventory-children-rls-tenant-d'),

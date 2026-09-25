@@ -67,14 +67,7 @@ describe('ChangeLogService', () => {
       pooled as unknown as never,
       dataSource as unknown as never,
     );
-    return {
-      service,
-      pooled,
-      boundRepo,
-      boundManager,
-      dataSource,
-      setConfigCalls,
-    };
+    return { service, pooled, boundRepo, boundManager, dataSource, setConfigCalls };
   };
 
   describe('tenant transaction binding', () => {
@@ -228,9 +221,9 @@ describe('ChangeLogService', () => {
     ])('rejects a %s before any SQL or transaction', async (_name, actor) => {
       const h = makeHarness();
 
-      await expect(h.service.log(baseParams(actor))).rejects.toThrowError(
-        AuditActorRequiredError,
-      );
+      await expect(
+        h.service.log(baseParams(actor)),
+      ).rejects.toThrowError(AuditActorRequiredError);
 
       expect(h.dataSource.transaction).not.toHaveBeenCalled();
       expect(h.boundRepo.create).not.toHaveBeenCalled();

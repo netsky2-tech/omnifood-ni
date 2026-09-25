@@ -1,8 +1,12 @@
 import { NotFoundException } from '@nestjs/common';
 import { EntityManager } from 'typeorm';
 import { ActivationService } from './activation.service';
-import { ActivationAttemptStatus } from '../entities/activation-attempt.entity';
-import type { DeviceSyncCredentialService } from '../../identity/services/device-sync-credential.service';
+import {
+  ActivationAttemptStatus,
+} from '../entities/activation-attempt.entity';
+import type {
+  DeviceSyncCredentialService,
+} from '../../identity/services/device-sync-credential.service';
 
 /**
  * Unit contract for the OD-03 provisioning response (issue #556 slice 11):
@@ -42,9 +46,7 @@ const buildService = (options: {
     getRepository: jest.fn().mockReturnValue({
       findOne: jest
         .fn()
-        .mockResolvedValue(
-          options.attempt === undefined ? passingAttempt : options.attempt,
-        ),
+        .mockResolvedValue(options.attempt === undefined ? passingAttempt : options.attempt),
     }),
   } as unknown as EntityManager;
   const dataSource = {
@@ -99,16 +101,12 @@ describe('ActivationService provisioning slug exposure (issue #556 slice 11)', (
       tenantSlugRows: [{ slug: 'provisioned-slug' }],
     });
 
-    const result = await service.confirmDeviceCredential(
-      TENANT_ID,
-      'attempt-1',
-      {
-        credentialId: 'credential-1',
-        deviceId: 'Q802024120001',
-        credentialVersion: 1,
-        renewalSecret: 'renewal-secret',
-      },
-    );
+    const result = await service.confirmDeviceCredential(TENANT_ID, 'attempt-1', {
+      credentialId: 'credential-1',
+      deviceId: 'Q802024120001',
+      credentialVersion: 1,
+      renewalSecret: 'renewal-secret',
+    });
 
     expect(result.slug).toBe('provisioned-slug');
   });

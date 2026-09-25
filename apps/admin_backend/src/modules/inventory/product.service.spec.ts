@@ -180,12 +180,10 @@ describe('ProductService', () => {
         orderBy: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest
-          .fn()
-          .mockResolvedValue([
-            [makeProduct({ id: 'p1', name: 'Café Espresso' })],
-            1,
-          ]),
+        getManyAndCount: jest.fn().mockResolvedValue([
+          [makeProduct({ id: 'p1', name: 'Café Espresso' })],
+          1,
+        ]),
       };
       repo.createQueryBuilder.mockReturnValue(qbMock);
     });

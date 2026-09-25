@@ -113,10 +113,10 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
     where: string,
     params: unknown[],
   ): Promise<number> {
-    const rows = await admin.query(
+    const rows = (await admin.query(
       `SELECT count(*)::int AS count FROM ${table} WHERE ${where}`,
       params,
-    );
+    )) as Array<{ count: number }>;
     return rows[0].count;
   }
 
@@ -205,11 +205,7 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
        VALUES ($1, $2, 'INITIAL_STOCK', 30.0, 0.0, 30.0, 60.0, 1800.0, 'SYSTEM', 'seed')`,
       [tenantScanId, scanProductId],
     );
-    await seedCommittedLegacyRow(
-      tenantScanId,
-      tokenScan,
-      'Ceviche Mixto Legacy',
-    );
+    await seedCommittedLegacyRow(tenantScanId, tokenScan, 'Ceviche Mixto Legacy');
 
     // tenantRemediate / tenantAccept: a discrepancy-producing legacy row each.
     await admin.query(
@@ -217,21 +213,13 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
        VALUES ($1, $2, 'Vigorón Legacy', 'PLATO', 180.0, 90.0, 20.0, true, false, now(), now())`,
       [remediateProductId, tenantRemediateId],
     );
-    await seedCommittedLegacyRow(
-      tenantRemediateId,
-      tokenRemediate,
-      'Vigorón Legacy',
-    );
+    await seedCommittedLegacyRow(tenantRemediateId, tokenRemediate, 'Vigorón Legacy');
     await admin.query(
       `INSERT INTO products (id, tenant_id, name, uom, "sellPrice", "averageCost", stock, is_active, is_perishable, created_at, updated_at)
        VALUES ($1, $2, 'Quesillo Legacy', 'PLATO', 120.0, 60.0, 15.0, true, false, now(), now())`,
       [acceptProductId, tenantAcceptId],
     );
-    await seedCommittedLegacyRow(
-      tenantAcceptId,
-      tokenAccept,
-      'Quesillo Legacy',
-    );
+    await seedCommittedLegacyRow(tenantAcceptId, tokenAccept, 'Quesillo Legacy');
 
     // tenantRollback: discrepancy-producing row + product; the receipt INSERT
     // will be poisoned, so the whole transaction must roll back to zero.
@@ -240,11 +228,7 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
        VALUES ($1, $2, 'Nacatamal Legacy', 'PLATO', 200.0, 100.0, 40.0, true, false, now(), now())`,
       [rollbackProductId, tenantRollbackId],
     );
-    await seedCommittedLegacyRow(
-      tenantRollbackId,
-      tokenRollback,
-      'Nacatamal Legacy',
-    );
+    await seedCommittedLegacyRow(tenantRollbackId, tokenRollback, 'Nacatamal Legacy');
 
     // tenantKardex: discrepancy-producing row + matching product so the scan
     // actually reaches the kardex aggregate; no kardex movements are seeded,
@@ -421,25 +405,17 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
   });
 
   it('fails closed on a blank tenant before any SQL in every public method', async () => {
-    await expect(
-      integrityService.generateIntegrityReport('   '),
-    ).rejects.toThrow(TenantContextRequiredError);
+    await expect(integrityService.generateIntegrityReport('   ')).rejects.toThrow(
+      TenantContextRequiredError,
+    );
     await expect(
       integrityService.expireIncompatibleLegacyStaging('   '),
     ).rejects.toThrow(TenantContextRequiredError);
     await expect(
-      integrityService.remediateReportWithInventoryCommand(
-        '   ',
-        randomUUID(),
-        'ref',
-      ),
+      integrityService.remediateReportWithInventoryCommand('   ', randomUUID(), 'ref'),
     ).rejects.toThrow(TenantContextRequiredError);
     await expect(
-      integrityService.acceptReportAsIs(
-        '   ',
-        randomUUID(),
-        'a substantive rationale',
-      ),
+      integrityService.acceptReportAsIs('   ', randomUUID(), 'a substantive rationale'),
     ).rejects.toThrow(TenantContextRequiredError);
     await expect(
       integrityService.reconcileLegacyBaselineSession('   '),
@@ -447,9 +423,7 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
 
     // Fail-fast happened before any protected access: the poison guard never
     // fired and no report exists anywhere for the probe tenants.
-    expect(await countAdmin('legacy_import_integrity_reports', '1=1', [])).toBe(
-      0,
-    );
+    expect(await countAdmin('legacy_import_integrity_reports', '1=1', [])).toBe(0);
   });
 
   it('generates a REVIEW_REQUIRED report with observed writes and persists report+receipt atomically', async () => {
@@ -480,11 +454,16 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
         tenantScanId,
       ]),
     ).toBe(1);
-    const receipts = await admin.query(
+    const receipts = (await admin.query(
       `SELECT receipt_type, decision, target_entity_id, executed_by
          FROM legacy_onboarding_migration_receipts WHERE tenant_id = $1`,
       [tenantScanId],
-    );
+    )) as Array<{
+      receipt_type: string;
+      decision: string;
+      target_entity_id: string;
+      executed_by: string;
+    }>;
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
       receipt_type: 'LEGACY_IMPORT_INTEGRITY_SCAN',
@@ -495,8 +474,7 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
   });
 
   it('generates a CLEAN report when no legacy direct writes exist, with its CLEAN receipt', async () => {
-    const report =
-      await integrityService.generateIntegrityReport(tenantCleanId);
+    const report = await integrityService.generateIntegrityReport(tenantCleanId);
 
     expect(report.status).toBe(LegacyImportIntegrityStatus.CLEAN);
     expect(report.observed_direct_stock_or_cost_writes).toHaveLength(0);
@@ -507,43 +485,51 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
         tenantCleanId,
       ]),
     ).toBe(1);
-    const receipts = await admin.query(
+    const receipts = (await admin.query(
       `SELECT decision FROM legacy_onboarding_migration_receipts WHERE tenant_id = $1 AND receipt_type = 'LEGACY_IMPORT_INTEGRITY_SCAN'`,
       [tenantCleanId],
-    );
+    )) as Array<{ decision: string }>;
     expect(receipts).toHaveLength(1);
     expect(receipts[0].decision).toBe('CLEAN');
   });
 
   it('expires incompatible legacy staging rows and writes the expiry receipt atomically, sparing compatible rows', async () => {
-    const result =
-      await integrityService.expireIncompatibleLegacyStaging(tenantExpireId);
+    const result = await integrityService.expireIncompatibleLegacyStaging(
+      tenantExpireId,
+    );
 
     expect(result.expiredSessions).toEqual([tokenExpire]);
     expect(result.expiredRowsCount).toBe(2);
 
-    const rows = await admin.query(
+    const rows = (await admin.query(
       `SELECT row_ordinal, estado_fila, mensaje_error_detalle
          FROM staging_importacion_productos WHERE tenant_id = $1 ORDER BY row_ordinal`,
       [tenantExpireId],
-    );
+    )) as Array<{
+      row_ordinal: number;
+      estado_fila: string;
+      mensaje_error_detalle: string | null;
+    }>;
     expect(rows).toHaveLength(3);
     expect(rows[0]).toMatchObject({
       row_ordinal: 1,
       estado_fila: 'ERROR',
     });
-    expect(rows[0].mensaje_error_detalle).toContain(
-      'Legacy staging incompatible',
-    );
+    expect(rows[0].mensaje_error_detalle).toContain('Legacy staging incompatible');
     expect(rows[1]).toMatchObject({ row_ordinal: 2, estado_fila: 'ERROR' });
     // The compatible row is untouched.
     expect(rows[2]).toMatchObject({ row_ordinal: 3, estado_fila: 'PENDIENTE' });
 
-    const receipts = await admin.query(
+    const receipts = (await admin.query(
       `SELECT receipt_type, decision, target_entity_id, evidence_json
          FROM legacy_onboarding_migration_receipts WHERE tenant_id = $1`,
       [tenantExpireId],
-    );
+    )) as Array<{
+      receipt_type: string;
+      decision: string;
+      target_entity_id: string;
+      evidence_json: { sessionToken: string; incompatibleRowsCount: number };
+    }>;
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
       receipt_type: 'LEGACY_STAGING_EXPIRY',
@@ -557,17 +543,15 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
   });
 
   it('remediates a report via inventory command idempotently and atomically', async () => {
-    const scanned =
-      await integrityService.generateIntegrityReport(tenantRemediateId);
+    const scanned = await integrityService.generateIntegrityReport(tenantRemediateId);
     expect(scanned.status).toBe(LegacyImportIntegrityStatus.REVIEW_REQUIRED);
 
-    const remediated =
-      await integrityService.remediateReportWithInventoryCommand(
-        tenantRemediateId,
-        scanned.id,
-        'INV_ADJUSTMENT:cmd-kardex-adj-777',
-        'auditor-remediation-1',
-      );
+    const remediated = await integrityService.remediateReportWithInventoryCommand(
+      tenantRemediateId,
+      scanned.id,
+      'INV_ADJUSTMENT:cmd-kardex-adj-777',
+      'auditor-remediation-1',
+    );
     expect(remediated.status).toBe(LegacyImportIntegrityStatus.REMEDIATED);
     expect(remediated.remediation_refs).toEqual([
       'INV_ADJUSTMENT:cmd-kardex-adj-777',
@@ -586,10 +570,14 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
       'INV_ADJUSTMENT:cmd-kardex-adj-777',
     ]);
 
-    const reports = await admin.query(
+    const reports = (await admin.query(
       `SELECT status, remediation_refs, reviewed_by FROM legacy_import_integrity_reports WHERE tenant_id = $1`,
       [tenantRemediateId],
-    );
+    )) as Array<{
+      status: string;
+      remediation_refs: string[];
+      reviewed_by: string | null;
+    }>;
     expect(reports).toHaveLength(1);
     expect(reports[0].status).toBe('REMEDIATED');
     expect(reports[0].remediation_refs).toEqual([
@@ -599,10 +587,14 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
     // remediation's reviewer is what persists.
     expect(reports[0].reviewed_by).toBe('auditor-remediation-1');
 
-    const receipts = await admin.query(
+    const receipts = (await admin.query(
       `SELECT receipt_type, decision, evidence_json FROM legacy_onboarding_migration_receipts WHERE tenant_id = $1`,
       [tenantRemediateId],
-    );
+    )) as Array<{
+      receipt_type: string;
+      decision: string;
+      evidence_json: { inventoryCommandRef: string };
+    }>;
     expect(receipts).toHaveLength(2); // scan receipt + ONE remediation receipt
     expect(
       receipts.filter((r) => r.receipt_type === 'LEGACY_IMPORT_REMEDIATION'),
@@ -613,8 +605,7 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
   });
 
   it('accepts a report as-is with an audited rationale and persists report+receipt atomically', async () => {
-    const scanned =
-      await integrityService.generateIntegrityReport(tenantAcceptId);
+    const scanned = await integrityService.generateIntegrityReport(tenantAcceptId);
     expect(scanned.status).toBe(LegacyImportIntegrityStatus.REVIEW_REQUIRED);
 
     const accepted = await integrityService.acceptReportAsIs(
@@ -625,20 +616,20 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
     );
     expect(accepted.status).toBe(LegacyImportIntegrityStatus.ACCEPTED_AS_IS);
 
-    const reports = await admin.query(
+    const reports = (await admin.query(
       `SELECT status, reviewed_by FROM legacy_import_integrity_reports WHERE tenant_id = $1`,
       [tenantAcceptId],
-    );
+    )) as Array<{ status: string; reviewed_by: string | null }>;
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({
       status: 'ACCEPTED_AS_IS',
       reviewed_by: 'auditor-finance-1',
     });
 
-    const receipts = await admin.query(
+    const receipts = (await admin.query(
       `SELECT receipt_type, decision, reason FROM legacy_onboarding_migration_receipts WHERE tenant_id = $1`,
       [tenantAcceptId],
-    );
+    )) as Array<{ receipt_type: string; decision: string; reason: string }>;
     expect(receipts).toHaveLength(2); // scan receipt + accept receipt
     expect(
       receipts.find((r) => r.receipt_type === 'LEGACY_IMPORT_ACCEPT_AS_IS'),
@@ -662,25 +653,29 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
       measurementEligible: false,
     });
 
-    const sessions = await admin.query(
+    const sessions = (await admin.query(
       `SELECT legacy_baseline, measurement_eligible, first_successful_sale_at
          FROM onboarding_sessions WHERE tenant_id = $1`,
       [tenantReconcileId],
-    );
+    )) as Array<{
+      legacy_baseline: boolean;
+      measurement_eligible: boolean;
+      first_successful_sale_at: Date | null;
+    }>;
     expect(sessions).toHaveLength(1);
     expect(sessions[0].legacy_baseline).toBe(true);
     expect(sessions[0].measurement_eligible).toBe(false);
     // INVARIANT: the real timestamp seeded by the tenant is preserved
     // verbatim; reconcile NEVER fabricates or rewrites a TTFSS.
     expect(sessions[0].first_successful_sale_at).not.toBeNull();
-    expect(sessions[0].first_successful_sale_at.toISOString()).toBe(
+    expect(sessions[0].first_successful_sale_at!.toISOString()).toBe(
       '2026-02-14T15:30:00.000Z',
     );
 
-    const receipts = await admin.query(
+    const receipts = (await admin.query(
       `SELECT receipt_type, decision FROM legacy_onboarding_migration_receipts WHERE tenant_id = $1`,
       [tenantReconcileId],
-    );
+    )) as Array<{ receipt_type: string; decision: string }>;
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
       receipt_type: 'LEGACY_BASELINE_RECONCILIATION',
@@ -703,16 +698,14 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
       ]),
     ).toBe(0);
     expect(
-      await countAdmin(
-        'legacy_onboarding_migration_receipts',
-        'tenant_id = $1',
-        [tenantRollbackId],
-      ),
+      await countAdmin('legacy_onboarding_migration_receipts', 'tenant_id = $1', [
+        tenantRollbackId,
+      ]),
     ).toBe(0);
-    const staging = await admin.query(
+    const staging = (await admin.query(
       `SELECT estado_fila FROM staging_importacion_productos WHERE tenant_id = $1`,
       [tenantRollbackId],
-    );
+    )) as Array<{ estado_fila: string }>;
     expect(staging).toHaveLength(1);
     expect(staging[0].estado_fila).toBe('COMMITTED');
   });
@@ -732,7 +725,9 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
           tenantKardexId,
           'auditor-kardex-probe',
         ),
-      ).rejects.toThrow(/current transaction is aborted|permission denied/i);
+      ).rejects.toThrow(
+        /current transaction is aborted|permission denied/i,
+      );
 
       // Fail-closed: zero orphaned reports and zero receipts for this
       // attempt, and staging/session state unchanged.
@@ -742,16 +737,14 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
         ]),
       ).toBe(0);
       expect(
-        await countAdmin(
-          'legacy_onboarding_migration_receipts',
-          'tenant_id = $1',
-          [tenantKardexId],
-        ),
+        await countAdmin('legacy_onboarding_migration_receipts', 'tenant_id = $1', [
+          tenantKardexId,
+        ]),
       ).toBe(0);
-      const staging = await admin.query(
+      const staging = (await admin.query(
         `SELECT estado_fila FROM staging_importacion_productos WHERE tenant_id = $1`,
         [tenantKardexId],
-      );
+      )) as Array<{ estado_fila: string }>;
       expect(staging).toHaveLength(1);
       expect(staging[0].estado_fila).toBe('COMMITTED');
       expect(
@@ -768,8 +761,7 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
     // Control: with privileges restored, the same scan succeeds — proving
     // the failure was the revoked privilege and the role is fully functional
     // again for the remaining proofs.
-    const report =
-      await integrityService.generateIntegrityReport(tenantKardexId);
+    const report = await integrityService.generateIntegrityReport(tenantKardexId);
     expect(report.status).toBe(LegacyImportIntegrityStatus.REVIEW_REQUIRED);
     expect(report.observed_direct_stock_or_cost_writes[0]).toMatchObject({
       productId: kardexPoisonProductId,
@@ -786,28 +778,23 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
       ]),
     ).toBe(0);
     expect(
-      await countAdmin(
-        'legacy_onboarding_migration_receipts',
-        'tenant_id = $1',
-        [tenantForeignId],
-      ),
+      await countAdmin('legacy_onboarding_migration_receipts', 'tenant_id = $1', [
+        tenantForeignId,
+      ]),
     ).toBe(0);
 
     // Its staging row and onboarding session are exactly as seeded.
-    const staging = await admin.query(
+    const staging = (await admin.query(
       `SELECT estado_fila, raw_nombre FROM staging_importacion_productos WHERE tenant_id = $1`,
       [tenantForeignId],
-    );
+    )) as Array<{ estado_fila: string; raw_nombre: string }>;
     expect(staging).toHaveLength(1);
-    expect(staging[0]).toMatchObject({
-      estado_fila: 'VALIDO',
-      raw_nombre: 'Fila Extranjera',
-    });
+    expect(staging[0]).toMatchObject({ estado_fila: 'VALIDO', raw_nombre: 'Fila Extranjera' });
 
-    const sessions = await admin.query(
+    const sessions = (await admin.query(
       `SELECT legacy_baseline, measurement_eligible FROM onboarding_sessions WHERE tenant_id = $1`,
       [tenantForeignId],
-    );
+    )) as Array<{ legacy_baseline: boolean; measurement_eligible: boolean }>;
     expect(sessions).toHaveLength(1);
     expect(sessions[0]).toMatchObject({
       legacy_baseline: false,

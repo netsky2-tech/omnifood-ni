@@ -76,14 +76,10 @@ export class ChangeLogService {
       return;
     }
 
-    await runInTenantTransaction(
-      this.dataSource,
-      params.tenantId,
-      async (bound) => {
-        const repo = bound.getRepository(ChangeLog);
-        await repo.save(buildEntry(repo));
-      },
-    );
+    await runInTenantTransaction(this.dataSource, params.tenantId, async (bound) => {
+      const repo = bound.getRepository(ChangeLog);
+      await repo.save(buildEntry(repo));
+    });
   }
 
   async findByTarget(

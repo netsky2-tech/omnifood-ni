@@ -155,7 +155,7 @@ describe('datafonos_equipos tenant RLS (Real PostgreSQL DB, migration-built sche
         'datafonos-rls-tenant-c',
         tenantDId,
         'datafonos-rls-tenant-d',
-        normalizeTenantSlug('datafonos-rls-tenant-a'),
+                normalizeTenantSlug('datafonos-rls-tenant-a'),
         normalizeTenantSlug('datafonos-rls-tenant-b'),
         normalizeTenantSlug('datafonos-rls-tenant-c'),
         normalizeTenantSlug('datafonos-rls-tenant-d'),
@@ -239,26 +239,10 @@ describe('datafonos_equipos tenant RLS (Real PostgreSQL DB, migration-built sche
     // EXACTLY the four command policies: an extra policy would widen access
     // beyond the tenant contract, a missing one narrows it.
     expect(policies).toEqual([
-      {
-        tablename: 'datafonos_equipos',
-        policyname: 'datafonos_equipos_tenant_delete',
-        cmd: 'DELETE',
-      },
-      {
-        tablename: 'datafonos_equipos',
-        policyname: 'datafonos_equipos_tenant_insert',
-        cmd: 'INSERT',
-      },
-      {
-        tablename: 'datafonos_equipos',
-        policyname: 'datafonos_equipos_tenant_select',
-        cmd: 'SELECT',
-      },
-      {
-        tablename: 'datafonos_equipos',
-        policyname: 'datafonos_equipos_tenant_update',
-        cmd: 'UPDATE',
-      },
+      { tablename: 'datafonos_equipos', policyname: 'datafonos_equipos_tenant_delete', cmd: 'DELETE' },
+      { tablename: 'datafonos_equipos', policyname: 'datafonos_equipos_tenant_insert', cmd: 'INSERT' },
+      { tablename: 'datafonos_equipos', policyname: 'datafonos_equipos_tenant_select', cmd: 'SELECT' },
+      { tablename: 'datafonos_equipos', policyname: 'datafonos_equipos_tenant_update', cmd: 'UPDATE' },
     ]);
   });
 

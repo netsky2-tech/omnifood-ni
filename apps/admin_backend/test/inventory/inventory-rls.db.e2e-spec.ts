@@ -164,7 +164,7 @@ describe('inventory tenant RLS (Real PostgreSQL DB, migration-built schema)', ()
         'inventory-rls-tenant-c',
         tenantDId,
         'inventory-rls-tenant-d',
-        normalizeTenantSlug('inventory-rls-tenant-a'),
+                normalizeTenantSlug('inventory-rls-tenant-a'),
         normalizeTenantSlug('inventory-rls-tenant-b'),
         normalizeTenantSlug('inventory-rls-tenant-c'),
         normalizeTenantSlug('inventory-rls-tenant-d'),
