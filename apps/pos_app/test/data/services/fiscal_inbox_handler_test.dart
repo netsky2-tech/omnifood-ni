@@ -230,6 +230,79 @@ void main() {
       expect(fx, isNull);
     });
 
+    group('D-21 (U2 #554): DGI authorization projection', () {
+      test('projects dgiAuthorizationCode/IssuedAt/ExpiresAt into local_configs', () async {
+        final envelope = {
+          ...sampleEnvelope,
+          'dgiAuthorizationCode': 'RES-SFC-145/2025',
+          'dgiAuthorizationIssuedAt': '2026-01-15',
+          'dgiAuthorizationExpiresAt': '2026-02-14',
+        };
+
+        final outcome = await handler.handleFiscalEnvelope(envelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        final code =
+            await database.localConfigDao.getConfigByKey('dgi_authorization_code');
+        expect(code?.value, 'RES-SFC-145/2025');
+        final issuedAt = await database.localConfigDao
+            .getConfigByKey('dgi_authorization_issued_at');
+        expect(issuedAt?.value, '2026-01-15');
+        final expiresAt = await database.localConfigDao
+            .getConfigByKey('dgi_authorization_expires_at');
+        expect(expiresAt?.value, '2026-02-14');
+      });
+
+      test('null authorization fields write no keys (absence looks like absence) and do not loop repair', () async {
+        final envelopeWithoutAuthorization = {
+          ...sampleEnvelope,
+          'dgiAuthorizationCode': null,
+          'dgiAuthorizationIssuedAt': null,
+          'dgiAuthorizationExpiresAt': null,
+        };
+
+        final outcome = await handler.handleFiscalEnvelope(envelopeWithoutAuthorization);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        expect(
+          await database.localConfigDao.getConfigByKey('dgi_authorization_code'),
+          isNull,
+        );
+        expect(
+          await database.localConfigDao.getConfigByKey('dgi_authorization_issued_at'),
+          isNull,
+        );
+        expect(
+          await database.localConfigDao.getConfigByKey('dgi_authorization_expires_at'),
+          isNull,
+        );
+
+        // The projection must be stable: an immediate replay is a true no-op.
+        final replay = await handler.handleFiscalEnvelope(envelopeWithoutAuthorization);
+        expect(replay.status, FiscalInboxStatus.idempotentNoOp);
+      });
+
+      test('blank authorization strings are treated as absent (no empty-key writes)', () async {
+        final envelopeWithBlanks = {
+          ...sampleEnvelope,
+          'dgiAuthorizationCode': '  ',
+          'dgiAuthorizationIssuedAt': '',
+        };
+
+        final outcome = await handler.handleFiscalEnvelope(envelopeWithBlanks);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        expect(
+          await database.localConfigDao.getConfigByKey('dgi_authorization_code'),
+          isNull,
+        );
+        expect(
+          await database.localConfigDao.getConfigByKey('dgi_authorization_issued_at'),
+          isNull,
+        );
+      });
+    });
+
     test('Q80-A fixture: preseeded snapshot without projections triggers projection repair on first replay and true idempotentNoOp on second replay', () async {
       const q80TenantId = 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a';
       const q80Revision = 1;

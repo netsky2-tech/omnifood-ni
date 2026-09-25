@@ -131,7 +131,7 @@ void main() {
     }
   });
 
-  testWidgets('B2a (D-16): the fiscal range fields render the no-configurado state',
+  testWidgets('B2a (D-16): the fiscal fields render the no-configurado state',
       (tester) async {
     when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
     when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
@@ -139,7 +139,7 @@ void main() {
     await tester.pumpWidget(buildWidget());
     await tester.pumpAndSettle();
 
-    // D-16: absence looks like absence — the range inputs start empty
+    // D-16: absence looks like absence — the fiscal inputs start empty
     // (no prefilled 1..10000 fiction); the current-number cursor is real
     // config and is not part of this assertion.
     String textOf(String key) => tester
@@ -147,10 +147,217 @@ void main() {
         .controller!
         .text;
     expect(textOf('dgi_range_start_input'), isEmpty);
-    expect(textOf('dgi_range_end_input'), isEmpty);
-    // Four fields share the no-configurado state: prefix, cursor, and both
-    // range bounds (D-16, JD-A-001).
-    expect(find.text('Sin configurar'), findsNWidgets(4));
+    // D-21 (U2 #554): the range end input is retired entirely.
+    expect(find.byKey(const Key('dgi_range_end_input')), findsNothing);
+    // Three fields share the no-configurado state: prefix, cursor, and the
+    // consecutivo inicial (D-16, JD-A-001; range end retired by D-21).
+    expect(find.text('Sin configurar'), findsNWidgets(3));
+  });
+
+  group('D-21 (U2 #554): authorization-only fiscal section', () {
+    Future<void> pumpForm(WidgetTester tester) async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
+      await tester.pumpWidget(buildWidget());
+      await tester.pumpAndSettle();
+    }
+
+    /// Fills the form's required fields so validators let a save through.
+    Future<void> fillRequiredFields(WidgetTester tester) async {
+      Future<void> fill(String label, String text) async {
+        await tester.enterText(find.widgetWithText(TextFormField, label), text);
+        await tester.pumpAndSettle();
+      }
+
+      await fill('Nombre Comercial / Razón Social', 'Mi Restaurante');
+      await fill('RUC (Nicaragua)', 'A0011234567890');
+      await fill('Tipo de Cambio Comercial (POS / Atención al Cliente)', '36.50');
+      await fill('Tipo de Cambio Oficial BCN (Base Fiscal DGI)', '36.62');
+    }
+
+    Future<void> tapSave(WidgetTester tester) async {
+      await tester.ensureVisible(find.text('GUARDAR CONFIGURACIÓN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GUARDAR CONFIGURACIÓN'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the section is retitle to AUTORIZACIÓN FISCAL DGI and the range is gone',
+        (tester) async {
+      await pumpForm(tester);
+
+      expect(find.text('AUTORIZACIÓN FISCAL DGI (Disposición 09-2007)'),
+          findsOneWidget);
+      expect(find.text('AUTORIZACIÓN Y RANGO FISCAL DGI (Disposición 09-2007)'),
+          findsNothing);
+      expect(find.text('Rango Final DGI'), findsNothing);
+      // Relabels (D-21): consecutivos replace the range language.
+      expect(find.text('Consecutivo inicial'), findsOneWidget);
+      expect(find.text('Consecutivo actual (auto-incremental)'), findsOneWidget);
+      expect(find.text('Rango Inicial DGI'), findsNothing);
+    });
+
+    testWidgets('the consecutivo actual input stays editable with auto-increment help',
+        (tester) async {
+      await pumpForm(tester);
+
+      final input = tester.widget<TextFormField>(
+        find.byKey(const Key('dgi_current_number_input')),
+      );
+      expect(input.enabled, isTrue);
+      expect(input.controller!.text, isEmpty);
+    });
+
+    testWidgets('an empty prefix passes validation (D-21 optional serie)', (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tapSave(tester);
+
+      // The save went through: the config was persisted without any prefix.
+      verify(() => mockDao.saveConfig(any())).called(greaterThanOrEqualTo(1));
+      expect(find.text('Prefijo Fiscal DGI'), findsOneWidget);
+    });
+
+    testWidgets('authorization code rejects 51 characters', (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_code_input')),
+        'A' * 51,
+      );
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      expect(find.text('Máximo 50 caracteres'), findsOneWidget);
+      verifyNever(() => mockDao.saveConfig(any()));
+    });
+
+    testWidgets("authorization code accepts 'RES-SFC-145/2025' (slashes and hyphens)",
+        (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_code_input')),
+        'RES-SFC-145/2025',
+      );
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      final saved = verify(() => mockDao.saveConfig(captureAny())).captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final byKey = {for (final e in saved) e.key: e.value};
+      expect(byKey['dgi_authorization_code'], 'RES-SFC-145/2025');
+    });
+
+    testWidgets('authorization code rejects spaces', (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_code_input')),
+        'RES SFC 145',
+      );
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      expect(find.text('Solo letras, números, guiones y barras'), findsOneWidget);
+      verifyNever(() => mockDao.saveConfig(any()));
+    });
+
+    testWidgets('authorization code rejects underscores and accents', (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_code_input')),
+        'RES_SFC-Á-1',
+      );
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      expect(find.text('Solo letras, números, guiones y barras'), findsOneWidget);
+      verifyNever(() => mockDao.saveConfig(any()));
+    });
+
+    testWidgets('date pair rule: issued without expiry is rejected', (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_issued_at_input')),
+        '2026-01-15',
+      );
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      expect(find.text('Si se indica la fecha de emisión, indique también la de vencimiento'),
+          findsOneWidget);
+      verifyNever(() => mockDao.saveConfig(any()));
+    });
+
+    testWidgets('date pair rule: expiry before issued is rejected', (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_issued_at_input')),
+        '2026-02-14',
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_expires_at_input')),
+        '2026-02-13',
+      );
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      expect(find.text('Debe ser mayor o igual a la fecha de emisión'), findsOneWidget);
+      verifyNever(() => mockDao.saveConfig(any()));
+    });
+
+    testWidgets('date pair rule: expiry equal to issued is accepted (mirrors backend >=)',
+        (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_issued_at_input')),
+        '2026-02-14',
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_expires_at_input')),
+        '2026-02-14',
+      );
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      final saved = verify(() => mockDao.saveConfig(captureAny())).captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final byKey = {for (final e in saved) e.key: e.value};
+      expect(byKey['dgi_authorization_issued_at'], '2026-02-14');
+      expect(byKey['dgi_authorization_expires_at'], '2026-02-14');
+    });
+
+    testWidgets('date fields reject non-ISO formats', (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_issued_at_input')),
+        '15/01/2026',
+      );
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      expect(find.text('Use el formato ISO yyyy-MM-dd'), findsOneWidget);
+      verifyNever(() => mockDao.saveConfig(any()));
+    });
   });
 
   testWidgets('D-17: saving the profile persists the authorization backing date and document keys', (tester) async {
