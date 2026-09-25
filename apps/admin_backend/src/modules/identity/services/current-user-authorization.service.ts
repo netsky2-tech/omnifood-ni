@@ -21,6 +21,8 @@ export class CurrentUserAuthorizationService {
   // the verified access token, never from client input.
   constructor(private readonly dataSource: DataSource) {}
 
+  // Performance rationale: exactly one tenant-bound transaction per
+  // authorize() call — one bind + one indexed lookup, nothing wider.
   async authorize(token: JwtAccessPayload): Promise<AuthoritativeCurrentUser> {
     try {
       const user = await runInTenantTransaction(

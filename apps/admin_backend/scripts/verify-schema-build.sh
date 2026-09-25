@@ -1151,11 +1151,12 @@ deleted_rows="$(psql_admin -d "${SCRATCH_DB}" -tAc \
   "WITH removed AS (DELETE FROM migrations WHERE name = ANY (string_to_array('${partial_ledger_names}', ',')) RETURNING 1) SELECT count(*) FROM removed" \
   | tr -d ' ')"
 expected_deleted_rows=43
-# Derivation: the list above holds exactly 42 migration names (the pre-slice-10
+# Derivation: the list above holds exactly 43 migration names (the pre-slice-10
 # 39 plus slice 10's ConvertKardexAndConfigForAllPolicies1809340000000, slice
-# 11's AddTenantSlug1809350000000, and stage 3's
-# CreateDeviceLinkingCodes1809360000000), and
-# the run below proves the count against the real ledger (41 -> 42 would fail
+# 11's AddTenantSlug1809350000000, stage 3's
+# CreateDeviceLinkingCodes1809360000000, and stage 12d's
+# EnforceUsersRls1809370000000), and
+# the run below proves the count against the real ledger (42 -> 43 would fail
 # here if the set and the ledger ever disagreed).
 printf 'ledger rows removed    : %s (expected %s)\n' "${deleted_rows}" "${expected_deleted_rows}"
 if [ "${deleted_rows}" -ne "${expected_deleted_rows}" ]; then

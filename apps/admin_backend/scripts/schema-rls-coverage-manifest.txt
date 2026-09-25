@@ -63,7 +63,7 @@
 
 # ---------------------------------------------------------------------------
 # direct — tenant_id + ENABLE + FORCE + a declared per-command policy set
-# (63 entries: 47 direct:SIUD + 10 direct:SI + 6 direct:SIU; entry ORDER is
+# (64 entries: 48 direct:SIUD + 10 direct:SI + 6 direct:SIU; entry ORDER is
 # unchanged from the pre-slice-10 manifest)
 # ---------------------------------------------------------------------------
 batches|direct:SIUD
@@ -166,7 +166,7 @@ credit_note_provenance_rls_baseline|global
 # ---------------------------------------------------------------------------
 # debt — explicit temporary tenant isolation debt. Each entry must be
 # promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (4)
+# slice in T2/T3; a fully protected debt entry fails as stale. (3)
 # ---------------------------------------------------------------------------
 # audit_integrity_alerts stays in debt (issue #512 T3 slice 7, founder
 # decision): its single writer is the pooled multi-tenant nightly integrity

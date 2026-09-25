@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
+  DataSource,
   FindOptionsWhere,
   LessThanOrEqual,
   MoreThanOrEqual,
   Repository,
 } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Invoice } from '../entities/invoice.entity';
 import { User } from '../../identity/entities/user.entity';
 import {
@@ -30,6 +32,11 @@ export class FiscalReportsService {
     private readonly invoiceRepo: Repository<Invoice>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    // Issue #556 stage 12d F1: the users read is bound through the
+    // tenant-bound transaction manager (FORCE RLS on users fails closed
+    // on a pooled connection); the pooled injection stays for module
+    // wiring and as the spec's runtime-teeth tripwire.
+    private readonly dataSource: DataSource,
   ) {}
 
   async getMonthlySummary(
@@ -156,9 +163,17 @@ export class FiscalReportsService {
       order: { created_at: 'DESC' },
     });
 
-    const users = await this.userRepo.find({
-      where: { tenant_id: tenantId },
-    });
+    // Issue #556 stage 12d F1: users is FORCE-RLS-protected — a pooled
+    // read here silently returned zero rows and every voided-invoice row
+    // lost its cashier name. Bound read, identical query semantics.
+    const users = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(User).find({
+          where: { tenant_id: tenantId },
+        }),
+    );
     const userMap = new Map<string, string>();
     for (const u of users) {
       userMap.set(u.id, u.name);
@@ -327,8 +342,7 @@ export class FiscalReportsService {
       .split('-')
       .map((v) => parseInt(v, 10));
 
-    const year =
-      yearParam != null && yearParam >= 2000 ? yearParam : currY;
+    const year = yearParam != null && yearParam >= 2000 ? yearParam : currY;
     const month =
       monthParam != null && monthParam >= 1 && monthParam <= 12
         ? monthParam

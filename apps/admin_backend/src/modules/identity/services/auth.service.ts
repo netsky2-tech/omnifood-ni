@@ -117,14 +117,6 @@ export class AuthService {
   }
 
   /**
-   * Slug-context login: resolve the global tenants row by slug (pooled read
-   * on a global table, pre-bind), bind the tenant transaction, and run the
-   * shared authentication flow through the bound manager. Unknown/inactive
-   * slug and user/tenant mismatch return the SAME generic failure as the
-   * wrong-password path, with the same password-compare timing.
-   */
-
-  /**
    * Burns exactly one bcrypt compare against the dummy digest so a generic
    * failure costs the same as the wrong-password path: response timing must
    * never distinguish unknown slug / inactive tenant / unknown user /

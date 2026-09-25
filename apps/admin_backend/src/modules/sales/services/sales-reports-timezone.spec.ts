@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { SalesReportsService } from './sales-reports.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -32,6 +33,13 @@ describe('SalesReportsService — America/Managua Business Day Boundaries Regres
         {
           provide: getRepositoryToken(User),
           useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          // Issue #556 stage 12d F1: the service now injects DataSource for
+          // the tenant-bound users read; this timezone regression never
+          // touches users, so a never-called fake is enough.
+          provide: DataSource,
+          useValue: { transaction: jest.fn() },
         },
       ],
     }).compile();
