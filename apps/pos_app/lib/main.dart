@@ -342,7 +342,9 @@ void main() async {
   );
 
   final connectivityService = NetworkConnectivityService(dio);
-  connectivityService.start();
+  // NOTE: connectivityService.start() fires GET /v1/health. Like background
+  // sync, it must stay gated until the terminal is linked (issue #556):
+  // started below, alongside syncService.start(), only when linked.
 
   final syncService = SyncService(
     auditRepository,
@@ -361,6 +363,7 @@ void main() async {
   final initialRoute = resolveStartupRoute(storedTenantSlug);
   final isTerminalLinked = initialRoute == '/';
   if (isTerminalLinked) {
+    connectivityService.start();
     syncService.start();
   }
 
@@ -643,7 +646,21 @@ class MyApp extends StatelessWidget {
           ),
         ),
         initialRoute: initialRoute,
-        routes: {
+        onGenerateInitialRoutes: (String initialRouteName) {
+          // Single-route initial stack: Flutter's default would root the
+          // stack at '/', letting back navigation pop '/link' and reveal
+          // login on an unlinked terminal (issue #556 gate bypass).
+          return resolveInitialRouteStack(initialRouteName).map((name) {
+            final builder = _routes[name] ?? _routes['/']!;
+            return MaterialPageRoute<void>(builder: builder);
+          }).toList();
+        },
+        routes: _routes,
+      ),
+    );
+  }
+
+  Map<String, WidgetBuilder> get _routes => {
           '/': (context) => const LoginView(),
           linkTerminalRoute: (context) => const LinkTerminalView(),
           '/lock': (context) => const LockScreenView(),
@@ -730,10 +747,7 @@ class MyApp extends StatelessWidget {
           '/config/terminal': (context) => const TerminalIdentityView(),
           '/config/activation': (context) => const ActivationTerminalView(),
           '/identity/audit': (context) => const AuditLogView(),
-        },
-      ),
-    );
-  }
+        };
 }
 
 class PlaceholderHome extends StatelessWidget {

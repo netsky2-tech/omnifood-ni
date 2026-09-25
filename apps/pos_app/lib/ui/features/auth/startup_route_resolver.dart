@@ -11,3 +11,15 @@ const String linkTerminalRoute = '/link';
 String resolveStartupRoute(String storedTenantSlug) {
   return storedTenantSlug.trim().isEmpty ? linkTerminalRoute : '/';
 }
+
+/// The initial navigator stack for startup: EXACTLY ONE route — the resolved
+/// gate route.
+///
+/// Flutter's `defaultGenerateInitialRoutes` roots the stack at '/' whenever
+/// the initial route is a named route, which would let Android back
+/// navigation pop '/link' and reveal LoginView on an unlinked terminal —
+/// bypassing the gate (issue #556). Feeding this list through
+/// `MaterialApp.onGenerateInitialRoutes` keeps the gate route un-poppable.
+List<String> resolveInitialRouteStack(String initialRouteName) {
+  return <String>[initialRouteName];
+}
