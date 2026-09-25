@@ -44,6 +44,9 @@ import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
 import 'data/services/terminal_identity_service.dart';
 import 'ui/features/auth/viewmodels/login_viewmodel.dart';
+import 'ui/features/auth/viewmodels/link_terminal_viewmodel.dart';
+import 'ui/features/auth/views/link_terminal_view.dart';
+import 'ui/features/auth/startup_route_resolver.dart';
 import 'ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
 import 'ui/features/inventory/items/insumo_view_model.dart';
 import 'ui/features/inventory/purchases/purchase_view_model.dart';
@@ -161,6 +164,11 @@ void main() async {
   );
   final refreshDio = Dio(productionTransportOptions(baseUrl));
 
+  // Dedicated pre-auth client for the linking code claim (issue #556):
+  // bare Dio with NO interceptors, so no Authorization header can ever be
+  // attached to the pre-auth link exchange.
+  final claimDio = Dio(productionTransportOptions(baseUrl));
+
   // Tenant configuration store (slug write-through from provisioning, issue #556)
   final tenantConfigService = TenantConfigService(database.localConfigDao);
 
@@ -205,6 +213,7 @@ void main() async {
     credentialCoordinator: credentialCoordinator,
     bootstrapCoordinator: deviceSyncBootstrapCoordinator,
     cleaner: legacyHumanCredentialCleaner,
+    claimDio: claimDio,
   );
 
   // Add Cloud Auth, Automatic Refresh & Path Normalization Interceptor
@@ -333,7 +342,9 @@ void main() async {
   );
 
   final connectivityService = NetworkConnectivityService(dio);
-  connectivityService.start();
+  // NOTE: connectivityService.start() fires GET /v1/health. Like background
+  // sync, it must stay gated until the terminal is linked (issue #556):
+  // started below, alongside syncService.start(), only when linked.
 
   final syncService = SyncService(
     auditRepository,
@@ -343,7 +354,18 @@ void main() async {
     database: database,
     connectivityService: connectivityService,
   );
-  syncService.start();
+
+  // Issue #556: pre-auth linking gate, resolved BEFORE any login attempt or
+  // backend traffic. Terminals without a stored tenant slug are gated
+  // behind terminal linking and background sync stays stopped until the
+  // terminal is linked (wiring-only gate; SyncService itself is untouched).
+  final storedTenantSlug = await tenantConfigService.getTenantSlug();
+  final initialRoute = resolveStartupRoute(storedTenantSlug);
+  final isTerminalLinked = initialRoute == '/';
+  if (isTerminalLinked) {
+    connectivityService.start();
+    syncService.start();
+  }
 
   runApp(
     MultiProvider(
@@ -352,6 +374,15 @@ void main() async {
           create: (_) => LoginViewModel(
             authRepository,
             resolveTenantSlug: () => tenantConfigService.getTenantSlug(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => LinkTerminalViewModel(
+            authRepository,
+            deviceId: deviceId,
+            persistTenantSlug: (slug) => tenantConfigService.persistTenantSlug(slug),
+            persistTenantId: (tenantId) =>
+                tenantConfigService.persistTenantId(tenantId),
           ),
         ),
         ChangeNotifierProvider(
@@ -501,7 +532,10 @@ void main() async {
           create: (_) => PrinterConfigService(database.localConfigDao),
         ),
       ],
-      child: MyApp(alertService: alertService),
+      child: MyApp(
+        alertService: alertService,
+        initialRoute: initialRoute,
+      ),
     ),
   );
 }
@@ -612,8 +646,23 @@ class MyApp extends StatelessWidget {
           ),
         ),
         initialRoute: initialRoute,
-        routes: {
+        onGenerateInitialRoutes: (String initialRouteName) {
+          // Single-route initial stack: Flutter's default would root the
+          // stack at '/', letting back navigation pop '/link' and reveal
+          // login on an unlinked terminal (issue #556 gate bypass).
+          return resolveInitialRouteStack(initialRouteName).map((name) {
+            final builder = _routes[name] ?? _routes['/']!;
+            return MaterialPageRoute<void>(builder: builder);
+          }).toList();
+        },
+        routes: _routes,
+      ),
+    );
+  }
+
+  Map<String, WidgetBuilder> get _routes => {
           '/': (context) => const LoginView(),
+          linkTerminalRoute: (context) => const LinkTerminalView(),
           '/lock': (context) => const LockScreenView(),
           '/home': (context) => const SaleView(),
           '/sales': (context) => const SaleView(),
@@ -698,10 +747,7 @@ class MyApp extends StatelessWidget {
           '/config/terminal': (context) => const TerminalIdentityView(),
           '/config/activation': (context) => const ActivationTerminalView(),
           '/identity/audit': (context) => const AuditLogView(),
-        },
-      ),
-    );
-  }
+        };
 }
 
 class PlaceholderHome extends StatelessWidget {

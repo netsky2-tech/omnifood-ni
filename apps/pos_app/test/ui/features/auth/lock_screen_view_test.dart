@@ -5,6 +5,7 @@ import 'package:pos_app/data/daos/user_dao.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/domain/models/auth/terminal_linking.dart';
 import 'package:pos_app/ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
 import 'package:pos_app/ui/features/auth/views/lock_screen_view.dart';
 
@@ -22,6 +23,9 @@ class _FakeAuthRepository implements AuthRepository {
   Future<User?> loginOffline(String userId, String pin) async => null;
   @override
   Future<User?> loginOnline(String email, String password, {String? tenantSlug}) async => null;
+  @override
+  Future<TerminalLinking> claimLinkingCode(String code, String deviceId) async =>
+      const TerminalLinking(tenantId: '', slug: '', deviceId: '');
   @override
   Future<User?> getCurrentUser() async => null;
   @override
