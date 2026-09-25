@@ -387,9 +387,26 @@ class ReceiptLayoutFormatter {
     }
 
     // 2. DOCUMENT INFO BLOCK
+    // Cancelled documents keep every fiscal element (DGI: no deletion) but lead
+    // with an unmistakable ANULADO banner so the paper can never be mistaken
+    // for a valid sale.
+    if (doc.isCanceled) {
+      buffer.writeln(doubleDivider());
+      for (final l in centerLines('*** DOCUMENTO ANULADO ***')) {
+        buffer.writeln(l);
+      }
+    }
     buffer.writeln(doubleDivider());
     buffer.writeln(center(doc.documentTitle));
     buffer.writeln(center('No. ${doc.documentNumber}'));
+    if (doc.isCanceled) {
+      final reason = doc.voidReason?.trim().isNotEmpty == true
+          ? doc.voidReason!.trim()
+          : 'SIN MOTIVO REGISTRADO';
+      for (final l in formatKeyValue('Motivo:', reason)) {
+        buffer.writeln(l);
+      }
+    }
     for (final l in formatKeyValue('Fecha:', dateFormat.format(doc.date))) {
       buffer.writeln(l);
     }
@@ -792,6 +809,19 @@ class ReceiptLayoutFormatter {
     }
 
     // 3. Document Info Block
+    // Cancelled documents lead with a dominant ANULADO banner (double-width
+    // and bold so it dominates the paper); see the plain-text path above.
+    if (doc.isCanceled) {
+      builder
+          .align(EscPosAlign.center)
+          .bold(true)
+          .fontSize(EscPosFontSize.doubleWidth)
+          .textLine(marginLine('ANULADO'))
+          .fontSize(EscPosFontSize.normal)
+          .textLine(marginLine('*** DOCUMENTO ANULADO ***'))
+          .bold(false)
+          .align(EscPosAlign.left);
+    }
     builder
         .textLine(marginLine(doubleDivider()))
         .bold(true)
@@ -800,6 +830,14 @@ class ReceiptLayoutFormatter {
         .bold(false)
         .align(EscPosAlign.left);
 
+    if (doc.isCanceled) {
+      final reason = doc.voidReason?.trim().isNotEmpty == true
+          ? doc.voidReason!.trim()
+          : 'SIN MOTIVO REGISTRADO';
+      for (final l in formatKeyValue('Motivo:', reason)) {
+        marginTextLine(builder, l);
+      }
+    }
     for (final l in formatKeyValue('Fecha:', dateFormat.format(doc.date))) {
       marginTextLine(builder, l);
     }

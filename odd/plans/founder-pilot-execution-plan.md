@@ -97,6 +97,27 @@ Recommendation: implement D-3 as "regime is the single source of IVA treatment, 
 
 **Stop condition:** if the unique constraint reveals duplicates on a live tenant, stop and route through Scenario D of `docs/operations/pilot-terminal-incident-procedure.md` before continuing.
 
+## Reprint: it exists twice, and neither one works
+
+The owner asked for reprint support "que no existe actualmente". Verified 2026-09-24: it is not absent, it is **built twice and reachable zero times** — the same defect class as `dgi_authorization_code` and `canVoidInvoice`. The correction matters because the fix differs: not "write reprint" but "pick the correct existing engine and give it a call site".
+
+| Mechanism | Location | What it does | Production callers |
+|---|---|---|---|
+| `reprintLastInvoice()` | `sale_view_model.dart:1478` | Rebuilds items + payments from the DAOs and prints, but only for the in-memory `_lastProcessedInvoice` | **0** |
+| `DurablePrintService.requestReprint()` | `durable_print_service.dart:295` | Creates a *marked copy* print job, requires `MANAGER`/`ADMIN`, mandatory trimmed reason, writes `REPRINT_REQUESTED` audit, and per its own doc comment "strictly NEVER duplicates DGI invoice or Kardex" | **0** (tests only) |
+
+`requestReprint` is the correct engine and already encodes the fiscal invariants this project needs — no new folio consumed, no duplicate invoice row, no duplicate Kardex movement, reason captured, actor logged. It is also built for **fulfillment print jobs**, not for the canonical invoice print path, which is why wiring it to Sales History is not a one-liner.
+
+**Open compliance question for the accountant (n.9), not an engineering choice:** `InvoiceEntity` carries **no fiscal header snapshot** (grep `businessName|ruc|legalName` in `invoice_entity.dart` → 0 hits). Business name, RUC, address and phone are read from live `local_configs` at print time, and `reprintLastInvoice` calls `getPrinterConfig()` per reprint. So reprinting a ticket issued before a fiscal-data change reproduces it under **today's** header, not the header it was issued with. Whether a reprint must reproduce the original header, or must be visibly marked as a later copy, is a DGI question — and if it must reproduce the original, that is a schema change (snapshot the header at issuance), not a print-path change. Do not guess it.
+
+**Planned as unit B1r**, deliberately after B1a-3: the ANULADO banner and the REIMPRESIÓN banner are the same rendering slot, and pre-building a reprint banner with no call site would manufacture a fourth member of the wired-but-invisible class.
+
+**Status update: tracked as issue #547.** B1a-3 shipped in `ff9b59fa` with the banner as a shared rendering slot, so the reprint artwork now has somewhere to live once B1r has a call site. #547 records the required behaviour (reprint any specific invoice, marked REIMPRESIÓN, never create an invoice row / consume a folio / write a Kardex movement, actor + mandatory reason audited) and the two open items: question n.9 above, and the rule that a reprint of a cancelled invoice must carry ANULADO **and** REIMPRESIÓN together.
+
+**One correction to the delegation report, recorded because it was believed briefly.** The B1a-3 writer reported that whoever voids an invoice "is not recorded" and that AC-9's identity requirement "needs a schema/data widening". That is wrong: `prepareLog()` resolves the acting user and `_buildAuditEntity(user, …)` stamps both the user id and an ISO-8601 timestamp into the hash-chained audit row (`audit_repository_impl.dart:78-100`), and `6dcadf13` already made that row's metadata valid JSON. What is missing is that the *printed document* does not receive that identity — a print-model wiring gap in B1a-2, not a migration. Left uncorrected, this would have put an unnecessary schema change into the critical path for day 1.
+
+
+
 ## Batch 1 — Day-1 operability (what the cashier sees)
 
 | ID | Unit | Issue |
