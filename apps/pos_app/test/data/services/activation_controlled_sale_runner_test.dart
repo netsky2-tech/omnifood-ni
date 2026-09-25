@@ -12,6 +12,7 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/activation/activation_attempt_local_entity.dart';
 import 'package:pos_app/data/models/activation/activation_check_result_local_entity.dart';
 import 'package:pos_app/data/models/activation/activation_outbox_envelope_entity.dart';
+import 'package:pos_app/data/models/activation/first_successful_sale_claim_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/product_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
@@ -1049,7 +1050,8 @@ void main() {
         final envelopes = await database.activationOutboxDao.getPendingEnvelopes(tenantId);
         final firstSaleEnv = envelopes.firstWhere((e) => e.eventType == 'FIRST_SUCCESSFUL_SALE_OBSERVED');
         expect(firstSaleEnv, isNotNull);
-        expect(firstSaleEnv.idempotencyKey, equals('onboarding:first-sale:$tenantId'));
+        // Issue #556: the claim delivery state is keyed per attempt.
+        expect(firstSaleEnv.idempotencyKey, equals('onboarding:first-sale:$tenantId:$attemptId'));
         expect(firstSaleEnv.syncStatus, equals('PENDING'));
 
         final payload = jsonDecode(firstSaleEnv.payloadJson) as Map<String, dynamic>;
@@ -1199,5 +1201,226 @@ void main() {
         }
       });
     });
+
+  group('Issue #556 — claim delivery state keyed per activation attempt', () {
+    const tenantId = 'tenant-founder-01';
+    const attemptId = 'attempt-pr20-uuid-1';
+    const verificationProductId = 'prod-pin-001';
+    const cashierId = 'cashier-off-01';
+
+    Future<void> seedPrerequisites() async {
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_range_end', value: '1000'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+      );
+      await database.userDao.insertUsers([
+        UserEntity(
+          id: cashierId,
+          name: 'Cajero Offline',
+          role: 'CASHIER',
+          pinHash: '',
+          isActive: true,
+          tenantId: tenantId,
+        ),
+      ]);
+      await database.securityProfileDao.insertProfiles([
+        SecurityProfileEntity(
+          userId: cashierId,
+          pinHash: localAuth.hashPin('123456'),
+          isPinEnabled: true,
+          isTotpEnabled: false,
+        ),
+      ]);
+      await database.productDao.insertProducts([
+        ProductEntity(
+          id: verificationProductId,
+          name: 'Café de Prueba Activación',
+          sellPrice: 50.0,
+          averageCost: 15.0,
+          stock: 100.0,
+          uom: 'CUP',
+          barcode: 'PROD-ACT-001',
+          isActive: true,
+          isPrepared: false,
+          tenantId: tenantId,
+        ),
+      ]);
+      await database.activationAttemptLocalDao.saveAttempt(
+        ActivationAttemptLocalEntity(
+          attemptId: attemptId,
+          tenantId: tenantId,
+          candidateTerminalId: 'pos-terminal-founder-01',
+          localStatus: 'RUNNING',
+          requiredFiscalRevision: 1,
+          requiredFiscalFingerprint: 'fiscal-fp-123',
+          verificationProductId: verificationProductId,
+          serverTimeAnchorAt: '2026-09-04T12:00:00.000Z',
+          anchorMonotonicTicks: 0,
+          bootSessionId: 'boot-session-pr21',
+          assignedAt: '2026-09-04T12:00:00.000Z',
+          updatedAt: '2026-09-04T12:00:00.000Z',
+        ),
+      );
+    }
+
+    Future<ActivationAttemptLocalEntity> seedSecondAttempt(String newAttemptId) async {
+      final attempt = ActivationAttemptLocalEntity(
+        attemptId: newAttemptId,
+        tenantId: tenantId,
+        candidateTerminalId: 'pos-terminal-founder-01',
+        localStatus: 'RUNNING',
+        requiredFiscalRevision: 1,
+        requiredFiscalFingerprint: 'fiscal-fp-123',
+        verificationProductId: verificationProductId,
+        serverTimeAnchorAt: '2026-09-04T12:00:00.000Z',
+        anchorMonotonicTicks: 0,
+        bootSessionId: 'boot-session-pr21',
+        assignedAt: '2026-09-04T12:00:00.000Z',
+        updatedAt: '2026-09-04T12:00:00.000Z',
+      );
+      await database.activationAttemptLocalDao.saveAttempt(attempt);
+      return attempt;
+    }
+
+    List<ActivationOutboxEnvelopeEntity> claimEnvelopesOf(List<ActivationOutboxEnvelopeEntity> envelopes) =>
+        envelopes.where((e) => e.eventType == 'FIRST_SUCCESSFUL_SALE_OBSERVED').toList();
+
+    test('sends the first-sale claim for a NEW attempt even when a previous attempt claim state exists', () async {
+      await seedPrerequisites();
+
+      // Simulate the persisted state of a PREVIOUS activation attempt that
+      // survived an upgrade install: the tenant-keyed claim row belongs to an
+      // older attempt, and its outbox envelope was already drained.
+      await database.firstSuccessfulSaleClaimDao.insertClaim(
+        const FirstSuccessfulSaleClaimEntity(
+          tenantId: tenantId,
+          terminalId: 'pos-terminal-founder-01',
+          ticketId: 'ticket-previous-attempt',
+          activationAttemptId: 'attempt-previous-uuid-0',
+          deviceOccurredAt: '2026-08-01T12:00:00.000Z',
+          clockConfidence: 'ANCHORED',
+          outboxEventId: 'outbox-event-previous-attempt',
+          createdAtLocal: '2026-08-01T12:00:00.000Z',
+        ),
+      );
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: attemptId,
+          cashierUserId: cashierId,
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+
+      // The claim MUST be enqueued for the CURRENT attempt regardless of the
+      // previous attempt's claim row; otherwise the backend finalizer answers
+      // VERIFICATION_SALE_EVIDENCE_MISSING for this attempt.
+      final attemptEnvelopes =
+          await database.activationOutboxDao.getEnvelopesByAttempt(tenantId, attemptId);
+      final claimEnvelopes = claimEnvelopesOf(attemptEnvelopes);
+      expect(claimEnvelopes.length, equals(1));
+      expect(
+        claimEnvelopes.first.idempotencyKey,
+        equals('onboarding:first-sale:$tenantId:$attemptId'),
+      );
+      final payload = jsonDecode(claimEnvelopes.first.payloadJson) as Map<String, dynamic>;
+      expect(payload['ticketId'], equals(result.verificationTicketId));
+      expect(payload['activationAttemptId'], equals(attemptId));
+    });
+
+    test('does not re-send the claim for the SAME attempt after the claim was delivered', () async {
+      await seedPrerequisites();
+
+      final first = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: attemptId,
+          cashierUserId: cashierId,
+        ),
+      );
+      expect(first.isSuccess, isTrue);
+
+      // Simulate the fase-3 evidence sync ACKing the claim envelope.
+      final pendingBefore = await database.activationOutboxDao.getPendingEnvelopes(tenantId);
+      final claimEnv = claimEnvelopesOf(pendingBefore).single;
+      await database.activationOutboxDao.updateEnvelope(
+        ActivationOutboxEnvelopeEntity(
+          id: claimEnv.id,
+          tenantId: claimEnv.tenantId,
+          activationAttemptId: claimEnv.activationAttemptId,
+          eventType: claimEnv.eventType,
+          idempotencyKey: claimEnv.idempotencyKey,
+          payloadJson: claimEnv.payloadJson,
+          payloadHash: claimEnv.payloadHash,
+          syncStatus: 'SYNCED',
+          createdAt: claimEnv.createdAt,
+        ),
+      );
+
+      // Idempotent re-execution of the SAME attempt.
+      final retry = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: attemptId,
+          cashierUserId: cashierId,
+        ),
+      );
+      expect(retry.isSuccess, isTrue);
+
+      final attemptEnvelopes =
+          await database.activationOutboxDao.getEnvelopesByAttempt(tenantId, attemptId);
+      final claimEnvelopes = claimEnvelopesOf(attemptEnvelopes);
+      expect(claimEnvelopes.length, equals(1));
+      expect(claimEnvelopes.first.syncStatus, equals('SYNCED'));
+    });
+
+    test('attempt-id change resets the claim decision: the new attempt gets its own claim', () async {
+      await seedPrerequisites();
+
+      final first = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: attemptId,
+          cashierUserId: cashierId,
+        ),
+      );
+      expect(first.isSuccess, isTrue);
+
+      // A brand-new attempt for the same tenant.
+      const attemptIdB = 'attempt-pr20-uuid-2';
+      await seedSecondAttempt(attemptIdB);
+
+      final second = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: attemptIdB,
+          cashierUserId: cashierId,
+        ),
+      );
+      expect(second.isSuccess, isTrue);
+      expect(second.verificationTicketId, isNot(equals(first.verificationTicketId)));
+
+      final bEnvelopes =
+          await database.activationOutboxDao.getEnvelopesByAttempt(tenantId, attemptIdB);
+      final claimEnvelopes = claimEnvelopesOf(bEnvelopes);
+      expect(claimEnvelopes.length, equals(1));
+      expect(
+        claimEnvelopes.first.idempotencyKey,
+        equals('onboarding:first-sale:$tenantId:$attemptIdB'),
+      );
+      final payload = jsonDecode(claimEnvelopes.first.payloadJson) as Map<String, dynamic>;
+      expect(payload['activationAttemptId'], equals(attemptIdB));
+    });
+  });
   });
 }

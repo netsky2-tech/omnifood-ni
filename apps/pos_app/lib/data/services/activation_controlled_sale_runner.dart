@@ -492,6 +492,17 @@ class ActivationControlledSaleRunner {
     );
 
     // 6.1 TTFSS First Successful Sale Claim (ONB1.8E & ONB1.8F)
+    // Issue #556: the claim DELIVERY state is keyed PER ATTEMPT, not per
+    // tenant. The persisted first_successful_sale_claims row is the tenant's
+    // historical TTFSS record (ONB1.9G observers read it) and stays write-once
+    // per tenant, but it must never gate a NEW attempt: after an upgrade
+    // install the row of a PREVIOUS attempt survives, the insert below is
+    // ignored on the tenant key, and gating on `getClaimByTenantId` made the
+    // new attempt silently skip its FIRST_SUCCESSFUL_SALE_OBSERVED envelope —
+    // the backend finalizer then answered VERIFICATION_SALE_EVIDENCE_MISSING.
+    // The backend claim endpoint binds the ticket to the attempt
+    // unconditionally and answers idempotently (claimed:false when the attempt
+    // already holds a pointer), so one claim per attempt is safe and required.
     final claimOutboxEventId = const Uuid().v4();
     final candidateClaim = FirstSuccessfulSaleClaimEntity(
       tenantId: trimmedTenantId,
@@ -510,14 +521,25 @@ class ActivationControlledSaleRunner {
     // Atomic write-once insert: ON CONFLICT DO NOTHING (OnConflictStrategy.ignore in Floor DAO)
     await _database.firstSuccessfulSaleClaimDao.insertClaim(candidateClaim);
 
-    // Verify if this ticket is the authoritative winning claim for this tenant
+    // Historical TTFSS record surfaced in the result; deliberately NOT used as
+    // the delivery gate above (see Issue #556 note).
     final persistedClaim = await _database.firstSuccessfulSaleClaimDao.getClaimByTenantId(trimmedTenantId);
-    final isWinningClaim = persistedClaim != null && persistedClaim.ticketId == ticketId;
 
-    if (isWinningClaim) {
+    // Per-attempt delivery gate: send the claim whenever THIS attempt has no
+    // claim envelope yet, regardless of what previous attempts did. The
+    // attempt-scoped idempotency key also makes re-execution of the same
+    // attempt a no-op (the already-ACKed envelope is neither duplicated nor
+    // re-drained by the fase-3 evidence sync).
+    final claimIdempotencyKey =
+        'onboarding:first-sale:$trimmedTenantId:$trimmedAttemptId';
+    final existingClaimEnvelope = await _database.activationOutboxDao
+        .getEnvelopeByIdempotencyKey(trimmedTenantId, claimIdempotencyKey);
+    final attemptHasClaimedVerificationSale = existingClaimEnvelope != null;
+
+    if (!attemptHasClaimedVerificationSale) {
       addEnvelope(
         eventType: 'FIRST_SUCCESSFUL_SALE_OBSERVED',
-        idempotencyKey: 'onboarding:first-sale:$trimmedTenantId',
+        idempotencyKey: claimIdempotencyKey,
         payload: {
           'ticketId': ticketId,
           'declarativeTenantId': trimmedTenantId,
@@ -528,7 +550,7 @@ class ActivationControlledSaleRunner {
           'clockConfidence': clockRes.clockConfidence,
           'serverTimeAnchorId': clockRes.serverTimeAnchorId,
           'posBuild': '1.0.0+1',
-          'outboxEventId': persistedClaim.outboxEventId,
+          'outboxEventId': claimOutboxEventId,
         },
       );
     }
