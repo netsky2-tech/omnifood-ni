@@ -1,7 +1,22 @@
 # #554 — Fiscal authorization redesign (D-21): no range, code + dates + consecutivos
 
-Status: IN PROGRESS · Branch: `feat/554-fiscal-auth-redesign` · Worktree: `issue-554-fiscal-auth`
+Status: IMPLEMENTED — awaiting push/PR decision (user-owned) · Branch: `feat/554-fiscal-auth-redesign` · Worktree: `issue-554-fiscal-auth` · Tip: 1971c113
 Blocked-on status: **UNBLOCKED by D-21** (2026-09-25 owner ruling relayed from the contadora). The letter was awaited to supply numbers; the ruling supplied a model — and the model retires the range.
+
+## Delivered (commits, verified by parent)
+
+| Unit | Commit | Evidence |
+|---|---|---|
+| docs D-21 + feature doc | 8ce11b5c | plan + this doc |
+| U1 backend fields | 231562c5 | onboarding 587/587, core/http 18/18 |
+| U2 POS form | e2be4081 | 5 suites 100/100, analyze clean |
+| U3 numbering | 17b1b082 | numbering 15/15, repo/VM 111/111, e2e 51/51, grep-zero |
+| U3b activation+DAO folio | b14c15c7 | runner+DAO 37/37, phase4 16/16, e2e 10/10 |
+| U4 expiry warning | f3ea9f87 | 59/59 + regression 18/18 |
+| fix impossible dates | 9e21516b | view suite 23/23 |
+| U5 dashboard | e44bae85 | vitest 35/35, adjacent 110/110, tsc clean |
+| U1b response contract | 1971c113 | unit 69/69, e2e 14/14 |
+| FINAL full pass | — | POS analyze clean + 2184/0; backend 2825/0 (8 skipped); dashboard 864/0 (4 skipped) |
 
 ## Why the design changed
 
@@ -35,6 +50,8 @@ Sync: the three authorization fields ride the existing fiscal snapshot (`Effecti
 - **Per-terminal series** (2+ cajas → A-001…/B-001…): design note only, own issue. Today's tenant-wide sequence is correct for single-caja SOHO; the gap (two terminals would race on `dgi_current_number`) goes into that issue.
 - #551 (remaining cloud projection) — untouched; this adds only the 3 authorization fields.
 - B6c letter review — needs the physical letter; the model above is letter-ready.
+- **DAO/numbering folio-format duplication** — aligned by U3b with a format-authority comment; unifying is a separate issue.
+- **Legacy '001-001-01-' fixtures** (database_seeder, durable_print_service, hardware_settings sample folios, invoice.dart comment) — inert, report-only inventory in U3b; cleanup is cosmetic follow-up.
 
 ## Work units (TDD, one commit each)
 
