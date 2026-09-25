@@ -88,17 +88,22 @@ class ActivationControlledSaleRunner {
     final trimmedCashierId = params.cashierUserId.trim();
 
     // D-2/D-16: activation is the APPROVED provisioning gate for the pilot
-    // fiscal series. The boot never writes (D-1); the range is provisioned
-    // ONCE here — only when absent — before the verification sale. The real
-    // documented range replaces it when SOHO's authorization letter arrives
-    // (#554 / server-side series).
+    // fiscal series. The boot never writes (D-1); the series is provisioned
+    // ONCE here — only when absent — before the verification sale, because
+    // the self-test sale cannot emit a number from nothing. B2a provisioned
+    // an invented prefix and a 1..1000 range as a documented exception; D-21
+    // retires both (there is no range for computarizados, and single branch
+    // + 1 caja uses a purely numeric consecutive), so what remains is the
+    // exception's real purpose: consecutivo inicial = 1 with an EMPTY
+    // prefix. The tenant's real fiscal configuration replaces it via the
+    // Business Profile form / server-side series (#554).
     final existingSeries =
         await _database.localConfigDao.getConfigByKey('dgi_prefix');
     if (existingSeries == null) {
       await DgiNumberingServiceImpl(
         _database.localConfigDao,
         _database.invoiceDao,
-      ).initializeRange(prefix: '001-001-01-', start: 1, end: 1000);
+      ).initializeRange(prefix: '', start: 1);
     }
 
     // 1. Fetch Attempt & Assert Pre-Condition: RUNNING or already LOCAL_ACTIVATION_EVIDENCE_COMPLETE
@@ -308,6 +313,10 @@ class ActivationControlledSaleRunner {
     final printerStatus = await _printerPort.checkStatus();
     final printerIsReady = printerStatus == PrinterStatus.ready;
     bool receiptPrintedSuccess = false;
+    // Issue #561 (Option A): set when the owner disabled auto-print
+    // (PrinterConfig.autoPrintInvoice == false) and the printer was ready —
+    // the sale persists and syncs identically, only the print is skipped.
+    bool receiptSkippedByUserConfig = false;
     String? receiptRegimeEvidence;
     int? receiptPaperWidthEvidence;
     String? receiptBlockedReason;
@@ -358,8 +367,18 @@ class ActivationControlledSaleRunner {
       if (resolvedRegime == null) {
         // Fail closed: issuing a fiscal document with a guessed document type
         // is worse than not printing it (DGI DT 09-2007).
+        // R3 (Issue #561): this stays a HARD FAIL regardless of the
+        // auto-print toggle — the regime gate is config-independent.
         receiptBlockedReason = 'RECEIPT_BLOCKED_UNRESOLVED_TAX_REGIME';
         receiptRegimeEvidence = regimeRaw;
+        receiptPaperWidthEvidence = receiptConfig.paperWidthMm;
+      } else if (!receiptConfig.autoPrintInvoice) {
+        // Issue #561 (Option A): respect the owner's auto-print toggle. The
+        // verification sale does NOT print; the SALE_RECEIPT_PATH check is
+        // recorded as WARNING with RECEIPT_SKIPPED_BY_USER_CONFIG and adds
+        // no error entry (R2 tolerates exactly this WARNING locally).
+        receiptSkippedByUserConfig = true;
+        receiptRegimeEvidence = resolvedRegime.code;
         receiptPaperWidthEvidence = receiptConfig.paperWidthMm;
       } else {
         final printResult = await _printerPort.printInvoice(
@@ -402,26 +421,38 @@ class ActivationControlledSaleRunner {
     checks['OFFLINE_SALE_PAID'] = salePaidCheck;
 
     // Check 2: SALE_RECEIPT_PATH
+    final receiptStatus = receiptPrintedSuccess
+        ? 'PASS'
+        : (receiptSkippedByUserConfig ? 'WARNING' : 'FAIL');
+    final receiptEvidenceRef = receiptPrintedSuccess
+        ? 'RECEIPT_PRINTED_OK'
+        : receiptSkippedByUserConfig
+            ? 'RECEIPT_SKIPPED_BY_USER_CONFIG'
+            : (receiptBlockedReason ?? 'RECEIPT_PRINT_FAILED');
+    final receiptDetails = <String, dynamic>{
+      'printerStatus': printerStatus.name,
+      'receiptSuccess': receiptPrintedSuccess,
+      'ticketId': ticketId,
+      'taxRegime': receiptRegimeEvidence,
+      'paperWidthMm': receiptPaperWidthEvidence,
+      'blockedReason': receiptBlockedReason,
+    };
+    if (receiptSkippedByUserConfig) {
+      // Issue #561: details must note that the user config skipped the print.
+      receiptDetails['skipReason'] = 'RECEIPT_SKIPPED_BY_USER_CONFIG';
+      receiptDetails['skippedByUserConfig'] = true;
+    }
     final receiptCheck = ActivationCheckResultLocalEntity(
       id: const Uuid().v4(),
       tenantId: trimmedTenantId,
       activationAttemptId: trimmedAttemptId,
       checkCode: 'SALE_RECEIPT_PATH',
-      status: receiptPrintedSuccess ? 'PASS' : 'FAIL',
+      status: receiptStatus,
       evidenceType: 'RECEIPT_PRINTER_OUTPUT',
-      evidenceRef: receiptPrintedSuccess
-          ? 'RECEIPT_PRINTED_OK'
-          : (receiptBlockedReason ?? 'RECEIPT_PRINT_FAILED'),
+      evidenceRef: receiptEvidenceRef,
       occurredAt: nowIso,
       recordedAt: nowIso,
-      detailsSanitizedJson: jsonEncode({
-        'printerStatus': printerStatus.name,
-        'receiptSuccess': receiptPrintedSuccess,
-        'ticketId': ticketId,
-        'taxRegime': receiptRegimeEvidence,
-        'paperWidthMm': receiptPaperWidthEvidence,
-        'blockedReason': receiptBlockedReason,
-      }),
+      detailsSanitizedJson: jsonEncode(receiptDetails),
     );
     checks['SALE_RECEIPT_PATH'] = receiptCheck;
     if (receiptBlockedReason != null) {
@@ -430,7 +461,7 @@ class ActivationControlledSaleRunner {
         'could not be resolved from printer configuration (configured value: ${receiptRegimeEvidence ?? '<empty>'}). '
         'Printing a fiscal document with a guessed document type is prohibited (DGI DT 09-2007).',
       );
-    } else if (!receiptPrintedSuccess) {
+    } else if (!receiptPrintedSuccess && !receiptSkippedByUserConfig) {
       errors.add(
         'SALE_RECEIPT_PATH_FAILED: Printing receipt failed with printer status ${printerStatus.name}',
       );
@@ -477,10 +508,8 @@ class ActivationControlledSaleRunner {
       idempotencyKey: 'activation:check:$trimmedTenantId:$trimmedAttemptId:SALE_RECEIPT_PATH',
       payload: {
         'checkCode': 'SALE_RECEIPT_PATH',
-        'status': receiptPrintedSuccess ? 'PASS' : 'FAIL',
-        'evidenceRef': receiptPrintedSuccess
-            ? 'RECEIPT_PRINTED_OK'
-            : (receiptBlockedReason ?? 'RECEIPT_PRINT_FAILED'),
+        'status': receiptStatus,
+        'evidenceRef': receiptEvidenceRef,
         'occurredAt': nowIso,
       },
     );
@@ -605,8 +634,23 @@ class ActivationControlledSaleRunner {
     }
 
     // 7. Attempt State Update: Transition to LOCAL_ACTIVATION_EVIDENCE_COMPLETE
+    // Issue #561 (R2): the local gate mirrors the backend WARNING whitelist
+    // EXPLICITLY. The ONLY tolerated non-PASS check is SALE_RECEIPT_PATH =
+    // WARNING with evidence ref RECEIPT_SKIPPED_BY_USER_CONFIG (the owner
+    // disabled auto-print). Any other WARNING/FAIL — including a WARNING on
+    // SALE_RECEIPT_PATH with any other evidence ref — keeps the attempt in
+    // RUNNING. No generic WARNING tolerance.
+    final receiptCheckForGate = checks['SALE_RECEIPT_PATH'];
+    final toleratedReceiptSkipWarning = receiptCheckForGate != null &&
+        receiptCheckForGate.checkCode == 'SALE_RECEIPT_PATH' &&
+        receiptCheckForGate.status == 'WARNING' &&
+        receiptCheckForGate.evidenceRef == 'RECEIPT_SKIPPED_BY_USER_CONFIG';
+
     final allChecksPassed = errors.isEmpty &&
-        checks.values.every((c) => c.status == 'PASS');
+        checks.values.every((c) {
+          if (c.status == 'PASS') return true;
+          return toleratedReceiptSkipWarning && identical(c, receiptCheckForGate);
+        });
 
     final updatedAttempt = attempt.copyWith(
       verificationTicketId: ticketId,

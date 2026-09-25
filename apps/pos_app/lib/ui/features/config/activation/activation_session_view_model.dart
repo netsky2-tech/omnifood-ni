@@ -19,8 +19,8 @@ enum ActivationSessionPhase { preOfflineChecks, controlledOfflineSale, reconnect
 class ActivationPhaseNotPreparedException extends StateError {
   ActivationPhaseNotPreparedException(ActivationSessionPhase phase)
       : super(
-          'Activation phase refused: ${phase.name} cannot run before a successful '
-          'prepare(). Run prepare() first.',
+          'No se puede iniciar esta fase de activación antes de completar '
+          'la anterior.',
         );
 }
 

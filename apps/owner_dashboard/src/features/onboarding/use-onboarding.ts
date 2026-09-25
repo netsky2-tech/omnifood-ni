@@ -9,6 +9,7 @@ import {
   startActivationAttempt,
   fetchActiveActivationAttempt,
   generateLinkingCode,
+  fetchLinkingCodes,
 } from "./onboarding-api";
 import {
   OnboardingLifecycleState,
@@ -28,6 +29,7 @@ export const onboardingKeys = {
   readiness: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "readiness"] as const,
   catalogSummary: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "catalog-summary"] as const,
   activationAttempt: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "activation-attempt"] as const,
+  linkingCodes: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "linking-codes"] as const,
 };
 
 export function calculateSetupCenterProgress(
@@ -241,6 +243,22 @@ export function useActiveActivationAttempt() {
     queryKey: onboardingKeys.activationAttempt(),
     queryFn: fetchActiveActivationAttempt,
     staleTime: 10_000,
+  });
+}
+
+/**
+ * Polls the tenant's linking codes every 5 seconds (issue #569 single
+ * linking flow): the owner generates a code and keeps this view open; when
+ * the POS claims the code the status flips ACTIVE -> CLAIMED and the setup
+ * center offers one-click activation for the claimed deviceId. Polling (not
+ * push) matches the offline-first reality where the POS and the dashboard
+ * share no direct channel.
+ */
+export function useLinkingCodes() {
+  return useQuery({
+    queryKey: onboardingKeys.linkingCodes(),
+    queryFn: fetchLinkingCodes,
+    refetchInterval: 5000,
   });
 }
 

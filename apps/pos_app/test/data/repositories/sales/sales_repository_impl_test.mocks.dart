@@ -2054,7 +2054,6 @@ class MockDgiNumberingService extends _i1.Mock
   _i51.Future<void> initializeRange({
     required String? prefix,
     required int? start,
-    required int? end,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -2063,7 +2062,6 @@ class MockDgiNumberingService extends _i1.Mock
           {
             #prefix: prefix,
             #start: start,
-            #end: end,
           },
         ),
         returnValue: _i51.Future<void>.value(),
@@ -2094,15 +2092,6 @@ class MockDgiNumberingService extends _i1.Mock
         returnValue: _i51.Future<void>.value(),
         returnValueForMissingStub: _i51.Future<void>.value(),
       ) as _i51.Future<void>);
-
-  @override
-  _i51.Future<bool> isRangeExhausted() => (super.noSuchMethod(
-        Invocation.method(
-          #isRangeExhausted,
-          [],
-        ),
-        returnValue: _i51.Future<bool>.value(false),
-      ) as _i51.Future<bool>);
 }
 
 /// A class which mocks [MovementEngine].

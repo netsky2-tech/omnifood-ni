@@ -85,7 +85,8 @@ void main() {
     when(mockDb.promotionDao).thenReturn(mockPromoDao);
     when(mockAuthRepo.getCurrentUser()).thenAnswer((_) async => null);
     when(mockInventoryRepo.getActiveProducts()).thenAnswer((_) async => []);
-    when(mockSessionDao.getActiveSession()).thenAnswer((_) async => null);
+    when(mockSessionDao.getActiveSessionForUserAndTerminal(any, any))
+        .thenAnswer((_) async => null);
     when(mockHoldDao.getAllHoldTickets()).thenAnswer((_) async => []);
     when(mockPromoDao.getActivePromotions()).thenAnswer((_) async => []);
     when(mockPromoDao.getAllPromotions()).thenAnswer((_) async => []);
@@ -230,6 +231,11 @@ void main() {
         reason: 'no reason selected yet: the client-side mirror of the '
             'repository boundary keeps ANULAR disabled',
       );
+
+      // #587 WU3: reason options render Spanish labels from the centralized
+      // map; the raw controlled codes never reach the dialog.
+      expect(find.text('Error de captura'), findsOneWidget);
+      expect(find.text('ERROR_DE_CAPTURA'), findsNothing);
 
       await tester.tap(find.text('Error de captura'));
       await tester.pumpAndSettle();

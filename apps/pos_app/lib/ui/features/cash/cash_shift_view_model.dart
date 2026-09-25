@@ -7,6 +7,7 @@ import '../../../data/daos/sales/payment_dao.dart';
 import '../../../data/models/sales/cashier_session_entity.dart';
 import '../../../data/models/sales/cash_movement_entity.dart';
 import '../../../domain/models/user.dart';
+import '../../../domain/repositories/auth_repository.dart';
 
 class CashShiftViewModel extends ChangeNotifier {
   final CashierSessionDao sessionDao;
@@ -15,6 +16,12 @@ class CashShiftViewModel extends ChangeNotifier {
   final String currentUserId;
   final String currentUserName;
   final String currentTerminalId;
+
+  /// Issue #552: when provided, the acting user id is resolved from the
+  /// identity source at action time (same per-action resolution the sale
+  /// path uses via AuthRepository.getCurrentUser) instead of trusting a
+  /// hard-coded literal captured at construction.
+  final AuthRepository? authRepository;
   UserRole? _currentUserRole;
 
   CashierSessionEntity? _activeShift;
@@ -28,20 +35,25 @@ class CashShiftViewModel extends ChangeNotifier {
     required this.sessionDao,
     required this.movementDao,
     this.paymentDao,
-    required this.currentUserId,
+    // Issue #552: no longer required — callers SHOULD inject authRepository
+    // and let the identity source provide the acting user id. Kept as a
+    // fallback for direct constructions (widget tests, isolated harnesses).
+    this.currentUserId = '',
     this.currentUserName = 'Cajero',
     this.currentTerminalId = 'term-main',
+    this.authRepository,
     UserRole? currentUserRole,
   }) : _currentUserRole = currentUserRole;
 
   factory CashShiftViewModel.fromDatabase({
     required AppDatabase database,
-    required String currentUserId,
+    String currentUserId = '',
     String currentUserName = 'Cajero',
     // D-15 (JD-A-002): identical default to SaleViewModel's
     // effectiveTerminalId — both session openers must resolve the same
     // terminal or the void guard's scoped session lookup never matches.
     String currentTerminalId = 'TERM-01',
+    AuthRepository? authRepository,
     UserRole? currentUserRole,
   }) {
     return CashShiftViewModel(
@@ -51,8 +63,22 @@ class CashShiftViewModel extends ChangeNotifier {
       currentUserId: currentUserId,
       currentUserName: currentUserName,
       currentTerminalId: currentTerminalId,
+      authRepository: authRepository,
       currentUserRole: currentUserRole,
     );
+  }
+
+  /// Issue #552: resolves the acting user id. The injected identity source
+  /// wins; when it reports no logged-in user, there IS no acting user (the
+  /// caller must refuse identity-stamped operations). Falls back to the
+  /// constructor value only when no identity source was injected.
+  Future<String?> _actingUserId() async {
+    final repo = authRepository;
+    if (repo != null) {
+      final user = await repo.getCurrentUser();
+      return user?.id;
+    }
+    return currentUserId.isNotEmpty ? currentUserId : null;
   }
 
   CashierSessionEntity? get activeShift => _activeShift;
@@ -76,7 +102,14 @@ class CashShiftViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _activeShift = await sessionDao.getActiveSession();
+      // Issue #552: scope the open-shift lookup to THIS user and terminal.
+      final actingUserId = await _actingUserId();
+      _activeShift = actingUserId == null
+          ? null
+          : await sessionDao.getActiveSessionForUserAndTerminal(
+              actingUserId,
+              currentTerminalId,
+            );
       if (_activeShift != null) {
         _movements = await movementDao.getMovementsByShiftId(_activeShift!.id);
       } else {
@@ -107,6 +140,16 @@ class CashShiftViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Issue #552: identity comes from the identity source, mirroring
+      // SaleViewModel.openSession's per-action getCurrentUser resolution.
+      final actingUserId = await _actingUserId();
+      if (actingUserId == null) {
+        _errorMessage = 'Debe iniciar sesión para abrir caja.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
       if (_currentUserRole == UserRole.waiter) {
         _errorMessage = 'No tiene permiso para abrir turno de caja.';
         _isLoading = false;
@@ -114,7 +157,13 @@ class CashShiftViewModel extends ChangeNotifier {
         return false;
       }
 
-      final existing = await sessionDao.getActiveSession();
+      // Issue #552: the duplicate-shift guard is scoped to THIS user and
+      // terminal — another cashier's open shift on the same terminal must
+      // not block this user from opening their own shift.
+      final existing = await sessionDao.getActiveSessionForUserAndTerminal(
+        actingUserId,
+        currentTerminalId,
+      );
       if (existing != null) {
         _errorMessage = 'Ya existe un turno de caja activo en esta terminal.';
         _isLoading = false;
@@ -127,7 +176,7 @@ class CashShiftViewModel extends ChangeNotifier {
 
       final session = CashierSessionEntity(
         id: shiftId,
-        userId: currentUserId,
+        userId: actingUserId,
         terminalId: currentTerminalId,
         openedAt: now,
         tipoModelo: 'CAJA_CENTRAL',

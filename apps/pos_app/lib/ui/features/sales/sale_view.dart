@@ -10,6 +10,7 @@ import '../../../domain/models/user.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/repositories/audit_repository.dart';
 import '../../../data/database/app_database.dart';
+import '../../../core/localization/label_map.dart';
 import '../../../core/navigation/route_observer.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
@@ -20,6 +21,7 @@ import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'tables/table_layout_view.dart';
 import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
+import '../config/business_profile/fiscal_authorization_expiry_notice_widget.dart';
 import '../../../presentation/features/sales/widgets/loyalty_compact_widget.dart';
 import '../../../presentation/features/sales/widgets/reward_cta_widget.dart';
 import '../../../presentation/features/sales/widgets/reward_confirmation_dialog.dart';
@@ -709,7 +711,7 @@ class _CloseBoxDialogState extends State<CloseBoxDialog> {
                 DataColumn(label: Text('Esperado')),
               ],
               rows: expected.entries.map((e) => DataRow(cells: [
-                DataCell(Text(e.key.name.toUpperCase())),
+                DataCell(Text(localize(e.key.name, kPaymentMethodLabels))),
                 DataCell(Text('C\$ ${e.value.toStringAsFixed(2)}')),
               ])).toList(),
             ),
@@ -1252,6 +1254,11 @@ class CartSidebar extends StatelessWidget {
 
     return Column(
       children: [
+        // D-21 (#554) U4: warning-only DGI authorization expiry notice at the
+        // top of the sale screen so the operator sees it before invoicing.
+        // Best-effort load; renders nothing when unconfigured and NEVER
+        // blocks checkout.
+        const FiscalAuthorizationExpiryNoticeLoader(),
         Padding(
           padding: EdgeInsets.all(isMobileSheet ? 8.0 : 16.0),
           child: Row(
@@ -1368,7 +1375,7 @@ class CartSummary extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('IVA (15%)'),
+              const Text('IVA'),
               Text('C\$ ${(viewModel.totalTax).toStringAsFixed(2)}'),
             ],
           ),
@@ -1696,7 +1703,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Row(
                   children: [
-                    Expanded(flex: 2, child: Text(method.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold))),
+                    Expanded(flex: 2, child: Text(localize(method.name, kPaymentMethodLabels), style: const TextStyle(fontWeight: FontWeight.bold))),
                     Expanded(
                       flex: 3,
                       child: TextField(

@@ -35,11 +35,24 @@ describe('SalesReportsService — America/Managua Business Day Boundaries Regres
           useValue: { find: jest.fn().mockResolvedValue([]) },
         },
         {
-          // Issue #556 stage 12d F1: the service now injects DataSource for
-          // the tenant-bound users read; this timezone regression never
-          // touches users, so a never-called fake is enough.
+          // Issue #581 WU1: the dashboard invoice read now runs inside the
+          // tenant-bound transaction manager; this fake invokes the callback
+          // with a manager that hands back the same invoice repo mock, so
+          // the where-clause assertion below keeps its original target and
+          // the timezone coverage is unchanged.
           provide: DataSource,
-          useValue: { transaction: jest.fn() },
+          useValue: {
+            transaction: jest.fn(
+              (work: (manager: unknown) => Promise<unknown>) =>
+                work({
+                  query: jest.fn(async () => []),
+                  getRepository: jest.fn((entity: unknown) => {
+                    if (entity === Invoice) return invoiceRepo;
+                    throw new Error('Unexpected repository request');
+                  }),
+                }),
+            ),
+          },
         },
       ],
     }).compile();

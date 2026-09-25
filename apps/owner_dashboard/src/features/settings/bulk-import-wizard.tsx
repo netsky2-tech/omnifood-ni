@@ -9,6 +9,7 @@ import {
   MAX_IMPORT_CHUNK_SIZE,
 } from "./types";
 import { generateOdav32Dataset } from "./odav32-dataset";
+import { localize, importModeLabels, duplicateResolutionLabels } from "@/lib/labels";
 import {
   useUploadChunkedImport,
   useCommitImport,
@@ -438,11 +439,14 @@ export function BulkImportWizard() {
                     onChange={(e) => setCommitMode(e.target.value as CommitMode)}
                     data-testid="commit-mode-select"
                   >
+                    {/* Human-first Spanish labels (issue #587); the raw enum stays as a
+                        trailing token because API payloads and diagnostics surface it.
+                        VALUE attributes are untouched — they are what gets committed. */}
                     <option value="VALID_ONLY">
-                      VALID_ONLY — Importar solo filas válidas ({uploadSummary.validRows})
+                      {localize("VALID_ONLY", importModeLabels)} ({uploadSummary.validRows}) — VALID_ONLY
                     </option>
                     <option value="ALL_OR_NOTHING">
-                      ALL_OR_NOTHING — Requerir 100% de filas válidas
+                      {localize("ALL_OR_NOTHING", importModeLabels)} — ALL_OR_NOTHING
                     </option>
                   </select>
                 </div>
@@ -455,9 +459,15 @@ export function BulkImportWizard() {
                     onChange={(e) => setDuplicateResolution(e.target.value as DuplicateResolution)}
                     data-testid="duplicate-resolution-select"
                   >
-                    <option value="REPLACE">REPLACE — Actualizar precio y datos del producto existente</option>
-                    <option value="SKIP">SKIP — Omitir y conservar producto existente</option>
-                    <option value="FAIL">FAIL — Detener importación si existe duplicado</option>
+                    <option value="REPLACE">
+                      {localize("REPLACE", duplicateResolutionLabels)} — REPLACE
+                    </option>
+                    <option value="SKIP">
+                      {localize("SKIP", duplicateResolutionLabels)} — SKIP
+                    </option>
+                    <option value="FAIL">
+                      {localize("FAIL", duplicateResolutionLabels)} — FAIL
+                    </option>
                   </select>
                 </div>
               </div>

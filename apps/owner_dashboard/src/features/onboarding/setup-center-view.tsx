@@ -1,28 +1,30 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect } from "react";
 import {
   useOnboardingSession,
   useOnboardingCatalogSummary,
   useActiveActivationAttempt,
   useStartActivationAttempt,
   useGenerateLinkingCode,
+  useLinkingCodes,
 } from "./use-onboarding";
 import { isVersionConflictError } from "./onboarding-api";
 import { emitOnboardingTelemetry } from "./onboarding-telemetry-client";
 import {
   OnboardingLifecycleState,
   ActivationAttemptStatus,
+  LinkingCodeStatus,
   type OnboardingStepKey,
   type GenerateLinkingCodeResponse,
+  type LinkingCodeResponse,
 } from "./types";
 import { isApiError } from "@/lib/api";
+import { localize, backendActivationErrorLabels, lifecycleStateLabels } from "@/lib/labels";
 import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
 import { useHasPermission } from "@/features/users/use-has-permission";
 import { AppPermission } from "@/features/users/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   CheckCircle2,
@@ -53,20 +55,19 @@ interface SetupCenterViewProps {
 
 /**
  * Maps a documented backend failure of POST /onboarding/activation/attempts to
- * a message a business owner understands. The backend message stays available
- * next to it for support diagnostics.
+ * a message a business owner understands. Known machine codes get their human
+ * lead line from backendActivationErrorLabels (issue #587 / D4); documented
+ * failures that carry no machine code (verification product, permission) keep
+ * their dedicated copy, and anything unknown falls back to a generic line. The
+ * backend message always stays available next to it for support diagnostics.
  */
 function describeActivationAttemptFailure(error: unknown): string {
   if (isApiError(error)) {
     const backendMessage = typeof error.message === "string" ? error.message : "";
-    if (backendMessage.includes("CANNOT_START_ACTIVATION_NOT_SALE_READY")) {
-      return "Tu comercio todavía no está Listo para Venta, así que no se puede iniciar la activación de la terminal. Completá los pasos pendientes del Setup Center e intentá de nuevo.";
-    }
-    if (backendMessage.includes("ACTIVE_ATTEMPT_EXISTS")) {
-      return "Ya existe una activación en curso para tu comercio. Continuá el proceso desde la terminal POS; la activación actual debe completarse antes de iniciar otra.";
-    }
-    if (backendMessage.includes("FISCAL_REVISION_NOT_AVAILABLE")) {
-      return "No se pudo registrar la revisión de tu configuración fiscal. Revisá la Configuración Fiscal DGI en el Setup Center e intentá de nuevo.";
+    for (const code of Object.keys(backendActivationErrorLabels)) {
+      if (backendMessage.includes(code)) {
+        return localize(code, backendActivationErrorLabels);
+      }
     }
     if (backendMessage.toLowerCase().includes("verification product")) {
       return "No hay un producto de verificación válido para activar la terminal. Necesitás al menos un producto activo con precio de venta mayor a cero.";
@@ -102,6 +103,24 @@ function formatLinkingCountdown(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+/**
+ * Claimed linking codes that are ready for one-click activation (issue #569
+ * single linking flow). A code qualifies when the POS claimed it (status
+ * CLAIMED) and the claim bound a deviceId — that binding is what replaces the
+ * manual terminal id transcription. Defensive Array.isArray: the endpoint is
+ * polled every 5s, and malformed or non-array responses must degrade to "no
+ * terminals detected" instead of crashing the setup center.
+ */
+function selectClaimableLinkingCodes(
+  linkingCodes: LinkingCodeResponse[] | undefined,
+): LinkingCodeResponse[] {
+  if (!Array.isArray(linkingCodes)) return [];
+  return linkingCodes.filter(
+    (code): code is LinkingCodeResponse & { deviceId: string } =>
+      code.status === LinkingCodeStatus.CLAIMED && typeof code.deviceId === "string" && code.deviceId !== "",
+  );
+}
+
 export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   const { session, readiness, progress, isLoading, isError, error, refetch, isFetching } =
     useOnboardingSession();
@@ -110,11 +129,11 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
 
   const isActivated = progress.currentLifecycle === OnboardingLifecycleState.ACTIVATED;
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
-  const [terminalIdInput, setTerminalIdInput] = useState("");
-  const [terminalIdValidationError, setTerminalIdValidationError] = useState<string | null>(null);
   const { data: activeAttempt } = useActiveActivationAttempt();
   const startActivationAttempt = useStartActivationAttempt();
   const generateLinkingCode = useGenerateLinkingCode();
+  const { data: linkingCodes } = useLinkingCodes();
+  const claimableLinkingCodes = selectClaimableLinkingCodes(linkingCodes);
 
   const [linkingCode, setLinkingCode] = useState<GenerateLinkingCodeResponse | null>(null);
   const [linkingNowMs, setLinkingNowMs] = useState(() => Date.now());
@@ -223,17 +242,14 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
     return null;
   }
 
-  const handleStartActivationAttempt = (event: FormEvent) => {
-    event.preventDefault();
-    const trimmedTerminalId = terminalIdInput.trim();
-    if (!trimmedTerminalId) {
-      setTerminalIdValidationError(
-        "Ingresá el ID de terminal que aparece en la pantalla de identidad de la terminal POS.",
-      );
-      return;
-    }
-    setTerminalIdValidationError(null);
-    startActivationAttempt.mutate({ candidateTerminalId: trimmedTerminalId });
+  /**
+   * Issue #569 single linking flow: the activation attempt is always started
+   * with the deviceId bound by a claimed linking code — never with a manually
+   * transcribed id. The mutation hook keeps a stable idempotency key per
+   * candidate terminal id across retries.
+   */
+  const handleStartActivationForClaimedDevice = (deviceId: string) => {
+    startActivationAttempt.mutate({ candidateTerminalId: deviceId });
   };
 
   const getLifecycleBadgeVariant = (state: OnboardingLifecycleState) => {
@@ -249,22 +265,8 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
     }
   };
 
-  const getLifecycleDisplayLabel = (state: OnboardingLifecycleState): string => {
-    switch (state) {
-      case OnboardingLifecycleState.PROVISIONED:
-        return "Inicial";
-      case OnboardingLifecycleState.SETUP_IN_PROGRESS:
-        return "En Configuración";
-      case OnboardingLifecycleState.SALE_READY:
-        return "Listo para Venta";
-      case OnboardingLifecycleState.ACTIVATION_IN_PROGRESS:
-        return "Activación en Curso";
-      case OnboardingLifecycleState.ACTIVATED:
-        return "Activado";
-      default:
-        return state;
-    }
-  };
+  const getLifecycleDisplayLabel = (state: OnboardingLifecycleState): string =>
+    localize(state, lifecycleStateLabels);
 
   const handleStepAction = (actionKey: OnboardingStepKey) => {
     if (actionKey === "catalog") {
@@ -508,11 +510,6 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                         </span>
                       </div>
                     )}
-                    <form
-                      data-testid="activation-attempt-form"
-                      onSubmit={handleStartActivationAttempt}
-                      className="flex flex-col gap-1.5"
-                    >
                     <div
                       data-testid="start-pos-terminal-btn"
                       className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium bg-blue-100 text-blue-800 border border-blue-300"
@@ -520,66 +517,6 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                       <Store className="h-4 w-4" />
                       Terminal Listo — Activar desde el POS
                     </div>
-                    <Label
-                      htmlFor="activation-terminal-id-input"
-                      className="text-[11px] text-muted-foreground font-medium"
-                    >
-                      ID de Terminal (leelo en la pantalla de identidad de la terminal POS)
-                    </Label>
-                    <Input
-                      id="activation-terminal-id-input"
-                      data-testid="activation-terminal-id-input"
-                      value={terminalIdInput}
-                      onChange={(event) => {
-                        setTerminalIdInput(event.target.value);
-                        if (terminalIdValidationError) setTerminalIdValidationError(null);
-                      }}
-                      placeholder="Ej.: POS-01"
-                      autoComplete="off"
-                      className="h-8 max-w-xs text-sm"
-                    />
-                    {terminalIdValidationError && (
-                      <span
-                        data-testid="activation-terminal-id-error"
-                        role="alert"
-                        className="text-[11px] text-destructive font-medium flex items-center gap-1"
-                      >
-                        <AlertTriangle className="h-3 w-3 shrink-0" />
-                        {terminalIdValidationError}
-                      </span>
-                    )}
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={startActivationAttempt.isPending}
-                      data-testid="create-activation-attempt-btn"
-                      className="self-start flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
-                    >
-                      <Store className="h-4 w-4" />
-                      {startActivationAttempt.isPending
-                        ? "Iniciando activación..."
-                        : "Iniciar Activación de Terminal"}
-                    </Button>
-                    {startActivationAttempt.isError && (
-                      <div
-                        data-testid="activation-attempt-error"
-                        role="alert"
-                        className="flex flex-col gap-0.5 px-3 py-2 rounded-md text-[11px] bg-destructive/10 border border-destructive/20"
-                      >
-                        <span className="font-medium text-destructive">
-                          {describeActivationAttemptFailure(startActivationAttempt.error)}
-                        </span>
-                        {isApiError(startActivationAttempt.error) && (
-                          <span
-                            data-testid="activation-attempt-error-backend"
-                            className="font-mono text-[10px] text-muted-foreground break-all"
-                          >
-                            {startActivationAttempt.error.message}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    </form>
                   </>
                 ) : (
                   <div
@@ -601,7 +538,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     data-testid="activation-hint"
                     className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5"
                   >
-                    Ingresá el ID de la terminal y iniciá la activación desde acá; el siguiente paso se realiza en la propia terminal POS.
+                    Generá el código de vinculación aquí abajo; cuando la terminal POS lo reclame, la detectamos automáticamente y iniciás la activación con un clic.
                   </span>
                 )}
                 {progress.isSaleReady && !hasActivationPermission && (
@@ -620,13 +557,16 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
         </CardContent>
       </Card>
 
-      {/* Issue #556 stage 12c — Vincular Terminal: single-use pre-login linking code. */}
+      {/* Issue #556 stage 12c + issue #569 single linking flow — Vincular y
+          Activar Terminal: single-use pre-login linking code plus automatic
+          detection of the terminal that claimed it, replacing the manual
+          terminal-id transcription with a one-click activation. */}
       <Card data-testid="terminal-linking-card" className="border-border/80 shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base font-semibold flex items-center gap-2 text-foreground">
               <Smartphone className="h-5 w-5 text-primary shrink-0" />
-              Vincular Terminal
+              Vincular y Activar Terminal
             </CardTitle>
             {linkingCode && (
               <Badge
@@ -643,8 +583,8 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             )}
           </div>
           <CardDescription className="text-xs text-muted-foreground mt-1">
-            Generá un código de un solo uso para que una terminal POS quede vinculada a tu comercio
-            antes de iniciar sesión en ella.
+            Generá un código de un solo uso e ingresalo en la terminal POS. Cuando la terminal lo
+            reclame, la detectamos automáticamente para activarla con un clic — sin copiar IDs a mano.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -737,6 +677,83 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               >
                 Cerrar
               </Button>
+            </div>
+          )}
+          {/* Issue #569 single linking flow — claimed-code detection. The
+              activation attempt is started ONLY from here, with the deviceId
+              bound by the claim. Hidden while an attempt awaits device checks;
+              a finished (FAIL/PASS_WITH_WARNING) attempt keeps the list
+              reachable as the one-click retry path. */}
+          {!isAwaitingDeviceChecks && (
+            <div className="space-y-2 pt-1" data-testid="terminal-detection-section">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <Smartphone className="h-3.5 w-3.5 shrink-0" />
+                Terminal detectada
+              </div>
+              {claimableLinkingCodes.length > 0 ? (
+                claimableLinkingCodes.map((code) => (
+                  <div
+                    key={code.id}
+                    data-testid="claimed-terminal-item"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-md border border-emerald-300 bg-emerald-50/30"
+                  >
+                    <div className="space-y-0.5">
+                      <span
+                        data-testid="claimed-terminal-device-id"
+                        className="text-sm font-mono font-medium text-foreground"
+                      >
+                        {code.deviceId}
+                      </span>
+                      <p className="text-[11px] text-muted-foreground">
+                        Reclamó un código de vinculación el{" "}
+                        {new Date(code.claimedAt ?? code.createdAt).toLocaleString("es-NI", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      data-testid="start-activation-for-terminal-btn"
+                      onClick={() => handleStartActivationForClaimedDevice(code.deviceId)}
+                      disabled={startActivationAttempt.isPending || !hasActivationPermission}
+                      className="self-start sm:self-auto flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
+                    >
+                      <Store className="h-4 w-4" />
+                      {startActivationAttempt.isPending
+                        ? "Iniciando activación..."
+                        : "Iniciar Activación para esta terminal"}
+                    </Button>
+                  </div>
+                ))
+              ) : (
+                <p
+                  data-testid="terminal-detection-empty"
+                  className="text-[11px] text-muted-foreground"
+                >
+                  Todavía no hay terminales detectadas. Cuando una terminal POS ingrese el código de
+                  vinculación, aparecerá acá automáticamente.
+                </p>
+              )}
+              {startActivationAttempt.isError && (
+                <div
+                  data-testid="activation-attempt-error"
+                  role="alert"
+                  className="flex flex-col gap-0.5 px-3 py-2 rounded-md text-[11px] bg-destructive/10 border border-destructive/20"
+                >
+                  <span className="font-medium text-destructive">
+                    {describeActivationAttemptFailure(startActivationAttempt.error)}
+                  </span>
+                  {isApiError(startActivationAttempt.error) && (
+                    <span
+                      data-testid="activation-attempt-error-backend"
+                      className="font-mono text-[10px] text-muted-foreground break-all"
+                    >
+                      {startActivationAttempt.error.message}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {generateLinkingCode.isError && (

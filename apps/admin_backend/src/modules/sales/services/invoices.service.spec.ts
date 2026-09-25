@@ -3683,4 +3683,64 @@ describe('InvoicesService', () => {
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
     });
   });
+
+  describe('fiscal cloud projection columns (#551 U3)', () => {
+    const baseDto = {
+      id: 'inv-fiscal-1',
+      number: '003',
+      createdAt: new Date().toISOString(),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+      paymentStatus: 'PAID',
+      items: [],
+      payments: [],
+    };
+
+    it('persists shiftId and localIssueDate on the sync upsert payload', async () => {
+      const dto: SyncInvoiceDto = {
+        ...baseDto,
+        shiftId: '0d2f9c1e-1234-4abc-9def-555555555555',
+        localIssueDate: '2026-09-25',
+      };
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'inv-fiscal-1',
+          shiftId: '0d2f9c1e-1234-4abc-9def-555555555555',
+          localIssueDate: '2026-09-25',
+        }),
+        ['id'],
+      );
+    });
+
+    it('persists explicit nulls so legacy invoices stay null (D-9, no backfill)', async () => {
+      const dto: SyncInvoiceDto = {
+        ...baseDto,
+        shiftId: null,
+        localIssueDate: null,
+      };
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ shiftId: null, localIssueDate: null }),
+        ['id'],
+      );
+    });
+
+    it('leaves legacy payloads without the fields untouched (no fabricated values)', async () => {
+      const dto: SyncInvoiceDto = { ...baseDto };
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledTimes(1);
+      const payload = invoiceRepo.upsert.mock.calls[0][0];
+      expect(payload.shiftId).toBeUndefined();
+      expect(payload.localIssueDate).toBeUndefined();
+    });
+  });
 });

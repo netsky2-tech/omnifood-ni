@@ -195,9 +195,8 @@ void main() {
           isClosed: false,
         ),
       );
-      // Numbering stubs: the gate is not under test here.
+      // Numbering stubs.
       final numberingService = MockDgiNumberingService();
-      when(numberingService.isRangeExhausted()).thenAnswer((_) async => false);
       when(numberingService.getNextNumber())
           .thenAnswer((_) async => '001-001-01-00000001');
       when(numberingService.incrementNumber()).thenAnswer((_) async {});

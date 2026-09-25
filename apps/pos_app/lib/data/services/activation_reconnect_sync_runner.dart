@@ -289,7 +289,7 @@ class ActivationReconnectSyncRunner {
       // Cloud finalizer was unreachable or returned network error:
       // POS MUST REMAIN in EVIDENCE_ACKED; NEVER unilaterally show ACTIVATED
       errors.add(
-        "Finalizer communication error: ${finalizeResult.failureCode ?? 'UNKNOWN_FINALIZER_ERROR'}",
+        "Error de comunicación con el servidor: ${finalizeResult.failureCode ?? 'UNKNOWN_FINALIZER_ERROR'}",
       );
       return ActivationReconnectSyncResult(
         isSuccess: false,

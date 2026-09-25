@@ -50,6 +50,7 @@ void main() {
           'currentStock': 1.5,
           'parLevel': 3.0,
           'originDocument': 'session-low-stock',
+          'movementType': 'LOW_STOCK_THRESHOLD',
           'sourceMovementId': 'mov-1',
         },
       ),
@@ -59,8 +60,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Stock bajo en Base de Café.'), findsOneWidget);
-    expect(find.text('HIGH'), findsOneWidget);
-    expect(find.text('LOW_STOCK'), findsOneWidget);
+    expect(find.text('Alta'), findsOneWidget);
+    expect(find.text('HIGH'), findsNothing);
+    expect(find.text('Stock bajo'), findsOneWidget);
+    expect(find.text('LOW_STOCK'), findsNothing);
+    expect(find.text('Movimiento: Umbral de stock bajo'), findsOneWidget);
+    expect(find.text('Movimiento: LOW_STOCK_THRESHOLD'), findsNothing);
     expect(find.text('Activa'), findsOneWidget);
 
     await tester.tap(find.text('RECONOCER'));
@@ -106,6 +111,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Resuelta'), findsOneWidget);
+    expect(find.text('Variación de conteo'), findsOneWidget);
+    expect(find.text('COUNT_VARIANCE'), findsNothing);
+    expect(find.text('Crítica'), findsOneWidget);
+    expect(find.text('CRITICAL'), findsNothing);
     expect(find.text('Documento origen: COUNT_SESSION · count-1'), findsOneWidget);
     expect(find.text('Compensado con ajuste aprobado'), findsOneWidget);
   });

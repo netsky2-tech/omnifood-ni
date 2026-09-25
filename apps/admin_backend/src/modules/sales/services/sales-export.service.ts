@@ -12,6 +12,7 @@ import * as ExcelJS from 'exceljs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import PDFDocument = require('pdfkit');
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
+import { FiscalSetupService } from '../../onboarding/services/fiscal-setup.service';
 import { Invoice } from '../entities/invoice.entity';
 import { CashShiftSession } from '../entities/cash-shift.entity';
 import {
@@ -55,7 +56,37 @@ export class SalesExportService {
     // read must run inside the tenant-bound transaction manager; the pooled
     // repositories stay declared for Nest DI compatibility only.
     private readonly dataSource: DataSource,
+    // B2e U3 (D-3): the sales book IVA labels derive from the tenant's
+    // effective fiscal configuration — the regime is the single source of
+    // IVA treatment, so no export header may hardcode a percentage.
+    private readonly fiscalSetupService: FiscalSetupService,
   ) {}
+
+  /**
+   * B2e U3 (D-3): regime-aware IVA column labels for the DGI sales book.
+   *
+   * The percentage is derived from the tenant's configured `taxRateIva`
+   * (Regimen General → e.g. 'IVA 15%'). When the effective rate is 0 (Cuota
+   * Fija) the labels stay plain ('IVA' / 'Gravado'): the book collects no
+   * IVA, so no percentage is printed — and never an invented 15%. If the
+   * fiscal setup cannot be read, the labels degrade to the plain form too:
+   * fail closed, never fall back to a fabricated rate.
+   */
+  private async resolveIvaLabels(tenantId: string): Promise<{
+    ivaLabel: string;
+    gravadoLabel: string;
+  }> {
+    try {
+      const setup = await this.fiscalSetupService.getFiscalSetup(tenantId);
+      const pct = Math.round(Number(setup.taxRateIva ?? 0) * 100);
+      if (pct > 0) {
+        return { ivaLabel: `IVA ${pct}%`, gravadoLabel: `Gravado ${pct}%` };
+      }
+    } catch {
+      // Fail closed: plain labels, never a hardcoded percentage.
+    }
+    return { ivaLabel: 'IVA', gravadoLabel: 'Gravado' };
+  }
 
   async exportSalesBook(
     tenantId: string,
@@ -79,11 +110,20 @@ export class SalesExportService {
       whereClause.created_at = LessThanOrEqual(end);
     }
 
-    const invoices = await this.invoiceRepo.find({
-      where: whereClause,
-      relations: ['items'],
-      order: { created_at: 'ASC' },
-    });
+    // Issue #581 WU1: invoices is a direct:SIUD RLS-forced table — the
+    // pooled find silently returned zero rows under the production
+    // NOBYPASSRLS role. Bound read, identical query semantics (mirrors
+    // exportZReports' binding pattern).
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: whereClause,
+          relations: ['items'],
+          order: { created_at: 'ASC' },
+        }),
+    );
 
     let totalGrossNio = 0;
     let totalTaxNio = 0;
@@ -182,18 +222,25 @@ export class SalesExportService {
         new Date(),
       );
 
+    // B2e U3 (D-3): labels resolve once per export from the fiscal config.
+    const { ivaLabel, gravadoLabel } = await this.resolveIvaLabels(tenantId);
+
     if (format === 'csv') {
       return {
         format: 'csv',
         filename: `libro-ventas-dgi-${datePrefix}.csv`,
         contentType: 'text/csv; charset=utf-8',
-        content: this.generateSalesBookCsv(records),
+        content: this.generateSalesBookCsv(records, ivaLabel, gravadoLabel),
         data: exportData,
       };
     }
 
     if (format === 'xlsx') {
-      const buffer = await this.generateSalesBookXlsx(exportData);
+      const buffer = await this.generateSalesBookXlsx(
+        exportData,
+        ivaLabel,
+        gravadoLabel,
+      );
       return {
         format: 'xlsx',
         filename: `libro-ventas-dgi-${datePrefix}.xlsx`,
@@ -205,7 +252,10 @@ export class SalesExportService {
     }
 
     if (format === 'pdf') {
-      const buffer = await this.generateSalesBookPdf(exportData);
+      const buffer = await this.generateSalesBookPdf(
+        exportData,
+        ivaLabel,
+      );
       return {
         format: 'pdf',
         filename: `libro-ventas-dgi-${datePrefix}.pdf`,
@@ -248,7 +298,7 @@ export class SalesExportService {
     // The only cash-shift access in this service: one read-only logical unit
     // inside its own tenant-bound transaction. The explicit tenant_id filter
     // stays in the where clause — binding is additive, never a replacement.
-    // The Invoice reads elsewhere in this service are untouched pooled access.
+    // The invoice read in exportSalesBook is bound the same way (issue #581 WU1).
     const shifts = await runInTenantTransaction(
       this.dataSource,
       tenantId,
@@ -341,15 +391,19 @@ export class SalesExportService {
     };
   }
 
-  private generateSalesBookCsv(records: SalesBookRowDto[]): string {
+  private generateSalesBookCsv(
+    records: SalesBookRowDto[],
+    ivaLabel: string,
+    gravadoLabel: string,
+  ): string {
     const headers = [
       'Fecha',
       'Numero Factura',
       'Tipo Documento',
       'Cliente',
       'Subtotal Exento (NIO)',
-      'Subtotal Gravado (NIO)',
-      'IVA 15% (NIO)',
+      `Subtotal ${gravadoLabel} (NIO)`,
+      `${ivaLabel} (NIO)`,
       'Descuento (NIO)',
       'Total (NIO)',
       'Total (USD)',
@@ -427,6 +481,8 @@ export class SalesExportService {
 
   private async generateSalesBookXlsx(
     data: SalesBookExportDto,
+    ivaLabel: string,
+    gravadoLabel: string,
   ): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'OmniFood NI';
@@ -440,8 +496,8 @@ export class SalesExportService {
       { header: 'Tipo Documento', key: 'documentType', width: 16 },
       { header: 'Cliente / RUC', key: 'customerName', width: 22 },
       { header: 'Exento (NIO)', key: 'exemptSubtotalNio', width: 16 },
-      { header: 'Gravado 15% (NIO)', key: 'taxableSubtotalNio', width: 18 },
-      { header: 'IVA 15% (NIO)', key: 'taxAmountNio', width: 16 },
+      { header: `${gravadoLabel} (NIO)`, key: 'taxableSubtotalNio', width: 18 },
+      { header: `${ivaLabel} (NIO)`, key: 'taxAmountNio', width: 16 },
       { header: 'Descuento (NIO)', key: 'discountNio', width: 16 },
       { header: 'Total (NIO)', key: 'totalNio', width: 16 },
       { header: 'Total (USD)', key: 'totalUsd', width: 16 },
@@ -533,6 +589,7 @@ export class SalesExportService {
 
   private async generateSalesBookPdf(
     data: SalesBookExportDto,
+    ivaLabel: string,
   ): Promise<Buffer> {
     const doc = new PDFDocument({
       size: 'LETTER',
@@ -565,7 +622,7 @@ export class SalesExportService {
       .text(
         `Total Registros: ${data.totalRecords} | Ventas Brutas: C$ ${data.totalGrossNio.toFixed(
           2,
-        )} | IVA 15%: C$ ${data.totalTaxNio.toFixed(
+        )} | ${ivaLabel}: C$ ${data.totalTaxNio.toFixed(
           2,
         )} | Exento: C$ ${data.totalExemptNio.toFixed(2)}`,
         { align: 'center' },

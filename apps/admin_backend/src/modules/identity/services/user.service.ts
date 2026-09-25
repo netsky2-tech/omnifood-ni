@@ -46,6 +46,9 @@ export class UserService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRepository(AuditLog)
+    // Issue #581: logAction no longer reads this pooled repository — every
+    // audit write resolves through the caller's bound transaction manager.
+    // Kept for Nest DI compatibility only.
     private auditRepository: Repository<AuditLog>,
     @InjectRepository(SecurityProfile)
     private securityProfileRepository: Repository<SecurityProfile>,
@@ -420,11 +423,13 @@ export class UserService {
     targetId: string,
     tenantId: string,
     adminId: string,
-    manager?: EntityManager,
+    manager: EntityManager,
   ) {
-    const repo = manager
-      ? manager.getRepository(AuditLog)
-      : this.auditRepository;
+    // Issue #581: the bound manager is required. Every caller runs inside a
+    // tenant-bound transaction and already supplies one; `audit_logs` is a
+    // debt table today but becomes direct:SIUD RLS in #512 T3 slice 7, so
+    // the old pooled fallback is removed instead of waiting to break.
+    const repo = manager.getRepository(AuditLog);
 
     const lastLog =
       typeof repo.findOne === 'function'

@@ -467,13 +467,18 @@ export class ActivationService {
           );
         }
 
-        // 5. Normative check status constraint: Only POST_RECONNECT_SYNC may be WARNING
+        // 5. Normative check status constraint: Only whitelisted checks may be
+        // WARNING. Issue #561 (R1): SALE_RECEIPT_PATH joins POST_RECONNECT_SYNC
+        // as the only WARNING-tolerant checks — SALE_RECEIPT_PATH WARNING with
+        // evidence ref RECEIPT_SKIPPED_BY_USER_CONFIG means the owner disabled
+        // auto-print and the device skipped the receipt by user config.
         if (
           dto.status === ActivationCheckStatus.WARNING &&
-          dto.checkCode !== ActivationCheckCode.POST_RECONNECT_SYNC
+          dto.checkCode !== ActivationCheckCode.POST_RECONNECT_SYNC &&
+          dto.checkCode !== ActivationCheckCode.SALE_RECEIPT_PATH
         ) {
           throw new BadRequestException(
-            `INVALID_CHECK_STATUS: Only POST_RECONNECT_SYNC may have WARNING status. Check '${dto.checkCode}' accepts only PASS | FAIL`,
+            `INVALID_CHECK_STATUS: Only POST_RECONNECT_SYNC and SALE_RECEIPT_PATH may have WARNING status. Check '${dto.checkCode}' accepts only PASS | FAIL`,
           );
         }
 
@@ -664,7 +669,13 @@ export class ActivationService {
               firstFailedCode = `CHECK_FAILED_${check.checkCode}`;
             }
           } else if (check.status === ActivationCheckStatus.WARNING) {
-            if (check.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC) {
+            // Issue #561 (R1): explicit whitelist — ONLY these two checks
+            // tolerate WARNING at finalization. Any other check WARNING keeps
+            // failing the attempt (INVALID_WARNING_*). No generic bypass.
+            if (
+              check.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC ||
+              check.checkCode === ActivationCheckCode.SALE_RECEIPT_PATH
+            ) {
               warningCheck = check;
             } else {
               if (!firstFailedCode) {
@@ -691,15 +702,22 @@ export class ActivationService {
           attempt.status = ActivationAttemptStatus.FAIL;
           attempt.failureCode = firstFailedCode;
         } else if (warningCheck) {
-          // PASS_WITH_WARNING: all local required checks = PASS and POST_RECONNECT_SYNC = WARNING
+          // PASS_WITH_WARNING: all local required checks = PASS and the only
+          // WARNING is on a whitelisted check (POST_RECONNECT_SYNC transient
+          // sync, or SALE_RECEIPT_PATH skipped by user auto-print config).
           attempt.status = ActivationAttemptStatus.PASS_WITH_WARNING;
           attempt.warningsCount = 1;
+
+          const warningCode =
+            warningCheck.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC
+              ? 'POST_RECONNECT_SYNC_TRANSIENT'
+              : 'SALE_RECEIPT_PATH_SKIPPED_BY_USER_CONFIG';
 
           // Persist ActivationFollowUp
           const followUp = fRepo.create({
             tenantId: trimmedTenant,
             activationAttemptId: attempt.id,
-            warningCode: 'POST_RECONNECT_SYNC_TRANSIENT',
+            warningCode,
             status: ActivationFollowUpStatus.OPEN,
             openedAt: now,
             openedBy: actorUserId || 'SYSTEM_FINALIZER',

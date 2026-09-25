@@ -957,7 +957,18 @@ class SaleViewModel extends ChangeNotifier {
 
   Future<void> checkActiveSession() async {
     await loadCompanyTaxRegime();
-    final sessionEntity = await _database.cashierSessionDao.getActiveSession();
+    // Issue #552: the open-session lookup is scoped to BOTH the acting user
+    // and the terminal — the same two values openSession/checkout stamp.
+    // The topology-blind getActiveSession() would bind a cashier to another
+    // cashier's concurrent shift. No logged-in user means no user+terminal
+    // session can match.
+    final user = await _authRepository.getCurrentUser();
+    final effectiveTerminalId =
+        _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01';
+    final sessionEntity = user == null
+        ? null
+        : await _database.cashierSessionDao
+            .getActiveSessionForUserAndTerminal(user.id, effectiveTerminalId);
     if (sessionEntity != null) {
       _activeSession = SalesMapper.toSessionDomain(sessionEntity);
       _sessionExpected = {
@@ -1501,8 +1512,6 @@ class SaleViewModel extends ChangeNotifier {
       // operator acts on — surface the directive message without the raw
       // error wrapper.
       if (e is FiscalSequenceUnconfiguredError) {
-        _errorMessage = e.message;
-      } else if (e is FiscalSequenceExhaustedError) {
         _errorMessage = e.message;
       } else {
         _errorMessage = 'Error al procesar la venta: $e';
