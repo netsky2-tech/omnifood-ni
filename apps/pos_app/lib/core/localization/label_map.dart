@@ -200,6 +200,87 @@ const Map<String, String> kReprintReasonLabels = <String, String>{
   'OTRO': 'Otro',
 };
 
+/// Count session lifecycle statuses (`CountSessionDocument.status`).
+///
+/// Source: `lib/domain/models/inventory/count_session_document.dart` —
+/// [CountSessionStatus] constants, exhaustive (draft, open, counting,
+/// recount, approval_pending, approved, posted, closed). The copy follows
+/// the app's own vocabulary: posting a session is rendered as "Aplicar
+/// ajustes" / "Aplicado:" in the count views, hence "Aplicada" for `posted`.
+const Map<String, String> kCountSessionStatusLabels = <String, String>{
+  'draft': 'Borrador',
+  'open': 'Abierta',
+  'counting': 'En conteo',
+  'recount': 'Reconteo',
+  'approval_pending': 'Pendiente de aprobación',
+  'approved': 'Aprobada',
+  'posted': 'Aplicada',
+  'closed': 'Cerrada',
+};
+
+/// Forensic alert severities (`ForensicAlert.severity`).
+///
+/// Source: alert emitters — `lib/presentation/services/alert_service_impl.dart`
+/// and `lib/ui/features/inventory/items/insumo_view_model.dart`
+/// (`critical`, `high`), `lib/data/repositories/audit_repository_impl.dart`
+/// (`critical`). Values are lowercase; no `warning`/`info` emitter exists in
+/// the app today. Cloud-projected alerts (sync_service ST-05) may carry other
+/// severities, which pass through unchanged per the [localize] convention.
+const Map<String, String> kForensicSeverityLabels = <String, String>{
+  'critical': 'Crítica',
+  'high': 'Alta',
+};
+
+/// Forensic alert types (`ForensicAlert.alertType`).
+///
+/// Sources (every local emitter, exhaustive):
+/// - `lib/presentation/services/alert_service_impl.dart` (LOW_STOCK).
+/// - `lib/ui/features/inventory/items/insumo_view_model.dart`
+///   (MANUAL_STOCK_ALTERATION, LOW_STOCK).
+/// - `lib/data/repositories/audit_repository_impl.dart`
+///   (AUDIT_STREAM_DUPLICATE_SEQUENCE, AUDIT_V3_POISON,
+///   AUDIT_BACKEND_TERMINAL_REJECTION).
+/// COUNT_VARIANCE is a projected cloud alert type (one-way sync projection,
+/// ST-05) also used as the app's test fixture vocabulary. Unknown cloud
+/// alert types pass through unchanged per the [localize] convention.
+const Map<String, String> kForensicAlertTypeLabels = <String, String>{
+  'LOW_STOCK': 'Stock bajo',
+  'MANUAL_STOCK_ALTERATION': 'Alteración manual de stock',
+  'AUDIT_STREAM_DUPLICATE_SEQUENCE': 'Secuencia duplicada en auditoría',
+  'AUDIT_V3_POISON': 'Payload de auditoría ilegible',
+  'AUDIT_BACKEND_TERMINAL_REJECTION': 'Rechazo del backend de auditoría',
+  'COUNT_VARIANCE': 'Variación de conteo',
+};
+
+/// Forensic alert lifecycle statuses (`ForensicAlert.status`).
+///
+/// Source: `lib/domain/models/inventory/forensic_alert.dart` (`active`
+/// default), `lib/presentation/services/alert_service_impl.dart`
+/// (`acknowledged`, `resolved` transitions) and
+/// `lib/ui/features/inventory/alerts/forensic_alert_view_model.dart`
+/// (`superseded`). Copy mirrors the view model's `statusFor`, which already
+/// renders localized statuses in the alert card chip.
+const Map<String, String> kForensicAlertStatusLabels = <String, String>{
+  'active': 'Activa',
+  'acknowledged': 'Reconocida',
+  'resolved': 'Resuelta',
+  'superseded': 'Reemplazada',
+};
+
+/// Movement type codes carried in forensic alert metadata
+/// (`metadata['movementType']`).
+///
+/// Source: `lib/presentation/services/alert_service_impl.dart` and
+/// `lib/ui/features/inventory/items/insumo_view_model.dart`
+/// (LOW_STOCK_THRESHOLD, MANUAL_STOCK_ALTERATION), exhaustive. These are
+/// alert-specific codes, NOT [MovementType] names: the kardex renders its
+/// movement types as Spanish free text from the view model, so this family
+/// is intentionally separate from any kardex movement labels.
+const Map<String, String> kForensicMovementTypeLabels = <String, String>{
+  'LOW_STOCK_THRESHOLD': 'Umbral de stock bajo',
+  'MANUAL_STOCK_ALTERATION': 'Alteración manual de stock',
+};
+
 /// Backend finalize verdict statuses (`backendFinalizeResult.status`).
 ///
 /// Source: `lib/data/ports/activation_sync_port.dart` — the verdict statuses
@@ -220,6 +301,11 @@ const Map<String, Map<String, String>> kAllLabelMaps = <String,
   'kActivationEvidenceRefLabels': kActivationEvidenceRefLabels,
   'kPaymentMethodLabels': kPaymentMethodLabels,
   'kUserRoleLabels': kUserRoleLabels,
+  'kCountSessionStatusLabels': kCountSessionStatusLabels,
+  'kForensicSeverityLabels': kForensicSeverityLabels,
+  'kForensicAlertTypeLabels': kForensicAlertTypeLabels,
+  'kForensicAlertStatusLabels': kForensicAlertStatusLabels,
+  'kForensicMovementTypeLabels': kForensicMovementTypeLabels,
   'kVoidReasonLabels': kVoidReasonLabels,
   'kReprintReasonLabels': kReprintReasonLabels,
   'kActivationBackendVerdictLabels': kActivationBackendVerdictLabels,

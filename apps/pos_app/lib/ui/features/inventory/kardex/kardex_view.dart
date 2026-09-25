@@ -252,7 +252,7 @@ class _KardexViewState extends State<KardexView> {
                                               children: [
                                                 const SizedBox(height: 4),
                                                 Text(
-                                                  '${entry.typeLabel.toUpperCase()} • ${entry.dateLabel}',
+                                                  '${entry.typeLabel} • ${entry.dateLabel}',
                                                   style: TextStyle(color: colorScheme.outline, fontSize: 11),
                                                 ),
                                                 const SizedBox(height: 4),
@@ -304,7 +304,7 @@ class _KardexViewState extends State<KardexView> {
                                                 (entry) => DataRow(
                                                   cells: [
                                                     DataCell(Text(entry.dateLabel), onTap: () => _showDetailSheet(context, entry)),
-                                                    DataCell(Text(entry.typeLabel.toUpperCase()), onTap: () => _showDetailSheet(context, entry)),
+                                                    DataCell(Text(entry.typeLabel), onTap: () => _showDetailSheet(context, entry)),
                                                     DataCell(_buildCostingChip(context, entry), onTap: () => _showDetailSheet(context, entry)),
                                                     DataCell(Text(entry.referenceLabel), onTap: () => _showDetailSheet(context, entry)),
                                                     DataCell(Text(entry.sourceDocumentLabel), onTap: () => _showDetailSheet(context, entry)),

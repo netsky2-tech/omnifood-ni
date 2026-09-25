@@ -87,6 +87,17 @@ void main() {
     expect(find.text('Kardex BOH'), findsOneWidget);
     expect(find.text('Leche Entera'), findsOneWidget);
     expect(find.text('Café Molido'), findsOneWidget);
+    // Type label renders as written by the view model (Spanish free text),
+    // never uppercased.
+    expect(
+      find.descendant(of: find.byType(DataTable), matching: find.text('Merma')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('MERMA'), findsNothing);
+    expect(
+      find.descendant(of: find.byType(DataTable), matching: find.text('Compra')),
+      findsOneWidget,
+    );
     expect(
       find.textContaining('Los costos históricos se muestran cuando el documento origen está disponible'),
       findsOneWidget,
@@ -106,7 +117,11 @@ void main() {
     await tester.tap(find.text('Limpiar búsqueda'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Compra'));
+    // The type filter chip is scoped: the table cell now also renders
+    // "Compra" (Spanish type label, not uppercased).
+    await tester.tap(
+      find.descendant(of: find.byType(FilterChip), matching: find.text('Compra')),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Café Molido'), findsOneWidget);
@@ -200,5 +215,8 @@ void main() {
 
     expect(find.text('Detalle del movimiento'), findsOneWidget);
     expect(find.text('Stock final: 18.00'), findsOneWidget);
+    // Handheld card subtitle keeps the Spanish type label, not uppercased.
+    expect(find.textContaining('Merma •'), findsOneWidget);
+    expect(find.textContaining('MERMA'), findsNothing);
   });
 }

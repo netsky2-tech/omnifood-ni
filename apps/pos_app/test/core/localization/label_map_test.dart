@@ -65,8 +65,17 @@ void main() {
       expect(kAllLabelMaps['kPaymentMethodLabels'], same(kPaymentMethodLabels));
       expect(kAllLabelMaps['kUserRoleLabels'], same(kUserRoleLabels));
       expect(kAllLabelMaps['kVoidReasonLabels'], same(kVoidReasonLabels));
-      expect(
-          kAllLabelMaps['kReprintReasonLabels'], same(kReprintReasonLabels));
+      expect(kAllLabelMaps['kReprintReasonLabels'], same(kReprintReasonLabels));
+      expect(kAllLabelMaps['kCountSessionStatusLabels'],
+          same(kCountSessionStatusLabels));
+      expect(kAllLabelMaps['kForensicSeverityLabels'],
+          same(kForensicSeverityLabels));
+      expect(kAllLabelMaps['kForensicAlertTypeLabels'],
+          same(kForensicAlertTypeLabels));
+      expect(kAllLabelMaps['kForensicAlertStatusLabels'],
+          same(kForensicAlertStatusLabels));
+      expect(kAllLabelMaps['kForensicMovementTypeLabels'],
+          same(kForensicMovementTypeLabels));
       expect(kAllLabelMaps['kActivationBackendVerdictLabels'],
           same(kActivationBackendVerdictLabels));
     });
@@ -96,6 +105,43 @@ void main() {
           'Papel atascado');
       expect(localize('CLIENTE_PERDIO_TICKET', kReprintReasonLabels),
           'El cliente perdió su ticket');
+      expect(localize('open', kCountSessionStatusLabels), 'Abierta');
+      expect(localize('approval_pending', kCountSessionStatusLabels),
+          'Pendiente de aprobación');
+      expect(localize('posted', kCountSessionStatusLabels), 'Aplicada');
+      expect(localize('critical', kForensicSeverityLabels), 'Crítica');
+      expect(localize('high', kForensicSeverityLabels), 'Alta');
+      expect(localize('LOW_STOCK', kForensicAlertTypeLabels), 'Stock bajo');
+      expect(localize('MANUAL_STOCK_ALTERATION', kForensicAlertTypeLabels),
+          'Alteración manual de stock');
+      expect(localize('AUDIT_BACKEND_TERMINAL_REJECTION',
+          kForensicAlertTypeLabels), 'Rechazo del backend de auditoría');
+      expect(localize('acknowledged', kForensicAlertStatusLabels),
+          'Reconocida');
+      expect(localize('superseded', kForensicAlertStatusLabels),
+          'Reemplazada');
+      expect(localize('LOW_STOCK_THRESHOLD', kForensicMovementTypeLabels),
+          'Umbral de stock bajo');
+      expect(localize('MANUAL_STOCK_ALTERATION', kForensicMovementTypeLabels),
+          'Alteración manual de stock');
+    });
+
+    test('count session statuses are exhaustive against CountSessionStatus', () {
+      // All lifecycle statuses defined by the CountSessionStatus vocabulary
+      // (lib/domain/models/inventory/count_session_document.dart).
+      expect(
+        kCountSessionStatusLabels.keys.toList(),
+        [
+          'draft',
+          'open',
+          'counting',
+          'recount',
+          'approval_pending',
+          'approved',
+          'posted',
+          'closed',
+        ],
+      );
     });
 
     test('void and reprint reason families are separate maps sharing OTRO', () {
