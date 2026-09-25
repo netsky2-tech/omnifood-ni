@@ -8,6 +8,7 @@ import type {
   ActivationAttempt,
   StartActivationDto,
   GenerateLinkingCodeResponse,
+  LinkingCodeResponse,
 } from "./types";
 
 export function isVersionConflictError(error: unknown): boolean {
@@ -76,4 +77,15 @@ export async function fetchActiveActivationAttempt(): Promise<ActivationAttempt 
  */
 export async function generateLinkingCode(): Promise<GenerateLinkingCodeResponse> {
   return api.post<GenerateLinkingCodeResponse>("/onboarding/activation/linking-codes");
+}
+
+/**
+ * Lists the most recent linking codes of the caller's tenant, sorted by
+ * createdAt DESC (limit 20). Human-auth: the tenant identity comes from the
+ * Bearer owner JWT, never from the query. The dashboard polls this listing to
+ * detect when a terminal claims a code and offer one-click activation for the
+ * claimed deviceId (issue #569 single linking flow).
+ */
+export async function fetchLinkingCodes(): Promise<LinkingCodeResponse[]> {
+  return api.get<LinkingCodeResponse[]>("/onboarding/activation/linking-codes");
 }

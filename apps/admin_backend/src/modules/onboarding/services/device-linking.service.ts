@@ -7,7 +7,11 @@ import {
 import * as bcrypt from 'bcrypt';
 import { randomInt } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
-import { bindTenantContext } from '../../../core/database/tenant-transaction';
+import {
+  bindTenantContext,
+  runInTenantTransaction,
+} from '../../../core/database/tenant-transaction';
+import { LinkingCodeResponseDto } from '../dto/linking-code-response.dto';
 import {
   DeviceLinkingCode,
   DeviceLinkingCodeStatus,
@@ -112,6 +116,13 @@ export function isUniqueViolationError(error: unknown): boolean {
 export interface GenerateLinkingCodeOptions {
   expiryMinutes?: number;
 }
+
+/**
+ * Bounded window of the dashboard listing (issue #569 single linking
+ * flow): the setup center only needs the most recent codes to offer
+ * one-click activation for freshly claimed devices.
+ */
+export const LINKING_CODES_LIST_LIMIT = 20;
 
 /**
  * Bounded regeneration budget for random collisions against the partial
@@ -250,6 +261,43 @@ export class DeviceLinkingService {
 
     throw new ConflictException(
       'Unable to generate a unique linking code after repeated collisions',
+    );
+  }
+
+  /**
+   * Lists the tenant's most recent linking codes for the dashboard
+   * (issue #569 single linking flow). Tenant-bound: the read runs inside a
+   * transaction whose context is bound to the caller's tenant id, so RLS
+   * filters every other tenant's rows and the explicit `where` keeps the
+   * predicate deterministic. The projection deliberately drops `codeHash`
+   * and `tenantId` (see LinkingCodeResponseDto).
+   */
+  async listLinkingCodes(tenantId: string): Promise<LinkingCodeResponseDto[]> {
+    const trimmedTenantId = tenantId?.trim();
+    if (!trimmedTenantId) {
+      throw new BadRequestException(
+        'Tenant context is required to list linking codes',
+      );
+    }
+
+    return await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenantId,
+      async (manager) => {
+        const rows = await manager.getRepository(DeviceLinkingCode).find({
+          where: { tenantId: trimmedTenantId },
+          order: { createdAt: 'DESC' },
+          take: LINKING_CODES_LIST_LIMIT,
+        });
+        return rows.map((row) => ({
+          id: row.id,
+          status: row.status,
+          deviceId: row.deviceId,
+          expiresAt: row.expiresAt,
+          claimedAt: row.claimedAt,
+          createdAt: row.createdAt,
+        }));
+      },
     );
   }
 

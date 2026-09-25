@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -17,6 +18,7 @@ import { RequirePermissions } from '../../identity/decorators/permissions.decora
 import { AppPermission } from '../../identity/security/permissions.enum';
 import { DeviceLinkingService } from '../services/device-linking.service';
 import { GenerateLinkingCodeDto } from '../dto/generate-linking-code.dto';
+import { LinkingCodeResponseDto } from '../dto/linking-code-response.dto';
 import { LinkDeviceDto } from '../dto/link-device.dto';
 import { DeviceLinkingRateLimiter } from '../utils/linking-rate-limiter';
 import { LINKING_CODE_GENERIC_FAILURE } from '../services/device-linking.service';
@@ -35,6 +37,9 @@ interface RequestWithUser extends Request {
  *
  * Two seams live here, deliberately shaped differently:
  *
+ * - `GET onboarding/activation/linking-codes` — HUMAN-AUTH. Tenant-scoped
+ *   listing of the most recent codes (issue #569 single linking flow) so
+ *   the dashboard can offer one-click activation for claimed devices.
  * - `POST onboarding/activation/linking-codes` — HUMAN-AUTH. Dashboard
  *   generates a single-use code for its tenant; the plaintext is returned
  *   exactly once. Guards, permission gate, and tenant binding follow the
@@ -86,6 +91,17 @@ export class DeviceLinkingController {
       actorUserId,
       { expiryMinutes: dto.expiryMinutes },
     );
+  }
+
+  @Get('linking-codes')
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @UseInterceptors(TenantInterceptor)
+  @RequirePermissions(AppPermission.ONBOARDING_ACTIVATION_MANAGE)
+  async listLinkingCodes(
+    @Req() req: RequestWithUser,
+  ): Promise<LinkingCodeResponseDto[]> {
+    const tenantId = this.getEffectiveTenantId(req);
+    return await this.deviceLinkingService.listLinkingCodes(tenantId);
   }
 
   @Post('link')

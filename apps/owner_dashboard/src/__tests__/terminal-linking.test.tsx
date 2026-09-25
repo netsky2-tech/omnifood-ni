@@ -128,14 +128,17 @@ function saleReadySessionResponse() {
 /**
  * URL-based fetch routing, mirroring the conventions of
  * onboarding-activation-attempt-surface.test.tsx. The linking-code POST is
- * routed separately so each test decides its outcome.
+ * routed separately so each test decides its outcome; the GET listing
+ * (issue #569 polling via useLinkingCodes) returns an empty array so the
+ * polling query never falls into the POST generation fallback.
  */
 function routeFetch(options: {
   generateLinkingCodeResponse?: { status: number; body: unknown };
   onGenerateLinkingCode?: () => Promise<Response>;
 }) {
-  fetchSpy.mockImplementation(async (input: string | URL | Request) => {
+  fetchSpy.mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
+    const isPost = init?.method === "POST" || (input instanceof Request && input.method === "POST");
     const okJson = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), {
         status,
@@ -143,6 +146,10 @@ function routeFetch(options: {
       });
 
     if (url.includes("/onboarding/activation/linking-codes")) {
+      if (!isPost) {
+        // GET is the issue #569 listing of this tenant's linking codes.
+        return okJson([]);
+      }
       if (options.onGenerateLinkingCode) {
         return options.onGenerateLinkingCode();
       }
