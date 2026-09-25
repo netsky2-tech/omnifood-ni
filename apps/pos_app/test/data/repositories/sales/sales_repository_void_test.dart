@@ -3,6 +3,8 @@ import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/customer/customer_entity.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
+import 'package:pos_app/data/mappers/sales_mapper.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/repositories/sales/sales_repository_impl.dart';
@@ -174,6 +176,81 @@ void main() {
       expect(txs.where((t) => t.type == 'adjust'), hasLength(1));
       final row = await database.customerDao.getCustomerById('cust-1');
       expect(row!.pointsBalance, 450);
+    });
+  });
+
+  group('JD-A-002: the sale records the terminal-matching session as shiftId', () {
+    test('a sale on a terminal with an open session records THAT session',
+        () async {
+      // A realistic device identity (not a shared fake constant): the
+      // session and the sale must resolve the SAME terminal or the void
+      // guard's scoped lookup never matches.
+      const deviceId = 'SUNMI-V2S-7F3A';
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'shift-T',
+          userId: 'cashier-1',
+          terminalId: deviceId,
+          openedAt: 1700000000000,
+          isClosed: false,
+        ),
+      );
+      // Numbering stubs: the gate is not under test here.
+      final numberingService = MockDgiNumberingService();
+      when(numberingService.isRangeExhausted()).thenAnswer((_) async => false);
+      when(numberingService.getNextNumber())
+          .thenAnswer((_) async => '001-001-01-00000001');
+      when(numberingService.incrementNumber()).thenAnswer((_) async {});
+      final processInventoryUseCase = MockProcessSaleInventoryUseCase();
+      when(processInventoryUseCase.execute(any)).thenAnswer((_) async => []);
+      // The DAO transaction stamps the number from the local config: seed
+      // the series the way a provisioned device would have it.
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01-'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+      );
+      repository = SalesRepositoryImpl(
+        database: database,
+        invoiceDao: database.invoiceDao,
+        itemDao: database.invoiceItemDao,
+        paymentDao: database.paymentDao,
+        transactionDao: database.salesTransactionDao,
+        numberingService: numberingService,
+        movementEngine: MockMovementEngine(),
+        auditRepository: auditRepository,
+        processInventoryUseCase: processInventoryUseCase,
+        reverseInventoryUseCase: reverseInventoryUseCase,
+        inventoryRepository: MockInventoryRepository(),
+      );
+
+      final entity = InvoiceEntity(
+        id: 'inv-terminal-1',
+        number: '001-001-01-00000001',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        userId: 'cashier-1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        syncStatus: 'synced',
+        paymentStatus: 'paid',
+        type: 'regular',
+        terminalId: deviceId,
+      );
+      await repository.saveSale(
+        invoice: SalesMapper.toInvoiceDomain(entity),
+        items: const [],
+        payments: const [],
+      );
+
+      final row = await database.database.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: ['inv-terminal-1'],
+      );
+      expect(row.single['shift_id'], 'shift-T',
+          reason: 'the session on THIS terminal is the sale shift');
     });
   });
 

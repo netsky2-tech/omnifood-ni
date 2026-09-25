@@ -376,6 +376,7 @@ void main() {
           authorizedByRole: anyNamed('authorizedByRole'),
           refundReasonPolicy: anyNamed('refundReasonPolicy'),
           lines: anyNamed('lines'),
+          terminalId: anyNamed('terminalId'),
         ),
       ).thenAnswer((_) async {});
 
@@ -398,6 +399,7 @@ void main() {
           authorizedByRole: UserRole.manager,
           refundReasonPolicy: RefundReasonPolicy.wasteNoRestock,
           lines: refundLines,
+          terminalId: 'TERM-01',
         ),
       ).called(1);
       expect(viewModel.errorMessage, isNull);
@@ -430,6 +432,7 @@ void main() {
         authorizedByRole: anyNamed('authorizedByRole'),
         refundReasonPolicy: anyNamed('refundReasonPolicy'),
         lines: anyNamed('lines'),
+        terminalId: anyNamed('terminalId'),
       ),
     );
   });

@@ -38,7 +38,10 @@ class CashShiftViewModel extends ChangeNotifier {
     required AppDatabase database,
     required String currentUserId,
     String currentUserName = 'Cajero',
-    String currentTerminalId = 'term-main',
+    // D-15 (JD-A-002): identical default to SaleViewModel's
+    // effectiveTerminalId — both session openers must resolve the same
+    // terminal or the void guard's scoped session lookup never matches.
+    String currentTerminalId = 'TERM-01',
     UserRole? currentUserRole,
   }) {
     return CashShiftViewModel(

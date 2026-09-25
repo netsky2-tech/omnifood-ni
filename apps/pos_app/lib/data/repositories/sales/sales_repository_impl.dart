@@ -26,6 +26,7 @@ import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
@@ -573,6 +574,10 @@ class SalesRepositoryImpl implements SalesRepository {
     final phone =
         nonBlank(await read('printer_header_phone')) ?? nonBlank(await read('phone'));
     final fiscalAuthorizationNumber = nonBlank(await read('dgi_authorization_code'));
+    // JD-B-003/A-003: the tax regime is part of the fiscal header — a
+    // reprint renders the regime AS ISSUED. Same key loadCompanyTaxRegime
+    // reads.
+    final taxRegime = nonBlank(await read('tax_regime'));
 
     final snapshot = <String, String>{};
     void put(String key, String? value) {
@@ -584,7 +589,11 @@ class SalesRepositoryImpl implements SalesRepository {
     put('address', address);
     put('phone', phone);
     put('fiscalAuthorizationNumber', fiscalAuthorizationNumber);
-    return snapshot.isEmpty ? null : jsonEncode(snapshot);
+    put('taxRegime', taxRegime);
+    // The regime is REQUIRED for a faithful reprint (JD-B-003/A-003): a
+    // snapshot without it is INCOMPLETE and the reprint fails closed (same
+    // named denial as a missing snapshot), never a live fallback.
+    return snapshot.containsKey('taxRegime') ? jsonEncode(snapshot) : null;
   }
 
   /// D-13: assembles a faithful reprint of the document AS ISSUED. The
@@ -622,11 +631,24 @@ class SalesRepositoryImpl implements SalesRepository {
       );
     }
     final Map<String, dynamic> snapshot;
+    TaxRegime snapshotRegime;
+    // JD-B-003/A-003 (R2-7): ANY anomaly decoding or parsing the snapshot —
+    // corrupted jsonb, a non-string regime, an unknown regime code — maps to
+    // the named denial. Nothing may throw past REPRINT_SNAPSHOT_UNAVAILABLE.
     try {
       snapshot = jsonDecode(rawSnapshot) as Map<String, dynamic>;
+      final rawRegime = snapshot['taxRegime'];
+      if (rawRegime is! String) {
+        throw const FormatException('taxRegime is missing or not a string');
+      }
+      final parsed = TaxRegime.fromString(rawRegime);
+      if (parsed == null) {
+        throw const FormatException('taxRegime is not a known regime code');
+      }
+      snapshotRegime = parsed;
     } catch (_) {
       throw StateError(
-        '$reprintSnapshotUnavailableCode: the stored fiscal header snapshot of invoice $invoiceId is corrupted',
+        '$reprintSnapshotUnavailableCode: the fiscal header snapshot of invoice $invoiceId is corrupted or incomplete',
       );
     }
     final header = snapshot.map(
@@ -658,6 +680,7 @@ class SalesRepositoryImpl implements SalesRepository {
     return ReprintPreparation(
       invoice: invoice,
       fiscalHeader: header,
+      taxRegime: snapshotRegime,
       items: items,
       payments: payments,
     );
@@ -828,6 +851,7 @@ class SalesRepositoryImpl implements SalesRepository {
     RefundReasonPolicy refundReasonPolicy =
         RefundReasonPolicy.restockOriginalBom,
     List<CreditNoteRefundLine>? lines,
+    String? terminalId,
   }) async {
     if (authorizedByRole == UserRole.cashier ||
         authorizedByRole == UserRole.waiter) {
@@ -874,9 +898,12 @@ class SalesRepositoryImpl implements SalesRepository {
     final creditNoteId = const Uuid().v4();
     final creditNoteNumber = await numberingService.getNextNumber();
     final now = DateTime.now();
-    final terminalId = 'pos-${original.userId}';
+    // The document's own terminal column keeps the historical derived value;
+    // the ISSUANCE SHIFT lookup uses the caller-supplied real terminal only
+    // (JD-B-002/R2-3).
+    final documentTerminalId = 'pos-${original.userId}';
     final sourceSequence = await transactionDao.getNextInvoiceSourceSequence(
-      terminalId,
+      documentTerminalId,
     );
     final payloadHash = _buildCreditNotePayloadHash(
       creditNoteId: creditNoteId,
@@ -886,6 +913,24 @@ class SalesRepositoryImpl implements SalesRepository {
       lines: selectedItems,
     );
 
+    // JD-B-002: rates copy from the ORIGIN invoice (the server path already
+    // does this) — never the constructor defaults (36.6241/36.50/0.0 would
+    // fabricate a fiscal fact). shiftId/localIssueDate = the ISSUANCE
+    // moment: the open session for the issuing user on this terminal and
+    // today's local date; null when no session is open — never invented.
+    // fiscalHeaderSnapshot = a FRESH snapshot of current config: this is a
+    // NEW document issued now, not a reprint of the origin.
+    // JD-B-002/R2-3: the issuance shift lookup uses ONLY the caller-supplied
+    // real terminal. The synthetic 'pos-<user>' value on the document is NOT
+    // used for the lookup — a synthetic match would fabricate shift
+    // membership. Null terminal (or no session on that terminal) => null
+    // shiftId, honestly.
+    final issuingSession = (terminalId != null && terminalId.trim().isNotEmpty)
+        ? await database.cashierSessionDao.getActiveSessionForUserAndTerminal(
+            authorizedByUserId.trim(),
+            terminalId.trim(),
+          )
+        : null;
     final creditNoteEntity = InvoiceEntity(
       id: creditNoteId,
       number: creditNoteNumber,
@@ -907,14 +952,20 @@ class SalesRepositoryImpl implements SalesRepository {
       refundReasonCode: sanitizedReason,
       authorizedByUserId: authorizedByUserId.trim(),
       authorizedByRole: authorizedByRole.name,
-      terminalId: terminalId,
+      terminalId: documentTerminalId,
       sourceSequence: sourceSequence,
-      idempotencyKey: 'credit-note:$terminalId:$creditNoteId',
+      idempotencyKey: 'credit-note:$documentTerminalId:$creditNoteId',
       payloadHash: payloadHash,
       paymentStatus: 'paid',
       syncStatus: refundReasonPolicy == RefundReasonPolicy.managerReviewHold
           ? 'error'
           : 'pending',
+      bcnOfficialRate: original.bcnOfficialRate,
+      commercialRate: original.commercialRate,
+      totalUsd: original.totalUsd,
+      shiftId: issuingSession?.id,
+      localIssueDate: localCalendarDate(now),
+      fiscalHeaderSnapshot: await _buildFiscalHeaderSnapshot(),
     );
 
     final itemEntities = selectedItems

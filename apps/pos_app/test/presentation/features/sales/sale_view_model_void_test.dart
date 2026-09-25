@@ -17,12 +17,13 @@ import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/usecases/sales/void_decision.dart';
 import 'dart:convert';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
-import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
+import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
@@ -358,11 +359,54 @@ void main() {
       expect(ownerVm.canVoidInvoice, isTrue);
     });
   });
+  group('B1r/JD-A-002: the session carries the sale terminal', () {
+    test('openSession persists the resolved deviceId, not a model default',
+        () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'u-1',
+          name: 'Cashier',
+          role: UserRole.cashier,
+          isActive: true,
+          tenantId: 'tenant-test',
+        ),
+      );
+      when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
+
+      // Realistic device identity, not a shared fake constant.
+      const deviceId = 'SUNMI-V2S-7F3A';
+      final vm = SaleViewModel(
+        mockSalesRepo,
+        mockInventoryRepo,
+        mockAuthRepo,
+        mockDb,
+        null,
+        true,
+        FakeTenantConfigService(fakeLocalConfigDao),
+        FakeKitchenOrderService(mockDb),
+        null, // printer config service
+        printer,
+        null, // sync service
+        null, // promotions engine
+        null, // loyalty service
+        deviceId,
+      );
+
+      await vm.openSession(100);
+
+      final captured =
+          verify(mockSessionDao.insertSession(captureAny)).captured.single
+              as CashierSessionEntity;
+      expect(captured.terminalId, deviceId);
+    });
+  });
+
   group('B1r slice 2: reprintInvoice from the immutable snapshot', () {
     const snapshotHeader = {
       'businessName': 'Café Original',
       'ruc': 'A0011234567890',
       'fiscalAuthorizationNumber': 'AUT-DGI-2026-0001',
+      'taxRegime': 'REGIMEN_GENERAL',
     };
 
     void arrangeReprintableOwner({bool printerFails = false}) {
@@ -401,6 +445,7 @@ void main() {
             type: InvoiceType.regular,
           ),
           fiscalHeader: snapshotHeader,
+          taxRegime: TaxRegime.regimenGeneral,
           items: const [],
           payments: const [],
         ),
@@ -432,6 +477,45 @@ void main() {
       // D-13 heart: the paper carries the SNAPSHOT header, not live config.
       expect(printed, contains('Café Original'));
       expect(printed, contains('AUT-DGI-2026-0001'));
+    });
+
+    test('R2-5: a COMPLETE snapshot reprints with ABSENT live tax_regime '
+        '(purest D-13 heart)', () async {
+      arrangeReprintableOwner();
+      // A fresh config store with NO tax_regime row: the live regime is
+      // genuinely absent. The snapshot must govern anyway (JD-B-003/R2-5).
+      final freshConfigDao = FakeLocalConfigDao();
+      freshConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: ''),
+      );
+      final vm = SaleViewModel(
+        mockSalesRepo,
+        mockInventoryRepo,
+        mockAuthRepo,
+        mockDb,
+        null,
+        true,
+        FakeTenantConfigService(freshConfigDao),
+        FakeKitchenOrderService(mockDb),
+        PrinterConfigService(freshConfigDao),
+        printer,
+      );
+      expect(vm.companyTaxRegime, isNull,
+          reason: 'precondition: the live regime is absent');
+
+      final ok = await vm.reprintInvoice('inv-void-target', 'PAPEL_ATASCADO',
+          reasonDetail: 'Segunda impresión');
+
+      expect(ok, isTrue);
+      expect(vm.lastReprintPrintSucceeded, isTrue);
+      expect(printer.printHistory, hasLength(1));
+      final printed = printer.printHistory.single.printedText ?? '';
+      expect(printed, contains('*** REIMPRESIÓN ***'));
+      // The snapshot regime renders: REGIMEN_GENERAL, not the CUOTA FIJA
+      // that any live fallback would fabricate.
+      expect(printed, contains('REGIMEN: GENERAL'));
+      expect(printed, isNot(contains('REGIMEN: CUOTA FIJA')));
+      expect(printed, contains('Café Original'));
     });
 
     test('denies a waiter with the permission message, engine untouched',

@@ -148,7 +148,9 @@ void main() {
         .text;
     expect(textOf('dgi_range_start_input'), isEmpty);
     expect(textOf('dgi_range_end_input'), isEmpty);
-    expect(find.text('Sin configurar'), findsNWidgets(2));
+    // Four fields share the no-configurado state: prefix, cursor, and both
+    // range bounds (D-16, JD-A-001).
+    expect(find.text('Sin configurar'), findsNWidgets(4));
   });
 
   testWidgets('D-17: saving the profile persists the authorization backing date and document keys', (tester) async {

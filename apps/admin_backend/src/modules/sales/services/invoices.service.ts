@@ -310,6 +310,9 @@ export class InvoicesService {
    *
    * Append-only: INSERT only. The origin invoice is never touched.
    */
+  // #519: this endpoint registers the fiscal correction ONLY — it does not
+  // execute inventory compensation (appendCreditNoteCompensation is the
+  // device sync path). The dashboard hints are fiscal-only accordingly.
   async createAdminCreditNote(
     tenantId: string,
     dto: CreateAdminCreditNoteDto,

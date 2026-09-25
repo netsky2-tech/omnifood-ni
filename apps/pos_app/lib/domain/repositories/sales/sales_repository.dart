@@ -1,3 +1,4 @@
+import '../../models/config/tax_regime.dart';
 import '../../models/sales/invoice.dart';
 import '../../models/sales/invoice_item.dart';
 import '../../models/sales/payment.dart';
@@ -87,6 +88,12 @@ abstract class SalesRepository {
     RefundReasonPolicy refundReasonPolicy =
         RefundReasonPolicy.restockOriginalBom,
     List<CreditNoteRefundLine>? lines,
+
+    /// JD-B-002/R2-3: the REAL terminal of the issuing session (same source
+    /// as the sale path). The issuance shift lookup uses ONLY this value —
+    /// null (or an unknown terminal) yields a null shiftId honestly, never a
+    /// synthetic terminal match.
+    String? terminalId,
   });
 
   // Reporting
@@ -102,12 +109,17 @@ abstract class SalesRepository {
 class ReprintPreparation {
   final Invoice invoice;
   final Map<String, String> fiscalHeader;
+
+  /// D-13 (JD-B-003): the regime AS ISSUED, parsed from the snapshot — the
+  /// reprint renders it, never the current config.
+  final TaxRegime taxRegime;
   final List<InvoiceItem> items;
   final List<Payment> payments;
 
   const ReprintPreparation({
     required this.invoice,
     required this.fiscalHeader,
+    required this.taxRegime,
     required this.items,
     required this.payments,
   });

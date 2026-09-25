@@ -399,6 +399,41 @@ void main() {
       expect(byKey.containsKey('dgi_current_number'), isFalse);
     });
 
+    test('saving a profile with untouched fiscal fields leaves the sequence '
+        'ABSENT (JD-A-001): getNextNumber would fail closed', () async {
+      when(() => mockConfigDao.getConfigByKey(any()))
+          .thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      final vm = BusinessProfileViewModel(mockConfigDao);
+      await vm.saveConfig({
+        'business_name': 'Mi Negocio',
+        'dgi_prefix': '',
+        'dgi_range_start': '',
+        'dgi_range_end': '',
+        'dgi_current_number': '',
+      });
+
+      // Verify what was WRITTEN (the dao mock cannot both capture writes and
+      // report reads): the four sequence keys must be absent from the
+      // captured writes — an empty-string prefix row would foreclose the
+      // activation runner's provisioning.
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final writtenKeys = written.map((e) => e.key).toSet();
+      for (final key in [
+        'dgi_prefix',
+        'dgi_range_start',
+        'dgi_range_end',
+        'dgi_current_number',
+      ]) {
+        expect(writtenKeys, isNot(contains(key)), reason: key);
+      }
+      expect(writtenKeys, contains('business_name'));
+    });
+
     test('saving explicit range values still persists them', () async {
       when(() => mockConfigDao.getConfigByKey(any()))
           .thenAnswer((_) async => null);

@@ -1241,6 +1241,231 @@ void main() {
     });
   });
 
+  group('B1r/JD-B-002: the POS credit note inherits origin rates and stamps issuance', () {
+    test('rates copy from the origin; shift/local date/snapshot reflect issuance',
+        () async {
+      // Origin with DISTINCT non-default rates: any constructor-default rate
+      // on the note (36.6241/36.50/0.0) is fabrication (JD-B-002).
+      final original = InvoiceEntity(
+        id: 'inv-cn-rates',
+        number: 'F001-000777',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        userId: 'cashier-1',
+        subtotal: 200,
+        totalTax: 30,
+        total: 230,
+        syncStatus: 'synced',
+        paymentStatus: 'paid',
+        type: 'regular',
+        bcnOfficialRate: 41.25,
+        commercialRate: 39.75,
+        totalUsd: 5.79,
+      );
+      final originalItems = [
+        InvoiceItemEntity(
+          id: 'origin-line-1',
+          invoiceId: original.id,
+          productId: 'combo-1',
+          productName: 'Combo 1',
+          quantity: 2,
+          unitPrice: 100,
+          originalTaxRate: 15,
+          appliedTaxRate: 15,
+          taxAmount: 30,
+          total: 230,
+        ),
+      ];
+
+      when(
+        mockInvoiceDao.getInvoiceById(original.id),
+      ).thenAnswer((_) async => original);
+      when(
+        mockNumberingService.isRangeExhausted(),
+      ).thenAnswer((_) async => false);
+      when(
+        mockItemDao.getItemsByInvoiceId(original.id),
+      ).thenAnswer((_) async => originalItems);
+      when(
+        mockTransactionDao.getCreditNotesByRelatedId(original.id),
+      ).thenAnswer((_) async => []);
+      when(
+        mockNumberingService.getNextNumber(),
+      ).thenAnswer((_) async => 'NC-777');
+      when(
+        mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
+      ).thenAnswer((_) async => 9);
+      when(
+        mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockReverseInventoryUseCase.execute(any, any),
+      ).thenAnswer((_) async => []);
+      // The credit-note movements builder queries the origin items again.
+      when(
+        mockItemDao.getItemsByInvoiceId('inv-cn-rates'),
+      ).thenAnswer((_) async => originalItems);
+      when(
+        mockTransactionDao.executeSaleTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).thenAnswer((_) async {});
+
+      // Issuance-time session: the shiftId must be THIS session. Realistic
+      // pairing — the session opener stamps a deviceId, and the caller passes
+      // that SAME terminal (JD-B-002/R2-3/R2-4).
+      const deviceId = 'SUNMI-V2S-7F3A';
+      const issuingUser = 'manager-1';
+      final session = CashierSessionEntity(
+        id: 'shift-issuance-1',
+        userId: issuingUser,
+        terminalId: deviceId,
+        openedAt: 1700000000000,
+        isClosed: false,
+      );
+      when(mockSessionDao.getActiveSessionForUserAndTerminal(
+        issuingUser,
+        deviceId,
+      )).thenAnswer((_) async => session);
+      // Issuance-time config: the snapshot must record THESE values.
+      when(mockLocalConfigDao.getConfigByKey('printer_header_business_name'))
+          .thenAnswer((_) async => LocalConfigEntity(
+              key: 'printer_header_business_name', value: 'Café Al Momento'));
+      when(mockLocalConfigDao.getConfigByKey('tax_regime')).thenAnswer(
+          (_) async => LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
+
+      await repository.createCreditNote(
+        originalInvoiceId: original.id,
+        reason: 'ERROR_DE_CAPTURA',
+        authorizedByUserId: issuingUser,
+        authorizedByRole: UserRole.manager,
+        terminalId: deviceId,
+      );
+
+      final captured = verify(
+        mockTransactionDao.executeSaleTransaction(
+          captureAny,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      );
+      captured.called(1);
+      final note = captured.captured.first as InvoiceEntity;
+      // Rates: origin's, not the constructor defaults.
+      expect(note.bcnOfficialRate, 41.25);
+      expect(note.commercialRate, 39.75);
+      expect(note.totalUsd, 5.79);
+      // Issuance moment: the open session and today's local date.
+      expect(note.shiftId, 'shift-issuance-1');
+      expect(note.localIssueDate,
+          DateTime.now().toIso8601String().substring(0, 10));
+      // A FRESH snapshot of issuance-time config, with the regime key.
+      final snapshot =
+          jsonDecode(note.fiscalHeaderSnapshot!) as Map<String, dynamic>;
+      expect(snapshot['businessName'], 'Café Al Momento');
+      expect(snapshot['taxRegime'], 'REGIMEN_GENERAL');
+    });
+
+    test('a mismatched terminal yields a null shiftId honestly, no throw',
+        () async {
+      final original = InvoiceEntity(
+        id: 'inv-cn-rates',
+        number: 'F001-000777',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        userId: 'cashier-1',
+        subtotal: 200,
+        totalTax: 30,
+        total: 230,
+        syncStatus: 'synced',
+        paymentStatus: 'paid',
+        type: 'regular',
+        bcnOfficialRate: 41.25,
+        commercialRate: 39.75,
+        totalUsd: 5.79,
+      );
+      when(
+        mockInvoiceDao.getInvoiceById(original.id),
+      ).thenAnswer((_) async => original);
+      when(
+        mockNumberingService.isRangeExhausted(),
+      ).thenAnswer((_) async => false);
+      when(
+        mockItemDao.getItemsByInvoiceId(original.id),
+      ).thenAnswer((_) async => []);
+      when(
+        mockTransactionDao.getCreditNotesByRelatedId(original.id),
+      ).thenAnswer((_) async => []);
+      when(
+        mockNumberingService.getNextNumber(),
+      ).thenAnswer((_) async => 'NC-778');
+      when(
+        mockTransactionDao.getNextInvoiceSourceSequence(any),
+      ).thenAnswer((_) async => 10);
+      when(
+        mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockReverseInventoryUseCase.execute(any, any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockTransactionDao.executeSaleTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).thenAnswer((_) async {});
+      // The issuing session lives on ANOTHER terminal: no match.
+      when(mockSessionDao.getActiveSessionForUserAndTerminal(
+        'manager-1',
+        'TERM-OTHER',
+      )).thenAnswer((_) async => null);
+
+      await repository.createCreditNote(
+        originalInvoiceId: original.id,
+        reason: 'ERROR_DE_CAPTURA',
+        authorizedByUserId: 'manager-1',
+        authorizedByRole: UserRole.manager,
+        terminalId: 'TERM-OTHER',
+      );
+
+      final captured = verify(
+        mockTransactionDao.executeSaleTransaction(
+          captureAny,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      );
+      captured.called(1);
+      final note = captured.captured.first as InvoiceEntity;
+      expect(note.shiftId, isNull,
+          reason: 'null = no open session known for this terminal — '
+              'never a synthetic match');
+    });
+  });
+
   group('SalesRepositoryImpl - credit note refund policy', () {
     test(
       'creates a partial financial-only credit note without returning BOM stock',
@@ -2048,6 +2273,9 @@ void main() {
       when(mockLocalConfigDao.getConfigByKey('dgi_authorization_code'))
           .thenAnswer((_) async => LocalConfigEntity(
               key: 'dgi_authorization_code', value: 'AUT-DGI-2026-0001'));
+      // JD-B-003: the regime is part of the snapshot.
+      when(mockLocalConfigDao.getConfigByKey('tax_regime')).thenAnswer(
+          (_) async => LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
       // Fallback path exercised: no printer_header_address, only 'address'.
       when(mockLocalConfigDao.getConfigByKey('address')).thenAnswer(
           (_) async => LocalConfigEntity(key: 'address', value: 'Calle Original 456'));
@@ -2068,6 +2296,7 @@ void main() {
         'ruc': 'A0011234567890',
         'address': 'Calle Original 456',
         'fiscalAuthorizationNumber': 'AUT-DGI-2026-0001',
+        'taxRegime': 'REGIMEN_GENERAL',
       });
       // Blank/absent values are omitted, never fabricated.
       expect(snapshot.containsKey('phone'), isFalse);

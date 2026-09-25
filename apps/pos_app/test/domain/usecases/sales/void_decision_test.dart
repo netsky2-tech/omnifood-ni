@@ -97,16 +97,17 @@ void main() {
     });
   });
 
-  group('evaluateVoidRequest — owner/manager bypass (D-10/D-11)', () {
-    test('void.any bypasses shift and date predicates', () {
+  group('evaluateVoidRequest — owner/manager bypass (D-10/D-11, D-14 bound)', () {
+    test('void.any bypasses ownInvoice and shift predicates for same-date invoices',
+        () {
       expect(
         evaluate(
           actorRole: UserRole.manager,
           actorUserId: 'manager-1',
           invoiceUserId: 'cashier-1',
           invoiceShiftId: 'shift-old',
-          invoiceLocalIssueDate: '2026-09-01',
-          invoiceCreatedAt: DateTime(2026, 9, 1, 21, 0),
+          invoiceLocalIssueDate: '2026-09-24',
+          invoiceCreatedAt: DateTime(2026, 9, 24, 9, 0),
           currentShiftId: 'shift-1',
         ),
         VoidDecision.allowed,
@@ -116,12 +117,29 @@ void main() {
           actorRole: UserRole.owner,
           actorUserId: 'owner-1',
           invoiceUserId: 'cashier-1',
-          invoiceShiftId: null,
-          invoiceLocalIssueDate: null,
-          invoiceCreatedAt: DateTime(2026, 8, 1, 12, 0),
-          currentShiftId: null,
+          invoiceShiftId: 'shift-other',
+          invoiceLocalIssueDate: '2026-09-24',
+          invoiceCreatedAt: DateTime(2026, 9, 24, 8, 0),
+          currentShiftId: 'shift-1',
         ),
         VoidDecision.allowed,
+      );
+    });
+
+    test('D-14 is categorical: owner with a cross-day invoice is deniedCrossDay',
+        () {
+      // JD-B-001/A-004: the bypass can no longer override the date predicate.
+      expect(
+        evaluate(
+          actorRole: UserRole.owner,
+          actorUserId: 'owner-1',
+          invoiceUserId: 'cashier-1',
+          invoiceShiftId: 'shift-1',
+          invoiceLocalIssueDate: '2026-09-01',
+          invoiceCreatedAt: DateTime(2026, 9, 1, 21, 0),
+          currentShiftId: 'shift-1',
+        ),
+        VoidDecision.deniedCrossDay,
       );
     });
   });
