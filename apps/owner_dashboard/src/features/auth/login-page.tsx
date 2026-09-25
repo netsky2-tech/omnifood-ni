@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 const loginSchema = z.object({
   email: z.string().email("Correo inválido"),
   password: z.string().min(6, "Mínimo 6 caracteres"),
-  tenantSlug: z.string().trim().min(1, "El tenant es requerido"),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -19,9 +18,10 @@ type LoginForm = z.infer<typeof loginSchema>;
 export function LoginPage() {
   const loginMutation = useLogin();
   const [showPassword, setShowPassword] = useState(false);
-  // The tenant slug normally comes from the host subdomain (soho.nhilospos.com -> soho);
-  // the field stays editable so the owner can correct or enter it manually.
-  const initialTenantSlug = resolveTenantSlug(window.location.hostname) ?? "";
+  // The tenant slug comes ONLY from the host subdomain (soho.nhilospos.com -> soho);
+  // there is no manual entry. Without a tenant subdomain (apex domain, localhost,
+  // IP address) the login fails closed instead of asking for a slug.
+  const tenantSlug = resolveTenantSlug(window.location.hostname);
 
   const {
     register,
@@ -29,14 +29,41 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      tenantSlug: initialTenantSlug,
-    },
   });
+
+  if (!tenantSlug) {
+    return (
+      <div className="fixed inset-0 flex overflow-y-auto overscroll-contain items-center justify-center bg-muted/30 px-4 py-8">
+        <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 sm:p-8 shadow-lg my-auto">
+          <div className="mb-8 text-center">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white p-2 mb-3 shadow-md border border-border">
+              <img
+                src="/logo.png"
+                alt="NHILOS POS"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">NHILOS POS</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Panel de administración
+            </p>
+          </div>
+          <div
+            className="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-center"
+            role="alert"
+          >
+            <p className="text-sm text-foreground">
+              Accedé desde el subdominio de tu comercio (ej.: soho.localhost)
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const onSubmit = (data: LoginForm) => {
     if (loginMutation.isPending) return;
-    loginMutation.mutate(data);
+    loginMutation.mutate({ ...data, tenantSlug });
   };
 
   return (
@@ -116,31 +143,6 @@ export function LoginPage() {
             {errors.password && (
               <p className="mt-1 text-xs text-destructive">
                 {errors.password.message}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="tenantSlug"
-              className="mb-1.5 block text-sm font-medium text-foreground"
-            >
-              Tenant (slug)
-            </label>
-            <Input
-              id="tenantSlug"
-              type="text"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              {...register("tenantSlug")}
-              placeholder="mi-negocio"
-              aria-invalid={!!errors.tenantSlug}
-              disabled={loginMutation.isPending}
-            />
-            {errors.tenantSlug && (
-              <p className="mt-1 text-xs text-destructive">
-                {errors.tenantSlug.message}
               </p>
             )}
           </div>
