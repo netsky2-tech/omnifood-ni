@@ -83,10 +83,14 @@ export function buildFounderPilotFixture(
   }
 
   if (!/^\d{6}$/.test(offlinePin)) {
-    throw new Error('ONBOARDING_FOUNDER_OWNER_PIN must contain exactly six digits');
+    throw new Error(
+      'ONBOARDING_FOUNDER_OWNER_PIN must contain exactly six digits',
+    );
   }
   if (password.length < 8) {
-    throw new Error('ONBOARDING_FOUNDER_OWNER_PASSWORD must contain at least eight characters');
+    throw new Error(
+      'ONBOARDING_FOUNDER_OWNER_PASSWORD must contain at least eight characters',
+    );
   }
 
   return {
@@ -153,7 +157,11 @@ async function seedFounderPilot(): Promise<void> {
           is_totp_enabled: false,
         }),
       );
-      return { tenantId: tenant.id, ownerId: owner.id, securityProfileId: profile.id };
+      return {
+        tenantId: tenant.id,
+        ownerId: owner.id,
+        securityProfileId: profile.id,
+      };
     });
 
     // This is intentionally the only output: it is a machine-readable handoff for

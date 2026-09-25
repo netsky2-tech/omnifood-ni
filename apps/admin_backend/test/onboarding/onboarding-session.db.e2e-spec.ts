@@ -56,10 +56,10 @@ describe('OnboardingSessionService under migration-built FORCE RLS (Real Postgre
   const tenantDId = randomUUID();
 
   const adminCountFor = async (tenantId: string): Promise<number> => {
-    const rows = (await admin.query(
+    const rows = await admin.query(
       `SELECT count(*)::int AS count FROM onboarding_sessions WHERE tenant_id = $1`,
       [tenantId],
-    )) as Array<{ count: number }>;
+    );
     return rows[0].count;
   };
 
@@ -124,12 +124,12 @@ describe('OnboardingSessionService under migration-built FORCE RLS (Real Postgre
     expect(role.rolsuper).toBe(false);
     expect(role.rolbypassrls).toBe(false);
 
-    const owned = (await admin.query(
+    const owned = await admin.query(
       `SELECT count(*)::int AS count FROM pg_tables
         WHERE schemaname = $1 AND tablename = 'onboarding_sessions'
           AND tableowner = $2`,
       [schema, fixture.runtimeRoleName],
-    )) as Array<{ count: number }>;
+    );
     expect(owned[0].count).toBe(0);
   });
 
@@ -188,28 +188,24 @@ describe('OnboardingSessionService under migration-built FORCE RLS (Real Postgre
     const sessionA = await service.getSession(tenantAId);
     expect(sessionA).not.toBeNull();
 
-    const updated = await service.updateSessionWithOptimisticLock(
-      sessionA as OnboardingSession,
-      1,
-      { lifecycleState: OnboardingLifecycleState.SALE_READY },
-    );
+    const updated = await service.updateSessionWithOptimisticLock(sessionA, 1, {
+      lifecycleState: OnboardingLifecycleState.SALE_READY,
+    });
     expect(updated.optimisticVersion).toBe(2);
     expect(updated.lifecycleState).toBe(OnboardingLifecycleState.SALE_READY);
 
-    const persisted = (await admin.query(
+    const persisted = await admin.query(
       `SELECT optimistic_version, lifecycle_state FROM onboarding_sessions WHERE id = $1`,
       [sessionAId],
-    )) as Array<{ optimistic_version: number; lifecycle_state: string }>;
+    );
     expect(persisted[0].optimistic_version).toBe(2);
     expect(persisted[0].lifecycle_state).toBe('SALE_READY');
 
     // Stale expected version: the row is now at version 2.
     await expect(
-      service.updateSessionWithOptimisticLock(
-        sessionA as OnboardingSession,
-        1,
-        { lifecycleState: OnboardingLifecycleState.ACTIVATED },
-      ),
+      service.updateSessionWithOptimisticLock(sessionA, 1, {
+        lifecycleState: OnboardingLifecycleState.ACTIVATED,
+      }),
     ).rejects.toThrow(ConflictException);
   });
 
@@ -223,7 +219,7 @@ describe('OnboardingSessionService under migration-built FORCE RLS (Real Postgre
     // A, so RLS hides B's row, the optimistic update affects zero rows, and
     // the service must surface the conflict instead of silently mutating.
     const forged = {
-      ...(sessionB as OnboardingSession),
+      ...sessionB,
       tenantId: tenantAId,
     };
     await expect(
@@ -232,10 +228,10 @@ describe('OnboardingSessionService under migration-built FORCE RLS (Real Postgre
       }),
     ).rejects.toThrow(ConflictException);
 
-    const untouched = (await admin.query(
+    const untouched = await admin.query(
       `SELECT optimistic_version, lifecycle_state FROM onboarding_sessions WHERE id = $1`,
       [sessionBId],
-    )) as Array<{ optimistic_version: number; lifecycle_state: string }>;
+    );
     expect(untouched[0].optimistic_version).toBe(1);
     expect(untouched[0].lifecycle_state).toBe('PROVISIONED');
   });
@@ -246,7 +242,7 @@ describe('OnboardingSessionService under migration-built FORCE RLS (Real Postgre
     const sessionA = await service.getSession(tenantAId);
     expect(sessionA).not.toBeNull();
     const mutated = {
-      ...(sessionA as OnboardingSession),
+      ...sessionA,
       measurementEligible: false,
     };
     await service.saveSession(mutated);

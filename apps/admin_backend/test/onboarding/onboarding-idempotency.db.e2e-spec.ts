@@ -6,7 +6,10 @@ import {
   OnboardingIdempotencyStatus,
 } from '../../src/modules/onboarding/entities/onboarding-idempotency.entity';
 import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/services/onboarding-idempotency.coordinator';
-import { bindTenantContext, TenantContextRequiredError } from '../../src/core/database/tenant-transaction';
+import {
+  bindTenantContext,
+  TenantContextRequiredError,
+} from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
 
 /**
@@ -66,22 +69,20 @@ describe('OnboardingIdempotencyCoordinator under migration-built FORCE RLS (Real
     completed_at: Date | null;
   }
 
-  const adminRowFor = async (
-    recordId: string,
-  ): Promise<PersistedRecordRow> => {
-    const rows = (await admin.query(
+  const adminRowFor = async (recordId: string): Promise<PersistedRecordRow> => {
+    const rows = await admin.query(
       `SELECT * FROM onboarding_idempotency_records WHERE id = $1`,
       [recordId],
-    )) as Array<PersistedRecordRow>;
+    );
     return rows[0];
   };
 
   const adminCountForKey = async (key: string): Promise<number> => {
-    const rows = (await admin.query(
+    const rows = await admin.query(
       `SELECT count(*)::int AS count FROM onboarding_idempotency_records
         WHERE idempotency_key = $1`,
       [key],
-    )) as Array<{ count: number }>;
+    );
     return rows[0].count;
   };
 
@@ -176,12 +177,12 @@ describe('OnboardingIdempotencyCoordinator under migration-built FORCE RLS (Real
     expect(role.rolsuper).toBe(false);
     expect(role.rolbypassrls).toBe(false);
 
-    const owned = (await admin.query(
+    const owned = await admin.query(
       `SELECT count(*)::int AS count FROM pg_tables
         WHERE schemaname = $1 AND tablename = 'onboarding_idempotency_records'
           AND tableowner = $2`,
       [schema, fixture.runtimeRoleName],
-    )) as Array<{ count: number }>;
+    );
     expect(owned[0].count).toBe(0);
   });
 
@@ -201,9 +202,7 @@ describe('OnboardingIdempotencyCoordinator under migration-built FORCE RLS (Real
     expect(lease.state).toBe('ACQUIRED');
     if (lease.state === 'ACQUIRED') {
       expect(lease.record.tenantId).toBe(tenantAId);
-      expect(lease.record.status).toBe(
-        OnboardingIdempotencyStatus.IN_PROGRESS,
-      );
+      expect(lease.record.status).toBe(OnboardingIdempotencyStatus.IN_PROGRESS);
       expect(lease.record.attemptCount).toBe(1);
     }
     expect(await adminCountForKey(key)).toBe(1);
@@ -268,11 +267,7 @@ describe('OnboardingIdempotencyCoordinator under migration-built FORCE RLS (Real
     await runtime.transaction(async (manager) => {
       await bindTenantContext(manager, tenantAId);
       await expect(
-        coordinator.completeSuccess(
-          recordBId,
-          { forged: true },
-          manager,
-        ),
+        coordinator.completeSuccess(recordBId, { forged: true }, manager),
       ).rejects.toThrow(ConflictException);
     });
 

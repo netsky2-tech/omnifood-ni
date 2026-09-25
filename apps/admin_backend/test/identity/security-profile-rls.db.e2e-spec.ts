@@ -164,7 +164,7 @@ describe('security_profiles tenant RLS (Real PostgreSQL DB, migration-built sche
         'security-profile-rls-tenant-c',
         tenantDId,
         'security-profile-rls-tenant-d',
-                normalizeTenantSlug('security-profile-rls-tenant-a'),
+        normalizeTenantSlug('security-profile-rls-tenant-a'),
         normalizeTenantSlug('security-profile-rls-tenant-b'),
         normalizeTenantSlug('security-profile-rls-tenant-c'),
         normalizeTenantSlug('security-profile-rls-tenant-d'),
@@ -179,7 +179,16 @@ describe('security_profiles tenant RLS (Real PostgreSQL DB, migration-built sche
               ($4, $5, 'Owner B1', 'OWNER'),
               ($6, $5, 'Owner B2', 'OWNER'),
               ($7, $8, 'Owner C', 'OWNER')`,
-      [userA1Id, tenantAId, userA2Id, userB1Id, tenantBId, userB2Id, userCId, tenantCId],
+      [
+        userA1Id,
+        tenantAId,
+        userA2Id,
+        userB1Id,
+        tenantBId,
+        userB2Id,
+        userCId,
+        tenantCId,
+      ],
     );
 
     // Seeded probe profiles, one per tenant A and B. Every other column has
@@ -264,10 +273,26 @@ describe('security_profiles tenant RLS (Real PostgreSQL DB, migration-built sche
     // EXACTLY the four command policies: an extra policy would widen access
     // beyond the tenant contract, a missing one narrows it.
     expect(policies).toEqual([
-      { tablename: 'security_profiles', policyname: 'security_profiles_tenant_delete', cmd: 'DELETE' },
-      { tablename: 'security_profiles', policyname: 'security_profiles_tenant_insert', cmd: 'INSERT' },
-      { tablename: 'security_profiles', policyname: 'security_profiles_tenant_select', cmd: 'SELECT' },
-      { tablename: 'security_profiles', policyname: 'security_profiles_tenant_update', cmd: 'UPDATE' },
+      {
+        tablename: 'security_profiles',
+        policyname: 'security_profiles_tenant_delete',
+        cmd: 'DELETE',
+      },
+      {
+        tablename: 'security_profiles',
+        policyname: 'security_profiles_tenant_insert',
+        cmd: 'INSERT',
+      },
+      {
+        tablename: 'security_profiles',
+        policyname: 'security_profiles_tenant_select',
+        cmd: 'SELECT',
+      },
+      {
+        tablename: 'security_profiles',
+        policyname: 'security_profiles_tenant_update',
+        cmd: 'UPDATE',
+      },
     ]);
 
     // Every defined expression is the ONE-HOP parent walk over users with
@@ -525,7 +550,7 @@ describe('security_profiles tenant RLS (Real PostgreSQL DB, migration-built sche
 
         const profile = await manager
           .getRepository(SecurityProfile)
-          .findOne({ where: { user_id: user!.id } });
+          .findOne({ where: { user_id: user.id } });
         expect(profile).not.toBeNull();
         expect(profile?.user_id).toBe(userA1Id);
 

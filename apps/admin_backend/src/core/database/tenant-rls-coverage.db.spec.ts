@@ -198,25 +198,31 @@ describe('tenant RLS coverage gate (migration-built schema)', () => {
   it(
     'rejects a synthetic unclassified tenant table by name',
     async () => {
-      await withIsolatedSchema('rls_cov_unclassified', async ({ queryRunner }) => {
-        await queryRunner.query(`
+      await withIsolatedSchema(
+        'rls_cov_unclassified',
+        async ({ queryRunner }) => {
+          await queryRunner.query(`
           CREATE TABLE smuggled_tenant_table (
             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id uuid NOT NULL
           )
         `);
 
-        const tables = await collectCatalogTables(queryRunner);
-        const result = evaluateTenantRlsCoverage(parseManifestText(''), tables);
+          const tables = await collectCatalogTables(queryRunner);
+          const result = evaluateTenantRlsCoverage(
+            parseManifestText(''),
+            tables,
+          );
 
-        expect(result.failures).toEqual([
-          {
-            kind: 'unclassified-table',
-            table: 'smuggled_tenant_table',
-            detail: 'public base table has no classification entry',
-          },
-        ]);
-      });
+          expect(result.failures).toEqual([
+            {
+              kind: 'unclassified-table',
+              table: 'smuggled_tenant_table',
+              detail: 'public base table has no classification entry',
+            },
+          ]);
+        },
+      );
     },
     TEST_TIMEOUT_MS,
   );
@@ -241,10 +247,9 @@ describe('tenant RLS coverage gate (migration-built schema)', () => {
         const tables = await collectCatalogTables(queryRunner);
         const result = evaluateTenantRlsCoverage(
           parseManifestText(
-            [
-              'platform_registry|global',
-              'misclassified_global|global',
-            ].join('\n'),
+            ['platform_registry|global', 'misclassified_global|global'].join(
+              '\n',
+            ),
           ),
           tables,
         );
@@ -312,51 +317,54 @@ describe('tenant RLS coverage gate (migration-built schema)', () => {
   it(
     'rejects a stale debt entry once the table becomes fully tenant-protected',
     async () => {
-      await withIsolatedSchema('rls_cov_stale_debt', async ({ queryRunner }) => {
-        await queryRunner.query(`
+      await withIsolatedSchema(
+        'rls_cov_stale_debt',
+        async ({ queryRunner }) => {
+          await queryRunner.query(`
           CREATE TABLE promoted_debt_table (
             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id uuid NOT NULL
           )
         `);
-        await queryRunner.query(
-          'ALTER TABLE promoted_debt_table ENABLE ROW LEVEL SECURITY',
-        );
-        await queryRunner.query(
-          'ALTER TABLE promoted_debt_table FORCE ROW LEVEL SECURITY',
-        );
-        await queryRunner.query(`
+          await queryRunner.query(
+            'ALTER TABLE promoted_debt_table ENABLE ROW LEVEL SECURITY',
+          );
+          await queryRunner.query(
+            'ALTER TABLE promoted_debt_table FORCE ROW LEVEL SECURITY',
+          );
+          await queryRunner.query(`
           CREATE POLICY promoted_debt_table_tenant_isolation
             ON promoted_debt_table
             USING (${TENANT_RLS_PREDICATE})
             WITH CHECK (${TENANT_RLS_PREDICATE})
         `);
 
-        const tables = await collectCatalogTables(queryRunner);
-        expect(
-          tables.find((table) => table.name === 'promoted_debt_table'),
-        ).toEqual({
-          name: 'promoted_debt_table',
-          hasTenantIdColumn: true,
-          rlsEnabled: true,
-          rlsForced: true,
-          policyCount: 1,
-        });
+          const tables = await collectCatalogTables(queryRunner);
+          expect(
+            tables.find((table) => table.name === 'promoted_debt_table'),
+          ).toEqual({
+            name: 'promoted_debt_table',
+            hasTenantIdColumn: true,
+            rlsEnabled: true,
+            rlsForced: true,
+            policyCount: 1,
+          });
 
-        const result = evaluateTenantRlsCoverage(
-          parseManifestText('promoted_debt_table|debt'),
-          tables,
-        );
+          const result = evaluateTenantRlsCoverage(
+            parseManifestText('promoted_debt_table|debt'),
+            tables,
+          );
 
-        expect(result.failures).toEqual([
-          {
-            kind: 'debt-fully-protected-stale',
-            table: 'promoted_debt_table',
-            detail:
-              'debt entry is now fully tenant-protected (tenant_id, ENABLE, FORCE, and at least one policy); promote it to direct and delete the debt entry',
-          },
-        ]);
-      });
+          expect(result.failures).toEqual([
+            {
+              kind: 'debt-fully-protected-stale',
+              table: 'promoted_debt_table',
+              detail:
+                'debt entry is now fully tenant-protected (tenant_id, ENABLE, FORCE, and at least one policy); promote it to direct and delete the debt entry',
+            },
+          ]);
+        },
+      );
     },
     TEST_TIMEOUT_MS,
   );

@@ -789,14 +789,23 @@ describe('UserService', () => {
         role: UserRole.CASHIER,
         security_version: 1,
       });
-      userRepository.save.mockImplementation((u: unknown) => Promise.resolve(u));
+      userRepository.save.mockImplementation((u: unknown) =>
+        Promise.resolve(u),
+      );
       auditRepository.findOne.mockResolvedValue({
         sequence_no: 5,
         entry_hash: 'hash-of-entry-5',
       });
-      auditRepository.save.mockImplementation((log: unknown) => Promise.resolve(log));
+      auditRepository.save.mockImplementation((log: unknown) =>
+        Promise.resolve(log),
+      );
 
-      await service.update('user-1', { name: 'New Name' }, 'tenant-1', 'admin-1');
+      await service.update(
+        'user-1',
+        { name: 'New Name' },
+        'tenant-1',
+        'admin-1',
+      );
 
       expect(auditRepository.findOne).toHaveBeenCalledWith({
         where: {
