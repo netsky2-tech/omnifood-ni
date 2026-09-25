@@ -533,6 +533,10 @@ describe('SalesExportService', () => {
             useValue: { find: jest.fn().mockResolvedValue([]) },
           },
           { provide: DataSource, useValue: boundDataSource },
+          {
+            provide: FiscalSetupService,
+            useValue: mockFiscalSetup,
+          },
         ],
       }).compile();
       const bound = module.get<SalesExportService>(SalesExportService);
