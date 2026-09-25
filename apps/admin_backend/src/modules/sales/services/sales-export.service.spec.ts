@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import * as ExcelJS from 'exceljs';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { SalesExportService } from './sales-export.service';
+import { FiscalSetupService } from '../../onboarding/services/fiscal-setup.service';
 import { Invoice } from '../entities/invoice.entity';
 import {
   CashShiftSession,
@@ -18,6 +20,12 @@ describe('SalesExportService', () => {
   let mockShiftRepo: {
     find: jest.Mock;
   };
+  // B2e U3 (D-3): the export IVA labels derive from the tenant's effective
+  // fiscal configuration through FiscalSetupService; the mock defaults to a
+  // Regimen General tenant at 15% so the existing label assertions keep
+  // proving the derived output while the Cuota Fija tests below prove the
+  // regime actually governs the labels.
+  let mockFiscalSetup: { getFiscalSetup: jest.Mock };
   // The tenant-bound transaction fake: the manager hands back the same
   // repository mocks the pooled tokens provide, so the existing behavior
   // assertions keep working unchanged while the guard test below proves the
@@ -49,6 +57,12 @@ describe('SalesExportService', () => {
     mockShiftRepo = {
       find: jest.fn(),
     };
+    mockFiscalSetup = {
+      getFiscalSetup: jest.fn().mockResolvedValue({
+        regime: 'REGIMEN_GENERAL',
+        taxRateIva: 0.15,
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -62,6 +76,10 @@ describe('SalesExportService', () => {
           useValue: mockShiftRepo,
         },
         { provide: DataSource, useValue: transactionalDataSource },
+        {
+          provide: FiscalSetupService,
+          useValue: mockFiscalSetup,
+        },
       ],
     }).compile();
 
@@ -135,8 +153,10 @@ describe('SalesExportService', () => {
         format: 'csv',
       });
 
+      // B2e U3 (D-3): the IVA percentage in the header is derived from the
+      // tenant's fiscal config (15% Regimen General in the default mock).
       expect(csvResult.content).toContain(
-        '"Fecha","Numero Factura","Tipo Documento","Cliente","Subtotal Exento (NIO)","Subtotal Gravado (NIO)","IVA 15% (NIO)","Descuento (NIO)","Total (NIO)","Total (USD)","Estado"',
+        '"Fecha","Numero Factura","Tipo Documento","Cliente","Subtotal Exento (NIO)","Subtotal Gravado 15% (NIO)","IVA 15% (NIO)","Descuento (NIO)","Total (NIO)","Total (USD)","Estado"',
       );
       expect(csvResult.content).toContain(
         '"2026-08-26","001-001-01-00000001","FACTURA","J0310000000000",0.00,1000.00,150.00,0.00,1150.00,31.51,"VALIDA"',
@@ -144,6 +164,77 @@ describe('SalesExportService', () => {
       expect(csvResult.content).toContain(
         '"2026-08-26","001-001-01-00000002","ANULADA","CONSUMIDOR FINAL",0.00,300.00,45.00,0.00,345.00,9.45,"ANULADA"',
       );
+    });
+
+    // B2e U3 (D-3): the configured rate governs the label — with a 15%
+    // Regimen General setup (the beforeEach default) the derived header is
+    // 'IVA 15% (NIO)'; a different configured rate must flow through.
+    it('derives the IVA CSV header from the fiscal config rate (D-3)', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([]);
+      mockFiscalSetup.getFiscalSetup.mockResolvedValue({
+        regime: 'REGIMEN_GENERAL',
+        taxRateIva: 0.15,
+      });
+
+      const csvResult = await service.exportSalesBook(tenantId, {
+        format: 'csv',
+      });
+
+      expect(csvResult.content).toContain('"IVA 15% (NIO)"');
+      expect(csvResult.content).toContain('"Subtotal Gravado 15% (NIO)"');
+    });
+
+    // B2e U3 (D-3): a Cuota Fija sales book collects no IVA, so its headers
+    // must never carry a percentage — and never the fabricated 'IVA 15%'.
+    it('omits any IVA percentage for a Cuota Fija sales book (D-3)', async () => {
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+      mockFiscalSetup.getFiscalSetup.mockResolvedValue({
+        regime: 'CUOTA_FIJA',
+        taxRateIva: 0.0,
+      });
+
+      const csvResult = await service.exportSalesBook(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'csv',
+      });
+
+      expect(csvResult.content).not.toContain('15%');
+      expect(csvResult.content).toContain('"IVA (NIO)"');
+      expect(csvResult.content).toContain('"Subtotal Gravado (NIO)"');
+
+      const xlsxResult = await service.exportSalesBook(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'xlsx',
+      });
+
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(xlsxResult.buffer as unknown as ExcelJS.Buffer);
+      const headerValues = workbook
+        .getWorksheet('Libro de Ventas DGI')
+        .getRow(1).values as unknown[];
+      const headers = headerValues.slice(1).map(String);
+      expect(headers).toContain('Gravado (NIO)');
+      expect(headers).toContain('IVA (NIO)');
+      expect(headers.join(',')).not.toContain('15%');
+    });
+
+    // B2e U3 (D-3): fail closed — if the fiscal setup cannot be read, the
+    // labels degrade to plain 'IVA' / 'Gravado', never to a hardcoded 15%.
+    it('falls back to plain IVA labels when the fiscal setup cannot be read (D-3)', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([]);
+      mockFiscalSetup.getFiscalSetup.mockRejectedValue(
+        new Error('fiscal setup unavailable'),
+      );
+
+      const csvResult = await service.exportSalesBook(tenantId, {
+        format: 'csv',
+      });
+
+      expect(csvResult.content).not.toContain('15%');
+      expect(csvResult.content).toContain('"IVA (NIO)"');
+      expect(csvResult.content).toContain('"Subtotal Gravado (NIO)"');
     });
 
     it('should generate valid XLSX binary buffer for sales book', async () => {
@@ -322,6 +413,10 @@ describe('SalesExportService', () => {
             useValue: pooledShift,
           },
           { provide: DataSource, useValue: boundDataSource },
+          {
+            provide: FiscalSetupService,
+            useValue: mockFiscalSetup,
+          },
         ],
       }).compile();
       const bound = module.get<SalesExportService>(SalesExportService);

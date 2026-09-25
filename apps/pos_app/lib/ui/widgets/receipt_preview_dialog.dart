@@ -108,20 +108,26 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
     }
 
     // Build standard diagnostic sample sale
+    // B2e D-3: the diagnostic sample derives its fixture rate from the
+    // selected regime — a Cuota Fija sample never carries an invented 15%,
+    // and the Régimen General sample keeps the 15% rate the formatter's
+    // current IVA label discloses. Receipt output still comes from the
+    // calculator's regime derivation either way.
+    final sampleTaxRate = _taxRegime.isCuotaFija ? 0.0 : 0.15;
     final sampleCart = [
-      const CartItem(
+      CartItem(
         productId: 'prod-01',
         productName: 'Café Americano Doble 12oz',
         quantity: 2,
         unitPrice: 45.0,
-        taxRate: 0.15,
+        taxRate: sampleTaxRate,
       ),
-      const CartItem(
+      CartItem(
         productId: 'prod-02',
         productName: 'Croissant Jamón y Queso Horneado Artesanal',
         quantity: 1,
         unitPrice: 85.0,
-        taxRate: 0.15,
+        taxRate: sampleTaxRate,
       ),
     ];
 

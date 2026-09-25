@@ -1374,7 +1374,7 @@ class CartSummary extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('IVA (15%)'),
+              const Text('IVA'),
               Text('C\$ ${(viewModel.totalTax).toStringAsFixed(2)}'),
             ],
           ),

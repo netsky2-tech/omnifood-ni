@@ -1718,7 +1718,7 @@ class SyncService {
               insumoId: map['insumoId'] as String?,
               createdAt: map['createdAt']?.toString() ?? existing?.createdAt,
               tenantId: map['tenantId'] as String? ?? existing?.tenantId,
-              taxRate: (map['taxRate'] as num?)?.toDouble() ?? 0.15,
+              taxRate: (map['taxRate'] as num?)?.toDouble() ?? 0.0,
               isTaxExempt: map['isTaxExempt'] as bool? ?? false,
               inventoryPolicy: map['inventoryPolicy'] as String? ?? existing?.inventoryPolicy,
               directStockInsumoId: map['directStockInsumoId'] as String? ?? existing?.directStockInsumoId,

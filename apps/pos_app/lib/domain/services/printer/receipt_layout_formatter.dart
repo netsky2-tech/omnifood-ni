@@ -546,7 +546,7 @@ class ReceiptLayoutFormatter {
         : (hasDiscount ? (doc.subtotal + doc.discountTotal) : doc.subtotal);
 
     if (doc.taxRegime.isCuotaFija) {
-      // Cuota Fija: Subtotal & Total. Never print IVA (15%): C$ 0.00 or VENTA EXENTA.
+      // Cuota Fija: Subtotal & Total. Never print an IVA line or VENTA EXENTA.
       if (hasDiscount) {
         if (metrics.is80mm) {
           buffer.writeln(
@@ -691,7 +691,7 @@ class ReceiptLayoutFormatter {
         }
         if (doc.totalTax > 0) {
           buffer.writeln(
-            formatTwoColumns('IVA (15%):', formatMoney(doc.totalTax)),
+            formatTwoColumns('IVA:', formatMoney(doc.totalTax)),
           );
         }
         buffer.writeln(doubleDivider());
@@ -1193,7 +1193,7 @@ class ReceiptLayoutFormatter {
         if (doc.totalTax > 0) {
           marginTextLine(
             builder,
-            formatTwoColumns('IVA (15%):', formatMoney(doc.totalTax)),
+            formatTwoColumns('IVA:', formatMoney(doc.totalTax)),
           );
         }
         builder
@@ -1554,7 +1554,7 @@ class ReceiptLayoutFormatter {
         );
         buffer.writeln(
           formatTwoColumns(
-            'IVA (15%):',
+            'IVA:',
             'C\$ ${invoice.totalTax.toStringAsFixed(2)}',
           ),
         );
@@ -1860,7 +1860,7 @@ class ReceiptLayoutFormatter {
             )
             .textLine(
               formatTwoColumns(
-                'IVA (15%):',
+                'IVA:',
                 'C\$ ${invoice.totalTax.toStringAsFixed(2)}',
               ),
             )

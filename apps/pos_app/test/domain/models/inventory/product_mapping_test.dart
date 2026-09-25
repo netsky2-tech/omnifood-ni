@@ -1,8 +1,44 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/mappers/inventory_mapper.dart';
 import 'package:pos_app/data/models/inventory/product_entity.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 
 void main() {
+  group('B2e D-3 fail-closed defaults', () {
+    test(
+      'product JSON without an explicit taxRate defaults to exempt 0.0, never an invented 15%',
+      () {
+        final product = Product.fromJson({
+          'id': 'legacy-no-rate',
+          'name': 'Producto sin tarifa sincronizada',
+          'uom': 'UND',
+          'stock': 1.0,
+          'averageCost': 10.0,
+          'sellPrice': 20.0,
+        });
+
+        expect(product.taxRate, equals(0.0));
+        expect(product.effectiveTaxRate, equals(0.0));
+      },
+    );
+
+    test(
+      'ProductEntity constructor without an explicit taxRate defaults to 0.0',
+      () {
+        final entity = ProductEntity(
+          id: 'entity-no-rate',
+          name: 'Producto sin tarifa',
+          uom: 'UND',
+          stock: 1,
+          averageCost: 10,
+          sellPrice: 20,
+        );
+
+        expect(entity.taxRate, equals(0.0));
+      },
+    );
+  });
+
   test(
     'preserves authoritative SIMPLE mapping identity without product-id inference',
     () {

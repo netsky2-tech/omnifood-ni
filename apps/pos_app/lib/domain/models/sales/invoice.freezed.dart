@@ -543,7 +543,7 @@ class _$InvoiceImpl implements _Invoice {
       this.inventoryOutcome,
       this.inventoryOutcomeReason,
       this.bcnOfficialRate = 36.6241,
-      this.commercialRate = 36.5,
+      this.commercialRate = 36.50,
       this.totalUsd = 0.0});
 
   factory _$InvoiceImpl.fromJson(Map<String, dynamic> json) =>

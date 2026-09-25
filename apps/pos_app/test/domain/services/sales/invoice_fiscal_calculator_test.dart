@@ -496,7 +496,7 @@ void main() {
       expect(text, contains('FACTURA DE VENTA'));
       expect(text, contains('SUBTOTAL:'));
       expect(text, contains('C\$ 100.00'));
-      expect(text, contains('IVA (15%):'));
+      expect(text, contains('IVA:'));
       expect(text, contains('C\$ 15.00'));
       expect(text, contains('TOTAL CORDOBAS:'));
       expect(text, contains('C\$ 115.00'));
@@ -700,16 +700,15 @@ void main() {
 
         final product = Product.fromJson(legacyJson);
 
-        // Business migration policy: legacy products without explicit fiscal fields
-        // default to taxRate=0.15. This is NOT a legal mandate (Ley 822 Art. 114
-        // does not require all retail goods to be taxed at 15%). It is a conservative
-        // migration assumption to avoid breaking existing catalogs during sync.
-        // Risk: catalogs with genuinely exempt products (e.g. medicine, basic food)
-        // will incorrectly show 15% until explicitly marked as exempt.
-        expect(product.taxRate, equals(0.15));
+        // B2e D-3 fail-closed policy: legacy products without explicit fiscal
+        // fields default to taxRate=0.0 (exempt). The backend payload is the
+        // rate's source of truth; a missing rate is never silently taxed at
+        // an invented 15%. Whether IVA applies at sale time is decided by the
+        // active regime (calculator/receipt layer).
+        expect(product.taxRate, equals(0.0));
         expect(product.isTaxExempt, isFalse);
-        expect(product.isGenuinelyExempt, isFalse);
-        expect(product.effectiveTaxRate, equals(0.15));
+        expect(product.isGenuinelyExempt, isTrue);
+        expect(product.effectiveTaxRate, equals(0.0));
 
         // When sold under Cuota Fija, Cuota Fija rule strictly overrides: IVA = 0
         final cfResult = calculator.calculate(

@@ -2724,6 +2724,9 @@ void main() {
           expect(savedProduct, isNotNull);
           expect(savedProduct!.name, 'Café Espresso Doble');
           expect(savedProduct.sellPrice, 55.0);
+          // B2e D-3 fail-closed: the delta omits taxRate, so the stored rate
+          // must default to 0.0 (exempt), never an invented 15%.
+          expect(savedProduct.taxRate, 0.0);
 
           final savedCategory = await database.catalogValueDao
               .findByTypeAndCode('CATEGORY', 'HOT_BEVERAGE');
