@@ -4,9 +4,14 @@ import 'package:provider/provider.dart';
 import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
 import 'business_profile_view_model.dart';
+import 'fiscal_authorization_expiry_notice_widget.dart';
 
 class BusinessProfileView extends StatefulWidget {
-  const BusinessProfileView({super.key});
+  /// D-21 (#554) U4: test-only clock override for the fiscal expiry notice.
+  /// Null in production — the notice then uses the real current date.
+  final DateTime? fiscalToday;
+
+  const BusinessProfileView({super.key, this.fiscalToday});
 
   @override
   State<BusinessProfileView> createState() => _BusinessProfileViewState();
@@ -306,6 +311,14 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       style: TextStyle(fontSize: 12, color: colorScheme.outline),
                     ),
                     const SizedBox(height: 16),
+                    // D-21 (#554) U4: expiry warning at the TOP of the fiscal
+                    // section. Warning only — it never blocks the form or
+                    // issuance.
+                    FiscalAuthorizationExpiryNotice(
+                      rawExpiresAt:
+                          viewModel.config['dgi_authorization_expires_at'],
+                      today: widget.fiscalToday,
+                    ),
                     Row(
                       children: [
                         Expanded(

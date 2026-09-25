@@ -24,11 +24,11 @@ void main() {
     viewModel = BusinessProfileViewModel(mockDao);
   });
 
-  Widget buildWidget() {
+  Widget buildWidget({DateTime? fiscalToday}) {
     return ChangeNotifierProvider<BusinessProfileViewModel>.value(
       value: viewModel,
-      child: const MaterialApp(
-        home: BusinessProfileView(),
+      child: MaterialApp(
+        home: BusinessProfileView(fiscalToday: fiscalToday),
       ),
     );
   }
@@ -357,6 +357,76 @@ void main() {
 
       expect(find.text('Use el formato ISO yyyy-MM-dd'), findsOneWidget);
       verifyNever(() => mockDao.saveConfig(any()));
+    });
+  });
+
+  group('D-21 (U4 #554): expiry notice at the top of the fiscal section', () {
+    /// D-21/U4: [fiscalToday] is the test-only clock override that keeps
+    /// these assertions deterministic (no DateTime.now() flakiness).
+    final today = DateTime(2026, 6, 15);
+
+    Future<void> pumpWithExpiry(WidgetTester tester, String? value) async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      if (value != null) {
+        when(() => mockDao.getConfigByKey('dgi_authorization_expires_at'))
+            .thenAnswer((_) async =>
+                LocalConfigEntity(key: 'dgi_authorization_expires_at', value: value));
+      }
+      await tester.pumpWidget(buildWidget(fiscalToday: today));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('absent expiry renders NO notice', (tester) async {
+      await pumpWithExpiry(tester, null);
+
+      expect(
+          find.byKey(const Key('fiscal_authorization_expiry_notice')),
+          findsNothing);
+    });
+
+    testWidgets('corrupt expiry renders NO notice (never invents a warning)',
+        (tester) async {
+      await pumpWithExpiry(tester, '31/12/2026');
+
+      expect(
+          find.byKey(const Key('fiscal_authorization_expiry_notice')),
+          findsNothing);
+    });
+
+    testWidgets('expiry within 30 days renders the amber notice with text',
+        (tester) async {
+      await pumpWithExpiry(tester, '2026-07-15');
+
+      expect(
+          find.byKey(const Key('fiscal_authorization_expiry_notice')),
+          findsOneWidget);
+      expect(
+          find.text(
+              'Su código de autorización DGI vence el 2026-07-15 (en 30 días).'),
+          findsOneWidget);
+    });
+
+    testWidgets('expired expiry renders the venció notice', (tester) async {
+      await pumpWithExpiry(tester, '2026-06-10');
+
+      expect(
+          find.text('Su código de autorización DGI venció el 2026-06-10.'),
+          findsOneWidget);
+    });
+
+    testWidgets('the notice sits at the TOP of the fiscal section',
+        (tester) async {
+      await pumpWithExpiry(tester, '2026-07-15');
+
+      final sectionTitle = tester.getTopLeft(find.text(
+          'AUTORIZACIÓN FISCAL DGI (Disposición 09-2007)'));
+      final notice = tester.getTopLeft(
+          find.byKey(const Key('fiscal_authorization_expiry_notice')));
+      final prefixInput = tester.getTopLeft(
+          find.byKey(const Key('dgi_prefix_input')));
+
+      expect(notice.dy, greaterThan(sectionTitle.dy));
+      expect(prefixInput.dy, greaterThan(notice.dy));
     });
   });
 

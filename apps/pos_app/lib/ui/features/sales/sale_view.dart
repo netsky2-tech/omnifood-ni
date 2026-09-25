@@ -20,6 +20,7 @@ import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'tables/table_layout_view.dart';
 import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
+import '../config/business_profile/fiscal_authorization_expiry_notice_widget.dart';
 import '../../../presentation/features/sales/widgets/loyalty_compact_widget.dart';
 import '../../../presentation/features/sales/widgets/reward_cta_widget.dart';
 import '../../../presentation/features/sales/widgets/reward_confirmation_dialog.dart';
@@ -1252,6 +1253,11 @@ class CartSidebar extends StatelessWidget {
 
     return Column(
       children: [
+        // D-21 (#554) U4: warning-only DGI authorization expiry notice at the
+        // top of the sale screen so the operator sees it before invoicing.
+        // Best-effort load; renders nothing when unconfigured and NEVER
+        // blocks checkout.
+        const FiscalAuthorizationExpiryNoticeLoader(),
         Padding(
           padding: EdgeInsets.all(isMobileSheet ? 8.0 : 16.0),
           child: Row(
