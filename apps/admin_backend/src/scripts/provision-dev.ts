@@ -1,10 +1,11 @@
+import { randomUUID } from 'crypto';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../core/app/app.module';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../modules/tenant/entities/tenant.entity';
 import { User, UserRole } from '../modules/identity/entities/user.entity';
 import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
-import { bindTenantContext } from '../core/database/tenant-transaction';
+import { runInTenantTransaction } from '../core/database/tenant-transaction';
 import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 import * as bcrypt from 'bcrypt';
 
@@ -27,8 +28,13 @@ async function provision() {
   const dataSource = app.get(DataSource);
 
   try {
-    await dataSource.transaction(async (manager) => {
+    // The tenant id must be known before the transaction opens: the wrapper
+    // binds the transaction-local RLS context from it. `tenants` is a public
+    // (non-RLS) table, so inserting it inside the bound callback is fine.
+    const tenantId = randomUUID();
+    await runInTenantTransaction(dataSource, tenantId, async (manager) => {
       const tenant = new Tenant();
+      tenant.id = tenantId;
       tenant.name = TENANT_NAME;
       // Issue #556 slice 11: the stable provisioning slug, derived with the
       // canonical normalization rule (src/modules/tenant/tenant-slug.ts).
@@ -37,11 +43,6 @@ async function provision() {
       tenant.is_active = true;
       const savedTenant = await manager.save(tenant);
       console.log(`Tenant created: ${savedTenant.id}`);
-
-      // Bind the transaction-local tenant context before any protected-table
-      // write: FORCE RLS on parent-owned/direct tables denies unbound writes
-      // from the non-owner runtime role.
-      await bindTenantContext(manager, savedTenant.id);
 
       const user = new User();
       user.name = OWNER_NAME;

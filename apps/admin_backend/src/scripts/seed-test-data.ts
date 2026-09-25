@@ -10,7 +10,7 @@ import {
   NEGATIVE_STOCK_POLICY,
 } from '../modules/inventory/entities/insumo.entity';
 import { UomConversion } from '../modules/inventory/entities/uom-conversion.entity';
-import { bindTenantContext } from '../core/database/tenant-transaction';
+import { runInTenantTransaction } from '../core/database/tenant-transaction';
 import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 import * as bcrypt from 'bcrypt';
 
@@ -369,7 +369,7 @@ async function seed() {
   const dataSource = app.get(DataSource);
 
   try {
-    await dataSource.transaction(async (manager) => {
+    await runInTenantTransaction(dataSource, TENANT_ID, async (manager) => {
       // 1. Tenant
       let tenant = await manager.findOne(Tenant, { where: { id: TENANT_ID } });
       if (!tenant) {
@@ -387,12 +387,11 @@ async function seed() {
         console.log(`ℹ️  Tenant already exists: ${TENANT_ID}`);
       }
 
-      // Bind the transaction-local tenant context before the first
-      // protected-table write: FORCE RLS on parent-owned (security_profiles)
-      // and direct (products, insumos, uom_conversions, inventory_kardex)
-      // tables denies unbound writes and reads from the non-owner runtime
-      // role. SET LOCAL semantics keep the binding inside this transaction.
-      await bindTenantContext(manager, TENANT_ID);
+      // The wrapper already bound the transaction-local tenant context
+      // (SET LOCAL) before this callback ran, so every write below —
+      // including FORCE RLS parent-owned (security_profiles) and direct
+      // (products, insumos, uom_conversions, inventory_kardex) tables — is
+      // tenant-authorized. `tenants` itself is a public (non-RLS) table.
 
       // 2. Users (IDs auto-generated as UUIDs; POS gets them from login response)
       const users = [
