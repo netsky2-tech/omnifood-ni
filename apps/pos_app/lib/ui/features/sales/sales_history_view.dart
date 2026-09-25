@@ -5,6 +5,7 @@ import '../../../presentation/features/sales/view_models/sales_history_view_mode
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/sales/invoice.dart';
 import '../../../domain/models/sales/invoice_item.dart';
+import '../../../domain/usecases/sales/void_decision.dart';
 import '../../design_system/design_system.dart';
 
 class SalesHistoryView extends StatefulWidget {
@@ -336,7 +337,7 @@ class InvoiceDetailsPanel extends StatelessWidget {
           
           const SizedBox(height: 24),
           
-          if (!invoice.isCanceled && invoice.type == InvoiceType.regular)
+          if (!invoice.isCanceled && invoice.type == InvoiceType.regular) ...[
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -349,7 +350,122 @@ class InvoiceDetailsPanel extends StatelessWidget {
                 onPressed: () => _showReturnConfirmation(context),
               ),
             ),
+            // D-15: the void action is permission-gated (SalesPermission),
+            // never a role-label check. The dialog collects the mandatory
+            // controlled reason (AC-6) before invoking the view model.
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('void_invoice_button'),
+                icon: const Icon(Icons.cancel_outlined),
+                label: const Text('ANULAR FACTURA'),
+                onPressed: context.watch<SaleViewModel>().canVoidInvoice
+                    ? () => _showVoidDialog(context)
+                    : null,
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  /// Neutral Spanish labels for the D-15 controlled reason codes (AC-6/AC-7).
+  String _voidReasonLabel(String code) => switch (code) {
+        VoidReasonCodes.errorDeCaptura => 'Error de captura',
+        VoidReasonCodes.clienteDesiste => 'Cliente desiste',
+        VoidReasonCodes.ticketDuplicado => 'Ticket duplicado',
+        VoidReasonCodes.otro => 'Otro',
+        _ => code,
+      };
+
+  void _showVoidDialog(BuildContext context) {
+    String? selectedCode;
+    final detailController = TextEditingController();
+    var submitting = false;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Anular Factura'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Seleccione el motivo de la anulación de ${invoice.number}:'),
+              const SizedBox(height: 8),
+              ...VoidReasonCodes.all.map(
+                (code) => RadioListTile<String>(
+                  value: code,
+                  groupValue: selectedCode,
+                  title: Text(_voidReasonLabel(code)),
+                  onChanged: (value) =>
+                      setDialogState(() => selectedCode = value),
+                ),
+              ),
+              TextField(
+                controller: detailController,
+                decoration: const InputDecoration(
+                  labelText: 'Detalle (opcional)',
+                  hintText: 'Describa el motivo si lo considera necesario',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCELAR'),
+            ),
+            ElevatedButton(
+              key: const Key('confirm_void_button'),
+              onPressed: selectedCode == null || submitting
+                  ? null
+                  : () async {
+                      setDialogState(() => submitting = true);
+                      final saleViewModel = context.read<SaleViewModel>();
+                      final messenger = ScaffoldMessenger.of(context);
+                      final detail = detailController.text.trim();
+                      final ok = await saleViewModel.voidInvoice(
+                        invoice.id,
+                        selectedCode!,
+                        reasonDetail: detail.isEmpty ? null : detail,
+                      );
+                      final printed = saleViewModel.lastVoidPrintSucceeded;
+                      if (!context.mounted) return;
+                      if (ok) {
+                        Navigator.pop(dialogContext);
+                        // Honesty rule: only claim the print if it happened.
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              printed
+                                  ? 'Factura anulada. Se imprimió el comprobante ANULADO.'
+                                  : 'Factura anulada. No se pudo imprimir el comprobante ANULADO.',
+                            ),
+                          ),
+                        );
+                        await context
+                            .read<SalesHistoryViewModel>()
+                            .loadInvoices();
+                      } else {
+                        // Denial: the dialog stays open with the typed reason
+                        // preserved; the specific guard message is surfaced.
+                        setDialogState(() => submitting = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              saleViewModel.errorMessage ??
+                                  'No se pudo anular la factura.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+              child: const Text('ANULAR'),
+            ),
+          ],
+        ),
       ),
     );
   }

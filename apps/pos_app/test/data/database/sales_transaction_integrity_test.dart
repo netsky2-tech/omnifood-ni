@@ -329,6 +329,8 @@ void main() {
           buildInvoice(id: 'inv-void', canceled: true),
           buildAudit('SALE_VOIDED', 1, '11111111-1111-4111-8111-111111111111'),
           false, // shouldFail
+          null, // no loyalty reversal: invoice has no customer points
+          null,
         );
 
         // All four writes committed as one unit.
@@ -385,6 +387,8 @@ void main() {
             buildInvoice(id: 'inv-void', canceled: true),
             buildAudit('SALE_VOIDED', 1, '22222222-2222-4222-8222-222222222222'),
             true, // shouldFail: force failure after every inner write
+            null, // no loyalty reversal: invoice has no customer points
+            null,
           ),
           throwsA(isA<Object>()),
         );

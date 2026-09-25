@@ -860,7 +860,7 @@ void main() {
         // The atomic write transaction must NOT have been opened: no
         // reversal could be computed, so there is nothing to persist.
         verifyNever(
-          mockTransactionDao.executeVoidTransaction(any, any, any, any),
+          mockTransactionDao.executeVoidTransaction(any, any, any, any, any, any),
         );
         // The invoice must NOT have been persisted as canceled.
         verifyNever(
@@ -943,7 +943,7 @@ void main() {
           mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
         ).thenAnswer((_) async => preparedAudit);
         when(
-          mockTransactionDao.executeVoidTransaction(any, any, any, any),
+          mockTransactionDao.executeVoidTransaction(any, any, any, any, any, any),
         ).thenAnswer((_) async {});
 
         await repository.voidInvoice('inv-void-ok', 'voided by manager');
@@ -956,9 +956,13 @@ void main() {
             captureAny,
             captureAny,
             captureAny,
+            captureAny,
+            captureAny,
           ),
         ).captured;
-        expect(captured.length, 4);
+        // Invoice + movements + audit + the two loyalty-reversal slots
+        // (null/no-op when the invoice has no customer points to reverse).
+        expect(captured.length, 6);
         final movements = captured[0] as List;
         expect(movements, isEmpty); // no BOM on this line
         final canceled = captured[1] as InvoiceEntity;
@@ -1073,7 +1077,7 @@ void main() {
         // unit; the repo must surface the error without performing any
         // separate compensating writes.
         when(
-          mockTransactionDao.executeVoidTransaction(any, any, any, any),
+          mockTransactionDao.executeVoidTransaction(any, any, any, any, any, any),
         ).thenThrow(StateError('simulated insumo stock update failure'));
 
         await expectLater(
@@ -1083,7 +1087,7 @@ void main() {
 
         // The atomic wrapper was the ONLY write path attempted.
         verify(
-          mockTransactionDao.executeVoidTransaction(any, any, any, any),
+          mockTransactionDao.executeVoidTransaction(any, any, any, any, any, any),
         ).called(1);
 
         // The repo performs NO direct persistence itself — every write
@@ -1164,7 +1168,7 @@ void main() {
         mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
       ).thenAnswer((_) async => preparedAudit);
       when(
-        mockTransactionDao.executeVoidTransaction(any, any, any, any),
+        mockTransactionDao.executeVoidTransaction(any, any, any, any, any, any),
       ).thenAnswer((_) async {});
 
       await repository.voidInvoice(invoiceId, reason);
@@ -1185,6 +1189,10 @@ void main() {
       }
       expect(decoded['invoice_id'], invoiceId);
       expect(decoded['reason'], reason);
+      // D-15: the reason is now a structured code + optional detail; the
+      // code always rides the metadata as the metrics hook.
+      expect(decoded['reason_code'], reason);
+      expect(decoded.containsKey('reason_detail'), isFalse);
     }
 
     test('escapes a reason containing a double quote', () async {

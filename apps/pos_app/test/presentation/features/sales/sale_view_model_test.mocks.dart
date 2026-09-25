@@ -77,6 +77,7 @@ import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.da
     as _i77;
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart' as _i79;
 import 'package:pos_app/data/models/sales/hold_ticket_entity.dart' as _i80;
+import 'package:pos_app/data/models/sales/invoice_entity.dart' as _i82;
 import 'package:pos_app/data/models/sales/promotion_entity.dart' as _i81;
 import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i72;
 import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i71;
@@ -800,15 +801,17 @@ class MockSalesRepository extends _i1.Mock implements _i54.SalesRepository {
   @override
   _i52.Future<void> voidInvoice(
     String? invoiceId,
-    String? reason,
-  ) =>
+    String? reasonCode, {
+    String? reasonDetail,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #voidInvoice,
           [
             invoiceId,
-            reason,
+            reasonCode,
           ],
+          {#reasonDetail: reasonDetail},
         ),
         returnValue: _i52.Future<void>.value(),
         returnValueForMissingStub: _i52.Future<void>.value(),
@@ -2591,4 +2594,159 @@ class MockPromotionDao extends _i1.Mock implements _i34.PromotionDao {
         returnValue: _i52.Future<void>.value(),
         returnValueForMissingStub: _i52.Future<void>.value(),
       ) as _i52.Future<void>);
+}
+
+/// A class which mocks [InvoiceDao].
+///
+/// See the documentation for Mockito's code generation for more information.
+class MockInvoiceDao extends _i1.Mock implements _i26.InvoiceDao {
+  MockInvoiceDao() {
+    _i1.throwOnMissingStub(this);
+  }
+
+  @override
+  _i52.Future<_i82.InvoiceEntity?> getInvoiceById(String? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getInvoiceById,
+          [id],
+        ),
+        returnValue: _i52.Future<_i82.InvoiceEntity?>.value(),
+      ) as _i52.Future<_i82.InvoiceEntity?>);
+
+  @override
+  _i52.Future<_i82.InvoiceEntity?> getInvoiceByNumber(String? number) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getInvoiceByNumber,
+          [number],
+        ),
+        returnValue: _i52.Future<_i82.InvoiceEntity?>.value(),
+      ) as _i52.Future<_i82.InvoiceEntity?>);
+
+  @override
+  _i52.Future<List<_i82.InvoiceEntity>> getAllInvoices() => (super.noSuchMethod(
+        Invocation.method(
+          #getAllInvoices,
+          [],
+        ),
+        returnValue:
+            _i52.Future<List<_i82.InvoiceEntity>>.value(<_i82.InvoiceEntity>[]),
+      ) as _i52.Future<List<_i82.InvoiceEntity>>);
+
+  @override
+  _i52.Future<List<_i82.InvoiceEntity>> getInvoicesBySyncStatus(
+          String? status) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getInvoicesBySyncStatus,
+          [status],
+        ),
+        returnValue:
+            _i52.Future<List<_i82.InvoiceEntity>>.value(<_i82.InvoiceEntity>[]),
+      ) as _i52.Future<List<_i82.InvoiceEntity>>);
+
+  @override
+  _i52.Future<List<_i82.InvoiceEntity>> getInvoicesByTimeRange(
+    int? startTime,
+    int? endTime,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getInvoicesByTimeRange,
+          [
+            startTime,
+            endTime,
+          ],
+        ),
+        returnValue:
+            _i52.Future<List<_i82.InvoiceEntity>>.value(<_i82.InvoiceEntity>[]),
+      ) as _i52.Future<List<_i82.InvoiceEntity>>);
+
+  @override
+  _i52.Future<List<_i82.InvoiceEntity>> getInvoicesByUserId(String? userId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getInvoicesByUserId,
+          [userId],
+        ),
+        returnValue:
+            _i52.Future<List<_i82.InvoiceEntity>>.value(<_i82.InvoiceEntity>[]),
+      ) as _i52.Future<List<_i82.InvoiceEntity>>);
+
+  @override
+  _i52.Future<void> insertInvoice(_i82.InvoiceEntity? invoice) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #insertInvoice,
+          [invoice],
+        ),
+        returnValue: _i52.Future<void>.value(),
+        returnValueForMissingStub: _i52.Future<void>.value(),
+      ) as _i52.Future<void>);
+
+  @override
+  _i52.Future<void> updateInvoice(_i82.InvoiceEntity? invoice) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateInvoice,
+          [invoice],
+        ),
+        returnValue: _i52.Future<void>.value(),
+        returnValueForMissingStub: _i52.Future<void>.value(),
+      ) as _i52.Future<void>);
+
+  @override
+  _i52.Future<String?> getLastInvoiceNumber() => (super.noSuchMethod(
+        Invocation.method(
+          #getLastInvoiceNumber,
+          [],
+        ),
+        returnValue: _i52.Future<String?>.value(),
+      ) as _i52.Future<String?>);
+
+  @override
+  _i52.Future<_i82.InvoiceEntity?> getLastInvoice() => (super.noSuchMethod(
+        Invocation.method(
+          #getLastInvoice,
+          [],
+        ),
+        returnValue: _i52.Future<_i82.InvoiceEntity?>.value(),
+      ) as _i52.Future<_i82.InvoiceEntity?>);
+
+  @override
+  _i52.Future<void> updateSyncStatusForIds(
+    List<String>? ids,
+    String? status,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateSyncStatusForIds,
+          [
+            ids,
+            status,
+          ],
+        ),
+        returnValue: _i52.Future<void>.value(),
+        returnValueForMissingStub: _i52.Future<void>.value(),
+      ) as _i52.Future<void>);
+
+  @override
+  _i52.Future<_i82.InvoiceEntity?> getInvoiceByIdempotencyKey(String? key) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getInvoiceByIdempotencyKey,
+          [key],
+        ),
+        returnValue: _i52.Future<_i82.InvoiceEntity?>.value(),
+      ) as _i52.Future<_i82.InvoiceEntity?>);
+
+  @override
+  _i52.Future<int?> getInventoryEnrichmentPendingCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getInventoryEnrichmentPendingCount,
+          [],
+        ),
+        returnValue: _i52.Future<int?>.value(),
+      ) as _i52.Future<int?>);
 }

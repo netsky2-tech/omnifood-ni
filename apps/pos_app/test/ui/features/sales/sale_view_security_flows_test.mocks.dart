@@ -150,6 +150,13 @@ class _FakeSyncRunOutcome_8 extends _i1.SmartFake
 /// See the documentation for Mockito's code generation for more information.
 class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
   @override
+  bool get lastVoidPrintSucceeded => (super.noSuchMethod(
+        Invocation.getter(#lastVoidPrintSucceeded),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   _i11.TenantOperationMode get operationMode => (super.noSuchMethod(
         Invocation.getter(#operationMode),
         returnValue: _i11.TenantOperationMode.foodparkQsr,
@@ -1077,21 +1084,23 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as _i18.Future<bool>);
 
   @override
-  _i18.Future<void> voidInvoice(
+  _i18.Future<bool> voidInvoice(
     String? invoiceId,
-    String? reason,
-  ) =>
+    String? reasonCode, {
+    String? reasonDetail,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #voidInvoice,
           [
             invoiceId,
-            reason,
+            reasonCode,
           ],
+          {#reasonDetail: reasonDetail},
         ),
-        returnValue: _i18.Future<void>.value(),
-        returnValueForMissingStub: _i18.Future<void>.value(),
-      ) as _i18.Future<void>);
+        returnValue: _i18.Future<bool>.value(false),
+        returnValueForMissingStub: _i18.Future<bool>.value(false),
+      ) as _i18.Future<bool>);
 
   @override
   void dispose() => super.noSuchMethod(

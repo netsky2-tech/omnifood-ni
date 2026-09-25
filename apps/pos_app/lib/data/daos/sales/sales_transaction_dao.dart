@@ -8,6 +8,7 @@ import '../../models/inventory/insumo_entity.dart';
 import '../../models/inventory/movement_entity.dart';
 import '../../models/sales/invoice_item_modifier_entity.dart';
 import '../../models/audit_log_entity.dart';
+import '../../models/customer/customer_point_transaction_entity.dart';
 import '../../models/fulfillment/fulfillment_persistence_entities.dart';
 
 @dao
@@ -67,6 +68,27 @@ abstract class SalesTransactionDao {
 
   @Query('SELECT * FROM inventory_movements WHERE sale_id = :saleId')
   Future<List<MovementEntity>> getMovementsBySaleId(String saleId);
+
+  /// B1a-2 (D-15): the loyalty reversal rides the void transaction. Insert
+  /// is ABORT: a duplicate primary key is a caller bug, never a silent
+  /// overwrite of reversal evidence.
+  @Insert(onConflict: OnConflictStrategy.abort)
+  Future<void> insertPointTransaction(
+      CustomerPointTransactionEntity transaction);
+
+  /// Relative delta update: SQLite computes the balance inside the
+  /// transaction, so a concurrent adjustment between the sale and the void
+  /// cannot be lost (the sale path sets an absolute snapshot; the void must
+  /// not).
+  @Query(
+    'UPDATE customers SET points_balance = points_balance + :delta, '
+    'updated_at = :updatedAt WHERE id = :customerId',
+  )
+  Future<void> applyCustomerPointsDelta(
+    String customerId,
+    double delta,
+    int updatedAt,
+  );
 
   @transaction
   Future<void> executeAckTransaction(
@@ -340,6 +362,14 @@ abstract class SalesTransactionDao {
     InvoiceEntity canceledInvoice,
     AuditLogEntity? auditLog,
     bool shouldFail,
+
+    /// B1a-2 (D-15): compensating loyalty reversal, inserted and applied to
+    /// the customer balance INSIDE this same unit so a points failure rolls
+    /// back the void exactly like a stock failure does. Null → no-op (the
+    /// invoice has no customer or no point transactions). Both parameters
+    /// must be null together or non-null together.
+    CustomerPointTransactionEntity? loyaltyReversal,
+    int? loyaltyReversalUpdatedAt,
   ) async {
     // 1. Reversal movements + insumo stock updates.
     for (final movement in movements) {
@@ -381,6 +411,21 @@ abstract class SalesTransactionDao {
 
     // 2. Cancel the invoice (UPDATE only — never DELETE; DGI compliance).
     await updateInvoice(canceledInvoice);
+
+    // 2b. Loyalty reversal (D-15): atomic with the cancellation. A points
+    // failure must roll back the void like a stock failure does.
+    if (loyaltyReversal != null && loyaltyReversalUpdatedAt != null) {
+      await insertPointTransaction(loyaltyReversal);
+      await applyCustomerPointsDelta(
+        loyaltyReversal.customerId,
+        loyaltyReversal.points,
+        loyaltyReversalUpdatedAt,
+      );
+    } else if (loyaltyReversal != null || loyaltyReversalUpdatedAt != null) {
+      throw StateError(
+        'Loyalty reversal requires both the transaction and its timestamp.',
+      );
+    }
 
     // 3. Forensic audit log — persisted atomically with the cancellation.
     if (auditLog != null) {

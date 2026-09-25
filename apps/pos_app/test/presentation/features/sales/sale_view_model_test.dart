@@ -6,6 +6,9 @@ import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
+import 'package:pos_app/data/daos/sales/invoice_dao.dart';
+import 'package:pos_app/data/models/sales/invoice_entity.dart';
+import 'package:pos_app/domain/usecases/sales/void_decision.dart';
 import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart';
 import 'package:pos_app/data/daos/sales/promotion_dao.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
@@ -107,6 +110,7 @@ class FakeTenantConfigService extends TenantConfigService {
   CashierSessionDao,
   HoldTicketDao,
   PromotionDao,
+  InvoiceDao,
 ])
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -117,6 +121,7 @@ void main() {
   late MockCashierSessionDao mockSessionDao;
   late MockHoldTicketDao mockHoldDao;
   late MockPromotionDao mockPromoDao;
+  late MockInvoiceDao mockInvoiceDao;
   late FakeLocalConfigDao fakeLocalConfigDao;
   late FakeKitchenOrderService fakeKitchenOrderService;
   late FakeTenantConfigService fakeTenantConfigService;
@@ -130,6 +135,7 @@ void main() {
     mockSessionDao = MockCashierSessionDao();
     mockHoldDao = MockHoldTicketDao();
     mockPromoDao = MockPromotionDao();
+    mockInvoiceDao = MockInvoiceDao();
     fakeLocalConfigDao = FakeLocalConfigDao();
     fakeLocalConfigDao.saveConfig(
       LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'),
@@ -138,6 +144,7 @@ void main() {
     when(mockDb.cashierSessionDao).thenReturn(mockSessionDao);
     when(mockDb.holdTicketDao).thenReturn(mockHoldDao);
     when(mockDb.promotionDao).thenReturn(mockPromoDao);
+    when(mockDb.invoiceDao).thenReturn(mockInvoiceDao);
     when(mockDb.localConfigDao).thenReturn(fakeLocalConfigDao);
     when(mockDb.kitchenOrderDao).thenReturn(FakeKitchenOrderDao());
     when(mockDb.taxConfigDao).thenReturn(FakeTaxConfigDao());
@@ -427,7 +434,8 @@ void main() {
     );
   });
 
-  test('voidInvoice denies cashier role with generic message', () async {
+  test('voidInvoice denies a cashier an invoice he did not issue '
+      '(D-15 own-invoice predicate)', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(
         id: 'u-1',
@@ -437,14 +445,23 @@ void main() {
         tenantId: 'tenant-test',
       ),
     );
+    when(
+      mockSessionDao.getActiveSessionForUserAndTerminal('u-1', 'pos-u-1'),
+    ).thenAnswer((_) async => null);
+    when(mockInvoiceDao.getInvoiceById('invoice-1')).thenAnswer(
+      (_) async => _voidGuardEntity(userId: 'u-2'),
+    );
 
-    await viewModel.voidInvoice('invoice-1', 'anulacion');
+    final ok = await viewModel.voidInvoice('invoice-1', 'OTRO');
 
-    expect(viewModel.errorMessage, 'Acceso denegado.');
-    verifyNever(mockSalesRepo.voidInvoice(any, any));
+    expect(ok, isFalse);
+    expect(viewModel.errorMessage, VoidDecision.deniedOwnInvoice.uiMessage);
+    verifyNever(mockSalesRepo.voidInvoice(any, any,
+        reasonDetail: anyNamed('reasonDetail')));
   });
 
-  test('voidInvoice denies waiter role with generic message', () async {
+  test('voidInvoice denies a waiter with the permission message (D-10/D-15)',
+      () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(
         id: 'u-2',
@@ -453,14 +470,23 @@ void main() {
         isActive: true,
       ),
     );
+    when(
+      mockSessionDao.getActiveSessionForUserAndTerminal('u-2', 'pos-u-2'),
+    ).thenAnswer((_) async => null);
+    when(mockInvoiceDao.getInvoiceById('invoice-2')).thenAnswer(
+      (_) async => _voidGuardEntity(userId: 'u-2'),
+    );
 
-    await viewModel.voidInvoice('invoice-2', 'anulacion');
+    final ok = await viewModel.voidInvoice('invoice-2', 'OTRO');
 
-    expect(viewModel.errorMessage, 'Acceso denegado.');
-    verifyNever(mockSalesRepo.voidInvoice(any, any));
+    expect(ok, isFalse);
+    expect(viewModel.errorMessage, VoidDecision.deniedNotPermitted.uiMessage);
+    verifyNever(mockSalesRepo.voidInvoice(any, any,
+        reasonDetail: anyNamed('reasonDetail')));
   });
 
-  test('voidInvoice allows manager role and calls repository', () async {
+  test('voidInvoice allows a manager (void.any bypass) and calls the '
+      'repository', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(
         id: 'u-3',
@@ -469,14 +495,27 @@ void main() {
         isActive: true,
       ),
     );
+    when(mockInvoiceDao.getInvoiceById('invoice-3')).thenAnswer(
+      (_) async => _voidGuardEntity(userId: 'u-9'),
+    );
     when(
-      mockSalesRepo.voidInvoice('invoice-3', 'anulacion manager'),
+      mockSessionDao.getActiveSessionForUserAndTerminal('u-3', 'pos-u-3'),
+    ).thenAnswer((_) async => null);
+    when(
+      mockSalesRepo.voidInvoice('invoice-3', 'anulacion manager',
+          reasonDetail: anyNamed('reasonDetail')),
     ).thenAnswer((_) async {});
 
-    await viewModel.voidInvoice('invoice-3', 'anulacion manager');
+    // No committed invoice to print: the copy step is skipped cleanly.
+    when(mockSalesRepo.getInvoiceById('invoice-3'))
+        .thenAnswer((_) async => null);
 
+    final ok = await viewModel.voidInvoice('invoice-3', 'anulacion manager');
+
+    expect(ok, isTrue);
     verify(
-      mockSalesRepo.voidInvoice('invoice-3', 'anulacion manager'),
+      mockSalesRepo.voidInvoice('invoice-3', 'anulacion manager',
+          reasonDetail: null),
     ).called(1);
     expect(viewModel.errorMessage, isNull);
   });
@@ -856,3 +895,24 @@ void main() {
     });
   });
 }
+
+/// Minimal data-layer invoice for the D-15 guard inputs (the domain Invoice
+/// deliberately does not carry shift membership or the local issue date).
+InvoiceEntity _voidGuardEntity({required String userId}) => InvoiceEntity(
+      id: 'guard-entity',
+      number: '001-001-01-00000001',
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      userId: userId,
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+      isCanceled: false,
+      syncStatus: 'synced',
+      paymentStatus: 'paid',
+      type: 'regular',
+      shiftId: 'shift-1',
+      localIssueDate:
+          '${DateTime.now().year.toString().padLeft(4, '0')}-'
+          '${DateTime.now().month.toString().padLeft(2, '0')}-'
+          '${DateTime.now().day.toString().padLeft(2, '0')}',
+    );

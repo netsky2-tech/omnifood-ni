@@ -4018,6 +4018,39 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'tenant_id': item.tenantId,
                   'metadata_raw': item.metadataRaw
                 }),
+        _customerPointTransactionEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'customer_point_transactions',
+            (CustomerPointTransactionEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'customer_id': item.customerId,
+                  'invoice_id': item.invoiceId,
+                  'type': item.type,
+                  'points': item.points,
+                  'balance_after': item.balanceAfter,
+                  'conversion_rate': item.conversionRate,
+                  'reason': item.reason,
+                  'created_at': item.createdAt,
+                  'sync_status': item.syncStatus,
+                  'loyalty_program_id': item.loyaltyProgramId,
+                  'ticket_id': item.ticketId,
+                  'reward_id': item.rewardId,
+                  'transaction_type': item.transactionType,
+                  'units': item.units,
+                  'reversal_of_transaction_id': item.reversalOfTransactionId,
+                  'idempotency_key': item.idempotencyKey,
+                  'source_event_id': item.sourceEventId,
+                  'actor_user_id': item.actorUserId,
+                  'branch_id': item.branchId,
+                  'terminal_id': item.terminalId,
+                  'program_version': item.programVersion,
+                  'reward_version': item.rewardVersion,
+                  'commercial_snapshot': item.commercialSnapshot,
+                  'origin': item.origin,
+                  'occurred_at': item.occurredAt,
+                  'recorded_at': item.recordedAt,
+                  'legacy_imported': item.legacyImported
+                }),
         _fulfillmentRecordEntityInsertionAdapter = InsertionAdapter(
             database,
             'fulfillment_records',
@@ -4136,6 +4169,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   final InsertionAdapter<MovementEntity> _movementEntityInsertionAdapter;
 
   final InsertionAdapter<AuditLogEntity> _auditLogEntityInsertionAdapter;
+
+  final InsertionAdapter<CustomerPointTransactionEntity>
+      _customerPointTransactionEntityInsertionAdapter;
 
   final InsertionAdapter<FulfillmentRecordEntity>
       _fulfillmentRecordEntityInsertionAdapter;
@@ -4307,6 +4343,17 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   }
 
   @override
+  Future<void> applyCustomerPointsDelta(
+    String customerId,
+    double delta,
+    int updatedAt,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE customers SET points_balance = points_balance + ?2, updated_at = ?3 WHERE id = ?1',
+        arguments: [customerId, delta, updatedAt]);
+  }
+
+  @override
   Future<void> advanceDgiCurrentNumber(String nextSequence) async {
     await _queryAdapter.queryNoReturn(
         'UPDATE local_configs SET value = ?1 WHERE `key` = \'dgi_current_number\'',
@@ -4378,6 +4425,13 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   Future<void> insertAuditLog(AuditLogEntity log) async {
     await _auditLogEntityInsertionAdapter.insert(
         log, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertPointTransaction(
+      CustomerPointTransactionEntity transaction) async {
+    await _customerPointTransactionEntityInsertionAdapter.insert(
+        transaction, OnConflictStrategy.abort);
   }
 
   @override
@@ -4535,17 +4589,24 @@ class _$SalesTransactionDao extends SalesTransactionDao {
     InvoiceEntity canceledInvoice,
     AuditLogEntity? auditLog,
     bool shouldFail,
+    CustomerPointTransactionEntity? loyaltyReversal,
+    int? loyaltyReversalUpdatedAt,
   ) async {
     if (database is sqflite.Transaction) {
-      await super.executeVoidTransaction(
-          movements, canceledInvoice, auditLog, shouldFail);
+      await super.executeVoidTransaction(movements, canceledInvoice, auditLog,
+          shouldFail, loyaltyReversal, loyaltyReversalUpdatedAt);
     } else {
       await (database as sqflite.Database)
           .transaction<void>((transaction) async {
         final transactionDatabase = _$AppDatabase(changeListener)
           ..database = transaction;
         await transactionDatabase.salesTransactionDao.executeVoidTransaction(
-            movements, canceledInvoice, auditLog, shouldFail);
+            movements,
+            canceledInvoice,
+            auditLog,
+            shouldFail,
+            loyaltyReversal,
+            loyaltyReversalUpdatedAt);
       });
     }
   }

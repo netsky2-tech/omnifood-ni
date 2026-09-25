@@ -125,8 +125,8 @@ class MockSalesRepository implements SalesRepository {
   }) async => throw UnimplementedError();
 
   @override
-  Future<void> voidInvoice(String invoiceId, String reason) async =>
-      throw UnimplementedError();
+  Future<void> voidInvoice(String invoiceId, String reasonCode,
+      {String? reasonDetail}) async => throw UnimplementedError();
 }
 
 class FakeAuditRepository implements AuditRepository {
