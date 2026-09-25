@@ -150,6 +150,7 @@ const Map<String, String> kActivationEvidenceRefLabels = <String, String>{
   'PRINT_TEST_FAILED': 'Falló la impresión de prueba',
   'RECEIPT_PRINTED_OK': 'Ticket impreso correctamente',
   'RECEIPT_PRINT_FAILED': 'No se pudo imprimir el ticket',
+  'RECEIPT_SKIPPED_BY_USER_CONFIG': 'Impresión omitida por configuración del usuario',
   'RECEIPT_BLOCKED_UNRESOLVED_TAX_REGIME':
       'Impresión bloqueada: régimen de impuestos sin resolver',
   'OUTBOX_CONSOLIDATED': 'Evidencia consolidada para sincronizar',
