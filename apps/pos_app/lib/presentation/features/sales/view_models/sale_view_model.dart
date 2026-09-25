@@ -1586,7 +1586,10 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> processReturn(
+  /// Returns true only when the credit note was created locally. A locally
+  /// created note is still pending validation at sync time; this result
+  /// never claims upstream acceptance.
+  Future<bool> processReturn(
     String invoiceNumber,
     String reason, {
     RefundReasonPolicy refundReasonPolicy =
@@ -1598,7 +1601,7 @@ class SaleViewModel extends ChangeNotifier {
     if (role == UserRole.cashier || role == UserRole.waiter) {
       _errorMessage = 'Acceso denegado.';
       notifyListeners();
-      return;
+      return false;
     }
 
     _isLoading = true;
@@ -1607,12 +1610,12 @@ class SaleViewModel extends ChangeNotifier {
       final original = await _salesRepository.getInvoiceByNumber(invoiceNumber);
       if (original == null) {
         _errorMessage = 'Factura no encontrada: $invoiceNumber';
-        return;
+        return false;
       }
 
       if (original.isCanceled) {
         _errorMessage = 'La factura ya está anulada.';
-        return;
+        return false;
       }
 
       await _salesRepository.createCreditNote(
@@ -1625,8 +1628,10 @@ class SaleViewModel extends ChangeNotifier {
       );
 
       _errorMessage = null;
+      return true;
     } catch (e) {
       _errorMessage = 'Error al procesar devolución: $e';
+      return false;
     } finally {
       _isLoading = false;
       notifyListeners();
