@@ -26,6 +26,14 @@ library;
 ///   (session user / terminal priming blockers).
 /// - `lib/data/services/activation_pre_offline_runner.dart`
 ///   (printer availability blocker).
+/// - `lib/data/ports/activation_priming_port.dart` and
+///   `lib/data/adapters/activation/dio_activation_priming_port.dart`
+///   (terminal priming payload blockers, surfaced verbatim as the view
+///   model's `blockerCode`).
+/// - `lib/data/ports/activation_priming_port.dart` (priming payload
+///   validation codes surfaced as bare blocker codes).
+/// - `lib/data/adapters/activation/dio_activation_priming_port.dart`
+///   (TERMINAL_PRIMING_PAYLOAD_MALFORMED).
 const Map<String, String> kActivationBlockerLabels = <String, String>{
   'NO_ACTIVE_ATTEMPT': 'No hay un intento de activación en curso.',
   'TERMINAL_MISMATCH': 'La terminal registrada no corresponde a este dispositivo.',
@@ -40,8 +48,26 @@ const Map<String, String> kActivationBlockerLabels = <String, String>{
       'No hay un intento preparado. Complete la preparación antes de continuar.',
   'SESSION_USER_UNRESOLVED': 'No se pudo identificar al usuario autorizado de la sesión.',
   'TERMINAL_PRIMING_FAILED': 'Falló la preparación de la terminal en el servidor.',
+  'TERMINAL_PRIMING_PAYLOAD_MALFORMED':
+      'La respuesta de preparación de la terminal no es utilizable. Verifique la conexión e intente de nuevo.',
   'PRINTER_AVAILABLE_FAILED':
       'La impresora no está lista. Revise su estado en Configuración.',
+  'TERMINAL_PRIMING_STATUS_MISSING':
+      'El servidor no reportó el estado de preparación de la terminal.',
+  'TERMINAL_PRIMING_SERVER_TIME_MISSING':
+      'El servidor no reportó su hora de referencia.',
+  'TERMINAL_PRIMING_CURRENT_VERSION_MISSING':
+      'El servidor no reportó la versión actual de datos.',
+  'TERMINAL_PRIMING_DELTAS_MISSING':
+      'El servidor no envió los cambios de datos pendientes.',
+  'TERMINAL_PRIMING_DELTAS_PARTIAL':
+      'La descarga de datos iniciales llegó incompleta. Sincronice e intente de nuevo.',
+  'TERMINAL_PRIMING_PRODUCT_ENTRY_MALFORMED':
+      'Un producto descargado tiene datos inválidos.',
+  'TERMINAL_PRIMING_CATALOG_ENTRY_MALFORMED':
+      'Una entrada del catálogo descargado es inválida.',
+  'TERMINAL_PRIMING_FISCAL_ENVELOPE_MALFORMED':
+      'La configuración fiscal descargada es inválida.',
 };
 
 /// Attempt lifecycle statuses (`localStatus`) managed by the activation
