@@ -6,6 +6,12 @@ abstract class CashierSessionDao {
   @Query('SELECT * FROM cashier_sessions WHERE id = :id')
   Future<CashierSessionEntity?> getSessionById(String id);
 
+  /// DEPRECATED for topology blindness (issue #552) — retained ONLY as a
+  /// test fixture helper (phase3/phase5 integration suites assert against a
+  /// single seeded session). Production code MUST NOT call this: the
+  /// `WHERE is_closed = 0 LIMIT 1` query ignores user and terminal, so two
+  /// concurrent registers would resolve each other's shift. Use
+  /// [getActiveSessionForUserAndTerminal] instead.
   @Query('SELECT * FROM cashier_sessions WHERE is_closed = 0 LIMIT 1')
   Future<CashierSessionEntity?> getActiveSession();
 

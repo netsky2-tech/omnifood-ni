@@ -478,7 +478,10 @@ void main() async {
             final saleVm = ctx.read<SaleViewModel>();
             final vm = CashShiftViewModel.fromDatabase(
               database: database,
-              currentUserId: 'user-cajero',
+              // Issue #552: the acting user id is resolved from the auth
+              // identity source at action time (AuthRepository.getCurrentUser),
+              // never from a hard-coded literal.
+              authRepository: authRepository,
               currentUserRole: saleVm.currentUserRole,
               // FC-1 (JD-A-002 residual): the cash-shift opener must stamp
               // the SAME terminal the sale path does, or the void guard's

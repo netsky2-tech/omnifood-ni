@@ -155,7 +155,10 @@ void main() {
 
     // Initial loads
     when(mockInventoryRepo.getActiveProducts()).thenAnswer((_) async => []);
-    when(mockSessionDao.getActiveSession()).thenAnswer((_) async => null);
+    // Issue #552: the session lookup is now scoped to user+terminal, so the
+    // default stub follows the scoped query the production code must call.
+    when(mockSessionDao.getActiveSessionForUserAndTerminal(any, any))
+        .thenAnswer((_) async => null);
     when(mockHoldDao.getAllHoldTickets()).thenAnswer((_) async => []);
     when(mockPromoDao.getActivePromotions()).thenAnswer((_) async => []);
     when(mockPromoDao.getAllPromotions()).thenAnswer((_) async => []);
@@ -192,6 +195,61 @@ void main() {
     expect(viewModel.cart, isEmpty);
     expect(viewModel.total, 0.0);
     expect(viewModel.activeSession, isNull);
+  });
+
+  test(
+      'issue #552: checkActiveSession resolves only the CURRENT user and terminal session',
+      () async {
+    const userA = User(
+      id: 'user-a',
+      name: 'Cajero A',
+      role: UserRole.cashier,
+      isActive: true,
+    );
+    const userB = User(
+      id: 'user-b',
+      name: 'Cajero B',
+      role: UserRole.cashier,
+      isActive: true,
+    );
+    final sessionA = CashierSessionEntity(
+      id: 'shift-a',
+      userId: 'user-a',
+      terminalId: 'TERM-01',
+      openedAt: DateTime.parse('2026-02-01T08:00:00Z').millisecondsSinceEpoch,
+      isClosed: false,
+    );
+    final sessionB = CashierSessionEntity(
+      id: 'shift-b',
+      userId: 'user-b',
+      terminalId: 'TERM-01',
+      openedAt: DateTime.parse('2026-02-01T08:05:00Z').millisecondsSinceEpoch,
+      isClosed: false,
+    );
+    when(mockSessionDao.getActiveSessionForUserAndTerminal('user-a', 'TERM-01'))
+        .thenAnswer((_) async => sessionA);
+    when(mockSessionDao.getActiveSessionForUserAndTerminal('user-b', 'TERM-01'))
+        .thenAnswer((_) async => sessionB);
+
+    when(mockAuthRepo.getCurrentUser()).thenAnswer((_) async => userA);
+    await viewModel.checkActiveSession();
+    expect(viewModel.activeSession!.id, 'shift-a');
+
+    // The same check under user B must resolve user B's session, not the
+    // other concurrent register's shift.
+    when(mockAuthRepo.getCurrentUser()).thenAnswer((_) async => userB);
+    final viewModelB = SaleViewModel(
+      mockSalesRepo,
+      mockInventoryRepo,
+      mockAuthRepo,
+      mockDb,
+      null,
+      true,
+      fakeTenantConfigService,
+      fakeKitchenOrderService,
+    );
+    await viewModelB.checkActiveSession();
+    expect(viewModelB.activeSession!.id, 'shift-b');
   });
 
   test('openSession persists CARTERA_MESERO model for cashier role', () async {

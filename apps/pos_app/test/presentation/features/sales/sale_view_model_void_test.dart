@@ -84,7 +84,8 @@ void main() {
     );
     when(mockAuthRepo.getCurrentUser()).thenAnswer((_) async => null);
     when(mockInventoryRepo.getActiveProducts()).thenAnswer((_) async => []);
-    when(mockSessionDao.getActiveSession()).thenAnswer((_) async => null);
+    when(mockSessionDao.getActiveSessionForUserAndTerminal(any, any))
+        .thenAnswer((_) async => null);
     when(mockHoldDao.getAllHoldTickets()).thenAnswer((_) async => []);
     when(mockPromoDao.getActivePromotions()).thenAnswer((_) async => []);
     when(mockPromoDao.getAllPromotions()).thenAnswer((_) async => []);
