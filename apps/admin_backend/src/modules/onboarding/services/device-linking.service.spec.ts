@@ -423,6 +423,105 @@ describe('DeviceLinkingService.claimCode', () => {
   });
 });
 
+describe('DeviceLinkingService.listLinkingCodes', () => {
+  const buildCodeRow = (
+    overrides: Partial<DeviceLinkingCode> = {},
+  ): DeviceLinkingCode => ({
+    id: 'code-1',
+    tenantId: 'tenant-1',
+    codeHash: '$2b$10$secret-hash',
+    status: DeviceLinkingCodeStatus.ACTIVE,
+    deviceId: null,
+    createdByUserId: 'user-9',
+    expiresAt: new Date('2026-01-01T00:15:00Z'),
+    claimedAt: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+    ...overrides,
+  });
+
+  const buildListDataSource = (find: jest.Mock): DataSource =>
+    ({
+      // runInTenantTransaction: bind (no-op) and run the work callback with
+      // a manager whose repository surfaces the observed find.
+      transaction: jest.fn(
+        async (
+          cb: (manager: {
+            query: () => Promise<unknown[]>;
+            getRepository: () => { find: jest.Mock };
+          }) => Promise<unknown>,
+        ) =>
+          cb({
+            query: jest.fn(async () => []),
+            getRepository: () => ({ find }),
+          }),
+      ),
+      getRepository: jest.fn(() => ({ find })),
+    }) as unknown as DataSource;
+
+  it('returns the 20 most recent tenant codes ordered by createdAt DESC without codeHash or tenantId', async () => {
+    const rows = [
+      buildCodeRow({
+        id: 'code-2',
+        status: DeviceLinkingCodeStatus.CLAIMED,
+        deviceId: 'POS-01',
+        claimedAt: new Date('2026-01-01T00:05:00Z'),
+        createdAt: new Date('2026-01-01T00:03:00Z'),
+      }),
+      buildCodeRow({ id: 'code-1' }),
+    ];
+    const find = jest.fn(async () => rows);
+    const service = new DeviceLinkingService(buildListDataSource(find));
+
+    const result = await service.listLinkingCodes('tenant-1');
+
+    expect(find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { tenantId: 'tenant-1' },
+        order: { createdAt: 'DESC' },
+        take: 20,
+      }),
+    );
+    expect(result).toEqual([
+      {
+        id: 'code-2',
+        status: DeviceLinkingCodeStatus.CLAIMED,
+        deviceId: 'POS-01',
+        expiresAt: expect.any(Date),
+        claimedAt: expect.any(Date),
+        createdAt: expect.any(Date),
+      },
+      {
+        id: 'code-1',
+        status: DeviceLinkingCodeStatus.ACTIVE,
+        deviceId: null,
+        expiresAt: expect.any(Date),
+        claimedAt: null,
+        createdAt: expect.any(Date),
+      },
+    ]);
+    for (const item of result) {
+      expect(item).not.toHaveProperty('codeHash');
+      expect(item).not.toHaveProperty('tenantId');
+    }
+  });
+
+  it('fails fast on a blank tenant id without touching the database', async () => {
+    const find = jest.fn(async () => []);
+    const transaction = jest.fn();
+    const service = new DeviceLinkingService({
+      transaction,
+      getRepository: jest.fn(() => ({ find })),
+    } as unknown as DataSource);
+
+    await expect(service.listLinkingCodes('   ')).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(find).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
+  });
+});
+
 // The exact claim-flag bind the service must issue: transaction-local
 // set_config, never read from client input.
 const SET_CONFIG_TEST_BIND = "SELECT set_config('app.linking_claim', $1, true)";
