@@ -76,6 +76,7 @@ void main() {
           same(kForensicAlertStatusLabels));
       expect(kAllLabelMaps['kForensicMovementTypeLabels'],
           same(kForensicMovementTypeLabels));
+      expect(kAllLabelMaps['kSyncErrorLabels'], same(kSyncErrorLabels));
       expect(kAllLabelMaps['kActivationBackendVerdictLabels'],
           same(kActivationBackendVerdictLabels));
     });
@@ -124,6 +125,35 @@ void main() {
           'Umbral de stock bajo');
       expect(localize('MANUAL_STOCK_ALTERATION', kForensicMovementTypeLabels),
           'Alteración manual de stock');
+      // Sync error codes (issue #587 item 22): exact discrete values emitted
+      // by SyncService.triggerManualSync / domainErrors composition.
+      expect(localize('DEVICE_REVOKED', kSyncErrorLabels),
+          'Dispositivo revocado por el servidor. Requiere reactivación.');
+      expect(
+          localize(
+              'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403)',
+              kSyncErrorLabels),
+          'Reautenticación requerida con el servidor nube (HTTP 401/403)');
+      expect(localize('AuditLogs', kSyncErrorLabels), 'Registros de auditoría');
+      expect(localize('Sales', kSyncErrorLabels), 'Ventas');
+      expect(localize('Fulfillment', kSyncErrorLabels),
+          'Preparación de pedidos');
+    });
+
+    test('sync error composition and exception dumps pass through unchanged', () {
+      // Composed summaries (auth message joined with domain tokens) and
+      // arbitrary e.toString() dumps have no single-code key: they render
+      // verbatim per the localize fallback convention (D2/D6).
+      expect(
+        localize(
+            'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403); Sales',
+            kSyncErrorLabels),
+        'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403); Sales',
+      );
+      expect(localize('AuditLogs; Sales', kSyncErrorLabels),
+          'AuditLogs; Sales');
+      expect(localize('Exception: network dropped', kSyncErrorLabels),
+          'Exception: network dropped');
     });
 
     test('count session statuses are exhaustive against CountSessionStatus', () {

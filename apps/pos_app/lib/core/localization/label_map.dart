@@ -281,6 +281,39 @@ const Map<String, String> kForensicMovementTypeLabels = <String, String>{
   'MANUAL_STOCK_ALTERATION': 'Alteración manual de stock',
 };
 
+/// Sync error detail strings surfaced verbatim by the cloud sync badge's
+/// "Detalle de Error" box (`SyncService.lastSyncError`).
+///
+/// Source: `lib/data/services/sync_service.dart` — `triggerManualSync` error
+/// composition. Only the exact discrete values that leak non-Spanish machine
+/// tokens are mapped:
+/// - `DEVICE_REVOKED`: auth message when `_syncBlockedReason` is
+///   `DEVICE_REVOKED` (revoked sync credential).
+/// - `AUTH_BLOCKED: …`: auth message when the sync credential is blocked
+///   (HTTP 401/403). The exact literal is keyed so the `AUTH_BLOCKED:` code
+///   prefix is dropped; the Spanish tail is preserved from the source. If
+///   the source literal drifts, the map entry becomes inert (pass-through),
+///   never wrong.
+/// - `AuditLogs`, `Sales`, `Fulfillment`: English domain tokens added to
+///   `domainErrors`. The other domain tokens (`Recetas`, `Compras`,
+///   `Producción`, `Conteos físicos`, `Kardex`, `Movimientos de stock`,
+///   `Catálogo`) are already Spanish and intentionally unmapped.
+///
+/// Composition semantics: `lastSyncError` may join several tokens with
+/// `; ` (e.g. `AUTH_BLOCKED: …; Sales`) or carry an arbitrary exception
+/// dump (`catch (e) { _lastSyncError = e.toString(); }`). Those composed /
+/// free-text values do not match any key and pass through unchanged per the
+/// [localize] convention — the detail box is diagnostic, so the raw detail
+/// stays visible (D2/D6).
+const Map<String, String> kSyncErrorLabels = <String, String>{
+  'DEVICE_REVOKED': 'Dispositivo revocado por el servidor. Requiere reactivación.',
+  'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403)':
+      'Reautenticación requerida con el servidor nube (HTTP 401/403)',
+  'AuditLogs': 'Registros de auditoría',
+  'Sales': 'Ventas',
+  'Fulfillment': 'Preparación de pedidos',
+};
+
 /// Backend finalize verdict statuses (`backendFinalizeResult.status`).
 ///
 /// Source: `lib/data/ports/activation_sync_port.dart` — the verdict statuses
@@ -308,6 +341,7 @@ const Map<String, Map<String, String>> kAllLabelMaps = <String,
   'kForensicMovementTypeLabels': kForensicMovementTypeLabels,
   'kVoidReasonLabels': kVoidReasonLabels,
   'kReprintReasonLabels': kReprintReasonLabels,
+  'kSyncErrorLabels': kSyncErrorLabels,
   'kActivationBackendVerdictLabels': kActivationBackendVerdictLabels,
 };
 
