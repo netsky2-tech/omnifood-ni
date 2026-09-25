@@ -176,6 +176,30 @@ const Map<String, String> kUserRoleLabels = <String, String>{
   'waiter': 'Mesero',
 };
 
+/// Void reason codes (D-15/#525 AC-6/AC-7, controlled list).
+///
+/// Source: `lib/domain/usecases/sales/void_decision.dart` —
+/// [VoidReasonCodes] (`VoidReasonCodes.all`, exhaustive).
+const Map<String, String> kVoidReasonLabels = <String, String>{
+  'ERROR_DE_CAPTURA': 'Error de captura',
+  'CLIENTE_DESISTE': 'Cliente desiste',
+  'TICKET_DUPLICADO': 'Ticket duplicado',
+  'OTRO': 'Otro',
+};
+
+/// Reprint reason codes (D-13/#547, controlled list).
+///
+/// Source: `lib/domain/usecases/sales/void_decision.dart` —
+/// [ReprintReasonCodes] (`ReprintReasonCodes.all`, exhaustive).
+/// Kept separate from [kVoidReasonLabels]: `OTRO` exists in both families
+/// but the controlled lists are independent domains.
+const Map<String, String> kReprintReasonLabels = <String, String>{
+  'PAPEL_ATASCADO': 'Papel atascado',
+  'CLIENTE_PERDIO_TICKET': 'El cliente perdió su ticket',
+  'VERIFICACION': 'Verificación',
+  'OTRO': 'Otro',
+};
+
 /// Backend finalize verdict statuses (`backendFinalizeResult.status`).
 ///
 /// Source: `lib/data/ports/activation_sync_port.dart` — the verdict statuses
@@ -196,6 +220,8 @@ const Map<String, Map<String, String>> kAllLabelMaps = <String,
   'kActivationEvidenceRefLabels': kActivationEvidenceRefLabels,
   'kPaymentMethodLabels': kPaymentMethodLabels,
   'kUserRoleLabels': kUserRoleLabels,
+  'kVoidReasonLabels': kVoidReasonLabels,
+  'kReprintReasonLabels': kReprintReasonLabels,
   'kActivationBackendVerdictLabels': kActivationBackendVerdictLabels,
 };
 

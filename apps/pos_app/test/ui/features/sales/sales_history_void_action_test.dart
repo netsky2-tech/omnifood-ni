@@ -231,6 +231,11 @@ void main() {
             'repository boundary keeps ANULAR disabled',
       );
 
+      // #587 WU3: reason options render Spanish labels from the centralized
+      // map; the raw controlled codes never reach the dialog.
+      expect(find.text('Error de captura'), findsOneWidget);
+      expect(find.text('ERROR_DE_CAPTURA'), findsNothing);
+
       await tester.tap(find.text('Error de captura'));
       await tester.pumpAndSettle();
       expect(

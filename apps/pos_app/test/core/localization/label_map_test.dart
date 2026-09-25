@@ -64,6 +64,9 @@ void main() {
           same(kActivationEvidenceRefLabels));
       expect(kAllLabelMaps['kPaymentMethodLabels'], same(kPaymentMethodLabels));
       expect(kAllLabelMaps['kUserRoleLabels'], same(kUserRoleLabels));
+      expect(kAllLabelMaps['kVoidReasonLabels'], same(kVoidReasonLabels));
+      expect(
+          kAllLabelMaps['kReprintReasonLabels'], same(kReprintReasonLabels));
       expect(kAllLabelMaps['kActivationBackendVerdictLabels'],
           same(kActivationBackendVerdictLabels));
     });
@@ -85,6 +88,24 @@ void main() {
       expect(localize('waiter', kUserRoleLabels), 'Mesero');
       expect(localize('RECEIPT_PRINTED_OK', kActivationEvidenceRefLabels),
           'Ticket impreso correctamente');
+      expect(localize('ERROR_DE_CAPTURA', kVoidReasonLabels),
+          'Error de captura');
+      expect(localize('TICKET_DUPLICADO', kVoidReasonLabels),
+          'Ticket duplicado');
+      expect(localize('PAPEL_ATASCADO', kReprintReasonLabels),
+          'Papel atascado');
+      expect(localize('CLIENTE_PERDIO_TICKET', kReprintReasonLabels),
+          'El cliente perdió su ticket');
+    });
+
+    test('void and reprint reason families are separate maps sharing OTRO', () {
+      // D-15/#525 and D-13/#547 controlled lists: exhaustive codes from
+      // VoidReasonCodes.all and ReprintReasonCodes.all.
+      expect(kVoidReasonLabels.keys.toList(),
+          ['ERROR_DE_CAPTURA', 'CLIENTE_DESISTE', 'TICKET_DUPLICADO', 'OTRO']);
+      expect(kReprintReasonLabels.keys.toList(),
+          ['PAPEL_ATASCADO', 'CLIENTE_PERDIO_TICKET', 'VERIFICACION', 'OTRO']);
+      expect(identical(kVoidReasonLabels, kReprintReasonLabels), isFalse);
     });
 
     test('backend verdict statuses reuse the check status labels', () {

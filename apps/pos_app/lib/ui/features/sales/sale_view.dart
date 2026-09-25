@@ -10,6 +10,7 @@ import '../../../domain/models/user.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/repositories/audit_repository.dart';
 import '../../../data/database/app_database.dart';
+import '../../../core/localization/label_map.dart';
 import '../../../core/navigation/route_observer.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
@@ -709,7 +710,7 @@ class _CloseBoxDialogState extends State<CloseBoxDialog> {
                 DataColumn(label: Text('Esperado')),
               ],
               rows: expected.entries.map((e) => DataRow(cells: [
-                DataCell(Text(e.key.name.toUpperCase())),
+                DataCell(Text(localize(e.key.name, kPaymentMethodLabels))),
                 DataCell(Text('C\$ ${e.value.toStringAsFixed(2)}')),
               ])).toList(),
             ),
@@ -1696,7 +1697,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Row(
                   children: [
-                    Expanded(flex: 2, child: Text(method.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold))),
+                    Expanded(flex: 2, child: Text(localize(method.name, kPaymentMethodLabels), style: const TextStyle(fontWeight: FontWeight.bold))),
                     Expanded(
                       flex: 3,
                       child: TextField(
