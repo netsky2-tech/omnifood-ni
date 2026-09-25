@@ -44,7 +44,6 @@ void main() {
     processInventoryUseCase = MockProcessSaleInventoryUseCase();
     final inventoryRepository = MockInventoryRepository();
     final auditRepository = MockAuditRepository();
-    when(numberingService.isRangeExhausted()).thenAnswer((_) async => false);
     when(
       numberingService.getNextNumber(),
     ).thenAnswer((_) async => '001-001-01-00000001');

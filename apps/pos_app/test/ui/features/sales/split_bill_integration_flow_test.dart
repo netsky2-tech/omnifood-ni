@@ -94,7 +94,6 @@ void main() {
     when(mockInventoryRepo.getActiveProducts()).thenAnswer((_) async => []);
     when(mockInventoryRepo.getProductById(any)).thenAnswer((_) async => null);
     when(mockProcessUseCase.execute(any)).thenAnswer((_) async => []);
-    when(mockNumberingService.isRangeExhausted()).thenAnswer((_) async => false);
 
     salesRepository = SalesRepositoryImpl(
       database: database,

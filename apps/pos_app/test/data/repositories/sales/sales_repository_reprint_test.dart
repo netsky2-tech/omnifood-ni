@@ -328,7 +328,6 @@ void main() {
       // Print-only path: the numbering service is never touched (D-13).
       verifyNever(numberingService.getNextNumber());
       verifyNever(numberingService.incrementNumber());
-      verifyNever(numberingService.isRangeExhausted());
     });
 
     test('a corrupted snapshot denies instead of fabricating a header',

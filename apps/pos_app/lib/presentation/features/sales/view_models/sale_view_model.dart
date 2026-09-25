@@ -1502,8 +1502,6 @@ class SaleViewModel extends ChangeNotifier {
       // error wrapper.
       if (e is FiscalSequenceUnconfiguredError) {
         _errorMessage = e.message;
-      } else if (e is FiscalSequenceExhaustedError) {
-        _errorMessage = e.message;
       } else {
         _errorMessage = 'Error al procesar la venta: $e';
       }
