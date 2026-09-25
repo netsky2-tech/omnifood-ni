@@ -215,6 +215,22 @@ void main() {
       expect(await service.getTenantSlug(), isEmpty);
     });
 
+    test('persistTenantId writes through and getTenantConfig picks it up', () async {
+      await service.persistTenantId('tenant-uuid-1');
+
+      final persistedEntity = await database.localConfigDao.getConfigByKey('tenant_id');
+      expect(persistedEntity?.value, 'tenant-uuid-1');
+
+      final config = await service.getTenantConfig();
+      expect(config.tenantId, 'tenant-uuid-1');
+    });
+
+    test('persistTenantId with a blank id is a no-op', () async {
+      await service.persistTenantId('   ');
+
+      expect(await database.localConfigDao.getConfigByKey('tenant_id'), isNull);
+    });
+
     test('corrupted or invalid operation_mode in database falls back gracefully without crashing', () async {
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'operation_mode', value: 'CORRUPTED_VALUE_123'),

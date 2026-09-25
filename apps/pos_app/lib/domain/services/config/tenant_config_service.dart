@@ -142,6 +142,21 @@ class TenantConfigService {
     );
   }
 
+  /// Write-through persistence for the tenant id captured from the pre-auth
+  /// linking claim (issue #556). Blank ids are ignored; this is pre-auth
+  /// context, never authority.
+  Future<void> persistTenantId(String tenantId) async {
+    final trimmed = tenantId.trim();
+    if (trimmed.isEmpty) return;
+    await _configDao.saveConfig(
+      LocalConfigEntity(
+        key: tenantIdKey,
+        value: trimmed,
+        description: 'Tenant unique identifier',
+      ),
+    );
+  }
+
   Future<bool> isFoodParkQsr() async => (await getOperationMode()).isFoodParkQsr;
   Future<bool> isRestaurant() async => (await getOperationMode()).isRestaurant;
   Future<bool> isHybrid() async => (await getOperationMode()).isHybrid;

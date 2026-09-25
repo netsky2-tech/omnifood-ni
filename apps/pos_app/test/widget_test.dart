@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:pos_app/main.dart';
+import 'package:pos_app/domain/models/auth/terminal_linking.dart';
 import 'package:pos_app/ui/features/inventory/boh/boh_navigation_shell_view.dart';
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/ui/features/auth/viewmodels/login_viewmodel.dart';
@@ -35,6 +36,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<User?> loginOnline(String email, String password, {String? tenantSlug}) async => null;
+  @override
+  Future<TerminalLinking> claimLinkingCode(String code, String deviceId) async =>
+      const TerminalLinking(tenantId: '', slug: '', deviceId: '');
   @override
   Future<bool> authorizeOverride({required String supervisorId, String? pin, String? totpCode}) async => false;
   @override

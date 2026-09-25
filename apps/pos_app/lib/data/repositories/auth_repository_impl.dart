@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../domain/models/auth/terminal_linking.dart';
 import '../../domain/models/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../daos/user_dao.dart';
@@ -39,6 +40,12 @@ class AuthRepositoryImpl implements AuthRepository {
   final DeviceSyncBootstrapCoordinator? _bootstrapCoordinator;
   final LegacyHumanCredentialFallbackCleaner _cleaner;
 
+  /// Dedicated pre-auth client for the linking code claim (issue #556).
+  /// In production wiring this is a bare Dio with NO interceptors; when
+  /// absent, the shared client is used with its Authorization header
+  /// stripped before the call.
+  final Dio? _claimDio;
+
   AuthRepositoryImpl(
     this._userDao,
     this._securityProfileDao,
@@ -50,6 +57,7 @@ class AuthRepositoryImpl implements AuthRepository {
     CloudCredentialCoordinator? credentialCoordinator,
     DeviceSyncBootstrapCoordinator? bootstrapCoordinator,
     LegacyHumanCredentialFallbackCleaner? cleaner,
+    Dio? claimDio,
   }) : _storage =
            storage ??
            const FlutterSecureStorage(
@@ -57,6 +65,7 @@ class AuthRepositoryImpl implements AuthRepository {
            ),
        _totpSeedKeyProvider =
            totpSeedKeyProvider ?? DeviceBoundTotpSeedKeyProvider(),
+       _claimDio = claimDio,
        _capabilityCache = capabilityCache,
        _credentialCoordinator = credentialCoordinator,
        _bootstrapCoordinator = bootstrapCoordinator,
@@ -331,6 +340,51 @@ class AuthRepositoryImpl implements AuthRepository {
     }
 
     return null;
+  }
+
+  @override
+  Future<TerminalLinking> claimLinkingCode(String code, String deviceId) async {
+    final claimDio = _claimDio ?? _dio;
+    // Pre-auth endpoint: never send credentials, even if a stale token sits
+    // on the shared client (issue #556).
+    claimDio.options.headers.remove('Authorization');
+    try {
+      final response = await claimDio.post(
+        '/onboarding/activation/link',
+        data: <String, dynamic>{
+          // Raw user input, trimmed; case normalization is server-side.
+          'code': code.trim(),
+          'deviceId': deviceId,
+        },
+      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      return TerminalLinking(
+        tenantId: (data['tenantId'] ?? '').toString(),
+        slug: (data['slug'] ?? '').toString(),
+        deviceId: (data['deviceId'] ?? deviceId).toString(),
+        linkedAt: data['linkedAt']?.toString(),
+      );
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 401 || status == 403) {
+        // Backend collapses unknown/expired/claimed/revoked codes into one
+        // 401: surface a single generic failure, never enumerate.
+        throw LinkingClaimException(
+          'Código de vinculación inválido o expirado. Solicite uno nuevo.',
+          statusCode: status,
+        );
+      }
+      if (status == 429) {
+        throw LinkingClaimException(
+          'Demasiados intentos, aguarde un momento.',
+          statusCode: status,
+        );
+      }
+      throw LinkingClaimException(
+        'Error de conexión. Verifique su red e intente de nuevo.',
+        statusCode: status,
+      );
+    }
   }
 
   @override
