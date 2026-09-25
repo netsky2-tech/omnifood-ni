@@ -178,7 +178,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 54,
+      version: 55,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -260,7 +260,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, `shift_id` TEXT, `local_issue_date` TEXT, FOREIGN KEY (`shift_id`) REFERENCES `cashier_sessions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `inventory_snapshot_json` TEXT, `inventory_snapshot_version` TEXT, `origin_invoice_item_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -341,6 +341,10 @@ class _$AppDatabase extends AppDatabase {
             'CREATE UNIQUE INDEX `idx_invoices_terminal_source_sequence` ON `invoices` (`terminal_id`, `source_sequence`)');
         await database.execute(
             'CREATE UNIQUE INDEX `idx_invoices_idempotency_key` ON `invoices` (`idempotency_key`)');
+        await database.execute(
+            'CREATE INDEX `idx_invoices_shift_id` ON `invoices` (`shift_id`)');
+        await database.execute(
+            'CREATE INDEX `idx_invoices_local_issue_date` ON `invoices` (`local_issue_date`)');
         await database.execute(
             'CREATE INDEX `index_kitchen_orders_station_status` ON `kitchen_orders` (`station`, `status`)');
         await database.execute(
@@ -3153,7 +3157,9 @@ class _$InvoiceDao extends InvoiceDao {
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
-                  'total_usd': item.totalUsd
+                  'total_usd': item.totalUsd,
+                  'shift_id': item.shiftId,
+                  'local_issue_date': item.localIssueDate
                 }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -3189,7 +3195,9 @@ class _$InvoiceDao extends InvoiceDao {
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
-                  'total_usd': item.totalUsd
+                  'total_usd': item.totalUsd,
+                  'shift_id': item.shiftId,
+                  'local_issue_date': item.localIssueDate
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -3235,7 +3243,9 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double),
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?),
         arguments: [id]);
   }
 
@@ -3273,7 +3283,9 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double),
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?),
         arguments: [number]);
   }
 
@@ -3311,7 +3323,9 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double));
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?));
   }
 
   @override
@@ -3348,7 +3362,9 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double),
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?),
         arguments: [status]);
   }
 
@@ -3389,7 +3405,9 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double),
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?),
         arguments: [startTime, endTime]);
   }
 
@@ -3427,7 +3445,9 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double),
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?),
         arguments: [userId]);
   }
 
@@ -3472,7 +3492,9 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double));
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?));
   }
 
   @override
@@ -3525,7 +3547,9 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double),
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?),
         arguments: [key]);
   }
 
@@ -3878,7 +3902,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
-                  'total_usd': item.totalUsd
+                  'total_usd': item.totalUsd,
+                  'shift_id': item.shiftId,
+                  'local_issue_date': item.localIssueDate
                 }),
         _invoiceItemEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -4070,7 +4096,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
-                  'total_usd': item.totalUsd
+                  'total_usd': item.totalUsd,
+                  'shift_id': item.shiftId,
+                  'local_issue_date': item.localIssueDate
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -4171,7 +4199,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double),
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?),
         arguments: [id]);
   }
 
@@ -4210,7 +4240,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
-            totalUsd: row['total_usd'] as double),
+            totalUsd: row['total_usd'] as double,
+            shiftId: row['shift_id'] as String?,
+            localIssueDate: row['local_issue_date'] as String?),
         arguments: [relatedId]);
   }
 
@@ -4635,6 +4667,17 @@ class _$CashierSessionDao extends CashierSessionDao {
             supervisorId: row['supervisor_id'] as String?,
             notes: row['notes'] as String?,
             syncStatus: row['sync_status'] as String));
+  }
+
+  @override
+  Future<CashierSessionEntity?> getActiveSessionForUserAndTerminal(
+    String userId,
+    String terminalId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM cashier_sessions WHERE is_closed = 0 AND user_id = ?1 AND terminal_id = ?2 ORDER BY opened_at DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => CashierSessionEntity(id: row['id'] as String, userId: row['user_id'] as String, terminalId: row['terminal_id'] as String, openedAt: row['opened_at'] as int, tipoModelo: row['tipo_modelo'] as String, closedAt: row['closed_at'] as int?, openingBalanceNio: row['opening_balance_nio'] as double?, openingBalanceUsd: row['opening_balance_usd'] as double, closingCountedNio: row['closing_counted_nio'] as double?, closingCountedUsd: row['closing_counted_usd'] as double?, expectedNio: row['expected_nio'] as double?, expectedUsd: row['expected_usd'] as double, differenceNio: row['difference_nio'] as double?, differenceUsd: row['difference_usd'] as double?, zReportSequence: row['z_report_sequence'] as int?, isClosed: (row['is_closed'] as int) != 0, supervisorId: row['supervisor_id'] as String?, notes: row['notes'] as String?, syncStatus: row['sync_status'] as String),
+        arguments: [userId, terminalId]);
   }
 
   @override

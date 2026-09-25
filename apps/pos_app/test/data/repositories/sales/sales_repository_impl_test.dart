@@ -7,7 +7,10 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
 import 'package:pos_app/data/daos/sales/invoice_item_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
+import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/daos/fulfillment/fulfillment_topology_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
@@ -65,10 +68,25 @@ class _StubFulfillmentTopologyDao implements FulfillmentTopologyDao {
   ) async => [];
 }
 
+class _StubCashierSessionDao implements CashierSessionDao {
+  @override
+  Future<CashierSessionEntity?> getActiveSessionForUserAndTerminal(
+    String userId,
+    String terminalId,
+  ) async =>
+      null;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnsupportedError('Not used by this test');
+}
+
 class _FulfillmentAppDatabase extends Fake implements AppDatabase {
   _FulfillmentAppDatabase(this.fulfillmentTopologyDao);
   @override
   final FulfillmentTopologyDao fulfillmentTopologyDao;
+  @override
+  final CashierSessionDao cashierSessionDao = _StubCashierSessionDao();
 }
 
 class _FulfillmentSalesTransactionDao extends Fake
@@ -96,6 +114,7 @@ class _FulfillmentSalesTransactionDao extends Fake
   InvoiceDao,
   InvoiceItemDao,
   PaymentDao,
+  CashierSessionDao,
   SalesTransactionDao,
   DgiNumberingService,
   MovementEngine,
@@ -117,6 +136,7 @@ void main() {
   late MockProcessSaleInventoryUseCase mockProcessInventoryUseCase;
   late MockReverseSaleInventoryUseCase mockReverseInventoryUseCase;
   late MockInventoryRepository mockInventoryRepository;
+  late MockCashierSessionDao mockSessionDao;
 
   setUp(() {
     mockDatabase = MockAppDatabase();
@@ -148,6 +168,14 @@ void main() {
       mockTransactionDao.getNextInvoiceSourceSequence(any),
     ).thenAnswer((_) async => 1);
     when(mockInvoiceDao.getInvoiceById(any)).thenAnswer((_) async => null);
+
+    // B1a-4: shift membership lookup at checkout. Default: no open session,
+    // so the sale persists a null shiftId unless a test overrides it.
+    mockSessionDao = MockCashierSessionDao();
+    when(mockDatabase.cashierSessionDao).thenReturn(mockSessionDao);
+    when(
+      mockSessionDao.getActiveSessionForUserAndTerminal(any, any),
+    ).thenAnswer((_) async => null);
   });
 
   test(
@@ -1785,5 +1813,321 @@ void main() {
         );
       },
     );
+  });
+
+  group('B1a-4: shift (turno) membership at checkout', () {
+    Invoice invoiceWithUser(String id, String userId) => Invoice(
+          id: id,
+          number: 'draft',
+          createdAt: DateTime.parse('2026-02-01T12:00:00Z'),
+          userId: userId,
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          paymentStatus: PaymentStatus.paid,
+          syncStatus: SyncStatus.pending,
+          type: InvoiceType.regular,
+        );
+
+    void arrangeHappyPath() {
+      when(
+        mockNumberingService.isRangeExhausted(),
+      ).thenAnswer((_) async => false);
+      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '001');
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).thenAnswer((_) async {});
+      when(mockNumberingService.incrementNumber()).thenAnswer((_) async {});
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+    }
+
+    InvoiceEntity capturedInvoice() {
+      final result = verify(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          captureAny,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      );
+      result.called(1);
+      return result.captured.first as InvoiceEntity;
+    }
+
+    test(
+        'records the open session id of the sale\'s own user and terminal as shiftId',
+        () async {
+      arrangeHappyPath();
+      when(
+        mockSessionDao.getActiveSessionForUserAndTerminal('user1', 'pos-user1'),
+      ).thenAnswer(
+        (_) async => CashierSessionEntity(
+          id: 'shift-open-1',
+          userId: 'user1',
+          terminalId: 'pos-user1',
+          openedAt: 100,
+          isClosed: false,
+        ),
+      );
+
+      await repository.saveSale(
+        invoice: invoiceWithUser('inv-shift-1', 'user1'),
+        items: const [],
+        payments: [],
+      );
+
+      expect(capturedInvoice().shiftId, 'shift-open-1');
+    });
+
+    test('records a null shiftId when no matching open session exists',
+        () async {
+      arrangeHappyPath();
+
+      await repository.saveSale(
+        invoice: invoiceWithUser('inv-shift-2', 'user1'),
+        items: const [],
+        payments: [],
+      );
+
+      expect(capturedInvoice().shiftId, isNull);
+    });
+
+    test(
+        'scopes the session lookup to the sale\'s own user and resolved terminal',
+        () async {
+      arrangeHappyPath();
+
+      await repository.saveSale(
+        invoice: invoiceWithUser('inv-shift-3', 'user1'),
+        items: const [],
+        payments: [],
+      );
+
+      // terminalId falls back to 'pos-<userId>' for the sale.
+      verify(
+        mockSessionDao.getActiveSessionForUserAndTerminal('user1', 'pos-user1'),
+      ).called(1);
+    });
+
+    test('records the local calendar issue date of the sale at checkout',
+        () async {
+      arrangeHappyPath();
+
+      // Local DateTime (not UTC-parsed): the fiscal day is the device-local
+      // calendar date at issuance, stored now and never recomputed (D-12).
+      await repository.saveSale(
+        invoice: Invoice(
+          id: 'inv-issue-date-1',
+          number: 'draft',
+          createdAt: DateTime(2026, 9, 23, 21, 40),
+          userId: 'user1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          paymentStatus: PaymentStatus.paid,
+          syncStatus: SyncStatus.pending,
+          type: InvoiceType.regular,
+        ),
+        items: const [],
+        payments: [],
+      );
+
+      expect(capturedInvoice().localIssueDate, '2026-09-23');
+    });
+  });
+
+  group('#548: full-column preservation on invoice rewrites', () {
+    // Every column of the live `invoices` schema, seeded with a DISTINCT,
+    // non-default value. A partial entity rebuild cannot reproduce these
+    // values: non-nullable columns fall back to constructor defaults and
+    // nullable ones to null, so any dropped column shows up as a value
+    // change. The tripwire test pins this map to the real schema so the
+    // next added column is covered automatically (dart:mirrors is not
+    // available in Flutter, so the entity field list is mirrored here and
+    // validated against PRAGMA table_info on every run).
+    const seededRow = <String, Object>{
+      'id': 'row-preservation-1',
+      'invoice_number': '001-001-01-00000999',
+      'created_at': 1700000000000,
+      'user_id': 'cashier-preserve',
+      'subtotal': 100.5,
+      'total_tax': 15.75,
+      'total': 116.25,
+      'is_canceled': 0,
+      'void_reason': 'seed-void-reason',
+      'sync_status': 'synced',
+      'payment_status': 'paid',
+      'customer_id': 'cust-777',
+      'global_tax_override': 1,
+      'type': 'regular',
+      'related_invoice_id': 'rel-888',
+      'origin_invoice_id': 'origin-999',
+      'refund_reason_policy': 'restockOriginalBom',
+      'refund_reason_code': 'R-1',
+      'authorized_by_user_id': 'manager-preserve',
+      'authorized_by_role': 'manager',
+      'terminal_id': 'term-preserve',
+      'source_sequence': 42,
+      'idempotency_key': 'sale:term-preserve:row-preservation-1',
+      'payload_hash': 'hash-preserve',
+      'inventory_policy_version': 'SALE_TIME_V1',
+      'inventory_outcome': 'APPLIED_INVENTORY_APPLIED',
+      'inventory_outcome_reason': 'frozen-sale',
+      'bcn_official_rate': 40.1234,
+      'commercial_rate': 38.9876,
+      'total_usd': 3.21,
+      'shift_id': 'shift-preserve',
+      'local_issue_date': '2026-09-23',
+    };
+
+    late AppDatabase preservationDatabase;
+    late SalesRepositoryImpl preservationRepository;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    setUp(() async {
+      preservationDatabase =
+          await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+      // shift_id is a real FK target: seed the session so the row is valid
+      // regardless of PRAGMA foreign_keys.
+      await preservationDatabase.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'shift-preserve',
+          userId: 'cashier-preserve',
+          terminalId: 'term-preserve',
+          openedAt: 1700000000000,
+          isClosed: false,
+        ),
+      );
+
+      final db = preservationDatabase.database;
+      await db.insert('invoices', seededRow);
+
+      final mockAuditRepository = MockAuditRepository();
+      when(
+        mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async => null);
+      when(
+        mockReverseInventoryUseCase.execute(any, any),
+      ).thenAnswer((_) async => []);
+
+      preservationRepository = SalesRepositoryImpl(
+        database: preservationDatabase,
+        invoiceDao: preservationDatabase.invoiceDao,
+        itemDao: preservationDatabase.invoiceItemDao,
+        paymentDao: preservationDatabase.paymentDao,
+        transactionDao: preservationDatabase.salesTransactionDao,
+        numberingService: mockNumberingService,
+        movementEngine: mockMovementEngine,
+        auditRepository: mockAuditRepository,
+        processInventoryUseCase: mockProcessInventoryUseCase,
+        reverseInventoryUseCase: mockReverseInventoryUseCase,
+        inventoryRepository: mockInventoryRepository,
+      );
+    });
+
+    tearDown(() async {
+      await preservationDatabase.close();
+    });
+
+    Future<Map<String, Object?>?> readRow() async {
+      final rows = await preservationDatabase.database.query(
+        'invoices',
+        where: 'id = ?',
+        whereArgs: [seededRow['id']],
+      );
+      return rows.isEmpty ? null : rows.first;
+    }
+
+    Future<Set<String>> schemaColumns() async {
+      final info = await preservationDatabase.database
+          .rawQuery('PRAGMA table_info(invoices)');
+      return info.map((row) => row['name'] as String).toSet();
+    }
+
+    /// Compares every column the operation is not allowed to change and
+    /// reports ALL offenders at once, naming each fabricated column.
+    void expectColumnsPreserved(
+      Map<String, Object?> before,
+      Map<String, Object?>? after,
+      Set<String> allowedToChange,
+    ) {
+      expect(after, isNotNull);
+      final mismatches = <String>[];
+      for (final column in seededRow.keys.toSet().difference(allowedToChange)) {
+        if (after![column] != before[column]) {
+          mismatches.add(
+            '$column: ${before[column]} -> ${after[column]}',
+          );
+        }
+      }
+      expect(
+        mismatches,
+        isEmpty,
+        reason: 'invoice rewrite fabricated/lost column data (#548)',
+      );
+    }
+
+    test('tripwire: seeded column list matches the live invoices schema',
+        () async {
+      expect(await schemaColumns(), seededRow.keys.toSet());
+    });
+
+    test('voidInvoice preserves all 31 columns it must not change', () async {
+      final before = (await readRow())!;
+
+      await preservationRepository.voidInvoice(
+        seededRow['id']! as String,
+        'Cambio de posición del pedido',
+      );
+
+      final after = await readRow();
+      // Void semantics itself must still hold.
+      expect(after!['is_canceled'], 1);
+      expect(after['void_reason'], 'Cambio de posición del pedido');
+      expect(after['sync_status'], 'pending');
+      expectColumnsPreserved(before, after, {
+        'is_canceled',
+        'void_reason',
+        'sync_status',
+      });
+    });
+
+    test('markAsFailed preserves all 31 columns it must not change',
+        () async {
+      final before = (await readRow())!;
+
+      await preservationRepository.markAsFailed(
+        seededRow['id']! as String,
+      );
+
+      final after = await readRow();
+      expect(after!['sync_status'], 'failed');
+      expect(after['is_canceled'], 0);
+      expect(after['void_reason'], 'seed-void-reason');
+      expectColumnsPreserved(before, after, {'sync_status'});
+    });
   });
 }
