@@ -8,7 +8,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
-import { SystemParametersConfigActiveView } from '../../inventory/entities/system-parameters-config.entity';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../inventory/entities/system-parameters-config.entity';
 import {
   bindTenantContext,
   runInTenantTransaction,
@@ -288,4 +291,167 @@ export class FiscalConfigVersionService {
       );
     }
   }
+
+  /**
+   * B1c-2 slice A config surface (D-14, #554): provisions the tenant's
+   * credit-note series. Fail-closed by design — nothing allocates until a
+   * human enters the real values from SOHO's authorization letter. The row
+   * is APPEND-ONLY supersession (the table trigger rejects UPDATE/DELETE):
+   * insert a new version, the active view resolves the governing row.
+   * Also the future home for B2a's server-side series work (#554).
+   */
+  async setCreditNoteSeries(
+    tenantId: string,
+    series: CreditNoteSeries,
+    userId?: string,
+  ): Promise<CreditNoteSeries> {
+    // Validate before any write: rejections happen at the boundary.
+    // Explicit discriminant comparison: this project runs with
+    // strictNullChecks off, where truthiness narrowing of a discriminated
+    // union does not apply.
+    const parsed = parseCreditNoteSeries({
+      ...(series.prefix !== undefined ? { prefix: series.prefix } : {}),
+      nextNumber: series.nextNumber,
+      ...(series.endNumber !== undefined ? { endNumber: series.endNumber } : {}),
+    });
+    if (parsed.ok === false) {
+      throw new BadRequestException(`${parsed.reason}: ${parsed.detail}`);
+    }
+    const configured = parsed.series;
+
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const viewRepo = manager.getRepository(
+          SystemParametersConfigActiveView,
+        );
+        const active = await viewRepo.findOne({
+          where: { tenant_id: tenantId, paramKey: CREDIT_NOTE_SERIES_PARAM_KEY },
+        });
+
+        const tableRepo = manager.getRepository(SystemParametersConfig);
+        await tableRepo.insert(
+          tableRepo.create({
+            tenant_id: tenantId,
+            paramKey: CREDIT_NOTE_SERIES_PARAM_KEY,
+            paramValue: configured as Record<string, unknown>,
+            version: (active?.version ?? 0) + 1,
+            effectiveFrom: new Date(),
+            isActive: true,
+            createdBy: userId,
+          }),
+        );
+        return configured;
+      },
+    );
+  }
+}
+
+/**
+ * B1c-2 slice A (D-14, #553 part 2): the tenant's configured credit-note
+ * series. This is the FIRST server-side series concept in the fiscal config
+ * (invoices are still numbered client-side by the POS). The counter lives
+ * in a system_parameters row (mutable, versioned, tenant-scoped) — never in
+ * FiscalConfigRevision, whose jsonb payloads are immutable revision
+ * snapshots and cannot hold a moving counter.
+ *
+ * This is also the intended future home for B2a's server-side series work
+ * (#554): same param-row mechanics, additional keys.
+ */
+export const CREDIT_NOTE_SERIES_PARAM_KEY = 'CREDIT_NOTE_SERIES';
+
+export type CreditNoteSeries = {
+  prefix?: string;
+  nextNumber: number;
+  endNumber?: number;
+};
+
+export type CreditNoteSeriesParseResult =
+  | { ok: true; series: CreditNoteSeries }
+  | { ok: false; reason: string; detail: string };
+
+/**
+ * Named fail-closed errors for series allocation. Never fabricate a default
+ * and never fall back to a guess: D-16/D-18 make an unconfigured or
+ * exhausted series a hard stop with a code the caller (and the operator)
+ * can act on.
+ */
+export class FiscalCreditNoteSeriesError extends BadRequestException {
+  constructor(
+    public readonly code:
+      | 'FISCAL_CREDIT_NOTE_SERIES_UNCONFIGURED'
+      | 'FISCAL_CREDIT_NOTE_SERIES_EXHAUSTED'
+      | 'FISCAL_CREDIT_NOTE_SERIES_INVALID',
+    message: string,
+  ) {
+    super(`${code}: ${message}`);
+    this.name = 'FiscalCreditNoteSeriesError';
+  }
+}
+
+/**
+ * Validates the stored jsonb shape. Malformed payloads are INVALID (fail
+ * loudly — a corrupted config must never silently fall back to a default).
+ * A well-formed series whose nextNumber already passed endNumber is
+ * EXHAUSTED (valid shape, no numbers left).
+ */
+export function parseCreditNoteSeries(
+  raw: unknown,
+): CreditNoteSeriesParseResult {
+  if (
+    typeof raw !== 'object' ||
+    raw === null ||
+    Array.isArray(raw) ||
+    typeof (raw as Record<string, unknown>).nextNumber !== 'number' ||
+    !Number.isInteger((raw as Record<string, unknown>).nextNumber) ||
+    ((raw as Record<string, unknown>).nextNumber as number) < 1
+  ) {
+    return {
+      ok: false,
+      reason: 'FISCAL_CREDIT_NOTE_SERIES_INVALID',
+      detail:
+        'CREDIT_NOTE_SERIES must be an object with integer nextNumber >= 1',
+    };
+  }
+  const rawRecord = raw as Record<string, unknown>;
+  const series: CreditNoteSeries = {
+    nextNumber: rawRecord.nextNumber as number,
+  };
+  if (rawRecord.prefix !== undefined) {
+    if (
+      typeof rawRecord.prefix !== 'string' ||
+      rawRecord.prefix.trim() === '' ||
+      /\s/.test(rawRecord.prefix)
+    ) {
+      return {
+        ok: false,
+        reason: 'FISCAL_CREDIT_NOTE_SERIES_INVALID',
+        detail: 'CREDIT_NOTE_SERIES prefix must be a non-blank string without whitespace',
+      };
+    }
+    series.prefix = rawRecord.prefix;
+  }
+  if (rawRecord.endNumber !== undefined) {
+    if (
+      typeof rawRecord.endNumber !== 'number' ||
+      !Number.isInteger(rawRecord.endNumber) ||
+      rawRecord.endNumber < 1
+    ) {
+      return {
+        ok: false,
+        reason: 'FISCAL_CREDIT_NOTE_SERIES_INVALID',
+        detail: 'CREDIT_NOTE_SERIES endNumber must be an integer >= 1 when present',
+      };
+    }
+    series.endNumber = rawRecord.endNumber;
+  }
+  if (series.endNumber !== undefined && series.nextNumber > series.endNumber) {
+    return {
+      ok: false,
+      reason: 'FISCAL_CREDIT_NOTE_SERIES_EXHAUSTED',
+      detail: `CREDIT_NOTE_SERIES is exhausted: nextNumber ${series.nextNumber} exceeds endNumber ${series.endNumber}`,
+    };
+  }
+  return { ok: true, series };
 }

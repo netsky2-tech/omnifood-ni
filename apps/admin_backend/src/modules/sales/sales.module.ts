@@ -6,6 +6,7 @@ import { Payment } from './entities/payment.entity';
 import { InvoiceItemModifier } from './entities/invoice-item-modifier.entity';
 import { InvoicesService } from './services/invoices.service';
 import { InvoicesController } from './controllers/invoices.controller';
+import { AdminInvoicesController } from './controllers/admin-invoices.controller';
 import { SyncBatchController } from './controllers/sync-batch.controller';
 import { InboundSyncController } from './controllers/inbound-sync.controller';
 import { InboundSyncService } from './services/inbound-sync.service';
@@ -71,6 +72,7 @@ import { forwardRef } from '@nestjs/common';
   ],
   controllers: [
     InvoicesController,
+    AdminInvoicesController,
     SyncBatchController,
     InboundSyncController,
     ReportsController,

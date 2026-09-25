@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -35,6 +36,16 @@ import {
 } from './sale-inventory-outcome.service';
 import { TenantFulfillmentRecord } from '../../fulfillment/entities/tenant-fulfillment-record.entity';
 import { bindTenantContext } from '../../../core/database/tenant-transaction';
+import {
+  SystemParametersConfig,
+  SystemParametersConfigActiveView,
+} from '../../inventory/entities/system-parameters-config.entity';
+import {
+  CREDIT_NOTE_SERIES_PARAM_KEY,
+  FiscalCreditNoteSeriesError,
+  parseCreditNoteSeries,
+} from '../../onboarding/services/fiscal-config-version.service';
+import { CreateAdminCreditNoteDto } from '../dto/admin-credit-note.dto';
 
 const SCALE_4 = 4;
 const CREDIT_NOTE_NO_STOCK_POLICIES = new Set([
@@ -283,6 +294,246 @@ export class InvoicesService {
         await this.paymentRepoFor(manager).upsert(paymentPayloads, ['id']);
       }
     }
+  }
+
+  /**
+   * B1c-2 slice A (D-14, #553 part 2): server-side credit-note issuance for
+   * the Backoffice. Human JWT transport — the authorizer comes from the
+   * principal, never from the body (the DTO rejects spoofed fields with a
+   * named 400).
+   *
+   * Atomicity: ONE SERIALIZABLE transaction binds the tenant context, runs
+   * the five credit-note asserts, allocates the next number from the
+   * configured series, and INSERTs the document and its items. A failure at
+   * any point rolls the whole unit back, so a crash can never burn a series
+   * number without committing its credit note (and vice versa).
+   *
+   * Append-only: INSERT only. The origin invoice is never touched.
+   */
+  async createAdminCreditNote(
+    tenantId: string,
+    dto: CreateAdminCreditNoteDto,
+    authorizer: { userId: string; role: UserRole },
+  ): Promise<{
+    id: string;
+    number: string;
+    originInvoiceId: string;
+    originInvoiceNumber: string;
+    total: number;
+  }> {
+    const authorizedByRole =
+      authorizer.role === UserRole.MANAGER ? 'manager' : 'owner';
+
+    return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+      await bindTenantContext(manager, tenantId);
+
+      // The assert helpers read the device-sync DTO shape; the admin request
+      // is adapted onto it. The authorizer fields are principal-derived.
+      const assertTarget = {
+        type: 'creditNote',
+        originInvoiceId: dto.originInvoiceId,
+        refundReasonCode: dto.refundReasonCode,
+        items: dto.items.map((item) => ({
+          originInvoiceItemId: item.originInvoiceItemId,
+          quantity: item.quantity,
+        })),
+        authorizedByUserId: authorizer.userId,
+        authorizedByRole,
+      } as unknown as SyncInvoiceDto;
+
+      this.assertCreditNoteReasonAndAuthorization(assertTarget);
+      await this.assertCreditNoteAuthorizingActor(tenantId, assertTarget, manager);
+      await this.assertCreditNoteOriginInvoiceIsRegularSale(
+        tenantId,
+        assertTarget,
+        manager,
+      );
+      await this.assertCreditNoteOriginItemsBelongToOriginInvoice(
+        tenantId,
+        assertTarget,
+        manager,
+      );
+
+      const origin = await this.invoiceRepoFor(manager).findOne({
+        where: { id: dto.originInvoiceId, tenant_id: tenantId },
+      });
+      if (!origin) {
+        throw new BadRequestException(
+          'credit-note origin invoice was not found',
+        );
+      }
+      const originItems = await this.itemRepoFor(manager).find({
+        where: { invoiceId: dto.originInvoiceId, tenant_id: tenantId },
+      });
+      const originItemsById = new Map(originItems.map((item) => [item.id, item]));
+
+      // Number allocation: fail-closed against the configured series, inside
+      // this same transaction (see allocateCreditNoteNumber for the race
+      // argument). No series, exhausted series, or malformed config: named
+      // error, zero rows written.
+      const allocated = await this.allocateCreditNoteNumber(
+        manager,
+        tenantId,
+        authorizer.userId,
+      );
+
+      const items = dto.items.map((requested) => {
+        const originItem = originItemsById.get(requested.originInvoiceItemId);
+        if (!originItem) {
+          throw new BadRequestException(
+            'credit-note origin invoice item was not found for this tenant',
+          );
+        }
+        const originQuantity = Math.abs(Number(originItem.quantity));
+        const refundQuantity = Math.abs(Number(requested.quantity));
+        const ratio = originQuantity === 0 ? 0 : refundQuantity / originQuantity;
+        const total = round4(-Number(originItem.total) * ratio);
+        const taxAmount = round4(-Number(originItem.taxAmount) * ratio);
+        return {
+          tenant_id: tenantId,
+          productId: originItem.productId,
+          productName: originItem.productName,
+          quantity: -refundQuantity,
+          unitPrice: originItem.unitPrice,
+          originalTaxRate: originItem.originalTaxRate,
+          appliedTaxRate: originItem.appliedTaxRate,
+          taxAmount,
+          total,
+          discount: 0,
+          notes: dto.notes ?? null,
+          originInvoiceItemId: requested.originInvoiceItemId,
+        };
+      });
+      const total = round4(items.reduce((sum, item) => sum + item.total, 0));
+      const totalTax = round4(
+        items.reduce((sum, item) => sum + item.taxAmount, 0),
+      );
+
+      try {
+        const invoiceRepo = manager.getRepository(Invoice);
+        const inserted = await invoiceRepo.insert(
+          invoiceRepo.create({
+            tenant_id: tenantId,
+            number: allocated.number,
+            created_at: new Date(),
+            userId: authorizer.userId,
+            subtotal: round4(total - totalTax),
+            totalTax,
+            total,
+            isCanceled: false,
+            paymentStatus: 'pending',
+            customerId: origin.customerId ?? null,
+            type: 'creditNote',
+            originInvoiceId: dto.originInvoiceId,
+            refundReasonCode: dto.refundReasonCode,
+            refundReasonPolicy: dto.refundReasonPolicy,
+            authorizedByUserId: authorizer.userId,
+            authorizedByRole,
+            bcnOfficialRate: origin.bcnOfficialRate,
+            commercialRate: origin.commercialRate,
+            totalUsd:
+              origin.commercialRate > 0
+                ? round4(total / origin.commercialRate)
+                : 0,
+          }),
+        );
+        const creditNoteId = String(inserted.identifiers[0]?.id);
+
+        if (items.length) {
+          await manager
+            .getRepository(InvoiceItem)
+            .insert(items.map((item) => ({ ...item, invoiceId: creditNoteId })));
+        }
+
+        return {
+          id: creditNoteId,
+          number: allocated.number,
+          originInvoiceId: dto.originInvoiceId,
+          originInvoiceNumber: origin.number,
+          total,
+        };
+      } catch (error: unknown) {
+        // B0.4 backstop: the (tenant_id, invoice_number) unique constraint
+        // makes a duplicate number impossible through the allocator; if it
+        // ever fires, surface a named conflict instead of a raw 500.
+        if (this.isUniqueViolation(error)) {
+          throw new ConflictException(
+            'CREDIT_NOTE_NUMBER_CONFLICT: the allocated credit-note number already exists for this tenant',
+          );
+        }
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Allocates the next credit-note number from the tenant's configured
+   * series (system_parameters, CREDIT_NOTE_SERIES param row). Fail-closed:
+   * UNCONFIGURED when the row is absent, INVALID when the stored jsonb is
+   * malformed, EXHAUSTED when nextNumber passed endNumber. Never fabricates
+   * a default and never falls back to a guessed range (D-16/D-18).
+   *
+   * Race safety: the sys_parametros_config table is APPEND-ONLY (the
+   * trg_sys_parametros_config_immutable trigger rejects UPDATE/DELETE), so
+   * an atomic UPDATE ... RETURNING is impossible and supersession is an
+   * INSERT of the next version. SELECT ... FOR UPDATE on the governing row
+   * does NOT serialize supersession either (a blocked second reader still
+   * sees the old row and would compute the same number). The race is
+   * resolved by the SERIALIZABLE isolation of the surrounding transaction:
+   * two concurrent allocators read the same governing version and both try
+   * to supersede it; one commits, the other aborts with 40001 and rolls
+   * back allocation AND document together (no number burned).
+   */
+  private async allocateCreditNoteNumber(
+    manager: EntityManager,
+    tenantId: string,
+    createdBy: string,
+  ): Promise<{ number: string; nextNumber: number }> {
+    const active = await manager
+      .getRepository(SystemParametersConfigActiveView)
+      .findOne({
+        where: { tenant_id: tenantId, paramKey: CREDIT_NOTE_SERIES_PARAM_KEY },
+      });
+    if (!active) {
+      throw new FiscalCreditNoteSeriesError(
+        'FISCAL_CREDIT_NOTE_SERIES_UNCONFIGURED',
+        'no CREDIT_NOTE_SERIES row is configured for this tenant; ask the owner to provision it from the Backoffice',
+      );
+    }
+    const parsed = parseCreditNoteSeries(active.paramValue);
+    if (parsed.ok === false) {
+      throw new FiscalCreditNoteSeriesError(
+        parsed.reason as 'FISCAL_CREDIT_NOTE_SERIES_INVALID',
+        parsed.detail,
+      );
+    }
+    const series = parsed.series;
+
+    const tableRepo = manager.getRepository(SystemParametersConfig);
+    await tableRepo.insert(
+      tableRepo.create({
+        tenant_id: tenantId,
+        paramKey: CREDIT_NOTE_SERIES_PARAM_KEY,
+        paramValue: {
+          ...(series.prefix !== undefined ? { prefix: series.prefix } : {}),
+          nextNumber: series.nextNumber + 1,
+          ...(series.endNumber !== undefined
+            ? { endNumber: series.endNumber }
+            : {}),
+        } as Record<string, unknown>,
+        version: active.version + 1,
+        effectiveFrom: new Date(),
+        isActive: true,
+        createdBy,
+      }),
+    );
+
+    return {
+      number: series.prefix
+        ? `${series.prefix}${series.nextNumber}`
+        : String(series.nextNumber),
+      nextNumber: series.nextNumber,
+    };
   }
 
   async findAll(tenantId: string): Promise<Invoice[]> {

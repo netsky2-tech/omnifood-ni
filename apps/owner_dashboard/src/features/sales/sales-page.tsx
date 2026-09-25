@@ -9,10 +9,12 @@ import {
   useTopProducts,
   useCashierPerformance,
 } from "./use-sales-reports";
+import { useRbac } from "@/lib/rbac";
+import { CreditNotesTab } from "./credit-notes-tab";
 
-type TabId = "summary" | "hourly" | "products" | "cashiers";
+type TabId = "summary" | "hourly" | "products" | "cashiers" | "credit-notes";
 
-const TABS: { id: TabId; label: string }[] = [
+const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "summary", label: "Resumen" },
   { id: "hourly", label: "Ventas por Hora" },
   { id: "products", label: "Top Productos" },
@@ -209,6 +211,16 @@ function CashiersTab({ startDate, endDate }: { startDate?: string; endDate?: str
 }
 
 export function SalesPage() {
+  // D-14/#553: the credit-note tab is permission-gated (backend
+  // SALES_ISSUE_CREDIT_NOTE, mirrored in rbac.ts as creditNotes.issue).
+  const { canPerformAction } = useRbac();
+  const canIssueCreditNote = canPerformAction("creditNotes.issue");
+  const TABS: { id: TabId; label: string }[] = [
+    ...BASE_TABS,
+    ...(canIssueCreditNote
+      ? [{ id: "credit-notes" as TabId, label: "Notas de Crédito" }]
+      : []),
+  ];
   const [activeTab, setActiveTab] = useState<TabId>("summary");
   const [range, setRange] = useState<DateRangeValue>(() => {
     const iso = formatLocalDate(new Date());
@@ -259,6 +271,7 @@ export function SalesPage() {
         {activeTab === "cashiers" && (
           <CashiersTab startDate={range.startDate} endDate={range.endDate} />
         )}
+        {activeTab === "credit-notes" && <CreditNotesTab />}
       </div>
     </div>
   );

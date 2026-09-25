@@ -1614,6 +1614,15 @@ class SaleViewModel extends ChangeNotifier {
     return _printInvoiceCopy(_lastProcessedInvoice!);
   }
 
+  /// PARKED BY DESIGN (D-14 / #553 Part 1, B1c-1): POS-side credit-note
+  /// issuance has NO production call site — the UI affordance was removed
+  /// and the Backoffice (B1c-2) is the emitter for cross-day corrections.
+  /// This method is retained, UI-less, pending DSI-6
+  /// (openspec/changes/device-sync-credit-note-authorization), which will
+  /// restore POS-side issuance behind reauthentication evidence. Its tests
+  /// stay green as the defense-in-depth contract for that return; do not
+  /// delete this method as "dead code" without reading DSI-6 first.
+  ///
   /// Returns true only when the credit note was created locally. A locally
   /// created note is still pending validation at sync time; this result
   /// never claims upstream acceptance.
