@@ -384,6 +384,19 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   { controller: 'TerminalPrimingController', transport: 'human' },
   { controller: 'FiscalSetupController', transport: 'human' },
   { controller: 'ActivationController', transport: 'human' },
+  {
+    controller: 'DeviceLinkingController',
+    transport: 'human',
+    overrides: [
+      {
+        httpMethod: 'POST',
+        handlerPath: 'link',
+        transport: 'public',
+        reason:
+          'pre-auth device linking claim (issue #556 stage 3): exchanges a single-use, bcrypt-verified linking code + deviceId for the tenant binding before any login exists; authority is the code material itself (mirrors DeviceSyncTokenController), per-IP rate limited',
+      },
+    ],
+  },
   { controller: 'OnboardingTelemetryController', transport: 'human' },
   { controller: 'OnboardingRolloutController', transport: 'human' },
   { controller: 'ImportStagingController', transport: 'human' },

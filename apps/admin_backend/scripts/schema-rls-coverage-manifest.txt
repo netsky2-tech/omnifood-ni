@@ -63,7 +63,7 @@
 
 # ---------------------------------------------------------------------------
 # direct — tenant_id + ENABLE + FORCE + a declared per-command policy set
-# (62 entries: 46 direct:SIUD + 10 direct:SI + 6 direct:SIU; entry ORDER is
+# (63 entries: 47 direct:SIUD + 10 direct:SI + 6 direct:SIU; entry ORDER is
 # unchanged from the pre-slice-10 manifest)
 # ---------------------------------------------------------------------------
 batches|direct:SIUD
@@ -75,6 +75,7 @@ customer_loyalty_account_projection|direct:SIUD
 customer_point_transactions|direct:SIUD
 customers|direct:SIUD
 datafonos_equipos|direct:SIUD
+device_linking_codes|direct:SIUD
 device_sync_credential_events|direct:SI
 device_sync_credentials|direct:SIUD
 fiscal_config_revisions|direct:SIUD
