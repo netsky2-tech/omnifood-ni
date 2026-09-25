@@ -27,7 +27,7 @@ import { ShieldCheck, Loader2, Landmark, CalendarClock, AlertTriangle } from "lu
 function toDateInputValue(value: string | null | undefined): string {
   if (typeof value !== "string") return "";
   const dateOnly = /^(\d{4}-\d{2}-\d{2})/.exec(value.trim());
-  return dateOnly ? dateOnly[1] : "";
+  return (dateOnly?.[1] as string | undefined) ?? "";
 }
 
 export function FiscalSetupForm() {
