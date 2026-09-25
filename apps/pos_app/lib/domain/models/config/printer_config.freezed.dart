@@ -47,15 +47,6 @@ mixin _$PrinterConfig {
   /// absence on paper is the honest state, never a blank-looking value.
   String? get dgiAuthorizationCode => throw _privateConstructorUsedError;
 
-  /// D-17: backing date (fecha de respaldo) of the authorization. Stored
-  /// only, never printed. Same write rules as [dgiAuthorizationCode].
-  String? get dgiAuthorizationDate => throw _privateConstructorUsedError;
-
-  /// D-17: backing document (documento de respaldo, e.g. the DGI
-  /// resolution). Stored only, never printed. Same write rules as
-  /// [dgiAuthorizationCode].
-  String? get dgiAuthorizationDocument => throw _privateConstructorUsedError;
-
   /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
   String? get headerRuc => throw _privateConstructorUsedError;
   String? get headerAddress => throw _privateConstructorUsedError;
@@ -91,8 +82,6 @@ abstract class $PrinterConfigCopyWith<$Res> {
       String? headerLegalName,
       String? fiscalRuc,
       String? dgiAuthorizationCode,
-      String? dgiAuthorizationDate,
-      String? dgiAuthorizationDocument,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
@@ -128,8 +117,6 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
     Object? headerLegalName = freezed,
     Object? fiscalRuc = freezed,
     Object? dgiAuthorizationCode = freezed,
-    Object? dgiAuthorizationDate = freezed,
-    Object? dgiAuthorizationDocument = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
@@ -188,14 +175,6 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
           ? _value.dgiAuthorizationCode
           : dgiAuthorizationCode // ignore: cast_nullable_to_non_nullable
               as String?,
-      dgiAuthorizationDate: freezed == dgiAuthorizationDate
-          ? _value.dgiAuthorizationDate
-          : dgiAuthorizationDate // ignore: cast_nullable_to_non_nullable
-              as String?,
-      dgiAuthorizationDocument: freezed == dgiAuthorizationDocument
-          ? _value.dgiAuthorizationDocument
-          : dgiAuthorizationDocument // ignore: cast_nullable_to_non_nullable
-              as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
           : headerRuc // ignore: cast_nullable_to_non_nullable
@@ -253,8 +232,6 @@ abstract class _$$PrinterConfigImplCopyWith<$Res>
       String? headerLegalName,
       String? fiscalRuc,
       String? dgiAuthorizationCode,
-      String? dgiAuthorizationDate,
-      String? dgiAuthorizationDocument,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
@@ -288,8 +265,6 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
     Object? headerLegalName = freezed,
     Object? fiscalRuc = freezed,
     Object? dgiAuthorizationCode = freezed,
-    Object? dgiAuthorizationDate = freezed,
-    Object? dgiAuthorizationDocument = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
@@ -348,14 +323,6 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
           ? _value.dgiAuthorizationCode
           : dgiAuthorizationCode // ignore: cast_nullable_to_non_nullable
               as String?,
-      dgiAuthorizationDate: freezed == dgiAuthorizationDate
-          ? _value.dgiAuthorizationDate
-          : dgiAuthorizationDate // ignore: cast_nullable_to_non_nullable
-              as String?,
-      dgiAuthorizationDocument: freezed == dgiAuthorizationDocument
-          ? _value.dgiAuthorizationDocument
-          : dgiAuthorizationDocument // ignore: cast_nullable_to_non_nullable
-              as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
           : headerRuc // ignore: cast_nullable_to_non_nullable
@@ -408,8 +375,6 @@ class _$PrinterConfigImpl implements _PrinterConfig {
       this.headerLegalName,
       this.fiscalRuc,
       this.dgiAuthorizationCode,
-      this.dgiAuthorizationDate,
-      this.dgiAuthorizationDocument,
       this.headerRuc,
       this.headerAddress,
       this.headerPhone,
@@ -469,17 +434,6 @@ class _$PrinterConfigImpl implements _PrinterConfig {
   @override
   final String? dgiAuthorizationCode;
 
-  /// D-17: backing date (fecha de respaldo) of the authorization. Stored
-  /// only, never printed. Same write rules as [dgiAuthorizationCode].
-  @override
-  final String? dgiAuthorizationDate;
-
-  /// D-17: backing document (documento de respaldo, e.g. the DGI
-  /// resolution). Stored only, never printed. Same write rules as
-  /// [dgiAuthorizationCode].
-  @override
-  final String? dgiAuthorizationDocument;
-
   /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
   @override
   final String? headerRuc;
@@ -501,7 +455,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
 
   @override
   String toString() {
-    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerLegalName: $headerLegalName, fiscalRuc: $fiscalRuc, dgiAuthorizationCode: $dgiAuthorizationCode, dgiAuthorizationDate: $dgiAuthorizationDate, dgiAuthorizationDocument: $dgiAuthorizationDocument, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, taxRegime: $taxRegime, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
+    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerLegalName: $headerLegalName, fiscalRuc: $fiscalRuc, dgiAuthorizationCode: $dgiAuthorizationCode, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, taxRegime: $taxRegime, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
   }
 
   @override
@@ -532,11 +486,6 @@ class _$PrinterConfigImpl implements _PrinterConfig {
                 other.fiscalRuc == fiscalRuc) &&
             (identical(other.dgiAuthorizationCode, dgiAuthorizationCode) ||
                 other.dgiAuthorizationCode == dgiAuthorizationCode) &&
-            (identical(other.dgiAuthorizationDate, dgiAuthorizationDate) ||
-                other.dgiAuthorizationDate == dgiAuthorizationDate) &&
-            (identical(
-                    other.dgiAuthorizationDocument, dgiAuthorizationDocument) ||
-                other.dgiAuthorizationDocument == dgiAuthorizationDocument) &&
             (identical(other.headerRuc, headerRuc) ||
                 other.headerRuc == headerRuc) &&
             (identical(other.headerAddress, headerAddress) ||
@@ -571,8 +520,6 @@ class _$PrinterConfigImpl implements _PrinterConfig {
         headerLegalName,
         fiscalRuc,
         dgiAuthorizationCode,
-        dgiAuthorizationDate,
-        dgiAuthorizationDocument,
         headerRuc,
         headerAddress,
         headerPhone,
@@ -611,8 +558,6 @@ abstract class _PrinterConfig implements PrinterConfig {
       final String? headerLegalName,
       final String? fiscalRuc,
       final String? dgiAuthorizationCode,
-      final String? dgiAuthorizationDate,
-      final String? dgiAuthorizationDocument,
       final String? headerRuc,
       final String? headerAddress,
       final String? headerPhone,
@@ -663,17 +608,6 @@ abstract class _PrinterConfig implements PrinterConfig {
   /// [PrinterConfigService.savePrinterConfig]. Null when unconfigured —
   /// absence on paper is the honest state, never a blank-looking value.
   String? get dgiAuthorizationCode;
-  @override
-
-  /// D-17: backing date (fecha de respaldo) of the authorization. Stored
-  /// only, never printed. Same write rules as [dgiAuthorizationCode].
-  String? get dgiAuthorizationDate;
-  @override
-
-  /// D-17: backing document (documento de respaldo, e.g. the DGI
-  /// resolution). Stored only, never printed. Same write rules as
-  /// [dgiAuthorizationCode].
-  String? get dgiAuthorizationDocument;
   @override
 
   /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].

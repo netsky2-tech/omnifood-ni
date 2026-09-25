@@ -452,15 +452,30 @@ void main() {
     });
   });
 
-  testWidgets('D-17: saving the profile persists the authorization backing date and document keys', (tester) async {
+  testWidgets('D-21 consolidation (#551): legacy D-17 backing inputs are removed from the form', (tester) async {
     when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
     when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
 
     await tester.pumpWidget(buildWidget());
     await tester.pumpAndSettle();
 
-    // Fill the fields the form requires before its validators let the save
-    // through (the authorization inputs themselves are optional).
+    // The D-17 backing pair was removed from the form: the D-21 trio
+    // (code + issued-at + expires-at) is the single authorization model.
+    expect(find.byKey(const Key('dgi_authorization_date_input')), findsNothing);
+    expect(find.byKey(const Key('dgi_authorization_document_input')), findsNothing);
+    expect(find.text('Fecha de Respaldo de la Autorización'), findsNothing);
+    expect(find.text('Documento de Respaldo'), findsNothing);
+    // The D-21 inputs remain.
+    expect(find.byKey(const Key('dgi_authorization_code_input')), findsOneWidget);
+  });
+
+  testWidgets('D-21 consolidation (#551): saving the profile never persists the legacy D-17 keys', (tester) async {
+    when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+    when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
+
+    await tester.pumpWidget(buildWidget());
+    await tester.pumpAndSettle();
+
     Future<void> fillField(String label, String text) async {
       await tester.enterText(
         find.widgetWithText(TextFormField, label),
@@ -475,9 +490,6 @@ void main() {
         'Tipo de Cambio Comercial (POS / Atención al Cliente)', '36.50');
     await fillField(
         'Tipo de Cambio Oficial BCN (Base Fiscal DGI)', '36.62');
-    await fillField('Fecha de Respaldo de la Autorización', '23/09/2026');
-    await fillField(
-        'Documento de Respaldo', 'Resolución DGI 098-2026');
 
     await tester.ensureVisible(find.text('GUARDAR CONFIGURACIÓN'));
     await tester.pumpAndSettle();
@@ -488,9 +500,7 @@ void main() {
         .whereType<LocalConfigEntity>()
         .toList();
     final byKey = {for (final e in saved) e.key: e.value};
-    expect(byKey['dgi_authorization_date'], '23/09/2026');
-    expect(byKey['dgi_authorization_document'], 'Resolución DGI 098-2026');
-    // The existing authorization-code input must not be clobbered by the save.
-    expect(byKey.containsKey('dgi_authorization_code'), isTrue);
+    expect(byKey.containsKey('dgi_authorization_date'), isFalse);
+    expect(byKey.containsKey('dgi_authorization_document'), isFalse);
   });
 }

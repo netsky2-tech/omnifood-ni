@@ -59,14 +59,10 @@ void main() {
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_current_number', value: '550'));
       when(() => mockConfigDao.getConfigByKey('dgi_authorization_code'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_code', value: 'AUT-2026'));
-      when(() => mockConfigDao.getConfigByKey('dgi_authorization_date'))
-          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_date', value: '23/09/2026'));
       when(() => mockConfigDao.getConfigByKey('dgi_range_start'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_range_start', value: ''));
       when(() => mockConfigDao.getConfigByKey('dgi_range_end'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_range_end', value: ''));
-      when(() => mockConfigDao.getConfigByKey('dgi_authorization_document'))
-          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_document', value: 'Resolución DGI 098-2026'));
       when(() => mockConfigDao.getConfigByKey('tax_regime'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'));
 
@@ -85,6 +81,23 @@ void main() {
       expect(viewModel.operationMode, TenantOperationMode.foodparkQsr);
       expect(viewModel.commercialRate, 36.50);
       expect(viewModel.bcnOfficialRate, 36.6241);
+    });
+
+    test('D-21 consolidation (#551): legacy D-17 backing keys are never read or defaulted',
+        () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+
+      await viewModel.loadConfig();
+
+      // The legacy pair stays in old local_configs rows but is ignored on
+      // read: never queried, never present in the config map, never
+      // resurrected by loadConfig.
+      verifyNever(() =>
+          mockConfigDao.getConfigByKey('dgi_authorization_date'));
+      verifyNever(() =>
+          mockConfigDao.getConfigByKey('dgi_authorization_document'));
+      expect(viewModel.config.containsKey('dgi_authorization_date'), isFalse);
+      expect(viewModel.config.containsKey('dgi_authorization_document'), isFalse);
     });
 
     test('saveConfig persists commercial and official exchange rates and operation mode',

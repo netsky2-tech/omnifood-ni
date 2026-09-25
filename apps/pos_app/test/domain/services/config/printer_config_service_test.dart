@@ -99,12 +99,24 @@ void main() {
       expect(savedRucWrites, isEmpty);
     });
 
-    group('D-17: fiscal authorization number (and backing date/document)', () {
-      test('getPrinterConfig reads the three authorization keys', () async {
+    group('D-21 consolidation (#551): legacy D-17 backing pair removed', () {
+      test('getPrinterConfig still reads the authorization code key', () async {
         when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
         when(mockDao.getConfigByKey('dgi_authorization_code')).thenAnswer(
             (_) async =>
                 LocalConfigEntity(key: 'dgi_authorization_code', value: 'AUT-DGI-2026-9876'));
+
+        final config = await service.getPrinterConfig();
+
+        expect(config.dgiAuthorizationCode, 'AUT-DGI-2026-9876');
+      });
+
+      test('legacy backing keys are never read from local_configs (ignored on read)', () async {
+        // D-21 consolidation: rows persisted by older builds stay in the
+        // table but the consolidation decision says they are simply ignored
+        // on read — no destructive migration, and getPrinterConfig must not
+        // resurrect them into the config.
+        when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
         when(mockDao.getConfigByKey('dgi_authorization_date')).thenAnswer(
             (_) async =>
                 LocalConfigEntity(key: 'dgi_authorization_date', value: '2026-09-23'));
@@ -112,14 +124,13 @@ void main() {
             (_) async => LocalConfigEntity(
                 key: 'dgi_authorization_document', value: 'Resolución DGI 098-2026'));
 
-        final config = await service.getPrinterConfig();
+        await service.getPrinterConfig();
 
-        expect(config.dgiAuthorizationCode, 'AUT-DGI-2026-9876');
-        expect(config.dgiAuthorizationDate, '2026-09-23');
-        expect(config.dgiAuthorizationDocument, 'Resolución DGI 098-2026');
+        verifyNever(mockDao.getConfigByKey('dgi_authorization_date'));
+        verifyNever(mockDao.getConfigByKey('dgi_authorization_document'));
       });
 
-      test('absent authorization keys yield nulls, not empty strings', () async {
+      test('absent authorization key yields null, not empty string', () async {
         when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
 
         final config = await service.getPrinterConfig();
@@ -127,8 +138,6 @@ void main() {
         // An empty string would print as a blank-looking value on paper
         // (the #548 fabrication failure mode); absent means null.
         expect(config.dgiAuthorizationCode, isNull);
-        expect(config.dgiAuthorizationDate, isNull);
-        expect(config.dgiAuthorizationDocument, isNull);
       });
 
       test(
@@ -138,8 +147,6 @@ void main() {
           driverType: PrinterDriverType.mock,
           headerBusinessName: 'Mi Restaurante',
           dgiAuthorizationCode: 'AUT-DGI-2026-9876',
-          dgiAuthorizationDate: '2026-09-23',
-          dgiAuthorizationDocument: 'Resolución DGI 098-2026',
         );
 
         await service.savePrinterConfig(newConfig);

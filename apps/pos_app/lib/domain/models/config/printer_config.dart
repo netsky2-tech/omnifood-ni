@@ -44,15 +44,6 @@ class PrinterConfig with _$PrinterConfig {
     /// absence on paper is the honest state, never a blank-looking value.
     String? dgiAuthorizationCode,
 
-    /// D-17: backing date (fecha de respaldo) of the authorization. Stored
-    /// only, never printed. Same write rules as [dgiAuthorizationCode].
-    String? dgiAuthorizationDate,
-
-    /// D-17: backing document (documento de respaldo, e.g. the DGI
-    /// resolution). Stored only, never printed. Same write rules as
-    /// [dgiAuthorizationCode].
-    String? dgiAuthorizationDocument,
-
     /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
     String? headerRuc,
     String? headerAddress,

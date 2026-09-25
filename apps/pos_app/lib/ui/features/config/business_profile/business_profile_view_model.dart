@@ -58,8 +58,6 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'dgi_authorization_code': '',
     'dgi_authorization_issued_at': '',
     'dgi_authorization_expires_at': '',
-    'dgi_authorization_date': '',
-    'dgi_authorization_document': '',
     'tax_regime': 'REGIMEN_GENERAL',
   };
   Map<String, String> get config => _config;
