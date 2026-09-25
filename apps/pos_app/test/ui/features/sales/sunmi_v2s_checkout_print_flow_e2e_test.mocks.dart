@@ -3,113 +3,114 @@
 // Do not manually edit this file.
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
-import 'dart:async' as _i53;
+import 'dart:async' as _i54;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:pos_app/data/daos/activation/activation_attempt_local_dao.dart'
-    as _i44;
-import 'package:pos_app/data/daos/activation/activation_check_result_local_dao.dart'
     as _i45;
-import 'package:pos_app/data/daos/activation/activation_outbox_dao.dart'
-    as _i48;
-import 'package:pos_app/data/daos/activation/first_customer_sale_observation_dao.dart'
-    as _i47;
-import 'package:pos_app/data/daos/activation/first_successful_sale_claim_dao.dart'
+import 'package:pos_app/data/daos/activation/activation_check_result_local_dao.dart'
     as _i46;
-import 'package:pos_app/data/daos/audit_log_dao.dart' as _i6;
-import 'package:pos_app/data/daos/catalog/catalog_value_dao.dart' as _i26;
-import 'package:pos_app/data/daos/customer/customer_dao.dart' as _i39;
-import 'package:pos_app/data/daos/customer/customer_point_transaction_dao.dart'
-    as _i40;
-import 'package:pos_app/data/daos/fiscal_config_local_dao.dart' as _i43;
-import 'package:pos_app/data/daos/fulfillment/fulfillment_persistence_dao.dart'
-    as _i51;
-import 'package:pos_app/data/daos/fulfillment/fulfillment_topology_dao.dart'
-    as _i50;
-import 'package:pos_app/data/daos/human_authorization/ohac_delivery_dao.dart'
-    as _i52;
-import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart'
+import 'package:pos_app/data/daos/activation/activation_outbox_dao.dart'
     as _i49;
-import 'package:pos_app/data/daos/inventory/batch_dao.dart' as _i25;
-import 'package:pos_app/data/daos/inventory/count_line_dao.dart' as _i12;
-import 'package:pos_app/data/daos/inventory/count_session_dao.dart' as _i11;
-import 'package:pos_app/data/daos/inventory/forensic_alert_dao.dart' as _i13;
-import 'package:pos_app/data/daos/inventory/insumo_dao.dart' as _i8;
-import 'package:pos_app/data/daos/inventory/inventory_dao.dart' as _i18;
-import 'package:pos_app/data/daos/inventory/kardex_correction_dao.dart' as _i17;
+import 'package:pos_app/data/daos/activation/first_customer_sale_observation_dao.dart'
+    as _i48;
+import 'package:pos_app/data/daos/activation/first_successful_sale_claim_dao.dart'
+    as _i47;
+import 'package:pos_app/data/daos/audit_log_dao.dart' as _i7;
+import 'package:pos_app/data/daos/catalog/catalog_value_dao.dart' as _i27;
+import 'package:pos_app/data/daos/customer/customer_dao.dart' as _i40;
+import 'package:pos_app/data/daos/customer/customer_point_transaction_dao.dart'
+    as _i41;
+import 'package:pos_app/data/daos/fiscal_config_local_dao.dart' as _i44;
+import 'package:pos_app/data/daos/fulfillment/fulfillment_persistence_dao.dart'
+    as _i52;
+import 'package:pos_app/data/daos/fulfillment/fulfillment_topology_dao.dart'
+    as _i51;
+import 'package:pos_app/data/daos/human_authorization/ohac_delivery_dao.dart'
+    as _i53;
+import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart'
+    as _i50;
+import 'package:pos_app/data/daos/inventory/batch_dao.dart' as _i26;
+import 'package:pos_app/data/daos/inventory/count_line_dao.dart' as _i13;
+import 'package:pos_app/data/daos/inventory/count_session_dao.dart' as _i12;
+import 'package:pos_app/data/daos/inventory/forensic_alert_dao.dart' as _i14;
+import 'package:pos_app/data/daos/inventory/insumo_dao.dart' as _i9;
+import 'package:pos_app/data/daos/inventory/inventory_dao.dart' as _i19;
+import 'package:pos_app/data/daos/inventory/kardex_correction_dao.dart' as _i18;
 import 'package:pos_app/data/daos/inventory/kardex_recalculate_queue_dao.dart'
-    as _i16;
-import 'package:pos_app/data/daos/inventory/movement_dao.dart' as _i14;
+    as _i17;
+import 'package:pos_app/data/daos/inventory/movement_dao.dart' as _i15;
 import 'package:pos_app/data/daos/inventory/movement_sync_state_dao.dart'
-    as _i15;
+    as _i16;
 import 'package:pos_app/data/daos/inventory/production_order_document_dao.dart'
-    as _i22;
-import 'package:pos_app/data/daos/inventory/production_transaction_dao.dart'
     as _i23;
-import 'package:pos_app/data/daos/inventory/purchase_dao.dart' as _i21;
-import 'package:pos_app/data/daos/inventory/recipe_dao.dart' as _i9;
+import 'package:pos_app/data/daos/inventory/production_transaction_dao.dart'
+    as _i24;
+import 'package:pos_app/data/daos/inventory/purchase_dao.dart' as _i22;
+import 'package:pos_app/data/daos/inventory/recipe_dao.dart' as _i10;
 import 'package:pos_app/data/daos/inventory/recipe_version_document_dao.dart'
-    as _i10;
-import 'package:pos_app/data/daos/inventory/supplier_dao.dart' as _i19;
-import 'package:pos_app/data/daos/inventory/uom_conversion_dao.dart' as _i24;
-import 'package:pos_app/data/daos/inventory/warehouse_dao.dart' as _i20;
-import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart' as _i38;
-import 'package:pos_app/data/daos/local_config_dao.dart' as _i7;
-import 'package:pos_app/data/daos/loyalty/loyalty_program_dao.dart' as _i41;
-import 'package:pos_app/data/daos/loyalty/loyalty_reward_dao.dart' as _i42;
-import 'package:pos_app/data/daos/sales/cash_movement_dao.dart' as _i33;
-import 'package:pos_app/data/daos/sales/cashier_session_dao.dart' as _i32;
-import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart' as _i34;
-import 'package:pos_app/data/daos/sales/invoice_dao.dart' as _i27;
-import 'package:pos_app/data/daos/sales/invoice_item_dao.dart' as _i28;
-import 'package:pos_app/data/daos/sales/payment_dao.dart' as _i29;
-import 'package:pos_app/data/daos/sales/promotion_dao.dart' as _i35;
-import 'package:pos_app/data/daos/sales/restaurant_area_dao.dart' as _i36;
-import 'package:pos_app/data/daos/sales/restaurant_table_dao.dart' as _i37;
-import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart' as _i31;
-import 'package:pos_app/data/daos/sales/tax_config_dao.dart' as _i30;
-import 'package:pos_app/data/daos/security_profile_dao.dart' as _i5;
-import 'package:pos_app/data/daos/user_dao.dart' as _i4;
+    as _i11;
+import 'package:pos_app/data/daos/inventory/supplier_dao.dart' as _i20;
+import 'package:pos_app/data/daos/inventory/uom_conversion_dao.dart' as _i25;
+import 'package:pos_app/data/daos/inventory/warehouse_dao.dart' as _i21;
+import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart' as _i39;
+import 'package:pos_app/data/daos/local_config_dao.dart' as _i8;
+import 'package:pos_app/data/daos/loyalty/loyalty_program_dao.dart' as _i42;
+import 'package:pos_app/data/daos/loyalty/loyalty_reward_dao.dart' as _i43;
+import 'package:pos_app/data/daos/sales/cash_movement_dao.dart' as _i34;
+import 'package:pos_app/data/daos/sales/cashier_session_dao.dart' as _i33;
+import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart' as _i35;
+import 'package:pos_app/data/daos/sales/invoice_dao.dart' as _i28;
+import 'package:pos_app/data/daos/sales/invoice_item_dao.dart' as _i29;
+import 'package:pos_app/data/daos/sales/payment_dao.dart' as _i30;
+import 'package:pos_app/data/daos/sales/promotion_dao.dart' as _i36;
+import 'package:pos_app/data/daos/sales/restaurant_area_dao.dart' as _i37;
+import 'package:pos_app/data/daos/sales/restaurant_table_dao.dart' as _i38;
+import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart' as _i32;
+import 'package:pos_app/data/daos/sales/tax_config_dao.dart' as _i31;
+import 'package:pos_app/data/daos/security_profile_dao.dart' as _i6;
+import 'package:pos_app/data/daos/user_dao.dart' as _i5;
 import 'package:pos_app/data/database/app_database.dart' as _i3;
 import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart'
-    as _i77;
-import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart'
     as _i78;
-import 'package:pos_app/data/models/sales/invoice_item_entity.dart' as _i81;
-import 'package:pos_app/data/models/sales/payment_entity.dart' as _i82;
-import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i73;
-import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i72;
-import 'package:pos_app/domain/models/config/printer_config.dart' as _i55;
+import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart'
+    as _i79;
+import 'package:pos_app/data/models/sales/invoice_item_entity.dart' as _i82;
+import 'package:pos_app/data/models/sales/payment_entity.dart' as _i83;
+import 'package:pos_app/domain/models/auth/terminal_linking.dart' as _i4;
+import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i74;
+import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i73;
+import 'package:pos_app/domain/models/config/printer_config.dart' as _i56;
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart'
-    as _i59;
-import 'package:pos_app/domain/models/inventory/batch.dart' as _i70;
+    as _i60;
+import 'package:pos_app/domain/models/inventory/batch.dart' as _i71;
 import 'package:pos_app/domain/models/inventory/count_session_document.dart'
-    as _i66;
-import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i75;
-import 'package:pos_app/domain/models/inventory/insumo.dart' as _i62;
-import 'package:pos_app/domain/models/inventory/inventory_movement.dart'
     as _i67;
-import 'package:pos_app/domain/models/inventory/product.dart' as _i63;
+import 'package:pos_app/domain/models/inventory/forensic_alert.dart' as _i76;
+import 'package:pos_app/domain/models/inventory/insumo.dart' as _i63;
+import 'package:pos_app/domain/models/inventory/inventory_movement.dart'
+    as _i68;
+import 'package:pos_app/domain/models/inventory/product.dart' as _i64;
 import 'package:pos_app/domain/models/inventory/production_order_document.dart'
-    as _i76;
-import 'package:pos_app/domain/models/inventory/purchase.dart' as _i74;
-import 'package:pos_app/domain/models/inventory/recipe.dart' as _i64;
+    as _i77;
+import 'package:pos_app/domain/models/inventory/purchase.dart' as _i75;
+import 'package:pos_app/domain/models/inventory/recipe.dart' as _i65;
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart'
-    as _i65;
-import 'package:pos_app/domain/models/inventory/supplier.dart' as _i68;
-import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i71;
-import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i69;
-import 'package:pos_app/domain/models/sales/invoice.dart' as _i56;
-import 'package:pos_app/domain/models/sales/invoice_item.dart' as _i57;
-import 'package:pos_app/domain/models/sales/payment.dart' as _i58;
-import 'package:pos_app/domain/models/user.dart' as _i60;
-import 'package:pos_app/domain/repositories/auth_repository.dart' as _i79;
+    as _i66;
+import 'package:pos_app/domain/models/inventory/supplier.dart' as _i69;
+import 'package:pos_app/domain/models/inventory/uom_conversion.dart' as _i72;
+import 'package:pos_app/domain/models/inventory/warehouse.dart' as _i70;
+import 'package:pos_app/domain/models/sales/invoice.dart' as _i57;
+import 'package:pos_app/domain/models/sales/invoice_item.dart' as _i58;
+import 'package:pos_app/domain/models/sales/payment.dart' as _i59;
+import 'package:pos_app/domain/models/user.dart' as _i61;
+import 'package:pos_app/domain/repositories/auth_repository.dart' as _i80;
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
-    as _i61;
+    as _i62;
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart' as _i2;
 import 'package:pos_app/domain/services/config/printer_config_service.dart'
-    as _i80;
-import 'package:sqflite/sqflite.dart' as _i54;
+    as _i81;
+import 'package:sqflite/sqflite.dart' as _i55;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -145,8 +146,9 @@ class _FakeAppDatabase_1 extends _i1.SmartFake implements _i3.AppDatabase {
         );
 }
 
-class _FakeUserDao_2 extends _i1.SmartFake implements _i4.UserDao {
-  _FakeUserDao_2(
+class _FakeTerminalLinking_2 extends _i1.SmartFake
+    implements _i4.TerminalLinking {
+  _FakeTerminalLinking_2(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -155,9 +157,8 @@ class _FakeUserDao_2 extends _i1.SmartFake implements _i4.UserDao {
         );
 }
 
-class _FakeSecurityProfileDao_3 extends _i1.SmartFake
-    implements _i5.SecurityProfileDao {
-  _FakeSecurityProfileDao_3(
+class _FakeUserDao_3 extends _i1.SmartFake implements _i5.UserDao {
+  _FakeUserDao_3(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -166,8 +167,9 @@ class _FakeSecurityProfileDao_3 extends _i1.SmartFake
         );
 }
 
-class _FakeAuditDao_4 extends _i1.SmartFake implements _i6.AuditDao {
-  _FakeAuditDao_4(
+class _FakeSecurityProfileDao_4 extends _i1.SmartFake
+    implements _i6.SecurityProfileDao {
+  _FakeSecurityProfileDao_4(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -176,9 +178,8 @@ class _FakeAuditDao_4 extends _i1.SmartFake implements _i6.AuditDao {
         );
 }
 
-class _FakeLocalConfigDao_5 extends _i1.SmartFake
-    implements _i7.LocalConfigDao {
-  _FakeLocalConfigDao_5(
+class _FakeAuditDao_5 extends _i1.SmartFake implements _i7.AuditDao {
+  _FakeAuditDao_5(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -187,8 +188,9 @@ class _FakeLocalConfigDao_5 extends _i1.SmartFake
         );
 }
 
-class _FakeInsumoDao_6 extends _i1.SmartFake implements _i8.InsumoDao {
-  _FakeInsumoDao_6(
+class _FakeLocalConfigDao_6 extends _i1.SmartFake
+    implements _i8.LocalConfigDao {
+  _FakeLocalConfigDao_6(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -197,8 +199,8 @@ class _FakeInsumoDao_6 extends _i1.SmartFake implements _i8.InsumoDao {
         );
 }
 
-class _FakeProductDao_7 extends _i1.SmartFake implements _i9.ProductDao {
-  _FakeProductDao_7(
+class _FakeInsumoDao_7 extends _i1.SmartFake implements _i9.InsumoDao {
+  _FakeInsumoDao_7(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -207,8 +209,8 @@ class _FakeProductDao_7 extends _i1.SmartFake implements _i9.ProductDao {
         );
 }
 
-class _FakeRecipeDao_8 extends _i1.SmartFake implements _i9.RecipeDao {
-  _FakeRecipeDao_8(
+class _FakeProductDao_8 extends _i1.SmartFake implements _i10.ProductDao {
+  _FakeProductDao_8(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -217,9 +219,8 @@ class _FakeRecipeDao_8 extends _i1.SmartFake implements _i9.RecipeDao {
         );
 }
 
-class _FakeRecipeVersionDocumentDao_9 extends _i1.SmartFake
-    implements _i10.RecipeVersionDocumentDao {
-  _FakeRecipeVersionDocumentDao_9(
+class _FakeRecipeDao_9 extends _i1.SmartFake implements _i10.RecipeDao {
+  _FakeRecipeDao_9(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -228,9 +229,9 @@ class _FakeRecipeVersionDocumentDao_9 extends _i1.SmartFake
         );
 }
 
-class _FakeCountSessionDao_10 extends _i1.SmartFake
-    implements _i11.CountSessionDao {
-  _FakeCountSessionDao_10(
+class _FakeRecipeVersionDocumentDao_10 extends _i1.SmartFake
+    implements _i11.RecipeVersionDocumentDao {
+  _FakeRecipeVersionDocumentDao_10(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -239,8 +240,9 @@ class _FakeCountSessionDao_10 extends _i1.SmartFake
         );
 }
 
-class _FakeCountLineDao_11 extends _i1.SmartFake implements _i12.CountLineDao {
-  _FakeCountLineDao_11(
+class _FakeCountSessionDao_11 extends _i1.SmartFake
+    implements _i12.CountSessionDao {
+  _FakeCountSessionDao_11(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -249,9 +251,8 @@ class _FakeCountLineDao_11 extends _i1.SmartFake implements _i12.CountLineDao {
         );
 }
 
-class _FakeForensicAlertDao_12 extends _i1.SmartFake
-    implements _i13.ForensicAlertDao {
-  _FakeForensicAlertDao_12(
+class _FakeCountLineDao_12 extends _i1.SmartFake implements _i13.CountLineDao {
+  _FakeCountLineDao_12(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -260,8 +261,9 @@ class _FakeForensicAlertDao_12 extends _i1.SmartFake
         );
 }
 
-class _FakeMovementDao_13 extends _i1.SmartFake implements _i14.MovementDao {
-  _FakeMovementDao_13(
+class _FakeForensicAlertDao_13 extends _i1.SmartFake
+    implements _i14.ForensicAlertDao {
+  _FakeForensicAlertDao_13(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -270,9 +272,8 @@ class _FakeMovementDao_13 extends _i1.SmartFake implements _i14.MovementDao {
         );
 }
 
-class _FakeMovementSyncStateDao_14 extends _i1.SmartFake
-    implements _i15.MovementSyncStateDao {
-  _FakeMovementSyncStateDao_14(
+class _FakeMovementDao_14 extends _i1.SmartFake implements _i15.MovementDao {
+  _FakeMovementDao_14(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -281,9 +282,9 @@ class _FakeMovementSyncStateDao_14 extends _i1.SmartFake
         );
 }
 
-class _FakeKardexRecalculateQueueDao_15 extends _i1.SmartFake
-    implements _i16.KardexRecalculateQueueDao {
-  _FakeKardexRecalculateQueueDao_15(
+class _FakeMovementSyncStateDao_15 extends _i1.SmartFake
+    implements _i16.MovementSyncStateDao {
+  _FakeMovementSyncStateDao_15(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -292,9 +293,9 @@ class _FakeKardexRecalculateQueueDao_15 extends _i1.SmartFake
         );
 }
 
-class _FakeKardexCorrectionDao_16 extends _i1.SmartFake
-    implements _i17.KardexCorrectionDao {
-  _FakeKardexCorrectionDao_16(
+class _FakeKardexRecalculateQueueDao_16 extends _i1.SmartFake
+    implements _i17.KardexRecalculateQueueDao {
+  _FakeKardexRecalculateQueueDao_16(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -303,8 +304,9 @@ class _FakeKardexCorrectionDao_16 extends _i1.SmartFake
         );
 }
 
-class _FakeInventoryDao_17 extends _i1.SmartFake implements _i18.InventoryDao {
-  _FakeInventoryDao_17(
+class _FakeKardexCorrectionDao_17 extends _i1.SmartFake
+    implements _i18.KardexCorrectionDao {
+  _FakeKardexCorrectionDao_17(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -313,8 +315,8 @@ class _FakeInventoryDao_17 extends _i1.SmartFake implements _i18.InventoryDao {
         );
 }
 
-class _FakeSupplierDao_18 extends _i1.SmartFake implements _i19.SupplierDao {
-  _FakeSupplierDao_18(
+class _FakeInventoryDao_18 extends _i1.SmartFake implements _i19.InventoryDao {
+  _FakeInventoryDao_18(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -323,8 +325,8 @@ class _FakeSupplierDao_18 extends _i1.SmartFake implements _i19.SupplierDao {
         );
 }
 
-class _FakeWarehouseDao_19 extends _i1.SmartFake implements _i20.WarehouseDao {
-  _FakeWarehouseDao_19(
+class _FakeSupplierDao_19 extends _i1.SmartFake implements _i20.SupplierDao {
+  _FakeSupplierDao_19(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -333,8 +335,8 @@ class _FakeWarehouseDao_19 extends _i1.SmartFake implements _i20.WarehouseDao {
         );
 }
 
-class _FakePurchaseDao_20 extends _i1.SmartFake implements _i21.PurchaseDao {
-  _FakePurchaseDao_20(
+class _FakeWarehouseDao_20 extends _i1.SmartFake implements _i21.WarehouseDao {
+  _FakeWarehouseDao_20(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -343,9 +345,8 @@ class _FakePurchaseDao_20 extends _i1.SmartFake implements _i21.PurchaseDao {
         );
 }
 
-class _FakeProductionOrderDocumentDao_21 extends _i1.SmartFake
-    implements _i22.ProductionOrderDocumentDao {
-  _FakeProductionOrderDocumentDao_21(
+class _FakePurchaseDao_21 extends _i1.SmartFake implements _i22.PurchaseDao {
+  _FakePurchaseDao_21(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -354,9 +355,9 @@ class _FakeProductionOrderDocumentDao_21 extends _i1.SmartFake
         );
 }
 
-class _FakeProductionTransactionDao_22 extends _i1.SmartFake
-    implements _i23.ProductionTransactionDao {
-  _FakeProductionTransactionDao_22(
+class _FakeProductionOrderDocumentDao_22 extends _i1.SmartFake
+    implements _i23.ProductionOrderDocumentDao {
+  _FakeProductionOrderDocumentDao_22(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -365,9 +366,9 @@ class _FakeProductionTransactionDao_22 extends _i1.SmartFake
         );
 }
 
-class _FakeUomConversionDao_23 extends _i1.SmartFake
-    implements _i24.UomConversionDao {
-  _FakeUomConversionDao_23(
+class _FakeProductionTransactionDao_23 extends _i1.SmartFake
+    implements _i24.ProductionTransactionDao {
+  _FakeProductionTransactionDao_23(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -376,8 +377,9 @@ class _FakeUomConversionDao_23 extends _i1.SmartFake
         );
 }
 
-class _FakeBatchDao_24 extends _i1.SmartFake implements _i25.BatchDao {
-  _FakeBatchDao_24(
+class _FakeUomConversionDao_24 extends _i1.SmartFake
+    implements _i25.UomConversionDao {
+  _FakeUomConversionDao_24(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -386,9 +388,8 @@ class _FakeBatchDao_24 extends _i1.SmartFake implements _i25.BatchDao {
         );
 }
 
-class _FakeCatalogValueDao_25 extends _i1.SmartFake
-    implements _i26.CatalogValueDao {
-  _FakeCatalogValueDao_25(
+class _FakeBatchDao_25 extends _i1.SmartFake implements _i26.BatchDao {
+  _FakeBatchDao_25(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -397,8 +398,9 @@ class _FakeCatalogValueDao_25 extends _i1.SmartFake
         );
 }
 
-class _FakeInvoiceDao_26 extends _i1.SmartFake implements _i27.InvoiceDao {
-  _FakeInvoiceDao_26(
+class _FakeCatalogValueDao_26 extends _i1.SmartFake
+    implements _i27.CatalogValueDao {
+  _FakeCatalogValueDao_26(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -407,9 +409,8 @@ class _FakeInvoiceDao_26 extends _i1.SmartFake implements _i27.InvoiceDao {
         );
 }
 
-class _FakeInvoiceItemDao_27 extends _i1.SmartFake
-    implements _i28.InvoiceItemDao {
-  _FakeInvoiceItemDao_27(
+class _FakeInvoiceDao_27 extends _i1.SmartFake implements _i28.InvoiceDao {
+  _FakeInvoiceDao_27(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -418,8 +419,9 @@ class _FakeInvoiceItemDao_27 extends _i1.SmartFake
         );
 }
 
-class _FakePaymentDao_28 extends _i1.SmartFake implements _i29.PaymentDao {
-  _FakePaymentDao_28(
+class _FakeInvoiceItemDao_28 extends _i1.SmartFake
+    implements _i29.InvoiceItemDao {
+  _FakeInvoiceItemDao_28(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -428,8 +430,8 @@ class _FakePaymentDao_28 extends _i1.SmartFake implements _i29.PaymentDao {
         );
 }
 
-class _FakeTaxConfigDao_29 extends _i1.SmartFake implements _i30.TaxConfigDao {
-  _FakeTaxConfigDao_29(
+class _FakePaymentDao_29 extends _i1.SmartFake implements _i30.PaymentDao {
+  _FakePaymentDao_29(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -438,9 +440,8 @@ class _FakeTaxConfigDao_29 extends _i1.SmartFake implements _i30.TaxConfigDao {
         );
 }
 
-class _FakeSalesTransactionDao_30 extends _i1.SmartFake
-    implements _i31.SalesTransactionDao {
-  _FakeSalesTransactionDao_30(
+class _FakeTaxConfigDao_30 extends _i1.SmartFake implements _i31.TaxConfigDao {
+  _FakeTaxConfigDao_30(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -449,9 +450,9 @@ class _FakeSalesTransactionDao_30 extends _i1.SmartFake
         );
 }
 
-class _FakeCashierSessionDao_31 extends _i1.SmartFake
-    implements _i32.CashierSessionDao {
-  _FakeCashierSessionDao_31(
+class _FakeSalesTransactionDao_31 extends _i1.SmartFake
+    implements _i32.SalesTransactionDao {
+  _FakeSalesTransactionDao_31(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -460,9 +461,9 @@ class _FakeCashierSessionDao_31 extends _i1.SmartFake
         );
 }
 
-class _FakeCashMovementDao_32 extends _i1.SmartFake
-    implements _i33.CashMovementDao {
-  _FakeCashMovementDao_32(
+class _FakeCashierSessionDao_32 extends _i1.SmartFake
+    implements _i33.CashierSessionDao {
+  _FakeCashierSessionDao_32(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -471,9 +472,9 @@ class _FakeCashMovementDao_32 extends _i1.SmartFake
         );
 }
 
-class _FakeHoldTicketDao_33 extends _i1.SmartFake
-    implements _i34.HoldTicketDao {
-  _FakeHoldTicketDao_33(
+class _FakeCashMovementDao_33 extends _i1.SmartFake
+    implements _i34.CashMovementDao {
+  _FakeCashMovementDao_33(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -482,8 +483,9 @@ class _FakeHoldTicketDao_33 extends _i1.SmartFake
         );
 }
 
-class _FakePromotionDao_34 extends _i1.SmartFake implements _i35.PromotionDao {
-  _FakePromotionDao_34(
+class _FakeHoldTicketDao_34 extends _i1.SmartFake
+    implements _i35.HoldTicketDao {
+  _FakeHoldTicketDao_34(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -492,9 +494,8 @@ class _FakePromotionDao_34 extends _i1.SmartFake implements _i35.PromotionDao {
         );
 }
 
-class _FakeRestaurantAreaDao_35 extends _i1.SmartFake
-    implements _i36.RestaurantAreaDao {
-  _FakeRestaurantAreaDao_35(
+class _FakePromotionDao_35 extends _i1.SmartFake implements _i36.PromotionDao {
+  _FakePromotionDao_35(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -503,9 +504,9 @@ class _FakeRestaurantAreaDao_35 extends _i1.SmartFake
         );
 }
 
-class _FakeRestaurantTableDao_36 extends _i1.SmartFake
-    implements _i37.RestaurantTableDao {
-  _FakeRestaurantTableDao_36(
+class _FakeRestaurantAreaDao_36 extends _i1.SmartFake
+    implements _i37.RestaurantAreaDao {
+  _FakeRestaurantAreaDao_36(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -514,9 +515,9 @@ class _FakeRestaurantTableDao_36 extends _i1.SmartFake
         );
 }
 
-class _FakeKitchenOrderDao_37 extends _i1.SmartFake
-    implements _i38.KitchenOrderDao {
-  _FakeKitchenOrderDao_37(
+class _FakeRestaurantTableDao_37 extends _i1.SmartFake
+    implements _i38.RestaurantTableDao {
+  _FakeRestaurantTableDao_37(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -525,8 +526,9 @@ class _FakeKitchenOrderDao_37 extends _i1.SmartFake
         );
 }
 
-class _FakeCustomerDao_38 extends _i1.SmartFake implements _i39.CustomerDao {
-  _FakeCustomerDao_38(
+class _FakeKitchenOrderDao_38 extends _i1.SmartFake
+    implements _i39.KitchenOrderDao {
+  _FakeKitchenOrderDao_38(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -535,9 +537,8 @@ class _FakeCustomerDao_38 extends _i1.SmartFake implements _i39.CustomerDao {
         );
 }
 
-class _FakeCustomerPointTransactionDao_39 extends _i1.SmartFake
-    implements _i40.CustomerPointTransactionDao {
-  _FakeCustomerPointTransactionDao_39(
+class _FakeCustomerDao_39 extends _i1.SmartFake implements _i40.CustomerDao {
+  _FakeCustomerDao_39(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -546,9 +547,9 @@ class _FakeCustomerPointTransactionDao_39 extends _i1.SmartFake
         );
 }
 
-class _FakeLoyaltyProgramDao_40 extends _i1.SmartFake
-    implements _i41.LoyaltyProgramDao {
-  _FakeLoyaltyProgramDao_40(
+class _FakeCustomerPointTransactionDao_40 extends _i1.SmartFake
+    implements _i41.CustomerPointTransactionDao {
+  _FakeCustomerPointTransactionDao_40(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -557,9 +558,9 @@ class _FakeLoyaltyProgramDao_40 extends _i1.SmartFake
         );
 }
 
-class _FakeLoyaltyRewardDao_41 extends _i1.SmartFake
-    implements _i42.LoyaltyRewardDao {
-  _FakeLoyaltyRewardDao_41(
+class _FakeLoyaltyProgramDao_41 extends _i1.SmartFake
+    implements _i42.LoyaltyProgramDao {
+  _FakeLoyaltyProgramDao_41(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -568,9 +569,9 @@ class _FakeLoyaltyRewardDao_41 extends _i1.SmartFake
         );
 }
 
-class _FakeFiscalConfigLocalDao_42 extends _i1.SmartFake
-    implements _i43.FiscalConfigLocalDao {
-  _FakeFiscalConfigLocalDao_42(
+class _FakeLoyaltyRewardDao_42 extends _i1.SmartFake
+    implements _i43.LoyaltyRewardDao {
+  _FakeLoyaltyRewardDao_42(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -579,9 +580,9 @@ class _FakeFiscalConfigLocalDao_42 extends _i1.SmartFake
         );
 }
 
-class _FakeActivationAttemptLocalDao_43 extends _i1.SmartFake
-    implements _i44.ActivationAttemptLocalDao {
-  _FakeActivationAttemptLocalDao_43(
+class _FakeFiscalConfigLocalDao_43 extends _i1.SmartFake
+    implements _i44.FiscalConfigLocalDao {
+  _FakeFiscalConfigLocalDao_43(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -590,9 +591,9 @@ class _FakeActivationAttemptLocalDao_43 extends _i1.SmartFake
         );
 }
 
-class _FakeActivationCheckResultLocalDao_44 extends _i1.SmartFake
-    implements _i45.ActivationCheckResultLocalDao {
-  _FakeActivationCheckResultLocalDao_44(
+class _FakeActivationAttemptLocalDao_44 extends _i1.SmartFake
+    implements _i45.ActivationAttemptLocalDao {
+  _FakeActivationAttemptLocalDao_44(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -601,9 +602,9 @@ class _FakeActivationCheckResultLocalDao_44 extends _i1.SmartFake
         );
 }
 
-class _FakeFirstSuccessfulSaleClaimDao_45 extends _i1.SmartFake
-    implements _i46.FirstSuccessfulSaleClaimDao {
-  _FakeFirstSuccessfulSaleClaimDao_45(
+class _FakeActivationCheckResultLocalDao_45 extends _i1.SmartFake
+    implements _i46.ActivationCheckResultLocalDao {
+  _FakeActivationCheckResultLocalDao_45(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -612,9 +613,9 @@ class _FakeFirstSuccessfulSaleClaimDao_45 extends _i1.SmartFake
         );
 }
 
-class _FakeFirstCustomerSaleObservationDao_46 extends _i1.SmartFake
-    implements _i47.FirstCustomerSaleObservationDao {
-  _FakeFirstCustomerSaleObservationDao_46(
+class _FakeFirstSuccessfulSaleClaimDao_46 extends _i1.SmartFake
+    implements _i47.FirstSuccessfulSaleClaimDao {
+  _FakeFirstSuccessfulSaleClaimDao_46(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -623,9 +624,9 @@ class _FakeFirstCustomerSaleObservationDao_46 extends _i1.SmartFake
         );
 }
 
-class _FakeActivationOutboxDao_47 extends _i1.SmartFake
-    implements _i48.ActivationOutboxDao {
-  _FakeActivationOutboxDao_47(
+class _FakeFirstCustomerSaleObservationDao_47 extends _i1.SmartFake
+    implements _i48.FirstCustomerSaleObservationDao {
+  _FakeFirstCustomerSaleObservationDao_47(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -634,9 +635,9 @@ class _FakeActivationOutboxDao_47 extends _i1.SmartFake
         );
 }
 
-class _FakeAuthorityProjectionDao_48 extends _i1.SmartFake
-    implements _i49.AuthorityProjectionDao {
-  _FakeAuthorityProjectionDao_48(
+class _FakeActivationOutboxDao_48 extends _i1.SmartFake
+    implements _i49.ActivationOutboxDao {
+  _FakeActivationOutboxDao_48(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -645,9 +646,9 @@ class _FakeAuthorityProjectionDao_48 extends _i1.SmartFake
         );
 }
 
-class _FakeFulfillmentTopologyDao_49 extends _i1.SmartFake
-    implements _i50.FulfillmentTopologyDao {
-  _FakeFulfillmentTopologyDao_49(
+class _FakeAuthorityProjectionDao_49 extends _i1.SmartFake
+    implements _i50.AuthorityProjectionDao {
+  _FakeAuthorityProjectionDao_49(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -656,9 +657,9 @@ class _FakeFulfillmentTopologyDao_49 extends _i1.SmartFake
         );
 }
 
-class _FakeFulfillmentPersistenceDao_50 extends _i1.SmartFake
-    implements _i51.FulfillmentPersistenceDao {
-  _FakeFulfillmentPersistenceDao_50(
+class _FakeFulfillmentTopologyDao_50 extends _i1.SmartFake
+    implements _i51.FulfillmentTopologyDao {
+  _FakeFulfillmentTopologyDao_50(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -667,9 +668,9 @@ class _FakeFulfillmentPersistenceDao_50 extends _i1.SmartFake
         );
 }
 
-class _FakeOhacDeliveryDao_51 extends _i1.SmartFake
-    implements _i52.OhacDeliveryDao {
-  _FakeOhacDeliveryDao_51(
+class _FakeFulfillmentPersistenceDao_51 extends _i1.SmartFake
+    implements _i52.FulfillmentPersistenceDao {
+  _FakeFulfillmentPersistenceDao_51(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -678,9 +679,9 @@ class _FakeOhacDeliveryDao_51 extends _i1.SmartFake
         );
 }
 
-class _FakeStreamController_52<T> extends _i1.SmartFake
-    implements _i53.StreamController<T> {
-  _FakeStreamController_52(
+class _FakeOhacDeliveryDao_52 extends _i1.SmartFake
+    implements _i53.OhacDeliveryDao {
+  _FakeOhacDeliveryDao_52(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -689,9 +690,9 @@ class _FakeStreamController_52<T> extends _i1.SmartFake
         );
 }
 
-class _FakeDatabaseExecutor_53 extends _i1.SmartFake
-    implements _i54.DatabaseExecutor {
-  _FakeDatabaseExecutor_53(
+class _FakeStreamController_53<T> extends _i1.SmartFake
+    implements _i54.StreamController<T> {
+  _FakeStreamController_53(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -700,9 +701,20 @@ class _FakeDatabaseExecutor_53 extends _i1.SmartFake
         );
 }
 
-class _FakePrinterConfig_54 extends _i1.SmartFake
-    implements _i55.PrinterConfig {
-  _FakePrinterConfig_54(
+class _FakeDatabaseExecutor_54 extends _i1.SmartFake
+    implements _i55.DatabaseExecutor {
+  _FakeDatabaseExecutor_54(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakePrinterConfig_55 extends _i1.SmartFake
+    implements _i56.PrinterConfig {
+  _FakePrinterConfig_55(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -716,11 +728,11 @@ class _FakePrinterConfig_54 extends _i1.SmartFake
 /// See the documentation for Mockito's code generation for more information.
 class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
   @override
-  _i53.Future<void> saveSale({
-    required _i56.Invoice? invoice,
-    required List<_i57.InvoiceItem>? items,
-    required List<_i58.Payment>? payments,
-    _i59.FulfillmentCheckoutContext? fulfillmentContext,
+  _i54.Future<void> saveSale({
+    required _i57.Invoice? invoice,
+    required List<_i58.InvoiceItem>? items,
+    required List<_i59.Payment>? payments,
+    _i60.FulfillmentCheckoutContext? fulfillmentContext,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -733,69 +745,69 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
             #fulfillmentContext: fulfillmentContext,
           },
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<_i56.Invoice?> getInvoiceById(String? id) => (super.noSuchMethod(
+  _i54.Future<_i57.Invoice?> getInvoiceById(String? id) => (super.noSuchMethod(
         Invocation.method(
           #getInvoiceById,
           [id],
         ),
-        returnValue: _i53.Future<_i56.Invoice?>.value(),
-        returnValueForMissingStub: _i53.Future<_i56.Invoice?>.value(),
-      ) as _i53.Future<_i56.Invoice?>);
+        returnValue: _i54.Future<_i57.Invoice?>.value(),
+        returnValueForMissingStub: _i54.Future<_i57.Invoice?>.value(),
+      ) as _i54.Future<_i57.Invoice?>);
 
   @override
-  _i53.Future<_i56.Invoice?> getInvoiceByNumber(String? number) =>
+  _i54.Future<_i57.Invoice?> getInvoiceByNumber(String? number) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoiceByNumber,
           [number],
         ),
-        returnValue: _i53.Future<_i56.Invoice?>.value(),
-        returnValueForMissingStub: _i53.Future<_i56.Invoice?>.value(),
-      ) as _i53.Future<_i56.Invoice?>);
+        returnValue: _i54.Future<_i57.Invoice?>.value(),
+        returnValueForMissingStub: _i54.Future<_i57.Invoice?>.value(),
+      ) as _i54.Future<_i57.Invoice?>);
 
   @override
-  _i53.Future<List<_i56.Invoice>> getUnsyncedInvoices() => (super.noSuchMethod(
+  _i54.Future<List<_i57.Invoice>> getUnsyncedInvoices() => (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedInvoices,
           [],
         ),
-        returnValue: _i53.Future<List<_i56.Invoice>>.value(<_i56.Invoice>[]),
+        returnValue: _i54.Future<List<_i57.Invoice>>.value(<_i57.Invoice>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i56.Invoice>>.value(<_i56.Invoice>[]),
-      ) as _i53.Future<List<_i56.Invoice>>);
+            _i54.Future<List<_i57.Invoice>>.value(<_i57.Invoice>[]),
+      ) as _i54.Future<List<_i57.Invoice>>);
 
   @override
-  _i53.Future<List<Map<String, dynamic>>> getUnsyncedAggregates() =>
+  _i54.Future<List<Map<String, dynamic>>> getUnsyncedAggregates() =>
       (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedAggregates,
           [],
         ),
-        returnValue: _i53.Future<List<Map<String, dynamic>>>.value(
+        returnValue: _i54.Future<List<Map<String, dynamic>>>.value(
             <Map<String, dynamic>>[]),
         returnValueForMissingStub:
-            _i53.Future<List<Map<String, dynamic>>>.value(
+            _i54.Future<List<Map<String, dynamic>>>.value(
                 <Map<String, dynamic>>[]),
-      ) as _i53.Future<List<Map<String, dynamic>>>);
+      ) as _i54.Future<List<Map<String, dynamic>>>);
 
   @override
-  _i53.Future<void> markAsSynced(List<String>? invoiceIds) =>
+  _i54.Future<void> markAsSynced(List<String>? invoiceIds) =>
       (super.noSuchMethod(
         Invocation.method(
           #markAsSynced,
           [invoiceIds],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> acknowledgeSaleSync({
+  _i54.Future<void> acknowledgeSaleSync({
     required String? invoiceId,
     required String? outcome,
     required List<String>? acknowledgedCorrelationIds,
@@ -810,22 +822,22 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
             #acknowledgedCorrelationIds: acknowledgedCorrelationIds,
           },
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<int> getInventoryEnrichmentPendingCount() => (super.noSuchMethod(
+  _i54.Future<int> getInventoryEnrichmentPendingCount() => (super.noSuchMethod(
         Invocation.method(
           #getInventoryEnrichmentPendingCount,
           [],
         ),
-        returnValue: _i53.Future<int>.value(0),
-        returnValueForMissingStub: _i53.Future<int>.value(0),
-      ) as _i53.Future<int>);
+        returnValue: _i54.Future<int>.value(0),
+        returnValueForMissingStub: _i54.Future<int>.value(0),
+      ) as _i54.Future<int>);
 
   @override
-  _i53.Future<_i2.ReprintPreparation> prepareReprintInvoice(
+  _i54.Future<_i2.ReprintPreparation> prepareReprintInvoice(
     String? invoiceId,
     String? reasonCode, {
     String? reasonDetail,
@@ -840,7 +852,7 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
           {#reasonDetail: reasonDetail},
         ),
         returnValue:
-            _i53.Future<_i2.ReprintPreparation>.value(_FakeReprintPreparation_0(
+            _i54.Future<_i2.ReprintPreparation>.value(_FakeReprintPreparation_0(
           this,
           Invocation.method(
             #prepareReprintInvoice,
@@ -852,7 +864,7 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
           ),
         )),
         returnValueForMissingStub:
-            _i53.Future<_i2.ReprintPreparation>.value(_FakeReprintPreparation_0(
+            _i54.Future<_i2.ReprintPreparation>.value(_FakeReprintPreparation_0(
           this,
           Invocation.method(
             #prepareReprintInvoice,
@@ -863,10 +875,10 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
             {#reasonDetail: reasonDetail},
           ),
         )),
-      ) as _i53.Future<_i2.ReprintPreparation>);
+      ) as _i54.Future<_i2.ReprintPreparation>);
 
   @override
-  _i53.Future<void> voidInvoice(
+  _i54.Future<void> voidInvoice(
     String? invoiceId,
     String? reasonCode, {
     String? reasonDetail,
@@ -880,16 +892,16 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
           ],
           {#reasonDetail: reasonDetail},
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> createCreditNote({
+  _i54.Future<void> createCreditNote({
     required String? originalInvoiceId,
     required String? reason,
     required String? authorizedByUserId,
-    required _i60.UserRole? authorizedByRole,
+    required _i61.UserRole? authorizedByRole,
     _i2.RefundReasonPolicy? refundReasonPolicy =
         _i2.RefundReasonPolicy.restockOriginalBom,
     List<_i2.CreditNoteRefundLine>? lines,
@@ -909,40 +921,40 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
             #terminalId: terminalId,
           },
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i56.Invoice>> getInvoicesBySessionId(String? sessionId) =>
+  _i54.Future<List<_i57.Invoice>> getInvoicesBySessionId(String? sessionId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoicesBySessionId,
           [sessionId],
         ),
-        returnValue: _i53.Future<List<_i56.Invoice>>.value(<_i56.Invoice>[]),
+        returnValue: _i54.Future<List<_i57.Invoice>>.value(<_i57.Invoice>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i56.Invoice>>.value(<_i56.Invoice>[]),
-      ) as _i53.Future<List<_i56.Invoice>>);
+            _i54.Future<List<_i57.Invoice>>.value(<_i57.Invoice>[]),
+      ) as _i54.Future<List<_i57.Invoice>>);
 
   @override
-  _i53.Future<List<_i58.Payment>> getPaymentsBySessionId(String? sessionId) =>
+  _i54.Future<List<_i59.Payment>> getPaymentsBySessionId(String? sessionId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getPaymentsBySessionId,
           [sessionId],
         ),
-        returnValue: _i53.Future<List<_i58.Payment>>.value(<_i58.Payment>[]),
+        returnValue: _i54.Future<List<_i59.Payment>>.value(<_i59.Payment>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i58.Payment>>.value(<_i58.Payment>[]),
-      ) as _i53.Future<List<_i58.Payment>>);
+            _i54.Future<List<_i59.Payment>>.value(<_i59.Payment>[]),
+      ) as _i54.Future<List<_i59.Payment>>);
 }
 
 /// A class which mocks [InventoryRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockInventoryRepository extends _i1.Mock
-    implements _i61.InventoryRepository {
+    implements _i62.InventoryRepository {
   @override
   _i3.AppDatabase get database => (super.noSuchMethod(
         Invocation.getter(#database),
@@ -957,40 +969,40 @@ class MockInventoryRepository extends _i1.Mock
       ) as _i3.AppDatabase);
 
   @override
-  _i53.Future<List<_i62.Insumo>> getActiveInsumos() => (super.noSuchMethod(
+  _i54.Future<List<_i63.Insumo>> getActiveInsumos() => (super.noSuchMethod(
         Invocation.method(
           #getActiveInsumos,
           [],
         ),
-        returnValue: _i53.Future<List<_i62.Insumo>>.value(<_i62.Insumo>[]),
+        returnValue: _i54.Future<List<_i63.Insumo>>.value(<_i63.Insumo>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i62.Insumo>>.value(<_i62.Insumo>[]),
-      ) as _i53.Future<List<_i62.Insumo>>);
+            _i54.Future<List<_i63.Insumo>>.value(<_i63.Insumo>[]),
+      ) as _i54.Future<List<_i63.Insumo>>);
 
   @override
-  _i53.Future<_i62.Insumo?> getInsumoById(String? id) => (super.noSuchMethod(
+  _i54.Future<_i63.Insumo?> getInsumoById(String? id) => (super.noSuchMethod(
         Invocation.method(
           #getInsumoById,
           [id],
         ),
-        returnValue: _i53.Future<_i62.Insumo?>.value(),
-        returnValueForMissingStub: _i53.Future<_i62.Insumo?>.value(),
-      ) as _i53.Future<_i62.Insumo?>);
+        returnValue: _i54.Future<_i63.Insumo?>.value(),
+        returnValueForMissingStub: _i54.Future<_i63.Insumo?>.value(),
+      ) as _i54.Future<_i63.Insumo?>);
 
   @override
-  _i53.Future<List<_i62.Insumo>> getInsumosByIds(List<String>? ids) =>
+  _i54.Future<List<_i63.Insumo>> getInsumosByIds(List<String>? ids) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInsumosByIds,
           [ids],
         ),
-        returnValue: _i53.Future<List<_i62.Insumo>>.value(<_i62.Insumo>[]),
+        returnValue: _i54.Future<List<_i63.Insumo>>.value(<_i63.Insumo>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i62.Insumo>>.value(<_i62.Insumo>[]),
-      ) as _i53.Future<List<_i62.Insumo>>);
+            _i54.Future<List<_i63.Insumo>>.value(<_i63.Insumo>[]),
+      ) as _i54.Future<List<_i63.Insumo>>);
 
   @override
-  _i53.Future<void> updateInsumoStock(
+  _i54.Future<void> updateInsumoStock(
     String? id,
     double? newStock,
   ) =>
@@ -1002,12 +1014,12 @@ class MockInventoryRepository extends _i1.Mock
             newStock,
           ],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> updateInsumoCost(
+  _i54.Future<void> updateInsumoCost(
     String? id,
     double? newCost,
   ) =>
@@ -1019,56 +1031,56 @@ class MockInventoryRepository extends _i1.Mock
             newCost,
           ],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> saveInsumo(_i62.Insumo? insumo) => (super.noSuchMethod(
+  _i54.Future<void> saveInsumo(_i63.Insumo? insumo) => (super.noSuchMethod(
         Invocation.method(
           #saveInsumo,
           [insumo],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i63.Product>> getActiveProducts() => (super.noSuchMethod(
+  _i54.Future<List<_i64.Product>> getActiveProducts() => (super.noSuchMethod(
         Invocation.method(
           #getActiveProducts,
           [],
         ),
-        returnValue: _i53.Future<List<_i63.Product>>.value(<_i63.Product>[]),
+        returnValue: _i54.Future<List<_i64.Product>>.value(<_i64.Product>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i63.Product>>.value(<_i63.Product>[]),
-      ) as _i53.Future<List<_i63.Product>>);
+            _i54.Future<List<_i64.Product>>.value(<_i64.Product>[]),
+      ) as _i54.Future<List<_i64.Product>>);
 
   @override
-  _i53.Future<_i63.Product?> getProductById(String? id) => (super.noSuchMethod(
+  _i54.Future<_i64.Product?> getProductById(String? id) => (super.noSuchMethod(
         Invocation.method(
           #getProductById,
           [id],
         ),
-        returnValue: _i53.Future<_i63.Product?>.value(),
-        returnValueForMissingStub: _i53.Future<_i63.Product?>.value(),
-      ) as _i53.Future<_i63.Product?>);
+        returnValue: _i54.Future<_i64.Product?>.value(),
+        returnValueForMissingStub: _i54.Future<_i64.Product?>.value(),
+      ) as _i54.Future<_i64.Product?>);
 
   @override
-  _i53.Future<void> saveProduct(_i63.Product? product) => (super.noSuchMethod(
+  _i54.Future<void> saveProduct(_i64.Product? product) => (super.noSuchMethod(
         Invocation.method(
           #saveProduct,
           [product],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> saveProductOptions({
+  _i54.Future<void> saveProductOptions({
     required String? productId,
-    required List<_i63.ProductVariant>? variants,
-    required List<_i63.Modifier>? modifiers,
+    required List<_i64.ProductVariant>? variants,
+    required List<_i64.Modifier>? modifiers,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1080,46 +1092,46 @@ class MockInventoryRepository extends _i1.Mock
             #modifiers: modifiers,
           },
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i64.Recipe>> getRecipeByProductId(String? productId) =>
+  _i54.Future<List<_i65.Recipe>> getRecipeByProductId(String? productId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getRecipeByProductId,
           [productId],
         ),
-        returnValue: _i53.Future<List<_i64.Recipe>>.value(<_i64.Recipe>[]),
+        returnValue: _i54.Future<List<_i65.Recipe>>.value(<_i65.Recipe>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i64.Recipe>>.value(<_i64.Recipe>[]),
-      ) as _i53.Future<List<_i64.Recipe>>);
+            _i54.Future<List<_i65.Recipe>>.value(<_i65.Recipe>[]),
+      ) as _i54.Future<List<_i65.Recipe>>);
 
   @override
-  _i53.Future<void> saveRecipe(_i64.Recipe? recipe) => (super.noSuchMethod(
+  _i54.Future<void> saveRecipe(_i65.Recipe? recipe) => (super.noSuchMethod(
         Invocation.method(
           #saveRecipe,
           [recipe],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> deleteRecipe(String? id) => (super.noSuchMethod(
+  _i54.Future<void> deleteRecipe(String? id) => (super.noSuchMethod(
         Invocation.method(
           #deleteRecipe,
           [id],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> replaceRecipesForProduct(
+  _i54.Future<void> replaceRecipesForProduct(
     String? productId,
-    List<_i64.Recipe>? recipes,
+    List<_i65.Recipe>? recipes,
   ) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1129,188 +1141,188 @@ class MockInventoryRepository extends _i1.Mock
             recipes,
           ],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i65.RecipeVersionDocument>> getRecipeVersionDocuments(
+  _i54.Future<List<_i66.RecipeVersionDocument>> getRecipeVersionDocuments(
           String? productId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getRecipeVersionDocuments,
           [productId],
         ),
-        returnValue: _i53.Future<List<_i65.RecipeVersionDocument>>.value(
-            <_i65.RecipeVersionDocument>[]),
+        returnValue: _i54.Future<List<_i66.RecipeVersionDocument>>.value(
+            <_i66.RecipeVersionDocument>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i65.RecipeVersionDocument>>.value(
-                <_i65.RecipeVersionDocument>[]),
-      ) as _i53.Future<List<_i65.RecipeVersionDocument>>);
+            _i54.Future<List<_i66.RecipeVersionDocument>>.value(
+                <_i66.RecipeVersionDocument>[]),
+      ) as _i54.Future<List<_i66.RecipeVersionDocument>>);
 
   @override
-  _i53.Future<String?> getActiveRecipeVersionId(String? productId) =>
+  _i54.Future<String?> getActiveRecipeVersionId(String? productId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getActiveRecipeVersionId,
           [productId],
         ),
-        returnValue: _i53.Future<String?>.value(),
-        returnValueForMissingStub: _i53.Future<String?>.value(),
-      ) as _i53.Future<String?>);
+        returnValue: _i54.Future<String?>.value(),
+        returnValueForMissingStub: _i54.Future<String?>.value(),
+      ) as _i54.Future<String?>);
 
   @override
-  _i53.Future<_i65.RecipeVersionDocument?> getRecipeVersionDocumentById(
+  _i54.Future<_i66.RecipeVersionDocument?> getRecipeVersionDocumentById(
           String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #getRecipeVersionDocumentById,
           [id],
         ),
-        returnValue: _i53.Future<_i65.RecipeVersionDocument?>.value(),
+        returnValue: _i54.Future<_i66.RecipeVersionDocument?>.value(),
         returnValueForMissingStub:
-            _i53.Future<_i65.RecipeVersionDocument?>.value(),
-      ) as _i53.Future<_i65.RecipeVersionDocument?>);
+            _i54.Future<_i66.RecipeVersionDocument?>.value(),
+      ) as _i54.Future<_i66.RecipeVersionDocument?>);
 
   @override
-  _i53.Future<void> saveRecipeVersionDocument(
-          _i65.RecipeVersionDocument? document) =>
+  _i54.Future<void> saveRecipeVersionDocument(
+          _i66.RecipeVersionDocument? document) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveRecipeVersionDocument,
           [document],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i65.RecipeVersionDocument>>
+  _i54.Future<List<_i66.RecipeVersionDocument>>
       getUnsyncedRecipeVersionDocuments() => (super.noSuchMethod(
             Invocation.method(
               #getUnsyncedRecipeVersionDocuments,
               [],
             ),
-            returnValue: _i53.Future<List<_i65.RecipeVersionDocument>>.value(
-                <_i65.RecipeVersionDocument>[]),
+            returnValue: _i54.Future<List<_i66.RecipeVersionDocument>>.value(
+                <_i66.RecipeVersionDocument>[]),
             returnValueForMissingStub:
-                _i53.Future<List<_i65.RecipeVersionDocument>>.value(
-                    <_i65.RecipeVersionDocument>[]),
-          ) as _i53.Future<List<_i65.RecipeVersionDocument>>);
+                _i54.Future<List<_i66.RecipeVersionDocument>>.value(
+                    <_i66.RecipeVersionDocument>[]),
+          ) as _i54.Future<List<_i66.RecipeVersionDocument>>);
 
   @override
-  _i53.Future<void> markRecipeVersionDocumentAsSynced(String? id) =>
+  _i54.Future<void> markRecipeVersionDocumentAsSynced(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #markRecipeVersionDocumentAsSynced,
           [id],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i66.CountSessionDocument>> getCountSessionDocuments() =>
+  _i54.Future<List<_i67.CountSessionDocument>> getCountSessionDocuments() =>
       (super.noSuchMethod(
         Invocation.method(
           #getCountSessionDocuments,
           [],
         ),
-        returnValue: _i53.Future<List<_i66.CountSessionDocument>>.value(
-            <_i66.CountSessionDocument>[]),
+        returnValue: _i54.Future<List<_i67.CountSessionDocument>>.value(
+            <_i67.CountSessionDocument>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i66.CountSessionDocument>>.value(
-                <_i66.CountSessionDocument>[]),
-      ) as _i53.Future<List<_i66.CountSessionDocument>>);
+            _i54.Future<List<_i67.CountSessionDocument>>.value(
+                <_i67.CountSessionDocument>[]),
+      ) as _i54.Future<List<_i67.CountSessionDocument>>);
 
   @override
-  _i53.Future<void> saveCountSessionDocument(
-          _i66.CountSessionDocument? session) =>
+  _i54.Future<void> saveCountSessionDocument(
+          _i67.CountSessionDocument? session) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveCountSessionDocument,
           [session],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i66.CountSessionDocument>>
+  _i54.Future<List<_i67.CountSessionDocument>>
       getUnsyncedCountSessionDocuments() => (super.noSuchMethod(
             Invocation.method(
               #getUnsyncedCountSessionDocuments,
               [],
             ),
-            returnValue: _i53.Future<List<_i66.CountSessionDocument>>.value(
-                <_i66.CountSessionDocument>[]),
+            returnValue: _i54.Future<List<_i67.CountSessionDocument>>.value(
+                <_i67.CountSessionDocument>[]),
             returnValueForMissingStub:
-                _i53.Future<List<_i66.CountSessionDocument>>.value(
-                    <_i66.CountSessionDocument>[]),
-          ) as _i53.Future<List<_i66.CountSessionDocument>>);
+                _i54.Future<List<_i67.CountSessionDocument>>.value(
+                    <_i67.CountSessionDocument>[]),
+          ) as _i54.Future<List<_i67.CountSessionDocument>>);
 
   @override
-  _i53.Future<void> markCountSessionDocumentAsSynced(String? id) =>
+  _i54.Future<void> markCountSessionDocumentAsSynced(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #markCountSessionDocumentAsSynced,
           [id],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> saveMovement(_i67.InventoryMovement? movement) =>
+  _i54.Future<void> saveMovement(_i68.InventoryMovement? movement) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveMovement,
           [movement],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i67.InventoryMovement>> getAllMovements() =>
+  _i54.Future<List<_i68.InventoryMovement>> getAllMovements() =>
       (super.noSuchMethod(
         Invocation.method(
           #getAllMovements,
           [],
         ),
-        returnValue: _i53.Future<List<_i67.InventoryMovement>>.value(
-            <_i67.InventoryMovement>[]),
+        returnValue: _i54.Future<List<_i68.InventoryMovement>>.value(
+            <_i68.InventoryMovement>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i67.InventoryMovement>>.value(
-                <_i67.InventoryMovement>[]),
-      ) as _i53.Future<List<_i67.InventoryMovement>>);
+            _i54.Future<List<_i68.InventoryMovement>>.value(
+                <_i68.InventoryMovement>[]),
+      ) as _i54.Future<List<_i68.InventoryMovement>>);
 
   @override
-  _i53.Future<List<_i67.InventoryMovement>> getUnsyncedMovements() =>
+  _i54.Future<List<_i68.InventoryMovement>> getUnsyncedMovements() =>
       (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedMovements,
           [],
         ),
-        returnValue: _i53.Future<List<_i67.InventoryMovement>>.value(
-            <_i67.InventoryMovement>[]),
+        returnValue: _i54.Future<List<_i68.InventoryMovement>>.value(
+            <_i68.InventoryMovement>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i67.InventoryMovement>>.value(
-                <_i67.InventoryMovement>[]),
-      ) as _i53.Future<List<_i67.InventoryMovement>>);
+            _i54.Future<List<_i68.InventoryMovement>>.value(
+                <_i68.InventoryMovement>[]),
+      ) as _i54.Future<List<_i68.InventoryMovement>>);
 
   @override
-  _i53.Future<void> markMovementAsSynced(String? id) => (super.noSuchMethod(
+  _i54.Future<void> markMovementAsSynced(String? id) => (super.noSuchMethod(
         Invocation.method(
           #markMovementAsSynced,
           [id],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> markMovementAsFailed(
+  _i54.Future<void> markMovementAsFailed(
     String? id, {
     String? error,
   }) =>
@@ -1320,80 +1332,80 @@ class MockInventoryRepository extends _i1.Mock
           [id],
           {#error: error},
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i68.Supplier>> getActiveSuppliers() => (super.noSuchMethod(
+  _i54.Future<List<_i69.Supplier>> getActiveSuppliers() => (super.noSuchMethod(
         Invocation.method(
           #getActiveSuppliers,
           [],
         ),
-        returnValue: _i53.Future<List<_i68.Supplier>>.value(<_i68.Supplier>[]),
+        returnValue: _i54.Future<List<_i69.Supplier>>.value(<_i69.Supplier>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i68.Supplier>>.value(<_i68.Supplier>[]),
-      ) as _i53.Future<List<_i68.Supplier>>);
+            _i54.Future<List<_i69.Supplier>>.value(<_i69.Supplier>[]),
+      ) as _i54.Future<List<_i69.Supplier>>);
 
   @override
-  _i53.Future<void> saveSupplier(_i68.Supplier? supplier) =>
+  _i54.Future<void> saveSupplier(_i69.Supplier? supplier) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveSupplier,
           [supplier],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i69.Warehouse>> getActiveWarehouses() =>
+  _i54.Future<List<_i70.Warehouse>> getActiveWarehouses() =>
       (super.noSuchMethod(
         Invocation.method(
           #getActiveWarehouses,
           [],
         ),
         returnValue:
-            _i53.Future<List<_i69.Warehouse>>.value(<_i69.Warehouse>[]),
+            _i54.Future<List<_i70.Warehouse>>.value(<_i70.Warehouse>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i69.Warehouse>>.value(<_i69.Warehouse>[]),
-      ) as _i53.Future<List<_i69.Warehouse>>);
+            _i54.Future<List<_i70.Warehouse>>.value(<_i70.Warehouse>[]),
+      ) as _i54.Future<List<_i70.Warehouse>>);
 
   @override
-  _i53.Future<void> saveWarehouse(_i69.Warehouse? warehouse) =>
+  _i54.Future<void> saveWarehouse(_i70.Warehouse? warehouse) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveWarehouse,
           [warehouse],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i70.Batch>> getBatchesByInsumoId(String? insumoId) =>
+  _i54.Future<List<_i71.Batch>> getBatchesByInsumoId(String? insumoId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getBatchesByInsumoId,
           [insumoId],
         ),
-        returnValue: _i53.Future<List<_i70.Batch>>.value(<_i70.Batch>[]),
+        returnValue: _i54.Future<List<_i71.Batch>>.value(<_i71.Batch>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i70.Batch>>.value(<_i70.Batch>[]),
-      ) as _i53.Future<List<_i70.Batch>>);
+            _i54.Future<List<_i71.Batch>>.value(<_i71.Batch>[]),
+      ) as _i54.Future<List<_i71.Batch>>);
 
   @override
-  _i53.Future<void> saveBatch(_i70.Batch? batch) => (super.noSuchMethod(
+  _i54.Future<void> saveBatch(_i71.Batch? batch) => (super.noSuchMethod(
         Invocation.method(
           #saveBatch,
           [batch],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i71.UomConversion>> getConversionsByInsumoId(
+  _i54.Future<List<_i72.UomConversion>> getConversionsByInsumoId(
           String? insumoId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1401,62 +1413,62 @@ class MockInventoryRepository extends _i1.Mock
           [insumoId],
         ),
         returnValue:
-            _i53.Future<List<_i71.UomConversion>>.value(<_i71.UomConversion>[]),
+            _i54.Future<List<_i72.UomConversion>>.value(<_i72.UomConversion>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i71.UomConversion>>.value(<_i71.UomConversion>[]),
-      ) as _i53.Future<List<_i71.UomConversion>>);
+            _i54.Future<List<_i72.UomConversion>>.value(<_i72.UomConversion>[]),
+      ) as _i54.Future<List<_i72.UomConversion>>);
 
   @override
-  _i53.Future<void> saveConversion(_i71.UomConversion? conversion) =>
+  _i54.Future<void> saveConversion(_i72.UomConversion? conversion) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveConversion,
           [conversion],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> deleteConversion(String? id) => (super.noSuchMethod(
+  _i54.Future<void> deleteConversion(String? id) => (super.noSuchMethod(
         Invocation.method(
           #deleteConversion,
           [id],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i72.CatalogValue>> getActiveCatalog(
-          _i73.CatalogType? type) =>
+  _i54.Future<List<_i73.CatalogValue>> getActiveCatalog(
+          _i74.CatalogType? type) =>
       (super.noSuchMethod(
         Invocation.method(
           #getActiveCatalog,
           [type],
         ),
         returnValue:
-            _i53.Future<List<_i72.CatalogValue>>.value(<_i72.CatalogValue>[]),
+            _i54.Future<List<_i73.CatalogValue>>.value(<_i73.CatalogValue>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i72.CatalogValue>>.value(<_i72.CatalogValue>[]),
-      ) as _i53.Future<List<_i72.CatalogValue>>);
+            _i54.Future<List<_i73.CatalogValue>>.value(<_i73.CatalogValue>[]),
+      ) as _i54.Future<List<_i73.CatalogValue>>);
 
   @override
-  _i53.Future<List<_i72.CatalogValue>> getAllCatalog(_i73.CatalogType? type) =>
+  _i54.Future<List<_i73.CatalogValue>> getAllCatalog(_i74.CatalogType? type) =>
       (super.noSuchMethod(
         Invocation.method(
           #getAllCatalog,
           [type],
         ),
         returnValue:
-            _i53.Future<List<_i72.CatalogValue>>.value(<_i72.CatalogValue>[]),
+            _i54.Future<List<_i73.CatalogValue>>.value(<_i73.CatalogValue>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i72.CatalogValue>>.value(<_i72.CatalogValue>[]),
-      ) as _i53.Future<List<_i72.CatalogValue>>);
+            _i54.Future<List<_i73.CatalogValue>>.value(<_i73.CatalogValue>[]),
+      ) as _i54.Future<List<_i73.CatalogValue>>);
 
   @override
-  _i53.Future<_i72.CatalogValue?> findCatalogByCode(
-    _i73.CatalogType? type,
+  _i54.Future<_i73.CatalogValue?> findCatalogByCode(
+    _i74.CatalogType? type,
     String? code,
   ) =>
       (super.noSuchMethod(
@@ -1467,23 +1479,23 @@ class MockInventoryRepository extends _i1.Mock
             code,
           ],
         ),
-        returnValue: _i53.Future<_i72.CatalogValue?>.value(),
-        returnValueForMissingStub: _i53.Future<_i72.CatalogValue?>.value(),
-      ) as _i53.Future<_i72.CatalogValue?>);
+        returnValue: _i54.Future<_i73.CatalogValue?>.value(),
+        returnValueForMissingStub: _i54.Future<_i73.CatalogValue?>.value(),
+      ) as _i54.Future<_i73.CatalogValue?>);
 
   @override
-  _i53.Future<void> upsertCatalogValues(List<_i72.CatalogValue>? values) =>
+  _i54.Future<void> upsertCatalogValues(List<_i73.CatalogValue>? values) =>
       (super.noSuchMethod(
         Invocation.method(
           #upsertCatalogValues,
           [values],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> setCatalogActive(
+  _i54.Future<void> setCatalogActive(
     String? id,
     bool? isActive,
   ) =>
@@ -1495,186 +1507,186 @@ class MockInventoryRepository extends _i1.Mock
             isActive,
           ],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<int> countCatalogValues() => (super.noSuchMethod(
+  _i54.Future<int> countCatalogValues() => (super.noSuchMethod(
         Invocation.method(
           #countCatalogValues,
           [],
         ),
-        returnValue: _i53.Future<int>.value(0),
-        returnValueForMissingStub: _i53.Future<int>.value(0),
-      ) as _i53.Future<int>);
+        returnValue: _i54.Future<int>.value(0),
+        returnValueForMissingStub: _i54.Future<int>.value(0),
+      ) as _i54.Future<int>);
 
   @override
-  _i53.Future<void> savePurchase(_i74.Purchase? purchase) =>
+  _i54.Future<void> savePurchase(_i75.Purchase? purchase) =>
       (super.noSuchMethod(
         Invocation.method(
           #savePurchase,
           [purchase],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> queuePurchaseSync(_i74.Purchase? purchase) =>
+  _i54.Future<void> queuePurchaseSync(_i75.Purchase? purchase) =>
       (super.noSuchMethod(
         Invocation.method(
           #queuePurchaseSync,
           [purchase],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i74.Purchase>> getPurchaseHistory() => (super.noSuchMethod(
+  _i54.Future<List<_i75.Purchase>> getPurchaseHistory() => (super.noSuchMethod(
         Invocation.method(
           #getPurchaseHistory,
           [],
         ),
-        returnValue: _i53.Future<List<_i74.Purchase>>.value(<_i74.Purchase>[]),
+        returnValue: _i54.Future<List<_i75.Purchase>>.value(<_i75.Purchase>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i74.Purchase>>.value(<_i74.Purchase>[]),
-      ) as _i53.Future<List<_i74.Purchase>>);
+            _i54.Future<List<_i75.Purchase>>.value(<_i75.Purchase>[]),
+      ) as _i54.Future<List<_i75.Purchase>>);
 
   @override
-  _i53.Future<List<_i74.Purchase>> getUnsyncedPurchases() =>
+  _i54.Future<List<_i75.Purchase>> getUnsyncedPurchases() =>
       (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedPurchases,
           [],
         ),
-        returnValue: _i53.Future<List<_i74.Purchase>>.value(<_i74.Purchase>[]),
+        returnValue: _i54.Future<List<_i75.Purchase>>.value(<_i75.Purchase>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i74.Purchase>>.value(<_i74.Purchase>[]),
-      ) as _i53.Future<List<_i74.Purchase>>);
+            _i54.Future<List<_i75.Purchase>>.value(<_i75.Purchase>[]),
+      ) as _i54.Future<List<_i75.Purchase>>);
 
   @override
-  _i53.Future<void> markPurchaseAsSynced(String? id) => (super.noSuchMethod(
+  _i54.Future<void> markPurchaseAsSynced(String? id) => (super.noSuchMethod(
         Invocation.method(
           #markPurchaseAsSynced,
           [id],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<double> fetchOfficialBcnRateByInvoiceDate(
+  _i54.Future<double> fetchOfficialBcnRateByInvoiceDate(
           DateTime? invoiceDate) =>
       (super.noSuchMethod(
         Invocation.method(
           #fetchOfficialBcnRateByInvoiceDate,
           [invoiceDate],
         ),
-        returnValue: _i53.Future<double>.value(0.0),
-        returnValueForMissingStub: _i53.Future<double>.value(0.0),
-      ) as _i53.Future<double>);
+        returnValue: _i54.Future<double>.value(0.0),
+        returnValueForMissingStub: _i54.Future<double>.value(0.0),
+      ) as _i54.Future<double>);
 
   @override
-  _i53.Future<double> getCachedOfficialBcnRate() => (super.noSuchMethod(
+  _i54.Future<double> getCachedOfficialBcnRate() => (super.noSuchMethod(
         Invocation.method(
           #getCachedOfficialBcnRate,
           [],
         ),
-        returnValue: _i53.Future<double>.value(0.0),
-        returnValueForMissingStub: _i53.Future<double>.value(0.0),
-      ) as _i53.Future<double>);
+        returnValue: _i54.Future<double>.value(0.0),
+        returnValueForMissingStub: _i54.Future<double>.value(0.0),
+      ) as _i54.Future<double>);
 
   @override
-  _i53.Future<List<_i75.ForensicAlert>> getForensicAlerts() =>
+  _i54.Future<List<_i76.ForensicAlert>> getForensicAlerts() =>
       (super.noSuchMethod(
         Invocation.method(
           #getForensicAlerts,
           [],
         ),
         returnValue:
-            _i53.Future<List<_i75.ForensicAlert>>.value(<_i75.ForensicAlert>[]),
+            _i54.Future<List<_i76.ForensicAlert>>.value(<_i76.ForensicAlert>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i75.ForensicAlert>>.value(<_i75.ForensicAlert>[]),
-      ) as _i53.Future<List<_i75.ForensicAlert>>);
+            _i54.Future<List<_i76.ForensicAlert>>.value(<_i76.ForensicAlert>[]),
+      ) as _i54.Future<List<_i76.ForensicAlert>>);
 
   @override
-  _i53.Future<void> saveForensicAlert(_i75.ForensicAlert? alert) =>
+  _i54.Future<void> saveForensicAlert(_i76.ForensicAlert? alert) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveForensicAlert,
           [alert],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i75.ForensicAlert>> getUnsyncedForensicAlerts() =>
+  _i54.Future<List<_i76.ForensicAlert>> getUnsyncedForensicAlerts() =>
       (super.noSuchMethod(
         Invocation.method(
           #getUnsyncedForensicAlerts,
           [],
         ),
         returnValue:
-            _i53.Future<List<_i75.ForensicAlert>>.value(<_i75.ForensicAlert>[]),
+            _i54.Future<List<_i76.ForensicAlert>>.value(<_i76.ForensicAlert>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i75.ForensicAlert>>.value(<_i75.ForensicAlert>[]),
-      ) as _i53.Future<List<_i75.ForensicAlert>>);
+            _i54.Future<List<_i76.ForensicAlert>>.value(<_i76.ForensicAlert>[]),
+      ) as _i54.Future<List<_i76.ForensicAlert>>);
 
   @override
-  _i53.Future<void> markForensicAlertAsSynced(String? id) =>
+  _i54.Future<void> markForensicAlertAsSynced(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #markForensicAlertAsSynced,
           [id],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i76.ProductionOrderDocument>>
+  _i54.Future<List<_i77.ProductionOrderDocument>>
       getProductionOrderDocuments() => (super.noSuchMethod(
             Invocation.method(
               #getProductionOrderDocuments,
               [],
             ),
-            returnValue: _i53.Future<List<_i76.ProductionOrderDocument>>.value(
-                <_i76.ProductionOrderDocument>[]),
+            returnValue: _i54.Future<List<_i77.ProductionOrderDocument>>.value(
+                <_i77.ProductionOrderDocument>[]),
             returnValueForMissingStub:
-                _i53.Future<List<_i76.ProductionOrderDocument>>.value(
-                    <_i76.ProductionOrderDocument>[]),
-          ) as _i53.Future<List<_i76.ProductionOrderDocument>>);
+                _i54.Future<List<_i77.ProductionOrderDocument>>.value(
+                    <_i77.ProductionOrderDocument>[]),
+          ) as _i54.Future<List<_i77.ProductionOrderDocument>>);
 
   @override
-  _i53.Future<int> reserveProductionSourceSequence(String? terminalId) =>
+  _i54.Future<int> reserveProductionSourceSequence(String? terminalId) =>
       (super.noSuchMethod(
         Invocation.method(
           #reserveProductionSourceSequence,
           [terminalId],
         ),
-        returnValue: _i53.Future<int>.value(0),
-        returnValueForMissingStub: _i53.Future<int>.value(0),
-      ) as _i53.Future<int>);
+        returnValue: _i54.Future<int>.value(0),
+        returnValueForMissingStub: _i54.Future<int>.value(0),
+      ) as _i54.Future<int>);
 
   @override
-  _i53.Future<void> saveProductionOrderDocument(
-          _i76.ProductionOrderDocument? document) =>
+  _i54.Future<void> saveProductionOrderDocument(
+          _i77.ProductionOrderDocument? document) =>
       (super.noSuchMethod(
         Invocation.method(
           #saveProductionOrderDocument,
           [document],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> saveProductionCloseTransaction(
-    _i76.ProductionOrderDocument? document,
-    List<_i67.InventoryMovement>? movements, {
+  _i54.Future<void> saveProductionCloseTransaction(
+    _i77.ProductionOrderDocument? document,
+    List<_i68.InventoryMovement>? movements, {
     bool? debugFailAfterWrites = false,
   }) =>
       (super.noSuchMethod(
@@ -1686,69 +1698,69 @@ class MockInventoryRepository extends _i1.Mock
           ],
           {#debugFailAfterWrites: debugFailAfterWrites},
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i76.ProductionOrderDocument>>
+  _i54.Future<List<_i77.ProductionOrderDocument>>
       getUnsyncedProductionOrders() => (super.noSuchMethod(
             Invocation.method(
               #getUnsyncedProductionOrders,
               [],
             ),
-            returnValue: _i53.Future<List<_i76.ProductionOrderDocument>>.value(
-                <_i76.ProductionOrderDocument>[]),
+            returnValue: _i54.Future<List<_i77.ProductionOrderDocument>>.value(
+                <_i77.ProductionOrderDocument>[]),
             returnValueForMissingStub:
-                _i53.Future<List<_i76.ProductionOrderDocument>>.value(
-                    <_i76.ProductionOrderDocument>[]),
-          ) as _i53.Future<List<_i76.ProductionOrderDocument>>);
+                _i54.Future<List<_i77.ProductionOrderDocument>>.value(
+                    <_i77.ProductionOrderDocument>[]),
+          ) as _i54.Future<List<_i77.ProductionOrderDocument>>);
 
   @override
-  _i53.Future<void> markProductionOrderDocumentAsSynced(String? id) =>
+  _i54.Future<void> markProductionOrderDocumentAsSynced(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #markProductionOrderDocumentAsSynced,
           [id],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i77.KardexCorrectionEntity>> getKardexCorrections() =>
+  _i54.Future<List<_i78.KardexCorrectionEntity>> getKardexCorrections() =>
       (super.noSuchMethod(
         Invocation.method(
           #getKardexCorrections,
           [],
         ),
-        returnValue: _i53.Future<List<_i77.KardexCorrectionEntity>>.value(
-            <_i77.KardexCorrectionEntity>[]),
+        returnValue: _i54.Future<List<_i78.KardexCorrectionEntity>>.value(
+            <_i78.KardexCorrectionEntity>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i77.KardexCorrectionEntity>>.value(
-                <_i77.KardexCorrectionEntity>[]),
-      ) as _i53.Future<List<_i77.KardexCorrectionEntity>>);
+            _i54.Future<List<_i78.KardexCorrectionEntity>>.value(
+                <_i78.KardexCorrectionEntity>[]),
+      ) as _i54.Future<List<_i78.KardexCorrectionEntity>>);
 
   @override
-  _i53.Future<List<_i78.KardexRecalculateQueueEntity>>
+  _i54.Future<List<_i79.KardexRecalculateQueueEntity>>
       getPendingKardexQueue() => (super.noSuchMethod(
             Invocation.method(
               #getPendingKardexQueue,
               [],
             ),
             returnValue:
-                _i53.Future<List<_i78.KardexRecalculateQueueEntity>>.value(
-                    <_i78.KardexRecalculateQueueEntity>[]),
+                _i54.Future<List<_i79.KardexRecalculateQueueEntity>>.value(
+                    <_i79.KardexRecalculateQueueEntity>[]),
             returnValueForMissingStub:
-                _i53.Future<List<_i78.KardexRecalculateQueueEntity>>.value(
-                    <_i78.KardexRecalculateQueueEntity>[]),
-          ) as _i53.Future<List<_i78.KardexRecalculateQueueEntity>>);
+                _i54.Future<List<_i79.KardexRecalculateQueueEntity>>.value(
+                    <_i79.KardexRecalculateQueueEntity>[]),
+          ) as _i54.Future<List<_i79.KardexRecalculateQueueEntity>>);
 }
 
 /// A class which mocks [AuthRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockAuthRepository extends _i1.Mock implements _i79.AuthRepository {
+class MockAuthRepository extends _i1.Mock implements _i80.AuthRepository {
   @override
   bool get isPendingSync => (super.noSuchMethod(
         Invocation.getter(#isPendingSync),
@@ -1757,7 +1769,7 @@ class MockAuthRepository extends _i1.Mock implements _i79.AuthRepository {
       ) as bool);
 
   @override
-  _i53.Future<_i60.User?> loginOnline(
+  _i54.Future<_i61.User?> loginOnline(
     String? email,
     String? password, {
     String? tenantSlug,
@@ -1771,22 +1783,59 @@ class MockAuthRepository extends _i1.Mock implements _i79.AuthRepository {
           ],
           {#tenantSlug: tenantSlug},
         ),
-        returnValue: _i53.Future<_i60.User?>.value(),
-        returnValueForMissingStub: _i53.Future<_i60.User?>.value(),
-      ) as _i53.Future<_i60.User?>);
+        returnValue: _i54.Future<_i61.User?>.value(),
+        returnValueForMissingStub: _i54.Future<_i61.User?>.value(),
+      ) as _i54.Future<_i61.User?>);
 
   @override
-  _i53.Future<void> syncStaff() => (super.noSuchMethod(
+  _i54.Future<_i4.TerminalLinking> claimLinkingCode(
+    String? code,
+    String? deviceId,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #claimLinkingCode,
+          [
+            code,
+            deviceId,
+          ],
+        ),
+        returnValue:
+            _i54.Future<_i4.TerminalLinking>.value(_FakeTerminalLinking_2(
+          this,
+          Invocation.method(
+            #claimLinkingCode,
+            [
+              code,
+              deviceId,
+            ],
+          ),
+        )),
+        returnValueForMissingStub:
+            _i54.Future<_i4.TerminalLinking>.value(_FakeTerminalLinking_2(
+          this,
+          Invocation.method(
+            #claimLinkingCode,
+            [
+              code,
+              deviceId,
+            ],
+          ),
+        )),
+      ) as _i54.Future<_i4.TerminalLinking>);
+
+  @override
+  _i54.Future<void> syncStaff() => (super.noSuchMethod(
         Invocation.method(
           #syncStaff,
           [],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<_i60.User?> loginOffline(
+  _i54.Future<_i61.User?> loginOffline(
     String? userId,
     String? pin,
   ) =>
@@ -1798,12 +1847,12 @@ class MockAuthRepository extends _i1.Mock implements _i79.AuthRepository {
             pin,
           ],
         ),
-        returnValue: _i53.Future<_i60.User?>.value(),
-        returnValueForMissingStub: _i53.Future<_i60.User?>.value(),
-      ) as _i53.Future<_i60.User?>);
+        returnValue: _i54.Future<_i61.User?>.value(),
+        returnValueForMissingStub: _i54.Future<_i61.User?>.value(),
+      ) as _i54.Future<_i61.User?>);
 
   @override
-  _i53.Future<bool> authorizeOverride({
+  _i54.Future<bool> authorizeOverride({
     required String? supervisorId,
     String? pin,
     String? totpCode,
@@ -1818,54 +1867,54 @@ class MockAuthRepository extends _i1.Mock implements _i79.AuthRepository {
             #totpCode: totpCode,
           },
         ),
-        returnValue: _i53.Future<bool>.value(false),
-        returnValueForMissingStub: _i53.Future<bool>.value(false),
-      ) as _i53.Future<bool>);
+        returnValue: _i54.Future<bool>.value(false),
+        returnValueForMissingStub: _i54.Future<bool>.value(false),
+      ) as _i54.Future<bool>);
 
   @override
-  _i53.Future<_i60.User?> getCurrentUser() => (super.noSuchMethod(
+  _i54.Future<_i61.User?> getCurrentUser() => (super.noSuchMethod(
         Invocation.method(
           #getCurrentUser,
           [],
         ),
-        returnValue: _i53.Future<_i60.User?>.value(),
-        returnValueForMissingStub: _i53.Future<_i60.User?>.value(),
-      ) as _i53.Future<_i60.User?>);
+        returnValue: _i54.Future<_i61.User?>.value(),
+        returnValueForMissingStub: _i54.Future<_i61.User?>.value(),
+      ) as _i54.Future<_i61.User?>);
 
   @override
-  _i53.Future<String?> getAccessToken() => (super.noSuchMethod(
+  _i54.Future<String?> getAccessToken() => (super.noSuchMethod(
         Invocation.method(
           #getAccessToken,
           [],
         ),
-        returnValue: _i53.Future<String?>.value(),
-        returnValueForMissingStub: _i53.Future<String?>.value(),
-      ) as _i53.Future<String?>);
+        returnValue: _i54.Future<String?>.value(),
+        returnValueForMissingStub: _i54.Future<String?>.value(),
+      ) as _i54.Future<String?>);
 
   @override
-  _i53.Future<void> logout() => (super.noSuchMethod(
+  _i54.Future<void> logout() => (super.noSuchMethod(
         Invocation.method(
           #logout,
           [],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<List<_i60.User>> getAllUsers() => (super.noSuchMethod(
+  _i54.Future<List<_i61.User>> getAllUsers() => (super.noSuchMethod(
         Invocation.method(
           #getAllUsers,
           [],
         ),
-        returnValue: _i53.Future<List<_i60.User>>.value(<_i60.User>[]),
+        returnValue: _i54.Future<List<_i61.User>>.value(<_i61.User>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i60.User>>.value(<_i60.User>[]),
-      ) as _i53.Future<List<_i60.User>>);
+            _i54.Future<List<_i61.User>>.value(<_i61.User>[]),
+      ) as _i54.Future<List<_i61.User>>);
 
   @override
-  _i53.Future<void> saveUser(
-    _i60.User? user, {
+  _i54.Future<void> saveUser(
+    _i61.User? user, {
     String? pin,
   }) =>
       (super.noSuchMethod(
@@ -1874,19 +1923,19 @@ class MockAuthRepository extends _i1.Mock implements _i79.AuthRepository {
           [user],
           {#pin: pin},
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> deleteUser(String? userId) => (super.noSuchMethod(
+  _i54.Future<void> deleteUser(String? userId) => (super.noSuchMethod(
         Invocation.method(
           #deleteUser,
           [userId],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 }
 
 /// A class which mocks [AppDatabase].
@@ -1894,680 +1943,680 @@ class MockAuthRepository extends _i1.Mock implements _i79.AuthRepository {
 /// See the documentation for Mockito's code generation for more information.
 class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
-  _i4.UserDao get userDao => (super.noSuchMethod(
+  _i5.UserDao get userDao => (super.noSuchMethod(
         Invocation.getter(#userDao),
-        returnValue: _FakeUserDao_2(
+        returnValue: _FakeUserDao_3(
           this,
           Invocation.getter(#userDao),
         ),
-        returnValueForMissingStub: _FakeUserDao_2(
+        returnValueForMissingStub: _FakeUserDao_3(
           this,
           Invocation.getter(#userDao),
         ),
-      ) as _i4.UserDao);
+      ) as _i5.UserDao);
 
   @override
-  _i5.SecurityProfileDao get securityProfileDao => (super.noSuchMethod(
+  _i6.SecurityProfileDao get securityProfileDao => (super.noSuchMethod(
         Invocation.getter(#securityProfileDao),
-        returnValue: _FakeSecurityProfileDao_3(
+        returnValue: _FakeSecurityProfileDao_4(
           this,
           Invocation.getter(#securityProfileDao),
         ),
-        returnValueForMissingStub: _FakeSecurityProfileDao_3(
+        returnValueForMissingStub: _FakeSecurityProfileDao_4(
           this,
           Invocation.getter(#securityProfileDao),
         ),
-      ) as _i5.SecurityProfileDao);
+      ) as _i6.SecurityProfileDao);
 
   @override
-  _i6.AuditDao get auditDao => (super.noSuchMethod(
+  _i7.AuditDao get auditDao => (super.noSuchMethod(
         Invocation.getter(#auditDao),
-        returnValue: _FakeAuditDao_4(
+        returnValue: _FakeAuditDao_5(
           this,
           Invocation.getter(#auditDao),
         ),
-        returnValueForMissingStub: _FakeAuditDao_4(
+        returnValueForMissingStub: _FakeAuditDao_5(
           this,
           Invocation.getter(#auditDao),
         ),
-      ) as _i6.AuditDao);
+      ) as _i7.AuditDao);
 
   @override
-  _i7.LocalConfigDao get localConfigDao => (super.noSuchMethod(
+  _i8.LocalConfigDao get localConfigDao => (super.noSuchMethod(
         Invocation.getter(#localConfigDao),
-        returnValue: _FakeLocalConfigDao_5(
+        returnValue: _FakeLocalConfigDao_6(
           this,
           Invocation.getter(#localConfigDao),
         ),
-        returnValueForMissingStub: _FakeLocalConfigDao_5(
+        returnValueForMissingStub: _FakeLocalConfigDao_6(
           this,
           Invocation.getter(#localConfigDao),
         ),
-      ) as _i7.LocalConfigDao);
+      ) as _i8.LocalConfigDao);
 
   @override
-  _i8.InsumoDao get insumoDao => (super.noSuchMethod(
+  _i9.InsumoDao get insumoDao => (super.noSuchMethod(
         Invocation.getter(#insumoDao),
-        returnValue: _FakeInsumoDao_6(
+        returnValue: _FakeInsumoDao_7(
           this,
           Invocation.getter(#insumoDao),
         ),
-        returnValueForMissingStub: _FakeInsumoDao_6(
+        returnValueForMissingStub: _FakeInsumoDao_7(
           this,
           Invocation.getter(#insumoDao),
         ),
-      ) as _i8.InsumoDao);
+      ) as _i9.InsumoDao);
 
   @override
-  _i9.ProductDao get productDao => (super.noSuchMethod(
+  _i10.ProductDao get productDao => (super.noSuchMethod(
         Invocation.getter(#productDao),
-        returnValue: _FakeProductDao_7(
+        returnValue: _FakeProductDao_8(
           this,
           Invocation.getter(#productDao),
         ),
-        returnValueForMissingStub: _FakeProductDao_7(
+        returnValueForMissingStub: _FakeProductDao_8(
           this,
           Invocation.getter(#productDao),
         ),
-      ) as _i9.ProductDao);
+      ) as _i10.ProductDao);
 
   @override
-  _i9.RecipeDao get recipeDao => (super.noSuchMethod(
+  _i10.RecipeDao get recipeDao => (super.noSuchMethod(
         Invocation.getter(#recipeDao),
-        returnValue: _FakeRecipeDao_8(
+        returnValue: _FakeRecipeDao_9(
           this,
           Invocation.getter(#recipeDao),
         ),
-        returnValueForMissingStub: _FakeRecipeDao_8(
+        returnValueForMissingStub: _FakeRecipeDao_9(
           this,
           Invocation.getter(#recipeDao),
         ),
-      ) as _i9.RecipeDao);
+      ) as _i10.RecipeDao);
 
   @override
-  _i10.RecipeVersionDocumentDao get recipeVersionDocumentDao =>
+  _i11.RecipeVersionDocumentDao get recipeVersionDocumentDao =>
       (super.noSuchMethod(
         Invocation.getter(#recipeVersionDocumentDao),
-        returnValue: _FakeRecipeVersionDocumentDao_9(
+        returnValue: _FakeRecipeVersionDocumentDao_10(
           this,
           Invocation.getter(#recipeVersionDocumentDao),
         ),
-        returnValueForMissingStub: _FakeRecipeVersionDocumentDao_9(
+        returnValueForMissingStub: _FakeRecipeVersionDocumentDao_10(
           this,
           Invocation.getter(#recipeVersionDocumentDao),
         ),
-      ) as _i10.RecipeVersionDocumentDao);
+      ) as _i11.RecipeVersionDocumentDao);
 
   @override
-  _i11.CountSessionDao get countSessionDao => (super.noSuchMethod(
+  _i12.CountSessionDao get countSessionDao => (super.noSuchMethod(
         Invocation.getter(#countSessionDao),
-        returnValue: _FakeCountSessionDao_10(
+        returnValue: _FakeCountSessionDao_11(
           this,
           Invocation.getter(#countSessionDao),
         ),
-        returnValueForMissingStub: _FakeCountSessionDao_10(
+        returnValueForMissingStub: _FakeCountSessionDao_11(
           this,
           Invocation.getter(#countSessionDao),
         ),
-      ) as _i11.CountSessionDao);
+      ) as _i12.CountSessionDao);
 
   @override
-  _i12.CountLineDao get countLineDao => (super.noSuchMethod(
+  _i13.CountLineDao get countLineDao => (super.noSuchMethod(
         Invocation.getter(#countLineDao),
-        returnValue: _FakeCountLineDao_11(
+        returnValue: _FakeCountLineDao_12(
           this,
           Invocation.getter(#countLineDao),
         ),
-        returnValueForMissingStub: _FakeCountLineDao_11(
+        returnValueForMissingStub: _FakeCountLineDao_12(
           this,
           Invocation.getter(#countLineDao),
         ),
-      ) as _i12.CountLineDao);
+      ) as _i13.CountLineDao);
 
   @override
-  _i13.ForensicAlertDao get forensicAlertDao => (super.noSuchMethod(
+  _i14.ForensicAlertDao get forensicAlertDao => (super.noSuchMethod(
         Invocation.getter(#forensicAlertDao),
-        returnValue: _FakeForensicAlertDao_12(
+        returnValue: _FakeForensicAlertDao_13(
           this,
           Invocation.getter(#forensicAlertDao),
         ),
-        returnValueForMissingStub: _FakeForensicAlertDao_12(
+        returnValueForMissingStub: _FakeForensicAlertDao_13(
           this,
           Invocation.getter(#forensicAlertDao),
         ),
-      ) as _i13.ForensicAlertDao);
+      ) as _i14.ForensicAlertDao);
 
   @override
-  _i14.MovementDao get movementDao => (super.noSuchMethod(
+  _i15.MovementDao get movementDao => (super.noSuchMethod(
         Invocation.getter(#movementDao),
-        returnValue: _FakeMovementDao_13(
+        returnValue: _FakeMovementDao_14(
           this,
           Invocation.getter(#movementDao),
         ),
-        returnValueForMissingStub: _FakeMovementDao_13(
+        returnValueForMissingStub: _FakeMovementDao_14(
           this,
           Invocation.getter(#movementDao),
         ),
-      ) as _i14.MovementDao);
+      ) as _i15.MovementDao);
 
   @override
-  _i15.MovementSyncStateDao get movementSyncStateDao => (super.noSuchMethod(
+  _i16.MovementSyncStateDao get movementSyncStateDao => (super.noSuchMethod(
         Invocation.getter(#movementSyncStateDao),
-        returnValue: _FakeMovementSyncStateDao_14(
+        returnValue: _FakeMovementSyncStateDao_15(
           this,
           Invocation.getter(#movementSyncStateDao),
         ),
-        returnValueForMissingStub: _FakeMovementSyncStateDao_14(
+        returnValueForMissingStub: _FakeMovementSyncStateDao_15(
           this,
           Invocation.getter(#movementSyncStateDao),
         ),
-      ) as _i15.MovementSyncStateDao);
+      ) as _i16.MovementSyncStateDao);
 
   @override
-  _i16.KardexRecalculateQueueDao get kardexRecalculateQueueDao =>
+  _i17.KardexRecalculateQueueDao get kardexRecalculateQueueDao =>
       (super.noSuchMethod(
         Invocation.getter(#kardexRecalculateQueueDao),
-        returnValue: _FakeKardexRecalculateQueueDao_15(
+        returnValue: _FakeKardexRecalculateQueueDao_16(
           this,
           Invocation.getter(#kardexRecalculateQueueDao),
         ),
-        returnValueForMissingStub: _FakeKardexRecalculateQueueDao_15(
+        returnValueForMissingStub: _FakeKardexRecalculateQueueDao_16(
           this,
           Invocation.getter(#kardexRecalculateQueueDao),
         ),
-      ) as _i16.KardexRecalculateQueueDao);
+      ) as _i17.KardexRecalculateQueueDao);
 
   @override
-  _i17.KardexCorrectionDao get kardexCorrectionDao => (super.noSuchMethod(
+  _i18.KardexCorrectionDao get kardexCorrectionDao => (super.noSuchMethod(
         Invocation.getter(#kardexCorrectionDao),
-        returnValue: _FakeKardexCorrectionDao_16(
+        returnValue: _FakeKardexCorrectionDao_17(
           this,
           Invocation.getter(#kardexCorrectionDao),
         ),
-        returnValueForMissingStub: _FakeKardexCorrectionDao_16(
+        returnValueForMissingStub: _FakeKardexCorrectionDao_17(
           this,
           Invocation.getter(#kardexCorrectionDao),
         ),
-      ) as _i17.KardexCorrectionDao);
+      ) as _i18.KardexCorrectionDao);
 
   @override
-  _i18.InventoryDao get inventoryDao => (super.noSuchMethod(
+  _i19.InventoryDao get inventoryDao => (super.noSuchMethod(
         Invocation.getter(#inventoryDao),
-        returnValue: _FakeInventoryDao_17(
+        returnValue: _FakeInventoryDao_18(
           this,
           Invocation.getter(#inventoryDao),
         ),
-        returnValueForMissingStub: _FakeInventoryDao_17(
+        returnValueForMissingStub: _FakeInventoryDao_18(
           this,
           Invocation.getter(#inventoryDao),
         ),
-      ) as _i18.InventoryDao);
+      ) as _i19.InventoryDao);
 
   @override
-  _i19.SupplierDao get supplierDao => (super.noSuchMethod(
+  _i20.SupplierDao get supplierDao => (super.noSuchMethod(
         Invocation.getter(#supplierDao),
-        returnValue: _FakeSupplierDao_18(
+        returnValue: _FakeSupplierDao_19(
           this,
           Invocation.getter(#supplierDao),
         ),
-        returnValueForMissingStub: _FakeSupplierDao_18(
+        returnValueForMissingStub: _FakeSupplierDao_19(
           this,
           Invocation.getter(#supplierDao),
         ),
-      ) as _i19.SupplierDao);
+      ) as _i20.SupplierDao);
 
   @override
-  _i20.WarehouseDao get warehouseDao => (super.noSuchMethod(
+  _i21.WarehouseDao get warehouseDao => (super.noSuchMethod(
         Invocation.getter(#warehouseDao),
-        returnValue: _FakeWarehouseDao_19(
+        returnValue: _FakeWarehouseDao_20(
           this,
           Invocation.getter(#warehouseDao),
         ),
-        returnValueForMissingStub: _FakeWarehouseDao_19(
+        returnValueForMissingStub: _FakeWarehouseDao_20(
           this,
           Invocation.getter(#warehouseDao),
         ),
-      ) as _i20.WarehouseDao);
+      ) as _i21.WarehouseDao);
 
   @override
-  _i21.PurchaseDao get purchaseDao => (super.noSuchMethod(
+  _i22.PurchaseDao get purchaseDao => (super.noSuchMethod(
         Invocation.getter(#purchaseDao),
-        returnValue: _FakePurchaseDao_20(
+        returnValue: _FakePurchaseDao_21(
           this,
           Invocation.getter(#purchaseDao),
         ),
-        returnValueForMissingStub: _FakePurchaseDao_20(
+        returnValueForMissingStub: _FakePurchaseDao_21(
           this,
           Invocation.getter(#purchaseDao),
         ),
-      ) as _i21.PurchaseDao);
+      ) as _i22.PurchaseDao);
 
   @override
-  _i22.ProductionOrderDocumentDao get productionOrderDocumentDao =>
+  _i23.ProductionOrderDocumentDao get productionOrderDocumentDao =>
       (super.noSuchMethod(
         Invocation.getter(#productionOrderDocumentDao),
-        returnValue: _FakeProductionOrderDocumentDao_21(
+        returnValue: _FakeProductionOrderDocumentDao_22(
           this,
           Invocation.getter(#productionOrderDocumentDao),
         ),
-        returnValueForMissingStub: _FakeProductionOrderDocumentDao_21(
+        returnValueForMissingStub: _FakeProductionOrderDocumentDao_22(
           this,
           Invocation.getter(#productionOrderDocumentDao),
         ),
-      ) as _i22.ProductionOrderDocumentDao);
+      ) as _i23.ProductionOrderDocumentDao);
 
   @override
-  _i23.ProductionTransactionDao get productionTransactionDao =>
+  _i24.ProductionTransactionDao get productionTransactionDao =>
       (super.noSuchMethod(
         Invocation.getter(#productionTransactionDao),
-        returnValue: _FakeProductionTransactionDao_22(
+        returnValue: _FakeProductionTransactionDao_23(
           this,
           Invocation.getter(#productionTransactionDao),
         ),
-        returnValueForMissingStub: _FakeProductionTransactionDao_22(
+        returnValueForMissingStub: _FakeProductionTransactionDao_23(
           this,
           Invocation.getter(#productionTransactionDao),
         ),
-      ) as _i23.ProductionTransactionDao);
+      ) as _i24.ProductionTransactionDao);
 
   @override
-  _i24.UomConversionDao get uomConversionDao => (super.noSuchMethod(
+  _i25.UomConversionDao get uomConversionDao => (super.noSuchMethod(
         Invocation.getter(#uomConversionDao),
-        returnValue: _FakeUomConversionDao_23(
+        returnValue: _FakeUomConversionDao_24(
           this,
           Invocation.getter(#uomConversionDao),
         ),
-        returnValueForMissingStub: _FakeUomConversionDao_23(
+        returnValueForMissingStub: _FakeUomConversionDao_24(
           this,
           Invocation.getter(#uomConversionDao),
         ),
-      ) as _i24.UomConversionDao);
+      ) as _i25.UomConversionDao);
 
   @override
-  _i25.BatchDao get batchDao => (super.noSuchMethod(
+  _i26.BatchDao get batchDao => (super.noSuchMethod(
         Invocation.getter(#batchDao),
-        returnValue: _FakeBatchDao_24(
+        returnValue: _FakeBatchDao_25(
           this,
           Invocation.getter(#batchDao),
         ),
-        returnValueForMissingStub: _FakeBatchDao_24(
+        returnValueForMissingStub: _FakeBatchDao_25(
           this,
           Invocation.getter(#batchDao),
         ),
-      ) as _i25.BatchDao);
+      ) as _i26.BatchDao);
 
   @override
-  _i26.CatalogValueDao get catalogValueDao => (super.noSuchMethod(
+  _i27.CatalogValueDao get catalogValueDao => (super.noSuchMethod(
         Invocation.getter(#catalogValueDao),
-        returnValue: _FakeCatalogValueDao_25(
+        returnValue: _FakeCatalogValueDao_26(
           this,
           Invocation.getter(#catalogValueDao),
         ),
-        returnValueForMissingStub: _FakeCatalogValueDao_25(
+        returnValueForMissingStub: _FakeCatalogValueDao_26(
           this,
           Invocation.getter(#catalogValueDao),
         ),
-      ) as _i26.CatalogValueDao);
+      ) as _i27.CatalogValueDao);
 
   @override
-  _i27.InvoiceDao get invoiceDao => (super.noSuchMethod(
+  _i28.InvoiceDao get invoiceDao => (super.noSuchMethod(
         Invocation.getter(#invoiceDao),
-        returnValue: _FakeInvoiceDao_26(
+        returnValue: _FakeInvoiceDao_27(
           this,
           Invocation.getter(#invoiceDao),
         ),
-        returnValueForMissingStub: _FakeInvoiceDao_26(
+        returnValueForMissingStub: _FakeInvoiceDao_27(
           this,
           Invocation.getter(#invoiceDao),
         ),
-      ) as _i27.InvoiceDao);
+      ) as _i28.InvoiceDao);
 
   @override
-  _i28.InvoiceItemDao get invoiceItemDao => (super.noSuchMethod(
+  _i29.InvoiceItemDao get invoiceItemDao => (super.noSuchMethod(
         Invocation.getter(#invoiceItemDao),
-        returnValue: _FakeInvoiceItemDao_27(
+        returnValue: _FakeInvoiceItemDao_28(
           this,
           Invocation.getter(#invoiceItemDao),
         ),
-        returnValueForMissingStub: _FakeInvoiceItemDao_27(
+        returnValueForMissingStub: _FakeInvoiceItemDao_28(
           this,
           Invocation.getter(#invoiceItemDao),
         ),
-      ) as _i28.InvoiceItemDao);
+      ) as _i29.InvoiceItemDao);
 
   @override
-  _i29.PaymentDao get paymentDao => (super.noSuchMethod(
+  _i30.PaymentDao get paymentDao => (super.noSuchMethod(
         Invocation.getter(#paymentDao),
-        returnValue: _FakePaymentDao_28(
+        returnValue: _FakePaymentDao_29(
           this,
           Invocation.getter(#paymentDao),
         ),
-        returnValueForMissingStub: _FakePaymentDao_28(
+        returnValueForMissingStub: _FakePaymentDao_29(
           this,
           Invocation.getter(#paymentDao),
         ),
-      ) as _i29.PaymentDao);
+      ) as _i30.PaymentDao);
 
   @override
-  _i30.TaxConfigDao get taxConfigDao => (super.noSuchMethod(
+  _i31.TaxConfigDao get taxConfigDao => (super.noSuchMethod(
         Invocation.getter(#taxConfigDao),
-        returnValue: _FakeTaxConfigDao_29(
+        returnValue: _FakeTaxConfigDao_30(
           this,
           Invocation.getter(#taxConfigDao),
         ),
-        returnValueForMissingStub: _FakeTaxConfigDao_29(
+        returnValueForMissingStub: _FakeTaxConfigDao_30(
           this,
           Invocation.getter(#taxConfigDao),
         ),
-      ) as _i30.TaxConfigDao);
+      ) as _i31.TaxConfigDao);
 
   @override
-  _i31.SalesTransactionDao get salesTransactionDao => (super.noSuchMethod(
+  _i32.SalesTransactionDao get salesTransactionDao => (super.noSuchMethod(
         Invocation.getter(#salesTransactionDao),
-        returnValue: _FakeSalesTransactionDao_30(
+        returnValue: _FakeSalesTransactionDao_31(
           this,
           Invocation.getter(#salesTransactionDao),
         ),
-        returnValueForMissingStub: _FakeSalesTransactionDao_30(
+        returnValueForMissingStub: _FakeSalesTransactionDao_31(
           this,
           Invocation.getter(#salesTransactionDao),
         ),
-      ) as _i31.SalesTransactionDao);
+      ) as _i32.SalesTransactionDao);
 
   @override
-  _i32.CashierSessionDao get cashierSessionDao => (super.noSuchMethod(
+  _i33.CashierSessionDao get cashierSessionDao => (super.noSuchMethod(
         Invocation.getter(#cashierSessionDao),
-        returnValue: _FakeCashierSessionDao_31(
+        returnValue: _FakeCashierSessionDao_32(
           this,
           Invocation.getter(#cashierSessionDao),
         ),
-        returnValueForMissingStub: _FakeCashierSessionDao_31(
+        returnValueForMissingStub: _FakeCashierSessionDao_32(
           this,
           Invocation.getter(#cashierSessionDao),
         ),
-      ) as _i32.CashierSessionDao);
+      ) as _i33.CashierSessionDao);
 
   @override
-  _i33.CashMovementDao get cashMovementDao => (super.noSuchMethod(
+  _i34.CashMovementDao get cashMovementDao => (super.noSuchMethod(
         Invocation.getter(#cashMovementDao),
-        returnValue: _FakeCashMovementDao_32(
+        returnValue: _FakeCashMovementDao_33(
           this,
           Invocation.getter(#cashMovementDao),
         ),
-        returnValueForMissingStub: _FakeCashMovementDao_32(
+        returnValueForMissingStub: _FakeCashMovementDao_33(
           this,
           Invocation.getter(#cashMovementDao),
         ),
-      ) as _i33.CashMovementDao);
+      ) as _i34.CashMovementDao);
 
   @override
-  _i34.HoldTicketDao get holdTicketDao => (super.noSuchMethod(
+  _i35.HoldTicketDao get holdTicketDao => (super.noSuchMethod(
         Invocation.getter(#holdTicketDao),
-        returnValue: _FakeHoldTicketDao_33(
+        returnValue: _FakeHoldTicketDao_34(
           this,
           Invocation.getter(#holdTicketDao),
         ),
-        returnValueForMissingStub: _FakeHoldTicketDao_33(
+        returnValueForMissingStub: _FakeHoldTicketDao_34(
           this,
           Invocation.getter(#holdTicketDao),
         ),
-      ) as _i34.HoldTicketDao);
+      ) as _i35.HoldTicketDao);
 
   @override
-  _i35.PromotionDao get promotionDao => (super.noSuchMethod(
+  _i36.PromotionDao get promotionDao => (super.noSuchMethod(
         Invocation.getter(#promotionDao),
-        returnValue: _FakePromotionDao_34(
+        returnValue: _FakePromotionDao_35(
           this,
           Invocation.getter(#promotionDao),
         ),
-        returnValueForMissingStub: _FakePromotionDao_34(
+        returnValueForMissingStub: _FakePromotionDao_35(
           this,
           Invocation.getter(#promotionDao),
         ),
-      ) as _i35.PromotionDao);
+      ) as _i36.PromotionDao);
 
   @override
-  _i36.RestaurantAreaDao get restaurantAreaDao => (super.noSuchMethod(
+  _i37.RestaurantAreaDao get restaurantAreaDao => (super.noSuchMethod(
         Invocation.getter(#restaurantAreaDao),
-        returnValue: _FakeRestaurantAreaDao_35(
+        returnValue: _FakeRestaurantAreaDao_36(
           this,
           Invocation.getter(#restaurantAreaDao),
         ),
-        returnValueForMissingStub: _FakeRestaurantAreaDao_35(
+        returnValueForMissingStub: _FakeRestaurantAreaDao_36(
           this,
           Invocation.getter(#restaurantAreaDao),
         ),
-      ) as _i36.RestaurantAreaDao);
+      ) as _i37.RestaurantAreaDao);
 
   @override
-  _i37.RestaurantTableDao get restaurantTableDao => (super.noSuchMethod(
+  _i38.RestaurantTableDao get restaurantTableDao => (super.noSuchMethod(
         Invocation.getter(#restaurantTableDao),
-        returnValue: _FakeRestaurantTableDao_36(
+        returnValue: _FakeRestaurantTableDao_37(
           this,
           Invocation.getter(#restaurantTableDao),
         ),
-        returnValueForMissingStub: _FakeRestaurantTableDao_36(
+        returnValueForMissingStub: _FakeRestaurantTableDao_37(
           this,
           Invocation.getter(#restaurantTableDao),
         ),
-      ) as _i37.RestaurantTableDao);
+      ) as _i38.RestaurantTableDao);
 
   @override
-  _i38.KitchenOrderDao get kitchenOrderDao => (super.noSuchMethod(
+  _i39.KitchenOrderDao get kitchenOrderDao => (super.noSuchMethod(
         Invocation.getter(#kitchenOrderDao),
-        returnValue: _FakeKitchenOrderDao_37(
+        returnValue: _FakeKitchenOrderDao_38(
           this,
           Invocation.getter(#kitchenOrderDao),
         ),
-        returnValueForMissingStub: _FakeKitchenOrderDao_37(
+        returnValueForMissingStub: _FakeKitchenOrderDao_38(
           this,
           Invocation.getter(#kitchenOrderDao),
         ),
-      ) as _i38.KitchenOrderDao);
+      ) as _i39.KitchenOrderDao);
 
   @override
-  _i39.CustomerDao get customerDao => (super.noSuchMethod(
+  _i40.CustomerDao get customerDao => (super.noSuchMethod(
         Invocation.getter(#customerDao),
-        returnValue: _FakeCustomerDao_38(
+        returnValue: _FakeCustomerDao_39(
           this,
           Invocation.getter(#customerDao),
         ),
-        returnValueForMissingStub: _FakeCustomerDao_38(
+        returnValueForMissingStub: _FakeCustomerDao_39(
           this,
           Invocation.getter(#customerDao),
         ),
-      ) as _i39.CustomerDao);
+      ) as _i40.CustomerDao);
 
   @override
-  _i40.CustomerPointTransactionDao get customerPointTransactionDao =>
+  _i41.CustomerPointTransactionDao get customerPointTransactionDao =>
       (super.noSuchMethod(
         Invocation.getter(#customerPointTransactionDao),
-        returnValue: _FakeCustomerPointTransactionDao_39(
+        returnValue: _FakeCustomerPointTransactionDao_40(
           this,
           Invocation.getter(#customerPointTransactionDao),
         ),
-        returnValueForMissingStub: _FakeCustomerPointTransactionDao_39(
+        returnValueForMissingStub: _FakeCustomerPointTransactionDao_40(
           this,
           Invocation.getter(#customerPointTransactionDao),
         ),
-      ) as _i40.CustomerPointTransactionDao);
+      ) as _i41.CustomerPointTransactionDao);
 
   @override
-  _i41.LoyaltyProgramDao get loyaltyProgramDao => (super.noSuchMethod(
+  _i42.LoyaltyProgramDao get loyaltyProgramDao => (super.noSuchMethod(
         Invocation.getter(#loyaltyProgramDao),
-        returnValue: _FakeLoyaltyProgramDao_40(
+        returnValue: _FakeLoyaltyProgramDao_41(
           this,
           Invocation.getter(#loyaltyProgramDao),
         ),
-        returnValueForMissingStub: _FakeLoyaltyProgramDao_40(
+        returnValueForMissingStub: _FakeLoyaltyProgramDao_41(
           this,
           Invocation.getter(#loyaltyProgramDao),
         ),
-      ) as _i41.LoyaltyProgramDao);
+      ) as _i42.LoyaltyProgramDao);
 
   @override
-  _i42.LoyaltyRewardDao get loyaltyRewardDao => (super.noSuchMethod(
+  _i43.LoyaltyRewardDao get loyaltyRewardDao => (super.noSuchMethod(
         Invocation.getter(#loyaltyRewardDao),
-        returnValue: _FakeLoyaltyRewardDao_41(
+        returnValue: _FakeLoyaltyRewardDao_42(
           this,
           Invocation.getter(#loyaltyRewardDao),
         ),
-        returnValueForMissingStub: _FakeLoyaltyRewardDao_41(
+        returnValueForMissingStub: _FakeLoyaltyRewardDao_42(
           this,
           Invocation.getter(#loyaltyRewardDao),
         ),
-      ) as _i42.LoyaltyRewardDao);
+      ) as _i43.LoyaltyRewardDao);
 
   @override
-  _i43.FiscalConfigLocalDao get fiscalConfigLocalDao => (super.noSuchMethod(
+  _i44.FiscalConfigLocalDao get fiscalConfigLocalDao => (super.noSuchMethod(
         Invocation.getter(#fiscalConfigLocalDao),
-        returnValue: _FakeFiscalConfigLocalDao_42(
+        returnValue: _FakeFiscalConfigLocalDao_43(
           this,
           Invocation.getter(#fiscalConfigLocalDao),
         ),
-        returnValueForMissingStub: _FakeFiscalConfigLocalDao_42(
+        returnValueForMissingStub: _FakeFiscalConfigLocalDao_43(
           this,
           Invocation.getter(#fiscalConfigLocalDao),
         ),
-      ) as _i43.FiscalConfigLocalDao);
+      ) as _i44.FiscalConfigLocalDao);
 
   @override
-  _i44.ActivationAttemptLocalDao get activationAttemptLocalDao =>
+  _i45.ActivationAttemptLocalDao get activationAttemptLocalDao =>
       (super.noSuchMethod(
         Invocation.getter(#activationAttemptLocalDao),
-        returnValue: _FakeActivationAttemptLocalDao_43(
+        returnValue: _FakeActivationAttemptLocalDao_44(
           this,
           Invocation.getter(#activationAttemptLocalDao),
         ),
-        returnValueForMissingStub: _FakeActivationAttemptLocalDao_43(
+        returnValueForMissingStub: _FakeActivationAttemptLocalDao_44(
           this,
           Invocation.getter(#activationAttemptLocalDao),
         ),
-      ) as _i44.ActivationAttemptLocalDao);
+      ) as _i45.ActivationAttemptLocalDao);
 
   @override
-  _i45.ActivationCheckResultLocalDao get activationCheckResultLocalDao =>
+  _i46.ActivationCheckResultLocalDao get activationCheckResultLocalDao =>
       (super.noSuchMethod(
         Invocation.getter(#activationCheckResultLocalDao),
-        returnValue: _FakeActivationCheckResultLocalDao_44(
+        returnValue: _FakeActivationCheckResultLocalDao_45(
           this,
           Invocation.getter(#activationCheckResultLocalDao),
         ),
-        returnValueForMissingStub: _FakeActivationCheckResultLocalDao_44(
+        returnValueForMissingStub: _FakeActivationCheckResultLocalDao_45(
           this,
           Invocation.getter(#activationCheckResultLocalDao),
         ),
-      ) as _i45.ActivationCheckResultLocalDao);
+      ) as _i46.ActivationCheckResultLocalDao);
 
   @override
-  _i46.FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao =>
+  _i47.FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao =>
       (super.noSuchMethod(
         Invocation.getter(#firstSuccessfulSaleClaimDao),
-        returnValue: _FakeFirstSuccessfulSaleClaimDao_45(
+        returnValue: _FakeFirstSuccessfulSaleClaimDao_46(
           this,
           Invocation.getter(#firstSuccessfulSaleClaimDao),
         ),
-        returnValueForMissingStub: _FakeFirstSuccessfulSaleClaimDao_45(
+        returnValueForMissingStub: _FakeFirstSuccessfulSaleClaimDao_46(
           this,
           Invocation.getter(#firstSuccessfulSaleClaimDao),
         ),
-      ) as _i46.FirstSuccessfulSaleClaimDao);
+      ) as _i47.FirstSuccessfulSaleClaimDao);
 
   @override
-  _i47.FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao =>
+  _i48.FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao =>
       (super.noSuchMethod(
         Invocation.getter(#firstCustomerSaleObservationDao),
-        returnValue: _FakeFirstCustomerSaleObservationDao_46(
+        returnValue: _FakeFirstCustomerSaleObservationDao_47(
           this,
           Invocation.getter(#firstCustomerSaleObservationDao),
         ),
-        returnValueForMissingStub: _FakeFirstCustomerSaleObservationDao_46(
+        returnValueForMissingStub: _FakeFirstCustomerSaleObservationDao_47(
           this,
           Invocation.getter(#firstCustomerSaleObservationDao),
         ),
-      ) as _i47.FirstCustomerSaleObservationDao);
+      ) as _i48.FirstCustomerSaleObservationDao);
 
   @override
-  _i48.ActivationOutboxDao get activationOutboxDao => (super.noSuchMethod(
+  _i49.ActivationOutboxDao get activationOutboxDao => (super.noSuchMethod(
         Invocation.getter(#activationOutboxDao),
-        returnValue: _FakeActivationOutboxDao_47(
+        returnValue: _FakeActivationOutboxDao_48(
           this,
           Invocation.getter(#activationOutboxDao),
         ),
-        returnValueForMissingStub: _FakeActivationOutboxDao_47(
+        returnValueForMissingStub: _FakeActivationOutboxDao_48(
           this,
           Invocation.getter(#activationOutboxDao),
         ),
-      ) as _i48.ActivationOutboxDao);
+      ) as _i49.ActivationOutboxDao);
 
   @override
-  _i49.AuthorityProjectionDao get authorityProjectionDao => (super.noSuchMethod(
+  _i50.AuthorityProjectionDao get authorityProjectionDao => (super.noSuchMethod(
         Invocation.getter(#authorityProjectionDao),
-        returnValue: _FakeAuthorityProjectionDao_48(
+        returnValue: _FakeAuthorityProjectionDao_49(
           this,
           Invocation.getter(#authorityProjectionDao),
         ),
-        returnValueForMissingStub: _FakeAuthorityProjectionDao_48(
+        returnValueForMissingStub: _FakeAuthorityProjectionDao_49(
           this,
           Invocation.getter(#authorityProjectionDao),
         ),
-      ) as _i49.AuthorityProjectionDao);
+      ) as _i50.AuthorityProjectionDao);
 
   @override
-  _i50.FulfillmentTopologyDao get fulfillmentTopologyDao => (super.noSuchMethod(
+  _i51.FulfillmentTopologyDao get fulfillmentTopologyDao => (super.noSuchMethod(
         Invocation.getter(#fulfillmentTopologyDao),
-        returnValue: _FakeFulfillmentTopologyDao_49(
+        returnValue: _FakeFulfillmentTopologyDao_50(
           this,
           Invocation.getter(#fulfillmentTopologyDao),
         ),
-        returnValueForMissingStub: _FakeFulfillmentTopologyDao_49(
+        returnValueForMissingStub: _FakeFulfillmentTopologyDao_50(
           this,
           Invocation.getter(#fulfillmentTopologyDao),
         ),
-      ) as _i50.FulfillmentTopologyDao);
+      ) as _i51.FulfillmentTopologyDao);
 
   @override
-  _i51.FulfillmentPersistenceDao get fulfillmentPersistenceDao =>
+  _i52.FulfillmentPersistenceDao get fulfillmentPersistenceDao =>
       (super.noSuchMethod(
         Invocation.getter(#fulfillmentPersistenceDao),
-        returnValue: _FakeFulfillmentPersistenceDao_50(
+        returnValue: _FakeFulfillmentPersistenceDao_51(
           this,
           Invocation.getter(#fulfillmentPersistenceDao),
         ),
-        returnValueForMissingStub: _FakeFulfillmentPersistenceDao_50(
+        returnValueForMissingStub: _FakeFulfillmentPersistenceDao_51(
           this,
           Invocation.getter(#fulfillmentPersistenceDao),
         ),
-      ) as _i51.FulfillmentPersistenceDao);
+      ) as _i52.FulfillmentPersistenceDao);
 
   @override
-  _i52.OhacDeliveryDao get ohacDeliveryDao => (super.noSuchMethod(
+  _i53.OhacDeliveryDao get ohacDeliveryDao => (super.noSuchMethod(
         Invocation.getter(#ohacDeliveryDao),
-        returnValue: _FakeOhacDeliveryDao_51(
+        returnValue: _FakeOhacDeliveryDao_52(
           this,
           Invocation.getter(#ohacDeliveryDao),
         ),
-        returnValueForMissingStub: _FakeOhacDeliveryDao_51(
+        returnValueForMissingStub: _FakeOhacDeliveryDao_52(
           this,
           Invocation.getter(#ohacDeliveryDao),
         ),
-      ) as _i52.OhacDeliveryDao);
+      ) as _i53.OhacDeliveryDao);
 
   @override
-  _i53.StreamController<String> get changeListener => (super.noSuchMethod(
+  _i54.StreamController<String> get changeListener => (super.noSuchMethod(
         Invocation.getter(#changeListener),
-        returnValue: _FakeStreamController_52<String>(
+        returnValue: _FakeStreamController_53<String>(
           this,
           Invocation.getter(#changeListener),
         ),
-        returnValueForMissingStub: _FakeStreamController_52<String>(
+        returnValueForMissingStub: _FakeStreamController_53<String>(
           this,
           Invocation.getter(#changeListener),
         ),
-      ) as _i53.StreamController<String>);
+      ) as _i54.StreamController<String>);
 
   @override
-  set changeListener(_i53.StreamController<String>? _changeListener) =>
+  set changeListener(_i54.StreamController<String>? _changeListener) =>
       super.noSuchMethod(
         Invocation.setter(
           #changeListener,
@@ -2577,20 +2626,20 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
       );
 
   @override
-  _i54.DatabaseExecutor get database => (super.noSuchMethod(
+  _i55.DatabaseExecutor get database => (super.noSuchMethod(
         Invocation.getter(#database),
-        returnValue: _FakeDatabaseExecutor_53(
+        returnValue: _FakeDatabaseExecutor_54(
           this,
           Invocation.getter(#database),
         ),
-        returnValueForMissingStub: _FakeDatabaseExecutor_53(
+        returnValueForMissingStub: _FakeDatabaseExecutor_54(
           this,
           Invocation.getter(#database),
         ),
-      ) as _i54.DatabaseExecutor);
+      ) as _i55.DatabaseExecutor);
 
   @override
-  set database(_i54.DatabaseExecutor? _database) => super.noSuchMethod(
+  set database(_i55.DatabaseExecutor? _database) => super.noSuchMethod(
         Invocation.setter(
           #database,
           _database,
@@ -2599,41 +2648,41 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
       );
 
   @override
-  _i53.Future<void> close() => (super.noSuchMethod(
+  _i54.Future<void> close() => (super.noSuchMethod(
         Invocation.method(
           #close,
           [],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 }
 
 /// A class which mocks [PrinterConfigService].
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockPrinterConfigService extends _i1.Mock
-    implements _i80.PrinterConfigService {
+    implements _i81.PrinterConfigService {
   @override
-  _i53.Stream<_i55.PrinterConfig> get onConfigChanged => (super.noSuchMethod(
+  _i54.Stream<_i56.PrinterConfig> get onConfigChanged => (super.noSuchMethod(
         Invocation.getter(#onConfigChanged),
-        returnValue: _i53.Stream<_i55.PrinterConfig>.empty(),
-        returnValueForMissingStub: _i53.Stream<_i55.PrinterConfig>.empty(),
-      ) as _i53.Stream<_i55.PrinterConfig>);
+        returnValue: _i54.Stream<_i56.PrinterConfig>.empty(),
+        returnValueForMissingStub: _i54.Stream<_i56.PrinterConfig>.empty(),
+      ) as _i54.Stream<_i56.PrinterConfig>);
 
   @override
-  _i53.Future<bool> isPrinterProfileConfigured() => (super.noSuchMethod(
+  _i54.Future<bool> isPrinterProfileConfigured() => (super.noSuchMethod(
         Invocation.method(
           #isPrinterProfileConfigured,
           [],
         ),
-        returnValue: _i53.Future<bool>.value(false),
-        returnValueForMissingStub: _i53.Future<bool>.value(false),
-      ) as _i53.Future<bool>);
+        returnValue: _i54.Future<bool>.value(false),
+        returnValueForMissingStub: _i54.Future<bool>.value(false),
+      ) as _i54.Future<bool>);
 
   @override
-  _i53.Future<void> confirmPrinterProfile({
-    required _i55.PrinterDriverType? driverType,
+  _i54.Future<void> confirmPrinterProfile({
+    required _i56.PrinterDriverType? driverType,
     required int? paperWidthMm,
   }) =>
       (super.noSuchMethod(
@@ -2645,18 +2694,18 @@ class MockPrinterConfigService extends _i1.Mock
             #paperWidthMm: paperWidthMm,
           },
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<_i55.PrinterConfig> getPrinterConfig() => (super.noSuchMethod(
+  _i54.Future<_i56.PrinterConfig> getPrinterConfig() => (super.noSuchMethod(
         Invocation.method(
           #getPrinterConfig,
           [],
         ),
         returnValue:
-            _i53.Future<_i55.PrinterConfig>.value(_FakePrinterConfig_54(
+            _i54.Future<_i56.PrinterConfig>.value(_FakePrinterConfig_55(
           this,
           Invocation.method(
             #getPrinterConfig,
@@ -2664,25 +2713,25 @@ class MockPrinterConfigService extends _i1.Mock
           ),
         )),
         returnValueForMissingStub:
-            _i53.Future<_i55.PrinterConfig>.value(_FakePrinterConfig_54(
+            _i54.Future<_i56.PrinterConfig>.value(_FakePrinterConfig_55(
           this,
           Invocation.method(
             #getPrinterConfig,
             [],
           ),
         )),
-      ) as _i53.Future<_i55.PrinterConfig>);
+      ) as _i54.Future<_i56.PrinterConfig>);
 
   @override
-  _i53.Future<void> savePrinterConfig(_i55.PrinterConfig? config) =>
+  _i54.Future<void> savePrinterConfig(_i56.PrinterConfig? config) =>
       (super.noSuchMethod(
         Invocation.method(
           #savePrinterConfig,
           [config],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
   void dispose() => super.noSuchMethod(
@@ -2697,40 +2746,40 @@ class MockPrinterConfigService extends _i1.Mock
 /// A class which mocks [InvoiceItemDao].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockInvoiceItemDao extends _i1.Mock implements _i28.InvoiceItemDao {
+class MockInvoiceItemDao extends _i1.Mock implements _i29.InvoiceItemDao {
   @override
-  _i53.Future<List<_i81.InvoiceItemEntity>> getItemsByInvoiceId(
+  _i54.Future<List<_i82.InvoiceItemEntity>> getItemsByInvoiceId(
           String? invoiceId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getItemsByInvoiceId,
           [invoiceId],
         ),
-        returnValue: _i53.Future<List<_i81.InvoiceItemEntity>>.value(
-            <_i81.InvoiceItemEntity>[]),
+        returnValue: _i54.Future<List<_i82.InvoiceItemEntity>>.value(
+            <_i82.InvoiceItemEntity>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i81.InvoiceItemEntity>>.value(
-                <_i81.InvoiceItemEntity>[]),
-      ) as _i53.Future<List<_i81.InvoiceItemEntity>>);
+            _i54.Future<List<_i82.InvoiceItemEntity>>.value(
+                <_i82.InvoiceItemEntity>[]),
+      ) as _i54.Future<List<_i82.InvoiceItemEntity>>);
 
   @override
-  _i53.Future<void> insertItems(List<_i81.InvoiceItemEntity>? items) =>
+  _i54.Future<void> insertItems(List<_i82.InvoiceItemEntity>? items) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertItems,
           [items],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 }
 
 /// A class which mocks [PaymentDao].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockPaymentDao extends _i1.Mock implements _i29.PaymentDao {
+class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
   @override
-  _i53.Future<List<_i82.PaymentEntity>> getPaymentsByInvoiceId(
+  _i54.Future<List<_i83.PaymentEntity>> getPaymentsByInvoiceId(
           String? invoiceId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -2738,13 +2787,13 @@ class MockPaymentDao extends _i1.Mock implements _i29.PaymentDao {
           [invoiceId],
         ),
         returnValue:
-            _i53.Future<List<_i82.PaymentEntity>>.value(<_i82.PaymentEntity>[]),
+            _i54.Future<List<_i83.PaymentEntity>>.value(<_i83.PaymentEntity>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i82.PaymentEntity>>.value(<_i82.PaymentEntity>[]),
-      ) as _i53.Future<List<_i82.PaymentEntity>>);
+            _i54.Future<List<_i83.PaymentEntity>>.value(<_i83.PaymentEntity>[]),
+      ) as _i54.Future<List<_i83.PaymentEntity>>);
 
   @override
-  _i53.Future<List<_i82.PaymentEntity>> getPaymentsByTimeRange(
+  _i54.Future<List<_i83.PaymentEntity>> getPaymentsByTimeRange(
     int? startTime,
     int? endTime,
   ) =>
@@ -2757,53 +2806,53 @@ class MockPaymentDao extends _i1.Mock implements _i29.PaymentDao {
           ],
         ),
         returnValue:
-            _i53.Future<List<_i82.PaymentEntity>>.value(<_i82.PaymentEntity>[]),
+            _i54.Future<List<_i83.PaymentEntity>>.value(<_i83.PaymentEntity>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i82.PaymentEntity>>.value(<_i82.PaymentEntity>[]),
-      ) as _i53.Future<List<_i82.PaymentEntity>>);
+            _i54.Future<List<_i83.PaymentEntity>>.value(<_i83.PaymentEntity>[]),
+      ) as _i54.Future<List<_i83.PaymentEntity>>);
 
   @override
-  _i53.Future<List<_i82.PaymentEntity>> getPendingCardPayments() =>
+  _i54.Future<List<_i83.PaymentEntity>> getPendingCardPayments() =>
       (super.noSuchMethod(
         Invocation.method(
           #getPendingCardPayments,
           [],
         ),
         returnValue:
-            _i53.Future<List<_i82.PaymentEntity>>.value(<_i82.PaymentEntity>[]),
+            _i54.Future<List<_i83.PaymentEntity>>.value(<_i83.PaymentEntity>[]),
         returnValueForMissingStub:
-            _i53.Future<List<_i82.PaymentEntity>>.value(<_i82.PaymentEntity>[]),
-      ) as _i53.Future<List<_i82.PaymentEntity>>);
+            _i54.Future<List<_i83.PaymentEntity>>.value(<_i83.PaymentEntity>[]),
+      ) as _i54.Future<List<_i83.PaymentEntity>>);
 
   @override
-  _i53.Future<int?> countPendingCardPayments() => (super.noSuchMethod(
+  _i54.Future<int?> countPendingCardPayments() => (super.noSuchMethod(
         Invocation.method(
           #countPendingCardPayments,
           [],
         ),
-        returnValue: _i53.Future<int?>.value(),
-        returnValueForMissingStub: _i53.Future<int?>.value(),
-      ) as _i53.Future<int?>);
+        returnValue: _i54.Future<int?>.value(),
+        returnValueForMissingStub: _i54.Future<int?>.value(),
+      ) as _i54.Future<int?>);
 
   @override
-  _i53.Future<void> updatePayment(_i82.PaymentEntity? payment) =>
+  _i54.Future<void> updatePayment(_i83.PaymentEntity? payment) =>
       (super.noSuchMethod(
         Invocation.method(
           #updatePayment,
           [payment],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 
   @override
-  _i53.Future<void> insertPayments(List<_i82.PaymentEntity>? payments) =>
+  _i54.Future<void> insertPayments(List<_i83.PaymentEntity>? payments) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertPayments,
           [payments],
         ),
-        returnValue: _i53.Future<void>.value(),
-        returnValueForMissingStub: _i53.Future<void>.value(),
-      ) as _i53.Future<void>);
+        returnValue: _i54.Future<void>.value(),
+        returnValueForMissingStub: _i54.Future<void>.value(),
+      ) as _i54.Future<void>);
 }
