@@ -155,9 +155,11 @@ void main() {
           value: '001-001-01',
         ),
       );
+      // B2a: the real cursor key (the old self-heal masked this seed's
+      // wrong key by fabricating the whole range).
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(
-          key: 'dgi_current_seq',
+          key: 'dgi_current_number',
           value: '1',
         ),
       );
@@ -503,7 +505,7 @@ void main() {
       );
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(
-          key: 'dgi_current_seq',
+          key: 'dgi_current_number',
           value: '10',
         ),
       );
@@ -695,7 +697,7 @@ void main() {
         );
         await diskDb1.localConfigDao.saveConfig(
           LocalConfigEntity(
-            key: 'dgi_current_seq',
+            key: 'dgi_current_number',
             value: '20',
           ),
         );
@@ -952,7 +954,7 @@ void main() {
           LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'),
         );
         await database.localConfigDao.saveConfig(
-          LocalConfigEntity(key: 'dgi_current_seq', value: '1'),
+          LocalConfigEntity(key: 'dgi_current_number', value: '1'),
         );
         await database.localConfigDao.saveConfig(
           LocalConfigEntity(key: 'dgi_range_end', value: '1000'),
@@ -1108,7 +1110,7 @@ void main() {
 
           // Seed configs
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'));
-          await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_current_seq', value: '1'));
+          await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_current_number', value: '1'));
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_range_end', value: '1000'));
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
           await diskDb.userDao.insertUsers([

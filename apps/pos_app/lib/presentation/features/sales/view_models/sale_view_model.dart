@@ -30,6 +30,7 @@ import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
 import 'package:pos_app/domain/services/sales/customer_identification_service.dart';
 import 'package:pos_app/domain/services/sales/loyalty_reward_interaction_service.dart';
 import 'package:pos_app/domain/services/sales/loyalty_evaluation_service.dart';
+import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/domain/usecases/sales/void_decision.dart';
 import 'package:pos_app/ui/features/sales/sales_permissions.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_evaluation.dart';
@@ -1490,7 +1491,16 @@ class SaleViewModel extends ChangeNotifier {
       _consumeOverride();
     } catch (e, stackTrace) {
       debugPrint('[SaleViewModel] Error al procesar la venta: $e\n$stackTrace');
-      _errorMessage = 'Error al procesar la venta: $e';
+      // D-16: the fiscal sequence states are configuration states the
+      // operator acts on — surface the directive message without the raw
+      // error wrapper.
+      if (e is FiscalSequenceUnconfiguredError) {
+        _errorMessage = e.message;
+      } else if (e is FiscalSequenceExhaustedError) {
+        _errorMessage = e.message;
+      } else {
+        _errorMessage = 'Error al procesar la venta: $e';
+      }
       notifyListeners();
       rethrow;
     }

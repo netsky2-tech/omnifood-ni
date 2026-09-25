@@ -7,6 +7,7 @@ import '../../domain/models/sales/invoice.dart';
 import '../../domain/models/sales/invoice_item.dart';
 import '../../domain/models/sales/payment.dart';
 import '../../domain/ports/printer_port.dart';
+import '../services/sales/dgi_numbering_service_impl.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
 import '../../domain/services/config/printer_config_service.dart';
 import '../database/app_database.dart';
@@ -85,6 +86,20 @@ class ActivationControlledSaleRunner {
     final trimmedTenantId = params.tenantId.trim();
     final trimmedAttemptId = params.attemptId.trim();
     final trimmedCashierId = params.cashierUserId.trim();
+
+    // D-2/D-16: activation is the APPROVED provisioning gate for the pilot
+    // fiscal series. The boot never writes (D-1); the range is provisioned
+    // ONCE here — only when absent — before the verification sale. The real
+    // documented range replaces it when SOHO's authorization letter arrives
+    // (#554 / server-side series).
+    final existingSeries =
+        await _database.localConfigDao.getConfigByKey('dgi_prefix');
+    if (existingSeries == null) {
+      await DgiNumberingServiceImpl(
+        _database.localConfigDao,
+        _database.invoiceDao,
+      ).initializeRange(prefix: '001-001-01-', start: 1, end: 1000);
+    }
 
     // 1. Fetch Attempt & Assert Pre-Condition: RUNNING or already LOCAL_ACTIVATION_EVIDENCE_COMPLETE
     final attempt = await _database.activationAttemptLocalDao.getAttemptById(trimmedAttemptId);
