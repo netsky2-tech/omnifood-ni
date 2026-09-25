@@ -25,8 +25,16 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
   }
 
   static DateTime? _tryParseIsoDate(String value) {
-    // Returns null for impossible calendar dates (e.g. 2026-02-30).
-    return DateTime.tryParse(value);
+    // DateTime.tryParse normalizes impossible calendar dates (2026-02-30 ->
+    // 2026-03-02), so verify the parsed date round-trips to the exact
+    // yyyy-MM-dd components — same rule as fiscal_authorization_expiry_notice.
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return null;
+    final y = int.parse(value.substring(0, 4));
+    final m = int.parse(value.substring(5, 7));
+    final d = int.parse(value.substring(8, 10));
+    if (parsed.year != y || parsed.month != m || parsed.day != d) return null;
+    return parsed;
   }
   final _formKey = GlobalKey<FormState>();
   final Map<String, TextEditingController> _controllers = {};

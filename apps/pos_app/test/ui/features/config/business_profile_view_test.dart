@@ -344,6 +344,28 @@ void main() {
       expect(byKey['dgi_authorization_expires_at'], '2026-02-14');
     });
 
+    testWidgets('date fields reject impossible calendar dates (2026-02-30)', (tester) async {
+      await pumpForm(tester);
+      await fillRequiredFields(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_issued_at_input')),
+        '2026-02-30',
+      );
+      await tester.enterText(
+        find.byKey(const Key('dgi_authorization_expires_at_input')),
+        '2026-03-30',
+      );
+      await tester.pumpAndSettle();
+      await tapSave(tester);
+
+      // DateTime.tryParse normalizes 2026-02-30 to 2026-03-02 — the validator
+      // must reject it via calendar round-trip, not silently accept it.
+      expect(find.text('Debe ser mayor o igual a la fecha de emisión'), findsNothing);
+      expect(find.text('Use el formato ISO yyyy-MM-dd'), findsOneWidget);
+      verifyNever(() => mockDao.saveConfig(any()));
+    });
+
     testWidgets('date fields reject non-ISO formats', (tester) async {
       await pumpForm(tester);
       await fillRequiredFields(tester);
