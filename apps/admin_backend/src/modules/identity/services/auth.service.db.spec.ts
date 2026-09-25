@@ -93,7 +93,14 @@ async function createRefreshHarness(withJti = false): Promise<RefreshHarness> {
       ...postgresConnection,
       schema,
       entities: [User, Tenant, SecurityProfile],
-      extra: { max: 1 },
+      extra: {
+        max: 1,
+        // Issue #556 stage 12d: the refresh path resolves the tenant slug
+        // through RAW unqualified SQL ("FROM tenants"), which ignores
+        // TypeORM's schema option — pin the session search_path so it lands
+        // in the scratch schema, mirroring the migration-built helper.
+        options: `-c search_path="${schema}",public`,
+      },
     });
     await dataSource.initialize();
     clients.push(dataSource);
@@ -112,6 +119,14 @@ async function createRefreshHarness(withJti = false): Promise<RefreshHarness> {
       is_active boolean NOT NULL, hashed_refresh_token text, created_at timestamptz DEFAULT now(),
       updated_at timestamptz DEFAULT now()
     )`);
+    // Issue #556 stage 12d: refresh requires the tenant slug path, so the
+    // scratch schema carries a minimal global tenants table for resolution.
+    await bootstrap.query(`CREATE TABLE "${schema}".tenants (
+      id text PRIMARY KEY, slug text UNIQUE NOT NULL, is_active boolean NOT NULL DEFAULT true
+    )`);
+    await bootstrap.query(
+      `INSERT INTO "${schema}".tenants (id, slug, is_active) VALUES ('tenant-1', 'tenant-slug', true)`,
+    );
     const migrationRunner = bootstrap.createQueryRunner();
     await migrationRunner.connect();
     await migrationRunner.query(`SET search_path TO "${schema}"`);
@@ -125,8 +140,8 @@ async function createRefreshHarness(withJti = false): Promise<RefreshHarness> {
     let firstService = await createClient();
     let secondService = await createClient();
     return {
-      first: () => firstService.refreshTokens(userId, token),
-      second: () => secondService.refreshTokens(userId, token),
+      first: () => firstService.refreshTokens(userId, token, 'tenant-slug'),
+      second: () => secondService.refreshTokens(userId, token, 'tenant-slug'),
       otherToken,
       readSession: async () => {
         const rows: unknown = await clients[0].query(

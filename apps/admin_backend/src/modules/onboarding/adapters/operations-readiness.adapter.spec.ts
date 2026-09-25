@@ -42,6 +42,9 @@ describe('OperationsReadinessAdapter (Unit)', () => {
         // Issue #512 slice 3 part A: the supplier readiness count also
         // resolves from the tenant-bound transaction manager.
         if (entity === Supplier) return supplierRepo;
+        // Issue #556 stage 12d: the users staff count joins the same bound
+        // transaction (FORCE RLS on users fails closed when unbound).
+        if (entity === User) return userRepo;
         return null;
       }),
     };
@@ -152,6 +155,33 @@ describe('OperationsReadinessAdapter (Unit)', () => {
       (productRepo.createQueryBuilder as jest.Mock).mock.invocationCallOrder[0],
     );
     expect(txManager.getRepository).toHaveBeenCalledWith(Product);
+  });
+
+  // Issue #556 stage 12d binding guard: reverting the staff count to the
+  // pooled `this.userRepository` would read `users` on an unbound connection
+  // and silently report zero staff under FORCE RLS.
+  it('binds the users staff count through the transaction manager (issue #556 stage 12d)', async () => {
+    (userRepo.count as jest.Mock).mockResolvedValue(2);
+    (recipeVersionRepo.count as jest.Mock).mockResolvedValue(0);
+    (supplierRepo.count as jest.Mock).mockResolvedValue(0);
+    const qbMock: any = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    (productRepo.createQueryBuilder as jest.Mock).mockReturnValue(qbMock);
+
+    await adapter.evaluateOperationsReadiness('tenant-staff');
+
+    expect(txManager.getRepository).toHaveBeenCalledWith(User);
+    expect(userRepo.count).toHaveBeenCalledWith({
+      where: { tenant_id: 'tenant-staff', is_active: true },
+    });
+    expect(txManager.query).toHaveBeenCalledWith(
+      TENANT_CONTEXT_SET_CONFIG_SQL,
+      ['tenant-staff'],
+    );
   });
 
   // Issue #512 slice 2 part A binding guard: reverting the `recipe_versions`

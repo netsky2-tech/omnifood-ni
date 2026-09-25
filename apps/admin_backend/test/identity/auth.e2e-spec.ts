@@ -57,6 +57,18 @@ describe('AuthController (e2e)', () => {
         IdentityModule,
       ],
     })
+      .overrideProvider(DataSource)
+      .useValue({
+        // Issue #556 stage 12d: every login resolves the slug through
+        // `query` (no tenant rows -> generic 401) before any binding.
+        query: jest.fn().mockResolvedValue([]),
+        transaction: jest.fn((operation: (manager: unknown) => unknown) =>
+          operation({
+            query: jest.fn().mockResolvedValue(undefined),
+            getRepository: jest.fn(),
+          }),
+        ),
+      })
       .overrideProvider(getRepositoryToken(User))
       .useValue(userRepository)
       .overrideProvider(getRepositoryToken(AuditLog))
@@ -75,10 +87,17 @@ describe('AuthController (e2e)', () => {
   });
 
   describe('/identity/login (POST)', () => {
-    it('should return 401 for invalid credentials', () => {
+    it('should return 400 when the required tenant slug is missing', () => {
       return request(app.getHttpServer())
         .post('/identity/login')
         .send({ email: 'wrong@test.com', pass: 'wrong' })
+        .expect(400);
+    });
+
+    it('should return 401 for invalid credentials', () => {
+      return request(app.getHttpServer())
+        .post('/identity/login')
+        .send({ email: 'wrong@test.com', pass: 'wrong', tenantSlug: 'nope' })
         .expect(401);
     });
   });

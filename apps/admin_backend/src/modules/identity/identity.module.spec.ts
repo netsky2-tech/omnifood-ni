@@ -55,7 +55,23 @@ const jwtEnvironment: Record<string, string> = {
 
 @Global()
 @Module({
-  providers: [{ provide: DataSource, useValue: {} }],
+  // Issue #556 stage 12d: every login resolves the tenant slug through
+  // `query` and binds the user read through the transaction manager, so the
+  // fake DataSource must expose both seams.
+  providers: [
+    {
+      provide: DataSource,
+      useValue: {
+        query: jest.fn().mockResolvedValue([]),
+        transaction: jest.fn((operation: (manager: unknown) => unknown) =>
+          operation({
+            query: jest.fn().mockResolvedValue(undefined),
+            getRepository: jest.fn(),
+          }),
+        ),
+      },
+    },
+  ],
   exports: [DataSource],
 })
 class TestDatabaseModule {}
@@ -148,7 +164,33 @@ describe('IdentityModule strict typed access-token ownership', () => {
       raw: {},
     });
 
-    const login = await authService.login('legacy@example.com', 'password');
+    // Issue #556 stage 12d: the slug path is THE path — resolve the tenant,
+    // bind, then read the user through the bound manager.
+    const dataSource = module.get<{
+      query: jest.Mock;
+      transaction: jest.Mock;
+    }>(DataSource);
+    dataSource.query.mockResolvedValue([
+      { id: 'legacy-tenant-id', slug: 'legacy-slug', is_active: true },
+    ]);
+    dataSource.transaction.mockImplementation(
+      (
+        operation: (manager: {
+          query: jest.Mock;
+          getRepository: jest.Mock;
+        }) => unknown,
+      ) =>
+        operation({
+          query: jest.fn().mockResolvedValue(undefined),
+          getRepository: jest.fn().mockReturnValue(userRepository),
+        }),
+    );
+
+    const login = await authService.login(
+      'legacy@example.com',
+      'password',
+      'legacy-slug',
+    );
     const request: GuardRequest = {
       headers: { authorization: `Bearer ${login.access_token}` },
     };

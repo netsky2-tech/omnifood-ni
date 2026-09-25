@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
+  DataSource,
   FindOptionsWhere,
   LessThanOrEqual,
   MoreThanOrEqual,
   Repository,
 } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Payment } from '../entities/payment.entity';
@@ -43,6 +45,11 @@ export class SalesReportsService {
     private readonly paymentRepo: Repository<Payment>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    // Issue #556 stage 12d F1: the users read is bound through the
+    // tenant-bound transaction manager (FORCE RLS on users fails closed
+    // on a pooled connection); the pooled injection stays for module
+    // wiring and as the spec's runtime-teeth tripwire.
+    private readonly dataSource: DataSource,
   ) {}
 
   async getDashboard(
@@ -316,9 +323,17 @@ export class SalesReportsService {
       where: whereClause,
     });
 
-    const users = await this.userRepo.find({
-      where: { tenant_id: tenantId },
-    });
+    // Issue #556 stage 12d F1: users is FORCE-RLS-protected — a pooled
+    // read here silently returned zero rows and every cashier name
+    // degraded to the raw id. Bound read, identical query semantics.
+    const users = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(User).find({
+          where: { tenant_id: tenantId },
+        }),
+    );
     const userMap = new Map<string, string>();
     for (const u of users) {
       userMap.set(u.id, u.name);

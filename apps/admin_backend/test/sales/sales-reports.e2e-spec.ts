@@ -238,7 +238,11 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
     transactionalManager = {
       query: jest.fn(async () => []),
       getRepository: jest.fn((entity: unknown) =>
-        entity === Invoice ? mockInvoiceRepo : mockShiftRepo,
+        entity === Invoice
+          ? mockInvoiceRepo
+          : entity === User
+            ? mockUserRepo
+            : mockShiftRepo,
       ),
     };
     transactionalDataSource = {
