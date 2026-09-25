@@ -38,6 +38,10 @@ export const FISCAL_PARAM_KEYS = {
   TAX_RATE_IVA: 'TAX_RATE_IVA',
   PRICES_INCLUDE_TAX: 'PRICES_INCLUDE_TAX',
   COMMERCIAL_FX_SPREAD: 'COMMERCIAL_FX_SPREAD',
+  // D-21 (#554): optional DGI authorization letter fields.
+  DGI_AUTHORIZATION_CODE: 'DGI_AUTHORIZATION_CODE',
+  DGI_AUTHORIZATION_ISSUED_AT: 'DGI_AUTHORIZATION_ISSUED_AT',
+  DGI_AUTHORIZATION_EXPIRES_AT: 'DGI_AUTHORIZATION_EXPIRES_AT',
 } as const;
 
 export const DGI_NICARAGUA_TAX_RATES = {
@@ -255,6 +259,33 @@ export class FiscalSetupService {
           userId,
         );
 
+        // D-21 (#554): optional DGI authorization fields. An absent field
+        // leaves any prior authorization untouched; a blank code clears it
+        // through a superseding null tombstone (append-only contract).
+        await this.upsertOrClearParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_CODE,
+          dto.dgiAuthorizationCode,
+          userId,
+        );
+
+        await this.upsertOrClearParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_ISSUED_AT,
+          dto.dgiAuthorizationIssuedAt,
+          userId,
+        );
+
+        await this.upsertOrClearParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_EXPIRES_AT,
+          dto.dgiAuthorizationExpiresAt,
+          userId,
+        );
+
         // 3. Record or Update FiscalConfigVersion
         let configVersion: FiscalConfigVersion | undefined;
         if (this.fiscalConfigVersionService) {
@@ -305,11 +336,40 @@ export class FiscalSetupService {
     return result;
   }
 
+  /**
+   * Upserts a string parameter, or clears it. D-16 spirit: absence must
+   * look like absence. An absent field is a no-op (the prior authorization
+   * stays untouched); a blank/empty string clears the value — never by
+   * storing '' (which would read as a value), and never by mutating the
+   * table: the append-only trigger rejects UPDATE/DELETE, so clearing
+   * inserts a superseding row whose value is null and lets the active view
+   * resolve it as the governing (absent) version.
+   */
+  private async upsertOrClearParameter(
+    manager: EntityManager,
+    tenantId: string,
+    paramKey: string,
+    value: string | undefined,
+    userId?: string,
+  ): Promise<void> {
+    if (value === undefined) {
+      return;
+    }
+    const trimmed = value.trim();
+    await this.upsertParameter(
+      manager,
+      tenantId,
+      paramKey,
+      trimmed === '' ? null : trimmed,
+      userId,
+    );
+  }
+
   private async upsertParameter(
     manager: EntityManager,
     tenantId: string,
     paramKey: string,
-    paramValue: Record<string, unknown> | number | string | boolean,
+    paramValue: Record<string, unknown> | number | string | boolean | null,
     userId?: string,
   ): Promise<void> {
     // Resolve the current active version through the active-configuration

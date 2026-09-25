@@ -410,4 +410,166 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       );
     });
   });
+
+  // D-21 (#554): optional DGI authorization fields ride the same append-only
+  // SystemParametersConfig supersession as the core fiscal parameters.
+  describe('configureFiscalSetup (DGI authorization persistence, D-21 #554)', () => {
+    const dgiParamRow = (
+      paramKey: string,
+      paramValue: string | null,
+      version = 1,
+    ): SystemParametersConfig => ({
+      id: `${paramKey}-${version}`,
+      tenant_id: tenantId,
+      tenant: mockTenant,
+      paramKey,
+      paramValue,
+      version,
+      effectiveFrom: new Date('2026-01-01'),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: userId,
+      createdAt: new Date('2026-01-01'),
+    });
+
+    // Each upsertParameter call resolves the active row for ITS OWN key
+    // through the active view; filter the mock by the requested paramKey so
+    // every key sees its own governing row.
+    const configureActiveRows = (rows: SystemParametersConfig[]): void => {
+      mockManager.find.mockImplementation(
+        async (
+          _target: unknown,
+          criteria?: { where?: { paramKey?: string } },
+        ) =>
+          rows.filter(
+            (row) => !criteria?.where?.paramKey || row.paramKey === criteria.where.paramKey,
+          ),
+      );
+    };
+
+    const savedRowsFor = (paramKey: string): unknown[] =>
+      mockManager.save.mock.calls
+        .map((call) => call[1])
+        .filter(
+          (row): row is SystemParametersConfig & { paramKey: string } =>
+            typeof row === 'object' &&
+            row !== null &&
+            (row as { paramKey?: string }).paramKey === paramKey,
+        );
+
+    beforeEach(() => {
+      mockManager.findOne.mockResolvedValue({ ...mockTenant });
+      configureActiveRows([]);
+    });
+
+    it('persists DGI_AUTHORIZATION_CODE, ISSUED_AT and EXPIRES_AT rows when the fields are present', async () => {
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        dgiAuthorizationCode: 'DGI-SFC-2024-00123',
+        dgiAuthorizationIssuedAt: '2025-01-15',
+        dgiAuthorizationExpiresAt: '2026-01-15',
+      };
+
+      await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(savedRowsFor('DGI_AUTHORIZATION_CODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'DGI_AUTHORIZATION_CODE',
+            paramValue: 'DGI-SFC-2024-00123',
+            version: 1,
+            isActive: true,
+          }),
+        ]),
+      );
+      expect(savedRowsFor('DGI_AUTHORIZATION_ISSUED_AT')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'DGI_AUTHORIZATION_ISSUED_AT',
+            paramValue: '2025-01-15',
+            version: 1,
+          }),
+        ]),
+      );
+      expect(savedRowsFor('DGI_AUTHORIZATION_EXPIRES_AT')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'DGI_AUTHORIZATION_EXPIRES_AT',
+            paramValue: '2026-01-15',
+            version: 1,
+          }),
+        ]),
+      );
+    });
+
+    it('writes no DGI rows when the fields are absent (prior authorization stays untouched)', async () => {
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+      };
+
+      await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(savedRowsFor('DGI_AUTHORIZATION_CODE')).toHaveLength(0);
+      expect(savedRowsFor('DGI_AUTHORIZATION_ISSUED_AT')).toHaveLength(0);
+      expect(savedRowsFor('DGI_AUTHORIZATION_EXPIRES_AT')).toHaveLength(0);
+    });
+
+    it('clears a blank code with a superseding null tombstone — never a stored empty string (D-16 spirit)', async () => {
+      configureActiveRows([dgiParamRow('DGI_AUTHORIZATION_CODE', 'DGI-OLD-001', 1)]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        dgiAuthorizationCode: '',
+      };
+
+      await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(savedRowsFor('DGI_AUTHORIZATION_CODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'DGI_AUTHORIZATION_CODE',
+            paramValue: null,
+            version: 2,
+            isActive: true,
+            effectiveTo: null,
+          }),
+        ]),
+      );
+      // Absence must read as absence: an empty string is never persisted.
+      for (const row of savedRowsFor('DGI_AUTHORIZATION_CODE')) {
+        expect((row as { paramValue?: unknown }).paramValue).not.toBe('');
+      }
+    });
+
+    it('skips the write when the submitted code equals the governing row (idempotent)', async () => {
+      configureActiveRows([
+        dgiParamRow('DGI_AUTHORIZATION_CODE', 'DGI-SFC-2024-00123', 1),
+      ]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        dgiAuthorizationCode: 'DGI-SFC-2024-00123',
+      };
+
+      await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(savedRowsFor('DGI_AUTHORIZATION_CODE')).toHaveLength(0);
+    });
+  });
 });
