@@ -327,7 +327,8 @@ export class FiscalReportsService {
       .split('-')
       .map((v) => parseInt(v, 10));
 
-    const year = yearParam != null && yearParam >= 2000 ? yearParam : currY;
+    const year =
+      yearParam != null && yearParam >= 2000 ? yearParam : currY;
     const month =
       monthParam != null && monthParam >= 1 && monthParam <= 12
         ? monthParam

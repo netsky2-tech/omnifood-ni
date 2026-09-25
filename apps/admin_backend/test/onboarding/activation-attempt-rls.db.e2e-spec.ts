@@ -252,9 +252,7 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     await admin.getRepository(Tenant).save({
       id: tenantId,
       name: `Activation RLS Proof Tenant ${label} ${tenantId}`,
-      slug: normalizeTenantSlug(
-        `Activation RLS Proof Tenant ${label} ${tenantId}`,
-      ),
+      slug: normalizeTenantSlug(`Activation RLS Proof Tenant ${label} ${tenantId}`),
       ruc: 'J0310000004321',
       is_active: true,
     });

@@ -88,7 +88,8 @@ describe('EnforceDatafonosRls1809320000000', () => {
           expect(sql).toContain(`CREATE POLICY "${policyName}" ON "${table}"`);
           expect(sql).toContain(`FOR ${command.toUpperCase()}`);
           createCount +=
-            sql.split(`CREATE POLICY "${policyName}" ON "${table}"`).length - 1;
+            sql.split(`CREATE POLICY "${policyName}" ON "${table}"`).length -
+            1;
         }
       }
       // 1 table x 4 commands = exactly 4 policies, no extras.

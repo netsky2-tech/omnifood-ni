@@ -51,29 +51,21 @@ export class PromotionsService {
     // lookup uses the manager-based helper directly, never the public read
     // method, because a tenant-bound transaction is never nested inside
     // another one.
-    return runInTenantTransaction(
-      this.dataSource,
-      tenantId,
-      async (manager) => {
-        const promotion = await this.findPromotionById(manager, tenantId, id);
-        Object.assign(promotion, dto);
-        return manager.getRepository(Promotion).save(promotion);
-      },
-    );
+    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
+      const promotion = await this.findPromotionById(manager, tenantId, id);
+      Object.assign(promotion, dto);
+      return manager.getRepository(Promotion).save(promotion);
+    });
   }
 
   async remove(tenantId: string, id: string): Promise<void> {
     // Soft delete via is_active: the read and the save share this
     // transaction, same manager-based helper as update.
-    return runInTenantTransaction(
-      this.dataSource,
-      tenantId,
-      async (manager) => {
-        const promotion = await this.findPromotionById(manager, tenantId, id);
-        promotion.is_active = false;
-        await manager.getRepository(Promotion).save(promotion);
-      },
-    );
+    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
+      const promotion = await this.findPromotionById(manager, tenantId, id);
+      promotion.is_active = false;
+      await manager.getRepository(Promotion).save(promotion);
+    });
   }
 
   /**
