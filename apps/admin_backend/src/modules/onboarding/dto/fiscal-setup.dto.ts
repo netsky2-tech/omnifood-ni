@@ -49,9 +49,7 @@ export const DGI_AUTHORIZATION_CODE_PATTERN = /^[A-Za-z0-9\-/]*$/;
  * IsISO8601 decorator owns format rejection, so no double-reporting.
  */
 @ValidatorConstraint({ name: 'dgiAuthorizationDateRange', async: false })
-export class DgiAuthorizationDateRangeConstraint
-  implements ValidatorConstraintInterface
-{
+export class DgiAuthorizationDateRangeConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
     if (typeof value !== 'string' || value === '') {
       return true;
@@ -68,7 +66,7 @@ export class DgiAuthorizationDateRangeConstraint
     return expiresMs >= issuedMs;
   }
 
-  defaultMessage(_args: ValidationArguments): string {
+  defaultMessage(): string {
     return DGI_AUTHORIZATION_DATE_RANGE_MESSAGE;
   }
 }
@@ -135,8 +133,7 @@ export class FiscalSetupDto {
   @IsISO8601(
     {},
     {
-      message:
-        'dgiAuthorizationIssuedAt must be a valid ISO-8601 date string',
+      message: 'dgiAuthorizationIssuedAt must be a valid ISO-8601 date string',
     },
   )
   dgiAuthorizationIssuedAt?: string | null;
@@ -146,8 +143,7 @@ export class FiscalSetupDto {
   @IsISO8601(
     {},
     {
-      message:
-        'dgiAuthorizationExpiresAt must be a valid ISO-8601 date string',
+      message: 'dgiAuthorizationExpiresAt must be a valid ISO-8601 date string',
     },
   )
   @Validate(DgiAuthorizationDateRangeConstraint)
