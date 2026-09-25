@@ -129,6 +129,7 @@ describe("W1 — LoginPage error states", () => {
 
     await user.type(screen.getByLabelText(/correo electrónico/i), "test@test.com");
     await user.type(screen.getByLabelText(/^contraseña$/i), "123456");
+    await user.type(screen.getByLabelText(/tenant/i), "test");
     await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => {
@@ -144,6 +145,7 @@ describe("W1 — LoginPage error states", () => {
 
     await user.type(screen.getByLabelText(/correo electrónico/i), "test@test.com");
     await user.type(screen.getByLabelText(/^contraseña$/i), "123456");
+    await user.type(screen.getByLabelText(/tenant/i), "test");
     await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => {
@@ -172,6 +174,7 @@ describe("W1 — LoginPage loading state", () => {
 
     await user.type(screen.getByLabelText(/correo electrónico/i), "test@test.com");
     await user.type(screen.getByLabelText(/^contraseña$/i), "123456");
+    await user.type(screen.getByLabelText(/tenant/i), "test");
     await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => {

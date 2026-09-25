@@ -4,12 +4,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Eye, EyeOff } from "lucide-react";
 import { useLogin } from "@/features/auth/auth-hooks";
+import { resolveTenantSlug } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 const loginSchema = z.object({
   email: z.string().email("Correo inválido"),
   password: z.string().min(6, "Mínimo 6 caracteres"),
+  tenantSlug: z.string().trim().min(1, "El tenant es requerido"),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -17,6 +19,9 @@ type LoginForm = z.infer<typeof loginSchema>;
 export function LoginPage() {
   const loginMutation = useLogin();
   const [showPassword, setShowPassword] = useState(false);
+  // The tenant slug normally comes from the host subdomain (soho.nhilospos.com -> soho);
+  // the field stays editable so the owner can correct or enter it manually.
+  const initialTenantSlug = resolveTenantSlug(window.location.hostname) ?? "";
 
   const {
     register,
@@ -24,6 +29,9 @@ export function LoginPage() {
     formState: { errors },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
+    defaultValues: {
+      tenantSlug: initialTenantSlug,
+    },
   });
 
   const onSubmit = (data: LoginForm) => {
@@ -108,6 +116,31 @@ export function LoginPage() {
             {errors.password && (
               <p className="mt-1 text-xs text-destructive">
                 {errors.password.message}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label
+              htmlFor="tenantSlug"
+              className="mb-1.5 block text-sm font-medium text-foreground"
+            >
+              Tenant (slug)
+            </label>
+            <Input
+              id="tenantSlug"
+              type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              {...register("tenantSlug")}
+              placeholder="mi-negocio"
+              aria-invalid={!!errors.tenantSlug}
+              disabled={loginMutation.isPending}
+            />
+            {errors.tenantSlug && (
+              <p className="mt-1 text-xs text-destructive">
+                {errors.tenantSlug.message}
               </p>
             )}
           </div>

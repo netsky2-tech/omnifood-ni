@@ -13,11 +13,12 @@ export function useLogin() {
 
   return useMutation({
     mutationFn: async (credentials: LoginRequest) => {
-      const { password, tenantSlug: _slug, ...rest } = credentials;
+      const { password, ...rest } = credentials;
       const cleanEmail = credentials.email.trim().toLowerCase();
+      const cleanTenantSlug = rest.tenantSlug?.trim();
       const raw = await api.post<{ access_token: string; refresh_token: string; user: LoginResponse["user"]; tenant: LoginResponse["tenant"] }>(
         "/identity/login",
-        { ...rest, email: cleanEmail, pass: password },
+        { ...rest, email: cleanEmail, pass: password, tenantSlug: cleanTenantSlug },
         { auth: false },
       );
       const response: LoginResponse = {
