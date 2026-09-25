@@ -253,12 +253,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             ($1, 'Tenant A', $3, now(), now()),
             ($2, 'Tenant B', $4, now(), now());
         `,
-          [
-            tenantAId,
-            tenantBId,
-            normalizeTenantSlug('Tenant A'),
-            normalizeTenantSlug('Tenant B'),
-          ],
+          [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
         );
         await dataSource.query(
           `
@@ -425,12 +420,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
              ($1, 'Tenant A', $3, now(), now()),
              ($2, 'Tenant B', $4, now(), now())`,
-          [
-            tenantAId,
-            tenantBId,
-            normalizeTenantSlug('Tenant A'),
-            normalizeTenantSlug('Tenant B'),
-          ],
+          [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
         );
         await dataSource.query(
           `INSERT INTO invoices (
@@ -654,12 +644,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
              ($1, 'Tenant A', $3, now(), now()),
              ($2, 'Tenant B', $4, now(), now())`,
-          [
-            tenantAId,
-            tenantBId,
-            normalizeTenantSlug('Tenant A'),
-            normalizeTenantSlug('Tenant B'),
-          ],
+          [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
         );
         await dataSource.query(
           `INSERT INTO invoices (

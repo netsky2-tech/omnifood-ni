@@ -158,7 +158,7 @@ describe('parent-owned sales children tenant RLS (Real PostgreSQL DB, migration-
         'parent-owned-rls-tenant-c',
         tenantDId,
         'parent-owned-rls-tenant-d',
-        normalizeTenantSlug('parent-owned-rls-tenant-a'),
+                normalizeTenantSlug('parent-owned-rls-tenant-a'),
         normalizeTenantSlug('parent-owned-rls-tenant-b'),
         normalizeTenantSlug('parent-owned-rls-tenant-c'),
         normalizeTenantSlug('parent-owned-rls-tenant-d'),
@@ -171,29 +171,14 @@ describe('parent-owned sales children tenant RLS (Real PostgreSQL DB, migration-
       `INSERT INTO invoices (id, tenant_id, invoice_number, created_at, user_id, subtotal, total_tax, total)
        VALUES ($1, $2, $4, now(), $5, 100.00, 15.00, 115.00),
               ($3, $6, $4, now(), $5, 100.00, 15.00, 115.00)`,
-      [
-        invoiceAId,
-        tenantAId,
-        invoiceBId,
-        SHARED_INVOICE_NUMBER,
-        randomUUID(),
-        tenantBId,
-      ],
+      [invoiceAId, tenantAId, invoiceBId, SHARED_INVOICE_NUMBER, randomUUID(), tenantBId],
     );
 
     await admin.query(
       `INSERT INTO invoice_items (id, invoice_id, tenant_id, product_id, product_name, quantity, unit_price, original_tax_rate, applied_tax_rate, tax_amount, total)
        VALUES ($1, $3, $6, $5, 'Espresso', 1, 100.00, 15, 15, 15.00, 115.00),
               ($2, $4, $7, $5, 'Espresso', 1, 100.00, 15, 15, 15.00, 115.00)`,
-      [
-        itemAId,
-        itemBId,
-        invoiceAId,
-        invoiceBId,
-        randomUUID(),
-        tenantAId,
-        tenantBId,
-      ],
+      [itemAId, itemBId, invoiceAId, invoiceBId, randomUUID(), tenantAId, tenantBId],
     );
 
     await admin.query(
@@ -504,9 +489,7 @@ describe('parent-owned sales children tenant RLS (Real PostgreSQL DB, migration-
           [throwawayModifier[0].id],
         ),
       );
-      expect(deletedModifier.map((r) => r.id)).toEqual([
-        throwawayModifier[0].id,
-      ]);
+      expect(deletedModifier.map((r) => r.id)).toEqual([throwawayModifier[0].id]);
 
       const throwawayPayment = returningRows(
         await runner.query(

@@ -309,39 +309,37 @@ export class UserService {
     // its FORCE RLS policy on a pooled connection, so the user lookup and
     // the dependent profile lookup run in one tenant-bound transaction (the
     // tenant id arrives from the JWT via the controller, @GetTenantId()).
-    return runInTenantTransaction(
-      this.dataSource,
-      tenantId,
-      async (manager) => {
-        const user = await manager.getRepository(User).findOne({
-          where: { id: userId, tenant_id: tenantId, is_active: true },
-        });
-        if (!user) {
-          throw new NotFoundException('Usuario no encontrado');
-        }
+    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
+      const user = await manager.getRepository(User).findOne({
+        where: { id: userId, tenant_id: tenantId, is_active: true },
+      });
+      if (!user) {
+        throw new NotFoundException('Usuario no encontrado');
+      }
 
-        const profile = await manager.getRepository(SecurityProfile).findOne({
+      const profile = await manager
+        .getRepository(SecurityProfile)
+        .findOne({
           where: { user_id: user.id },
         });
 
-        const customPermissions = (profile?.custom_permissions ??
-          []) as AppPermission[];
-        const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
-          []) as AppPermission[];
-        const effectivePermissions = resolveEffectivePermissions(
-          user.role,
-          customPermissions,
-        );
+      const customPermissions = (profile?.custom_permissions ??
+        []) as AppPermission[];
+      const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
+        []) as AppPermission[];
+      const effectivePermissions = resolveEffectivePermissions(
+        user.role,
+        customPermissions,
+      );
 
-        return {
-          user_id: user.id,
-          role: user.role,
-          role_permissions: rolePermissions,
-          custom_permissions: customPermissions,
-          effective_permissions: effectivePermissions,
-        };
-      },
-    );
+      return {
+        user_id: user.id,
+        role: user.role,
+        role_permissions: rolePermissions,
+        custom_permissions: customPermissions,
+        effective_permissions: effectivePermissions,
+      };
+    });
   }
 
   async setCustomPermissions(

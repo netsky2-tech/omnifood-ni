@@ -6,11 +6,15 @@ import { InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Payment } from '../entities/payment.entity';
-import { InventoryMovement } from '../../inventory/entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from '../../inventory/entities/inventory-movement.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
+import { Insumo } from '../../inventory/entities/insumo.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
 import {
   SystemParametersConfig,
@@ -92,15 +96,16 @@ describe('InvoicesService.createAdminCreditNote', () => {
     version: 7,
   });
 
-  const dto = (): CreateAdminCreditNoteDto => ({
-    originInvoiceId: 'origin-1',
-    refundReasonCode: 'ERROR_DE_CAPTURA',
-    refundReasonPolicy: 'FINANCIAL_ONLY',
-    items: [
-      { originInvoiceItemId: 'origin-item-1', quantity: 1 },
-    ] as CreateAdminCreditNoteItemDto[],
-    notes: 'Corrección administrativa',
-  });
+  const dto = (): CreateAdminCreditNoteDto =>
+    ({
+      originInvoiceId: 'origin-1',
+      refundReasonCode: 'ERROR_DE_CAPTURA',
+      refundReasonPolicy: 'FINANCIAL_ONLY',
+      items: [
+        { originInvoiceItemId: 'origin-item-1', quantity: 1 },
+      ] as CreateAdminCreditNoteItemDto[],
+      notes: 'Corrección administrativa',
+    }) as CreateAdminCreditNoteDto;
 
   const authorizer = { userId: 'owner-1', role: UserRole.OWNER };
 
@@ -214,15 +219,15 @@ describe('InvoicesService.createAdminCreditNote', () => {
   it('allocates sequential numbers from the configured series across two calls', async () => {
     let currentSeries = seriesRow(40);
     seriesViewRepo.findOne.mockImplementation(async () => currentSeries);
-    seriesParamRepo.insert.mockImplementation(
-      async (row: { paramValue: Record<string, unknown> }) => {
-        currentSeries = {
-          ...currentSeries,
-          paramValue: { ...currentSeries.paramValue, ...row.paramValue },
-        };
-        return { identifiers: [] };
-      },
-    );
+    seriesParamRepo.insert.mockImplementation(async (row: {
+      paramValue: Record<string, unknown>;
+    }) => {
+      currentSeries = {
+        ...currentSeries,
+        paramValue: { ...currentSeries.paramValue, ...row.paramValue },
+      };
+      return { identifiers: [] };
+    });
 
     const first = await service.createAdminCreditNote(
       'tenant-1',
@@ -314,10 +319,7 @@ describe('InvoicesService.createAdminCreditNote', () => {
   });
 
   it('rejects an origin invoice that is not a regular sale', async () => {
-    invoiceRepo.findOne.mockResolvedValue({
-      ...originInvoice,
-      type: 'creditNote',
-    });
+    invoiceRepo.findOne.mockResolvedValue({ ...originInvoice, type: 'creditNote' });
 
     await expect(
       service.createAdminCreditNote('tenant-1', dto(), authorizer),

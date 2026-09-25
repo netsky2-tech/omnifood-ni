@@ -130,7 +130,7 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
       unknown_columns: null,
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
-    };
+    } as unknown as ImportStaging;
   }
 
   function makeExistingProduct(stock = 50): Product {
@@ -152,7 +152,7 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
       is_tax_exempt: false,
       created_at: new Date('2026-01-01'),
       updated_at: new Date('2026-01-01'),
-    };
+    } as unknown as Product;
   }
 
   describe('generateIntegrityReport (Parsing, Aggregation & Kardex Evidence)', () => {
@@ -268,7 +268,7 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
   describe('expireIncompatibleLegacyStaging (Lifecycle Transitions)', () => {
     it('expires uncommitted legacy staging sessions with incompatible stock/cost fields and issues receipts (ONB1.4H)', async () => {
       const pendingLegacyRow: ImportStaging = {
-        ...makeCommittedLegacyRow(),
+        ...(makeCommittedLegacyRow() as unknown as ImportStaging),
         id: 'staged-pending-1',
         token_sesion_importacion: 'session-incompatible-1',
         raw_nombre: 'Producto Incompatible',
@@ -311,7 +311,9 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
   });
 
   describe('remediateReportWithInventoryCommand & acceptReportAsIs (Rule 72)', () => {
-    function makeReviewRequiredReport(id: string): LegacyImportIntegrityReport {
+    function makeReviewRequiredReport(
+      id: string,
+    ): LegacyImportIntegrityReport {
       return {
         id,
         tenant_id: tenantId,
@@ -332,7 +334,7 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
         reviewed_by: null,
         remediation_refs: [],
         created_at: new Date(),
-      };
+      } as unknown as LegacyImportIntegrityReport;
     }
 
     it('ONB1.10A: remediates report strictly via inventory command reference and issues REMEDIATED receipt (AC-39, Rule 72)', async () => {
@@ -535,21 +537,22 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
 
     function stubManagerLookups(): void {
       mockManager.find.mockResolvedValue([]);
-      mockManager.findOne.mockImplementation(async (entityClass: unknown) =>
-        entityClass === OnboardingSession
-          ? Promise.resolve({
-              id: 'session-bind-1',
-              tenantId,
-              legacyBaseline: false,
-              measurementEligible: true,
-              firstSuccessfulSaleAt: null,
-            } as unknown as OnboardingSession)
-          : Promise.resolve({
-              id: 'report-bind-1',
-              tenant_id: tenantId,
-              status: LegacyImportIntegrityStatus.REVIEW_REQUIRED,
-              remediation_refs: [],
-            } as unknown as LegacyImportIntegrityReport),
+      mockManager.findOne.mockImplementation(
+        async (entityClass: unknown) =>
+          entityClass === OnboardingSession
+            ? Promise.resolve({
+                id: 'session-bind-1',
+                tenantId,
+                legacyBaseline: false,
+                measurementEligible: true,
+                firstSuccessfulSaleAt: null,
+              } as unknown as OnboardingSession)
+            : Promise.resolve({
+                id: 'report-bind-1',
+                tenant_id: tenantId,
+                status: LegacyImportIntegrityStatus.REVIEW_REQUIRED,
+                remediation_refs: [],
+              } as unknown as LegacyImportIntegrityReport),
       );
     }
 
@@ -574,11 +577,7 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
         'report-x',
         'ref',
       );
-      await service.acceptReportAsIs(
-        tenantId,
-        'report-x',
-        'a substantive rationale',
-      );
+      await service.acceptReportAsIs(tenantId, 'report-x', 'a substantive rationale');
       await service.reconcileLegacyBaselineSession(tenantId);
 
       // Five public calls, five transactions, five single bindings.
@@ -598,11 +597,7 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
         'report-x',
         'ref',
       );
-      await service.acceptReportAsIs(
-        tenantId,
-        'report-x',
-        'a substantive rationale',
-      );
+      await service.acceptReportAsIs(tenantId, 'report-x', 'a substantive rationale');
       await service.reconcileLegacyBaselineSession(tenantId);
 
       expect(stagingRepo.find).not.toHaveBeenCalled();
@@ -665,19 +660,18 @@ describe('LegacyImportIntegrityReportService (Unit & Triangulation / ONB1.4H)', 
       );
       expect(mockManager.save).toHaveBeenCalledWith(
         LegacyOnboardingMigrationReceipt,
-        expect.objectContaining({
-          receipt_type: 'LEGACY_IMPORT_INTEGRITY_SCAN',
-        }),
+        expect.objectContaining({ receipt_type: 'LEGACY_IMPORT_INTEGRITY_SCAN' }),
       );
       expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     });
 
     it('propagates a receipt-write failure out of the transaction (rollback boundary in production)', async () => {
       mockManager.find.mockResolvedValue([]);
-      mockManager.save.mockImplementation(async (entityClass: unknown) =>
-        entityClass === LegacyOnboardingMigrationReceipt
-          ? Promise.reject(new Error('receipt insert denied'))
-          : Promise.resolve({ id: 'report-uuid-1' }),
+      mockManager.save.mockImplementation(
+        async (entityClass: unknown) =>
+          entityClass === LegacyOnboardingMigrationReceipt
+            ? Promise.reject(new Error('receipt insert denied'))
+            : Promise.resolve({ id: 'report-uuid-1' }),
       );
 
       await expect(service.generateIntegrityReport(tenantId)).rejects.toThrow(
