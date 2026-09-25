@@ -208,15 +208,21 @@ export class ActivationService {
           `Onboarding session not found for tenant '${tenantId}'`,
         );
       }
-      if (session.firstSuccessfulSaleAt) {
-        return { claimed: false, ticketId: null };
-      }
 
+      // Issue #556 re-activation fix: the verification ticket binds to THIS
+      // attempt unconditionally. The tenant-level firstSuccessfulSaleAt
+      // marker is first-ever only — on re-activation (wipe + re-link) the
+      // marker is already set by a previous attempt, and skipping the bind
+      // here left the new attempt without evidence (finalize evaluated
+      // VERIFICATION_SALE_EVIDENCE_MISSING on an all-PASS attempt).
       attempt.verificationTicketId = dto.ticketId;
       await aRepo.save(attempt);
-      session.firstSuccessfulSaleAt = new Date(
-        dto.anchoredOccurredAt || dto.deviceOccurredAt,
-      );
+
+      if (!session.firstSuccessfulSaleAt) {
+        session.firstSuccessfulSaleAt = new Date(
+          dto.anchoredOccurredAt || dto.deviceOccurredAt,
+        );
+      }
       session.lastActivityAt = new Date();
       session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
       await sRepo.save(session);
