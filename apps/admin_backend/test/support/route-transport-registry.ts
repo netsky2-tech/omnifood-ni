@@ -414,6 +414,12 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
     controller: 'InvoicesController',
     transport: 'device',
   },
+  {
+    controller: 'AdminInvoicesController',
+    transport: 'human',
+    reason:
+      'Backoffice credit-note issuance and origin-invoice picker (D-14/#553): authenticated by a human JWT principal under ISSUE_CREDIT_NOTE, deliberately NOT the device transport that DSI-6 keeps fail-closed',
+  },
   { controller: 'FulfillmentTopologyController', transport: 'human' },
   { controller: 'FulfillmentRetentionController', transport: 'human' },
   { controller: 'FulfillmentRolloutController', transport: 'human' },
