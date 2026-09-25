@@ -34,6 +34,7 @@ const families: Record<string, Record<string, string>> = {
 describe("label families — map hygiene", () => {
   it.each(Object.keys(families))("%s has non-empty keys and non-Screaming values", (familyName) => {
     const family = families[familyName];
+    if (!family) throw new Error(`label family not found: ${familyName}`);
     expect(Object.keys(family).length).toBeGreaterThan(0);
     for (const [code, label] of Object.entries(family)) {
       expect(code.trim(), `${familyName}[${code}] key`).not.toBe("");
