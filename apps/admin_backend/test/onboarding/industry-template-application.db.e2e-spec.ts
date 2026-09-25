@@ -1,11 +1,7 @@
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
-import {
-  IndustryTemplateService,
-} from '../../src/modules/onboarding/services/industry-template.service';
-import {
-  TemplatePreviewService,
-} from '../../src/modules/onboarding/services/template-preview.service';
+import { IndustryTemplateService } from '../../src/modules/onboarding/services/industry-template.service';
+import { TemplatePreviewService } from '../../src/modules/onboarding/services/template-preview.service';
 import { IndustryTemplate } from '../../src/modules/onboarding/entities/industry-template.entity';
 import { TemplateInsumo } from '../../src/modules/onboarding/entities/template-insumo.entity';
 import { TemplateProduct } from '../../src/modules/onboarding/entities/template-product.entity';
@@ -89,10 +85,10 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
   const sessionForeignId = randomUUID();
 
   async function countAdmin(table: string, where: string, params: unknown[]) {
-    const rows = (await admin.query(
+    const rows = await admin.query(
       `SELECT count(*)::int AS count FROM ${table} WHERE ${where}`,
       params,
-    )) as Array<{ count: number }>;
+    );
     return rows[0].count;
   }
 
@@ -144,12 +140,14 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
 
     // Foreign tenant provenance: one application and one seed link bound to
     // CAFETERIA, which must stay invisible to the other tenants' paths.
-    const templateInsumos = (await admin.query(
+    const templateInsumos = await admin.query(
       `SELECT id, name FROM template_insumos WHERE template_id = 'CAFETERIA'
         AND name IN ('Granos de Café Especial', 'Leche Entera', 'Leche de Almendras', 'Azúcar Blanca')`,
-    )) as Array<{ id: string; name: string }>;
-    const granosId = templateInsumos.find((t) => t.name === 'Granos de Café Especial')!.id;
-    const lecheId = templateInsumos.find((t) => t.name === 'Leche Entera')!.id;
+    );
+    const granosId = templateInsumos.find(
+      (t) => t.name === 'Granos de Café Especial',
+    ).id;
+    const lecheId = templateInsumos.find((t) => t.name === 'Leche Entera').id;
 
     await admin.query(
       `INSERT INTO onboarding_template_applications
@@ -298,9 +296,13 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
   });
 
   it('applies the template tenant-locally through the bound transaction', async () => {
-    const result = await applyService.applyTemplate(tenantApplyId, 'CAFETERIA', {
-      idempotencyKey: 'bound-apply-key',
-    });
+    const result = await applyService.applyTemplate(
+      tenantApplyId,
+      'CAFETERIA',
+      {
+        idempotencyKey: 'bound-apply-key',
+      },
+    );
 
     expect(result).toMatchObject({
       tenantId: tenantApplyId,
@@ -314,17 +316,11 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
     });
 
     // Application row: exactly one, tenant-local, APPLIED, with a summary.
-    const applications = (await admin.query(
+    const applications = await admin.query(
       `SELECT tenant_id, template_code, status, summary_json, applied_at
          FROM onboarding_template_applications WHERE tenant_id = $1`,
       [tenantApplyId],
-    )) as Array<{
-      tenant_id: string;
-      template_code: string;
-      status: string;
-      summary_json: Record<string, unknown> | null;
-      applied_at: Date | null;
-    }>;
+    );
     expect(applications).toHaveLength(1);
     expect(applications[0]).toMatchObject({
       tenant_id: tenantApplyId,
@@ -339,12 +335,12 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
     expect(applications[0].applied_at).not.toBeNull();
 
     // Seed links: 7 INSUMO + 5 PRODUCT + 5 RECIPE_VERSION, all tenant-local.
-    const links = (await admin.query(
+    const links = await admin.query(
       `SELECT target_entity_type, count(*)::int AS count
          FROM onboarding_template_seed_links WHERE tenant_id = $1
         GROUP BY target_entity_type ORDER BY target_entity_type`,
       [tenantApplyId],
-    )) as Array<{ target_entity_type: string; count: number }>;
+    );
     expect(links).toEqual([
       { target_entity_type: 'INSUMO', count: 7 },
       { target_entity_type: 'PRODUCT', count: 5 },
@@ -352,9 +348,9 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
     ]);
 
     // Catalog writes are tenant-local too.
-    expect(
-      await countAdmin('insumos', 'tenant_id = $1', [tenantApplyId]),
-    ).toBe(7);
+    expect(await countAdmin('insumos', 'tenant_id = $1', [tenantApplyId])).toBe(
+      7,
+    );
     expect(
       await countAdmin('products', 'tenant_id = $1', [tenantApplyId]),
     ).toBe(5);
@@ -367,11 +363,9 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
   });
 
   it('replays the same idempotency key idempotently with zero duplicate writes', async () => {
-    const first = await applyService.applyTemplate(
-      tenantApplyId,
-      'CAFETERIA',
-      { idempotencyKey: 'bound-apply-key' },
-    );
+    const first = await applyService.applyTemplate(tenantApplyId, 'CAFETERIA', {
+      idempotencyKey: 'bound-apply-key',
+    });
     const replay = await applyService.applyTemplate(
       tenantApplyId,
       'CAFETERIA',
@@ -402,9 +396,7 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
         idempotencyKey: 'foreign-session-key',
         sessionId: sessionForeignId,
       }),
-    ).rejects.toThrow(
-      'Onboarding session does not exist for this tenant',
-    );
+    ).rejects.toThrow('Onboarding session does not exist for this tenant');
     expect(
       await countAdmin('onboarding_template_applications', 'tenant_id = $1', [
         tenantApplyId,
@@ -419,11 +411,11 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
     );
     expect(result.tenantId).toBe(tenantApplyId);
 
-    const linked = (await admin.query(
+    const linked = await admin.query(
       `SELECT onboarding_session_id FROM onboarding_template_applications
         WHERE tenant_id = $1 AND idempotency_key = 'own-session-key'`,
       [tenantApplyId],
-    )) as Array<{ onboarding_session_id: string }>;
+    );
     expect(linked).toHaveLength(1);
     expect(linked[0].onboarding_session_id).toBe(sessionApplyId);
   });
@@ -462,9 +454,9 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
         await manager.query(`SELECT set_config('app.tenant_id', $1, true)`, [
           tenantForeignId,
         ]);
-        const visible = (await manager.query(
+        const visible = await manager.query(
           `SELECT count(*)::int AS count FROM onboarding_template_applications WHERE template_code = 'CAFETERIA'`,
-        )) as Array<{ count: number }>;
+        );
         expect(visible[0].count).toBe(1);
       });
     } finally {
@@ -478,9 +470,9 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
     // product's seed-link insert, after earlier insumo/product writes in the
     // same transaction. Retry-tolerant: a previous interrupted run may have
     // left the constraint behind.
-    const capuchino = (await admin.query(
+    const capuchino = await admin.query(
       `SELECT id FROM template_products WHERE template_id = 'CAFETERIA' AND name = 'Capuchino 8oz'`,
-    )) as Array<{ id: string }>;
+    );
     expect(capuchino).toHaveLength(1);
     await admin.query(
       `ALTER TABLE onboarding_template_seed_links

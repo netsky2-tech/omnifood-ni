@@ -78,7 +78,12 @@ describe('FulfillmentTopology (e2e - Real PostgreSQL)', () => {
        ($1, 'Tenant A', $3, now(), now()),
        ($2, 'Tenant B', $4, now(), now())
        ON CONFLICT (id) DO NOTHING`,
-      [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
+      [
+        tenantAId,
+        tenantBId,
+        normalizeTenantSlug('Tenant A'),
+        normalizeTenantSlug('Tenant B'),
+      ],
     );
 
     await runner.query(

@@ -345,7 +345,11 @@ export class InvoicesService {
       } as unknown as SyncInvoiceDto;
 
       this.assertCreditNoteReasonAndAuthorization(assertTarget);
-      await this.assertCreditNoteAuthorizingActor(tenantId, assertTarget, manager);
+      await this.assertCreditNoteAuthorizingActor(
+        tenantId,
+        assertTarget,
+        manager,
+      );
       await this.assertCreditNoteOriginInvoiceIsRegularSale(
         tenantId,
         assertTarget,
@@ -368,7 +372,9 @@ export class InvoicesService {
       const originItems = await this.itemRepoFor(manager).find({
         where: { invoiceId: dto.originInvoiceId, tenant_id: tenantId },
       });
-      const originItemsById = new Map(originItems.map((item) => [item.id, item]));
+      const originItemsById = new Map(
+        originItems.map((item) => [item.id, item]),
+      );
 
       // Number allocation: fail-closed against the configured series, inside
       // this same transaction (see allocateCreditNoteNumber for the race
@@ -389,7 +395,8 @@ export class InvoicesService {
         }
         const originQuantity = Math.abs(Number(originItem.quantity));
         const refundQuantity = Math.abs(Number(requested.quantity));
-        const ratio = originQuantity === 0 ? 0 : refundQuantity / originQuantity;
+        const ratio =
+          originQuantity === 0 ? 0 : refundQuantity / originQuantity;
         const total = round4(-Number(originItem.total) * ratio);
         const taxAmount = round4(-Number(originItem.taxAmount) * ratio);
         return {
@@ -445,7 +452,9 @@ export class InvoicesService {
         if (items.length) {
           await manager
             .getRepository(InvoiceItem)
-            .insert(items.map((item) => ({ ...item, invoiceId: creditNoteId })));
+            .insert(
+              items.map((item) => ({ ...item, invoiceId: creditNoteId })),
+            );
         }
 
         return {

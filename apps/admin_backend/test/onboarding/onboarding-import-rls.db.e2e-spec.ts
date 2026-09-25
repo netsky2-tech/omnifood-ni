@@ -71,7 +71,9 @@ const poolCleanupExtra = { extra: { allowExitOnIdle: true } };
 async function asRuntimeRole<T>(
   runtime: DataSource,
   tenantId: string | null,
-  assertion: (runner: ReturnType<DataSource['createQueryRunner']>) => Promise<T>,
+  assertion: (
+    runner: ReturnType<DataSource['createQueryRunner']>,
+  ) => Promise<T>,
 ): Promise<T> {
   const runner = runtime.createQueryRunner();
   await runner.connect();
@@ -92,7 +94,9 @@ async function asRuntimeRole<T>(
  * `[rows, affectedRowCount]` while SELECTs arrive as a plain rows array.
  * Normalizes both shapes to the rows array so assertions read on `id`.
  */
-function returningRows(result: unknown): Array<{ id: string; tenant_id?: string }> {
+function returningRows(
+  result: unknown,
+): Array<{ id: string; tenant_id?: string }> {
   if (Array.isArray(result) && Array.isArray(result[0])) {
     return result[0] as Array<{ id: string }>;
   }
@@ -190,18 +194,20 @@ describe('onboarding import/integrity tenant RLS (Real PostgreSQL DB, migration-
   });
 
   it('seeds both tenants through the superuser and proves the runtime role is a table non-owner that cannot bypass RLS', async () => {
-    const seeded = (await admin.query(
+    const seeded = await admin.query(
       `SELECT
          (SELECT count(*)::int FROM legacy_import_integrity_reports) AS reports,
          (SELECT count(*)::int FROM product_import_sessions) AS sessions,
          (SELECT count(*)::int FROM staging_importacion_productos) AS staging`,
-    )) as Array<{ reports: number; sessions: number; staging: number }>;
+    );
     expect(seeded[0]).toEqual({ reports: 2, sessions: 2, staging: 2 });
 
-    const role = (await admin.query(
-      `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1`, [
-      fixture.runtimeRoleName,
-    ]))[0];
+    const role = (
+      await admin.query(
+        `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1`,
+        [fixture.runtimeRoleName],
+      )
+    )[0];
     expect(role).toBeDefined();
     expect(role.rolsuper).toBe(false);
     expect(role.rolbypassrls).toBe(false);
@@ -235,9 +241,21 @@ describe('onboarding import/integrity tenant RLS (Real PostgreSQL DB, migration-
     )) as Array<{ relname: string; rls_enabled: boolean; rls_forced: boolean }>;
 
     expect(facts).toEqual([
-      { relname: 'legacy_import_integrity_reports', rls_enabled: true, rls_forced: true },
-      { relname: 'product_import_sessions', rls_enabled: true, rls_forced: true },
-      { relname: 'staging_importacion_productos', rls_enabled: true, rls_forced: true },
+      {
+        relname: 'legacy_import_integrity_reports',
+        rls_enabled: true,
+        rls_forced: true,
+      },
+      {
+        relname: 'product_import_sessions',
+        rls_enabled: true,
+        rls_forced: true,
+      },
+      {
+        relname: 'staging_importacion_productos',
+        rls_enabled: true,
+        rls_forced: true,
+      },
     ]);
 
     for (const table of TABLES) {
@@ -368,12 +386,13 @@ describe('onboarding import/integrity tenant RLS (Real PostgreSQL DB, migration-
       ],
     ] as const) {
       await asRuntimeRole(runtime, tenantCId, async (runner) => {
-        const foreignValue = table === 'staging_importacion_productos'
-          ? [tenantDId, randomUUID(), randomUUID()]
-          : [tenantDId];
-        await expect(
-          runner.query(insertSql, foreignValue),
-        ).rejects.toThrow(/row-level security/i);
+        const foreignValue =
+          table === 'staging_importacion_productos'
+            ? [tenantDId, randomUUID(), randomUUID()]
+            : [tenantDId];
+        await expect(runner.query(insertSql, foreignValue)).rejects.toThrow(
+          /row-level security/i,
+        );
         void table;
       });
     }

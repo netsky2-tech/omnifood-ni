@@ -6,7 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as crypto from 'crypto';
-import { runInTenantTransaction, resolveTenantContextId } from '../../../core/database/tenant-transaction';
+import {
+  runInTenantTransaction,
+  resolveTenantContextId,
+} from '../../../core/database/tenant-transaction';
 import { IndustryTemplate } from '../entities/industry-template.entity';
 import {
   TemplateSeedLink,
@@ -16,7 +19,11 @@ import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product } from '../../inventory/entities/product.entity';
 
 export type TemplateDiffStatus =
-  'NEW' | 'EXISTING_LINKED' | 'EXISTING_UNLINKED' | 'CONFLICT' | 'UNSUPPORTED';
+  | 'NEW'
+  | 'EXISTING_LINKED'
+  | 'EXISTING_UNLINKED'
+  | 'CONFLICT'
+  | 'UNSUPPORTED';
 
 export interface TemplateItemDiff {
   itemId: string;

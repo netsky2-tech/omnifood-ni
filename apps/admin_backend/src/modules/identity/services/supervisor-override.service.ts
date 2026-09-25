@@ -71,20 +71,18 @@ export class SupervisorOverrideService {
           return { supervisor: null, profile: null };
         }
 
-        const profile = await manager
-          .getRepository(SecurityProfile)
-          .findOne({
-            where: { user_id: supervisor.id },
-            select: [
-              'id',
-              'user_id',
-              'pin_hash',
-              'totp_secret_seed',
-              'is_pin_enabled',
-              'is_totp_enabled',
-              'custom_permissions',
-            ],
-          });
+        const profile = await manager.getRepository(SecurityProfile).findOne({
+          where: { user_id: supervisor.id },
+          select: [
+            'id',
+            'user_id',
+            'pin_hash',
+            'totp_secret_seed',
+            'is_pin_enabled',
+            'is_totp_enabled',
+            'custom_permissions',
+          ],
+        });
 
         return { supervisor, profile };
       },
