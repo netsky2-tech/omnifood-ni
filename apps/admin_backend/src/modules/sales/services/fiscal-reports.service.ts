@@ -48,15 +48,23 @@ export class FiscalReportsService {
       query?.month,
     );
 
-    const invoices = await this.invoiceRepo.find({
-      where: {
-        tenant_id: tenantId,
-        isCanceled: false,
-        created_at: Between(start, end),
-      },
-      relations: ['items'],
-      order: { created_at: 'ASC' },
-    });
+    // Issue #581 WU1: invoices is a direct:SIUD RLS-forced table — the
+    // pooled find silently returned zero rows under the production
+    // NOBYPASSRLS role. Bound read, identical query semantics.
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: {
+            tenant_id: tenantId,
+            isCanceled: false,
+            created_at: Between(start, end),
+          },
+          relations: ['items'],
+          order: { created_at: 'ASC' },
+        }),
+    );
 
     let totalGrossSales = 0;
     let totalTaxableSales = 0;
@@ -158,10 +166,17 @@ export class FiscalReportsService {
       whereClause.created_at = LessThanOrEqual(end);
     }
 
-    const invoices = await this.invoiceRepo.find({
-      where: whereClause,
-      order: { created_at: 'DESC' },
-    });
+    // Issue #581 WU1: bound invoice read (see getMonthlySummary) — joins
+    // the users read, which was already bound in issue #556 stage 12d F1.
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: whereClause,
+          order: { created_at: 'DESC' },
+        }),
+    );
 
     // Issue #556 stage 12d F1: users is FORCE-RLS-protected — a pooled
     // read here silently returned zero rows and every voided-invoice row
@@ -229,10 +244,16 @@ export class FiscalReportsService {
       whereClause.created_at = LessThanOrEqual(end);
     }
 
-    const invoices = await this.invoiceRepo.find({
-      where: whereClause,
-      order: { created_at: 'ASC' },
-    });
+    // Issue #581 WU1: bound invoice read (see getMonthlySummary).
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: whereClause,
+          order: { created_at: 'ASC' },
+        }),
+    );
 
     const seriesMap = new Map<string, number[]>();
 
