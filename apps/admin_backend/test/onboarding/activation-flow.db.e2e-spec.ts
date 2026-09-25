@@ -731,6 +731,281 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     expect(sessionWarn?.activatedAt).toBeDefined();
   });
 
+  // Issue #561 (Option A): the owner can disable auto-print on the POS.
+  // The device then records SALE_RECEIPT_PATH = WARNING with evidence ref
+  // RECEIPT_SKIPPED_BY_USER_CONFIG instead of a hard FAIL, and the finalizer
+  // must land on PASS_WITH_WARNING via the explicit R1 whitelist.
+  it('9b. Issue #561 SALE_RECEIPT_PATH WARNING (RECEIPT_SKIPPED_BY_USER_CONFIG) finalizes PASS_WITH_WARNING with its own follow-up code', async () => {
+    const tenantSkipId = randomUUID();
+    const ownerSkipUserId = randomUUID();
+    const terminalSkipId = 'pos-skipwarn-01';
+
+    await dataSource.getRepository(Tenant).save({
+      id: tenantSkipId,
+      name: 'OmniFood Receipt Skip Warning',
+      slug: normalizeTenantSlug('OmniFood Receipt Skip Warning'),
+      ruc: 'J0310000006666',
+      is_active: true,
+    });
+
+    await dataSource.getRepository(User).save({
+      id: ownerSkipUserId,
+      tenant_id: tenantSkipId,
+      name: 'Owner Skip Warn',
+      email: 'ownerskipwarn@omnifood.ni',
+      password_hash: 'hash',
+      role: UserRole.OWNER,
+      is_active: true,
+      security_version: 1,
+    });
+
+    await dataSource.getRepository(SystemParametersConfig).save({
+      tenant_id: tenantSkipId,
+      paramKey: 'FISCAL_REGIME',
+      paramValue: 'REGIMEN_GENERAL',
+      isActive: true,
+    });
+
+    await dataSource.getRepository(Product).save({
+      tenant_id: tenantSkipId,
+      name: 'Cafe Skip Warning',
+      sellPrice: 30,
+      uom: 'UN',
+      product_type: ProductType.SIMPLE,
+      is_active: true,
+      stock: 0,
+      averageCost: 0,
+    });
+
+    await dataSource.getRepository(OnboardingSession).save({
+      tenantId: tenantSkipId,
+      lifecycleState: OnboardingLifecycleState.SALE_READY,
+      saleReadyFirstAt: new Date(),
+      measurementEligible: true,
+      legacyBaseline: false,
+      optimisticVersion: 1,
+    });
+
+    const skipToken = signIdentityJwtAccessToken(jwtService, {
+      sub: ownerSkipUserId,
+      email: 'ownerskipwarn@omnifood.ni',
+      role: UserRole.OWNER,
+      tenantId: tenantSkipId,
+      terminalId: terminalSkipId,
+    });
+
+    const startRes = await request(app.getHttpServer())
+      .post('/api/onboarding/activation/attempts')
+      .set('Authorization', `Bearer ${skipToken}`)
+      .send({ candidateTerminalId: terminalSkipId });
+
+    expect(startRes.status).toBe(201);
+    const attemptSkipId = startRes.body.id;
+    await persistVerificationSaleEvidence(
+      attemptSkipId,
+      tenantSkipId,
+      ownerSkipUserId,
+    );
+
+    // Ingest the other 9 checks as PASS
+    const other9 = [
+      ActivationCheckCode.TERMINAL_LINKED,
+      ActivationCheckCode.REQUIRED_CONFIG_LOCAL,
+      ActivationCheckCode.AUTHORIZED_USER_LOCAL,
+      ActivationCheckCode.PRINTER_AVAILABLE,
+      ActivationCheckCode.TEST_PRINT,
+      ActivationCheckCode.SQLITE_DURABILITY,
+      ActivationCheckCode.OFFLINE_SALE_PAID,
+      ActivationCheckCode.OUTBOX_DURABLE,
+      ActivationCheckCode.POST_RECONNECT_SYNC,
+    ];
+
+    for (const code of other9) {
+      await request(app.getHttpServer())
+        .post(`/api/onboarding/activation/attempts/${attemptSkipId}/checks`)
+        .set('Authorization', `Bearer ${skipToken}`)
+        .send({
+          checkCode: code,
+          status: ActivationCheckStatus.PASS,
+        });
+    }
+
+    // Ingest SALE_RECEIPT_PATH as WARNING with the user-config skip ref
+    await request(app.getHttpServer())
+      .post(`/api/onboarding/activation/attempts/${attemptSkipId}/checks`)
+      .set('Authorization', `Bearer ${skipToken}`)
+      .send({
+        checkCode: ActivationCheckCode.SALE_RECEIPT_PATH,
+        status: ActivationCheckStatus.WARNING,
+        evidenceRef: 'RECEIPT_SKIPPED_BY_USER_CONFIG',
+      });
+
+    // Finalize -> PASS_WITH_WARNING (R1 whitelist, no INVALID_WARNING code)
+    const finalizeRes = await request(app.getHttpServer())
+      .post(`/api/onboarding/activation/attempts/${attemptSkipId}/finalize`)
+      .set('Authorization', `Bearer ${skipToken}`)
+      .send();
+
+    expect(finalizeRes.status).toBe(201);
+    expect(finalizeRes.body.status).toBe(
+      ActivationAttemptStatus.PASS_WITH_WARNING,
+    );
+    expect(finalizeRes.body.failureCode).toBeNull();
+    expect(finalizeRes.body.warningsCount).toBe(1);
+
+    // Follow-up must carry the receipt-skip warning code, not the sync one
+    const followUpsRes = await request(app.getHttpServer())
+      .get(`/api/onboarding/activation/attempts/${attemptSkipId}/follow-ups`)
+      .set('Authorization', `Bearer ${skipToken}`);
+
+    expect(followUpsRes.status).toBe(200);
+    expect(followUpsRes.body.length).toBe(1);
+    expect(followUpsRes.body[0].status).toBe(ActivationFollowUpStatus.OPEN);
+    expect(followUpsRes.body[0].warningCode).toBe(
+      'SALE_RECEIPT_PATH_SKIPPED_BY_USER_CONFIG',
+    );
+    expect(followUpsRes.body[0].closureEvidenceRef).toBe(
+      'RECEIPT_SKIPPED_BY_USER_CONFIG',
+    );
+
+    // Session must be ACTIVATED
+    const sessionSkip = await dataSource
+      .getRepository(OnboardingSession)
+      .findOne({ where: { tenantId: tenantSkipId } });
+    expect(sessionSkip?.lifecycleState).toBe(
+      OnboardingLifecycleState.ACTIVATED,
+    );
+  });
+
+  // Issue #561 (R1/R3): a hard FAIL on SALE_RECEIPT_PATH (e.g. printer
+  // offline during the verification sale) must keep failing the attempt —
+  // the whitelist tolerates WARNING only, never FAIL.
+  it('9c. Issue #561 SALE_RECEIPT_PATH FAIL still finalizes FAIL with CHECK_FAILED_SALE_RECEIPT_PATH', async () => {
+    const tenantFailId = randomUUID();
+    const ownerFailUserId = randomUUID();
+    const terminalFailId = 'pos-rfail-01';
+
+    await dataSource.getRepository(Tenant).save({
+      id: tenantFailId,
+      name: 'OmniFood Receipt Fail',
+      slug: normalizeTenantSlug('OmniFood Receipt Fail'),
+      ruc: 'J0310000007777',
+      is_active: true,
+    });
+
+    await dataSource.getRepository(User).save({
+      id: ownerFailUserId,
+      tenant_id: tenantFailId,
+      name: 'Owner Receipt Fail',
+      email: 'ownerfail@omnifood.ni',
+      password_hash: 'hash',
+      role: UserRole.OWNER,
+      is_active: true,
+      security_version: 1,
+    });
+
+    await dataSource.getRepository(SystemParametersConfig).save({
+      tenant_id: tenantFailId,
+      paramKey: 'FISCAL_REGIME',
+      paramValue: 'REGIMEN_GENERAL',
+      isActive: true,
+    });
+
+    await dataSource.getRepository(Product).save({
+      tenant_id: tenantFailId,
+      name: 'Cafe Receipt Fail',
+      sellPrice: 30,
+      uom: 'UN',
+      product_type: ProductType.SIMPLE,
+      is_active: true,
+      stock: 0,
+      averageCost: 0,
+    });
+
+    await dataSource.getRepository(OnboardingSession).save({
+      tenantId: tenantFailId,
+      lifecycleState: OnboardingLifecycleState.SALE_READY,
+      saleReadyFirstAt: new Date(),
+      measurementEligible: true,
+      legacyBaseline: false,
+      optimisticVersion: 1,
+    });
+
+    const failToken = signIdentityJwtAccessToken(jwtService, {
+      sub: ownerFailUserId,
+      email: 'ownerfail@omnifood.ni',
+      role: UserRole.OWNER,
+      tenantId: tenantFailId,
+      terminalId: terminalFailId,
+    });
+
+    const startRes = await request(app.getHttpServer())
+      .post('/api/onboarding/activation/attempts')
+      .set('Authorization', `Bearer ${failToken}`)
+      .send({ candidateTerminalId: terminalFailId });
+
+    expect(startRes.status).toBe(201);
+    const attemptFailId = startRes.body.id;
+    await persistVerificationSaleEvidence(
+      attemptFailId,
+      tenantFailId,
+      ownerFailUserId,
+    );
+
+    const other9 = [
+      ActivationCheckCode.TERMINAL_LINKED,
+      ActivationCheckCode.REQUIRED_CONFIG_LOCAL,
+      ActivationCheckCode.AUTHORIZED_USER_LOCAL,
+      ActivationCheckCode.PRINTER_AVAILABLE,
+      ActivationCheckCode.TEST_PRINT,
+      ActivationCheckCode.SQLITE_DURABILITY,
+      ActivationCheckCode.OFFLINE_SALE_PAID,
+      ActivationCheckCode.OUTBOX_DURABLE,
+      ActivationCheckCode.POST_RECONNECT_SYNC,
+    ];
+
+    for (const code of other9) {
+      await request(app.getHttpServer())
+        .post(`/api/onboarding/activation/attempts/${attemptFailId}/checks`)
+        .set('Authorization', `Bearer ${failToken}`)
+        .send({
+          checkCode: code,
+          status: ActivationCheckStatus.PASS,
+        });
+    }
+
+    // Ingest SALE_RECEIPT_PATH as a hard FAIL (printer blocked the receipt)
+    await request(app.getHttpServer())
+      .post(`/api/onboarding/activation/attempts/${attemptFailId}/checks`)
+      .set('Authorization', `Bearer ${failToken}`)
+      .send({
+        checkCode: ActivationCheckCode.SALE_RECEIPT_PATH,
+        status: ActivationCheckStatus.FAIL,
+        evidenceRef: 'RECEIPT_PRINT_FAILED',
+      });
+
+    // Finalize -> FAIL with CHECK_FAILED_SALE_RECEIPT_PATH (never WARNING-tolerated)
+    const finalizeRes = await request(app.getHttpServer())
+      .post(`/api/onboarding/activation/attempts/${attemptFailId}/finalize`)
+      .set('Authorization', `Bearer ${failToken}`)
+      .send();
+
+    expect(finalizeRes.status).toBe(201);
+    expect(finalizeRes.body.status).toBe(ActivationAttemptStatus.FAIL);
+    expect(finalizeRes.body.failureCode).toBe(
+      'CHECK_FAILED_SALE_RECEIPT_PATH',
+    );
+
+    // FAIL attempt with valid readiness reverts to SALE_READY (not ACTIVATED)
+    const sessionFail = await dataSource
+      .getRepository(OnboardingSession)
+      .findOne({ where: { tenantId: tenantFailId } });
+    expect(sessionFail?.lifecycleState).toBe(
+      OnboardingLifecycleState.SALE_READY,
+    );
+    expect(sessionFail?.activatedAt).toBeNull();
+  });
+
   it('10. ONB1.7D–E Background Convergence Reconciler: POST /api/onboarding/activation/reconcile-convergence auto-closes warning follow-up', async () => {
     const tenantConvId = randomUUID();
     const userConvId = randomUUID();

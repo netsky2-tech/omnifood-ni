@@ -398,6 +398,70 @@ void main() {
       expect(evidence['taxRegime'], equals('NOT_A_REAL_REGIME'));
     });
 
+    test('respects autoPrintInvoice=false: never prints, records WARNING RECEIPT_SKIPPED_BY_USER_CONFIG, attempt still completes (#561)', () async {
+      await seedPrerequisites();
+      // Owner disabled auto-print from the hardware settings toggle.
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'printer_auto_invoice', value: 'false'),
+      );
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: attemptId,
+          cashierUserId: cashierId,
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+      // Regression (R4/#561 acceptance): the printer must never be invoked
+      // when the owner disabled auto-print.
+      expect(printerAdapter.printHistory, isEmpty);
+      // The user-config skip is a WARNING, not an error: no error entries.
+      expect(result.errors, isEmpty);
+
+      final receiptCheck = await database.activationCheckResultLocalDao.getCheck(
+        tenantId,
+        attemptId,
+        'SALE_RECEIPT_PATH',
+      );
+      expect(receiptCheck, isNotNull);
+      expect(receiptCheck!.status, equals('WARNING'));
+      expect(
+        receiptCheck.evidenceRef,
+        equals('RECEIPT_SKIPPED_BY_USER_CONFIG'),
+      );
+      final evidence =
+          jsonDecode(receiptCheck.detailsSanitizedJson!) as Map<String, dynamic>;
+      expect(evidence['receiptSuccess'], isFalse);
+      expect(evidence['skippedByUserConfig'], isTrue);
+      expect(evidence['skipReason'], equals('RECEIPT_SKIPPED_BY_USER_CONFIG'));
+
+      // R2: the attempt still reaches LOCAL_ACTIVATION_EVIDENCE_COMPLETE.
+      final updatedAttempt =
+          await database.activationAttemptLocalDao.getAttemptById(attemptId);
+      expect(updatedAttempt, isNotNull);
+      expect(
+        updatedAttempt!.localStatus,
+        equals('LOCAL_ACTIVATION_EVIDENCE_COMPLETE'),
+      );
+
+      // The ACTIVATION_CHECK outbox envelope mirrors the WARNING so the
+      // backend finalizer sees the same whitelisted evidence.
+      final envelopes = await database.activationOutboxDao.getEnvelopesByAttempt(
+        tenantId,
+        attemptId,
+      );
+      final receiptEnv = envelopes.firstWhere(
+        (e) =>
+            e.eventType == 'ACTIVATION_CHECK' &&
+            e.payloadJson.contains('SALE_RECEIPT_PATH'),
+      );
+      final payload = jsonDecode(receiptEnv.payloadJson) as Map<String, dynamic>;
+      expect(payload['status'], equals('WARNING'));
+      expect(payload['evidenceRef'], equals('RECEIPT_SKIPPED_BY_USER_CONFIG'));
+    });
+
     test('retry of attempt does not create a second verification ticket (idempotency)', () async {
       await seedPrerequisites();
 
