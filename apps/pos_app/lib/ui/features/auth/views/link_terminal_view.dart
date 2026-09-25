@@ -53,13 +53,23 @@ class _LinkTerminalViewState extends State<LinkTerminalView> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'Terminal: ${displayTerminalId(viewModel.deviceId)}',
-                    style: textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                      color: Colors.grey.shade700,
-                    ),
-                    textAlign: TextAlign.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    children: [
+                      Text(
+                        'Terminal: ',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      SelectableText(
+                        viewModel.deviceId,
+                        style: textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 28), // stack-lg
                   TextField(
@@ -118,10 +128,3 @@ class _LinkTerminalViewState extends State<LinkTerminalView> {
   }
 }
 
-/// Compact, monospace-friendly rendering of the terminal id: keeps the tail
-/// (the distinguishing part of `pos-local-<uuid>`) and elides the rest.
-String displayTerminalId(String deviceId) {
-  final id = deviceId.trim();
-  if (id.length <= 12) return id;
-  return '…${id.substring(id.length - 12)}';
-}

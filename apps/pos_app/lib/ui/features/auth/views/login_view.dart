@@ -35,7 +35,7 @@ class _LoginViewState extends State<LoginView> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Aprovisionamiento Inicial del Terminal',
+                    'Iniciar Sesión',
                     style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
