@@ -256,4 +256,57 @@ describe('CreateDeviceLinkingCodes1809360000000 (db)', () => {
     },
     30_000,
   );
+
+  it('rejects a duplicate ACTIVE code_hash (partial unique index) and allows reuse after the code is claimed', async () => {
+    await withFreshSchema(async (dataSource) => {
+      await runUp(dataSource);
+
+      const tenantId = randomUUID();
+      await dataSource.query(
+        `INSERT INTO tenants (id, name, slug) VALUES ($1, 'Tenant Uno', 'tenant-uno')`,
+        [tenantId],
+      );
+
+      const sharedHash = await bcrypt.hash('ABCD23', 4);
+      await dataSource.query(
+        `INSERT INTO device_linking_codes
+             (tenant_id, code_hash, status, created_by_user_id, expires_at)
+           VALUES ($1, $2, 'ACTIVE', 'user-9', now() + interval '15 minutes')`,
+        [tenantId, sharedHash],
+      );
+
+      // A second ACTIVE row with the same plaintext is rejected: the
+      // partial unique index makes cross-tenant ACTIVE collisions
+      // impossible, so the claim scan can never mis-bind.
+      await expect(
+        dataSource.query(
+          `INSERT INTO device_linking_codes
+               (tenant_id, code_hash, status, created_by_user_id, expires_at)
+             VALUES ($1, $2, 'ACTIVE', 'user-9', now() + interval '15 minutes')`,
+          [tenantId, sharedHash],
+        ),
+      ).rejects.toThrow(/uq_device_linking_codes_active_hash|duplicate key/);
+
+      // Claim the first row: the partial index only constrains ACTIVE
+      // rows, so the same plaintext may be minted fresh again.
+      const liveCodeId = (
+        await dataSource.query(
+          `SELECT id FROM device_linking_codes WHERE code_hash = $1`,
+          [sharedHash],
+        )
+      )[0].id as string;
+      await dataSource.transaction(async (manager) =>
+        manager.query(CLAIM_LINKING_CODE_SQL, [liveCodeId, 'POS-01']),
+      );
+
+      await expect(
+        dataSource.query(
+          `INSERT INTO device_linking_codes
+               (tenant_id, code_hash, status, created_by_user_id, expires_at)
+             VALUES ($1, $2, 'ACTIVE', 'user-9', now() + interval '15 minutes')`,
+          [tenantId, sharedHash],
+        ),
+      ).resolves.toBeDefined();
+    });
+  }, 30_000);
 });

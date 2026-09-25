@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -77,9 +78,47 @@ export const CLAIM_CANDIDATES_SQL =
 export const CLAIM_LINKING_CODE_SQL =
   "UPDATE device_linking_codes SET status = 'CLAIMED', device_id = $2, claimed_at = now(), updated_at = now() WHERE id = $1 AND status = 'ACTIVE' AND expires_at > now() RETURNING tenant_id";
 
+/**
+ * Opportunistic expiry cleanup (issue #556 stage 3, review finding F2):
+ * runs inside the generation transaction, bounded by
+ * idx_device_linking_codes_expires_at, so expired rows cannot accumulate
+ * forever. A periodic sweep is unnecessary at current scale because
+ * generateLinkingCode runs per provisioning, and the DELETE is scoped to
+ * the caller's tenant by the table's pure-tenant DELETE policy.
+ */
+export const CLEANUP_EXPIRED_LINKING_CODES_SQL =
+  'DELETE FROM device_linking_codes WHERE expires_at < now()';
+
+/**
+ * The partial unique index (review finding F1): only ACTIVE rows compete,
+ * so the same plaintext can never be ACTIVE in two tenants at once and a
+ * random collision can never mis-bind a claimant. Generation retries on a
+ * collision instead of failing.
+ */
+export const UNIQUE_ACTIVE_CODE_HASH_INDEX =
+  'uq_device_linking_codes_active_hash';
+
+/**
+ * The Postgres unique-violation code, mirrored from the driver error (the
+ * QueryFailedError surface carries it directly or under driverError).
+ */
+export function isUniqueViolationError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  const driverCode = (error as { driverError?: { code?: unknown } } | null)
+    ?.driverError?.code;
+  return code === '23505' || driverCode === '23505';
+}
+
 export interface GenerateLinkingCodeOptions {
   expiryMinutes?: number;
 }
+
+/**
+ * Bounded regeneration budget for random collisions against the partial
+ * unique index. 31^6 ≈ 887M makes even two collisions in a row
+ * negligible; five turns an impossibility into a hard stop.
+ */
+const MAX_GENERATION_ATTEMPTS = 5;
 
 export interface GenerateLinkingCodeResult {
   /** The plaintext code, returned exactly ONCE. Never stored or logged. */
@@ -148,6 +187,14 @@ export class DeviceLinkingService {
   /**
    * Generates a linking code for the caller's tenant. The plaintext is
    * returned exactly once and only its bcrypt hash is persisted.
+   *
+   * Uniqueness (review finding F1): the partial unique index
+   * uq_device_linking_codes_active_hash makes a duplicate ACTIVE plaintext
+   * impossible, so on the astronomically rare random collision the
+   * generation retries with a fresh code (bounded loop) instead of
+   * inserting a duplicate that would mis-bind the claimant. Expired rows
+   * are opportunistically cleaned up inside the same transaction (finding
+   * F2), bounded by the expires_at index.
    */
   async generateLinkingCode(
     tenantId: string,
@@ -174,23 +221,36 @@ export class DeviceLinkingService {
       );
     }
 
-    const code = generateLinkingCodeValue();
-    const codeHash = await bcrypt.hash(code, LINKING_CODE_BCRYPT_COST);
     const expiresAt = new Date(Date.now() + expiryMinutes * 60_000);
 
-    await this.dataSource.transaction(async (manager: EntityManager) => {
-      await bindTenantContext(manager, trimmedTenantId);
-      await manager.getRepository(DeviceLinkingCode).insert({
-        tenantId: trimmedTenantId,
-        codeHash,
-        status: DeviceLinkingCodeStatus.ACTIVE,
-        deviceId: null,
-        createdByUserId: trimmedActorUserId,
-        expiresAt,
-      });
-    });
+    for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
+      const code = generateLinkingCodeValue();
+      const codeHash = await bcrypt.hash(code, LINKING_CODE_BCRYPT_COST);
+      try {
+        await this.dataSource.transaction(async (manager: EntityManager) => {
+          await bindTenantContext(manager, trimmedTenantId);
+          await manager.query(CLEANUP_EXPIRED_LINKING_CODES_SQL);
+          await manager.getRepository(DeviceLinkingCode).insert({
+            tenantId: trimmedTenantId,
+            codeHash,
+            status: DeviceLinkingCodeStatus.ACTIVE,
+            deviceId: null,
+            createdByUserId: trimmedActorUserId,
+            expiresAt,
+          });
+        });
+        return { code, expiresAt };
+      } catch (error) {
+        if (!isUniqueViolationError(error)) {
+          throw error;
+        }
+        // Duplicate ACTIVE plaintext: regenerate with a fresh code.
+      }
+    }
 
-    return { code, expiresAt };
+    throw new ConflictException(
+      'Unable to generate a unique linking code after repeated collisions',
+    );
   }
 
   /**

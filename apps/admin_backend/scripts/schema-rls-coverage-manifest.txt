@@ -38,7 +38,7 @@
 #
 # The three declared command sets, and why each group is declared as it is:
 #
-#   direct:SIUD (46) — ordinary business tables whose lifecycle reads, inserts,
+#   direct:SIUD (47) — ordinary business tables whose lifecycle reads, inserts,
 #                   updates AND deletes rows; their write paths mutate and
 #                   remove state as part of normal operation.
 #   direct:SI    (10) — append-only ledgers (sync credential events, human-auth

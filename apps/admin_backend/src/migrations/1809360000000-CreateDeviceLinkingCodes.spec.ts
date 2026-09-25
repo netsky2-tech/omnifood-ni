@@ -61,6 +61,9 @@ describe('CreateDeviceLinkingCodes1809360000000', () => {
       'ON device_linking_codes (tenant_id, status)',
       'idx_device_linking_codes_expires_at',
       'ON device_linking_codes (expires_at)',
+      'uq_device_linking_codes_active_hash',
+      'ON device_linking_codes (code_hash) WHERE status =',
+      "'ACTIVE'",
     ]) {
       expect(sql).toContain(fragment);
     }
@@ -143,8 +146,11 @@ describe('CreateDeviceLinkingCodes1809360000000', () => {
     await expect(migration.up(queryRunner)).resolves.toBeUndefined();
   });
 
-  it('down migration drops the table cleanly', async () => {
+  it('down migration drops the partial unique index and the table cleanly', async () => {
     const sql = await collectSql('down');
+    expect(sql).toContain(
+      'DROP INDEX IF EXISTS uq_device_linking_codes_active_hash',
+    );
     expect(sql).toContain('DROP TABLE IF EXISTS device_linking_codes');
   });
 });

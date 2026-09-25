@@ -50,8 +50,13 @@ import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
  * - status lifecycle: ACTIVE -> CLAIMED (claim), or EXPIRED/REVOKED by
  *   explicit maintenance. Expired rows are unreachable through the claim
  *   predicate (expires_at > now()) even before cleanup runs.
- * - Indexes: (tenant_id, status) for the human-auth tenant view, and
- *   expires_at for cleanup sweeps.
+ * - Indexes: (tenant_id, status) for the human-auth tenant view, expires_at
+ *   for cleanup sweeps, and the partial unique index uq_device_linking_codes_active_hash
+ *   on (code_hash) WHERE status = 'ACTIVE': the same plaintext can never be
+ *   ACTIVE in two tenants at once, so a random collision can never mis-bind
+ *   a claimant to the lowest-id matching tenant (the claim scan picks the
+ *   first match; with the index, there is at most one). Generation retries
+ *   deterministically on collision (bounded loop in DeviceLinkingService).
  * - Idempotent for the partial-ledger scenario (guarded CREATE POLICY,
  *   IF NOT EXISTS everywhere); down() drops the table and its policies.
  */
@@ -81,6 +86,13 @@ export class CreateDeviceLinkingCodes1809360000000 implements MigrationInterface
         ON device_linking_codes (tenant_id, status);
       CREATE INDEX IF NOT EXISTS idx_device_linking_codes_expires_at
         ON device_linking_codes (expires_at);
+
+      -- Partial unique: only ACTIVE rows compete, so a CLAIMED/EXPIRED row
+      -- never blocks a fresh code with the same plaintext (verified by the
+      -- db spec: duplicate ACTIVE inserts are rejected, post-claim reuse is
+      -- allowed).
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_device_linking_codes_active_hash
+        ON device_linking_codes (code_hash) WHERE status = 'ACTIVE';
 
       -- FORCE ROW LEVEL SECURITY keeps the tenant boundary authoritative for
       -- every role, including the table owner. The claim branch below is the
@@ -145,6 +157,7 @@ export class CreateDeviceLinkingCodes1809360000000 implements MigrationInterface
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
+      DROP INDEX IF EXISTS uq_device_linking_codes_active_hash;
       DROP TABLE IF EXISTS device_linking_codes CASCADE;
     `);
   }

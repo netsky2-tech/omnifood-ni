@@ -3,6 +3,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import {
   CLAIM_LINKING_CODE_SQL,
+  CLEANUP_EXPIRED_LINKING_CODES_SQL,
   DEFAULT_LINKING_EXPIRY_MINUTES,
   DeviceLinkingService,
   LINKING_CODE_ALPHABET,
@@ -56,6 +57,13 @@ const buildManager = (routes: RoutedQuery[]) => {
   };
 };
 
+// Every generation transaction also runs the opportunistic expiry cleanup
+// (review finding F2), so the shared stub routes it by default.
+const CLEANUP_ROUTE: RoutedQuery = {
+  match: /DELETE FROM device_linking_codes/,
+  result: [],
+};
+
 const buildDataSource = (manager: EntityManager): DataSource =>
   ({
     transaction: jest.fn(async (cb: (m: EntityManager) => Promise<unknown>) =>
@@ -107,6 +115,7 @@ describe('DeviceLinkingService.generateLinkingCode', () => {
   it('stores only the bcrypt hash, binds tenant context, and returns the plaintext once', async () => {
     const { manager, query } = buildManager([
       { match: BIND_TENANT, result: [] },
+      CLEANUP_ROUTE,
     ]);
     const service = new DeviceLinkingService(buildDataSource(manager));
 
@@ -137,7 +146,10 @@ describe('DeviceLinkingService.generateLinkingCode', () => {
   });
 
   it('defaults the expiry to 15 minutes', async () => {
-    const { manager } = buildManager([{ match: BIND_TENANT, result: [] }]);
+    const { manager } = buildManager([
+      { match: BIND_TENANT, result: [] },
+      CLEANUP_ROUTE,
+    ]);
     const service = new DeviceLinkingService(buildDataSource(manager));
 
     const before = Date.now();
@@ -151,7 +163,10 @@ describe('DeviceLinkingService.generateLinkingCode', () => {
   });
 
   it('rejects out-of-range expiry minutes', async () => {
-    const { manager } = buildManager([{ match: BIND_TENANT, result: [] }]);
+    const { manager } = buildManager([
+      { match: BIND_TENANT, result: [] },
+      CLEANUP_ROUTE,
+    ]);
     const service = new DeviceLinkingService(buildDataSource(manager));
 
     await expect(
@@ -162,6 +177,104 @@ describe('DeviceLinkingService.generateLinkingCode', () => {
         expiryMinutes: 100000,
       }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('runs the opportunistic expiry cleanup inside the generation transaction', async () => {
+    const { manager, query } = buildManager([
+      { match: BIND_TENANT, result: [] },
+      CLEANUP_ROUTE,
+    ]);
+    const service = new DeviceLinkingService(buildDataSource(manager));
+
+    await service.generateLinkingCode('tenant-1', 'user-9');
+
+    expect(query).toHaveBeenCalledWith(CLEANUP_EXPIRED_LINKING_CODES_SQL);
+    // The cleanup runs after the tenant bind (the pure-tenant DELETE policy
+    // requires the bound context) and before the insert.
+    const bindCall = query.mock.calls.findIndex((call) =>
+      String(call[0]).includes("set_config('app.tenant_id'"),
+    );
+    const cleanupCall = query.mock.calls.findIndex(
+      (call) => call[0] === CLEANUP_EXPIRED_LINKING_CODES_SQL,
+    );
+    const insertCallOrder = (
+      (manager as unknown as { getRepository: jest.Mock }).getRepository.mock
+        .results[0].value as { insert: jest.Mock }
+    ).insert.mock.invocationCallOrder[0];
+    expect(bindCall).toBeGreaterThanOrEqual(0);
+    expect(cleanupCall).toBeGreaterThan(bindCall);
+    expect(insertCallOrder).toBeGreaterThan(
+      query.mock.invocationCallOrder[cleanupCall],
+    );
+  });
+
+  it('regenerates deterministically when the plaintext collides with an ACTIVE code', async () => {
+    const uniqueViolation = Object.assign(
+      new Error(
+        'duplicate key value violates unique constraint "uq_device_linking_codes_active_hash"',
+      ),
+      { code: '23505', constraint: 'uq_device_linking_codes_active_hash' },
+    );
+    let insertAttempts = 0;
+    const insert = jest.fn(async () => {
+      insertAttempts += 1;
+      if (insertAttempts === 1) {
+        throw uniqueViolation;
+      }
+    });
+    const query = jest.fn(async () => []);
+    const manager = {
+      query,
+      getRepository: jest.fn(() => ({ insert })),
+    } as unknown as EntityManager;
+    const service = new DeviceLinkingService(buildDataSource(manager));
+
+    const result = await service.generateLinkingCode('tenant-1', 'user-9');
+
+    expect(isCanonicalLinkingCode(result.code)).toBe(true);
+    expect(insertAttempts).toBe(2);
+    // Each attempt re-binds the tenant context inside its own transaction.
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("set_config('app.tenant_id'"),
+      ['tenant-1'],
+    );
+  });
+
+  it('gives up with a conflict after the bounded regeneration budget', async () => {
+    const uniqueViolation = Object.assign(new Error('duplicate key'), {
+      code: '23505',
+    });
+    const insert = jest.fn(async () => {
+      throw uniqueViolation;
+    });
+    const manager = {
+      query: jest.fn(async () => []),
+      getRepository: jest.fn(() => ({ insert })),
+    } as unknown as EntityManager;
+    const service = new DeviceLinkingService(buildDataSource(manager));
+
+    await expect(
+      service.generateLinkingCode('tenant-1', 'user-9'),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(insert).toHaveBeenCalledTimes(5);
+  });
+
+  it('propagates non-unique-violation insert errors', async () => {
+    const insert = jest.fn(async () => {
+      throw Object.assign(new Error('connection refused'), {
+        code: 'ECONNREFUSED',
+      });
+    });
+    const manager = {
+      query: jest.fn(async () => []),
+      getRepository: jest.fn(() => ({ insert })),
+    } as unknown as EntityManager;
+    const service = new DeviceLinkingService(buildDataSource(manager));
+
+    await expect(
+      service.generateLinkingCode('tenant-1', 'user-9'),
+    ).rejects.toThrow('connection refused');
+    expect(insert).toHaveBeenCalledTimes(1);
   });
 });
 
