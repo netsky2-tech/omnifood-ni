@@ -15,6 +15,7 @@ import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
 } from '../../inventory/entities/system-parameters-config.entity';
+import { EffectiveFiscalPayload } from '../dto/fiscal-config-version.dto';
 import { FiscalRegime } from '../dto/fiscal-setup.dto';
 import { computeJcsSha256 } from '../utils/canonical-jcs';
 import { normalizeTenantSlug } from '../../tenant/tenant-slug';
@@ -161,6 +162,11 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         taxRate: 0.15,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
+        // D-21 (#554): no DGI authorization configured yet — absence reads
+        // as null, never as an empty string.
+        dgiAuthorizationCode: null,
+        dgiAuthorizationIssuedAt: null,
+        dgiAuthorizationExpiresAt: null,
       });
 
       const fingerprint = service.computeCanonicalFingerprint(payload);
@@ -173,6 +179,100 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       await expect(
         service.getEffectiveFiscalPayload('non-existent'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // D-21 (#554): the DGI authorization fields ride the fingerprinted
+  // effective payload so every material authorization change is versioned
+  // and synced to the POS through the existing snapshot channel.
+  describe('DGI authorization exposure (D-21, #554)', () => {
+    const dgiRow = (
+      paramKey: string,
+      paramValue: string | null,
+    ): SystemParametersConfig => ({
+      id: `dgi-${paramKey}`,
+      tenant_id: tenantId,
+      tenant: mockTenant,
+      paramKey,
+      paramValue,
+      version: 1,
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: 'user-1',
+      createdAt: new Date(),
+    });
+
+    const paramsWithDgi: SystemParametersConfig[] = [
+      ...mockParams,
+      dgiRow('DGI_AUTHORIZATION_CODE', 'DGI-SFC-2024-00123'),
+      dgiRow('DGI_AUTHORIZATION_ISSUED_AT', '2025-01-15'),
+      dgiRow('DGI_AUTHORIZATION_EXPIRES_AT', '2026-01-15'),
+    ];
+
+    it('exposes the DGI authorization fields in the effective payload when configured', async () => {
+      sysParamRepo.find.mockResolvedValueOnce(paramsWithDgi);
+
+      const payload = await service.getEffectiveFiscalPayload(tenantId);
+
+      expect(payload.dgiAuthorizationCode).toBe('DGI-SFC-2024-00123');
+      expect(payload.dgiAuthorizationIssuedAt).toBe('2025-01-15');
+      expect(payload.dgiAuthorizationExpiresAt).toBe('2026-01-15');
+    });
+
+    it('reads a stored empty-string code as null (absence looks like absence, D-16 spirit)', async () => {
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        dgiRow('DGI_AUTHORIZATION_CODE', ''),
+      ]);
+
+      const payload = await service.getEffectiveFiscalPayload(tenantId);
+
+      expect(payload.dgiAuthorizationCode).toBeNull();
+    });
+
+    it('exposes the DGI authorization fields in the config snapshot for cloud sync', async () => {
+      sysParamRepo.find.mockResolvedValue(paramsWithDgi);
+      revisionRepo.findOne.mockResolvedValue(null);
+
+      const snapshot = await service.getFiscalConfigSnapshot(tenantId);
+
+      expect(snapshot.dgiAuthorizationCode).toBe('DGI-SFC-2024-00123');
+      expect(snapshot.dgiAuthorizationIssuedAt).toBe('2025-01-15');
+      expect(snapshot.dgiAuthorizationExpiresAt).toBe('2026-01-15');
+    });
+
+    it('covers the DGI authorization fields in the fingerprint: configuring a code changes it', async () => {
+      const payloadWithoutDgi = await service.getEffectiveFiscalPayload(tenantId);
+      const fingerprintWithoutDgi = service.computeCanonicalFingerprint(payloadWithoutDgi);
+
+      sysParamRepo.find.mockResolvedValueOnce(paramsWithDgi);
+      const payloadWithDgi = await service.getEffectiveFiscalPayload(tenantId);
+      const fingerprintWithDgi = service.computeCanonicalFingerprint(payloadWithDgi);
+
+      expect(fingerprintWithDgi).not.toBe(fingerprintWithoutDgi);
+    });
+
+    it('records a strictly higher revision when the DGI authorization code changes', async () => {
+      const baselinePayload = await service.getEffectiveFiscalPayload(tenantId);
+      const baselineFingerprint = service.computeCanonicalFingerprint(baselinePayload);
+
+      const existingRevision: FiscalConfigRevision = {
+        id: 'rev-1-id',
+        tenant_id: tenantId,
+        revision: 1,
+        fingerprint: baselineFingerprint,
+        payload: baselinePayload as unknown as Record<string, unknown>,
+        created_at: new Date('2026-01-01'),
+      };
+      revisionRepo.findOne.mockResolvedValueOnce(existingRevision);
+      sysParamRepo.find.mockResolvedValueOnce(paramsWithDgi);
+
+      const result = await service.recordRevisionChange(tenantId);
+
+      expect(result.revision).toBe(2);
+      expect(result.fingerprint).not.toBe(baselineFingerprint);
+      expect(revisionRepo.save).toHaveBeenCalled();
     });
   });
 
@@ -211,7 +311,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
     });
 
     it('strictly increments revision (prev.revision + 1) when effective config changes materially', async () => {
-      const oldPayload = {
+      const oldPayload: EffectiveFiscalPayload = {
         tenantId,
         businessName: 'Old Business Name',
         ruc: 'J0310000000001',
@@ -219,6 +319,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         taxRate: 0.0,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
+        dgiAuthorizationCode: null,
+        dgiAuthorizationIssuedAt: null,
+        dgiAuthorizationExpiresAt: null,
       };
       const oldFingerprint = service.computeCanonicalFingerprint(oldPayload);
 
@@ -227,7 +330,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         tenant_id: tenantId,
         revision: 1,
         fingerprint: oldFingerprint,
-        payload: oldPayload,
+        payload: oldPayload as unknown as Record<string, unknown>,
         created_at: new Date('2026-01-01'),
       };
 

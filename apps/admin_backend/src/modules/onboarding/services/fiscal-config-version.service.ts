@@ -28,6 +28,19 @@ import {
 } from '../dto/fiscal-config-version.dto';
 import { computeJcsSha256 } from '../utils/canonical-jcs';
 
+/**
+ * D-21 (#554): resolves a DGI authorization string parameter. A governing
+ * tombstone (null) or an empty string reads as null — absence must look
+ * like absence, never like a stored '' (D-16 spirit).
+ */
+function readDgiStringParam(
+  paramMap: Map<string, unknown>,
+  paramKey: string,
+): string | null {
+  const raw = paramMap.get(paramKey);
+  return typeof raw === 'string' && raw !== '' ? raw : null;
+}
+
 @Injectable()
 export class FiscalConfigVersionService {
   constructor(
@@ -102,6 +115,21 @@ export class FiscalConfigVersionService {
     const commercialFxSpread =
       typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
 
+    // D-21 (#554): the authorization fields read as null when unconfigured
+    // (or when a null/'' tombstone governs) — absence never reads as ''.
+    const dgiAuthorizationCode = readDgiStringParam(
+      paramMap,
+      FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_CODE,
+    );
+    const dgiAuthorizationIssuedAt = readDgiStringParam(
+      paramMap,
+      FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_ISSUED_AT,
+    );
+    const dgiAuthorizationExpiresAt = readDgiStringParam(
+      paramMap,
+      FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_EXPIRES_AT,
+    );
+
     return {
       tenantId: tenant.id,
       businessName: tenant.name,
@@ -110,6 +138,9 @@ export class FiscalConfigVersionService {
       taxRate,
       pricesIncludeTax,
       commercialFxSpread,
+      dgiAuthorizationCode,
+      dgiAuthorizationIssuedAt,
+      dgiAuthorizationExpiresAt,
     };
   }
 
@@ -241,6 +272,9 @@ export class FiscalConfigVersionService {
         taxRate: payload.taxRate,
         pricesIncludeTax: payload.pricesIncludeTax,
         commercialFxSpread: payload.commercialFxSpread,
+        dgiAuthorizationCode: payload.dgiAuthorizationCode,
+        dgiAuthorizationIssuedAt: payload.dgiAuthorizationIssuedAt,
+        dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
         configVersion: version,
         generatedAt: new Date().toISOString(),
       };
@@ -254,6 +288,9 @@ export class FiscalConfigVersionService {
       taxRate: payload.taxRate,
       pricesIncludeTax: payload.pricesIncludeTax,
       commercialFxSpread: payload.commercialFxSpread,
+      dgiAuthorizationCode: payload.dgiAuthorizationCode,
+      dgiAuthorizationIssuedAt: payload.dgiAuthorizationIssuedAt,
+      dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
       configVersion: {
         revision: latest.revision,
         fingerprint: latest.fingerprint,

@@ -149,25 +149,20 @@ void main() {
       String attemptStatus = 'RUNNING',
       String taxRegimeConfig = 'REGIMEN_GENERAL',
     }) async {
-      // 1. DGI Numbering range in localConfig
+      // 1. DGI series in localConfig (tenant-provisioned prefixed series:
+      // still legal under D-21, where the prefix is optional). The B2a
+      // range-end key is RETIRED (D-21: there is no range for computarizados)
+      // and is no longer seeded.
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(
           key: 'dgi_prefix',
           value: '001-001-01',
         ),
       );
-      // B2a: the real cursor key (the old self-heal masked this seed's
-      // wrong key by fabricating the whole range).
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(
           key: 'dgi_current_number',
           value: '1',
-        ),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(
-          key: 'dgi_range_end',
-          value: '1000',
         ),
       );
 
@@ -511,12 +506,6 @@ void main() {
         ),
       );
       await database.localConfigDao.saveConfig(
-        LocalConfigEntity(
-          key: 'dgi_range_end',
-          value: '1000',
-        ),
-      );
-      await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
       );
 
@@ -700,12 +689,6 @@ void main() {
           LocalConfigEntity(
             key: 'dgi_current_number',
             value: '20',
-          ),
-        );
-        await diskDb1.localConfigDao.saveConfig(
-          LocalConfigEntity(
-            key: 'dgi_range_end',
-            value: '1000',
           ),
         );
         await diskDb1.localConfigDao.saveConfig(
@@ -958,9 +941,6 @@ void main() {
           LocalConfigEntity(key: 'dgi_current_number', value: '1'),
         );
         await database.localConfigDao.saveConfig(
-          LocalConfigEntity(key: 'dgi_range_end', value: '1000'),
-        );
-        await database.localConfigDao.saveConfig(
           LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
         );
 
@@ -1113,7 +1093,6 @@ void main() {
           // Seed configs
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'));
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_current_number', value: '1'));
-          await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_range_end', value: '1000'));
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
           await diskDb.userDao.insertUsers([
             UserEntity(id: cashierId, name: 'Cajero Offline', role: 'CASHIER', pinHash: '', isActive: true, tenantId: tenantId),
@@ -1422,5 +1401,136 @@ void main() {
       expect(payload['activationAttemptId'], equals(attemptIdB));
     });
   });
+  });
+
+  group('D-21 — activation provisioning: pure numeric consecutivo (B2a bootstrap range retired)', () {
+    const tenantId = 'tenant-founder-01';
+    const verificationProductId = 'prod-pin-001';
+    const cashierId = 'cashier-d21-01';
+
+    /// Seeds everything the controlled sale needs EXCEPT any dgi_* config:
+    /// the runner itself must provision the consecutivo inicial when absent
+    /// (the B2a-documented once-only provisioning before the self-test sale).
+    Future<void> seedActivationScenarioWithoutFiscalConfig({required String attemptId}) async {
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+      );
+
+      await database.userDao.insertUsers([
+        UserEntity(
+          id: cashierId,
+          name: 'Cajero D21',
+          role: 'CASHIER',
+          pinHash: '',
+          isActive: true,
+          tenantId: tenantId,
+        ),
+      ]);
+      await database.securityProfileDao.insertProfiles([
+        SecurityProfileEntity(
+          userId: cashierId,
+          pinHash: localAuth.hashPin('123456'),
+          isPinEnabled: true,
+          isTotpEnabled: false,
+        ),
+      ]);
+
+      await database.productDao.insertProducts([
+        ProductEntity(
+          id: verificationProductId,
+          name: 'Café de Prueba Activación',
+          sellPrice: 50.0,
+          averageCost: 15.0,
+          stock: 100.0,
+          uom: 'CUP',
+          barcode: 'PROD-ACT-D21',
+          isActive: true,
+          isPrepared: false,
+          tenantId: tenantId,
+        ),
+      ]);
+
+      await database.activationAttemptLocalDao.saveAttempt(
+        ActivationAttemptLocalEntity(
+          attemptId: attemptId,
+          tenantId: tenantId,
+          candidateTerminalId: 'pos-terminal-founder-01',
+          localStatus: 'RUNNING',
+          requiredFiscalRevision: 1,
+          requiredFiscalFingerprint: 'fiscal-fp-123',
+          verificationProductId: verificationProductId,
+          assignedAt: '2026-09-04T12:00:00.000Z',
+          updatedAt: '2026-09-04T12:00:00.000Z',
+        ),
+      );
+    }
+
+    test('provisions consecutivo inicial=1 with an EMPTY prefix, never writes dgi_range_end, and the self-test sale emits the plain folio 1', () async {
+      await seedActivationScenarioWithoutFiscalConfig(attemptId: 'attempt-d21-1');
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: 'attempt-d21-1',
+          cashierUserId: cashierId,
+        ),
+      );
+
+      expect(result.isSuccess, isTrue,
+          reason: 'the activation self-test sale must still succeed');
+
+      // D-21 provisioning shape: the series is a purely numeric consecutivo —
+      // prefix EMPTY, no range end. Provisioning stays once-only-when-absent
+      // (D-1): the presence-marker row must exist afterwards.
+      final prefix = await database.localConfigDao.getConfigByKey('dgi_prefix');
+      expect(prefix, isNotNull,
+          reason: 'the provisioning happened exactly once (marker row exists)');
+      expect(prefix!.value, isEmpty,
+          reason: 'D-21: single branch + 1 caja → purely numeric consecutive, no invented prefix');
+      final start = await database.localConfigDao.getConfigByKey('dgi_range_start');
+      expect(start, isNotNull);
+      expect(start!.value, '1',
+          reason: 'the consecutivo inicial is provisioned as 1');
+      expect(await database.localConfigDao.getConfigByKey('dgi_range_end'), isNull,
+          reason: 'D-21: the range concept is dead — no end is provisioned');
+
+      // The self-test folio is the plain number (1), not '001-001-01-00000001'.
+      final invoice =
+          await database.invoiceDao.getInvoiceById(result.verificationTicketId!);
+      expect(invoice, isNotNull);
+      expect(invoice!.number, '1',
+          reason: 'empty prefix → plain unpadded numeric folio (D-21)');
+    });
+
+    test('provisioning is once-only: a later attempt continues the cursor and never re-seeds (D-1)', () async {
+      await seedActivationScenarioWithoutFiscalConfig(attemptId: 'attempt-d21-2a');
+      final first = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: 'attempt-d21-2a',
+          cashierUserId: cashierId,
+        ),
+      );
+      expect(first.isSuccess, isTrue);
+      final firstInvoice =
+          await database.invoiceDao.getInvoiceById(first.verificationTicketId!);
+      expect(firstInvoice!.number, '1');
+
+      // A second attempt on the same device: the marker row now exists, so no
+      // re-provisioning — the cursor must continue, never reset to 1 (D-1).
+      await seedActivationScenarioWithoutFiscalConfig(attemptId: 'attempt-d21-2b');
+      final second = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: 'attempt-d21-2b',
+          cashierUserId: cashierId,
+        ),
+      );
+      expect(second.isSuccess, isTrue);
+      final secondInvoice =
+          await database.invoiceDao.getInvoiceById(second.verificationTicketId!);
+      expect(secondInvoice!.number, '2',
+          reason: 'D-1: provisioning never overwrites or restarts a persisted sequence');
+    });
   });
 }

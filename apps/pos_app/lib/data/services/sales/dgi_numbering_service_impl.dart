@@ -3,17 +3,19 @@ import '../../daos/local_config_dao.dart';
 import '../../daos/sales/invoice_dao.dart';
 import '../../models/local_config_entity.dart';
 
-/// D-16/D-18: fail-closed DGI numbering. The three self-heals that used to
+/// D-21 (and B2a D-16/D-18/D-1 heritage): fail-closed DGI numbering with no
+/// range concept. Computerized systems issue consecutive, progressive,
+/// gapless numbers — unbounded. The three self-heals that used to
 /// materialize invented ranges (boot 1-1000, missing-config 1-1000000,
-/// parse-fallback 1) are gone: an unconfigured sequence is a named
-/// configuration state, not something to paper over.
+/// parse-fallback 1) are gone, and the exhaustion gate is gone with the
+/// range: an unconfigured or corrupt sequence is the single named failure
+/// state, not something to paper over.
 class DgiNumberingServiceImpl implements DgiNumberingService {
   final LocalConfigDao _configDao;
   final InvoiceDao? _invoiceDao;
 
   static const String _keyPrefix = 'dgi_prefix';
   static const String _keyStart = 'dgi_range_start';
-  static const String _keyEnd = 'dgi_range_end';
   static const String _keyCurrent = 'dgi_current_number';
 
   DgiNumberingServiceImpl(this._configDao, [this._invoiceDao]);
@@ -29,7 +31,9 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   /// D-18: the persisted last folio is authoritative — a number is never
   /// reused even when the config cursor lags behind (crash between print
   /// and cursor save). An undetermined last folio (no persisted invoice)
-  /// falls back to the configured cursor.
+  /// falls back to the configured cursor. Works for both folio formats
+  /// (plain `3` and padded `001-001-01-00000003`): the trailing decimal run
+  /// is the consecutivo either way.
   Future<int> _resolveNextSequence(int configuredCurrent) async {
     if (_invoiceDao != null) {
       final lastInvoice = await _invoiceDao.getLastInvoice();
@@ -47,22 +51,10 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     final current = await _configDao.getConfigByKey(_keyCurrent);
     final parsed = int.tryParse(current?.value ?? '');
     if (parsed == null || parsed < 1) {
+      // D-18 spirit: a corrupt/unparseable cursor is the same named
+      // configuration state as an absent one — never a self-healed default.
       throw const FiscalSequenceUnconfiguredError(
-        'La serie fiscal no está configurada para este negocio. Configure el rango DGI antes de facturar.',
-      );
-    }
-    return parsed;
-  }
-
-  Future<int?> _readConfiguredEnd() async {
-    final end = await _configDao.getConfigByKey(_keyEnd);
-    // D-16: a null/blank end is the legitimate unbounded state, not a
-    // default to fabricate.
-    if (end == null || end.value.trim().isEmpty) return null;
-    final parsed = int.tryParse(end.value);
-    if (parsed == null) {
-      throw const FiscalSequenceUnconfiguredError(
-        'El rango DGI configurado es inválido. Corrija la configuración antes de facturar.',
+        'La serie fiscal no está configurada para este negocio. Configure la autorización fiscal DGI (consecutivo inicial) antes de facturar.',
       );
     }
     return parsed;
@@ -72,7 +64,6 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   Future<void> initializeRange({
     required String prefix,
     required int start,
-    required int? end,
   }) async {
     await _configDao.saveConfig(
       LocalConfigEntity(key: _keyPrefix, value: prefix),
@@ -80,12 +71,6 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     await _configDao.saveConfig(
       LocalConfigEntity(key: _keyStart, value: start.toString()),
     );
-    // D-16: an absent end is stored as absent (no row), never as a number.
-    if (end != null) {
-      await _configDao.saveConfig(
-        LocalConfigEntity(key: _keyEnd, value: end.toString()),
-      );
-    }
 
     final current = await _configDao.getConfigByKey(_keyCurrent);
     // D-1: never overwrite a persisted fiscal sequence.
@@ -99,22 +84,16 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   @override
   Future<String> getNextNumber() async {
     final prefixEntity = await _configDao.getConfigByKey(_keyPrefix);
+    // D-21: the prefix is optional. Blank/absent → the folio is the plain
+    // decimal consecutivo with no padding and no prefix (1, 2, 3, ...).
     final prefix = prefixEntity?.value.trim() ?? '';
-    if (prefix.isEmpty) {
-      throw const FiscalSequenceUnconfiguredError(
-        'La serie fiscal no está configurada para este negocio. Configure el rango DGI antes de facturar.',
-      );
-    }
     final configuredCurrent = await _readConfiguredCurrent();
     final validSequence = await _resolveNextSequence(configuredCurrent);
 
-    final end = await _readConfiguredEnd();
-    if (end != null && validSequence > end) {
-      throw const FiscalSequenceExhaustedError(
-        'El rango autorizado DGI se agotó. No se reutilizan ni extienden correlativos; solicite un rango nuevo.',
-      );
+    if (prefix.isEmpty) {
+      return validSequence.toString();
     }
-
+    // Prefix present → preserved format: prefix + zero-padded 8-digit folio.
     final numStr = validSequence.toString().padLeft(8, '0');
     return '$prefix$numStr';
   }
@@ -134,16 +113,5 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     await _configDao.saveConfig(
       LocalConfigEntity(key: _keyCurrent, value: next.toString()),
     );
-  }
-
-  @override
-  Future<bool> isRangeExhausted() async {
-    final configuredCurrent = await _readConfiguredCurrent();
-    final end = await _readConfiguredEnd();
-    // D-16: a series without a documented end is never exhausted.
-    if (end == null) return false;
-
-    final validSequence = await _resolveNextSequence(configuredCurrent);
-    return validSequence > end;
   }
 }

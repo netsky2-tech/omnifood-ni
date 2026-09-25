@@ -111,7 +111,6 @@ void main() {
     when(mockInventoryRepo.getUnsyncedCountSessionDocuments()).thenAnswer((_) async => []);
     when(mockInventoryRepo.getUnsyncedForensicAlerts()).thenAnswer((_) async => []);
     when(mockProcessUseCase.execute(any)).thenAnswer((_) async => []);
-    when(mockNumberingService.isRangeExhausted()).thenAnswer((_) async => false);
 
     var seq = 1;
     when(mockNumberingService.getNextNumber()).thenAnswer(

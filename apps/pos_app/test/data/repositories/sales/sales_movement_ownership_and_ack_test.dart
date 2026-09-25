@@ -46,10 +46,7 @@ void main() {
     mockReverseInventoryUseCase = MockReverseSaleInventoryUseCase();
     mockInventoryRepository = MockInventoryRepository();
 
-    when(
-      mockNumberingService.isRangeExhausted(),
-    ).thenAnswer((_) async => false);
-    when(
+        when(
       mockNumberingService.getNextNumber(),
     ).thenAnswer((_) async => '001-001-01-00000001');
     when(mockNumberingService.incrementNumber()).thenAnswer((_) async {});

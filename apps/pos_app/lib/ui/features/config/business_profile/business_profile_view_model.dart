@@ -48,11 +48,16 @@ class BusinessProfileViewModel extends ChangeNotifier {
     // letter. Blank here + the saveConfig skip below means an untouched
     // profile leaves the sequence UNCONFIGURED (the numbering service fails
     // closed) and the activation runner provisions it at the approved gate.
+    // D-21 (#554): there is NO range for computerized systems — only
+    // consecutive numbering. 'dgi_range_end' is RETIRED: it is not in the
+    // defaults map (so loadConfig never reads it) and saveConfig drops it.
+    // 'dgi_range_start' keeps its key but means "Consecutivo inicial".
     'dgi_prefix': '',
     'dgi_range_start': '',
-    'dgi_range_end': '',
     'dgi_current_number': '',
     'dgi_authorization_code': '',
+    'dgi_authorization_issued_at': '',
+    'dgi_authorization_expires_at': '',
     'dgi_authorization_date': '',
     'dgi_authorization_document': '',
     'tax_regime': 'REGIMEN_GENERAL',
@@ -213,15 +218,23 @@ class BusinessProfileViewModel extends ChangeNotifier {
   static const Set<String> _sequenceKeys = {
     'dgi_prefix',
     'dgi_range_start',
-    'dgi_range_end',
     'dgi_current_number',
   };
+
+  /// D-21 (#554): the range concept is retired for computerized systems.
+  /// The key is never written again — not blank, not with a legacy value.
+  /// Reads ignore it because it is no longer in the defaults map.
+  static const String _retiredKey = 'dgi_range_end';
 
   Future<void> saveConfig(Map<String, String> newConfig) async {
     _isLoading = true;
     notifyListeners();
     try {
       for (final entry in newConfig.entries) {
+        if (entry.key == _retiredKey) {
+          // D-21: the retired range-end key is dropped on write.
+          continue;
+        }
         if (_sequenceKeys.contains(entry.key) &&
             entry.value.trim().isEmpty) {
           // Blank sequence value = leave the persisted row untouched.

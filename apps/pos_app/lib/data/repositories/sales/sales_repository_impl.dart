@@ -125,9 +125,6 @@ class SalesRepositoryImpl implements SalesRepository {
     if (fulfillmentContext != null) {
       await _validateFulfillmentContext(fulfillmentContext);
     }
-    if (await numberingService.isRangeExhausted()) {
-      throw Exception('DGI Authorized Numbering Range exhausted.');
-    }
 
     final finalNumber = await numberingService.getNextNumber();
     final nextDgiSequence = _nextDgiSequence(finalNumber);
@@ -863,9 +860,6 @@ class SalesRepositoryImpl implements SalesRepository {
     final sanitizedReason = reason.trim();
     if (sanitizedReason.isEmpty) {
       throw StateError('Credit note reason must not be blank.');
-    }
-    if (await numberingService.isRangeExhausted()) {
-      throw Exception('DGI Authorized Numbering Range exhausted.');
     }
 
     final original = await invoiceDao.getInvoiceById(originalInvoiceId);

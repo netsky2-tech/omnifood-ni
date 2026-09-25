@@ -4,15 +4,38 @@ import 'package:provider/provider.dart';
 import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
 import 'business_profile_view_model.dart';
+import 'fiscal_authorization_expiry_notice_widget.dart';
 
 class BusinessProfileView extends StatefulWidget {
-  const BusinessProfileView({super.key});
+  /// D-21 (#554) U4: test-only clock override for the fiscal expiry notice.
+  /// Null in production — the notice then uses the real current date.
+  final DateTime? fiscalToday;
+
+  const BusinessProfileView({super.key, this.fiscalToday});
 
   @override
   State<BusinessProfileView> createState() => _BusinessProfileViewState();
 }
 
 class _BusinessProfileViewState extends State<BusinessProfileView> {
+  /// D-21 (#554): strict yyyy-MM-dd shape + a real calendar date.
+  static bool _isValidIsoDate(String value) {
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return false;
+    return _tryParseIsoDate(value) != null;
+  }
+
+  static DateTime? _tryParseIsoDate(String value) {
+    // DateTime.tryParse normalizes impossible calendar dates (2026-02-30 ->
+    // 2026-03-02), so verify the parsed date round-trips to the exact
+    // yyyy-MM-dd components — same rule as fiscal_authorization_expiry_notice.
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return null;
+    final y = int.parse(value.substring(0, 4));
+    final m = int.parse(value.substring(5, 7));
+    final d = int.parse(value.substring(8, 10));
+    if (parsed.year != y || parsed.month != m || parsed.day != d) return null;
+    return parsed;
+  }
   final _formKey = GlobalKey<FormState>();
   final Map<String, TextEditingController> _controllers = {};
   Map<String, String> _lastSyncedConfig = {};
@@ -289,13 +312,21 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                     ),
 
                     const SizedBox(height: 32),
-                    Text('AUTORIZACIÓN Y RANGO FISCAL DGI (Disposición 09-2007)', style: Theme.of(context).textTheme.labelLarge),
+                    Text('AUTORIZACIÓN FISCAL DGI (Disposición 09-2007)', style: Theme.of(context).textTheme.labelLarge),
                     const SizedBox(height: 8),
                     Text(
-                      'Configure el prefijo, rango autorizado y el número exacto con el que continuará la facturación de su negocio.',
+                      'Configure el código de autorización DGI, sus fechas y los consecutivos con los que continúa la facturación. D-21: para sistemas computarizados no existe rango autorizado, solo numeración consecutiva.',
                       style: TextStyle(fontSize: 12, color: colorScheme.outline),
                     ),
                     const SizedBox(height: 16),
+                    // D-21 (#554) U4: expiry warning at the TOP of the fiscal
+                    // section. Warning only — it never blocks the form or
+                    // issuance.
+                    FiscalAuthorizationExpiryNotice(
+                      rawExpiresAt:
+                          viewModel.config['dgi_authorization_expires_at'],
+                      today: widget.fiscalToday,
+                    ),
                     Row(
                       children: [
                         Expanded(
@@ -307,7 +338,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                               labelText: 'Prefijo Fiscal DGI',
                               hintText: 'Sin configurar',
                               prefixIcon: Icon(Icons.receipt_long),
-                              helperText: 'Prefijo oficial asignado por la DGI; déjelo vacío si aún no fue autorizado',
+                              helperText: 'Opcional: vacío = consecutivo puramente numérico (sucursal única con 1 caja, D-21).',
                             ),
                             // D-16 (JD-A-001): optional — the prefix is real
                             // fiscal configuration, not a default. Blank =
@@ -323,10 +354,10 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                             controller: _controllers['dgi_current_number'],
                             keyboardType: TextInputType.number,
                             decoration: const InputDecoration(
-                              labelText: 'Siguiente Factura a Emitir',
+                              labelText: 'Consecutivo actual (auto-incremental)',
                               hintText: 'Sin configurar',
                               prefixIcon: Icon(Icons.pin),
-                              helperText: 'Déjelo vacío si la serie aún no fue autorizada',
+                              helperText: 'El sistema avanza este consecutivo automáticamente en cada factura; edítelo solo para recuperar la secuencia tras una falla (D-6).',
                             ),
                             // D-16 (JD-A-001): optional — blank cursor means
                             // the sequence stays unconfigured (fail-closed).
@@ -341,25 +372,78 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       ],
                     ),
                     const SizedBox(height: 16),
+                    TextFormField(
+                      key: const Key('dgi_range_start_input'),
+                      controller: _controllers['dgi_range_start'],
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Consecutivo inicial',
+                        hintText: 'Sin configurar',
+                        helperText: 'Primer número de factura autorizado: siembra el consecutivo actual en la primera configuración.',
+                      ),
+                      // D-16: optional — an unconfigured sequence is a
+                      // legitimate state, not a form error. D-21: same key,
+                      // same rule; it now means "Consecutivo inicial".
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return null;
+                        final parsed = int.tryParse(v);
+                        if (parsed == null || parsed < 1) {
+                          return 'Debe ser un entero mayor o igual a 1';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      key: const Key('dgi_authorization_code_input'),
+                      controller: _controllers['dgi_authorization_code'],
+                      decoration: const InputDecoration(
+                        labelText: 'Código / Resolución de Autorización DGI (CAFD)',
+                        hintText: 'DGI-SFC-2024-00123',
+                        prefixIcon: Icon(Icons.verified),
+                        helperText: 'El formato exacto es el que indique la carta de autorización; se validan solo longitud (máx. 50) y caracteres (letras, números, guiones y barras).',
+                      ),
+                      // D-21 (#554): NO structural mask — the code format is
+                      // whatever the authorization letter states. Only a
+                      // length ceiling (≤50) and a charset rule apply.
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return null;
+                        if (v.length > 50) return 'Máximo 50 caracteres';
+                        if (!RegExp(r'^[A-Za-z0-9\-/]*$').hasMatch(v)) {
+                          return 'Solo letras, números, guiones y barras';
+                        }
+                        return null;
+                      },
+                    ),
+
+                    const SizedBox(height: 16),
                     Row(
                       children: [
                         Expanded(
                           child: TextFormField(
-                            key: const Key('dgi_range_start_input'),
-                            controller: _controllers['dgi_range_start'],
-                            keyboardType: TextInputType.number,
+                            key: const Key('dgi_authorization_issued_at_input'),
+                            controller: _controllers['dgi_authorization_issued_at'],
+                            keyboardType: TextInputType.datetime,
                             decoration: const InputDecoration(
-                              labelText: 'Rango Inicial DGI',
-                              hintText: 'Sin configurar',
-                              helperText: 'Deje vacío si el rango aún no fue autorizado',
+                              labelText: 'Fecha de Emisión de la Autorización',
+                              hintText: 'Ej: 2026-01-15',
+                              helperText: 'Fecha de emisión indicada en la carta/resolución DGI (formato ISO yyyy-MM-dd).',
                             ),
-                            // D-16: optional — an unconfigured sequence is a
-                            // legitimate state, not a form error.
+                            // D-21 (#554): both dates are optional, but they
+                            // travel in pairs and expiry >= issued (mirrors
+                            // the backend FiscalSetupDto rule).
                             validator: (v) {
-                              if (v == null || v.isEmpty) return null;
-                              final parsed = int.tryParse(v);
-                              if (parsed == null || parsed < 1) {
-                                return 'Debe ser un entero mayor o igual a 1';
+                              final value = v ?? '';
+                              if (value.isEmpty) {
+                                final expiry =
+                                    _controllers['dgi_authorization_expires_at']?.text ?? '';
+                                if (expiry.isNotEmpty) {
+                                  return 'Si se indica la fecha de vencimiento, indique también la de emisión';
+                                }
+                                return null;
+                              }
+                              if (!_isValidIsoDate(value)) {
+                                return 'Use el formato ISO yyyy-MM-dd';
                               }
                               return null;
                             },
@@ -368,44 +452,41 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                         const SizedBox(width: 16),
                         Expanded(
                           child: TextFormField(
-                            key: const Key('dgi_range_end_input'),
-                            controller: _controllers['dgi_range_end'],
-                            keyboardType: TextInputType.number,
+                            key: const Key('dgi_authorization_expires_at_input'),
+                            controller: _controllers['dgi_authorization_expires_at'],
+                            keyboardType: TextInputType.datetime,
                             decoration: const InputDecoration(
-                              labelText: 'Rango Final DGI',
-                              hintText: 'Sin configurar',
-                              helperText: 'Debe ser mayor o igual al rango inicial',
+                              labelText: 'Fecha de Vencimiento de la Autorización',
+                              hintText: 'Ej: 2026-02-14',
+                              helperText: 'Fecha de vencimiento de la autorización DGI (formato ISO yyyy-MM-dd).',
                             ),
-                            // D-16: optional; when both bounds are present,
-                            // end >= start (never a decreasing range).
                             validator: (v) {
-                              if (v == null || v.isEmpty) return null;
-                              final parsedEnd = int.tryParse(v);
-                              if (parsedEnd == null || parsedEnd < 1) {
-                                return 'Debe ser un entero mayor o igual a 1';
+                              final value = v ?? '';
+                              if (value.isEmpty) {
+                                final issued =
+                                    _controllers['dgi_authorization_issued_at']?.text ?? '';
+                                if (issued.isNotEmpty) {
+                                  return 'Si se indica la fecha de emisión, indique también la de vencimiento';
+                                }
+                                return null;
                               }
-                              final startValue =
-                                  _controllers['dgi_range_start']?.text;
-                              final parsedStart = int.tryParse(startValue ?? '');
-                              if (parsedStart != null && parsedEnd < parsedStart) {
-                                return 'Debe ser mayor o igual al rango inicial';
+                              if (!_isValidIsoDate(value)) {
+                                return 'Use el formato ISO yyyy-MM-dd';
+                              }
+                              final issued =
+                                  _controllers['dgi_authorization_issued_at']?.text ?? '';
+                              final issuedDate = _tryParseIsoDate(issued);
+                              final expiryDate = _tryParseIsoDate(value);
+                              if (issuedDate != null &&
+                                  expiryDate != null &&
+                                  expiryDate.isBefore(issuedDate)) {
+                                return 'Debe ser mayor o igual a la fecha de emisión';
                               }
                               return null;
                             },
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      key: const Key('dgi_authorization_code_input'),
-                      controller: _controllers['dgi_authorization_code'],
-                      decoration: const InputDecoration(
-                        labelText: 'Código / Resolución de Autorización DGI (CAFD)',
-                        hintText: 'Ej: AUT-DGI-2026-9876',
-                        prefixIcon: Icon(Icons.verified),
-                        helperText: 'Número de resolución o autorización fiscal emitido por la DGI',
-                      ),
                     ),
 
                     const SizedBox(height: 16),

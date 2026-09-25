@@ -14,7 +14,21 @@ import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShieldCheck, Loader2, Landmark } from "lucide-react";
+import {
+  resolveDgiAuthorizationExpiryStatus,
+} from "./types";
+import { ShieldCheck, Loader2, Landmark, CalendarClock, AlertTriangle } from "lucide-react";
+
+/**
+ * D-21 (#554): normalizes a snapshot date (date-only or full ISO-8601) to
+ * the YYYY-MM-DD value <input type="date"> can display. Unparseable input
+ * yields "" — an absent field, never a corrupted one.
+ */
+function toDateInputValue(value: string | null | undefined): string {
+  if (typeof value !== "string") return "";
+  const dateOnly = /^(\d{4}-\d{2}-\d{2})/.exec(value.trim());
+  return (dateOnly?.[1] as string | undefined) ?? "";
+}
 
 export function FiscalSetupForm() {
   const { data: initialData, isLoading, isError } = useFiscalSetup();
@@ -37,11 +51,24 @@ export function FiscalSetupForm() {
       pricesIncludeTax: true,
       phone: "",
       address: "",
+      dgiAuthorizationCode: "",
+      dgiAuthorizationIssuedAt: "",
+      dgiAuthorizationExpiresAt: "",
     },
   });
 
   const selectedRegime = watch("regime");
   const pricesIncludeTax = watch("pricesIncludeTax");
+
+  // D-21 (#554): expiry warning reads the SAVED snapshot (query data — the
+  // GET response, or the POST response after a save). Informational only:
+  // it never blocks saving. Absence renders no banner.
+  const savedExpiresAt = initialData?.dgiAuthorizationExpiresAt;
+  const expiryStatus = resolveDgiAuthorizationExpiryStatus(
+    savedExpiresAt ?? null,
+    new Date(),
+  );
+  const expiryDisplayDate = toDateInputValue(savedExpiresAt);
 
   useEffect(() => {
     if (initialData) {
@@ -53,12 +80,23 @@ export function FiscalSetupForm() {
         pricesIncludeTax: initialData.pricesIncludeTax ?? true,
         phone: "",
         address: "",
+        dgiAuthorizationCode: initialData.dgiAuthorizationCode ?? "",
+        dgiAuthorizationIssuedAt: toDateInputValue(initialData.dgiAuthorizationIssuedAt),
+        dgiAuthorizationExpiresAt: toDateInputValue(initialData.dgiAuthorizationExpiresAt),
       });
     }
   }, [initialData, reset]);
 
   const onSubmit = (values: FiscalSetupFormValues) => {
-    updateMutation.mutate(values);
+    const { dgiAuthorizationIssuedAt, dgiAuthorizationExpiresAt, ...rest } = values;
+    updateMutation.mutate({
+      ...rest,
+      // D-21 (#554) backend contract: the code is ALWAYS sent — '' clears
+      // the stored value through a null tombstone — while blank dates are
+      // omitted, because an absent field leaves any prior value untouched.
+      ...(dgiAuthorizationIssuedAt ? { dgiAuthorizationIssuedAt } : {}),
+      ...(dgiAuthorizationExpiresAt ? { dgiAuthorizationExpiresAt } : {}),
+    });
   };
 
   if (isLoading) {
@@ -100,6 +138,38 @@ export function FiscalSetupForm() {
         </div>
       </CardHeader>
       <CardContent>
+        {/* D-21 (#554): DGI authorization expiry warning (fixed 30-day lead).
+            Informational only — never blocks saving. Absence = no banner. */}
+        {expiryStatus.state === "warning" && (
+          <Alert
+            className="mb-6 border-amber-500/40 bg-amber-500/10 text-foreground"
+            data-testid="dgi-authorization-expiry-warning"
+          >
+            <CalendarClock className="h-4 w-4 text-amber-500" />
+            <AlertTitle className="font-semibold text-sm">
+              Autorización DGI próxima a vencer
+            </AlertTitle>
+            <AlertDescription className="text-xs text-muted-foreground mt-1">
+              La autorización DGI registrada vence el {expiryDisplayDate ||
+                savedExpiresAt} ({expiryStatus.daysUntilExpiry === 0
+                ? "vence hoy"
+                : `en ${expiryStatus.daysUntilExpiry} días`}). Renueve su carta de autorización ante la DGI para evitar interrupciones en la facturación.
+            </AlertDescription>
+          </Alert>
+        )}
+        {expiryStatus.state === "expired" && (
+          <Alert variant="destructive" className="mb-6" data-testid="dgi-authorization-expired-warning">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle className="font-semibold text-sm">
+              Autorización DGI vencida
+            </AlertTitle>
+            <AlertDescription className="text-xs mt-1">
+              La autorización DGI registrada venció el {expiryDisplayDate ||
+                savedExpiresAt}. Gestione su renovación ante la DGI lo antes posible.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* DGI Immutability Invariant Alert (ODAV-31) */}
         <Alert className="mb-6 bg-muted/50 border-blue-500/30 text-foreground">
           <ShieldCheck className="h-4 w-4 text-blue-500" />
@@ -197,6 +267,53 @@ export function FiscalSetupForm() {
                   checked={pricesIncludeTax}
                   onCheckedChange={(checked) => setValue("pricesIncludeTax", checked, { shouldDirty: true })}
                 />
+              </div>
+            </div>
+
+            {/* D-21 (#554): DGI authorization letter data (optional). No
+                structural mask — the operator types what the letter says. */}
+            <div className="space-y-2 md:col-span-2 border rounded-lg p-4 bg-card">
+              <div className="space-y-0.5">
+                <Label htmlFor="dgiAuthorizationCode">Código de Autorización DGI</Label>
+                <p className="text-xs text-muted-foreground">
+                  El formato exacto es el de la carta de autorización. Solo se validan letras, números, guiones y barras.
+                </p>
+              </div>
+              <Input
+                id="dgiAuthorizationCode"
+                placeholder="DGI-SFC-2024-00123"
+                maxLength={50}
+                {...register("dgiAuthorizationCode")}
+                aria-invalid={Boolean(errors.dgiAuthorizationCode)}
+              />
+              {errors.dgiAuthorizationCode && (
+                <p className="text-xs text-destructive">{errors.dgiAuthorizationCode.message}</p>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dgiAuthorizationIssuedAt">Fecha de Emisión (carta DGI)</Label>
+                  <Input
+                    id="dgiAuthorizationIssuedAt"
+                    type="date"
+                    {...register("dgiAuthorizationIssuedAt")}
+                    aria-invalid={Boolean(errors.dgiAuthorizationIssuedAt)}
+                  />
+                  {errors.dgiAuthorizationIssuedAt && (
+                    <p className="text-xs text-destructive">{errors.dgiAuthorizationIssuedAt.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="dgiAuthorizationExpiresAt">Fecha de Vencimiento (carta DGI)</Label>
+                  <Input
+                    id="dgiAuthorizationExpiresAt"
+                    type="date"
+                    {...register("dgiAuthorizationExpiresAt")}
+                    aria-invalid={Boolean(errors.dgiAuthorizationExpiresAt)}
+                  />
+                  {errors.dgiAuthorizationExpiresAt && (
+                    <p className="text-xs text-destructive">{errors.dgiAuthorizationExpiresAt.message}</p>
+                  )}
+                </div>
               </div>
             </div>
 

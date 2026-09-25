@@ -251,10 +251,7 @@ void main() {
         ),
       ];
 
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '001');
+            when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '001');
       // Product not found → item passes through without recipeVersionId resolution
       when(
         mockInventoryRepository.getProductById('prod1'),
@@ -351,10 +348,7 @@ void main() {
         syncStatus: SyncStatus.pending,
         type: InvoiceType.regular,
       );
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(
+            when(
         mockNumberingService.getNextNumber(),
       ).thenAnswer((_) async => 'F001-000127');
       when(
@@ -432,10 +426,7 @@ void main() {
         ),
       ];
 
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(
+            when(
         mockNumberingService.getNextNumber(),
       ).thenAnswer((_) async => 'F001-000127');
       when(
@@ -522,10 +513,7 @@ void main() {
         syncStatus: SyncStatus.pending,
         type: InvoiceType.regular,
       );
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(
+            when(
         mockNumberingService.getNextNumber(),
       ).thenAnswer((_) async => 'F001-000128');
       when(
@@ -627,10 +615,7 @@ void main() {
         ),
       ];
 
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '002');
+            when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '002');
       when(
         mockInventoryRepository.getProductById('burger-1'),
       ).thenAnswer((_) async => preparedProduct);
@@ -711,10 +696,7 @@ void main() {
         ),
       ];
 
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '003');
+            when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '003');
       when(
         mockInventoryRepository.getProductById('burger-1'),
       ).thenAnswer((_) async => preparedProduct);
@@ -790,10 +772,7 @@ void main() {
         ),
       ];
 
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '004');
+            when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '004');
       when(
         mockInventoryRepository.getProductById('burger-1'),
       ).thenAnswer((_) async => preparedProduct);
@@ -1279,10 +1258,7 @@ void main() {
       when(
         mockInvoiceDao.getInvoiceById(original.id),
       ).thenAnswer((_) async => original);
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(
+            when(
         mockItemDao.getItemsByInvoiceId(original.id),
       ).thenAnswer((_) async => originalItems);
       when(
@@ -1398,10 +1374,7 @@ void main() {
       when(
         mockInvoiceDao.getInvoiceById(original.id),
       ).thenAnswer((_) async => original);
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(
+            when(
         mockItemDao.getItemsByInvoiceId(original.id),
       ).thenAnswer((_) async => []);
       when(
@@ -1501,19 +1474,13 @@ void main() {
         when(
           mockInvoiceDao.getInvoiceById(original.id),
         ).thenAnswer((_) async => original);
-        when(
-          mockNumberingService.isRangeExhausted(),
-        ).thenAnswer((_) async => false);
-        when(
+                when(
           mockItemDao.getItemsByInvoiceId(original.id),
         ).thenAnswer((_) async => originalItems);
         when(
           mockTransactionDao.getCreditNotesByRelatedId(original.id),
         ).thenAnswer((_) async => []);
-        when(
-          mockNumberingService.isRangeExhausted(),
-        ).thenAnswer((_) async => false);
-        when(
+                when(
           mockNumberingService.getNextNumber(),
         ).thenAnswer((_) async => 'NC-001');
         when(
@@ -1587,25 +1554,6 @@ void main() {
       },
     );
 
-    test('rejects credit note when DGI numbering range is exhausted', () async {
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => true);
-
-      await expectLater(
-        repository.createCreditNote(
-          originalInvoiceId: 'inv-exhausted',
-          reason: 'Valid return reason',
-          authorizedByUserId: 'manager-1',
-          authorizedByRole: UserRole.manager,
-        ),
-        throwsA(isA<Exception>()),
-      );
-
-      verifyNever(mockNumberingService.getNextNumber());
-      verifyNever(mockInvoiceDao.getInvoiceById(any));
-    });
-
     test(
       'rejects blank credit note reason before numbering or persistence',
       () async {
@@ -1618,8 +1566,6 @@ void main() {
           ),
           throwsA(isA<StateError>()),
         );
-
-        verifyNever(mockNumberingService.isRangeExhausted());
         verifyNever(
           mockTransactionDao.executeSaleTransaction(
             any,
@@ -1644,8 +1590,6 @@ void main() {
         ),
         throwsA(isA<StateError>()),
       );
-
-      verifyNever(mockNumberingService.isRangeExhausted());
       verifyNever(
         mockTransactionDao.executeSaleTransaction(
           any,
@@ -1680,8 +1624,6 @@ void main() {
           ),
           throwsA(isA<StateError>()),
         );
-
-        verifyNever(mockNumberingService.isRangeExhausted());
         verifyNever(mockInvoiceDao.getInvoiceById(any));
         verifyNever(
           mockTransactionDao.executeSaleTransaction(
@@ -1727,10 +1669,7 @@ void main() {
           ),
         ];
 
-        when(
-          mockNumberingService.isRangeExhausted(),
-        ).thenAnswer((_) async => false);
-        when(
+                when(
           mockInvoiceDao.getInvoiceById(original.id),
         ).thenAnswer((_) async => original);
         when(
@@ -1838,10 +1777,7 @@ void main() {
           type: 'creditNote',
         );
 
-        when(
-          mockNumberingService.isRangeExhausted(),
-        ).thenAnswer((_) async => false);
-        when(
+                when(
           mockInvoiceDao.getInvoiceById(canceledOrigin.id),
         ).thenAnswer((_) async => canceledOrigin);
         when(
@@ -1912,10 +1848,7 @@ void main() {
           ),
         ];
 
-        when(
-          mockNumberingService.isRangeExhausted(),
-        ).thenAnswer((_) async => false);
-        when(
+                when(
           mockInvoiceDao.getInvoiceById(original.id),
         ).thenAnswer((_) async => original);
         when(
@@ -2021,10 +1954,7 @@ void main() {
         when(
           mockInvoiceDao.getInvoiceById(original.id),
         ).thenAnswer((_) async => original);
-        when(
-          mockNumberingService.isRangeExhausted(),
-        ).thenAnswer((_) async => false);
-        when(
+                when(
           mockItemDao.getItemsByInvoiceId(original.id),
         ).thenAnswer((_) async => originalItems);
         when(
@@ -2081,10 +2011,7 @@ void main() {
         );
 
     void arrangeHappyPath() {
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '001');
+            when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '001');
       when(
         mockProcessInventoryUseCase.execute(any),
       ).thenAnswer((_) async => []);
@@ -2237,10 +2164,7 @@ void main() {
         );
 
     void arrangeSnapshotPath() {
-      when(
-        mockNumberingService.isRangeExhausted(),
-      ).thenAnswer((_) async => false);
-      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '001');
+            when(mockNumberingService.getNextNumber()).thenAnswer((_) async => '001');
       when(
         mockProcessInventoryUseCase.execute(any),
       ).thenAnswer((_) async => []);

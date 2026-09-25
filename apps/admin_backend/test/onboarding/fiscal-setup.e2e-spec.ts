@@ -443,6 +443,9 @@ describe('FiscalSetup (Integration & E2E)', () => {
       taxRateIva: 0.0,
       pricesIncludeTax: true,
       commercialFxSpread: 0.5,
+      dgiAuthorizationCode: null,
+      dgiAuthorizationIssuedAt: null,
+      dgiAuthorizationExpiresAt: null,
     });
   });
 
