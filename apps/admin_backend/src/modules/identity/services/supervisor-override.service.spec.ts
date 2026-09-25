@@ -67,6 +67,9 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
     manager.getRepository.mockImplementation((entity: unknown) => {
       if (entity === User) return userRepository;
       if (entity === SecurityProfile) return securityProfileRepository;
+      // Issue #581: the override audit write rides its own tenant-bound
+      // transaction, so the manager hands back the audit repository too.
+      if (entity === AuditLog) return auditRepository;
       throw new Error(
         `Unexpected repository request: ${(entity as { name?: string })?.name ?? typeof entity}`,
       );
@@ -386,13 +389,12 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
   // runtime, not at compile time.
   describe('tenant transaction binding', () => {
     it('binds the supervisor and profile reads through the tenant transaction; pooled repos stay silent', async () => {
-      // Pooled tripwires: any call here means a read escaped the bound
-      // transaction and would hit RLS with no tenant bound.
+      // Pooled tripwires: any call here means a read or the audit write
+      // escaped a bound transaction and would hit RLS with no tenant bound.
       const pooledUser = { findOne: jest.fn() };
       const pooledProfile = { findOne: jest.fn() };
-      // Audit writes stay on the pooled repository on purpose: they happen
-      // after the bound read transaction commits so a rejection audit is
-      // not rolled back with the thrown branch.
+      // Issue #581: the audit write is bound too, so the pooled audit repo
+      // must stay silent.
       const pooledAudit = { save: jest.fn().mockResolvedValue({ id: 'a1' }) };
 
       const hashedPin = await bcrypt.hash('123456', 10);
@@ -415,6 +417,7 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
       };
 
       const setConfigCalls: Array<[string, string[]]> = [];
+      const boundAudit = { save: jest.fn().mockResolvedValue({ id: 'a1' }) };
       const boundManager = {
         query: jest.fn(async (sql: string, params: string[]) => {
           setConfigCalls.push([sql, params]);
@@ -425,7 +428,9 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
             ? boundUser
             : entity === SecurityProfile
               ? boundProfile
-              : null,
+              : entity === AuditLog
+                ? boundAudit
+                : null,
         ),
       };
       const boundDataSource = {
@@ -466,21 +471,32 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
       );
       expect(response.authorized).toBe(true);
 
-      // ONE transaction for the read unit, binding the tenant context
-      // exactly once with the production set_config SQL.
-      expect(boundDataSource.transaction).toHaveBeenCalledTimes(1);
-      expect(setConfigCalls).toHaveLength(1);
+      // ONE transaction for the read unit and ONE for the audit write,
+      // each binding the tenant context exactly once with the production
+      // set_config SQL (issue #581: the write is bound too).
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(2);
+      expect(setConfigCalls).toHaveLength(2);
       expect(setConfigCalls[0][0]).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
       expect(setConfigCalls[0][1]).toEqual([testTenantId]);
+      expect(setConfigCalls[1][0]).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
+      expect(setConfigCalls[1][1]).toEqual([testTenantId]);
 
       // Both reads resolved through the bound manager's repositories.
       expect(boundUser.findOne).toHaveBeenCalledTimes(1);
       expect(boundProfile.findOne).toHaveBeenCalledTimes(1);
+      // The audit write resolved through the bound manager as well.
+      expect(boundAudit.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'SUPERVISOR_OVERRIDE_APPROVED',
+          tenant_id: testTenantId,
+        }),
+      );
 
       // RUNTIME TEETH: the pooled read tripwires stayed silent. A reverted
-      // read lands here and fails this assertion.
+      // read or write lands here and fails this assertion.
       expect(pooledUser.findOne).not.toHaveBeenCalled();
       expect(pooledProfile.findOne).not.toHaveBeenCalled();
+      expect(pooledAudit.save).not.toHaveBeenCalled();
     });
   });
 });

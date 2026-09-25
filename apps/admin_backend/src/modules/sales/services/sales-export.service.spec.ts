@@ -450,5 +450,120 @@ describe('SalesExportService', () => {
       // lands here and fails this assertion — no compile error involved.
       expect(pooledShift.find).not.toHaveBeenCalled();
     });
+
+    // Issue #581 WU1: invoices is a direct:SIUD RLS-forced table — the
+    // pooled exportSalesBook find silently returned zero rows under the
+    // production NOBYPASSRLS role. RUNTIME teeth: same isolated-fake
+    // pattern as the slice-5 guard above, with a pooled invoice tripwire.
+    it('binds the exportSalesBook invoice read through the tenant transaction (issue #581 WU1)', async () => {
+      const pooledInvoice = { find: jest.fn() };
+      const boundInvoice = {
+        find: jest.fn().mockResolvedValue([
+          {
+            id: 'inv-1',
+            tenant_id: tenantId,
+            number: '001-001-01-00000001',
+            type: 'regular',
+            subtotal: 1000,
+            totalTax: 150,
+            total: 1150,
+            totalUsd: 31.51,
+            isCanceled: false,
+            customerId: 'J0310000000000',
+            created_at: new Date('2026-08-26T10:00:00.000Z'),
+            items: [
+              {
+                id: 'item-1',
+                productId: 'p-1',
+                productName: 'Comida',
+                quantity: 1,
+                unitPrice: 1000,
+                discount: 0,
+                originalTaxRate: 0.15,
+                appliedTaxRate: 0.15,
+                taxAmount: 150,
+                total: 1150,
+              } as InvoiceItem,
+            ],
+          },
+          {
+            id: 'inv-2',
+            tenant_id: tenantId,
+            number: '001-001-01-00000002',
+            type: 'regular',
+            subtotal: 300,
+            totalTax: 45,
+            total: 345,
+            totalUsd: 9.45,
+            isCanceled: true,
+            created_at: new Date('2026-08-26T11:00:00.000Z'),
+            items: [],
+          },
+        ]),
+      };
+
+      const setConfigCalls: Array<[string, string[]]> = [];
+      const boundManager = {
+        query: jest.fn(async (sql: string, params: string[]) => {
+          setConfigCalls.push([sql, params]);
+          return [];
+        }),
+        getRepository: jest.fn((entity: unknown) =>
+          entity === Invoice
+            ? boundInvoice
+            : { find: jest.fn().mockResolvedValue([]) },
+        ),
+      };
+      const boundDataSource = {
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            work(boundManager),
+        ),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          SalesExportService,
+          {
+            provide: getRepositoryToken(Invoice),
+            useValue: pooledInvoice,
+          },
+          {
+            provide: getRepositoryToken(CashShiftSession),
+            useValue: { find: jest.fn().mockResolvedValue([]) },
+          },
+          { provide: DataSource, useValue: boundDataSource },
+        ],
+      }).compile();
+      const bound = module.get<SalesExportService>(SalesExportService);
+
+      const result = await bound.exportSalesBook(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'json',
+      });
+
+      expect(result.data.totalRecords).toBe(2);
+
+      // ONE logical read unit, ONE transaction, bound exactly once with the
+      // production set_config SQL carrying the tenant id as a parameter.
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(setConfigCalls).toEqual([
+        [TENANT_CONTEXT_SET_CONFIG_SQL, [tenantId]],
+      ]);
+
+      // Identical query semantics: same where, relations, and ordering.
+      expect(boundInvoice.find).toHaveBeenCalledTimes(1);
+      const findArgs = boundInvoice.find.mock.calls[0][0];
+      expect(findArgs.where).toEqual({
+        tenant_id: tenantId,
+        created_at: expect.anything(),
+      });
+      expect(findArgs.relations).toEqual(['items']);
+      expect(findArgs.order).toEqual({ created_at: 'ASC' });
+
+      // RUNTIME TEETH: the pooled tripwire stayed silent.
+      expect(pooledInvoice.find).not.toHaveBeenCalled();
+    });
   });
 });

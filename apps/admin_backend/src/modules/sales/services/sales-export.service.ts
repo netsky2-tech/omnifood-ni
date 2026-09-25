@@ -110,11 +110,20 @@ export class SalesExportService {
       whereClause.created_at = LessThanOrEqual(end);
     }
 
-    const invoices = await this.invoiceRepo.find({
-      where: whereClause,
-      relations: ['items'],
-      order: { created_at: 'ASC' },
-    });
+    // Issue #581 WU1: invoices is a direct:SIUD RLS-forced table — the
+    // pooled find silently returned zero rows under the production
+    // NOBYPASSRLS role. Bound read, identical query semantics (mirrors
+    // exportZReports' binding pattern).
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: whereClause,
+          relations: ['items'],
+          order: { created_at: 'ASC' },
+        }),
+    );
 
     let totalGrossNio = 0;
     let totalTaxNio = 0;
@@ -289,7 +298,7 @@ export class SalesExportService {
     // The only cash-shift access in this service: one read-only logical unit
     // inside its own tenant-bound transaction. The explicit tenant_id filter
     // stays in the where clause — binding is additive, never a replacement.
-    // The Invoice reads elsewhere in this service are untouched pooled access.
+    // The invoice read in exportSalesBook is bound the same way (issue #581 WU1).
     const shifts = await runInTenantTransaction(
       this.dataSource,
       tenantId,

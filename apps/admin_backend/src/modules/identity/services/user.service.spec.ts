@@ -27,6 +27,16 @@ describe('UserService', () => {
     save: jest.fn(),
   };
 
+  // Issue #581: logAction resolves the audit repository exclusively through
+  // the bound transaction manager, so the pooled DI token is a tripwire:
+  // any call here means an audit write escaped the tenant-bound transaction
+  // and would break when `audit_logs` is promoted to direct:SIUD RLS
+  // (#512 T3 slice 7).
+  const pooledAuditRepository = {
+    findOne: jest.fn(),
+    save: jest.fn(),
+  };
+
   const securityProfileRepository = {
     create: jest.fn(),
     findOne: jest.fn(),
@@ -72,7 +82,10 @@ describe('UserService', () => {
       providers: [
         UserService,
         { provide: getRepositoryToken(User), useValue: userRepository },
-        { provide: getRepositoryToken(AuditLog), useValue: auditRepository },
+        {
+          provide: getRepositoryToken(AuditLog),
+          useValue: pooledAuditRepository,
+        },
         {
           provide: getRepositoryToken(SecurityProfile),
           useValue: securityProfileRepository,
@@ -831,6 +844,45 @@ describe('UserService', () => {
           forensic_status: 'ACTIVE',
         }),
       );
+    });
+
+    it('writes the audit log through the bound manager and keeps the pooled repo silent (issue #581)', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        tenant_id: 'tenant-1',
+        name: 'Old Name',
+        role: UserRole.CASHIER,
+        security_version: 1,
+      });
+      userRepository.save.mockImplementation((u: unknown) =>
+        Promise.resolve(u),
+      );
+      auditRepository.findOne.mockResolvedValue(null);
+      auditRepository.save.mockResolvedValue({ id: 'audit-1' });
+
+      await service.update(
+        'user-1',
+        { name: 'New Name' },
+        'tenant-1',
+        'admin-1',
+      );
+
+      // The mutation transaction bound the tenant context exactly once.
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-1'],
+      );
+      // The audit write resolved through the bound manager's repository.
+      expect(auditRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'USER_UPDATED',
+          tenant_id: 'tenant-1',
+        }),
+      );
+      // RUNTIME TEETH: the pooled audit repository stayed silent.
+      expect(pooledAuditRepository.findOne).not.toHaveBeenCalled();
+      expect(pooledAuditRepository.save).not.toHaveBeenCalled();
     });
   });
 });
