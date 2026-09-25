@@ -211,14 +211,31 @@ class HardwareSettingsViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // B2e D-3: the diagnostic ticket must derive its sample fiscal amounts
+      // from the configured regime — a Cuota Fija device never prints a test
+      // ticket carrying an invented 15% IVA.
+      final taxRegime = TaxRegime.fromString(_config.taxRegime);
+      if (taxRegime == null) {
+        _statusMessage =
+            'Empresa sin régimen fiscal DGI configurado. Configure Información de Empresa antes de probar impresión.';
+        _isTesting = false;
+        notifyListeners();
+        return false;
+      }
+      final isCuotaFija = taxRegime.isCuotaFija;
+      final sampleTaxRate = isCuotaFija ? 0.0 : 0.15;
+      final sampleTaxAmount = isCuotaFija ? 0.0 : 15.0;
+      final sampleNet = 100.0;
+      final sampleTotal = sampleNet + sampleTaxAmount;
+
       final sampleInvoice = Invoice(
         id: 'test-print-id',
         number: '001-001-01-00000000',
         createdAt: DateTime.now(),
         userId: 'admin',
-        subtotal: 100.0,
-        totalTax: 15.0,
-        total: 115.0,
+        subtotal: sampleNet,
+        totalTax: sampleTaxAmount,
+        total: sampleTotal,
         commercialRate: 36.50,
         bcnOfficialRate: 36.6241,
         totalUsd: 3.15,
@@ -232,20 +249,20 @@ class HardwareSettingsViewModel extends ChangeNotifier {
           productId: 'prod-test',
           productName: 'TICKET DE PRUEBA HARDWARE',
           quantity: 1,
-          unitPrice: 100.0,
-          originalTaxRate: 0.15,
-          appliedTaxRate: 0.15,
-          taxAmount: 15.0,
-          total: 115.0,
+          unitPrice: sampleNet,
+          originalTaxRate: sampleTaxRate,
+          appliedTaxRate: sampleTaxRate,
+          taxAmount: sampleTaxAmount,
+          total: sampleTotal,
         ),
       ];
 
       final samplePayments = [
-        const Payment(
+        Payment(
           id: 'pay-test-1',
           invoiceId: 'test-print-id',
           method: PaymentMethod.cash,
-          amount: 115.0,
+          amount: sampleTotal,
         ),
       ];
 
@@ -265,15 +282,6 @@ class HardwareSettingsViewModel extends ChangeNotifier {
             logoRasterBytes = rawBytes;
           }
         } catch (_) {}
-      }
-
-      final taxRegime = TaxRegime.fromString(_config.taxRegime);
-      if (taxRegime == null) {
-        _statusMessage =
-            'Empresa sin régimen fiscal DGI configurado. Configure Información de Empresa antes de probar impresión.';
-        _isTesting = false;
-        notifyListeners();
-        return false;
       }
 
       // Preview only (never a fiscal document): use the locally persisted issuer

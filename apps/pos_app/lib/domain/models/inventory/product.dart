@@ -24,13 +24,12 @@ class Product with _$Product {
     String? createdAt,
     InventoryPolicy? inventoryPolicy,
     String? directStockInsumoId,
-    /// Business migration default: 0.15 (15% IVA).
-    /// This is NOT a legal requirement (Ley 822 Art. 114 does not mandate 15%
-    /// for all retail goods). It is a conservative migration assumption for
-    /// legacy products that predate the fiscal field addition.
-    /// Risk: genuinely exempt catalogs (medicine, basic food) will show 15%
-    /// until explicitly marked isTaxExempt=true or taxRate=0.0.
-    @Default(0.15) double taxRate,
+    /// B2e D-3 fail-closed default: 0.0 (exempt).
+    /// A product without an explicit synced rate is treated as exempt, never
+    /// silently taxed at an invented 15%. The backend payload is the rate's
+    /// source of truth; whether IVA applies at sale time is decided by the
+    /// active fiscal regime (calculator/receipt layer), not by this default.
+    @Default(0.0) double taxRate,
     @Default(false) bool isTaxExempt,
     @Default([]) List<ProductVariant> variants,
     @Default([]) List<Modifier> availableModifiers,

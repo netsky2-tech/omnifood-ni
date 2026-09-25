@@ -2542,7 +2542,71 @@ final allMigrations = [
   migration52_53,
   migration53_54,
   migration54_55,
+  migration55_56,
 ];
+
+/// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open
+/// application-layer default.
+///
+/// Historical note: SQLite cannot ALTER COLUMN DEFAULT, so the schema-level
+/// `tax_rate REAL NOT NULL` columns carry no invented default; the old 0.15
+/// lived in the Dart constructors/mappers. Devices provisioned while that
+/// default was active may hold product/invoice-item rows written at 15% even
+/// though the operator never chose a rate.
+///
+/// The reconciliation is deliberately CONDITIONAL: only where the device's
+/// persisted regime (`local_configs` key `tax_regime`) is CUOTA_FIJA can a
+/// 15% rate be known-wrong for every receipt the terminal prints, so only
+/// there are 0.15 rows rewritten to 0.0. Under REGIMEN_GENERAL a 0.15 row may
+/// be a legitimately configured rate and is left untouched. When the regime
+/// is unknown (missing key or table) the migration is a strict no-op —
+/// fail-closed, never an unconditional rewrite.
+///
+/// Historical amounts (`invoice_items.tax_amount`, `total`, invoice totals)
+/// are intentionally NOT recomputed: they are the historical record of what
+/// the sale captured and DGI norms forbid rewriting issued documents; the
+/// receipt/report layers already derive the displayed IVA from the regime.
+final migration55_56 = Migration(55, 56, (database) async {
+  final configsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'local_configs'",
+  );
+  if (configsTable.isEmpty) return;
+
+  final regimeRows = await database.query(
+    'local_configs',
+    columns: ['value'],
+    where: 'key = ?',
+    whereArgs: ['tax_regime'],
+    limit: 1,
+  );
+  final regime = regimeRows.isEmpty
+      ? ''
+      : ((regimeRows.single['value'] as String?) ?? '').trim();
+  if (regime != 'CUOTA_FIJA') return;
+
+  final productsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products'",
+  );
+  if (productsTable.isNotEmpty) {
+    await database.execute(
+      'UPDATE products SET tax_rate = 0.0 WHERE tax_rate = 0.15',
+    );
+  }
+
+  final itemsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'invoice_items'",
+  );
+  if (itemsTable.isNotEmpty) {
+    await database.execute(
+      'UPDATE invoice_items SET original_tax_rate = 0.0 '
+      'WHERE original_tax_rate = 0.15',
+    );
+    await database.execute(
+      'UPDATE invoice_items SET applied_tax_rate = 0.0 '
+      'WHERE applied_tax_rate = 0.15',
+    );
+  }
+});
 
 /// Catalog mapping identity is additive: historical products remain usable.
 final migration47_48 = Migration(47, 48, (database) async {

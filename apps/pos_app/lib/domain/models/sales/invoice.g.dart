@@ -43,7 +43,7 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       inventoryOutcome: json['inventoryOutcome'] as String?,
       inventoryOutcomeReason: json['inventoryOutcomeReason'] as String?,
       bcnOfficialRate: (json['bcnOfficialRate'] as num?)?.toDouble() ?? 36.6241,
-      commercialRate: (json['commercialRate'] as num?)?.toDouble() ?? 36.5,
+      commercialRate: (json['commercialRate'] as num?)?.toDouble() ?? 36.50,
       totalUsd: (json['totalUsd'] as num?)?.toDouble() ?? 0.0,
     );
 
