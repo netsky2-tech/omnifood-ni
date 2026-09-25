@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:pos_app/domain/models/sales/sale_time_inventory_snapshot.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/mappers/sales_mapper.dart';
+import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
@@ -183,5 +184,86 @@ void main() {
       final noImpact = SaleTimeInventorySnapshot(classification: SaleInventoryClassification.simple, disposition: SaleInventoryDisposition.noImpact, catalogRevision: 'r', reasonCode: 'NO_EXPLICIT_INSUMO_MAPPING');
       final persisted = InvoiceItemEntity(id: 'bad', invoiceId: 'inv-1', productId: 'p', productName: 'Soda', quantity: 1, unitPrice: 20, originalTaxRate: .15, appliedTaxRate: .15, taxAmount: 3, total: 23, inventorySnapshotJson: jsonEncode(noImpact.toJson()));
       expect(() => SalesMapper.toItemDomain(persisted), throwsArgumentError);
-    });  });
+    });
+  });
+
+  group('SalesMapper — #551 shiftId + localIssueDate travel to the cloud', () {
+    final baseInvoice = Invoice(
+      id: 'inv-1',
+      number: '001-001-01-00000001',
+      createdAt: DateTime(2026, 6, 23),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+    );
+
+    InvoiceEntity invoiceWithShiftFacts() => InvoiceEntity(
+          id: 'inv-1',
+          number: '001-001-01-00000001',
+          createdAt: DateTime(2026, 6, 23).millisecondsSinceEpoch,
+          userId: 'user-1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+        )
+          ..shiftId = 'shift-77'
+          ..localIssueDate = '2026-06-23';
+
+    test('toInvoiceDomain preserves the entity shift membership facts (#548 full-column pattern)', () {
+      final domain = SalesMapper.toInvoiceDomain(invoiceWithShiftFacts());
+
+      expect(domain.shiftId, 'shift-77');
+      expect(domain.localIssueDate, '2026-06-23');
+    });
+
+    test('toInvoiceEntity preserves the domain shift membership facts (round trip)', () {
+      final domain = SalesMapper.toInvoiceDomain(invoiceWithShiftFacts());
+      final entity = SalesMapper.toInvoiceEntity(domain);
+
+      expect(entity.shiftId, 'shift-77');
+      expect(entity.localIssueDate, '2026-06-23');
+    });
+
+    test('toSyncJson emits shiftId and localIssueDate with real values', () {
+      final domain = SalesMapper.toInvoiceDomain(invoiceWithShiftFacts());
+
+      final json = SalesMapper.toSyncJson(domain, const [], const []);
+
+      expect(json['shiftId'], 'shift-77');
+      expect(json['localIssueDate'], '2026-06-23');
+    });
+
+    test('toSyncJson emits null shiftId/localIssueDate as null (relatedInvoiceId convention)', () {
+      // An invoice issued with no open shift persists null, never a
+      // fabricated value (B1a-4/D-11); the payload mirrors that honestly.
+      final json = SalesMapper.toSyncJson(baseInvoice, const [], const []);
+
+      expect(json['shiftId'], isNull);
+      expect(json['localIssueDate'], isNull);
+    });
+
+    test('#551 tripwire: the payload MUST contain the shiftId and localIssueDate keys', () {
+      final domain = SalesMapper.toInvoiceDomain(invoiceWithShiftFacts());
+
+      final json = SalesMapper.toSyncJson(domain, const [], const []);
+
+      // The server-side D-15 void guard is structurally impossible without
+      // these facts. If this test fails because someone removed the keys,
+      // restore them — removal breaks the fiscal-cloud projection.
+      expect(json.keys, containsAll(['shiftId', 'localIssueDate']));
+    });
+
+    test('fiscal_header_snapshot stays EXCLUDED from the sync payload', () {
+      // Intentional per #551: the snapshot is an immutable on-device
+      // reprint artifact, not a cloud fact.
+      final domain = SalesMapper.toInvoiceDomain(invoiceWithShiftFacts());
+
+      final json = SalesMapper.toSyncJson(domain, const [], const []);
+
+      expect(json.keys, isNot(contains('fiscalHeaderSnapshot')));
+      expect(json.keys, isNot(contains('fiscal_header_snapshot')));
+      expect(jsonEncode(json), isNot(contains('fiscalHeaderSnapshot')));
+    });
+  });
 }

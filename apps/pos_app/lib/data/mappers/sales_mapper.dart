@@ -320,6 +320,8 @@ class SalesMapper {
       bcnOfficialRate: entity.bcnOfficialRate,
       commercialRate: entity.commercialRate,
       totalUsd: entity.totalUsd,
+      shiftId: entity.shiftId,
+      localIssueDate: entity.localIssueDate,
     );
   }
 
@@ -355,6 +357,8 @@ class SalesMapper {
       bcnOfficialRate: domain.bcnOfficialRate,
       commercialRate: domain.commercialRate,
       totalUsd: domain.totalUsd,
+      shiftId: domain.shiftId,
+      localIssueDate: domain.localIssueDate,
     );
   }
 
@@ -534,6 +538,11 @@ class SalesMapper {
       'customerId': invoice.customerId,
       'globalTaxOverride': invoice.globalTaxOverride,
       'relatedInvoiceId': invoice.relatedInvoiceId,
+      // #551: the shift-membership facts travel so the backend can enforce
+      // voidability on its own calendar. Null travels as null (the
+      // relatedInvoiceId convention) — never fabricated.
+      'shiftId': invoice.shiftId,
+      'localIssueDate': invoice.localIssueDate,
       if (invoice.originInvoiceId?.isNotEmpty ?? false)
         'originInvoiceId': invoice.originInvoiceId,
       if (invoice.refundReasonPolicy?.isNotEmpty ?? false)

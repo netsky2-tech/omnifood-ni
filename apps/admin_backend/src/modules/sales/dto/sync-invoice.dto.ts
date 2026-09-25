@@ -365,4 +365,16 @@ export class SyncInvoiceDto {
 
   @IsOptional()
   inventoryOutcomeReason?: Record<string, any> | string;
+
+  @IsString()
+  @IsOptional()
+  // #551: cashier session UUID from the POS payload. Null travels as null
+  // for invoices issued before the field existed (D-9: no backfill).
+  shiftId?: string | null;
+
+  @IsDateString()
+  @IsOptional()
+  // #551: local calendar date (ISO YYYY-MM-DD) fixed at issuance on-device.
+  // Null travels as null for legacy invoices (D-9: no backfill).
+  localIssueDate?: string | null;
 }

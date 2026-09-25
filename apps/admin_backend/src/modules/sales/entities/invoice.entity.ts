@@ -131,6 +131,17 @@ export class Invoice {
   @Column({ name: 'inventory_outcome_reason', type: 'jsonb', nullable: true })
   inventoryOutcomeReason?: Record<string, any> | string | null;
 
+  // #551 U3: cashier session UUID emitted by the POS sync payload
+  // (`shiftId`). Nullable: the fact never existed server-side for legacy
+  // invoices (D-9, no backfill).
+  @Column({ name: 'shift_id', type: 'uuid', nullable: true })
+  shiftId?: string | null;
+
+  // #551 U3: local calendar date (ISO YYYY-MM-DD) fixed at issuance on the
+  // POS. Nullable for the same D-9 reason.
+  @Column({ name: 'local_issue_date', type: 'date', nullable: true })
+  localIssueDate?: string | null;
+
   @UpdateDateColumn({ type: 'timestamptz' })
   updated_at: Date;
 }

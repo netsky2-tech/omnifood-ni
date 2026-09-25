@@ -43,6 +43,19 @@ mixin _$Invoice {
   String? get authorizedByUserId => throw _privateConstructorUsedError;
   String? get authorizedByRole => throw _privateConstructorUsedError;
   String? get terminalId => throw _privateConstructorUsedError;
+
+  /// #551: the open cashier shift bound at issuance (B1a-4/D-11). Lives
+  /// on [InvoiceEntity.shiftId] (assigned after [SalesMapper
+  /// .toInvoiceEntity] at checkout); carried on the domain model only so
+  /// [SalesMapper.toSyncJson] can project it to the cloud. Null = issued
+  /// with no open shift — never fabricated.
+  String? get shiftId => throw _privateConstructorUsedError;
+
+  /// #551: the local calendar date fixed at issuance (D-12). Mirrors
+  /// [InvoiceEntity.localIssueDate]; travels in the sync payload so the
+  /// backend can evaluate voidability on its own calendar. Never
+  /// recomputed from [createdAt].
+  String? get localIssueDate => throw _privateConstructorUsedError;
   int? get sourceSequence => throw _privateConstructorUsedError;
   String? get idempotencyKey => throw _privateConstructorUsedError;
   String? get payloadHash => throw _privateConstructorUsedError;
@@ -85,6 +98,8 @@ abstract class $InvoiceCopyWith<$Res> {
       String? authorizedByUserId,
       String? authorizedByRole,
       String? terminalId,
+      String? shiftId,
+      String? localIssueDate,
       int? sourceSequence,
       String? idempotencyKey,
       String? payloadHash,
@@ -130,6 +145,8 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
     Object? authorizedByUserId = freezed,
     Object? authorizedByRole = freezed,
     Object? terminalId = freezed,
+    Object? shiftId = freezed,
+    Object? localIssueDate = freezed,
     Object? sourceSequence = freezed,
     Object? idempotencyKey = freezed,
     Object? payloadHash = freezed,
@@ -225,6 +242,14 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
           ? _value.terminalId
           : terminalId // ignore: cast_nullable_to_non_nullable
               as String?,
+      shiftId: freezed == shiftId
+          ? _value.shiftId
+          : shiftId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      localIssueDate: freezed == localIssueDate
+          ? _value.localIssueDate
+          : localIssueDate // ignore: cast_nullable_to_non_nullable
+              as String?,
       sourceSequence: freezed == sourceSequence
           ? _value.sourceSequence
           : sourceSequence // ignore: cast_nullable_to_non_nullable
@@ -294,6 +319,8 @@ abstract class _$$InvoiceImplCopyWith<$Res> implements $InvoiceCopyWith<$Res> {
       String? authorizedByUserId,
       String? authorizedByRole,
       String? terminalId,
+      String? shiftId,
+      String? localIssueDate,
       int? sourceSequence,
       String? idempotencyKey,
       String? payloadHash,
@@ -337,6 +364,8 @@ class __$$InvoiceImplCopyWithImpl<$Res>
     Object? authorizedByUserId = freezed,
     Object? authorizedByRole = freezed,
     Object? terminalId = freezed,
+    Object? shiftId = freezed,
+    Object? localIssueDate = freezed,
     Object? sourceSequence = freezed,
     Object? idempotencyKey = freezed,
     Object? payloadHash = freezed,
@@ -432,6 +461,14 @@ class __$$InvoiceImplCopyWithImpl<$Res>
           ? _value.terminalId
           : terminalId // ignore: cast_nullable_to_non_nullable
               as String?,
+      shiftId: freezed == shiftId
+          ? _value.shiftId
+          : shiftId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      localIssueDate: freezed == localIssueDate
+          ? _value.localIssueDate
+          : localIssueDate // ignore: cast_nullable_to_non_nullable
+              as String?,
       sourceSequence: freezed == sourceSequence
           ? _value.sourceSequence
           : sourceSequence // ignore: cast_nullable_to_non_nullable
@@ -497,6 +534,8 @@ class _$InvoiceImpl implements _Invoice {
       this.authorizedByUserId,
       this.authorizedByRole,
       this.terminalId,
+      this.shiftId,
+      this.localIssueDate,
       this.sourceSequence,
       this.idempotencyKey,
       this.payloadHash,
@@ -504,7 +543,7 @@ class _$InvoiceImpl implements _Invoice {
       this.inventoryOutcome,
       this.inventoryOutcomeReason,
       this.bcnOfficialRate = 36.6241,
-      this.commercialRate = 36.50,
+      this.commercialRate = 36.5,
       this.totalUsd = 0.0});
 
   factory _$InvoiceImpl.fromJson(Map<String, dynamic> json) =>
@@ -560,6 +599,21 @@ class _$InvoiceImpl implements _Invoice {
   final String? authorizedByRole;
   @override
   final String? terminalId;
+
+  /// #551: the open cashier shift bound at issuance (B1a-4/D-11). Lives
+  /// on [InvoiceEntity.shiftId] (assigned after [SalesMapper
+  /// .toInvoiceEntity] at checkout); carried on the domain model only so
+  /// [SalesMapper.toSyncJson] can project it to the cloud. Null = issued
+  /// with no open shift — never fabricated.
+  @override
+  final String? shiftId;
+
+  /// #551: the local calendar date fixed at issuance (D-12). Mirrors
+  /// [InvoiceEntity.localIssueDate]; travels in the sync payload so the
+  /// backend can evaluate voidability on its own calendar. Never
+  /// recomputed from [createdAt].
+  @override
+  final String? localIssueDate;
   @override
   final int? sourceSequence;
   @override
@@ -584,7 +638,7 @@ class _$InvoiceImpl implements _Invoice {
 
   @override
   String toString() {
-    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
+    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, shiftId: $shiftId, localIssueDate: $localIssueDate, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
   }
 
   @override
@@ -629,6 +683,9 @@ class _$InvoiceImpl implements _Invoice {
                 other.authorizedByRole == authorizedByRole) &&
             (identical(other.terminalId, terminalId) ||
                 other.terminalId == terminalId) &&
+            (identical(other.shiftId, shiftId) || other.shiftId == shiftId) &&
+            (identical(other.localIssueDate, localIssueDate) ||
+                other.localIssueDate == localIssueDate) &&
             (identical(other.sourceSequence, sourceSequence) ||
                 other.sourceSequence == sourceSequence) &&
             (identical(other.idempotencyKey, idempotencyKey) ||
@@ -674,6 +731,8 @@ class _$InvoiceImpl implements _Invoice {
         authorizedByUserId,
         authorizedByRole,
         terminalId,
+        shiftId,
+        localIssueDate,
         sourceSequence,
         idempotencyKey,
         payloadHash,
@@ -722,6 +781,8 @@ abstract class _Invoice implements Invoice {
       final String? authorizedByUserId,
       final String? authorizedByRole,
       final String? terminalId,
+      final String? shiftId,
+      final String? localIssueDate,
       final int? sourceSequence,
       final String? idempotencyKey,
       final String? payloadHash,
@@ -776,6 +837,21 @@ abstract class _Invoice implements Invoice {
   String? get authorizedByRole;
   @override
   String? get terminalId;
+  @override
+
+  /// #551: the open cashier shift bound at issuance (B1a-4/D-11). Lives
+  /// on [InvoiceEntity.shiftId] (assigned after [SalesMapper
+  /// .toInvoiceEntity] at checkout); carried on the domain model only so
+  /// [SalesMapper.toSyncJson] can project it to the cloud. Null = issued
+  /// with no open shift — never fabricated.
+  String? get shiftId;
+  @override
+
+  /// #551: the local calendar date fixed at issuance (D-12). Mirrors
+  /// [InvoiceEntity.localIssueDate]; travels in the sync payload so the
+  /// backend can evaluate voidability on its own calendar. Never
+  /// recomputed from [createdAt].
+  String? get localIssueDate;
   @override
   int? get sourceSequence;
   @override

@@ -34,6 +34,19 @@ class Invoice with _$Invoice {
     String? authorizedByUserId,
     String? authorizedByRole,
     String? terminalId,
+
+    /// #551: the open cashier shift bound at issuance (B1a-4/D-11). Lives
+    /// on [InvoiceEntity.shiftId] (assigned after [SalesMapper
+    /// .toInvoiceEntity] at checkout); carried on the domain model only so
+    /// [SalesMapper.toSyncJson] can project it to the cloud. Null = issued
+    /// with no open shift — never fabricated.
+    String? shiftId,
+
+    /// #551: the local calendar date fixed at issuance (D-12). Mirrors
+    /// [InvoiceEntity.localIssueDate]; travels in the sync payload so the
+    /// backend can evaluate voidability on its own calendar. Never
+    /// recomputed from [createdAt].
+    String? localIssueDate,
     int? sourceSequence,
     String? idempotencyKey,
     String? payloadHash,
