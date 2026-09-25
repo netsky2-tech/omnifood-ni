@@ -101,7 +101,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Bodega Central'), findsAtLeastNWidgets(1));
-    expect(find.text('Estado: posted'), findsAtLeastNWidgets(1));
+    expect(find.text('Estado: Aplicada'), findsAtLeastNWidgets(1));
+    expect(find.text('Estado: posted'), findsNothing);
     expect(find.textContaining('Variación aprobada: -2.00 L'), findsOneWidget);
     expect(find.textContaining('Referencias de ajuste: 1'), findsOneWidget);
   });

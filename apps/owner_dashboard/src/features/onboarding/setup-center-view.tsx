@@ -15,6 +15,7 @@ import {
   type GenerateLinkingCodeResponse,
 } from "./types";
 import { isApiError } from "@/lib/api";
+import { localize, backendActivationErrorLabels, lifecycleStateLabels } from "@/lib/labels";
 import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
 import { useHasPermission } from "@/features/users/use-has-permission";
 import { AppPermission } from "@/features/users/types";
@@ -53,20 +54,19 @@ interface SetupCenterViewProps {
 
 /**
  * Maps a documented backend failure of POST /onboarding/activation/attempts to
- * a message a business owner understands. The backend message stays available
- * next to it for support diagnostics.
+ * a message a business owner understands. Known machine codes get their human
+ * lead line from backendActivationErrorLabels (issue #587 / D4); documented
+ * failures that carry no machine code (verification product, permission) keep
+ * their dedicated copy, and anything unknown falls back to a generic line. The
+ * backend message always stays available next to it for support diagnostics.
  */
 function describeActivationAttemptFailure(error: unknown): string {
   if (isApiError(error)) {
     const backendMessage = typeof error.message === "string" ? error.message : "";
-    if (backendMessage.includes("CANNOT_START_ACTIVATION_NOT_SALE_READY")) {
-      return "Tu comercio todavía no está Listo para Venta, así que no se puede iniciar la activación de la terminal. Completá los pasos pendientes del Setup Center e intentá de nuevo.";
-    }
-    if (backendMessage.includes("ACTIVE_ATTEMPT_EXISTS")) {
-      return "Ya existe una activación en curso para tu comercio. Continuá el proceso desde la terminal POS; la activación actual debe completarse antes de iniciar otra.";
-    }
-    if (backendMessage.includes("FISCAL_REVISION_NOT_AVAILABLE")) {
-      return "No se pudo registrar la revisión de tu configuración fiscal. Revisá la Configuración Fiscal DGI en el Setup Center e intentá de nuevo.";
+    for (const code of Object.keys(backendActivationErrorLabels)) {
+      if (backendMessage.includes(code)) {
+        return localize(code, backendActivationErrorLabels);
+      }
     }
     if (backendMessage.toLowerCase().includes("verification product")) {
       return "No hay un producto de verificación válido para activar la terminal. Necesitás al menos un producto activo con precio de venta mayor a cero.";
@@ -249,22 +249,8 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
     }
   };
 
-  const getLifecycleDisplayLabel = (state: OnboardingLifecycleState): string => {
-    switch (state) {
-      case OnboardingLifecycleState.PROVISIONED:
-        return "Inicial";
-      case OnboardingLifecycleState.SETUP_IN_PROGRESS:
-        return "En Configuración";
-      case OnboardingLifecycleState.SALE_READY:
-        return "Listo para Venta";
-      case OnboardingLifecycleState.ACTIVATION_IN_PROGRESS:
-        return "Activación en Curso";
-      case OnboardingLifecycleState.ACTIVATED:
-        return "Activado";
-      default:
-        return state;
-    }
-  };
+  const getLifecycleDisplayLabel = (state: OnboardingLifecycleState): string =>
+    localize(state, lifecycleStateLabels);
 
   const handleStepAction = (actionKey: OnboardingStepKey) => {
     if (actionKey === "catalog") {

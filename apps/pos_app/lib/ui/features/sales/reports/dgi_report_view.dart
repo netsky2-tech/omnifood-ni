@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dgi_report_view_model.dart';
 import '../../../design_system/design_system.dart';
+import '../../../../core/localization/label_map.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
 
@@ -307,7 +308,7 @@ class _DgiReportViewState extends State<DgiReportView> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(e.key.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(localize(e.key.name, kPaymentMethodLabels), style: const TextStyle(fontWeight: FontWeight.bold)),
                   Text('C\$ ${e.value.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 ],
               ),

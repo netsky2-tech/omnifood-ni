@@ -7,6 +7,7 @@ import '../../../domain/models/sales/invoice.dart';
 import '../../../domain/models/sales/invoice_item.dart';
 import '../../../domain/usecases/sales/void_decision.dart';
 // ReprintReasonCodes and the snapshot-unavailable copy live in the same module.
+import '../../../core/localization/label_map.dart';
 import '../../design_system/design_system.dart';
 
 class SalesHistoryView extends StatefulWidget {
@@ -382,14 +383,10 @@ class InvoiceDetailsPanel extends StatelessWidget {
     );
   }
 
-  /// Neutral Spanish labels for the D-13 reprint reason codes.
-  String _reprintReasonLabel(String code) => switch (code) {
-        ReprintReasonCodes.papelAtascado => 'Papel atascado',
-        ReprintReasonCodes.clientePerdioTicket => 'El cliente perdió su ticket',
-        ReprintReasonCodes.verificacion => 'Verificación',
-        ReprintReasonCodes.otro => 'Otro',
-        _ => code,
-      };
+  /// Neutral Spanish labels for the D-13 reprint reason codes, delegated to
+  /// the centralized map (#587 WU3); unknown codes pass through unchanged.
+  String _reprintReasonLabel(String code) =>
+      localize(code, kReprintReasonLabels);
 
   /// D-13: reprint reason dialog — mandatory controlled code + optional
   /// detail. On success the SnackBar claims only the print outcome; the
@@ -480,14 +477,10 @@ class InvoiceDetailsPanel extends StatelessWidget {
     );
   }
 
-  /// Neutral Spanish labels for the D-15 controlled reason codes (AC-6/AC-7).
-  String _voidReasonLabel(String code) => switch (code) {
-        VoidReasonCodes.errorDeCaptura => 'Error de captura',
-        VoidReasonCodes.clienteDesiste => 'Cliente desiste',
-        VoidReasonCodes.ticketDuplicado => 'Ticket duplicado',
-        VoidReasonCodes.otro => 'Otro',
-        _ => code,
-      };
+  /// Neutral Spanish labels for the D-15 controlled reason codes (AC-6/AC-7),
+  /// delegated to the centralized map (#587 WU3); unknown codes pass through
+  /// unchanged.
+  String _voidReasonLabel(String code) => localize(code, kVoidReasonLabels);
 
   void _showVoidDialog(BuildContext context) {
     String? selectedCode;

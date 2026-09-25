@@ -15,9 +15,15 @@ import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
 import 'package:pos_app/domain/models/inventory/production_order_document.dart';
 import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
+import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart';
 
 class MockAuditRepo implements AuditRepository {
   int syncCalls = 0;
+
+  /// When set, [syncLogs] throws this object to simulate an audit domain
+  /// sync failure (drives `domainErrors.add('AuditLogs')` in SyncService).
+  Object? syncError;
+
   @override
   String get deviceId => 'test-terminal';
   @override
@@ -27,6 +33,8 @@ class MockAuditRepo implements AuditRepository {
   @override
   Future<AuditSyncOutcome> syncLogs() async {
     syncCalls++;
+    final error = syncError;
+    if (error != null) throw error;
     return const AuditSyncOutcome.complete();
   }
   @override
@@ -35,8 +43,17 @@ class MockAuditRepo implements AuditRepository {
 
 class MockSalesRepo implements SalesRepository {
   List<Map<String, Object?>> unsynced = [];
+
+  /// When set, [getUnsyncedAggregates] throws this object to simulate a
+  /// sales domain sync failure (drives `domainErrors.add('Sales')`).
+  Object? fetchError;
+
   @override
-  Future<List<Map<String, Object?>>> getUnsyncedAggregates() async => unsynced;
+  Future<List<Map<String, Object?>>> getUnsyncedAggregates() async {
+    final error = fetchError;
+    if (error != null) throw error;
+    return unsynced;
+  }
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -55,6 +72,8 @@ class MockInventoryRepo implements InventoryRepository {
   Future<List<CountSessionDocument>> getUnsyncedCountSessionDocuments() async => [];
   @override
   Future<List<ForensicAlert>> getUnsyncedForensicAlerts() async => [];
+  @override
+  Future<List<KardexCorrectionEntity>> getKardexCorrections() async => [];
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -175,6 +194,54 @@ void main() {
       expect(find.text('Sincronización forzada iniciada...'), findsOneWidget);
       expect(auditRepo.syncCalls, 1);
       await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+        'error detail dialog renders a known discrete sync error code as a Spanish label',
+        (tester) async {
+      connectivityService.setOnlineStateForTest(true);
+      // Only the sales domain fails: SyncService records the exact discrete
+      // token 'Sales' as lastSyncError (verified single-domain composition).
+      salesRepo.fetchError = Exception('sales sync down');
+
+      final outcome = await syncService.triggerManualSync();
+      expect(outcome.status, SyncRunStatus.partial);
+      // Guard the premise: the composition must be the bare discrete code,
+      // otherwise the map entry could not be exercised through the badge.
+      expect(syncService.lastSyncError, 'Sales');
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cloud_sync_status_badge_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detalle de Error:'), findsOneWidget);
+      expect(find.text('Ventas'), findsOneWidget);
+      expect(find.text('Sales'), findsNothing);
+    });
+
+    testWidgets(
+        'error detail dialog renders composed sync error summaries verbatim (pass-through)',
+        (tester) async {
+      connectivityService.setOnlineStateForTest(true);
+      // Two failing domains produce a composed summary with no single-code
+      // key: the raw diagnostic detail must stay visible (D2/D6).
+      auditRepo.syncError = Exception('audit down');
+      salesRepo.fetchError = Exception('sales down');
+
+      await syncService.triggerManualSync();
+      expect(syncService.lastSyncError, 'AuditLogs; Sales');
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cloud_sync_status_badge_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detalle de Error:'), findsOneWidget);
+      expect(find.text('AuditLogs; Sales'), findsOneWidget);
+      expect(find.text('Registros de auditoría'), findsNothing);
     });
   });
 }

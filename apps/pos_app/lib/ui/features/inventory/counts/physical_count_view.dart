@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/localization/label_map.dart';
 import 'count_session_detail_view.dart';
 import 'physical_count_view_model.dart';
 
@@ -106,7 +107,7 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                                         style: Theme.of(context).textTheme.titleMedium,
                                       ),
                                       const SizedBox(height: 8),
-                                      Text('Estado: ${session.status}'),
+                                      Text('Estado: ${localize(session.status, kCountSessionStatusLabels)}'),
                         Text(
                           'Líneas aprobadas: ${session.approvedLineCount}',
                           style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/localization/label_map.dart';
 import 'activation_session_view_model.dart';
 
 /// Guided terminal-activation screen: an operator completes activation from
@@ -125,7 +126,7 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      blockerCode,
+                      localize(blockerCode, kActivationBlockerLabels),
                       key: const Key('activation_blocker_code'),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
@@ -168,7 +169,7 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               Text(
-                attempt.localStatus,
+                localize(attempt.localStatus, kActivationAttemptStatusLabels),
                 key: const Key('activation_attempt_status'),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
@@ -282,7 +283,7 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               Text(
-                blockers.join('\n'),
+                blockers.map(_localizeBlocker).join('\n'),
                 key: const Key('pre_offline_blockers'),
                 style: TextStyle(
                   color: Colors.red.shade700,
@@ -340,7 +341,8 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Estado del intento: ${result.attemptStatus}',
+                'Estado del intento: '
+                '${localize(result.attemptStatus, kActivationAttemptStatusLabels)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (checks.isNotEmpty) ...[
@@ -417,7 +419,7 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               Text(
-                result.attemptStatus,
+                localize(result.attemptStatus, kActivationAttemptStatusLabels),
                 key: const Key('finalized_status'),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -432,7 +434,7 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
               if (result.backendFinalizeResult != null)
                 Text(
                   'Veredicto del backend: '
-                  '${result.backendFinalizeResult!.status}',
+                  '${localize(result.backendFinalizeResult!.status, kActivationBackendVerdictLabels)}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               const SizedBox(height: 8),
@@ -508,8 +510,23 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
     return error.trim() == blockers.join('\n').trim();
   }
 
-  /// One row per check the runner actually reported: its code and its
-  /// status. Nothing is invented and no count is fabricated.
+  /// Localizes one raw runner blocker string. Blockers are reported either
+  /// as a bare code (`NO_ACTIVE_ATTEMPT`) or as `CODE: raw detail`; the code
+  /// head is translated through [kActivationBlockerLabels] and the reported
+  /// detail tail is preserved verbatim so no reported information is lost.
+  String _localizeBlocker(String blocker) {
+    final separatorIndex = blocker.indexOf(':');
+    if (separatorIndex <= 0) {
+      return localize(blocker, kActivationBlockerLabels);
+    }
+    final head = blocker.substring(0, separatorIndex).trim();
+    final tail = blocker.substring(separatorIndex + 1).trim();
+    final localizedHead = localize(head, kActivationBlockerLabels);
+    return tail.isEmpty ? localizedHead : '$localizedHead — $tail';
+  }
+
+  /// One row per check the runner actually reported: its localized code and
+  /// its localized status. Nothing is invented and no count is fabricated.
   Widget _buildCheckRow(String code, String status) {
     final Color statusColor;
     switch (status) {
@@ -533,12 +550,12 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
         children: [
           Expanded(
             child: Text(
-              code,
+              localize(code, kActivationCheckCodeLabels),
               style: const TextStyle(fontFamily: 'monospace'),
             ),
           ),
           Text(
-            status,
+            localize(status, kActivationCheckStatusLabels),
             style: TextStyle(
               color: statusColor,
               fontWeight: FontWeight.w600,

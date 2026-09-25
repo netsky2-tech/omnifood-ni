@@ -125,6 +125,11 @@ void main() {
       );
       await tester.tap(find.text('Papel atascado'));
       await tester.pumpAndSettle();
+
+      // #587 WU3: reason options render Spanish labels from the centralized
+      // map; the raw controlled codes never reach the dialog.
+      expect(find.text('PAPEL_ATASCADO'), findsNothing);
+      expect(find.text('Papel atascado'), findsOneWidget);
       expect(
         tester.widget<ElevatedButton>(confirm).onPressed,
         isNotNull,

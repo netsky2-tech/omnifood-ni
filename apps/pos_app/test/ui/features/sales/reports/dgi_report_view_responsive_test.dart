@@ -147,6 +147,11 @@ void main() {
       expect(find.text('C\$ 15.00'), findsOneWidget);
       expect(find.text('Ventas Netas'), findsOneWidget);
       expect(find.text('C\$ 100.00'), findsOneWidget);
+
+      // #587 WU3: payment-method breakdown renders Spanish labels, not raw
+      // enum names (CASH).
+      expect(find.text('Efectivo'), findsOneWidget);
+      expect(find.text('CASH'), findsNothing);
     });
 
     testWidgets('renders adaptive dropdown and stacked KPI cards on Sunmi V2s handheld (360x720dp)', (tester) async {
