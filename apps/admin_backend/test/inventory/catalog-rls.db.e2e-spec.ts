@@ -151,7 +151,7 @@ describe('catalog products/insumos tenant RLS (Real PostgreSQL DB, migration-bui
         'catalog-rls-tenant-c',
         tenantDId,
         'catalog-rls-tenant-d',
-                normalizeTenantSlug('catalog-rls-tenant-a'),
+        normalizeTenantSlug('catalog-rls-tenant-a'),
         normalizeTenantSlug('catalog-rls-tenant-b'),
         normalizeTenantSlug('catalog-rls-tenant-c'),
         normalizeTenantSlug('catalog-rls-tenant-d'),

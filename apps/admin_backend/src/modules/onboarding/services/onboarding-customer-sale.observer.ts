@@ -62,7 +62,10 @@ export class OnboardingCustomerSaleObserver {
       };
     }
 
-    const occurredAt = dto.occurredAt instanceof Date ? dto.occurredAt : new Date(dto.occurredAt);
+    const occurredAt =
+      dto.occurredAt instanceof Date
+        ? dto.occurredAt
+        : new Date(dto.occurredAt);
     let isFirstSuccessfulSale = false;
 
     // If firstSuccessfulSaleAt is null, this commercial sale also claims TTFSS

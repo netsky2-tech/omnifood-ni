@@ -65,7 +65,9 @@ const poolCleanupExtra = { extra: { allowExitOnIdle: true } };
 async function asRuntimeRole<T>(
   runtime: DataSource,
   tenantId: string | null,
-  assertion: (runner: ReturnType<DataSource['createQueryRunner']>) => Promise<T>,
+  assertion: (
+    runner: ReturnType<DataSource['createQueryRunner']>,
+  ) => Promise<T>,
 ): Promise<T> {
   const runner = runtime.createQueryRunner();
   await runner.connect();
@@ -86,7 +88,9 @@ async function asRuntimeRole<T>(
  * `[rows, affectedRowCount]` while SELECTs arrive as a plain rows array.
  * Normalizes both shapes to the rows array so assertions read on `id`.
  */
-function returningRows(result: unknown): Array<{ id: string; tenant_id?: string }> {
+function returningRows(
+  result: unknown,
+): Array<{ id: string; tenant_id?: string }> {
   if (Array.isArray(result) && Array.isArray(result[0])) {
     return result[0] as Array<{ id: string }>;
   }
@@ -187,18 +191,20 @@ describe('onboarding template/provenance tenant RLS (Real PostgreSQL DB, migrati
   });
 
   it('seeds both tenants through the superuser and proves the runtime role is a table non-owner that cannot bypass RLS', async () => {
-    const seeded = (await admin.query(
+    const seeded = await admin.query(
       `SELECT
          (SELECT count(*)::int FROM onboarding_template_applications) AS applications,
          (SELECT count(*)::int FROM onboarding_template_seed_links) AS seed_links,
          (SELECT count(*)::int FROM legacy_onboarding_migration_receipts) AS receipts`,
-    )) as Array<{ applications: number; seed_links: number; receipts: number }>;
+    );
     expect(seeded[0]).toEqual({ applications: 2, seed_links: 2, receipts: 2 });
 
-    const role = (await admin.query(
-      `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1`, [
-      fixture.runtimeRoleName,
-    ]))[0];
+    const role = (
+      await admin.query(
+        `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1`,
+        [fixture.runtimeRoleName],
+      )
+    )[0];
     expect(role).toBeDefined();
     expect(role.rolsuper).toBe(false);
     expect(role.rolbypassrls).toBe(false);
@@ -232,9 +238,21 @@ describe('onboarding template/provenance tenant RLS (Real PostgreSQL DB, migrati
     )) as Array<{ relname: string; rls_enabled: boolean; rls_forced: boolean }>;
 
     expect(facts).toEqual([
-      { relname: 'legacy_onboarding_migration_receipts', rls_enabled: true, rls_forced: true },
-      { relname: 'onboarding_template_applications', rls_enabled: true, rls_forced: true },
-      { relname: 'onboarding_template_seed_links', rls_enabled: true, rls_forced: true },
+      {
+        relname: 'legacy_onboarding_migration_receipts',
+        rls_enabled: true,
+        rls_forced: true,
+      },
+      {
+        relname: 'onboarding_template_applications',
+        rls_enabled: true,
+        rls_forced: true,
+      },
+      {
+        relname: 'onboarding_template_seed_links',
+        rls_enabled: true,
+        rls_forced: true,
+      },
     ]);
 
     for (const table of TABLES) {
@@ -376,9 +394,9 @@ describe('onboarding template/provenance tenant RLS (Real PostgreSQL DB, migrati
       ],
     ] as const) {
       await asRuntimeRole(runtime, tenantCId, async (runner) => {
-        await expect(
-          runner.query(insertSql, [tenantDId]),
-        ).rejects.toThrow(/row-level security/i);
+        await expect(runner.query(insertSql, [tenantDId])).rejects.toThrow(
+          /row-level security/i,
+        );
         void table;
       });
     }
@@ -451,7 +469,9 @@ describe('onboarding template/provenance tenant RLS (Real PostgreSQL DB, migrati
           [throwawaySeedLink[0].id],
         ),
       );
-      expect(deletedSeedLink.map((r) => r.id)).toEqual([throwawaySeedLink[0].id]);
+      expect(deletedSeedLink.map((r) => r.id)).toEqual([
+        throwawaySeedLink[0].id,
+      ]);
 
       const throwawayReceipt = returningRows(
         await runner.query(

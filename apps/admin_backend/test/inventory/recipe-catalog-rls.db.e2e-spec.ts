@@ -187,7 +187,7 @@ describe('recipe catalog tenant RLS (Real PostgreSQL DB, migration-built schema)
         'recipe-rls-tenant-c',
         tenantDId,
         'recipe-rls-tenant-d',
-                normalizeTenantSlug('recipe-rls-tenant-a'),
+        normalizeTenantSlug('recipe-rls-tenant-a'),
         normalizeTenantSlug('recipe-rls-tenant-b'),
         normalizeTenantSlug('recipe-rls-tenant-c'),
         normalizeTenantSlug('recipe-rls-tenant-d'),
@@ -378,9 +378,9 @@ describe('recipe catalog tenant RLS (Real PostgreSQL DB, migration-built schema)
         batches: batchAId,
       } as const;
       for (const [table, id] of Object.entries(own)) {
-        const rows = (await runner.query(
-          `SELECT id FROM ${table}`,
-        )) as Array<{ id: string }>;
+        const rows = (await runner.query(`SELECT id FROM ${table}`)) as Array<{
+          id: string;
+        }>;
         expect(rows.map((r) => r.id)).toEqual([id]);
       }
     });
@@ -396,9 +396,9 @@ describe('recipe catalog tenant RLS (Real PostgreSQL DB, migration-built schema)
         batches: batchBId,
       } as const;
       for (const [table, id] of Object.entries(own)) {
-        const rows = (await runner.query(
-          `SELECT id FROM ${table}`,
-        )) as Array<{ id: string }>;
+        const rows = (await runner.query(`SELECT id FROM ${table}`)) as Array<{
+          id: string;
+        }>;
         expect(rows.map((r) => r.id)).toEqual([id]);
       }
     });

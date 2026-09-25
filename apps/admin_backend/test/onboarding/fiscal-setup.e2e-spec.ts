@@ -104,8 +104,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
           const matching = dbSysParams.filter(
             (p) =>
               p.tenant_id === where?.tenant_id &&
-              (where.paramKey === undefined ||
-                p.paramKey === where.paramKey) &&
+              (where.paramKey === undefined || p.paramKey === where.paramKey) &&
               p.isActive &&
               (p.effectiveTo === null || p.effectiveTo > new Date()),
           );
@@ -619,9 +618,9 @@ describe('FiscalSetup (Integration & E2E)', () => {
     expect(
       secondRows.find((p) => p.paramKey === 'FISCAL_REGIME')?.paramValue,
     ).toBe(FiscalRegime.REGIMEN_GENERAL);
-    expect(secondRows.find((p) => p.paramKey === 'TAX_RATE_IVA')?.paramValue).toBe(
-      0.15,
-    );
+    expect(
+      secondRows.find((p) => p.paramKey === 'TAX_RATE_IVA')?.paramValue,
+    ).toBe(0.15);
     expect(
       secondRows.find((p) => p.paramKey === 'PRICES_INCLUDE_TAX')?.paramValue,
     ).toBe(false);

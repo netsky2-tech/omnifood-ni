@@ -9,7 +9,10 @@ export interface ProductCostItem {
   value?: number;
   reason?: string;
   provenance?:
-    'KARDEX' | 'PURCHASE_DOCUMENT' | 'MANUAL_INITIAL_PROVENANCE' | 'NONE';
+    | 'KARDEX'
+    | 'PURCHASE_DOCUMENT'
+    | 'MANUAL_INITIAL_PROVENANCE'
+    | 'NONE';
 }
 
 export interface CostingReadinessResult {
