@@ -93,7 +93,14 @@ async function createRefreshHarness(withJti = false): Promise<RefreshHarness> {
       ...postgresConnection,
       schema,
       entities: [User, Tenant, SecurityProfile],
-      extra: { max: 1 },
+      extra: {
+        max: 1,
+        // Issue #556 stage 12d: the refresh path resolves the tenant slug
+        // through RAW unqualified SQL ("FROM tenants"), which ignores
+        // TypeORM's schema option — pin the session search_path so it lands
+        // in the scratch schema, mirroring the migration-built helper.
+        options: `-c search_path="${schema}",public`,
+      },
     });
     await dataSource.initialize();
     clients.push(dataSource);

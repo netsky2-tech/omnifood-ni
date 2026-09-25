@@ -188,16 +188,18 @@ audit_logs|debt
 # becomes direct only when the POS cash-session sync receiver and its entity
 # actually land.
 cashier_sessions|debt
-# users stays in debt (issue #512 T3 slices 8 and 11, founder decision).
-# Stage 1 of the login redesign (issue #556, OD-03) has landed: login and
-# refresh accept an OPTIONAL tenantSlug; when present, auth.service.ts
-# resolves slug -> tenant on the global tenants table, binds the transaction
-# context (SET LOCAL app.tenant_id) and only then reads the user through the
-# bound manager, so both entry points already have a bound path for the
-# future FORCE RLS world. The legacy no-slug paths (pooled email lookup on
-# login, unbound user read on refresh) remain UNCHANGED for the migration
-# window, and uq_users_email is still globally unique rather than per
-# tenant. FORCE RLS enablement is stage 3, gated on POS adoption E2E
-# (slice 11-B ships the tenantSlug contract to the POS); users becomes
-# direct only when the legacy window closes.
-users|debt
+# users is direct (issue #556 stage 12d): the identity isolation boundary is
+# fully armed. ENABLE + FORCE RLS and the four per-command policies
+# (users_tenant_{select,insert,update,delete}) landed with migration
+# 1809370000000. Every production reader/writer is tenant-bound: login and
+# refresh require the tenantSlug (the legacy no-slug pooled paths were
+# removed — stage 12b links the terminal pre-login, so first-owner login
+# needs no compatibility branch), getMe and the authoritative current-user
+# guard read inside the JWT-bound transaction, user CRUD/staff sync/
+# effective permissions/supervisor override were bound in slice 9, and the
+# onboarding readiness adapters join the bound transaction. uq_users_email
+# stays GLOBAL by founder decision — cross-tenant email uniqueness is a
+# provisioning invariant, not an isolation mechanism, and the login path
+# proves the boundary: a valid foreign email is invisible to a slug-bound
+# connection.
+users|direct:SIUD
