@@ -30,6 +30,20 @@ function setHostname(hostname: string) {
   });
 }
 
+function restoreLocation() {
+  Object.defineProperty(window, "location", {
+    writable: true,
+    value: originalLocation,
+  });
+}
+
+const loginResponse = {
+  access_token: "at",
+  refresh_token: "rt",
+  user: { id: "u1", email: "test@test.com", name: "Test", role: "OWNER", tenantId: "t1", active: true },
+  tenant: { id: "t1", name: "Test", slug: "soho", ruc: "001", active: true },
+};
+
 function TestWrapper({ children }: { children: React.ReactNode }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
@@ -58,7 +72,7 @@ describe("W1 — resolveTenantSlug", () => {
   });
 });
 
-describe("W1 — LoginPage tenant slug field", () => {
+describe("W1 — LoginPage host-derived slug", () => {
   beforeEach(() => {
     setHostname("localhost");
     vi.clearAllMocks();
@@ -69,27 +83,49 @@ describe("W1 — LoginPage tenant slug field", () => {
   });
 
   afterEach(() => {
-    Object.defineProperty(window, "location", {
-      writable: true,
-      value: originalLocation,
-    });
+    restoreLocation();
   });
 
-  it("renders empty tenant field when host has no subdomain", () => {
+  it("renders fail-closed notice without credentials form on localhost", () => {
     render(<LoginPage />, { wrapper: TestWrapper });
 
-    expect(screen.getByLabelText(/tenant/i)).toHaveValue("");
+    expect(screen.getByText(/accedé desde el subdominio de tu comercio/i)).toBeInTheDocument();
+    expect(screen.getByText("NHILOS POS")).toBeInTheDocument();
+    expect(screen.getByText("Panel de administración")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/correo electrónico/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^contraseña$/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/tenant/i)).not.toBeInTheDocument();
   });
 
-  it("pre-fills tenant field from the subdomain", () => {
+  it.each(["nhilospos.com", "127.0.0.1"])(
+    "renders fail-closed notice without credentials form on %s",
+    (hostname) => {
+      setHostname(hostname);
+      render(<LoginPage />, { wrapper: TestWrapper });
+
+      expect(screen.getByText(/accedé desde el subdominio de tu comercio/i)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/correo electrónico/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /iniciar sesión/i })).not.toBeInTheDocument();
+      expect(vi.mocked(apiModule.api.post)).not.toHaveBeenCalled();
+    },
+  );
+
+  it("renders credentials form without tenant field on soho.localhost", () => {
     setHostname("soho.localhost");
     render(<LoginPage />, { wrapper: TestWrapper });
 
-    expect(screen.getByLabelText(/tenant/i)).toHaveValue("soho");
+    expect(screen.queryByText(/accedé desde el subdominio/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/correo electrónico/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^contraseña$/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/tenant/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("mi-negocio")).not.toBeInTheDocument();
   });
 
-  it("shows inline error and does not call the API when tenant is empty", async () => {
+  it("sends host-derived tenantSlug on submit from soho.localhost", async () => {
+    setHostname("soho.localhost");
     const user = userEvent.setup();
+    vi.mocked(apiModule.api.post).mockResolvedValue(loginResponse);
+
     render(<LoginPage />, { wrapper: TestWrapper });
 
     await user.type(screen.getByLabelText(/correo electrónico/i), "test@test.com");
@@ -97,20 +133,22 @@ describe("W1 — LoginPage tenant slug field", () => {
     fireEvent.submit(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("El tenant es requerido")).toBeInTheDocument();
+      expect(vi.mocked(apiModule.api.post)).toHaveBeenCalledWith(
+        "/identity/login",
+        expect.objectContaining({
+          email: "test@test.com",
+          pass: "123456",
+          tenantSlug: "soho",
+        }),
+        { auth: false },
+      );
     });
-    expect(vi.mocked(apiModule.api.post)).not.toHaveBeenCalled();
   });
 
-  it("includes tenantSlug in the POST body on submit", async () => {
+  it("sends host-derived tenantSlug on submit from soho.nhilospos.com", async () => {
     setHostname("soho.nhilospos.com");
     const user = userEvent.setup();
-    vi.mocked(apiModule.api.post).mockResolvedValue({
-      access_token: "at",
-      refresh_token: "rt",
-      user: { id: "u1", email: "test@test.com", name: "Test", role: "OWNER", tenantId: "t1", active: true },
-      tenant: { id: "t1", name: "Test", slug: "soho", ruc: "001", active: true },
-    });
+    vi.mocked(apiModule.api.post).mockResolvedValue(loginResponse);
 
     render(<LoginPage />, { wrapper: TestWrapper });
 

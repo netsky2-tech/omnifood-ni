@@ -24,7 +24,8 @@ export interface AuthResponse {
  * - Subdomain hosts (e.g. soho.nhilospos.com, soho.localhost): first label,
  *   unless it is 'www' or 'app' (reserved front-facing hosts).
  * - Hosts without a tenant subdomain (localhost, apex domains, IP addresses):
- *   null. The caller can fall back to a manual field.
+ *   null. The login page fails closed: it renders a notice instead of the
+ *   credentials form (no manual slug entry on a public page).
  */
 export function resolveTenantSlug(hostname: string): string | null {
   const host = hostname.trim().toLowerCase();
