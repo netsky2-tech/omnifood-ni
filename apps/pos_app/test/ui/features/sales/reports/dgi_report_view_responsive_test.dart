@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
@@ -29,15 +30,21 @@ class _FakeDgiReportViewModel extends DgiReportViewModel {
   final List<CashierSession> _testSessions;
   final List<Invoice> _testInvoices;
   final List<Payment> _testPayments;
+  final TaxRegime? _taxRegime;
 
   _FakeDgiReportViewModel(
     this._testSessions,
     this._testInvoices,
-    this._testPayments,
-  ) : super(
+    this._testPayments, {
+    TaxRegime? taxRegime,
+  }) : _taxRegime = taxRegime,
+       super(
           _FakeSalesRepository(invoices: _testInvoices, payments: _testPayments),
           _FakeAppDatabase(),
         );
+
+  @override
+  TaxRegime? get taxRegime => _taxRegime;
 
   @override
   List<CashierSession> get sessions => _testSessions;
@@ -135,7 +142,8 @@ void main() {
       expect(find.text('Arqueo de Caja (Reporte X)'), findsOneWidget);
       expect(find.text('Ventas Brutas'), findsOneWidget);
       expect(find.text('C\$ 115.00'), findsWidgets);
-      expect(find.text('IVA (15%)'), findsOneWidget);
+      expect(find.text('IVA'), findsOneWidget);
+      expect(find.text('IVA (15%)'), findsNothing);
       expect(find.text('C\$ 15.00'), findsOneWidget);
       expect(find.text('Ventas Netas'), findsOneWidget);
       expect(find.text('C\$ 100.00'), findsOneWidget);
@@ -158,7 +166,8 @@ void main() {
       expect(find.text('IMPRIMIR REPORTE'), findsOneWidget);
       expect(find.text('Ventas Brutas'), findsOneWidget);
       expect(find.text('C\$ 115.00'), findsWidgets);
-      expect(find.text('IVA (15%)'), findsOneWidget);
+      expect(find.text('IVA'), findsOneWidget);
+      expect(find.text('IVA (15%)'), findsNothing);
       expect(find.text('C\$ 15.00'), findsOneWidget);
       expect(find.text('Ventas Netas'), findsOneWidget);
       expect(find.text('C\$ 100.00'), findsOneWidget);
@@ -172,6 +181,78 @@ void main() {
 
       await tester.tap(find.text('CERRAR'));
       await tester.pumpAndSettle();
+    });
+  });
+
+  group('DgiReport regime-aware IVA treatment (D-3)', () {
+    testWidgets(
+      'CUOTA_FIJA audit card prints the fiscal notice instead of an IVA line',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        final vm = _FakeDgiReportViewModel(
+          testSessions,
+          testInvoices,
+          testPayments,
+          taxRegime: TaxRegime.cuotaFija,
+        );
+        await tester.pumpWidget(buildTestWidget(vm));
+        await tester.pumpAndSettle();
+
+        expect(find.text('NO RECAUDA IVA'), findsOneWidget);
+        expect(find.text('IVA'), findsNothing);
+        expect(find.text('IVA (15%)'), findsNothing);
+      },
+    );
+
+    test('X/Z print string under CUOTA_FIJA prints the fiscal notice, never an IVA amount line', () async {
+      final vm = _FakeDgiReportViewModel(
+        testSessions,
+        testInvoices,
+        testPayments,
+        taxRegime: TaxRegime.cuotaFija,
+      );
+      await vm.selectSession(testSessions.first);
+
+      final report = vm.generatePrintString();
+
+      expect(report, contains('NO RECAUDA IVA'));
+      expect(report, isNot(contains('IVA:')));
+      expect(report, isNot(contains('IVA (15%)')));
+    });
+
+    test('X/Z print string under REGIMEN_GENERAL prints a plain IVA label with the amount', () async {
+      final vm = _FakeDgiReportViewModel(
+        testSessions,
+        testInvoices,
+        testPayments,
+        taxRegime: TaxRegime.regimenGeneral,
+      );
+      await vm.selectSession(testSessions.first);
+
+      final report = vm.generatePrintString();
+
+      expect(report, contains('IVA:'));
+      expect(report, contains('\$15.00'));
+      expect(report, isNot(contains('IVA (15%)')));
+    });
+
+    test('X/Z print string with unknown regime falls back to plain IVA label (never a percentage literal)', () async {
+      final vm = _FakeDgiReportViewModel(
+        testSessions,
+        testInvoices,
+        testPayments,
+        taxRegime: null,
+      );
+      await vm.selectSession(testSessions.first);
+
+      final report = vm.generatePrintString();
+
+      expect(report, contains('IVA:'));
+      expect(report, isNot(contains('IVA (15%)')));
+      expect(report, isNot(contains('NO RECAUDA IVA')));
     });
   });
 }

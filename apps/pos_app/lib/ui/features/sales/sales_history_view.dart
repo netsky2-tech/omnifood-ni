@@ -320,13 +320,16 @@ class InvoiceDetailsPanel extends StatelessWidget {
               Text('C\$ ${invoice.subtotal.toStringAsFixed(2)}'),
             ],
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('IVA (15%):'),
-              Text('C\$ ${invoice.totalTax.toStringAsFixed(2)}'),
-            ],
-          ),
+          // D-3: under CUOTA_FIJA the tenant does not collect IVA — the row is
+          // omitted instead of showing a label that contradicts the receipts.
+          if (context.watch<SaleViewModel>().companyTaxRegime?.isCuotaFija != true)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('IVA:'),
+                Text('C\$ ${invoice.totalTax.toStringAsFixed(2)}'),
+              ],
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

@@ -496,7 +496,7 @@ void main() {
       expect(text, contains('FACTURA DE VENTA'));
       expect(text, contains('SUBTOTAL:'));
       expect(text, contains('C\$ 100.00'));
-      expect(text, contains('IVA (15%):'));
+      expect(text, contains('IVA:'));
       expect(text, contains('C\$ 15.00'));
       expect(text, contains('TOTAL CORDOBAS:'));
       expect(text, contains('C\$ 115.00'));

@@ -251,7 +251,9 @@ class _DgiReportViewState extends State<DgiReportView> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: _ReportStatCard(
-                      title: 'IVA (15%)',
+                      // D-3: Cuota Fija tenants do not collect IVA — show the
+                      // domain fiscal notice instead of an IVA label.
+                      title: viewModel.taxRegime?.isCuotaFija == true ? 'NO RECAUDA IVA' : 'IVA',
                       value: 'C\$ ${viewModel.totalTax.toStringAsFixed(2)}',
                       color: colorScheme.secondary,
                     ),
@@ -279,7 +281,9 @@ class _DgiReportViewState extends State<DgiReportView> {
               const SizedBox(width: 16),
               Expanded(
                 child: _ReportStatCard(
-                  title: 'IVA (15%)',
+                  // D-3: Cuota Fija tenants do not collect IVA — show the
+                  // domain fiscal notice instead of an IVA label.
+                  title: viewModel.taxRegime?.isCuotaFija == true ? 'NO RECAUDA IVA' : 'IVA',
                   value: 'C\$ ${viewModel.totalTax.toStringAsFixed(2)}',
                   color: colorScheme.secondary,
                 ),

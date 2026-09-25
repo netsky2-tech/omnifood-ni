@@ -105,7 +105,8 @@ void main() {
 
       expect(formattedTicket, contains('REGIMEN: GENERAL'));
       expect(formattedTicket, contains('001-001-01-00000011'));
-      expect(formattedTicket, contains('IVA (15%):'));
+      expect(formattedTicket, contains('IVA:'));
+      expect(formattedTicket, isNot(contains('IVA (15%)')));
       expect(formattedTicket, contains('C\$ 115.00'));
     });
 
