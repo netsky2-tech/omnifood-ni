@@ -77,7 +77,7 @@ class PrinterConfigService {
     await _configDao.saveConfig(LocalConfigEntity(
       key: driverTypeKey,
       value: _driverCode(driverType),
-      description: 'Printer driver type',
+      description: 'Tipo de controlador de impresora',
     ));
     await _configDao.saveConfig(LocalConfigEntity(
       key: paperWidthMmKey,
@@ -191,7 +191,7 @@ class PrinterConfigService {
       await _configDao.saveConfig(LocalConfigEntity(
         key: driverTypeKey,
         value: _driverCode(config.driverType),
-        description: 'Printer driver type',
+        description: 'Tipo de controlador de impresora',
       ));
     }
     await _configDao.saveConfig(LocalConfigEntity(
