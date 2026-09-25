@@ -225,6 +225,20 @@ export interface ActivationAttempt {
 }
 
 /**
+ * Response of POST /onboarding/activation/linking-codes, matched against the
+ * backend contract in apps/admin_backend/src/modules/onboarding/:
+ * DeviceLinkingController.generateLinkingCode returns exactly
+ * `{ code, expiresAt }` (GenerateLinkingCodeResult in
+ * services/device-linking.service.ts). The plaintext code is returned exactly
+ * ONCE — only its bcrypt hash is persisted server-side — and `expiresAt`
+ * serializes as an ISO string over JSON. There is no `id` field.
+ */
+export interface GenerateLinkingCodeResponse {
+  code: string;
+  expiresAt: string;
+}
+
+/**
  * Body for POST /onboarding/activation/attempts. The backend accepts exactly
  * these whitelisted fields (global validation pipe: whitelist +
  * forbidNonWhitelisted). Tenant and actor identity come from the JWT and must

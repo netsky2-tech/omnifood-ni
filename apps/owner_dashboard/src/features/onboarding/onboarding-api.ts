@@ -7,6 +7,7 @@ import type {
   OnboardingCatalogSummaryResponse,
   ActivationAttempt,
   StartActivationDto,
+  GenerateLinkingCodeResponse,
 } from "./types";
 
 export function isVersionConflictError(error: unknown): boolean {
@@ -64,4 +65,15 @@ export async function startActivationAttempt(
 
 export async function fetchActiveActivationAttempt(): Promise<ActivationAttempt | null> {
   return api.get<ActivationAttempt | null>("/onboarding/activation/attempts/active");
+}
+
+/**
+ * Generates a single-use terminal linking code for the caller's tenant
+ * (issue #556 stage 12c). Human-auth: the tenant and actor identity come from
+ * the Bearer owner JWT, never from the payload; the backend DTO
+ * (GenerateLinkingCodeDto) is fully optional, so NO body is sent. The
+ * plaintext code is returned exactly once and expires in 15 minutes.
+ */
+export async function generateLinkingCode(): Promise<GenerateLinkingCodeResponse> {
+  return api.post<GenerateLinkingCodeResponse>("/onboarding/activation/linking-codes");
 }

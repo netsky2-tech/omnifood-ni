@@ -8,6 +8,7 @@ import {
   fetchOnboardingCatalogSummary,
   startActivationAttempt,
   fetchActiveActivationAttempt,
+  generateLinkingCode,
 } from "./onboarding-api";
 import {
   OnboardingLifecycleState,
@@ -278,5 +279,17 @@ export function useStartActivationAttempt() {
       queryClient.invalidateQueries({ queryKey: onboardingKeys.readiness() });
       queryClient.invalidateQueries({ queryKey: onboardingKeys.activationAttempt() });
     },
+  });
+}
+
+/**
+ * Generates a single-use terminal linking code (issue #556 stage 12c). No
+ * cache invalidation: generating a code does not change the onboarding
+ * session, readiness snapshot or activation attempt state — the code is
+ * ephemeral display-only data owned by the calling component.
+ */
+export function useGenerateLinkingCode() {
+  return useMutation({
+    mutationFn: () => generateLinkingCode(),
   });
 }

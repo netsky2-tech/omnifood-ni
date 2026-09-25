@@ -4,6 +4,7 @@ import {
   useOnboardingCatalogSummary,
   useActiveActivationAttempt,
   useStartActivationAttempt,
+  useGenerateLinkingCode,
 } from "./use-onboarding";
 import { isVersionConflictError } from "./onboarding-api";
 import { emitOnboardingTelemetry } from "./onboarding-telemetry-client";
@@ -11,6 +12,7 @@ import {
   OnboardingLifecycleState,
   ActivationAttemptStatus,
   type OnboardingStepKey,
+  type GenerateLinkingCodeResponse,
 } from "./types";
 import { isApiError } from "@/lib/api";
 import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
@@ -42,6 +44,7 @@ import {
   DollarSign,
   Users,
   ExternalLink,
+  Smartphone,
 } from "lucide-react";
 
 interface SetupCenterViewProps {
@@ -75,6 +78,30 @@ function describeActivationAttemptFailure(error: unknown): string {
   return "No se pudo iniciar la activación de la terminal. Intentá de nuevo en unos minutos.";
 }
 
+/**
+ * Maps a documented backend failure of POST /onboarding/activation/linking-codes
+ * to a message a business owner understands. The backend message stays
+ * available next to it for support diagnostics.
+ */
+function describeLinkingCodeFailure(error: unknown): string {
+  if (isApiError(error)) {
+    if (error.status === 401) {
+      return "Tu sesión expiró. Volvé a iniciar sesión como propietario y generá el código de nuevo.";
+    }
+    if (error.status === 403) {
+      return "Tu usuario no tiene permiso para generar códigos de vinculación (requiere onboarding:activation:manage). Pedile al dueño del negocio que te asigne el permiso.";
+    }
+  }
+  return "No se pudo generar el código de vinculación. Intentá de nuevo en unos minutos.";
+}
+
+/** Formats a remaining-seconds count as mm:ss. */
+function formatLinkingCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   const { session, readiness, progress, isLoading, isError, error, refetch, isFetching } =
     useOnboardingSession();
@@ -87,6 +114,28 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   const [terminalIdValidationError, setTerminalIdValidationError] = useState<string | null>(null);
   const { data: activeAttempt } = useActiveActivationAttempt();
   const startActivationAttempt = useStartActivationAttempt();
+  const generateLinkingCode = useGenerateLinkingCode();
+
+  const [linkingCode, setLinkingCode] = useState<GenerateLinkingCodeResponse | null>(null);
+  const [linkingNowMs, setLinkingNowMs] = useState(() => Date.now());
+
+  const linkingExpiresAtMs = linkingCode
+    ? new Date(linkingCode.expiresAt).getTime()
+    : 0;
+  const linkingIsExpired = linkingCode !== null && linkingExpiresAtMs <= linkingNowMs;
+  const linkingRemainingSeconds =
+    linkingCode && !linkingIsExpired
+      ? Math.max(0, Math.ceil((linkingExpiresAtMs - linkingNowMs) / 1000))
+      : 0;
+
+  // One-second ticker while a linking code is on screen, so the countdown and
+  // the expired state track real time. The code itself never auto-hides: it
+  // stays visible (grayed out once expired) until the owner dismisses it.
+  useEffect(() => {
+    if (!linkingCode) return;
+    const intervalId = window.setInterval(() => setLinkingNowMs(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [linkingCode]);
 
   const isAwaitingDeviceChecks =
     activeAttempt?.status === ActivationAttemptStatus.CREATED ||
@@ -568,6 +617,147 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Issue #556 stage 12c — Vincular Terminal: single-use pre-login linking code. */}
+      <Card data-testid="terminal-linking-card" className="border-border/80 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-semibold flex items-center gap-2 text-foreground">
+              <Smartphone className="h-5 w-5 text-primary shrink-0" />
+              Vincular Terminal
+            </CardTitle>
+            {linkingCode && (
+              <Badge
+                variant="outline"
+                data-testid="terminal-linking-status-badge"
+                className={`text-[11px] font-mono ${
+                  linkingIsExpired
+                    ? "border-amber-300 bg-amber-50 text-amber-800"
+                    : "border-emerald-300 bg-emerald-50 text-emerald-800"
+                }`}
+              >
+                {linkingIsExpired ? "Expirado" : "Código activo"}
+              </Badge>
+            )}
+          </div>
+          <CardDescription className="text-xs text-muted-foreground mt-1">
+            Generá un código de un solo uso para que una terminal POS quede vinculada a tu comercio
+            antes de iniciar sesión en ella.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!hasActivationPermission && (
+            <span
+              data-testid="terminal-linking-permission-guard-note"
+              role="alert"
+              className="text-[11px] text-amber-700 font-medium flex items-center gap-1"
+            >
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+              Requiere permiso de activación (onboarding:activation:manage)
+            </span>
+          )}
+          {(!linkingCode || linkingIsExpired) && (
+            <Button
+              size="sm"
+              data-testid="generate-linking-code-btn"
+              onClick={() =>
+                generateLinkingCode.mutate(undefined, {
+                  onSuccess: (data) => {
+                    setLinkingCode(data);
+                    setLinkingNowMs(Date.now());
+                  },
+                })
+              }
+              disabled={generateLinkingCode.isPending || !hasActivationPermission}
+              className="flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
+            >
+              <Smartphone className="h-4 w-4" />
+              {generateLinkingCode.isPending
+                ? "Generando código..."
+                : "Generar código de vinculación"}
+            </Button>
+          )}
+          {linkingCode && (
+            <div
+              data-testid="terminal-linking-code-display"
+              className={`p-4 rounded-lg border space-y-2 ${
+                linkingIsExpired
+                  ? "border-amber-300 bg-amber-50/50"
+                  : "border-emerald-300 bg-emerald-50/30"
+              }`}
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Código de vinculación
+              </p>
+              <p
+                data-testid="terminal-linking-code-value"
+                className={`text-4xl font-mono font-bold tracking-[0.35em] text-foreground ${
+                  linkingIsExpired ? "opacity-40 line-through" : ""
+                }`}
+              >
+                {linkingCode.code}
+              </p>
+              <p className="text-xs font-medium text-amber-800 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                Este código es de un solo uso y expira en 15 minutos.
+              </p>
+              {linkingIsExpired ? (
+                <p data-testid="terminal-linking-expired" className="text-xs text-amber-800">
+                  Este código expiró. Generá uno nuevo para vincular la terminal.
+                </p>
+              ) : (
+                <p
+                  data-testid="terminal-linking-expiry"
+                  className="text-xs text-muted-foreground flex items-center gap-1.5"
+                >
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  Expira a las{" "}
+                  <span className="font-medium text-foreground">
+                    {new Date(linkingCode.expiresAt).toLocaleTimeString("es-NI", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>{" "}
+                  — tiempo restante{" "}
+                  <span
+                    data-testid="terminal-linking-countdown"
+                    className="font-mono font-bold text-foreground"
+                  >
+                    {formatLinkingCountdown(linkingRemainingSeconds)}
+                  </span>
+                </p>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="terminal-linking-dismiss-btn"
+                onClick={() => setLinkingCode(null)}
+              >
+                Cerrar
+              </Button>
+            </div>
+          )}
+          {generateLinkingCode.isError && (
+            <div
+              data-testid="terminal-linking-error"
+              role="alert"
+              className="flex flex-col gap-0.5 px-3 py-2 rounded-md text-[11px] bg-destructive/10 border border-destructive/20"
+            >
+              <span className="font-medium text-destructive">
+                {describeLinkingCodeFailure(generateLinkingCode.error)}
+              </span>
+              {isApiError(generateLinkingCode.error) && (
+                <span
+                  data-testid="terminal-linking-error-backend"
+                  className="font-mono text-[10px] text-muted-foreground break-all"
+                >
+                  {generateLinkingCode.error.message}
+                </span>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
