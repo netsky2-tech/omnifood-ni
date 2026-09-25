@@ -73,6 +73,15 @@ export class DgiAuthorizationDateRangeConstraint
   }
 }
 
+/**
+ * D-16 symmetry (D-21, #554): the authorization dates must be clearable over
+ * HTTP the same way the code is. An empty/whitespace-only string transforms
+ * to null — the clear sentinel the service routes through its tombstone
+ * path — so a blank date NEVER reaches IsISO8601 or the persistence layer.
+ */
+const blankStringToNull = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' && value.trim() === '' ? null : value;
+
 export class FiscalSetupDto {
   @IsEnum(FiscalRegime, {
     message: 'regime must be either CUOTA_FIJA or REGIMEN_GENERAL',
@@ -121,6 +130,7 @@ export class FiscalSetupDto {
   })
   dgiAuthorizationCode?: string;
 
+  @Transform(blankStringToNull)
   @IsOptional()
   @IsISO8601(
     {},
@@ -129,8 +139,9 @@ export class FiscalSetupDto {
         'dgiAuthorizationIssuedAt must be a valid ISO-8601 date string',
     },
   )
-  dgiAuthorizationIssuedAt?: string;
+  dgiAuthorizationIssuedAt?: string | null;
 
+  @Transform(blankStringToNull)
   @IsOptional()
   @IsISO8601(
     {},
@@ -140,7 +151,7 @@ export class FiscalSetupDto {
     },
   )
   @Validate(DgiAuthorizationDateRangeConstraint)
-  dgiAuthorizationExpiresAt?: string;
+  dgiAuthorizationExpiresAt?: string | null;
 }
 
 export interface FiscalSetupResponse {
@@ -151,6 +162,10 @@ export interface FiscalSetupResponse {
   taxRateIva: number;
   pricesIncludeTax: boolean;
   commercialFxSpread: number;
+  /** D-21 (#554): null means no active authorization (or tombstoned/cleared). */
+  dgiAuthorizationCode: string | null;
+  dgiAuthorizationIssuedAt: string | null;
+  dgiAuthorizationExpiresAt: string | null;
   configVersion?: FiscalConfigVersion;
   configuredAt?: Date;
 }

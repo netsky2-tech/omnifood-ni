@@ -227,5 +227,36 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
       });
       expect(dto.dgiAuthorizationIssuedAt).toBe('2025-01-15');
     });
+
+    // D-16 symmetry (D-21, #554): absence must look like absence. A client
+    // that receives a set date must be able to clear it over HTTP; the empty
+    // string (and explicit null) is the clear sentinel, never a stored ''.
+    it('accepts an empty string date and transforms it to the null clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationIssuedAt: '',
+        dgiAuthorizationExpiresAt: '',
+      });
+      expect(dto.dgiAuthorizationIssuedAt).toBeNull();
+      expect(dto.dgiAuthorizationExpiresAt).toBeNull();
+    });
+
+    it('accepts a whitespace-only date as the null clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationExpiresAt: '   ',
+      });
+      expect(dto.dgiAuthorizationExpiresAt).toBeNull();
+    });
+
+    it('accepts an explicit null date as the clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationIssuedAt: null,
+        dgiAuthorizationExpiresAt: null,
+      });
+      expect(dto.dgiAuthorizationIssuedAt).toBeNull();
+      expect(dto.dgiAuthorizationExpiresAt).toBeNull();
+    });
   });
 });

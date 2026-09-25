@@ -126,16 +126,60 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
 
       const result = await service.getFiscalSetup(tenantId);
 
-      expect(result).toEqual({
-        tenantId,
-        businessName: 'Café Managua',
-        ruc: 'J0310000001234',
-        regime: FiscalRegime.REGIMEN_GENERAL,
-        taxRateIva: 0.15,
-        pricesIncludeTax: true,
-        commercialFxSpread: 0.5,
-      });
+    const paramMap: Record<string, unknown> = {
+      tenantId,
+      businessName: 'Café Managua',
+      ruc: 'J0310000001234',
+      regime: FiscalRegime.REGIMEN_GENERAL,
+      taxRateIva: 0.15,
+      pricesIncludeTax: true,
+      commercialFxSpread: 0.5,
+      // D-21 (#554): the response must expose the authorization fields so the
+      // dashboard can prefill the form and render its expiry banner.
+      dgiAuthorizationCode: null,
+      dgiAuthorizationIssuedAt: null,
+      dgiAuthorizationExpiresAt: null,
+    };
+
+    expect(result).toEqual(paramMap);
+  });
+
+  it('exposes DGI authorization fields from active parameter rows', async () => {
+    tenantRepo.findOne.mockResolvedValueOnce({
+      ...mockTenant,
+      name: 'Café Managua',
+      ruc: 'J0310000001234',
     });
+
+    const dgiRow = (
+      paramKey: string,
+      paramValue: string,
+    ): SystemParametersConfig => ({
+      id: paramKey,
+      tenant_id: tenantId,
+      tenant: mockTenant,
+      paramKey,
+      paramValue,
+      version: 1,
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: userId,
+      createdAt: new Date(),
+    });
+
+    mockManager.find.mockResolvedValueOnce([
+      dgiRow('DGI_AUTHORIZATION_CODE', 'DGI-SFC-2024-00123'),
+      dgiRow('DGI_AUTHORIZATION_ISSUED_AT', '2025-01-15'),
+      dgiRow('DGI_AUTHORIZATION_EXPIRES_AT', '2026-01-15'),
+    ]);
+
+    const result = await service.getFiscalSetup(tenantId);
+
+    expect(result.dgiAuthorizationCode).toBe('DGI-SFC-2024-00123');
+    expect(result.dgiAuthorizationIssuedAt).toBe('2025-01-15');
+    expect(result.dgiAuthorizationExpiresAt).toBe('2026-01-15');
+  });
 
     it('returns default values when system parameters have not yet been configured', async () => {
       tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
@@ -151,6 +195,9 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         taxRateIva: 0.0,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
+        dgiAuthorizationCode: null,
+        dgiAuthorizationIssuedAt: null,
+        dgiAuthorizationExpiresAt: null,
       });
     });
 
@@ -433,17 +480,39 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     });
 
     // Each upsertParameter call resolves the active row for ITS OWN key
-    // through the active view; filter the mock by the requested paramKey so
-    // every key sees its own governing row.
+    // through the active view; the mock simulates the view over the initial
+    // rows PLUS every row saved during the transaction, resolving a single
+    // governing row per key (highest version wins) — mirroring the real
+    // DISTINCT ON view so POST responses read the just-written state.
     const configureActiveRows = (rows: SystemParametersConfig[]): void => {
       mockManager.find.mockImplementation(
         async (
           _target: unknown,
           criteria?: { where?: { paramKey?: string } },
-        ) =>
-          rows.filter(
-            (row) => !criteria?.where?.paramKey || row.paramKey === criteria.where.paramKey,
-          ),
+        ) => {
+          const savedRows = mockManager.save.mock.calls
+            .map((call) => call[1])
+            .filter(
+              (row): row is SystemParametersConfig & { paramKey: string } =>
+                typeof row === 'object' &&
+                row !== null &&
+                (row as { paramKey?: string }).paramKey !== undefined,
+            );
+          const all = [...rows, ...savedRows];
+          const candidates = criteria?.where?.paramKey
+            ? all.filter(
+                (row) => row.paramKey === criteria.where!.paramKey,
+              )
+            : all;
+          const governing = new Map<string, SystemParametersConfig>();
+          for (const row of candidates) {
+            const current = governing.get(row.paramKey);
+            if (!current || row.version > current.version) {
+              governing.set(row.paramKey, row);
+            }
+          }
+          return [...governing.values()];
+        },
       );
     };
 
@@ -570,6 +639,88 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       await service.configureFiscalSetup(tenantId, dto, userId);
 
       expect(savedRowsFor('DGI_AUTHORIZATION_CODE')).toHaveLength(0);
+    });
+
+    // D-21 (#554) response contract: the GET/POST response must serialize the
+    // authorization fields — the dashboard prefills its form from the GET and
+    // overwrites its query cache with the POST response.
+    it('returns the just-saved authorization values in the POST response', async () => {
+      configureActiveRows([]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        dgiAuthorizationCode: 'DGI-SFC-2024-00123',
+        dgiAuthorizationIssuedAt: '2025-01-15',
+        dgiAuthorizationExpiresAt: '2026-01-15',
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(result.dgiAuthorizationCode).toBe('DGI-SFC-2024-00123');
+      expect(result.dgiAuthorizationIssuedAt).toBe('2025-01-15');
+      expect(result.dgiAuthorizationExpiresAt).toBe('2026-01-15');
+    });
+
+    it('reports a date cleared via empty string as null in the response with a tombstone row', async () => {
+      configureActiveRows([
+        dgiParamRow('DGI_AUTHORIZATION_EXPIRES_AT', '2026-01-15', 1),
+      ]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        dgiAuthorizationExpiresAt: '',
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(result.dgiAuthorizationExpiresAt).toBeNull();
+      expect(savedRowsFor('DGI_AUTHORIZATION_EXPIRES_AT')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'DGI_AUTHORIZATION_EXPIRES_AT',
+            paramValue: null,
+            version: 2,
+            isActive: true,
+            effectiveTo: null,
+          }),
+        ]),
+      );
+    });
+
+    it('round-trips code and dates through POST then GET (dashboard prefill contract)', async () => {
+      configureActiveRows([]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        dgiAuthorizationCode: 'RES-SFC-145/2025',
+        dgiAuthorizationIssuedAt: '2025-06-01',
+        dgiAuthorizationExpiresAt: '2026-06-01',
+      };
+
+      await service.configureFiscalSetup(tenantId, dto, userId);
+
+      tenantRepo.findOne.mockResolvedValueOnce({
+        ...mockTenant,
+        name: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+      });
+      const fetched = await service.getFiscalSetup(tenantId);
+
+      expect(fetched.dgiAuthorizationCode).toBe('RES-SFC-145/2025');
+      expect(fetched.dgiAuthorizationIssuedAt).toBe('2025-06-01');
+      expect(fetched.dgiAuthorizationExpiresAt).toBe('2026-06-01');
     });
   });
 });

@@ -148,6 +148,7 @@ export class FiscalSetupService {
       taxRateIva,
       pricesIncludeTax,
       commercialFxSpread,
+      ...this.dgiAuthorizationFields(paramMap),
       configVersion,
     };
   }
@@ -308,6 +309,18 @@ export class FiscalSetupService {
           configuredAt,
         });
 
+        // D-21 (#554): the POST response must reflect the effective post-write
+        // state — the dashboard overwrites its query cache with it, so a just-
+        // saved value must appear and a cleared one must read as null (D-16).
+        const postWriteParams = await manager.find(
+          SystemParametersConfigActiveView,
+          { where: { tenant_id: trimmedTenantId } },
+        );
+        const postWriteMap = new Map<string, unknown>();
+        for (const p of postWriteParams) {
+          postWriteMap.set(p.paramKey, p.paramValue);
+        }
+
         return {
           tenantId: trimmedTenantId,
           businessName: tenant.name,
@@ -316,6 +329,7 @@ export class FiscalSetupService {
           taxRateIva: targetTaxRate,
           pricesIncludeTax: dto.pricesIncludeTax,
           commercialFxSpread: dto.commercialFxSpread,
+          ...this.dgiAuthorizationFields(postWriteMap),
           configVersion,
           configuredAt,
         };
@@ -337,9 +351,35 @@ export class FiscalSetupService {
   }
 
   /**
+   * D-21 (#554): serializes the DGI authorization fields for the GET/POST
+   * response. An absent, blank or tombstoned (null) row reads as null —
+   * absence must look like absence (D-16).
+   */
+  private dgiAuthorizationFields(paramMap: Map<string, unknown>): {
+    dgiAuthorizationCode: string | null;
+    dgiAuthorizationIssuedAt: string | null;
+    dgiAuthorizationExpiresAt: string | null;
+  } {
+    const read = (key: string): string | null => {
+      const value = paramMap.get(key);
+      return typeof value === 'string' && value.trim() !== '' ? value : null;
+    };
+    return {
+      dgiAuthorizationCode: read(FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_CODE),
+      dgiAuthorizationIssuedAt: read(
+        FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_ISSUED_AT,
+      ),
+      dgiAuthorizationExpiresAt: read(
+        FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_EXPIRES_AT,
+      ),
+    };
+  }
+
+  /**
    * Upserts a string parameter, or clears it. D-16 spirit: absence must
    * look like absence. An absent field is a no-op (the prior authorization
-   * stays untouched); a blank/empty string clears the value — never by
+   * stays untouched); a blank/empty string — or an explicit null (the
+   * transformed clear sentinel for the dates) — clears the value — never by
    * storing '' (which would read as a value), and never by mutating the
    * table: the append-only trigger rejects UPDATE/DELETE, so clearing
    * inserts a superseding row whose value is null and lets the active view
@@ -349,13 +389,13 @@ export class FiscalSetupService {
     manager: EntityManager,
     tenantId: string,
     paramKey: string,
-    value: string | undefined,
+    value: string | null | undefined,
     userId?: string,
   ): Promise<void> {
     if (value === undefined) {
       return;
     }
-    const trimmed = value.trim();
+    const trimmed = (value ?? '').trim();
     await this.upsertParameter(
       manager,
       tenantId,
