@@ -479,6 +479,10 @@ void main() async {
               database: database,
               currentUserId: 'user-cajero',
               currentUserRole: saleVm.currentUserRole,
+              // FC-1 (JD-A-002 residual): the cash-shift opener must stamp
+              // the SAME terminal the sale path does, or the void guard's
+              // scoped session lookup never matches for shifts opened here.
+              currentTerminalId: deviceId,
             );
             vm.init();
             return vm;
