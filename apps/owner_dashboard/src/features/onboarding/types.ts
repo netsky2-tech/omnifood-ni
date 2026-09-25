@@ -239,6 +239,39 @@ export interface GenerateLinkingCodeResponse {
 }
 
 /**
+ * Linking code lifecycle, verified against `DeviceLinkingCodeStatus` in
+ * apps/admin_backend/src/modules/onboarding/entities/device-linking-code.entity.ts.
+ */
+export const LinkingCodeStatus = {
+  ACTIVE: "ACTIVE",
+  CLAIMED: "CLAIMED",
+  EXPIRED: "EXPIRED",
+  REVOKED: "REVOKED",
+} as const;
+
+export type LinkingCodeStatus = (typeof LinkingCodeStatus)[keyof typeof LinkingCodeStatus];
+
+/**
+ * Safe projection of a device linking code as returned by
+ * GET /onboarding/activation/linking-codes (issue #569 single linking flow),
+ * matched against LinkingCodeResponseDto in
+ * apps/admin_backend/src/modules/onboarding/dto/linking-code-response.dto.ts.
+ * Deliberately excludes codeHash and tenantId. Timestamps serialize as ISO
+ * strings over JSON; the plaintext code is never included (it is returned
+ * exactly once by the POST generation endpoint).
+ */
+export interface LinkingCodeResponse {
+  id: string;
+  status: LinkingCodeStatus;
+  /** Bound device id once the POS claimed the code; null while ACTIVE. */
+  deviceId: string | null;
+  expiresAt: string;
+  /** Set when the code transitioned to CLAIMED; null otherwise. */
+  claimedAt: string | null;
+  createdAt: string;
+}
+
+/**
  * Body for POST /onboarding/activation/attempts. The backend accepts exactly
  * these whitelisted fields (global validation pipe: whitelist +
  * forbidNonWhitelisted). Tenant and actor identity come from the JWT and must
