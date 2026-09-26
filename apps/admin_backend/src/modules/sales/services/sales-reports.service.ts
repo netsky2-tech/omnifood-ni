@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -8,6 +8,14 @@ import {
   MoreThanOrEqual,
   Repository,
 } from 'typeorm';
+import {
+  currentLocalDateKey,
+  parseLocalDateKey,
+  ReportingPeriodValidationError,
+  resolveReportingBounds,
+  ResolvedReportingBounds,
+} from '../../../core/reporting/reporting-period';
+import { computeSalesReportingTotals } from '../../../core/reporting/sales-reporting-semantics';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -56,10 +64,9 @@ export class SalesReportsService {
     tenantId: string,
     query?: SalesDashboardQueryDto,
   ): Promise<SalesDashboardReportDto> {
-    const { start, end } = this.parseDateBounds(
-      query?.startDate,
-      query?.endDate,
-    );
+    const bounds = this.resolvePeriodBounds(query?.startDate, query?.endDate);
+    const start = bounds.startInclusiveUtc;
+    const end = bounds.endInclusiveUtc;
     const whereClause: FindOptionsWhere<Invoice> = {
       tenant_id: tenantId,
       isCanceled: false,
@@ -123,13 +130,33 @@ export class SalesReportsService {
                 ? round2(amount * exchangeRate)
                 : amount;
 
-          totalPaymentsNio = round2(totalPaymentsNio + amountNio);
+          // AG-08 reporting net: tendered amounts include over-tender change,
+          // which must not count as collected money. `changeGiven` defaults to
+          // 0 in the schema; legacy rows without the value are treated as
+          // zero (reported as an approximation until decomposed).
+          const changeRaw = Number(p.changeGiven ?? 0);
+          const changeCurrency = (p.changeCurrency ?? 'NIO')
+            .trim()
+            .toUpperCase();
+          const changeNio =
+            changeRaw > 0
+              ? changeCurrency === 'USD'
+                ? round2(changeRaw * exchangeRate)
+                : changeRaw
+              : 0;
+          const effectiveNio = round2(amountNio - changeNio);
+          const effectiveUsd =
+            changeRaw > 0 && changeCurrency === 'USD'
+              ? round2(amount - changeRaw)
+              : amount;
+
+          totalPaymentsNio = round2(totalPaymentsNio + effectiveNio);
 
           if (method === 'CASH' || method === 'EFECTIVO') {
             if (currency === 'USD') {
-              cashUsd = round2(cashUsd + amount);
+              cashUsd = round2(cashUsd + effectiveUsd);
             } else {
-              cashNio = round2(cashNio + amountNio);
+              cashNio = round2(cashNio + effectiveNio);
             }
           } else if (
             method === 'CARD' ||
@@ -138,12 +165,12 @@ export class SalesReportsService {
             method === 'BANPRO'
           ) {
             if (currency === 'USD') {
-              cardUsd = round2(cardUsd + amount);
+              cardUsd = round2(cardUsd + effectiveUsd);
             } else {
-              cardNio = round2(cardNio + amountNio);
+              cardNio = round2(cardNio + effectiveNio);
             }
           } else {
-            otherPaymentsNio = round2(otherPaymentsNio + amountNio);
+            otherPaymentsNio = round2(otherPaymentsNio + effectiveNio);
           }
         }
       }
@@ -152,6 +179,11 @@ export class SalesReportsService {
     const invoiceCount = invoices.length;
     const ticketAverage =
       invoiceCount > 0 ? round2(grossSales / invoiceCount) : 0;
+
+    // V2 explicit semantics (spec §7.1/§7.2): same completed rows the legacy
+    // fields aggregate over (isCanceled = false, credit notes net in as
+    // persisted), expressed through the shared semantics helper.
+    const salesTotals = computeSalesReportingTotals(invoices);
 
     const paymentMethodsBreakdown: PaymentMethodsBreakdownDto = {
       cashNio: round2(cashNio),
@@ -163,13 +195,28 @@ export class SalesReportsService {
     };
 
     return {
+      // Legacy fields — retained unchanged (spec §7.2/§7.3).
       grossSales: round2(grossSales),
       netTaxableSales: round2(netTaxableSales),
       totalTax: round2(totalTax),
       totalDiscounts: round2(totalDiscounts),
       invoiceCount,
       ticketAverage,
+
+      // V2 additive semantics fields (spec §7.2).
+      netSalesNio: salesTotals.netSalesNio,
+      preDiscountSalesNio: salesTotals.preDiscountSalesNio,
+      completedTicketCount: salesTotals.completedTicketCount,
+      averageTicketNetNio: salesTotals.averageTicketNetNio,
+      totalTaxNio: salesTotals.totalTaxNio,
+      totalDiscountsNio: salesTotals.totalDiscountsNio,
+
       paymentMethodsBreakdown,
+      reportingPeriod: {
+        timezone: 'America/Managua',
+        localStartDate: bounds.localStartDate ?? null,
+        localEndDate: bounds.localEndDate ?? null,
+      },
       startDate: query?.startDate,
       endDate: query?.endDate,
       generatedAt: new Date().toISOString(),
@@ -236,10 +283,8 @@ export class SalesReportsService {
     tenantId: string,
     query?: TopProductsQueryDto,
   ): Promise<TopProductsReportDto> {
-    const { start, end } = this.parseDateBounds(
-      query?.startDate,
-      query?.endDate,
-    );
+    const { startInclusiveUtc: start, endInclusiveUtc: end } =
+      this.resolvePeriodBounds(query?.startDate, query?.endDate);
     const limit = query?.limit != null && query.limit > 0 ? query.limit : 10;
 
     const whereClause: FindOptionsWhere<Invoice> = {
@@ -322,10 +367,8 @@ export class SalesReportsService {
     tenantId: string,
     query?: CashierPerformanceQueryDto,
   ): Promise<CashierPerformanceReportDto> {
-    const { start, end } = this.parseDateBounds(
-      query?.startDate,
-      query?.endDate,
-    );
+    const { startInclusiveUtc: start, endInclusiveUtc: end } =
+      this.resolvePeriodBounds(query?.startDate, query?.endDate);
     const whereClause: FindOptionsWhere<Invoice> = {
       tenant_id: tenantId,
       isCanceled: false,
@@ -415,30 +458,28 @@ export class SalesReportsService {
     };
   }
 
-  private parseDateBounds(
+  /**
+   * Date parsing is consolidated behind the shared ReportingPeriod resolver
+   * (spec §6.1/§6.2). NOTE: InventoryReportsService still parses its own
+   * dates and migrates to this resolver in a later roadmap batch (Batch 1
+   * keeps the diff small by design).
+   *
+   * Legacy one-sided/unbounded inputs are preserved: absent or unparseable
+   * bounds resolve as unbounded. Inverted or invalid calendar dates are now
+   * rejected with 400 instead of silently returning empty/invalid results.
+   */
+  private resolvePeriodBounds(
     startDateStr?: string,
     endDateStr?: string,
-  ): { start?: Date; end?: Date } {
-    let start: Date | undefined;
-    let end: Date | undefined;
-
-    if (startDateStr) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) {
-        start = new Date(`${startDateStr}T00:00:00.000-06:00`);
-      } else {
-        start = new Date(startDateStr);
+  ): ResolvedReportingBounds {
+    try {
+      return resolveReportingBounds(startDateStr, endDateStr);
+    } catch (error) {
+      if (error instanceof ReportingPeriodValidationError) {
+        throw new BadRequestException(error.message);
       }
+      throw error;
     }
-
-    if (endDateStr) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(endDateStr)) {
-        end = new Date(`${endDateStr}T23:59:59.999-06:00`);
-      } else {
-        end = new Date(endDateStr);
-      }
-    }
-
-    return { start, end };
   }
 
   private parseDayRange(dateStr?: string): {
@@ -446,19 +487,33 @@ export class SalesReportsService {
     start: Date;
     end: Date;
   } {
-    let target = dateStr;
-    if (!target) {
-      target = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Managua',
-      }).format(new Date());
+    const requested = dateStr?.trim();
+    let dateKey: string;
+    if (!requested) {
+      dateKey = currentLocalDateKey();
+    } else {
+      // Legacy tolerance: embedded timestamps were truncated at the 'T'.
+      const candidate = requested.split('T')[0];
+      try {
+        dateKey = parseLocalDateKey(candidate);
+      } catch (error) {
+        if (error instanceof ReportingPeriodValidationError) {
+          throw new BadRequestException(error.message);
+        }
+        throw error;
+      }
     }
 
-    const cleanDate = target.split('T')[0];
-    const start = new Date(`${cleanDate}T00:00:00.000-06:00`);
-    const end = new Date(`${cleanDate}T23:59:59.999-06:00`);
+    const bounds = this.resolvePeriodBounds(dateKey, dateKey);
+    const start = bounds.startInclusiveUtc;
+    const end = bounds.endInclusiveUtc;
+    if (!start || !end) {
+      // Unreachable: a validated date key always resolves both bounds.
+      throw new Error(`Unresolvable day range for '${dateKey}'`);
+    }
 
     return {
-      dateStr: cleanDate,
+      dateStr: dateKey,
       start,
       end,
     };

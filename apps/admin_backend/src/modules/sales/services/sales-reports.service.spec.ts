@@ -279,6 +279,177 @@ describe('SalesReportsService', () => {
       expect(result.invoiceCount).toBe(0);
       expect(result.ticketAverage).toBe(0);
       expect(result.paymentMethodsBreakdown.totalNio).toBe(0);
+
+      // V2 additive fields on the empty period (spec §7.2)
+      expect(result.netSalesNio).toBe(0);
+      expect(result.preDiscountSalesNio).toBe(0);
+      expect(result.completedTicketCount).toBe(0);
+      expect(result.averageTicketNetNio).toBeNull();
+      expect(result.totalTaxNio).toBe(0);
+      expect(result.totalDiscountsNio).toBe(0);
+    });
+
+    it('exposes the V2 additive semantics fields without redefining legacy fields (spec §7.2)', async () => {
+      // Same fixture shape as the legacy aggregation test: the legacy fields
+      // must keep their exact values while the V2 fields are added alongside.
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-1',
+          tenant_id: tenantId,
+          number: '001-001-01-00000001',
+          subtotal: 1000,
+          totalTax: 150,
+          total: 1150,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T10:00:00.000Z'),
+          items: [
+            {
+              id: 'item-1',
+              discount: 50,
+            } as InvoiceItem,
+          ],
+          payments: [],
+        },
+        {
+          id: 'inv-2',
+          tenant_id: tenantId,
+          number: '001-001-01-00000002',
+          subtotal: 2000,
+          totalTax: 300,
+          total: 2300,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T12:00:00.000Z'),
+          items: [
+            {
+              id: 'item-2',
+              discount: 100,
+            } as InvoiceItem,
+          ],
+          payments: [],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getDashboard(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-27',
+      });
+
+      // Legacy fields keep their historical values
+      expect(result.grossSales).toBe(3450);
+      expect(result.netTaxableSales).toBe(3000);
+      expect(result.totalTax).toBe(450);
+      expect(result.totalDiscounts).toBe(150);
+      expect(result.invoiceCount).toBe(2);
+      expect(result.ticketAverage).toBe(1725);
+
+      // V2 explicit semantics (PRD §7.2/§7.3/§7.5: Net Sales = Σ subtotal,
+      // Pre-discount = Net Sales + Discounts, Average = Net / Tickets)
+      expect(result.netSalesNio).toBe(3000);
+      expect(result.preDiscountSalesNio).toBe(3150);
+      expect(result.completedTicketCount).toBe(2);
+      expect(result.averageTicketNetNio).toBe(1500);
+      expect(result.totalTaxNio).toBe(450);
+      expect(result.totalDiscountsNio).toBe(150);
+
+      // Reporting period metadata (America/Managua, inclusive end date)
+      expect(result.reportingPeriod).toEqual({
+        timezone: 'America/Managua',
+        localStartDate: '2026-08-26',
+        localEndDate: '2026-08-27',
+      });
+    });
+
+    it('returns null local period bounds when no range was supplied', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([]);
+
+      const result = await service.getDashboard(tenantId);
+
+      expect(result.reportingPeriod).toEqual({
+        timezone: 'America/Managua',
+        localStartDate: null,
+        localEndDate: null,
+      });
+    });
+
+    it('nets changeGiven out of over-tendered cash in the payment breakdown (AG-08)', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-cash',
+          tenant_id: tenantId,
+          number: '001-001-01-00000010',
+          subtotal: 137,
+          totalTax: 0,
+          total: 137,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T10:00:00.000Z'),
+          items: [],
+          payments: [
+            {
+              id: 'pay-cash',
+              invoiceId: 'inv-cash',
+              method: 'CASH',
+              amount: 200,
+              currency: 'NIO',
+              exchangeRate: 1.0,
+              amountNio: 200,
+              changeGiven: 63,
+              changeCurrency: 'NIO',
+              createdAt: new Date(),
+              invoice: {} as Invoice,
+            },
+          ],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getDashboard(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+      });
+
+      // Over-tendered cash (amount 200, change 63) contributes 137.
+      expect(result.paymentMethodsBreakdown.cashNio).toBe(137);
+      expect(result.paymentMethodsBreakdown.totalNio).toBe(137);
+    });
+
+    it('treats missing changeGiven on legacy payment rows as zero', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-legacy',
+          tenant_id: tenantId,
+          number: '001-001-01-00000011',
+          subtotal: 500,
+          totalTax: 0,
+          total: 500,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T10:00:00.000Z'),
+          items: [],
+          payments: [
+            {
+              id: 'pay-legacy',
+              invoiceId: 'inv-legacy',
+              method: 'CASH',
+              amount: 500,
+              currency: 'NIO',
+              exchangeRate: 1.0,
+              amountNio: 500,
+              changeCurrency: 'NIO',
+              createdAt: new Date(),
+              invoice: {} as Invoice,
+            } as Payment,
+          ],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getDashboard(tenantId);
+
+      expect(result.paymentMethodsBreakdown.cashNio).toBe(500);
+      expect(result.paymentMethodsBreakdown.totalNio).toBe(500);
     });
   });
 

@@ -52,14 +52,57 @@ export interface PaymentMethodsBreakdownDto {
   totalNio: number;
 }
 
+/**
+ * V2 reporting period metadata (spec §7.2). The reporting timezone is fixed to
+ * America/Managua (PRD §8). The local bounds are the normalized Managua
+ * calendar dates (YYYY-MM-DD) actually applied to the query; a side is null
+ * when the corresponding query bound was not supplied (the route remains
+ * unbounded on that side rather than fabricating a default).
+ */
+export interface ReportingPeriodMetadataDto {
+  timezone: 'America/Managua';
+  localStartDate: string | null;
+  localEndDate: string | null;
+}
+
 export interface SalesDashboardReportDto {
+  /**
+   * @deprecated Legacy ambiguous field: post-discount AND post-tax. Dashboard
+   * V2 work must use `netSalesNio` instead (spec §7.2/§7.3). Retained until
+   * all known existing consumers migrate.
+   */
   grossSales: number;
+  /**
+   * @deprecated Legacy ambiguous name: post-discount, PRE-tax sum of
+   * `subtotal`. Retained for existing consumers (spec §7.3).
+   */
   netTaxableSales: number;
   totalTax: number;
   totalDiscounts: number;
   invoiceCount: number;
+  /**
+   * @deprecated Legacy average is post-tax (`grossSales / invoiceCount`);
+   * Dashboard V2 must use `averageTicketNetNio` (PRD §7.5). Retained for
+   * existing consumers (spec §7.3).
+   */
   ticketAverage: number;
+
+  // V2 explicit semantics (spec §7.2) — additive, never redefine legacy fields.
+  /** Net Sales: Σ invoice.subtotal (post-discount, pre-tax, credit notes net in as persisted). */
+  netSalesNio: number;
+  /** Pre-discount Sales: netSalesNio + totalDiscountsNio (PRD §7.3). */
+  preDiscountSalesNio: number;
+  /** Completed Tickets: finalized, not canceled/void documents (PRD §7.1). */
+  completedTicketCount: number;
+  /** Average Ticket = netSalesNio / completedTicketCount; null when count is 0 (PRD §7.5). */
+  averageTicketNetNio: number | null;
+  /** V2 tax total (same aggregation as legacy `totalTax`, explicit currency-qualified name). */
+  totalTaxNio: number;
+  /** V2 discount total (same aggregation as legacy `totalDiscounts`). */
+  totalDiscountsNio: number;
+
   paymentMethodsBreakdown: PaymentMethodsBreakdownDto;
+  reportingPeriod: ReportingPeriodMetadataDto;
   startDate?: string;
   endDate?: string;
   generatedAt: string;
