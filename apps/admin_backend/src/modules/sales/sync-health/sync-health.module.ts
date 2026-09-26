@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { IdentityModule } from '../../identity/identity.module';
 import { SyncHealthController } from './sync-health.controller';
 import { SyncHealthService } from './sync-health.service';
 import { CardReconciliationSummaryController } from './card-reconciliation-summary.controller';
@@ -16,6 +17,7 @@ import { CardReconciliationSummaryService } from './card-reconciliation-summary.
  * purpose: the services' only DataSource use is runInTenantTransaction.
  */
 @Module({
+  imports: [IdentityModule],
   controllers: [SyncHealthController, CardReconciliationSummaryController],
   providers: [SyncHealthService, CardReconciliationSummaryService],
   exports: [SyncHealthService, CardReconciliationSummaryService],

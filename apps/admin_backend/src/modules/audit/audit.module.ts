@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { IdentityModule } from '../identity/identity.module';
 import { ChangeLog } from './entities/change-log.entity';
 import { ChangeLogService } from './change-log.service';
 import { AuditSummaryService } from './audit-summary.service';
@@ -13,7 +14,7 @@ import { AuditSummaryController } from './audit-summary.controller';
  * summary service on purpose.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([ChangeLog])],
+  imports: [TypeOrmModule.forFeature([ChangeLog]), IdentityModule],
   controllers: [AuditSummaryController],
   providers: [ChangeLogService, AuditSummaryService],
   exports: [ChangeLogService, AuditSummaryService, TypeOrmModule],
