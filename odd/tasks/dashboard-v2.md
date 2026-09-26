@@ -179,3 +179,24 @@ discipline: evidence first, decisions second, PRD third, implementation batches 
   batches 2–4 landed); backend `sales+core` 48 suites / 725 (1 skip).
 - **Product flag:** PRD §9.3 gap for complete-month comparison presets implemented as
   calendar-anchored MoM (see Batch 2) — founder confirmation still pending.
+
+### Batch 5 — Performance charts
+
+- **Status:** done (5a `87a1292c`, 5b `7838d968`).
+- **5a:** `GET /sales/reports/dashboard/daily-series` (2–60 days), continuous days, buckets
+  `localIssueDate ?? Managua(created_at)` (D-9 no-backfill fallback), out-of-range clamp,
+  §7.2 parity asserted (`Σ days.netSalesNio == dashboard netSalesNio`).
+- **5b:** lazy performance band (SalesTrend + comparison overlay, Hourly, TopProducts, PaymentMix)
+  on recharts `^3.10.1` via pnpm under the 7-day release-age policy; pure `chart-domain` adapters;
+  per-cell ErrorBoundary; `vite build` proves recharts isolated in the lazy chunk.
+- **Evidence:** backend sales+core 48/745 (1 skip); dashboard 71 files / 960 pass / 4 skip;
+  tsc deltas 0 both trees; oxlint clean; worker crash at turn 74 recovered from tree state,
+  no loss.
+- **Open backend debts surfaced by 5b (not silently absorbed):**
+  1. **FR-PRODUCT-01 pre-tax basis** — `top-products.totalRevenue` is tax-inclusive line sums
+     (verified in `invoices.service`); card carries a permanent honest note; pre-tax field needs a
+     future backend mini-batch.
+  2. Hourly widget for multi-day ranges shows only the range's last day (single-day endpoint) —
+     caption discloses; needs product acceptance or a range-capable endpoint.
+  3. Legacy "Métodos de Pago" card still coexists with PaymentMix (page-test owns it) —
+     deduplication decision pending Batch 8 cleanup.
