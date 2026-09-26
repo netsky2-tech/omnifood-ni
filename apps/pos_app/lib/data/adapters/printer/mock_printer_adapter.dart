@@ -59,6 +59,9 @@ class MockPrinterAdapter implements PrinterPort {
     bool isTaxExempt = false,
     int paperWidthMm = 58,
     PostPaidFeedback? loyaltyFeedback,
+    String? fiscalAuthorizationNumber,
+    bool isReprint = false,
+    DateTime? reprintAt,
   }) async {
     // Clear captures first so a failing call cannot leave stale argument values.
     lastPaperWidthMm = null;
@@ -98,6 +101,7 @@ class MockPrinterAdapter implements PrinterPort {
         taxRegime: taxRegime,
         isTaxExempt: isTaxExempt,
         loyaltyFeedback: loyaltyFeedback,
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
       );
       bytes = layoutFormatter.formatInvoiceEscPos(
         invoice,
@@ -113,6 +117,7 @@ class MockPrinterAdapter implements PrinterPort {
         isTaxExempt: isTaxExempt,
         logoRasterBytes: logoRasterBytes,
         loyaltyFeedback: loyaltyFeedback,
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
       );
     } else {
       final document = ReceiptDocument.fromInvoice(
@@ -128,6 +133,9 @@ class MockPrinterAdapter implements PrinterPort {
         taxRegime: taxRegime,
         isTaxExempt: isTaxExempt,
         logoRasterBytes: logoRasterBytes,
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+        isReprint: isReprint,
+        reprintAt: reprintAt,
       );
       text = layoutFormatter.formatReceiptDocumentText(document);
       bytes = layoutFormatter.formatReceiptDocumentEscPos(document);

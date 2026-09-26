@@ -127,6 +127,7 @@ import {
 import { JwtAccessPayload } from '../../src/modules/identity/security/jwt-token.types';
 import { FiscalRegime } from '../../src/modules/onboarding/dto/fiscal-setup.dto';
 
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -274,12 +275,14 @@ async function with74ScenariosIsolatedSchema(
       tenantRepo.create({
         id: tenantAId,
         name: 'Normative Suite Tenant A',
+        slug: normalizeTenantSlug('Normative Suite Tenant A'),
         ruc: 'J0310000001234',
         is_active: true,
       }),
       tenantRepo.create({
         id: tenantBId,
         name: 'Normative Suite Tenant B',
+        slug: normalizeTenantSlug('Normative Suite Tenant B'),
         ruc: 'J0310000005678',
         is_active: true,
       }),

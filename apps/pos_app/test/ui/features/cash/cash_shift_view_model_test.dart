@@ -1,8 +1,24 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/ui/features/cash/cash_shift_view_model.dart';
+
+/// Identity-source fake (issue #552): only [getCurrentUser] matters for the
+/// cash-shift VM; every other repository capability is out of scope here.
+class FakeIdentityAuthRepository implements AuthRepository {
+  FakeIdentityAuthRepository(this.user);
+
+  final User? user;
+
+  @override
+  Future<User?> getCurrentUser() async => user;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => UnimplementedError();
+}
 
 void main() {
   late AppDatabase database;
@@ -103,6 +119,103 @@ void main() {
       expect(viewModel.activeShift!.expectedNio, 1400.0);
       expect(viewModel.activeShift!.expectedUsd, 30.0);
       expect(viewModel.movements, hasLength(3));
+    });
+
+    test(
+        'issue #552: resolves ITS OWN user+terminal session when two sessions are open concurrently',
+        () async {
+      // Another cashier already has an open shift on the SAME terminal.
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'shift-a',
+          userId: 'cashier-a',
+          terminalId: 'term-main',
+          openedAt:
+              DateTime.parse('2026-02-01T08:00:00Z').millisecondsSinceEpoch,
+          isClosed: false,
+        ),
+      );
+
+      final vmB = CashShiftViewModel.fromDatabase(
+        database: database,
+        currentUserId: 'cashier-b',
+        currentTerminalId: 'term-main',
+        currentUserRole: UserRole.cashier,
+      );
+
+      // The topology-blind lookup used to hand cashier-b cashier-a's shift.
+      await vmB.init();
+      expect(vmB.hasActiveShift, isFalse);
+
+      // cashier-b can open its OWN shift even though cashier-a's is open.
+      final opened = await vmB.openShift(
+        initialFloatNio: 500.0,
+        initialFloatUsd: 0.0,
+      );
+      expect(opened, isTrue);
+      expect(vmB.activeShift!.userId, 'cashier-b');
+
+      // cashier-a still resolves its own shift, not cashier-b's.
+      final vmA = CashShiftViewModel.fromDatabase(
+        database: database,
+        currentUserId: 'cashier-a',
+        currentTerminalId: 'term-main',
+        currentUserRole: UserRole.cashier,
+      );
+      await vmA.init();
+      expect(vmA.activeShift!.id, 'shift-a');
+    });
+
+    test(
+        'issue #552: openShift stamps the user id resolved from the identity source',
+        () async {
+      final vm = CashShiftViewModel.fromDatabase(
+        database: database,
+        authRepository: FakeIdentityAuthRepository(
+          const User(
+            id: 'real-user-42',
+            name: 'María López',
+            role: UserRole.cashier,
+            isActive: true,
+          ),
+        ),
+        currentTerminalId: 'term-main',
+        currentUserRole: UserRole.cashier,
+      );
+
+      await vm.init();
+      final opened = await vm.openShift(
+        initialFloatNio: 1000.0,
+        initialFloatUsd: 0.0,
+      );
+
+      expect(opened, isTrue);
+      final persisted = await database.cashierSessionDao
+          .getActiveSessionForUserAndTerminal('real-user-42', 'term-main');
+      expect(persisted, isNotNull);
+      expect(persisted!.userId, 'real-user-42');
+    });
+
+    test(
+        'issue #552: openShift refuses to open when the identity source has no logged-in user',
+        () async {
+      final vm = CashShiftViewModel.fromDatabase(
+        database: database,
+        authRepository: FakeIdentityAuthRepository(null),
+        currentTerminalId: 'term-main',
+        currentUserRole: UserRole.cashier,
+      );
+
+      await vm.init();
+      expect(vm.hasActiveShift, isFalse);
+
+      final opened = await vm.openShift(
+        initialFloatNio: 1000.0,
+        initialFloatUsd: 0.0,
+      );
+
+      expect(opened, isFalse);
+      expect(vm.errorMessage, 'Debe iniciar sesión para abrir caja.');
     });
 
     test('blocks opening another shift if one is already active', () async {

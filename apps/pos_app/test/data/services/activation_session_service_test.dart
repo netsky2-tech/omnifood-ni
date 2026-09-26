@@ -199,7 +199,17 @@ class _NoopSalesRepository implements SalesRepository {
   Future<int> getInventoryEnrichmentPendingCount() => Future.value(0);
 
   @override
-  Future<void> voidInvoice(String invoiceId, String reason) => Future.value();
+  Future<ReprintPreparation> prepareReprintInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> voidInvoice(String invoiceId, String reason,
+          {String? reasonDetail}) =>
+      Future.value();
 
   @override
   Future<void> createCreditNote({
@@ -209,6 +219,7 @@ class _NoopSalesRepository implements SalesRepository {
     required UserRole authorizedByRole,
     RefundReasonPolicy refundReasonPolicy = RefundReasonPolicy.restockOriginalBom,
     List<CreditNoteRefundLine>? lines,
+    String? terminalId,
   }) =>
       Future.value();
 

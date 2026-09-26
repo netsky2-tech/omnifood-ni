@@ -26,15 +26,34 @@ import { AppPermission } from '../../src/modules/identity/security/permissions.e
 import { generateTotp } from '../../src/modules/identity/security/totp.util';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 
+/**
+ * Issue #512 T3 slice 9 rework: the supervisor-override service now opens
+ * its read unit inside `dataSource.transaction`, binding the tenant context
+ * and reading users/security_profiles through the manager. The fake
+ * DataSource therefore exposes `transaction`, and its manager routes
+ * `getRepository` to the overridden per-test repositories (populated in
+ * beforeAll, read at request time).
+ */
+const transactionalManager: { query: jest.Mock; getRepository: jest.Mock } = {
+  query: jest.fn().mockResolvedValue(undefined),
+  getRepository: jest.fn(() => ({})),
+};
+
+const fakeDataSource = {
+  entityMetadatas: [],
+  getRepository: jest.fn().mockReturnValue({}),
+  transaction: jest.fn(
+    async (work: (manager: unknown) => Promise<unknown>) =>
+      await work(transactionalManager),
+  ),
+};
+
 @Global()
 @Module({
   providers: [
     {
       provide: DataSource,
-      useValue: {
-        entityMetadatas: [],
-        getRepository: jest.fn().mockReturnValue({}),
-      },
+      useValue: fakeDataSource,
     },
   ],
   exports: [DataSource],
@@ -149,6 +168,15 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
       findOne: jest.fn(),
       save: jest.fn(),
     };
+
+    // Route the transaction manager's repository lookups to the same
+    // overridden mocks the spec asserts against.
+    transactionalManager.getRepository.mockImplementation((entity: unknown) => {
+      if (entity === User) return userRepository;
+      if (entity === SecurityProfile) return securityProfileRepository;
+      if (entity === AuditLog) return auditRepository;
+      return {};
+    });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [

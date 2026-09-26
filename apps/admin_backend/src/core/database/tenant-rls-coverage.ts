@@ -12,13 +12,21 @@
  *
  * Stored classes
  * --------------
- *   direct        — the table carries tenant_id, ENABLE RLS, FORCE RLS, and
- *                   at least one policy (the policy predicate vocabulary and
- *                   form are already asserted by the existing schema-build
- *                   invariants; this module never redefines them).
+ *   direct:<SET>  — the table carries tenant_id, ENABLE RLS, FORCE RLS, and
+ *                   per-command policies covering EXACTLY the declared
+ *                   command set <SET> (letters S/I/U/D of SELECT/INSERT/
+ *                   UPDATE/DELETE, issue #512 T3 slice 10): every declared
+ *                   command has at least one policy, and no policy command
+ *                   exists outside the set. A FOR ALL policy covers all four
+ *                   commands and only satisfies direct:SIUD.
+ *   direct        — legacy bare spelling: the structural contract only
+ *                   (tenant_id, ENABLE, FORCE, at least one policy), no
+ *                   per-command ratchet. Kept for the DB specs' in-code
+ *                   fixture manifests; the production manifest must not use
+ *                   it, and the shell verifier fails on any bare entry.
  *   parent-owned  — no direct tenant column; isolation flows through a
  *                   foreign key to a tenant-bearing parent. Policy work for
- *                   this class is explicitly deferred to issue #493 T3.
+ *                   this class landed in issue #512 T3 slice 9.
  *   global        — reviewed platform / pre-tenant / infrastructure
  *                   exception (for example the TypeORM migration ledger).
  *   debt          — current tenant isolation debt, permitted only as an
@@ -30,9 +38,13 @@
  * -----------------------
  * Every public base table absent from the manifest is "prohibited/
  * unclassified" and fails. The manifest itself is judged fail-closed too:
- * unknown classifications, malformed lines, and duplicate entries fail
- * rather than being skipped, because a silently dropped line would widen
- * the gate without anyone deciding to.
+ * unknown classifications, malformed lines, bad command-set tokens (unknown,
+ * lowercase, empty, or duplicated letters; a set on a non-direct class), and
+ * duplicate entries fail rather than being skipped, because a silently
+ * dropped line would widen the gate without anyone deciding to. A declared
+ * `direct:<SET>` entry is additionally judged against the pg_policies command
+ * facts the caller supplies (missing declared commands and policy commands
+ * outside the set are failures; missing command evidence fails closed).
  *
  * The module is dependency-free (Node built-ins only) so the shell verifier
  * can require the compiled file directly and the Jest suites can exercise
@@ -50,10 +62,58 @@ export const RLS_COVERAGE_CLASSES: readonly RlsCoverageClass[] = [
   'debt',
 ];
 
+/**
+ * One declared policy command, spelled as the manifest letter of the compound
+ * `direct:<SET>` classification (issue #512 T3 slice 10).
+ */
+export type TenantRlsCommandLetter = 'S' | 'I' | 'U' | 'D';
+
+export const TENANT_RLS_COMMAND_LETTERS: readonly TenantRlsCommandLetter[] = [
+  'S',
+  'I',
+  'U',
+  'D',
+];
+
+/** The pg_policies `cmd` spelling for each declared command letter. */
+const COMMAND_BY_LETTER: Record<TenantRlsCommandLetter, string> = {
+  S: 'SELECT',
+  I: 'INSERT',
+  U: 'UPDATE',
+  D: 'DELETE',
+};
+
+/** The declared command letter for a pg_policies `cmd` spelling, or null. */
+function letterByCommand(command: string): TenantRlsCommandLetter | null {
+  const letter = (
+    Object.keys(COMMAND_BY_LETTER) as TenantRlsCommandLetter[]
+  ).find((candidate) => COMMAND_BY_LETTER[candidate] === command);
+  return letter ?? null;
+}
+
+/**
+ * One pg_policies fact the per-command ratchet judges: a policy command
+ * exists on a table. `command` is the pg_policies `cmd` spelling ('SELECT',
+ * 'INSERT', 'UPDATE', 'DELETE' or 'ALL'); a FOR ALL policy covers all four
+ * declared commands and is judged as such (defensive: after slice 10 no
+ * direct table should carry one).
+ */
+export interface TenantRlsPolicyCommandRow {
+  table: string;
+  command: string;
+}
+
 /** One reviewed manifest entry: a public base table and its stored class. */
 export interface TenantRlsManifestEntry {
   table: string;
   classification: RlsCoverageClass;
+  /**
+   * The declared per-command set of a compound `direct:<SET>` entry, in the
+   * order the entry declares it. Undefined for the legacy bare `direct`
+   * spelling, which carries no per-command ratchet (the production manifest
+   * must not use it; the shell verifier fails on any bare entry).
+   */
+  declaredCommands?: readonly TenantRlsCommandLetter[];
 }
 
 /** A manifest line that could not be parsed; the gate fails closed on these. */
@@ -88,7 +148,10 @@ export type TenantRlsCoverageFailureKind =
   | 'direct-without-rls-protection'
   | 'tenant-bearing-global'
   | 'tenant-bearing-parent-owned'
-  | 'debt-fully-protected-stale';
+  | 'debt-fully-protected-stale'
+  | 'missing-declared-command-policy'
+  | 'undeclared-command-policy'
+  | 'policy-command-evidence-missing';
 
 export interface TenantRlsCoverageFailure {
   kind: TenantRlsCoverageFailureKind;
@@ -100,6 +163,15 @@ export interface TenantRlsCoverageResult {
   failures: TenantRlsCoverageFailure[];
   /** Table count per stored class, for the verifier's deterministic report. */
   classifiedCounts: Record<RlsCoverageClass, number>;
+  /**
+   * `direct` entries still using the legacy bare spelling (no per-command
+   * ratchet). The production manifest must carry none; the shell verifier
+   * fails the run when this is non-zero so the legacy spelling cannot widen
+   * the gate silently.
+   */
+  legacyDirectEntries: number;
+  /** `direct` entries carrying a declared per-command set. */
+  declaredCommandDirectEntries: number;
 }
 
 /**
@@ -143,6 +215,44 @@ export function parseManifestText(text: string): ParsedTenantRlsManifest {
 
     const table = line.slice(0, separator).trim();
     const classification = line.slice(separator + 1).trim();
+
+    // Compound form: `direct:<SET>` declares the per-command policy set the
+    // table's policies must cover EXACTLY (issue #512 T3 slice 10). The set
+    // is judged here, fail-closed: a bad token is an issue, never a silently
+    // widened entry.
+    const colonAt = classification.indexOf(':');
+    if (colonAt >= 0) {
+      const baseClass = classification.slice(0, colonAt);
+      const commandSet = classification.slice(colonAt + 1);
+      const letters = [...commandSet];
+      const isValidSet =
+        baseClass === 'direct' &&
+        letters.length > 0 &&
+        letters.every((letter) =>
+          (TENANT_RLS_COMMAND_LETTERS as readonly string[]).includes(letter),
+        ) &&
+        new Set(letters).size === letters.length;
+      if (!isValidSet) {
+        issues.push({
+          line: index + 1,
+          text: line,
+          reason:
+            baseClass !== 'direct'
+              ? `command sets are only defined for the direct classification, got "${classification}"`
+              : `invalid command set "${classification}" (expected one or more of S, I, U, D, e.g. direct:SIUD)`,
+        });
+        continue;
+      }
+
+      seen.set(table, (seen.get(table) ?? 0) + 1);
+      entries.push({
+        table,
+        classification: 'direct',
+        declaredCommands: letters as TenantRlsCommandLetter[],
+      });
+      continue;
+    }
+
     if (!(RLS_COVERAGE_CLASSES as readonly string[]).includes(classification)) {
       issues.push({
         line: index + 1,
@@ -178,6 +288,93 @@ function directProtectionGaps(table: TenantRlsCatalogTable): string[] {
 }
 
 /**
+ * The declared per-command set of one compound `direct:<SET>` entry, spelled
+ * the way the manifest carries it (e.g. "direct:SI") for failure details.
+ */
+function declaredSetSpelling(entry: TenantRlsManifestEntry): string {
+  return `direct:${(entry.declaredCommands ?? []).join('')}`;
+}
+
+/**
+ * The per-command ratchet (issue #512 T3 slice 10): the table's pg_policies
+ * command set must cover EXACTLY the declared set. Every declared command
+ * needs at least one policy; every policy command must belong to the set.
+ * A FOR ALL policy covers all four declared commands (defensive: after the
+ * slice 10 conversion no direct table should carry one, but the comparison
+ * must not miscount if one ever reappears). Judged only from the structural
+ * command facts — no tenant data is ever read.
+ */
+function evaluateDeclaredCommands(
+  entry: TenantRlsManifestEntry,
+  policyCommands: readonly TenantRlsPolicyCommandRow[] | undefined,
+  failures: TenantRlsCoverageFailure[],
+): void {
+  const declared = entry.declaredCommands ?? [];
+  if (policyCommands === undefined) {
+    failures.push({
+      kind: 'policy-command-evidence-missing',
+      table: entry.table,
+      detail:
+        `entry declares the command set "${declaredSetSpelling(entry)}" but no ` +
+        'pg_policies command evidence was supplied; the per-command ratchet ' +
+        'cannot be judged without it',
+    });
+    return;
+  }
+
+  // Expand the actual command coverage: ALL covers S/I/U/D, otherwise the
+  // exact pg_policies cmd spelling maps to its letter. An unknown spelling
+  // (pg_policies should never emit one) is judged outside the set instead of
+  // being silently dropped.
+  const covered = new Set<TenantRlsCommandLetter>();
+  const unknownCommands: string[] = [];
+  for (const row of policyCommands) {
+    if (row.table !== entry.table) continue;
+    if (row.command === 'ALL') {
+      for (const letter of TENANT_RLS_COMMAND_LETTERS) covered.add(letter);
+      continue;
+    }
+    const letter = letterByCommand(row.command);
+    if (letter) covered.add(letter);
+    else unknownCommands.push(row.command);
+  }
+
+  for (const letter of TENANT_RLS_COMMAND_LETTERS) {
+    if (declared.includes(letter) && !covered.has(letter)) {
+      failures.push({
+        kind: 'missing-declared-command-policy',
+        table: entry.table,
+        detail:
+          `declared command ${COMMAND_BY_LETTER[letter]} (${letter}) has no ` +
+          `policy; the entry declares "${declaredSetSpelling(entry)}"`,
+      });
+    }
+  }
+
+  for (const letter of TENANT_RLS_COMMAND_LETTERS) {
+    if (covered.has(letter) && !declared.includes(letter)) {
+      failures.push({
+        kind: 'undeclared-command-policy',
+        table: entry.table,
+        detail:
+          `policy command ${COMMAND_BY_LETTER[letter]} (${letter}) is outside ` +
+          `the declared set "${declaredSetSpelling(entry)}"`,
+      });
+    }
+  }
+
+  for (const command of unknownCommands) {
+    failures.push({
+      kind: 'undeclared-command-policy',
+      table: entry.table,
+      detail:
+        `policy command ${command} is outside the declared set ` +
+        `"${declaredSetSpelling(entry)}"`,
+    });
+  }
+}
+
+/**
  * The coverage gate. Deterministic by construction: failures are sorted by
  * kind then table, details name schema objects only, and no tenant data is
  * ever read (the caller supplies structural catalog rows).
@@ -185,6 +382,7 @@ function directProtectionGaps(table: TenantRlsCatalogTable): string[] {
 export function evaluateTenantRlsCoverage(
   manifest: ParsedTenantRlsManifest,
   tables: readonly TenantRlsCatalogTable[],
+  policyCommands?: readonly TenantRlsPolicyCommandRow[],
 ): TenantRlsCoverageResult {
   const failures: TenantRlsCoverageFailure[] = [];
   const classifiedCounts: Record<RlsCoverageClass, number> = {
@@ -193,6 +391,8 @@ export function evaluateTenantRlsCoverage(
     global: 0,
     debt: 0,
   };
+  let legacyDirectEntries = 0;
+  let declaredCommandDirectEntries = 0;
 
   for (const issue of manifest.issues) {
     failures.push({
@@ -234,6 +434,9 @@ export function evaluateTenantRlsCoverage(
     classifiedCounts[entry.classification]++;
 
     if (entry.classification === 'direct') {
+      if (entry.declaredCommands) declaredCommandDirectEntries++;
+      else legacyDirectEntries++;
+
       if (!table.hasTenantIdColumn) {
         failures.push({
           kind: 'direct-without-tenant-column',
@@ -250,6 +453,9 @@ export function evaluateTenantRlsCoverage(
           table: entry.table,
           detail: `missing: ${missing.join(', ')}`,
         });
+      }
+      if (entry.declaredCommands) {
+        evaluateDeclaredCommands(entry, policyCommands, failures);
       }
       continue;
     }
@@ -303,5 +509,10 @@ export function evaluateTenantRlsCoverage(
       : a.kind.localeCompare(b.kind),
   );
 
-  return { failures, classifiedCounts };
+  return {
+    failures,
+    classifiedCounts,
+    legacyDirectEntries,
+    declaredCommandDirectEntries,
+  };
 }

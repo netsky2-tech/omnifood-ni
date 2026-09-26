@@ -1,5 +1,11 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { FiscalRegime, FiscalSetupDto } from './fiscal-setup.dto';
+import {
+  DGI_AUTHORIZATION_CODE_CHARSET_MESSAGE,
+  DGI_AUTHORIZATION_CODE_TOO_LONG_MESSAGE,
+  DGI_AUTHORIZATION_DATE_RANGE_MESSAGE,
+  FiscalRegime,
+  FiscalSetupDto,
+} from './fiscal-setup.dto';
 
 /**
  * DTO/ValidationPipe seam tests: exercises the REAL Nest global ValidationPipe
@@ -88,6 +94,169 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
         ruc: '  J0310000055555  ',
       });
       expect(dto.ruc).toBe('J0310000055555');
+    });
+  });
+
+  // D-21 (#554): the DGI authorization code carries a charset + length
+  // ceiling only. DGI's format is not officially documented (e.g.
+  // 'DGI-SFC-2024-00123', 'RES-SFC-145/2025'), so no structural mask and
+  // no format enforcement — the operator types what the letter says.
+  describe('DGI authorization code (D-21, #554)', () => {
+    it('accepts a body without any DGI authorization fields', async () => {
+      const dto = await transformBody(validBody());
+      expect(dto.dgiAuthorizationCode).toBeUndefined();
+      expect(dto.dgiAuthorizationIssuedAt).toBeUndefined();
+      expect(dto.dgiAuthorizationExpiresAt).toBeUndefined();
+    });
+
+    it.each([
+      ['DGI-style reference', 'DGI-SFC-2024-00123'],
+      ['resolution-style reference with slash', 'RES-SFC-145/2025'],
+    ])('accepts a %s', async (_label, code) => {
+      const dto = await transformBody({ ...validBody(), dgiAuthorizationCode: code });
+      expect(dto.dgiAuthorizationCode).toBe(code);
+    });
+
+    it('accepts a 50-character code at the length ceiling', async () => {
+      const code = 'A'.repeat(50);
+      const dto = await transformBody({ ...validBody(), dgiAuthorizationCode: code });
+      expect(dto.dgiAuthorizationCode).toBe(code);
+    });
+
+    it('rejects a 51-character code with the ceiling message', async () => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        dgiAuthorizationCode: 'A'.repeat(51),
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(DGI_AUTHORIZATION_CODE_TOO_LONG_MESSAGE);
+    });
+
+    it('accepts an empty string so the clear path is reachable from HTTP', async () => {
+      const dto = await transformBody({ ...validBody(), dgiAuthorizationCode: '' });
+      expect(dto.dgiAuthorizationCode).toBe('');
+    });
+
+    it.each([
+      ['internal spaces', 'DGI SFC 2024'],
+      ['underscore (symbol outside the charset)', 'RES_SFC_2025'],
+      ['hash (symbol outside the charset)', 'RES-SFC-#145'],
+      ['non-ASCII letters', 'RESOLUCIÓN-2025'],
+    ])('rejects a code with %s', async (_label, code) => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        dgiAuthorizationCode: code,
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(DGI_AUTHORIZATION_CODE_CHARSET_MESSAGE);
+    });
+  });
+
+  describe('DGI authorization dates (D-21, #554)', () => {
+    it('accepts a valid ISO-8601 issuedAt/expiresAt pair', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationIssuedAt: '2025-01-15',
+        dgiAuthorizationExpiresAt: '2026-01-15',
+      });
+      expect(dto.dgiAuthorizationIssuedAt).toBe('2025-01-15');
+      expect(dto.dgiAuthorizationExpiresAt).toBe('2026-01-15');
+    });
+
+    it.each([
+      [
+        'dgiAuthorizationIssuedAt',
+        { dgiAuthorizationIssuedAt: '15/01/2025' },
+      ],
+      [
+        'dgiAuthorizationExpiresAt',
+        { dgiAuthorizationExpiresAt: 'not-a-date' },
+      ],
+    ])('rejects a non-ISO-8601 %s', async (_field, extra) => {
+      await expect(
+        transformBody({ ...validBody(), ...extra }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects an expiresAt earlier than issuedAt', async () => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        dgiAuthorizationIssuedAt: '2025-01-15',
+        dgiAuthorizationExpiresAt: '2024-01-15',
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(DGI_AUTHORIZATION_DATE_RANGE_MESSAGE);
+    });
+
+    it('accepts an expiresAt equal to issuedAt', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationIssuedAt: '2025-01-15',
+        dgiAuthorizationExpiresAt: '2025-01-15',
+      });
+      expect(dto.dgiAuthorizationExpiresAt).toBe('2025-01-15');
+    });
+
+    it('accepts an expiresAt without an issuedAt (no comparison possible)', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationExpiresAt: '2026-01-15',
+      });
+      expect(dto.dgiAuthorizationExpiresAt).toBe('2026-01-15');
+    });
+
+    it('accepts an issuedAt without an expiresAt', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationIssuedAt: '2025-01-15',
+      });
+      expect(dto.dgiAuthorizationIssuedAt).toBe('2025-01-15');
+    });
+
+    // D-16 symmetry (D-21, #554): absence must look like absence. A client
+    // that receives a set date must be able to clear it over HTTP; the empty
+    // string (and explicit null) is the clear sentinel, never a stored ''.
+    it('accepts an empty string date and transforms it to the null clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationIssuedAt: '',
+        dgiAuthorizationExpiresAt: '',
+      });
+      expect(dto.dgiAuthorizationIssuedAt).toBeNull();
+      expect(dto.dgiAuthorizationExpiresAt).toBeNull();
+    });
+
+    it('accepts a whitespace-only date as the null clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationExpiresAt: '   ',
+      });
+      expect(dto.dgiAuthorizationExpiresAt).toBeNull();
+    });
+
+    it('accepts an explicit null date as the clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationIssuedAt: null,
+        dgiAuthorizationExpiresAt: null,
+      });
+      expect(dto.dgiAuthorizationIssuedAt).toBeNull();
+      expect(dto.dgiAuthorizationExpiresAt).toBeNull();
     });
   });
 });

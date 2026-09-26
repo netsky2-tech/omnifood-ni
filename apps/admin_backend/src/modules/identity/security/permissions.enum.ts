@@ -2,6 +2,7 @@ import { UserRole } from './user-role.enum';
 
 export enum AppPermission {
   SALES_VOID_INVOICE = 'sales:void_invoice',
+  SALES_ISSUE_CREDIT_NOTE = 'sales:issue_credit_note',
   SALES_DISCOUNT_OVERRIDE = 'sales:discount_override',
   SALES_ITEM_CANCEL = 'sales:item_cancel',
   SALES_PRICE_OVERRIDE = 'sales:price_override',
@@ -31,6 +32,7 @@ export type Permission = `${AppPermission}` | AppPermission;
 
 export const APP_PERMISSIONS = {
   SALES_VOID_INVOICE: AppPermission.SALES_VOID_INVOICE,
+  SALES_ISSUE_CREDIT_NOTE: AppPermission.SALES_ISSUE_CREDIT_NOTE,
   SALES_DISCOUNT_OVERRIDE: AppPermission.SALES_DISCOUNT_OVERRIDE,
   SALES_ITEM_CANCEL: AppPermission.SALES_ITEM_CANCEL,
   SALES_PRICE_OVERRIDE: AppPermission.SALES_PRICE_OVERRIDE,
@@ -67,6 +69,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
 > = {
   [UserRole.OWNER]: [
     AppPermission.SALES_VOID_INVOICE,
+    AppPermission.SALES_ISSUE_CREDIT_NOTE,
     AppPermission.SALES_DISCOUNT_OVERRIDE,
     AppPermission.SALES_ITEM_CANCEL,
     AppPermission.SALES_PRICE_OVERRIDE,
@@ -92,6 +95,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
   ],
   [UserRole.MANAGER]: [
     AppPermission.SALES_VOID_INVOICE,
+    AppPermission.SALES_ISSUE_CREDIT_NOTE,
     AppPermission.SALES_DISCOUNT_OVERRIDE,
     AppPermission.SALES_ITEM_CANCEL,
     AppPermission.SALES_PRICE_OVERRIDE,

@@ -39,6 +39,9 @@ describe('FiscalSetupController (Unit)', () => {
         taxRateIva: 0.15,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
+        dgiAuthorizationCode: null,
+        dgiAuthorizationIssuedAt: null,
+        dgiAuthorizationExpiresAt: null,
       };
 
       service.getFiscalSetup.mockResolvedValueOnce(mockResponse);
@@ -86,6 +89,9 @@ describe('FiscalSetupController (Unit)', () => {
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
         configuredAt: new Date(),
+        dgiAuthorizationCode: null,
+        dgiAuthorizationIssuedAt: null,
+        dgiAuthorizationExpiresAt: null,
       };
 
       service.configureFiscalSetup.mockResolvedValueOnce(mockResponse);

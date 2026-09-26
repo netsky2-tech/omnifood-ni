@@ -133,6 +133,8 @@ void main() {
           invoice(invoiceId, isCanceled: true),
           null,
           false,
+          null, // no loyalty reversal: invoice has no customer points
+          null,
         );
 
         final savedInvoice = await database.invoiceDao.getInvoiceById(

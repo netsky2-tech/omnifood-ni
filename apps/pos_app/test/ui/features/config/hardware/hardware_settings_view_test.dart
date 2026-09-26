@@ -4,6 +4,8 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/domain/models/config/printer_config.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
+import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/ports/printer_port.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/ui/features/config/hardware/hardware_settings_view.dart';
@@ -147,6 +149,113 @@ void main() {
       )).called(1);
 
       expect(find.textContaining('Impresión de prueba enviada'), findsWidgets);
+    });
+
+    testWidgets(
+        'B2e D-3: test print sample derives its fiscal amounts from the configured tax regime',
+        (tester) async {
+      tester.view.physicalSize = const Size(1024, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      Object? capturedInvoice;
+      List<Object?>? capturedItems;
+      when(mockPrinterPort.printInvoice(
+        any,
+        items: anyNamed('items'),
+        payments: anyNamed('payments'),
+        businessName: anyNamed('businessName'),
+        legalName: anyNamed('legalName'),
+        ruc: anyNamed('ruc'),
+        address: anyNamed('address'),
+        phone: anyNamed('phone'),
+        logoRasterBytes: anyNamed('logoRasterBytes'),
+        taxRegime: anyNamed('taxRegime'),
+        isTaxExempt: anyNamed('isTaxExempt'),
+        paperWidthMm: anyNamed('paperWidthMm'),
+      )).thenAnswer((Invocation invocation) async {
+        capturedInvoice = invocation.positionalArguments.first;
+        capturedItems =
+            invocation.namedArguments[const Symbol('items')] as List<Object?>?;
+        return PrinterResult.success();
+      });
+
+      // CUOTA_FIJA: the diagnostic ticket must never carry an invented 15%.
+      when(mockConfigService.getPrinterConfig()).thenAnswer(
+        (_) async => const PrinterConfig(
+          driverType: PrinterDriverType.sunmiV2s,
+          paperWidthMm: 58,
+          headerBusinessName: 'NHILOS POS HW Test',
+          taxRegime: 'CUOTA_FIJA',
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      final printButton = find.byKey(const Key('test_print_button'));
+      await tester.ensureVisible(printButton);
+      await tester.pumpAndSettle();
+      await tester.tap(printButton);
+      await tester.pumpAndSettle();
+
+      final invoice = capturedInvoice as Invoice;
+      expect(invoice.totalTax, equals(0.0));
+      expect(invoice.total, equals(100.0));
+      final item = capturedItems!.single as InvoiceItem;
+      expect(item.originalTaxRate, equals(0.0));
+      expect(item.appliedTaxRate, equals(0.0));
+      expect(item.taxAmount, equals(0.0));
+      expect(item.total, equals(100.0));
+    });
+
+    testWidgets(
+        'B2e D-3: test print under REGIMEN_GENERAL keeps the 15% sample amounts',
+        (tester) async {
+      tester.view.physicalSize = const Size(1024, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      Object? capturedInvoice;
+      when(mockPrinterPort.printInvoice(
+        any,
+        items: anyNamed('items'),
+        payments: anyNamed('payments'),
+        businessName: anyNamed('businessName'),
+        legalName: anyNamed('legalName'),
+        ruc: anyNamed('ruc'),
+        address: anyNamed('address'),
+        phone: anyNamed('phone'),
+        logoRasterBytes: anyNamed('logoRasterBytes'),
+        taxRegime: anyNamed('taxRegime'),
+        isTaxExempt: anyNamed('isTaxExempt'),
+        paperWidthMm: anyNamed('paperWidthMm'),
+      )).thenAnswer((Invocation invocation) async {
+        capturedInvoice = invocation.positionalArguments.first;
+        return PrinterResult.success();
+      });
+
+      when(mockConfigService.getPrinterConfig()).thenAnswer(
+        (_) async => const PrinterConfig(
+          driverType: PrinterDriverType.sunmiV2s,
+          paperWidthMm: 58,
+          headerBusinessName: 'NHILOS POS HW Test',
+          taxRegime: 'REGIMEN_GENERAL',
+        ),
+      );
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      final printButton = find.byKey(const Key('test_print_button'));
+      await tester.ensureVisible(printButton);
+      await tester.pumpAndSettle();
+      await tester.tap(printButton);
+      await tester.pumpAndSettle();
+
+      final invoice = capturedInvoice as Invoice;
+      expect(invoice.totalTax, equals(15.0));
+      expect(invoice.total, equals(115.0));
     });
 
     testWidgets('preview prints the locally persisted issuer RUC, never the header override',

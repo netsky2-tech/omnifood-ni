@@ -36,6 +36,10 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
   let fiscalConfigVersionService: any;
   let onboardingCatalogService: any;
   let dataSource: any;
+  // The manager the tenant-bound transaction hands back: audit writes and
+  // reads issued inside an activation transaction must ride THIS manager
+  // (issue #512 slice 7), never the pooled repositories.
+  let transactionalManager: any;
   let changeLogService: any;
 
   const tenantId = 'tenant-founder-01';
@@ -104,21 +108,21 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       }),
     };
 
+    transactionalManager = {
+      // Transaction-local tenant context binding (RLS pre-policy).
+      query: jest.fn().mockResolvedValue(undefined),
+      getRepository: (entityClass: any) => {
+        if (entityClass === ActivationAttempt) return attemptRepo;
+        if (entityClass === OnboardingSession) return sessionRepo;
+        if (entityClass === ActivationCheckResult) return checkRepo;
+        if (entityClass === ActivationFollowUp) return followUpRepo;
+        if (entityClass === Invoice) return invoiceRepo;
+        return null;
+      },
+    };
+
     dataSource = {
-      transaction: jest.fn((cb) =>
-        cb({
-          // Transaction-local tenant context binding (RLS pre-policy).
-          query: jest.fn().mockResolvedValue(undefined),
-          getRepository: (entityClass: any) => {
-            if (entityClass === ActivationAttempt) return attemptRepo;
-            if (entityClass === OnboardingSession) return sessionRepo;
-            if (entityClass === ActivationCheckResult) return checkRepo;
-            if (entityClass === ActivationFollowUp) return followUpRepo;
-            if (entityClass === Invoice) return invoiceRepo;
-            return null;
-          },
-        }),
-      ),
+      transaction: jest.fn((cb) => cb(transactionalManager)),
     };
 
     changeLogService = {
@@ -977,7 +981,9 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       expect(result.attempt.failureCode).toBe('SUPPORT_OVERRIDE_FAIL');
       expect(session.lifecycleState).toBe(OnboardingLifecycleState.SALE_READY);
 
-      // Audit logged
+      // Audit logged, riding the tenant-bound transaction's manager
+      // (issue #512 slice 7): the override write and its audit entry share
+      // the same bound transaction.
       expect(changeLogService.log).toHaveBeenCalledWith(
         expect.objectContaining({
           tenantId,
@@ -985,6 +991,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
           action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
           targetType: 'ActivationAttempt',
         }),
+        transactionalManager,
       );
     });
 
@@ -1067,6 +1074,15 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       ]);
 
       const diag = await service.getActivationDiagnostics(tenantId, attemptId);
+
+      // The audit-trail read rides the tenant-bound transaction's manager
+      // (issue #512 slice 7), never the pooled repository.
+      expect(changeLogService.findByTarget).toHaveBeenCalledWith(
+        tenantId,
+        'ActivationAttempt',
+        attemptId,
+        transactionalManager,
+      );
 
       expect(diag.attempt.id).toBe(attemptId);
       expect(diag.session.lifecycleState).toBe(
@@ -1395,5 +1411,118 @@ describe('ActivationService — transaction-local tenant binding (RLS pre-policy
     expect(dataSource.transaction).toHaveBeenCalledTimes(3);
     expect(setConfigCalls).toHaveLength(3);
     expect(accessOrder.slice(0, 2)).toEqual(['set_config', 'followUp.find']);
+  });
+});
+
+describe('ActivationService — claimFirstSuccessfulSale re-activation (issue #556)', () => {
+  const tenantId = 'tenant-founder-01';
+  const terminalId = 'pos-term-01';
+  const devicePrincipal: DevicePrincipal = { tenantId, terminalId };
+
+  const buildService = () => {
+    const attemptRepo: any = {
+      findOne: jest.fn(async () => ({
+        id: 'attempt-uuid-1',
+        tenantId,
+        candidateTerminalId: terminalId,
+        verificationTicketId: null,
+      })),
+      save: jest.fn(async (entity: any) => entity),
+    };
+    const sessionRepo: any = {
+      findOne: jest.fn(async () => ({
+        id: 'session-uuid-1',
+        tenantId,
+        // RE-ACTIVATION: a previous attempt already set the tenant-level
+        // first-sale marker.
+        firstSuccessfulSaleAt: new Date('2026-01-01T10:00:00.000Z'),
+        lastActivityAt: new Date('2026-01-01T09:00:00.000Z'),
+        optimisticVersion: 1,
+      })),
+      save: jest.fn(async (entity: any) => entity),
+    };
+    const invoiceRepo: any = {
+      findOne: jest.fn(async () => ({
+        id: 'verification-invoice-1',
+        tenant_id: tenantId,
+        isCanceled: false,
+        paymentStatus: 'paid',
+      })),
+    };
+    const dataSource: any = {
+      transaction: jest.fn(async (cb: (m: any) => Promise<unknown>) =>
+        cb({
+          query: jest.fn(async () => undefined),
+          getRepository: (entityClass: any) => {
+            if (entityClass === ActivationAttempt) return attemptRepo;
+            if (entityClass === OnboardingSession) return sessionRepo;
+            if (entityClass === Invoice) return invoiceRepo;
+            return null;
+          },
+        }),
+      ),
+    };
+
+    const service = new ActivationService(
+      attemptRepo,
+      { find: jest.fn() } as any,
+      { findOne: jest.fn() } as any,
+      sessionRepo,
+      {} as any,
+      {} as any,
+      {} as any,
+      dataSource,
+      { log: jest.fn().mockResolvedValue(undefined) } as any,
+    );
+
+    return { service, attemptRepo, sessionRepo, invoiceRepo };
+  };
+
+  const claim = (service: ActivationService) =>
+    service.claimFirstSuccessfulSale(
+      'attempt-uuid-1',
+      {
+        declarativeTenantId: tenantId,
+        declarativeTerminalId: terminalId,
+        activationAttemptId: 'attempt-uuid-1',
+        ticketId: 'verification-invoice-1',
+        anchoredOccurredAt: '2026-09-24T12:00:00.000Z',
+        deviceOccurredAt: '2026-09-24T12:00:01.000Z',
+      } as any,
+      devicePrincipal,
+    );
+
+  it('binds the ticket to the attempt even when the tenant first-sale marker is already set', async () => {
+    const { service, attemptRepo } = buildService();
+
+    const result = await claim(service);
+
+    // (a) the NEW attempt receives the verification evidence...
+    expect(attemptRepo.save).toHaveBeenCalledTimes(1);
+    const savedAttempt = attemptRepo.save.mock.calls[0][0];
+    expect(savedAttempt.verificationTicketId).toBe('verification-invoice-1');
+    // (d) ...and the claim is reported as claimed.
+    expect(result).toEqual({
+      claimed: true,
+      ticketId: 'verification-invoice-1',
+    });
+  });
+
+  it('never overwrites the existing tenant firstSuccessfulSaleAt marker', async () => {
+    const { service, sessionRepo } = buildService();
+
+    await claim(service);
+
+    expect(sessionRepo.save).toHaveBeenCalledTimes(1);
+    const savedSession = sessionRepo.save.mock.calls[0][0];
+    // (c) first-ever only: the previous attempt's marker must survive intact.
+    expect(savedSession.firstSuccessfulSaleAt).toEqual(
+      new Date('2026-01-01T10:00:00.000Z'),
+    );
+    // Session bookkeeping still advances.
+    expect(savedSession.optimisticVersion).toBe(2);
+    expect(savedSession.lastActivityAt.getTime()).toBeGreaterThan(
+      new Date('2026-01-01T09:00:00.000Z').getTime(),
+    );
   });
 });

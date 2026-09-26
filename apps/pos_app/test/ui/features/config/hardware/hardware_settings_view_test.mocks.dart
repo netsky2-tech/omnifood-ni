@@ -65,6 +65,34 @@ class MockPrinterConfigService extends _i1.Mock
       ) as _i5.Stream<_i2.PrinterConfig>);
 
   @override
+  _i5.Future<bool> isPrinterProfileConfigured() => (super.noSuchMethod(
+        Invocation.method(
+          #isPrinterProfileConfigured,
+          [],
+        ),
+        returnValue: _i5.Future<bool>.value(false),
+        returnValueForMissingStub: _i5.Future<bool>.value(false),
+      ) as _i5.Future<bool>);
+
+  @override
+  _i5.Future<void> confirmPrinterProfile({
+    required _i2.PrinterDriverType? driverType,
+    required int? paperWidthMm,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #confirmPrinterProfile,
+          [],
+          {
+            #driverType: driverType,
+            #paperWidthMm: paperWidthMm,
+          },
+        ),
+        returnValue: _i5.Future<void>.value(),
+        returnValueForMissingStub: _i5.Future<void>.value(),
+      ) as _i5.Future<void>);
+
+  @override
   _i5.Future<_i2.PrinterConfig> getPrinterConfig() => (super.noSuchMethod(
         Invocation.method(
           #getPrinterConfig,
@@ -170,6 +198,9 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
     bool? isTaxExempt = false,
     int? paperWidthMm = 58,
     _i11.PostPaidFeedback? loyaltyFeedback,
+    String? fiscalAuthorizationNumber,
+    bool? isReprint = false,
+    DateTime? reprintAt,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -189,6 +220,9 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
             #isTaxExempt: isTaxExempt,
             #paperWidthMm: paperWidthMm,
             #loyaltyFeedback: loyaltyFeedback,
+            #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+            #isReprint: isReprint,
+            #reprintAt: reprintAt,
           },
         ),
         returnValue: _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
@@ -210,6 +244,9 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #isTaxExempt: isTaxExempt,
               #paperWidthMm: paperWidthMm,
               #loyaltyFeedback: loyaltyFeedback,
+              #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+              #isReprint: isReprint,
+              #reprintAt: reprintAt,
             },
           ),
         )),
@@ -233,6 +270,9 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #isTaxExempt: isTaxExempt,
               #paperWidthMm: paperWidthMm,
               #loyaltyFeedback: loyaltyFeedback,
+              #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+              #isReprint: isReprint,
+              #reprintAt: reprintAt,
             },
           ),
         )),

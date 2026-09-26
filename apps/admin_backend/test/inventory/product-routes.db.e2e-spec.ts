@@ -15,6 +15,7 @@ import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { CurrentUserAuthorizationService } from '../../src/modules/identity/services/current-user-authorization.service';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -65,8 +66,8 @@ async function withIsolatedSchema(
 
     const tenantId = randomUUID();
     await dataSource.query(
-      `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-      [tenantId, `E2E Tenant ${schemaPrefix}`],
+      `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+      [tenantId, `E2E Tenant ${schemaPrefix}`, normalizeTenantSlug(`E2E Tenant ${schemaPrefix}`)],
     );
 
     const productService = new ProductService(dataSource, {
@@ -513,8 +514,8 @@ describe('ProductController E2E — real PostgreSQL', () => {
           async ({ app, dataSource, jwtService, tenantId }) => {
             const otherTenantId = randomUUID();
             await dataSource.query(
-              `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-              [otherTenantId, 'Other Tenant'],
+              `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+              [otherTenantId, 'Other Tenant', normalizeTenantSlug('Other Tenant')],
             );
 
             const tokenA = signIdentityJwtAccessToken(jwtService, {

@@ -129,8 +129,9 @@ CREATE TABLE audit_logs (
 
 ### 3.1 Login (Online)
 - **Endpoint**: `POST /identity/login`
-- **Request**: `{ "email": "...", "password": "..." }`
+- **Request**: `{ "email": "...", "password": "...", "tenantSlug": "..." (optional, ≤50 chars, issue #556 slice 11) }`
 - **Response**: `{ "token": "JWT", "user": { "id": "...", "name": "...", "role": "...", "tenant_id": "..." } }`
+- **Staged rollout (issue #556, OD-03 founder design)**: `tenantSlug` is optional pre-auth CONTEXT, never authority. When present, the backend resolves slug -> tenant on the global `tenants` table, binds the transaction context (`SET LOCAL app.tenant_id`) and only then queries the user by email, verifying the user belongs to the resolved tenant. Unknown tenant, inactive tenant, or user/tenant mismatch return the SAME generic invalid-credentials failure (no tenant enumeration). Legacy payloads without `tenantSlug` keep working unchanged during the migration window; that compatibility is a migration-window-only contract (users FORCE RLS enablement is stage 3, gated on POS adoption). `POST /identity/refresh` accepts the same optional `tenantSlug` with the same resolve-and-bind-first contract, and `GET /identity/me` plus the device-sync-credential provisioning/confirm responses expose the persisted `slug` so the POS can store it.
 
 ### 3.2 Sync Staff (POS to Cloud)
 

@@ -127,6 +127,34 @@ void main() {
     )).called(1);
 
     expect(find.text('Cierre de Caja - Arqueo'), findsOneWidget);
+
+    // #587 WU3: the arqueo breakdown renders Spanish method labels, not raw
+    // enum names (sessionExpected stubs PaymentMethod.cash: 100).
+    expect(find.text('Efectivo'), findsOneWidget);
+    expect(find.text('CASH'), findsNothing);
+  });
+
+  testWidgets('checkout dialog renders Spanish payment method labels, not raw enum names', (tester) async {
+    when(mockViewModel.total).thenReturn(115.0);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<SaleViewModel>.value(value: mockViewModel),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: CheckoutDialog()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Efectivo'), findsOneWidget);
+    expect(find.text('Tarjeta'), findsOneWidget);
+    expect(find.text('Código QR'), findsOneWidget);
+    expect(find.text('CASH'), findsNothing);
+    expect(find.text('CARD'), findsNothing);
+    expect(find.text('QR'), findsNothing);
   });
 
   testWidgets('authorizes close-box restricted action offline using TOTP and preserves audit callback path', (tester) async {

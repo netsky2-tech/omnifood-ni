@@ -148,6 +148,36 @@ void main() {
     });
 
     test(
+        'B2e D-3: product payload without taxRate stores fail-closed 0.0, never an invented 15%',
+        () async {
+      primingPort.payload = payload(
+        products: [
+          {
+            'id': 'prod-no-rate',
+            'name': 'Producto sin tarifa explícita',
+            'uom': 'UND',
+            'stock': 5,
+            'averageCost': 20,
+            'sellPrice': 40,
+            'isActive': true,
+            'productType': 'SIMPLE',
+            'tenantId': 'tenant-founder-01',
+          },
+        ],
+      );
+
+      await service.primeTerminal();
+
+      final product =
+          await database.productDao.findProductById('prod-no-rate');
+      expect(product, isNotNull);
+      // Fail-closed: a product without an explicit synced rate is treated as
+      // exempt. The active regime (receipt/calculator layer) decides whether
+      // IVA applies — the default itself must never invent 15%.
+      expect(product!.taxRate, equals(0.0));
+    });
+
+    test(
         'applied product fingerprint matches the pinned activation fingerprint',
         () async {
       primingPort.payload = payload();

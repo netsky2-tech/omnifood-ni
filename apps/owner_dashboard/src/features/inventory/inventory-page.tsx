@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatLocalDate } from "@/lib/utils";
 import { toFiniteNumber } from "@/lib/numeric";
+import { localize, alertSeverityLabels } from "@/lib/labels";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { StatCard } from "@/components/ui/stat-card";
@@ -363,7 +364,7 @@ function AlertsTab() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${SEVERITY_STYLES[alert.severity]}`}>
-                        {alert.severity}
+                        {localize(alert.severity, alertSeverityLabels)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs">{alert.message}</td>

@@ -114,6 +114,33 @@ void main() {
       expect(validRecord.isRenewalExpired(DateTime.utc(2025, 1, 1)), isFalse);
     });
 
+    test('accepts the optional tenant slug from provisioning responses and round-trips it', () {
+      final withSlug = DeviceSyncCredentialRecord.fromJson(
+        Map<String, dynamic>.from(validRecord.toJson())
+          ..['slug'] = 'tenant-omnifood-managua',
+      );
+      expect(withSlug.slug, 'tenant-omnifood-managua');
+
+      final json = withSlug.toJson();
+      expect(json['slug'], 'tenant-omnifood-managua');
+      expect(DeviceSyncCredentialRecord.fromJson(json).slug, 'tenant-omnifood-managua');
+
+      final copied = validRecord.copyWith(slug: 'tenant-slug-copy');
+      expect(copied.slug, 'tenant-slug-copy');
+    });
+
+    test('treats slug as pre-auth routing hint, not credential identity', () {
+      // Slug is not part of equality: two records with identical exchange
+      // material but different slugs are the same credential.
+      final a = DeviceSyncCredentialRecord.fromJson(
+        Map<String, dynamic>.from(validRecord.toJson())..['slug'] = 'slug-a',
+      );
+      final b = DeviceSyncCredentialRecord.fromJson(
+        Map<String, dynamic>.from(validRecord.toJson())..['slug'] = 'slug-b',
+      );
+      expect(a, equals(b));
+    });
+
     test('strictly rejects prohibited human credentials or tokens in fromJson', () {
       final prohibitedFieldsToTest = [
         'accessToken',
@@ -149,6 +176,11 @@ void main() {
           reason: 'Field $field should be strictly rejected',
         );
       }
+    });
+
+    test('defaults slug to empty string when the response omits it (legacy installs)', () {
+      final jsonWithoutSlug = Map<String, dynamic>.from(validRecord.toJson())..remove('slug');
+      expect(DeviceSyncCredentialRecord.fromJson(jsonWithoutSlug).slug, '');
     });
 
     test('rejects unexpected unknown keys outside allowlist in fromJson', () {

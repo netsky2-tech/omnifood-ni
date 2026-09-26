@@ -7,7 +7,8 @@ import {
 } from '@nestjs/jwt';
 import { DataSource, type EntityManager } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { AuthService } from './auth.service';
+import { AuthService, DUMMY_PASSWORD_HASH } from './auth.service';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { User, UserRole } from '../entities/user.entity';
 import {
   IDENTITY_JWT_CONFIG,
@@ -100,9 +101,20 @@ describe('AuthService', () => {
   ) =>
     mockDataSource.transaction.mockImplementation((callback) =>
       callback({
+        // `query` accepts the tenant-context set_config binding issued at
+        // the start of every tenant transaction.
+        query: jest.fn().mockResolvedValue(undefined),
         getRepository: jest.fn().mockReturnValue(repository),
       } as unknown as EntityManager),
     );
+
+  // Issue #556 stage 12d: the slug path is THE path. Every login/refresh
+  // resolves the tenant by slug on the global tenants table before the
+  // bound transaction opens.
+  const useResolvedTenant = (tenant: Record<string, unknown> = {}) =>
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-1', slug: 'mi-negocio', is_active: true, ...tenant },
+    ]);
 
   beforeEach(async () => {
     mockUserRepository = {
@@ -118,8 +130,13 @@ describe('AuthService', () => {
       transaction: jest.fn<unknown, [TransactionCallback]>(),
       query: jest.fn(),
     };
+    // Default transaction fake: hands back a manager whose repository for
+    // User is the same mock the pooled token provides, so existing behavior
+    // assertions keep working unchanged. `query` accepts the tenant-context
+    // set_config binding issued at the start of every tenant transaction.
     mockDataSource.transaction.mockImplementation((callback) =>
       callback({
+        query: jest.fn().mockResolvedValue(undefined),
         getRepository: jest.fn().mockReturnValue(mockUserRepository),
       } as unknown as EntityManager),
     );
@@ -607,6 +624,7 @@ describe('AuthService', () => {
   });
 
   it('logs in successfully with valid credentials and persists refresh hash', async () => {
+    useResolvedTenant();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-1',
       email: 'cashier@omnifood.ni',
@@ -622,7 +640,11 @@ describe('AuthService', () => {
       .mockResolvedValueOnce('access-token')
       .mockResolvedValueOnce('refresh-token');
 
-    const result = await service.login('cashier@omnifood.ni', 'Password123!');
+    const result = await service.login(
+      'cashier@omnifood.ni',
+      'Password123!',
+      'mi-negocio',
+    );
 
     expect(result.access_token).toBe('access-token');
     expect(result.refresh_token).toBe('refresh-token');
@@ -671,6 +693,7 @@ describe('AuthService', () => {
   });
 
   it('routes login refresh persistence through the canonical verifier', async () => {
+    useResolvedTenant();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'verifier-login-user',
       email: 'verifier-login@omnifood.ni',
@@ -689,7 +712,11 @@ describe('AuthService', () => {
       .mockResolvedValueOnce('access-token')
       .mockResolvedValueOnce('login-refresh-token');
 
-    await service.login('verifier-login@omnifood.ni', 'Password123!');
+    await service.login(
+      'verifier-login@omnifood.ni',
+      'Password123!',
+      'mi-negocio',
+    );
 
     expect(hash).toHaveBeenCalledWith('login-refresh-token');
     expect(mockUserRepository.update).toHaveBeenCalledWith(
@@ -701,6 +728,7 @@ describe('AuthService', () => {
   });
 
   it('rejects inactive login with a generic error', async () => {
+    useResolvedTenant();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-2',
       email: 'waiter@omnifood.ni',
@@ -712,7 +740,7 @@ describe('AuthService', () => {
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
 
     await expect(
-      service.login('waiter@omnifood.ni', 'password'),
+      service.login('waiter@omnifood.ni', 'password', 'mi-negocio'),
     ).rejects.toThrow('Credenciales inválidas');
   });
 
@@ -928,7 +956,12 @@ describe('AuthService', () => {
       .mockResolvedValueOnce('new-refresh');
 
     const refreshToken = await createRefreshJwt('user-3');
-    const tokens = await service.refreshTokens('user-3', refreshToken);
+    useResolvedTenant();
+    const tokens = await service.refreshTokens(
+      'user-3',
+      refreshToken,
+      'mi-negocio',
+    );
 
     expect(tokens).toMatchObject({
       access_token: 'new-access',
@@ -944,6 +977,7 @@ describe('AuthService', () => {
 
   it('routes modern rotation comparison and successor persistence through the canonical verifier', async () => {
     useRealJwtVerification();
+    useResolvedTenant();
     const lockedRepository = createLockedRepository({ id: 'modern-user' });
     useLockedRepository(lockedRepository);
     const compare = jest
@@ -960,7 +994,7 @@ describe('AuthService', () => {
     });
 
     await expect(
-      service.refreshTokens('modern-user', refreshToken),
+      service.refreshTokens('modern-user', refreshToken, 'mi-negocio'),
     ).resolves.toEqual({
       access_token: 'modern-access-token',
       refresh_token: 'modern-successor-token',
@@ -978,6 +1012,7 @@ describe('AuthService', () => {
 
   it('migrates a matching pre-jti bearer into the stable persisted refresh family', async () => {
     useRealJwtVerification();
+    useResolvedTenant();
     const lockedRepository = createLockedRepository({
       id: 'legacy-user',
       security_version: 8,
@@ -999,6 +1034,7 @@ describe('AuthService', () => {
           { refresh_token_family_id: 'family-active' },
           { includeJti: false },
         ),
+        'mi-negocio',
       ),
     ).resolves.toEqual({
       access_token: 'upgraded-access',
@@ -1028,6 +1064,7 @@ describe('AuthService', () => {
 
   it('routes pre-jti bridge comparison and successor persistence through the canonical verifier', async () => {
     useRealJwtVerification();
+    useResolvedTenant();
     const lockedRepository = createLockedRepository({
       id: 'legacy-verifier-user',
     });
@@ -1047,7 +1084,11 @@ describe('AuthService', () => {
       { includeJti: false },
     );
 
-    await service.refreshTokens('legacy-verifier-user', refreshToken);
+    await service.refreshTokens(
+      'legacy-verifier-user',
+      refreshToken,
+      'mi-negocio',
+    );
 
     expect(compare).toHaveBeenCalledWith(refreshToken, 'active-hash');
     expect(hash).toHaveBeenCalledWith('legacy-successor-token');
@@ -1055,6 +1096,7 @@ describe('AuthService', () => {
 
   it('rejects a family-less pre-jti token without rotating an active stored family', async () => {
     useRealJwtVerification();
+    useResolvedTenant();
     const lockedRepository = createLockedRepository({ id: 'isolated-user' });
     useLockedRepository(lockedRepository);
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(false as never);
@@ -1063,6 +1105,7 @@ describe('AuthService', () => {
       service.refreshTokens(
         'isolated-user',
         await createRefreshJwt('isolated-user', {}, { includeJti: false }),
+        'mi-negocio',
       ),
     ).rejects.toThrow('Acceso denegado');
 
@@ -1076,6 +1119,7 @@ describe('AuthService', () => {
 
   it('does not rotate a hash match when its signed family is foreign', async () => {
     useRealJwtVerification();
+    useResolvedTenant();
     const lockedRepository = createLockedRepository({ id: 'bound-user' });
     useLockedRepository(lockedRepository);
     jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
@@ -1086,6 +1130,7 @@ describe('AuthService', () => {
         await createRefreshJwt('bound-user', {
           refresh_token_family_id: 'family-foreign',
         }),
+        'mi-negocio',
       ),
     ).rejects.toThrow('Acceso denegado');
 
@@ -1096,6 +1141,7 @@ describe('AuthService', () => {
   it('serializes one pre-jti winner and revokes its replaying loser', async () => {
     useRealJwtVerification();
     useRealJwtSigning();
+    useResolvedTenant();
     let committed = false;
     const consumed = await createRefreshJwt(
       'retry-user',
@@ -1118,6 +1164,9 @@ describe('AuthService', () => {
       );
       try {
         const outcome = await callback({
+          // `query` accepts the tenant-context set_config binding issued at
+          // the start of every tenant transaction.
+          query: jest.fn().mockResolvedValue(undefined),
           getRepository: jest.fn().mockReturnValue(lockedRepository),
         } as unknown as EntityManager);
         state = staged;
@@ -1128,7 +1177,7 @@ describe('AuthService', () => {
         throw error;
       }
     });
-    await service.refreshTokens('retry-user', consumed);
+    await service.refreshTokens('retry-user', consumed, 'mi-negocio');
     expect(lockedRepository.findOne).toHaveBeenCalledWith(
       expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
     );
@@ -1138,9 +1187,9 @@ describe('AuthService', () => {
       expect.any(Object),
     );
     committed = false;
-    await expect(service.refreshTokens('retry-user', consumed)).rejects.toThrow(
-      'Acceso denegado',
-    );
+    await expect(
+      service.refreshTokens('retry-user', consumed, 'mi-negocio'),
+    ).rejects.toThrow('Acceso denegado');
     expect(committed).toBe(true);
     expect(mockJwtService.signAsync).toHaveBeenNthCalledWith(
       2,
@@ -1156,6 +1205,7 @@ describe('AuthService', () => {
 
   it('rejects refresh when no stored refresh hash exists', async () => {
     useRealJwtVerification();
+    useResolvedTenant();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-4',
       email: 'owner@omnifood.ni',
@@ -1168,9 +1218,9 @@ describe('AuthService', () => {
     const compare = jest.spyOn(bcrypt, 'compare');
     const refreshToken = await createRefreshJwt('user-4');
 
-    await expect(service.refreshTokens('user-4', refreshToken)).rejects.toThrow(
-      'Acceso denegado',
-    );
+    await expect(
+      service.refreshTokens('user-4', refreshToken, 'mi-negocio'),
+    ).rejects.toThrow('Acceso denegado');
 
     expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
       refreshToken,
@@ -1184,6 +1234,7 @@ describe('AuthService', () => {
 
   it('rejects inactive users before comparing, signing, or rotating refresh tokens', async () => {
     useRealJwtVerification();
+    useResolvedTenant();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'inactive-user',
       email: 'inactive@omnifood.ni',
@@ -1197,7 +1248,7 @@ describe('AuthService', () => {
     const refreshToken = await createRefreshJwt('inactive-user');
 
     await expect(
-      service.refreshTokens('inactive-user', refreshToken),
+      service.refreshTokens('inactive-user', refreshToken, 'mi-negocio'),
     ).rejects.toThrow('Acceso denegado');
 
     expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
@@ -1212,6 +1263,7 @@ describe('AuthService', () => {
 
   it('rejects a verified refresh token with a mismatched hash without an oracle or downstream update', async () => {
     useRealJwtVerification();
+    useResolvedTenant();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'user-5',
       email: 'manager@omnifood.ni',
@@ -1225,9 +1277,9 @@ describe('AuthService', () => {
       .mockResolvedValue(false);
     const refreshToken = await createRefreshJwt('user-5');
 
-    await expect(service.refreshTokens('user-5', refreshToken)).rejects.toThrow(
-      'Acceso denegado',
-    );
+    await expect(
+      service.refreshTokens('user-5', refreshToken, 'mi-negocio'),
+    ).rejects.toThrow('Acceso denegado');
 
     expect(mockJwtService.verifyAsync).toHaveBeenCalledWith(
       refreshToken,
@@ -1240,6 +1292,7 @@ describe('AuthService', () => {
   });
 
   it('rejects inactive users before issuing login tokens', async () => {
+    useResolvedTenant();
     mockUserRepository.findOne.mockResolvedValue({
       id: 'inactive-user',
       email: 'inactive@omnifood.ni',
@@ -1250,7 +1303,7 @@ describe('AuthService', () => {
     });
 
     await expect(
-      service.login('inactive@omnifood.ni', 'Password123!'),
+      service.login('inactive@omnifood.ni', 'Password123!', 'mi-negocio'),
     ).rejects.toThrow('Credenciales inválidas');
     expect(mockJwtService.signAsync).not.toHaveBeenCalled();
   });
@@ -1269,12 +1322,13 @@ describe('AuthService', () => {
         {
           id: 'tenant-123',
           name: 'Central Kitchen',
+          slug: 'central-kitchen-provisioned',
           ruc: 'J0310000000000',
           is_active: true,
         },
       ]);
 
-      const result = await service.getMe('user-1');
+      const result = await service.getMe('user-1', 'tenant-123');
       expect(result.user).toEqual({
         id: 'user-1',
         name: 'Jane Doe',
@@ -1287,7 +1341,8 @@ describe('AuthService', () => {
       expect(result.tenant).toEqual({
         id: 'tenant-123',
         name: 'Central Kitchen',
-        slug: 'central-kitchen',
+        // Issue #556 slice 11: the persisted provisioning slug.
+        slug: 'central-kitchen-provisioned',
         ruc: 'J0310000000000',
         active: true,
       });
@@ -1304,7 +1359,7 @@ describe('AuthService', () => {
       });
       mockDataSource.query.mockResolvedValue([]);
 
-      const result = await service.getMe('user-1');
+      const result = await service.getMe('user-1', 'tenant-123');
       expect(result.tenant).toBeNull();
     });
 
@@ -1319,13 +1374,13 @@ describe('AuthService', () => {
       });
       mockDataSource.query.mockResolvedValue({ notAnArray: true });
 
-      const result = await service.getMe('user-1');
+      const result = await service.getMe('user-1', 'tenant-123');
       expect(result.tenant).toBeNull();
     });
 
     it('throws UnauthorizedException when user is not found or inactive', async () => {
       mockUserRepository.findOne.mockResolvedValue(null);
-      await expect(service.getMe('non-existent')).rejects.toThrow(
+      await expect(service.getMe('non-existent', 'tenant-123')).rejects.toThrow(
         'Usuario no encontrado o inactivo',
       );
 
@@ -1333,9 +1388,563 @@ describe('AuthService', () => {
         id: 'user-1',
         is_active: false,
       });
-      await expect(service.getMe('user-1')).rejects.toThrow(
+      await expect(service.getMe('user-1', 'tenant-123')).rejects.toThrow(
         'Usuario no encontrado o inactivo',
       );
     });
+  });
+
+  // Issue #512 T3 slice 9 rework: security_profiles is now tenant-RLS
+  // FORCE-protected, so the staff-sync JOIN must run inside the
+  // tenant-bound transaction manager or the joined side collapses to null.
+  // This guard has RUNTIME teeth: the pooled repository stands beside the
+  // bound one as a tripwire, and any reverted access fails at runtime.
+  describe('staff sync tenant transaction binding', () => {
+    it('binds the staff JOIN through the tenant transaction; the pooled repository stays silent', async () => {
+      const getMany = jest.fn().mockResolvedValue([]);
+      const boundQb = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany,
+      };
+      const boundUserRepository = {
+        createQueryBuilder: jest.fn().mockReturnValue(boundQb),
+      };
+      // Pooled tripwire: any createQueryBuilder call here means the JOIN
+      // escaped the bound transaction.
+      const pooledUserRepository = { createQueryBuilder: jest.fn() };
+
+      const setConfigCalls: Array<[string, string[]]> = [];
+      const boundManager = {
+        query: jest.fn(async (sql: string, params: string[]) => {
+          setConfigCalls.push([sql, params]);
+          return [];
+        }),
+        getRepository: jest.fn(() => boundUserRepository),
+      };
+      const boundDataSource = {
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            work(boundManager),
+        ),
+        query: jest.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          AuthService,
+          {
+            provide: getRepositoryToken(User),
+            useValue: pooledUserRepository,
+          },
+          { provide: JwtService, useValue: mockJwtService },
+          { provide: DataSource, useValue: boundDataSource },
+          { provide: IDENTITY_JWT_CONFIG, useValue: jwtConfig },
+        ],
+      }).compile();
+      const bound = module.get<AuthService>(AuthService);
+
+      await bound.getStaffForSync('tenant-1', UserRole.OWNER);
+
+      // ONE transaction for the staff-sync read unit, binding the tenant
+      // context exactly once with the production set_config SQL.
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(setConfigCalls).toHaveLength(1);
+      expect(setConfigCalls[0][0]).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
+      expect(setConfigCalls[0][1]).toEqual(['tenant-1']);
+
+      // The JOIN resolved through the bound manager's repository.
+      expect(boundUserRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
+      expect(boundQb.leftJoinAndSelect).toHaveBeenCalledWith(
+        'user.security_profile',
+        'security_profile',
+      );
+
+      // RUNTIME TEETH: the pooled tripwire stayed silent.
+      expect(pooledUserRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('AuthService tenant-slug login context (issue #556 slice 11)', () => {
+  let service: AuthService;
+  let mockUserRepository: {
+    createQueryBuilder: jest.Mock;
+    findOne: jest.Mock;
+    update: jest.Mock;
+  };
+  let mockJwtService: {
+    signAsync: jest.Mock;
+    verifyAsync: jest.Mock;
+  };
+  let mockDataSource: {
+    transaction: jest.Mock<unknown, [TransactionCallback]>;
+    query: jest.Mock;
+  };
+
+  const boundFindOne = jest.fn();
+  const boundUpdate = jest.fn();
+  const boundManagerQueries: Array<{ sql: string; parameters?: unknown[] }> =
+    [];
+
+  const useTenantBoundManager = () => {
+    const manager = {
+      query: jest.fn((sql: string, parameters?: unknown[]) => {
+        boundManagerQueries.push({ sql, parameters });
+        return Promise.resolve([]);
+      }),
+      getRepository: jest.fn().mockReturnValue({
+        findOne: boundFindOne,
+        update: boundUpdate,
+      }),
+    } as unknown as EntityManager;
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback(manager),
+    );
+    return manager;
+  };
+
+  const slugUser = (overrides: Record<string, unknown> = {}) => ({
+    id: 'slug-user-1',
+    email: 'cashier@omnifood.ni',
+    name: 'Cashier',
+    password_hash: 'stored-hash',
+    role: UserRole.CASHIER,
+    tenant_id: 'tenant-resolved',
+    is_active: true,
+    security_version: 1,
+    ...overrides,
+  });
+
+  beforeEach(async () => {
+    mockUserRepository = {
+      createQueryBuilder: jest.fn(),
+      findOne: jest.fn(),
+      update: jest.fn(),
+    };
+    mockJwtService = {
+      signAsync: jest.fn(),
+      verifyAsync: jest.fn(),
+    };
+    mockDataSource = {
+      transaction: jest.fn<unknown, [TransactionCallback]>(),
+      query: jest.fn().mockResolvedValue([]),
+    };
+    // Default transaction fake (mirrors the main describe): the slug path's
+    // bound manager resolves User through the shared repository mock.
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback({
+        query: jest.fn().mockResolvedValue(undefined),
+        getRepository: jest.fn().mockReturnValue(mockUserRepository),
+      } as unknown as EntityManager),
+    );
+    boundFindOne.mockReset();
+    boundUpdate.mockReset();
+    boundManagerQueries.length = 0;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        {
+          provide: getRepositoryToken(User),
+          useValue: mockUserRepository,
+        },
+        { provide: JwtService, useValue: mockJwtService },
+        { provide: DataSource, useValue: mockDataSource },
+        { provide: IDENTITY_JWT_CONFIG, useValue: jwtConfig },
+      ],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('resolves the tenant by slug, binds app.tenant_id, and looks the user up through the bound manager', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    const manager = useTenantBoundManager();
+    boundFindOne.mockResolvedValue(slugUser());
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed-refresh' as never);
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    const result = await service.login(
+      'cashier@omnifood.ni',
+      'Password123!',
+      'mi-negocio',
+    );
+
+    // Server-side slug resolution on the global tenants table, pre-bind.
+    expect(mockDataSource.query).toHaveBeenCalledWith(
+      expect.stringContaining('FROM tenants'),
+      ['mi-negocio'],
+    );
+    // Bind BEFORE the user lookup: set_config runs first through the manager.
+    expect(boundManagerQueries[0]).toEqual({
+      sql: TENANT_CONTEXT_SET_CONFIG_SQL,
+      parameters: ['tenant-resolved'],
+    });
+    expect(manager.getRepository).toHaveBeenCalledWith(User);
+    expect(boundFindOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.arrayContaining([
+          expect.objectContaining({ email: 'cashier@omnifood.ni' }),
+        ]),
+      }),
+    );
+    // Response shape unchanged: no slug added to the login response.
+    expect(result.user).toMatchObject({
+      id: 'slug-user-1',
+      tenant_id: 'tenant-resolved',
+    });
+    expect(Object.keys(result)).toEqual(
+      expect.arrayContaining(['access_token', 'refresh_token', 'user']),
+    );
+    expect(Object.keys(result.user)).not.toContain('slug');
+  });
+
+  it('never touches the pooled user repository on the slug path (pooled tripwire)', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    useTenantBoundManager();
+    boundFindOne.mockResolvedValue(slugUser());
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await service.login('cashier@omnifood.ni', 'Password123!', 'mi-negocio');
+
+    expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
+    expect(mockUserRepository.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('returns the generic invalid-credentials failure for an unknown slug', async () => {
+    mockDataSource.query.mockResolvedValue([]);
+    useTenantBoundManager();
+
+    await expect(
+      service.login('cashier@omnifood.ni', 'Password123!', 'no-such-tenant'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+    expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('returns the generic invalid-credentials failure for an inactive tenant slug', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: false },
+    ]);
+    useTenantBoundManager();
+
+    await expect(
+      service.login('cashier@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+    expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('returns the generic invalid-credentials failure when the user does not belong to the resolved tenant', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    useTenantBoundManager();
+    boundFindOne.mockResolvedValue(slugUser({ tenant_id: 'another-tenant' }));
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+
+    await expect(
+      service.login('cashier@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+  });
+
+  it('rejects the removed no-slug legacy login generically without touching the pool or the database', async () => {
+    // Issue #556 stage 12d: the migration window is closed. A login without
+    // a tenant slug fails generically with equalized timing (one dummy
+    // bcrypt compare), opens NO transaction, issues NO tenant query, and
+    // never touches the pooled repository — there is no compatibility
+    // branch for old POS builds (stage 12b links the terminal pre-login).
+    const compareSpy = jest
+      .spyOn(bcrypt, 'compare')
+      .mockResolvedValue(false as never);
+
+    await expect(
+      service.login('cashier@omnifood.ni', 'Password123!'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+    expect(compareSpy).toHaveBeenCalledWith(
+      'Password123!',
+      DUMMY_PASSWORD_HASH,
+    );
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+    expect(mockDataSource.query).not.toHaveBeenCalled();
+    expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects the removed no-slug legacy refresh with the generic refresh rejection before any transaction', async () => {
+    mockJwtService.verifyAsync.mockResolvedValue({
+      sub: 'slug-user-1',
+      token_type: JWT_TOKEN_TYPES.REFRESH,
+    });
+
+    await expect(
+      service.refreshTokens('slug-user-1', 'refresh-token'),
+    ).rejects.toThrow('Acceso denegado');
+
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+    expect(mockDataSource.query).not.toHaveBeenCalled();
+    expect(mockUserRepository.findOne).not.toHaveBeenCalled();
+  });
+
+  it('refresh with tenantSlug binds the tenant and filters the user read by the resolved tenant id', async () => {
+    jest.useFakeTimers();
+    try {
+      const refreshPayload = {
+        sub: 'slug-user-1',
+        token_type: JWT_TOKEN_TYPES.REFRESH,
+        refresh_token_family_id: 'family-1',
+      };
+      mockJwtService.verifyAsync.mockResolvedValue(refreshPayload);
+      mockDataSource.query.mockResolvedValue([
+        { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+      ]);
+      const manager = useTenantBoundManager();
+      boundFindOne.mockResolvedValue({
+        id: 'slug-user-1',
+        email: 'cashier@omnifood.ni',
+        tenant_id: 'tenant-resolved',
+        role: UserRole.CASHIER,
+        is_active: true,
+        security_version: 1,
+        hashed_refresh_token: 'active-hash',
+        refresh_token_family_id: 'family-1',
+        refresh_token_revoked_at: null,
+      });
+      jest
+        .spyOn(refreshTokenVerifier, 'compareRefreshTokenVerifier')
+        .mockResolvedValue(true);
+      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed-refresh' as never);
+      mockJwtService.signAsync
+        .mockResolvedValueOnce('access-token')
+        .mockResolvedValueOnce('refresh-token');
+
+      const result = await service.refreshTokens(
+        'slug-user-1',
+        'refresh-token',
+        'mi-negocio',
+      );
+
+      expect(result.access_token).toBe('access-token');
+      expect(mockDataSource.query).toHaveBeenCalledWith(
+        expect.stringContaining('FROM tenants'),
+        ['mi-negocio'],
+      );
+      expect(boundManagerQueries[0]).toEqual({
+        sql: TENANT_CONTEXT_SET_CONFIG_SQL,
+        parameters: ['tenant-resolved'],
+      });
+      expect(boundFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'slug-user-1',
+            tenant_id: 'tenant-resolved',
+          }),
+        }),
+      );
+      expect(manager.getRepository).toHaveBeenCalledWith(User);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('refresh with an unknown slug fails with the generic refresh rejection before any transaction', async () => {
+    mockJwtService.verifyAsync.mockResolvedValue({
+      sub: 'slug-user-1',
+      token_type: JWT_TOKEN_TYPES.REFRESH,
+    });
+    mockDataSource.query.mockResolvedValue([]);
+    useTenantBoundManager();
+
+    await expect(
+      service.refreshTokens('slug-user-1', 'refresh-token', 'no-such-tenant'),
+    ).rejects.toThrow('Acceso denegado');
+
+    expect(mockDataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('getMe binds the tenant transaction and returns the persisted slug from the tenants row', async () => {
+    useTenantBoundManager();
+    boundFindOne.mockResolvedValue({
+      id: 'user-1',
+      name: 'Jane Doe',
+      email: 'jane@example.com',
+      role: UserRole.MANAGER,
+      tenant_id: 'tenant-123',
+      is_active: true,
+    });
+    mockDataSource.query.mockResolvedValue([
+      {
+        id: 'tenant-123',
+        name: 'Renamed Tenant',
+        slug: 'stored-provisioned-slug',
+        ruc: 'J0310000000000',
+        is_active: true,
+      },
+    ]);
+
+    const result = await service.getMe('user-1', 'tenant-123');
+
+    // The self read ran inside the tenant-bound transaction (RUNTIME TEETH:
+    // the pooled tripwire stayed silent — set_config ran before the read).
+    expect(mockDataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(boundManagerQueries[0]).toEqual({
+      sql: TENANT_CONTEXT_SET_CONFIG_SQL,
+      parameters: ['tenant-123'],
+    });
+    expect(boundFindOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: 'user-1',
+          tenant_id: 'tenant-123',
+        }),
+      }),
+    );
+    expect(result.tenant).toMatchObject({
+      id: 'tenant-123',
+      slug: 'stored-provisioned-slug',
+    });
+    // The persisted slug, not an ad-hoc recomputation from the current name.
+    expect(result.tenant?.slug).not.toBe('renamed-tenant');
+  });
+});
+
+describe('AuthService slug-path timing equalization (F1 regression, issue #556)', () => {
+  let service: AuthService;
+  let mockUserRepository: {
+    createQueryBuilder: jest.Mock;
+    findOne: jest.Mock;
+    update: jest.Mock;
+  };
+  let mockJwtService: {
+    signAsync: jest.Mock;
+    verifyAsync: jest.Mock;
+  };
+  let mockDataSource: {
+    transaction: jest.Mock<unknown, [TransactionCallback]>;
+    query: jest.Mock;
+  };
+
+  beforeEach(async () => {
+    mockUserRepository = {
+      createQueryBuilder: jest.fn(),
+      findOne: jest.fn(),
+      update: jest.fn(),
+    };
+    mockJwtService = {
+      signAsync: jest.fn(),
+      verifyAsync: jest.fn(),
+    };
+    mockDataSource = {
+      transaction: jest.fn<unknown, [TransactionCallback]>(),
+      query: jest.fn().mockResolvedValue([]),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: getRepositoryToken(User), useValue: mockUserRepository },
+        { provide: JwtService, useValue: mockJwtService },
+        { provide: DataSource, useValue: mockDataSource },
+        { provide: IDENTITY_JWT_CONFIG, useValue: jwtConfig },
+      ],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('burns exactly one bcrypt compare on a valid slug with a nonexistent email', async () => {
+    // Valid, ACTIVE tenant slug resolves; the email does not exist. The
+    // generic failure must still cost one bcrypt compare, otherwise
+    // response timing enumerates active tenant slugs.
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback({
+        query: jest.fn().mockResolvedValue([]),
+        getRepository: jest.fn().mockReturnValue({
+          findOne: jest.fn().mockResolvedValue(null),
+          update: jest.fn(),
+        }),
+      } as unknown as EntityManager),
+    );
+    const compareSpy = jest
+      .spyOn(bcrypt, 'compare')
+      .mockResolvedValue(false as never);
+
+    await expect(
+      service.login('ghost@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+    expect(compareSpy).toHaveBeenCalledWith(
+      'Password123!',
+      DUMMY_PASSWORD_HASH,
+    );
+  });
+
+  it('burns exactly one bcrypt compare when the slug-path user is inactive', async () => {
+    mockDataSource.query.mockResolvedValue([
+      { id: 'tenant-resolved', slug: 'mi-negocio', is_active: true },
+    ]);
+    mockDataSource.transaction.mockImplementation((callback) =>
+      callback({
+        query: jest.fn().mockResolvedValue([]),
+        getRepository: jest.fn().mockReturnValue({
+          findOne: jest.fn().mockResolvedValue({
+            id: 'inactive-user',
+            email: 'inactive@omnifood.ni',
+            name: 'Inactive',
+            password_hash: 'stored-hash',
+            role: UserRole.CASHIER,
+            tenant_id: 'tenant-resolved',
+            is_active: false,
+          }),
+          update: jest.fn(),
+        }),
+      } as unknown as EntityManager),
+    );
+    const compareSpy = jest
+      .spyOn(bcrypt, 'compare')
+      .mockResolvedValue(false as never);
+
+    await expect(
+      service.login('inactive@omnifood.ni', 'Password123!', 'mi-negocio'),
+    ).rejects.toThrow('Credenciales inválidas');
+
+    expect(compareSpy).toHaveBeenCalledTimes(1);
+    expect(compareSpy).toHaveBeenCalledWith(
+      'Password123!',
+      DUMMY_PASSWORD_HASH,
+    );
   });
 });

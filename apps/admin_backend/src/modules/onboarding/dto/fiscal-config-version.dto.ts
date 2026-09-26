@@ -13,6 +13,10 @@ export interface EffectiveFiscalPayload {
   ruc: string | null;
   taxRate: number;
   tenantId: string;
+  /** D-21 (#554): null when no DGI authorization is configured. */
+  dgiAuthorizationCode: string | null;
+  dgiAuthorizationIssuedAt: string | null;
+  dgiAuthorizationExpiresAt: string | null;
 }
 
 export interface FiscalConfigSnapshot {
@@ -23,6 +27,10 @@ export interface FiscalConfigSnapshot {
   taxRate: number;
   pricesIncludeTax: boolean;
   commercialFxSpread?: number;
+  /** D-21 (#554): null when no DGI authorization is configured. */
+  dgiAuthorizationCode?: string | null;
+  dgiAuthorizationIssuedAt?: string | null;
+  dgiAuthorizationExpiresAt?: string | null;
   configVersion: FiscalConfigVersion;
   generatedAt: string;
 }

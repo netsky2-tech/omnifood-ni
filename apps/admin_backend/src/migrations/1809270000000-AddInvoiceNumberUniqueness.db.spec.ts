@@ -152,9 +152,32 @@ async function insertTenant(
   queryRunner: QueryRunner,
   tenantId: string,
 ): Promise<void> {
-  await queryRunner.query(
-    `INSERT INTO tenants (id, name) VALUES ('${tenantId}', 'tenant-${tenantId}')`,
+  // Schema-aware: frozen legacy databases (e.g. the fail-closed guard test
+  // at 1809260000000) predate the tenants.slug column added by main's
+  // login-slug work (1809350000000). Probe, then insert the slug only when
+  // the column exists.
+  const slugColumn = await queryRunner.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'tenants' AND column_name = 'slug'`,
   );
+  const withSlug = Array.isArray(slugColumn) && slugColumn.length > 0;
+  await queryRunner.query(
+    withSlug
+      ? `INSERT INTO tenants (id, name, slug) VALUES ('${tenantId}', 'tenant-${tenantId}', 'tenant-${tenantId}')`
+      : `INSERT INTO tenants (id, name) VALUES ('${tenantId}', 'tenant-${tenantId}')`,
+  );
+}
+
+async function bindTenantContext(
+  queryRunner: QueryRunner,
+  tenantId: string,
+): Promise<void> {
+  // The invoices RLS policies hardened by #512's slices are enforced for this
+  // job's connection role (it does not bypass RLS), so every invoice INSERT
+  // must run with the tenant bound or the WITH CHECK clause rejects the row.
+  await queryRunner.query("SELECT set_config('app.tenant_id', $1, 'false')", [
+    tenantId,
+  ]);
 }
 
 async function insertInvoice(
@@ -162,6 +185,10 @@ async function insertInvoice(
   tenantId: string,
   invoiceNumber: string,
 ): Promise<void> {
+  // Bind per-invoice (not per-tenant setup): session-scoped binding means
+  // the LAST bind wins, so interleaved multi-tenant inserts would otherwise
+  // run under the wrong tenant's WITH CHECK clause.
+  await bindTenantContext(queryRunner, tenantId);
   await queryRunner.query(`
     INSERT INTO invoices (
       tenant_id, invoice_number, created_at, user_id,

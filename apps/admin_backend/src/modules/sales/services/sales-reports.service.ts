@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
+  DataSource,
   FindOptionsWhere,
   LessThanOrEqual,
   MoreThanOrEqual,
   Repository,
 } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Payment } from '../entities/payment.entity';
@@ -43,6 +45,11 @@ export class SalesReportsService {
     private readonly paymentRepo: Repository<Payment>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    // Issue #556 stage 12d F1: the users read is bound through the
+    // tenant-bound transaction manager (FORCE RLS on users fails closed
+    // on a pooled connection); the pooled injection stays for module
+    // wiring and as the spec's runtime-teeth tripwire.
+    private readonly dataSource: DataSource,
   ) {}
 
   async getDashboard(
@@ -66,11 +73,19 @@ export class SalesReportsService {
       whereClause.created_at = LessThanOrEqual(end);
     }
 
-    const invoices = await this.invoiceRepo.find({
-      where: whereClause,
-      relations: ['items', 'payments'],
-      order: { created_at: 'DESC' },
-    });
+    // Issue #581 WU1: invoices is a direct:SIUD RLS-forced table — the
+    // pooled find silently returned zero rows under the production
+    // NOBYPASSRLS role. Bound read, identical query semantics.
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: whereClause,
+          relations: ['items', 'payments'],
+          order: { created_at: 'DESC' },
+        }),
+    );
 
     let grossSales = 0;
     let netTaxableSales = 0;
@@ -167,14 +182,20 @@ export class SalesReportsService {
   ): Promise<HourlySalesReportDto> {
     const { dateStr, start, end } = this.parseDayRange(query?.date);
 
-    const invoices = await this.invoiceRepo.find({
-      where: {
-        tenant_id: tenantId,
-        isCanceled: false,
-        created_at: Between(start, end),
-      },
-      order: { created_at: 'ASC' },
-    });
+    // Issue #581 WU1: bound invoice read (see getDashboard).
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: {
+            tenant_id: tenantId,
+            isCanceled: false,
+            created_at: Between(start, end),
+          },
+          order: { created_at: 'ASC' },
+        }),
+    );
 
     const hourlyBuckets: HourlySalesBucketDto[] = Array.from(
       { length: 24 },
@@ -234,10 +255,16 @@ export class SalesReportsService {
       whereClause.created_at = LessThanOrEqual(end);
     }
 
-    const invoices = await this.invoiceRepo.find({
-      where: whereClause,
-      relations: ['items'],
-    });
+    // Issue #581 WU1: bound invoice read (see getDashboard).
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: whereClause,
+          relations: ['items'],
+        }),
+    );
 
     const productAggregates = new Map<
       string,
@@ -312,13 +339,28 @@ export class SalesReportsService {
       whereClause.created_at = LessThanOrEqual(end);
     }
 
-    const invoices = await this.invoiceRepo.find({
-      where: whereClause,
-    });
+    // Issue #581 WU1: bound invoice read (see getDashboard) — joins the
+    // users read, which was already bound in issue #556 stage 12d F1.
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: whereClause,
+        }),
+    );
 
-    const users = await this.userRepo.find({
-      where: { tenant_id: tenantId },
-    });
+    // Issue #556 stage 12d F1: users is FORCE-RLS-protected — a pooled
+    // read here silently returned zero rows and every cashier name
+    // degraded to the raw id. Bound read, identical query semantics.
+    const users = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(User).find({
+          where: { tenant_id: tenantId },
+        }),
+    );
     const userMap = new Map<string, string>();
     for (const u of users) {
       userMap.set(u.id, u.name);

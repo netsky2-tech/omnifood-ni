@@ -238,6 +238,9 @@ describe('Activation Device Credential Provisioning (db)', () => {
 
       const changeLogService = new ChangeLogService(
         dataSource.getRepository(ChangeLog),
+        // Issue #512 slice 7: change_log is tenant-RLS protected, so the
+        // service binds its own tenant transactions through the DataSource.
+        dataSource,
       );
 
       const dummyReadiness = {

@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { EntityManager } from 'typeorm';
 
 export const FORENSIC_ALERT_DISPATCHER = 'FORENSIC_ALERT_DISPATCHER';
 
@@ -56,12 +56,27 @@ export function shouldCreateHighValueInventoryAlert(
   return QUALIFYING_HIGH_VALUE_DOCUMENT_TYPES.has(candidate.sourceDocumentType);
 }
 
+/**
+ * Raised when a forensic alert write is attempted without the caller's
+ * tenant-bound transaction manager. forensic_alerts is tenant-RLS protected
+ * (issue #512 T3 slice 7), so there is deliberately no pooled fallback: an
+ * unbound pooled INSERT would be denied by row level security, and the
+ * failure must be explicit instead of silent.
+ */
+export class ForensicAlertManagerRequiredError extends Error {
+  constructor() {
+    super(
+      'FORENSIC_ALERT_MANAGER_REQUIRED: a tenant-bound transaction manager is required to write a forensic alert',
+    );
+    this.name = 'ForensicAlertManagerRequiredError';
+  }
+}
+
 @Injectable()
 export class ForensicAlertService {
   private readonly logger = new Logger(ForensicAlertService.name);
 
   constructor(
-    private readonly dataSource: DataSource,
     @Optional()
     @Inject(FORENSIC_ALERT_DISPATCHER)
     private readonly dispatcher?: ForensicAlertDispatcher,
@@ -69,10 +84,12 @@ export class ForensicAlertService {
 
   async create(
     input: ForensicAlertInput,
-    manager?: EntityManager,
+    manager: EntityManager,
   ): Promise<void> {
-    const executor = manager ?? this.dataSource.manager;
-    await executor.query(
+    if (!manager) {
+      throw new ForensicAlertManagerRequiredError();
+    }
+    await manager.query(
       `INSERT INTO forensic_alerts (tenant_id, alert_type, severity, actor_role, message, metadata)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
       [

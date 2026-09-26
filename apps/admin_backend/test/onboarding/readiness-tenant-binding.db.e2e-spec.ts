@@ -32,6 +32,7 @@ import { OnboardingIdempotencyRecord } from '../../src/modules/onboarding/entiti
 import { OnboardingTelemetryEvent } from '../../src/modules/onboarding/entities/onboarding-telemetry-event.entity';
 import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #358 regression test: `GET /onboarding/readiness` and activation
@@ -264,12 +265,14 @@ describe('InventoryReadiness tenant binding on poisoned pooled connections (Real
       tenantRepo.create({
         id: tenantAId,
         name: 'Café El Buen Sabor',
+        slug: normalizeTenantSlug('Café El Buen Sabor'),
         ruc: 'J0310000001234',
         is_active: true,
       }),
       tenantRepo.create({
         id: tenantBId,
         name: 'Pupusería Vacía',
+        slug: normalizeTenantSlug('Pupusería Vacía'),
         ruc: 'J0310000009999',
         is_active: true,
       }),

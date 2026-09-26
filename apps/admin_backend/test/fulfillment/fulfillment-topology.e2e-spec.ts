@@ -23,6 +23,7 @@ import { AuditIntegrityAlert } from '../../src/modules/identity/entities/audit-i
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { signIdentityJwtAccessToken } from '../support/identity-jwt-test.fixture';
 import { ensurePublicAuthTables } from '../support/fulfillment-test-db.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 describe('FulfillmentTopology (e2e - Real PostgreSQL)', () => {
   let app: INestApplication<App>;
@@ -73,11 +74,11 @@ describe('FulfillmentTopology (e2e - Real PostgreSQL)', () => {
 
     // Seed tenants and users in public tables for auth & AuthoritativeCurrentUserGuard
     await runner.query(
-      `INSERT INTO tenants (id, name, created_at, updated_at) VALUES
-       ($1, 'Tenant A', now(), now()),
-       ($2, 'Tenant B', now(), now())
+      `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
+       ($1, 'Tenant A', $3, now(), now()),
+       ($2, 'Tenant B', $4, now(), now())
        ON CONFLICT (id) DO NOTHING`,
-      [tenantAId, tenantBId],
+      [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
     );
 
     await runner.query(

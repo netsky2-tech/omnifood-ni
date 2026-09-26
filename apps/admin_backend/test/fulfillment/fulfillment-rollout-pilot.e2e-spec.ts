@@ -56,6 +56,7 @@ import {
   type ProvisionedDeviceSyncCredential,
 } from '../support/device-sync-e2e.helper';
 import { SyncBatchRecordDto } from '../../src/modules/sales/dto/sync-batch.dto';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   BackfillScanResult,
   RollbackStatus,
@@ -206,11 +207,18 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
     await ensurePublicDeviceSyncTables(runner);
 
     await runner.query(
-      `INSERT INTO tenants (id, name, created_at, updated_at) VALUES
-       ($1, $3, now(), now()),
-       ($2, $4, now(), now())
+      `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
+       ($1, $3, $5, now(), now()),
+       ($2, $4, $6, now(), now())
        ON CONFLICT (id) DO NOTHING`,
-      [tenantAId, tenantBId, tenantAName, tenantBName],
+      [
+        tenantAId,
+        tenantBId,
+        tenantAName,
+        tenantBName,
+        normalizeTenantSlug(tenantAName),
+        normalizeTenantSlug(tenantBName),
+      ],
     );
 
     const ownerAEmail = `owner.a.${randomUUID()}@test.com`;

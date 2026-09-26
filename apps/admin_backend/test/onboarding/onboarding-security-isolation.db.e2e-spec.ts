@@ -61,6 +61,7 @@ import {
   signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
 import { SupportOverrideAction } from '../../src/modules/onboarding/dto/activation.dto';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 const postgresConnection = {
   host: process.env.DB_HOST?.trim() ?? '127.0.0.1',
@@ -164,11 +165,13 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
       tenantRepo.create({
         id: tenantAId,
         name: 'Tenant A Isolation Corp',
+        slug: normalizeTenantSlug('Tenant A Isolation Corp'),
         is_active: true,
       }),
       tenantRepo.create({
         id: tenantBId,
         name: 'Tenant B Isolation Corp',
+        slug: normalizeTenantSlug('Tenant B Isolation Corp'),
         is_active: true,
       }),
     ]);

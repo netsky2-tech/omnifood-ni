@@ -17,6 +17,7 @@ import { FiscalConfigRevision } from './entities/fiscal-config-revision.entity';
 import { ActivationAttempt } from './entities/activation-attempt.entity';
 import { ActivationCheckResult } from './entities/activation-check-result.entity';
 import { ActivationFollowUp } from './entities/activation-follow-up.entity';
+import { DeviceLinkingCode } from './entities/device-linking-code.entity';
 import { OnboardingTelemetryEvent } from './entities/onboarding-telemetry-event.entity';
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { User } from '../identity/entities/user.entity';
@@ -55,6 +56,9 @@ import { OnboardingCatalogService } from './services/onboarding-catalog.service'
 import { OnboardingCatalogController } from './controllers/onboarding-catalog.controller';
 import { ActivationService } from './services/activation.service';
 import { ActivationController } from './controllers/activation.controller';
+import { DeviceLinkingService } from './services/device-linking.service';
+import { DeviceLinkingController } from './controllers/device-linking.controller';
+import { DeviceLinkingRateLimiter } from './utils/linking-rate-limiter';
 import { TerminalPrimingService } from './services/terminal-priming.service';
 import { TerminalPrimingController } from './controllers/terminal-priming.controller';
 import { OnboardingTelemetryService } from './telemetry/onboarding-telemetry.service';
@@ -115,6 +119,7 @@ export const getRequiredOnboardingJwtSecret = (
       ActivationAttempt,
       ActivationCheckResult,
       ActivationFollowUp,
+      DeviceLinkingCode,
       OnboardingTelemetryEvent,
       Tenant,
       User,
@@ -140,6 +145,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingSessionController,
     OnboardingCatalogController,
     ActivationController,
+    DeviceLinkingController,
     TerminalPrimingController,
     OnboardingTelemetryController,
     OnboardingRolloutController,
@@ -159,6 +165,8 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingIdempotencyCoordinator,
     OnboardingCatalogService,
     ActivationService,
+    DeviceLinkingService,
+    DeviceLinkingRateLimiter,
     TerminalPrimingService,
     OnboardingTelemetryService,
     OnboardingCustomerSaleObserver,

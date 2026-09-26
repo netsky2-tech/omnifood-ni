@@ -18,6 +18,7 @@ import {
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { RewardDefinition } from '../entities/reward-definition.entity';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -50,7 +51,7 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
     await bootstrap.query(`CREATE TABLE "${schema}".tenants (
-      id text PRIMARY KEY, name text NOT NULL, ruc text, is_active boolean DEFAULT true,
+      id text PRIMARY KEY, name text NOT NULL, slug text NOT NULL, ruc text, is_active boolean DEFAULT true,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);
 
@@ -122,11 +123,12 @@ describe('LV1.7C — Loyalty Sync Fault Suite (Real PostgreSQL)', () => {
     projRepo = dataSource.getRepository(CustomerLoyaltyAccountProjection);
     progRepo = dataSource.getRepository(LoyaltyProgram);
     custRepo = dataSource.getRepository(Customer);
-    ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
+    ledgerService = new LoyaltyLedgerService(txRepo, projRepo, dataSource);
 
     await dataSource.getRepository(Tenant).save({
       id: tenantId,
       name: 'Sync Fault Test Tenant',
+      slug: normalizeTenantSlug('Sync Fault Test Tenant'),
       is_active: true,
     });
 

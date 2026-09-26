@@ -13,6 +13,7 @@ import { FulfillmentRetentionService } from './fulfillment-retention.service';
 import { InvoicesService } from '../../sales/services/invoices.service';
 import { SyncBatchRecordDto } from '../../sales/dto/sync-batch.dto';
 import { createMigrationBuiltSchemaFixture } from '../../../../test/support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 /**
  * ISSUE #418: the schema is built by RUNNING THE FULL MIGRATION SET (via
@@ -111,6 +112,7 @@ describe('FulfillmentRetentionService (db - Real PostgreSQL, Zero Mocks, migrati
         tenantRepo.create({
           id,
           name: `Retention Spec Tenant ${index}`,
+          slug: normalizeTenantSlug(`Retention Spec Tenant ${index}`),
           ruc: `J031000000000${index}`,
           is_active: true,
         }),

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../../../domain/models/config/tax_regime.dart';
 import '../../../../../domain/models/sales/invoice.dart';
 import '../../../../../domain/models/sales/payment.dart';
 import '../../../../../domain/models/sales/cashier_session.dart';
@@ -33,6 +34,7 @@ class DgiReportViewModel extends ChangeNotifier {
     try {
       final entities = await _database.cashierSessionDao.getAllSessions();
       _sessions = entities.map(SalesMapper.toSessionDomain).toList();
+      await _loadTaxRegime();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -82,6 +84,21 @@ class DgiReportViewModel extends ChangeNotifier {
   int get canceledCount => _invoices.where((i) => i.isCanceled).length;
   double get canceledTotal => _invoices.where((i) => i.isCanceled).fold(0.0, (sum, i) => sum + i.total);
 
+  /// Active tenant tax regime (D-3: the regime is the single source of IVA
+  /// treatment). Null until loaded or when the device has no projected regime.
+  TaxRegime? _taxRegime;
+  TaxRegime? get taxRegime => _taxRegime;
+
+  Future<void> _loadTaxRegime() async {
+    try {
+      final configEntity = await _database.localConfigDao.getConfigByKey('tax_regime');
+      _taxRegime = TaxRegime.fromString(configEntity?.value);
+    } catch (_) {
+      // Fail open to the plain label; never fabricate a percentage literal.
+      _taxRegime = null;
+    }
+  }
+
   String generatePrintString() {
     if (_selectedSession == null) return "No hay sesión seleccionada";
     
@@ -95,7 +112,13 @@ class DgiReportViewModel extends ChangeNotifier {
     }
     buf.writeln("------------------------------------------");
     buf.writeln("VENTAS BRUTAS:      \$${totalGross.toStringAsFixed(2)}");
-    buf.writeln("IVA (15%):          \$${totalTax.toStringAsFixed(2)}");
+    // D-3: regime-aware IVA treatment. Cuota Fija does not collect IVA — the
+    // X/Z prints the domain fiscal notice instead of a contradicting amount.
+    if (taxRegime?.isCuotaFija == true) {
+      buf.writeln(taxRegime!.fiscalNotice);
+    } else {
+      buf.writeln("IVA:                \$${totalTax.toStringAsFixed(2)}");
+    }
     buf.writeln("VENTAS NETAS:       \$${totalNet.toStringAsFixed(2)}");
     buf.writeln("------------------------------------------");
     buf.writeln("POR MÉTODO DE PAGO:");

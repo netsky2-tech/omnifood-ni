@@ -51,7 +51,10 @@ void main() {
         expect(find.textContaining('REGIMEN: CUOTA FIJA'), findsOneWidget);
         expect(find.textContaining('COMPROBANTE DE VENTA'), findsOneWidget);
         expect(find.textContaining('NO RECAUDA IVA'), findsOneWidget);
+        // Under Cuota Fija the IVA amount row is omitted entirely (D-3):
+        // no percentage literal and no amount line.
         expect(find.textContaining('IVA (15%):'), findsNothing);
+        expect(find.textContaining('IVA:'), findsNothing);
 
         // Verify monospace typography
         final textWidget = tester.widget<Text>(
@@ -140,7 +143,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.textContaining('COMPROBANTE DE VENTA'), findsOneWidget);
-        expect(find.textContaining('IVA (15%):'), findsNothing);
+        expect(find.textContaining('IVA:'), findsNothing);
 
         // Switch to Régimen General
         await tester.tap(find.text('Régimen Gral.'));
@@ -148,7 +151,8 @@ void main() {
 
         expect(find.textContaining('FACTURA DE VENTA'), findsOneWidget);
         expect(find.textContaining('REGIMEN: GENERAL'), findsOneWidget);
-        expect(find.textContaining('IVA (15%):'), findsOneWidget);
+        expect(find.textContaining('IVA:'), findsOneWidget);
+        expect(find.textContaining('IVA (15%)'), findsNothing);
       },
     );
   });

@@ -1,5 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { SalesReportsService } from './sales-reports.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -17,8 +19,19 @@ describe('SalesReportsService', () => {
   let mockPaymentRepo: {
     find: jest.Mock;
   };
-  let mockUserRepo: {
+  // Issue #556 stage 12d F1: the users read runs through the tenant-bound
+  // transaction manager; the pooled injection stays only as a RUNTIME TEETH
+  // tripwire — any call here means a users read escaped the bound
+  // transaction and would silently return zero rows under FORCE RLS.
+  let pooledUserRepo: {
     find: jest.Mock;
+  };
+  let boundUserRepo: {
+    find: jest.Mock;
+  };
+  let setConfigQueries: Array<{ sql: string; parameters?: unknown[] }>;
+  let mockDataSource: {
+    transaction: jest.Mock;
   };
 
   const tenantId = 'tenant-test-123';
@@ -33,8 +46,41 @@ describe('SalesReportsService', () => {
     mockPaymentRepo = {
       find: jest.fn(),
     };
-    mockUserRepo = {
+    pooledUserRepo = {
       find: jest.fn(),
+    };
+    boundUserRepo = {
+      find: jest.fn(),
+    };
+    setConfigQueries = [];
+    mockDataSource = {
+      transaction: jest.fn(
+        (
+          operation: (manager: {
+            query: jest.Mock;
+            getRepository: jest.Mock;
+          }) => Promise<unknown>,
+        ) =>
+          operation({
+            query: jest.fn((sql: string, parameters?: unknown[]) => {
+              setConfigQueries.push({ sql, parameters });
+              return Promise.resolve([]);
+            }),
+            getRepository: jest.fn().mockImplementation((entity: unknown) => {
+              // Issue #581 WU1: invoice reads also run inside the bound
+              // transaction now; the manager hands back the same repo mock
+              // the pooled token provides, so the behavior assertions below
+              // keep their original target.
+              if (entity === Invoice) return mockInvoiceRepo;
+              if (entity === User) return boundUserRepo;
+              const entityName =
+                typeof entity === 'function' && 'name' in entity
+                  ? (entity as { name: string }).name
+                  : 'unknown entity';
+              throw new Error(`Unexpected repository request: ${entityName}`);
+            }),
+          }),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -54,7 +100,11 @@ describe('SalesReportsService', () => {
         },
         {
           provide: getRepositoryToken(User),
-          useValue: mockUserRepo,
+          useValue: pooledUserRepo,
+        },
+        {
+          provide: DataSource,
+          useValue: mockDataSource,
         },
       ],
     }).compile();
@@ -388,7 +438,7 @@ describe('SalesReportsService', () => {
       ];
 
       mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
-      mockUserRepo.find.mockResolvedValue(mockUsers);
+      boundUserRepo.find.mockResolvedValue(mockUsers);
 
       const result = await service.getCashierPerformance(tenantId);
 
@@ -407,6 +457,199 @@ describe('SalesReportsService', () => {
       expect(carlos?.invoiceCount).toBe(1);
       expect(carlos?.totalSales).toBe(800);
       expect(carlos?.ticketAverage).toBe(800);
+    });
+
+    // Issue #556 stage 12d F1 (adversarial verification): users is
+    // FORCE-RLS-protected, so the pooled `userRepo.find` here silently
+    // returned zero rows and every cashier name degraded to the raw id.
+    // The read must run through the tenant-bound transaction manager.
+    it('binds the users read through the tenant transaction; the pooled repository stays silent', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([
+        {
+          id: 'inv-1',
+          tenant_id: tenantId,
+          userId: 'user-c1',
+          total: 1000,
+          isCanceled: false,
+        },
+      ]);
+      boundUserRepo.find.mockResolvedValue([
+        { id: 'user-c1', name: 'María Cajera', tenant_id: tenantId },
+      ]);
+
+      await service.getCashierPerformance(tenantId);
+
+      // Issue #581 WU1: the invoice read is now also bound, so the method
+      // opens TWO transactions (invoices, users); every binding carries the
+      // JWT tenant before its read.
+      expect(mockDataSource.transaction).toHaveBeenCalledTimes(2);
+      expect(setConfigQueries).toEqual([
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+      ]);
+      // Same query semantics as before: identical WHERE, no ordering change.
+      expect(boundUserRepo.find).toHaveBeenCalledWith({
+        where: { tenant_id: tenantId },
+      });
+      const result = await service.getCashierPerformance(tenantId);
+
+      expect(result.cashiers[0]?.cashierName).toBe('María Cajera');
+
+      // RUNTIME TEETH: the pooled tripwire stayed silent.
+      expect(pooledUserRepo.find).not.toHaveBeenCalled();
+    });
+  });
+
+  // Issue #581 WU1: invoices is a direct:SIUD RLS-forced table — a pooled
+  // find silently returns zero rows under the production NOBYPASSRLS role.
+  // Every invoice read in this service must execute inside the tenant-bound
+  // transaction manager. RUNTIME teeth: each guard uses isolated fakes with
+  // a pooled tripwire; a reverted access lands on it and fails.
+  describe('tenant transaction binding (issue #581 WU1)', () => {
+    const buildBoundService = async (
+      boundInvoiceFind: jest.Mock,
+      boundUserFind?: jest.Mock,
+    ) => {
+      const pooledInvoiceRepo = { find: jest.fn() };
+      const pooledUserRepo = { find: jest.fn() };
+      const boundUserRepo = {
+        find: boundUserFind ?? jest.fn().mockResolvedValue([]),
+      };
+      const setConfigQueries: Array<{
+        sql: string;
+        parameters?: unknown[];
+      }> = [];
+      const dataSource = {
+        transaction: jest.fn((work: (manager: unknown) => Promise<unknown>) =>
+          work({
+            query: jest.fn((sql: string, parameters?: unknown[]) => {
+              setConfigQueries.push({ sql, parameters });
+              return Promise.resolve([]);
+            }),
+            getRepository: jest.fn((entity: unknown) => {
+              if (entity === Invoice) return { find: boundInvoiceFind };
+              if (entity === User) return boundUserRepo;
+              throw new Error('Unexpected repository request');
+            }),
+          }),
+        ),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          SalesReportsService,
+          {
+            provide: getRepositoryToken(Invoice),
+            useValue: pooledInvoiceRepo,
+          },
+          {
+            provide: getRepositoryToken(InvoiceItem),
+            useValue: { find: jest.fn() },
+          },
+          {
+            provide: getRepositoryToken(Payment),
+            useValue: { find: jest.fn() },
+          },
+          { provide: getRepositoryToken(User), useValue: pooledUserRepo },
+          { provide: DataSource, useValue: dataSource },
+        ],
+      }).compile();
+
+      return {
+        service: module.get<SalesReportsService>(SalesReportsService),
+        pooledInvoiceRepo,
+        pooledUserRepo,
+        boundUserRepo,
+        setConfigQueries,
+      };
+    };
+
+    it('binds the getDashboard invoice read through the tenant transaction; the pooled repository stays silent', async () => {
+      const boundInvoiceFind = jest.fn().mockResolvedValue([]);
+      const { service, pooledInvoiceRepo, setConfigQueries } =
+        await buildBoundService(boundInvoiceFind);
+
+      await service.getDashboard(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+      });
+
+      expect(setConfigQueries).toEqual([
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+      ]);
+      // Identical query semantics: same where, relations, and ordering.
+      expect(boundInvoiceFind).toHaveBeenCalledWith({
+        where: {
+          tenant_id: tenantId,
+          isCanceled: false,
+          created_at: expect.anything(),
+        },
+        relations: ['items', 'payments'],
+        order: { created_at: 'DESC' },
+      });
+      expect(pooledInvoiceRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('binds the getHourlySales invoice read through the tenant transaction; the pooled repository stays silent', async () => {
+      const boundInvoiceFind = jest.fn().mockResolvedValue([]);
+      const { service, pooledInvoiceRepo, setConfigQueries } =
+        await buildBoundService(boundInvoiceFind);
+
+      await service.getHourlySales(tenantId, { date: '2026-08-26' });
+
+      expect(setConfigQueries).toEqual([
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+      ]);
+      expect(boundInvoiceFind).toHaveBeenCalledWith({
+        where: {
+          tenant_id: tenantId,
+          isCanceled: false,
+          created_at: expect.anything(),
+        },
+        order: { created_at: 'ASC' },
+      });
+      expect(pooledInvoiceRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('binds the getTopProducts invoice read through the tenant transaction; the pooled repository stays silent', async () => {
+      const boundInvoiceFind = jest.fn().mockResolvedValue([]);
+      const { service, pooledInvoiceRepo, setConfigQueries } =
+        await buildBoundService(boundInvoiceFind);
+
+      await service.getTopProducts(tenantId, { limit: 5 });
+
+      expect(setConfigQueries).toEqual([
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+      ]);
+      expect(boundInvoiceFind).toHaveBeenCalledWith({
+        where: { tenant_id: tenantId, isCanceled: false },
+        relations: ['items'],
+      });
+      expect(pooledInvoiceRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('binds both getCashierPerformance reads (invoices + users) through the tenant transaction; the pooled repositories stay silent', async () => {
+      const boundInvoiceFind = jest.fn().mockResolvedValue([]);
+      const boundUserFind = jest.fn().mockResolvedValue([]);
+      const { service, pooledInvoiceRepo, pooledUserRepo, setConfigQueries } =
+        await buildBoundService(boundInvoiceFind, boundUserFind);
+
+      await service.getCashierPerformance(tenantId);
+
+      // Two logical read units (invoices, users), each in its own bound
+      // transaction; every binding carries the JWT tenant as a parameter.
+      expect(setConfigQueries).toEqual([
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+      ]);
+      expect(boundInvoiceFind).toHaveBeenCalledWith({
+        where: { tenant_id: tenantId, isCanceled: false },
+      });
+      expect(boundUserFind).toHaveBeenCalledWith({
+        where: { tenant_id: tenantId },
+      });
+      expect(pooledInvoiceRepo.find).not.toHaveBeenCalled();
+      expect(pooledUserRepo.find).not.toHaveBeenCalled();
     });
   });
 });

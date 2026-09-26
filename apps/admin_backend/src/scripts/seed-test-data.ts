@@ -10,6 +10,8 @@ import {
   NEGATIVE_STOCK_POLICY,
 } from '../modules/inventory/entities/insumo.entity';
 import { UomConversion } from '../modules/inventory/entities/uom-conversion.entity';
+import { runInTenantTransaction } from '../core/database/tenant-transaction';
+import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -367,13 +369,16 @@ async function seed() {
   const dataSource = app.get(DataSource);
 
   try {
-    await dataSource.transaction(async (manager) => {
+    await runInTenantTransaction(dataSource, TENANT_ID, async (manager) => {
       // 1. Tenant
       let tenant = await manager.findOne(Tenant, { where: { id: TENANT_ID } });
       if (!tenant) {
         tenant = manager.create(Tenant, {
           id: TENANT_ID,
           name: TENANT_NAME,
+          // Issue #556 slice 11: the stable provisioning slug, derived with
+          // the canonical normalization rule.
+          slug: normalizeTenantSlug(TENANT_NAME),
           is_active: true,
         });
         await manager.save(tenant);
@@ -381,6 +386,12 @@ async function seed() {
       } else {
         console.log(`ℹ️  Tenant already exists: ${TENANT_ID}`);
       }
+
+      // The wrapper already bound the transaction-local tenant context
+      // (SET LOCAL) before this callback ran, so every write below —
+      // including FORCE RLS parent-owned (security_profiles) and direct
+      // (products, insumos, uom_conversions, inventory_kardex) tables — is
+      // tenant-authorized. `tenants` itself is a public (non-RLS) table.
 
       // 2. Users (IDs auto-generated as UUIDs; POS gets them from login response)
       const users = [

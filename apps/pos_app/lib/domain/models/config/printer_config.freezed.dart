@@ -39,6 +39,14 @@ mixin _$PrinterConfig {
   /// Never written by [PrinterConfigService.savePrinterConfig].
   String? get fiscalRuc => throw _privateConstructorUsedError;
 
+  /// D-17 (P0): fiscal authorization number printed at the bottom-right of
+  /// the invoice (DT 09-2007 QUINTO). Read from local_configs
+  /// ['dgi_authorization_code']; written by the operator from the business
+  /// profile, like [fiscalRuc]. Never written by
+  /// [PrinterConfigService.savePrinterConfig]. Null when unconfigured —
+  /// absence on paper is the honest state, never a blank-looking value.
+  String? get dgiAuthorizationCode => throw _privateConstructorUsedError;
+
   /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
   String? get headerRuc => throw _privateConstructorUsedError;
   String? get headerAddress => throw _privateConstructorUsedError;
@@ -73,6 +81,7 @@ abstract class $PrinterConfigCopyWith<$Res> {
       String headerBusinessName,
       String? headerLegalName,
       String? fiscalRuc,
+      String? dgiAuthorizationCode,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
@@ -107,6 +116,7 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
     Object? headerBusinessName = null,
     Object? headerLegalName = freezed,
     Object? fiscalRuc = freezed,
+    Object? dgiAuthorizationCode = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
@@ -160,6 +170,10 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
       fiscalRuc: freezed == fiscalRuc
           ? _value.fiscalRuc
           : fiscalRuc // ignore: cast_nullable_to_non_nullable
+              as String?,
+      dgiAuthorizationCode: freezed == dgiAuthorizationCode
+          ? _value.dgiAuthorizationCode
+          : dgiAuthorizationCode // ignore: cast_nullable_to_non_nullable
               as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
@@ -217,6 +231,7 @@ abstract class _$$PrinterConfigImplCopyWith<$Res>
       String headerBusinessName,
       String? headerLegalName,
       String? fiscalRuc,
+      String? dgiAuthorizationCode,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
@@ -249,6 +264,7 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
     Object? headerBusinessName = null,
     Object? headerLegalName = freezed,
     Object? fiscalRuc = freezed,
+    Object? dgiAuthorizationCode = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
@@ -303,6 +319,10 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
           ? _value.fiscalRuc
           : fiscalRuc // ignore: cast_nullable_to_non_nullable
               as String?,
+      dgiAuthorizationCode: freezed == dgiAuthorizationCode
+          ? _value.dgiAuthorizationCode
+          : dgiAuthorizationCode // ignore: cast_nullable_to_non_nullable
+              as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
           : headerRuc // ignore: cast_nullable_to_non_nullable
@@ -354,6 +374,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
       this.headerBusinessName = 'OMNIFOOD NI',
       this.headerLegalName,
       this.fiscalRuc,
+      this.dgiAuthorizationCode,
       this.headerRuc,
       this.headerAddress,
       this.headerPhone,
@@ -404,6 +425,15 @@ class _$PrinterConfigImpl implements _PrinterConfig {
   @override
   final String? fiscalRuc;
 
+  /// D-17 (P0): fiscal authorization number printed at the bottom-right of
+  /// the invoice (DT 09-2007 QUINTO). Read from local_configs
+  /// ['dgi_authorization_code']; written by the operator from the business
+  /// profile, like [fiscalRuc]. Never written by
+  /// [PrinterConfigService.savePrinterConfig]. Null when unconfigured —
+  /// absence on paper is the honest state, never a blank-looking value.
+  @override
+  final String? dgiAuthorizationCode;
+
   /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
   @override
   final String? headerRuc;
@@ -425,7 +455,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
 
   @override
   String toString() {
-    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerLegalName: $headerLegalName, fiscalRuc: $fiscalRuc, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, taxRegime: $taxRegime, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
+    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerLegalName: $headerLegalName, fiscalRuc: $fiscalRuc, dgiAuthorizationCode: $dgiAuthorizationCode, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, taxRegime: $taxRegime, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
   }
 
   @override
@@ -454,6 +484,8 @@ class _$PrinterConfigImpl implements _PrinterConfig {
                 other.headerLegalName == headerLegalName) &&
             (identical(other.fiscalRuc, fiscalRuc) ||
                 other.fiscalRuc == fiscalRuc) &&
+            (identical(other.dgiAuthorizationCode, dgiAuthorizationCode) ||
+                other.dgiAuthorizationCode == dgiAuthorizationCode) &&
             (identical(other.headerRuc, headerRuc) ||
                 other.headerRuc == headerRuc) &&
             (identical(other.headerAddress, headerAddress) ||
@@ -487,6 +519,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
         headerBusinessName,
         headerLegalName,
         fiscalRuc,
+        dgiAuthorizationCode,
         headerRuc,
         headerAddress,
         headerPhone,
@@ -524,6 +557,7 @@ abstract class _PrinterConfig implements PrinterConfig {
       final String headerBusinessName,
       final String? headerLegalName,
       final String? fiscalRuc,
+      final String? dgiAuthorizationCode,
       final String? headerRuc,
       final String? headerAddress,
       final String? headerPhone,
@@ -565,6 +599,15 @@ abstract class _PrinterConfig implements PrinterConfig {
   /// the sale and reprint paths print; [headerRuc] must never shadow it.
   /// Never written by [PrinterConfigService.savePrinterConfig].
   String? get fiscalRuc;
+  @override
+
+  /// D-17 (P0): fiscal authorization number printed at the bottom-right of
+  /// the invoice (DT 09-2007 QUINTO). Read from local_configs
+  /// ['dgi_authorization_code']; written by the operator from the business
+  /// profile, like [fiscalRuc]. Never written by
+  /// [PrinterConfigService.savePrinterConfig]. Null when unconfigured —
+  /// absence on paper is the honest state, never a blank-looking value.
+  String? get dgiAuthorizationCode;
   @override
 
   /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { LoyaltyProfitAwareService } from './loyalty-profit-aware.service';
 import { TypeOrmInventoryCostQueryAdapter } from './inventory-cost-query.adapter';
 import {
@@ -19,6 +19,37 @@ import {
 import { Product } from '../../inventory/entities/product.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { Customer } from '../../customers/entities/customer.entity';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
+
+/**
+ * Issue #512 slice 4: passthrough spy over `dataSource.transaction` that
+ * records the tenant-context binding SQL issued on each unit manager, without
+ * changing any observable behavior.
+ */
+function captureTenantBinding(source: DataSource): unknown[][] {
+  const actual = source.transaction.bind(source);
+  const bindingCalls: unknown[][] = [];
+  jest.spyOn(source, 'transaction').mockImplementation(((
+    ...args: unknown[]
+  ) => {
+    const cb = args[args.length - 1] as (
+      manager: EntityManager,
+    ) => Promise<unknown>;
+    return actual(async (manager: EntityManager) => {
+      const rawQuery = manager.query.bind(manager);
+      jest
+        .spyOn(manager, 'query')
+        .mockImplementation(async (sql: string, params?: unknown[]) => {
+          if (sql === TENANT_CONTEXT_SET_CONFIG_SQL) {
+            bindingCalls.push(params);
+          }
+          return rawQuery(sql, params);
+        });
+      return cb(manager);
+    });
+  }) as never);
+  return bindingCalls;
+}
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -140,6 +171,7 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
       dataSource.getRepository(LoyaltyProgram),
       dataSource.getRepository(CustomerPointTransaction),
       costAdapter,
+      dataSource,
     );
   });
 
@@ -429,6 +461,48 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
       expect(metrics.effectiveIncentiveRatePct.reason).toBe(
         'NO_QUALIFIED_SALES',
       );
+    });
+  });
+
+  describe('Tenant binding (issue #512 slice 4)', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('binds the getRewardProfitAwareMetrics access through the tenant transaction (issue #512 slice 4)', async () => {
+      const program = await dataSource.getRepository(LoyaltyProgram).save({
+        tenant_id: tenant1Id,
+        name: 'Binding Guard Program',
+        program_type: LoyaltyProgramType.SPEND_POINTS,
+        status: LoyaltyProgramStatus.ACTIVE,
+      });
+      const reward = await dataSource.getRepository(RewardDefinition).save({
+        tenant_id: tenant1Id,
+        loyalty_program_id: program.id,
+        name: 'Binding Guard Reward',
+        reward_type: RewardType.DISCOUNT_AMOUNT,
+        cost_units: 10,
+        benefit_config: { amountNio: 5 },
+        status: RewardStatus.ACTIVE,
+      });
+
+      const bindingCalls = captureTenantBinding(dataSource);
+      const pooledRewardRepo = dataSource.getRepository(RewardDefinition);
+      const pooledFindOneSpy = jest.spyOn(pooledRewardRepo, 'findOne');
+
+      const metrics = await profitAwareService.getRewardProfitAwareMetrics(
+        tenant1Id,
+        reward.id,
+      );
+
+      expect(metrics.rewardId).toBe(reward.id);
+      // A tenant transaction must be opened for the reward/program reads...
+      expect(dataSource.transaction).toHaveBeenCalled();
+      // ...with the transaction-local binding SQL issued on the unit manager
+      // with the trimmed tenant id before any protected access.
+      expect(bindingCalls).toContainEqual([tenant1Id]);
+      // The pooled repository property must not be used for the reads.
+      expect(pooledFindOneSpy).not.toHaveBeenCalled();
     });
   });
 });

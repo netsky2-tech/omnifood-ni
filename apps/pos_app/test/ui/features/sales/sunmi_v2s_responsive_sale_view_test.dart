@@ -149,7 +149,7 @@ void main() {
 
       // Verify bottom sheet appears with cart summary
       expect(find.text('CARRITO'), findsOneWidget);
-      expect(find.text('IVA (15%)'), findsOneWidget);
+      expect(find.text('IVA'), findsOneWidget);
       expect(find.text('TOTAL'), findsOneWidget);
       expect(find.widgetWithText(ElevatedButton, 'COBRAR'), findsOneWidget);
     });

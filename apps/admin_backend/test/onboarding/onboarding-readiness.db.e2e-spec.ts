@@ -68,6 +68,7 @@ import { ChangeLogService } from '../../src/modules/audit/change-log.service';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -180,12 +181,14 @@ async function withReadinessIsolatedSchema(
       tenantRepo.create({
         id: tenantAId,
         name: 'Café El Buen Sabor',
+        slug: normalizeTenantSlug('Café El Buen Sabor'),
         ruc: 'J0310000001234',
         is_active: true,
       }),
       tenantRepo.create({
         id: tenantBId,
         name: 'Pupusería Doña María',
+        slug: normalizeTenantSlug('Pupusería Doña María'),
         ruc: 'J0310000009999',
         is_active: true,
       }),

@@ -1,6 +1,8 @@
 import { UnauthorizedException } from '@nestjs/common';
+import type { EntityManager } from 'typeorm';
 import { User, UserRole } from '../entities/user.entity';
 import { CurrentUserAuthorizationService } from './current-user-authorization.service';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 
 const token = {
   sub: 'user-1',
@@ -25,12 +27,34 @@ const currentUser = (overrides: Partial<User> = {}) =>
   });
 
 describe('CurrentUserAuthorizationService', () => {
+  // Issue #556 stage 12d: the authoritative user read is a `users` access
+  // under FORCE RLS, so it resolves through the tenant-bound transaction
+  // manager. The bound manager's User repository is the ONLY read path;
+  // there is no pooled fallback to trip over.
   const repository = { findOne: jest.fn() };
-  const service = new CurrentUserAuthorizationService(repository);
+  const setConfigQueries: Array<{ sql: string; parameters?: unknown[] }> = [];
+  const manager = {
+    query: jest.fn((sql: string, parameters?: unknown[]) => {
+      setConfigQueries.push({ sql, parameters });
+      return Promise.resolve([]);
+    }),
+    getRepository: jest.fn<unknown, [unknown]>().mockReturnValue(repository),
+  } as unknown as EntityManager;
+  const dataSource = {
+    transaction: jest.fn(
+      (operation: (transactionManager: EntityManager) => Promise<unknown>) =>
+        operation(manager),
+    ),
+  };
+  const service = new CurrentUserAuthorizationService(dataSource as never);
 
-  beforeEach(() => repository.findOne.mockReset());
+  beforeEach(() => {
+    repository.findOne.mockReset();
+    (manager.getRepository as unknown as jest.Mock).mockClear();
+    setConfigQueries.length = 0;
+  });
 
-  it('replaces mutable claims from the current same-tenant user', async () => {
+  it('binds the tenant context before the authoritative read and replaces mutable claims from the current same-tenant user', async () => {
     repository.findOne.mockResolvedValue(currentUser());
 
     await expect(service.authorize(token)).resolves.toEqual({
@@ -40,6 +64,12 @@ describe('CurrentUserAuthorizationService', () => {
       is_active: true,
       security_version: 1,
     });
+    // ONE transaction binding the JWT tenant before the user read.
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    expect(setConfigQueries).toEqual([
+      { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: ['tenant-1'] },
+    ]);
+    expect(manager.getRepository).toHaveBeenCalledWith(User);
     expect(repository.findOne).toHaveBeenCalledWith({
       where: { id: 'user-1', tenant_id: 'tenant-1' },
       select: [

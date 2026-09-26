@@ -1,6 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import {
   RewardDefinition,
   RewardType,
@@ -72,6 +73,10 @@ export class LoyaltyProfitAwareService {
     private readonly txRepo: Repository<CustomerPointTransaction>,
     @Inject(INVENTORY_COST_QUERY_PORT)
     private readonly costQueryPort: InventoryCostQueryPort,
+    // Issue #512 slice 4: the tenant-bound transaction manager is the only
+    // access path to the customers/loyalty tables; the pooled repositories
+    // above stay declared for Nest DI compatibility only.
+    private readonly dataSource: DataSource,
   ) {}
 
   async getRewardProfitAwareMetrics(
@@ -79,19 +84,28 @@ export class LoyaltyProfitAwareService {
     rewardId: string,
     asOfInput?: Date | string,
   ): Promise<RewardProfitAwareView> {
-    const reward = await this.rewardRepo.findOne({
-      where: { id: rewardId, tenant_id: tenantId },
-    });
-    if (!reward) {
-      throw new NotFoundException('Reward not found');
-    }
+    // Unit A: reward + program reads (issue #512 slice 4).
+    const { reward, program } = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const reward = await manager.getRepository(RewardDefinition).findOne({
+          where: { id: rewardId, tenant_id: tenantId },
+        });
+        if (!reward) {
+          throw new NotFoundException('Reward not found');
+        }
 
-    const program = await this.programRepo.findOne({
-      where: { id: reward.loyalty_program_id, tenant_id: tenantId },
-    });
-    if (!program) {
-      throw new NotFoundException('Loyalty program not found');
-    }
+        const program = await manager.getRepository(LoyaltyProgram).findOne({
+          where: { id: reward.loyalty_program_id, tenant_id: tenantId },
+        });
+        if (!program) {
+          throw new NotFoundException('Loyalty program not found');
+        }
+
+        return { reward, program };
+      },
+    );
 
     const asOfUtc = asOfInput ? new Date(asOfInput) : new Date();
     const window = computeProfitAwareWindow(asOfUtc);
@@ -132,13 +146,18 @@ export class LoyaltyProfitAwareService {
       asOfUtc,
     });
 
-    // 2. Query program transactions for qualified sales
-    const programTxs = await this.txRepo.find({
-      where: {
-        tenant_id: tenantId,
-        loyalty_program_id: program.id,
-      },
-    });
+    // 2. Query program transactions for qualified sales (unit B)
+    const programTxs = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(CustomerPointTransaction).find({
+          where: {
+            tenant_id: tenantId,
+            loyalty_program_id: program.id,
+          },
+        }),
+    );
 
     // Identify reversals that occurred on or before asOfUtc
     const reversedTxIds = new Set<string>();
@@ -183,13 +202,18 @@ export class LoyaltyProfitAwareService {
       asOfUtc,
     );
 
-    // 3. Query reward transactions for incentive cost
-    const rewardTxs = await this.txRepo.find({
-      where: {
-        tenant_id: tenantId,
-        reward_id: reward.id,
-      },
-    });
+    // 3. Query reward transactions for incentive cost (unit C)
+    const rewardTxs = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(CustomerPointTransaction).find({
+          where: {
+            tenant_id: tenantId,
+            reward_id: reward.id,
+          },
+        }),
+    );
 
     const redeemRecords: RedeemTransactionRecord[] = [];
     for (const tx of rewardTxs) {

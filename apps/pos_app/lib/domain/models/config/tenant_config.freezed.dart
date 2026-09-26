@@ -23,6 +23,7 @@ mixin _$TenantConfig {
   TenantOperationMode get operationMode => throw _privateConstructorUsedError;
   String get tenantId => throw _privateConstructorUsedError;
   String get tenantName => throw _privateConstructorUsedError;
+  String get tenantSlug => throw _privateConstructorUsedError;
   bool get buzzerPagerRequired => throw _privateConstructorUsedError;
   bool get tableServiceEnabled => throw _privateConstructorUsedError;
   bool get autoPrintKitchenTicket => throw _privateConstructorUsedError;
@@ -44,6 +45,7 @@ abstract class $TenantConfigCopyWith<$Res> {
       {TenantOperationMode operationMode,
       String tenantId,
       String tenantName,
+      String tenantSlug,
       bool buzzerPagerRequired,
       bool tableServiceEnabled,
       bool autoPrintKitchenTicket,
@@ -66,6 +68,7 @@ class _$TenantConfigCopyWithImpl<$Res, $Val extends TenantConfig>
     Object? operationMode = null,
     Object? tenantId = null,
     Object? tenantName = null,
+    Object? tenantSlug = null,
     Object? buzzerPagerRequired = null,
     Object? tableServiceEnabled = null,
     Object? autoPrintKitchenTicket = null,
@@ -83,6 +86,10 @@ class _$TenantConfigCopyWithImpl<$Res, $Val extends TenantConfig>
       tenantName: null == tenantName
           ? _value.tenantName
           : tenantName // ignore: cast_nullable_to_non_nullable
+              as String,
+      tenantSlug: null == tenantSlug
+          ? _value.tenantSlug
+          : tenantSlug // ignore: cast_nullable_to_non_nullable
               as String,
       buzzerPagerRequired: null == buzzerPagerRequired
           ? _value.buzzerPagerRequired
@@ -116,6 +123,7 @@ abstract class _$$TenantConfigImplCopyWith<$Res>
       {TenantOperationMode operationMode,
       String tenantId,
       String tenantName,
+      String tenantSlug,
       bool buzzerPagerRequired,
       bool tableServiceEnabled,
       bool autoPrintKitchenTicket,
@@ -136,6 +144,7 @@ class __$$TenantConfigImplCopyWithImpl<$Res>
     Object? operationMode = null,
     Object? tenantId = null,
     Object? tenantName = null,
+    Object? tenantSlug = null,
     Object? buzzerPagerRequired = null,
     Object? tableServiceEnabled = null,
     Object? autoPrintKitchenTicket = null,
@@ -153,6 +162,10 @@ class __$$TenantConfigImplCopyWithImpl<$Res>
       tenantName: null == tenantName
           ? _value.tenantName
           : tenantName // ignore: cast_nullable_to_non_nullable
+              as String,
+      tenantSlug: null == tenantSlug
+          ? _value.tenantSlug
+          : tenantSlug // ignore: cast_nullable_to_non_nullable
               as String,
       buzzerPagerRequired: null == buzzerPagerRequired
           ? _value.buzzerPagerRequired
@@ -181,6 +194,7 @@ class _$TenantConfigImpl extends _TenantConfig {
       {this.operationMode = TenantOperationMode.foodparkQsr,
       this.tenantId = '',
       this.tenantName = '',
+      this.tenantSlug = '',
       this.buzzerPagerRequired = false,
       this.tableServiceEnabled = false,
       this.autoPrintKitchenTicket = false,
@@ -202,6 +216,9 @@ class _$TenantConfigImpl extends _TenantConfig {
   final String tenantName;
   @override
   @JsonKey()
+  final String tenantSlug;
+  @override
+  @JsonKey()
   final bool buzzerPagerRequired;
   @override
   @JsonKey()
@@ -220,7 +237,7 @@ class _$TenantConfigImpl extends _TenantConfig {
 
   @override
   String toString() {
-    return 'TenantConfig(operationMode: $operationMode, tenantId: $tenantId, tenantName: $tenantName, buzzerPagerRequired: $buzzerPagerRequired, tableServiceEnabled: $tableServiceEnabled, autoPrintKitchenTicket: $autoPrintKitchenTicket, customSettings: $customSettings)';
+    return 'TenantConfig(operationMode: $operationMode, tenantId: $tenantId, tenantName: $tenantName, tenantSlug: $tenantSlug, buzzerPagerRequired: $buzzerPagerRequired, tableServiceEnabled: $tableServiceEnabled, autoPrintKitchenTicket: $autoPrintKitchenTicket, customSettings: $customSettings)';
   }
 
   @override
@@ -234,6 +251,8 @@ class _$TenantConfigImpl extends _TenantConfig {
                 other.tenantId == tenantId) &&
             (identical(other.tenantName, tenantName) ||
                 other.tenantName == tenantName) &&
+            (identical(other.tenantSlug, tenantSlug) ||
+                other.tenantSlug == tenantSlug) &&
             (identical(other.buzzerPagerRequired, buzzerPagerRequired) ||
                 other.buzzerPagerRequired == buzzerPagerRequired) &&
             (identical(other.tableServiceEnabled, tableServiceEnabled) ||
@@ -251,6 +270,7 @@ class _$TenantConfigImpl extends _TenantConfig {
       operationMode,
       tenantId,
       tenantName,
+      tenantSlug,
       buzzerPagerRequired,
       tableServiceEnabled,
       autoPrintKitchenTicket,
@@ -275,6 +295,7 @@ abstract class _TenantConfig extends TenantConfig {
       {final TenantOperationMode operationMode,
       final String tenantId,
       final String tenantName,
+      final String tenantSlug,
       final bool buzzerPagerRequired,
       final bool tableServiceEnabled,
       final bool autoPrintKitchenTicket,
@@ -290,6 +311,8 @@ abstract class _TenantConfig extends TenantConfig {
   String get tenantId;
   @override
   String get tenantName;
+  @override
+  String get tenantSlug;
   @override
   bool get buzzerPagerRequired;
   @override

@@ -77,7 +77,8 @@ void main() {
 
   group('CashShiftView & Dialogs Widgets', () {
     testWidgets('renders empty state when no shift is active', (tester) async {
-      when(() => mockSessionDao.getActiveSession()).thenAnswer((_) async => null);
+      when(() => mockSessionDao.getActiveSessionForUserAndTerminal(
+        'user-cajero-1', 'term-main')).thenAnswer((_) async => null);
 
       await viewModel.init();
       await tester.pumpWidget(buildApp(const CashShiftView()));
@@ -115,8 +116,8 @@ void main() {
         syncStatus: 'pending',
       );
 
-      when(() => mockSessionDao.getActiveSession())
-          .thenAnswer((_) async => activeSession);
+      when(() => mockSessionDao.getActiveSessionForUserAndTerminal(
+          'user-cajero-1', 'term-main')).thenAnswer((_) async => activeSession);
       when(() => mockMovementDao.getMovementsByShiftId('shift-1'))
           .thenAnswer((_) async => [movement]);
 
@@ -139,7 +140,8 @@ void main() {
 
     testWidgets('OpenShiftDialog allows entering float and opening shift',
         (tester) async {
-      when(() => mockSessionDao.getActiveSession()).thenAnswer((_) async => null);
+      when(() => mockSessionDao.getActiveSessionForUserAndTerminal(
+        'user-cajero-1', 'term-main')).thenAnswer((_) async => null);
       when(() => mockSessionDao.insertSession(any())).thenAnswer((_) async {});
 
       await viewModel.init();
@@ -183,8 +185,8 @@ void main() {
 
       final recordedMovements = <CashMovementEntity>[];
 
-      when(() => mockSessionDao.getActiveSession())
-          .thenAnswer((_) async => activeSession);
+      when(() => mockSessionDao.getActiveSessionForUserAndTerminal(
+          'user-cajero-1', 'term-main')).thenAnswer((_) async => activeSession);
       when(() => mockMovementDao.getMovementsByShiftId('shift-1'))
           .thenAnswer((_) async => recordedMovements);
       when(() => mockMovementDao.insertMovement(any())).thenAnswer((inv) async {
@@ -232,8 +234,8 @@ void main() {
         syncStatus: 'pending',
       );
 
-      when(() => mockSessionDao.getActiveSession())
-          .thenAnswer((_) async => activeSession);
+      when(() => mockSessionDao.getActiveSessionForUserAndTerminal(
+          'user-cajero-1', 'term-main')).thenAnswer((_) async => activeSession);
       when(() => mockMovementDao.getMovementsByShiftId('shift-1'))
           .thenAnswer((_) async => []);
       when(() => mockSessionDao.countClosedSessions()).thenAnswer((_) async => 0);

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { UserService } from './user.service';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { User, UserRole } from '../entities/user.entity';
 import {
   ALL_APP_PERMISSIONS,
@@ -22,6 +23,16 @@ describe('UserService', () => {
   };
 
   const auditRepository = {
+    findOne: jest.fn(),
+    save: jest.fn(),
+  };
+
+  // Issue #581: logAction resolves the audit repository exclusively through
+  // the bound transaction manager, so the pooled DI token is a tripwire:
+  // any call here means an audit write escaped the tenant-bound transaction
+  // and would break when `audit_logs` is promoted to direct:SIUD RLS
+  // (#512 T3 slice 7).
+  const pooledAuditRepository = {
     findOne: jest.fn(),
     save: jest.fn(),
   };
@@ -71,7 +82,10 @@ describe('UserService', () => {
       providers: [
         UserService,
         { provide: getRepositoryToken(User), useValue: userRepository },
-        { provide: getRepositoryToken(AuditLog), useValue: auditRepository },
+        {
+          provide: getRepositoryToken(AuditLog),
+          useValue: pooledAuditRepository,
+        },
         {
           provide: getRepositoryToken(SecurityProfile),
           useValue: securityProfileRepository,
@@ -666,14 +680,100 @@ describe('UserService', () => {
       });
 
       await service.getUserEffectivePermissions('user-1', 'tenant-1');
-      await service.findById('user-1');
+      await service.findById('user-1', 'tenant-1');
 
-      expect(dataSource.transaction).not.toHaveBeenCalled();
-      expect(bindCount()).toBe(0);
+      // Issue #512 T3 slice 9 rework + issue #556 stage 12d: the
+      // effective-permissions read and the findById read each run in their
+      // own bound transaction — but both stay READS: two transactions, two
+      // binds, and never a publication mark.
+      expect(dataSource.transaction).toHaveBeenCalledTimes(2);
+      expect(bindCount()).toBe(2);
       expect(markCount()).toBe(0);
     });
 
-    it('findByTenant requests is_active along with other core fields', async () => {
+    it('binds the effective-permissions read through the tenant transaction; pooled repos stay silent (issue #512 T3 slice 9)', async () => {
+      // Pooled tripwires: any call here means a read escaped the bound
+      // transaction and would hit RLS on a connection with no tenant bound.
+      const pooledUser = { findOne: jest.fn() };
+      const pooledProfile = { findOne: jest.fn() };
+
+      const boundUser = {
+        findOne: jest.fn().mockResolvedValue({
+          id: 'user-cashier',
+          role: UserRole.CASHIER,
+          tenant_id: 'tenant-1',
+          is_active: true,
+        }),
+      };
+      const boundProfile = {
+        findOne: jest.fn().mockResolvedValue({
+          user_id: 'user-cashier',
+          custom_permissions: [],
+        }),
+      };
+
+      const setConfigCalls: Array<[string, string[]]> = [];
+      const boundManager = {
+        query: jest.fn(async (sql: string, params: string[]) => {
+          setConfigCalls.push([sql, params]);
+          return [];
+        }),
+        getRepository: jest.fn((entity: unknown) =>
+          entity === User
+            ? boundUser
+            : entity === SecurityProfile
+              ? boundProfile
+              : null,
+        ),
+      };
+      const boundDataSource = {
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            work(boundManager),
+        ),
+      };
+
+      const boundModule: TestingModule = await Test.createTestingModule({
+        providers: [
+          UserService,
+          { provide: getRepositoryToken(User), useValue: pooledUser },
+          {
+            provide: getRepositoryToken(AuditLog),
+            useValue: { findOne: jest.fn(), save: jest.fn() },
+          },
+          {
+            provide: getRepositoryToken(SecurityProfile),
+            useValue: pooledProfile,
+          },
+          { provide: DataSource, useValue: boundDataSource },
+          { provide: AuthService, useValue: authService },
+        ],
+      }).compile();
+      const bound = boundModule.get<UserService>(UserService);
+
+      const effective = await bound.getUserEffectivePermissions(
+        'user-cashier',
+        'tenant-1',
+      );
+      expect(effective.user_id).toBe('user-cashier');
+
+      // ONE transaction, binding the tenant context exactly once with the
+      // production set_config SQL.
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(setConfigCalls).toHaveLength(1);
+      expect(setConfigCalls[0][0]).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
+      expect(setConfigCalls[0][1]).toEqual(['tenant-1']);
+
+      // Both reads resolved through the bound manager's repositories.
+      expect(boundUser.findOne).toHaveBeenCalledTimes(1);
+      expect(boundProfile.findOne).toHaveBeenCalledTimes(1);
+
+      // RUNTIME TEETH: the pooled tripwires stayed silent.
+      expect(pooledUser.findOne).not.toHaveBeenCalled();
+      expect(pooledProfile.findOne).not.toHaveBeenCalled();
+    });
+
+    it('findByTenant reads through the bound transaction and requests is_active along with other core fields', async () => {
       const mockUsers = [
         {
           id: 'user-1',
@@ -692,6 +792,11 @@ describe('UserService', () => {
         where: { tenant_id: 'tenant-1', is_active: true },
         select: ['id', 'email', 'name', 'role', 'created_at', 'is_active'],
       });
+      // Issue #556 stage 12d: the staff list read is bound under FORCE RLS.
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-1'],
+      );
     });
 
     it('logAction chains sequence_no and entry_hash from latest active log', async () => {
@@ -702,14 +807,23 @@ describe('UserService', () => {
         role: UserRole.CASHIER,
         security_version: 1,
       });
-      userRepository.save.mockImplementation((u: unknown) => Promise.resolve(u));
+      userRepository.save.mockImplementation((u: unknown) =>
+        Promise.resolve(u),
+      );
       auditRepository.findOne.mockResolvedValue({
         sequence_no: 5,
         entry_hash: 'hash-of-entry-5',
       });
-      auditRepository.save.mockImplementation((log: unknown) => Promise.resolve(log));
+      auditRepository.save.mockImplementation((log: unknown) =>
+        Promise.resolve(log),
+      );
 
-      await service.update('user-1', { name: 'New Name' }, 'tenant-1', 'admin-1');
+      await service.update(
+        'user-1',
+        { name: 'New Name' },
+        'tenant-1',
+        'admin-1',
+      );
 
       expect(auditRepository.findOne).toHaveBeenCalledWith({
         where: {
@@ -730,6 +844,45 @@ describe('UserService', () => {
           forensic_status: 'ACTIVE',
         }),
       );
+    });
+
+    it('writes the audit log through the bound manager and keeps the pooled repo silent (issue #581)', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        tenant_id: 'tenant-1',
+        name: 'Old Name',
+        role: UserRole.CASHIER,
+        security_version: 1,
+      });
+      userRepository.save.mockImplementation((u: unknown) =>
+        Promise.resolve(u),
+      );
+      auditRepository.findOne.mockResolvedValue(null);
+      auditRepository.save.mockResolvedValue({ id: 'audit-1' });
+
+      await service.update(
+        'user-1',
+        { name: 'New Name' },
+        'tenant-1',
+        'admin-1',
+      );
+
+      // The mutation transaction bound the tenant context exactly once.
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-1'],
+      );
+      // The audit write resolved through the bound manager's repository.
+      expect(auditRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'USER_UPDATED',
+          tenant_id: 'tenant-1',
+        }),
+      );
+      // RUNTIME TEETH: the pooled audit repository stayed silent.
+      expect(pooledAuditRepository.findOne).not.toHaveBeenCalled();
+      expect(pooledAuditRepository.save).not.toHaveBeenCalled();
     });
   });
 });

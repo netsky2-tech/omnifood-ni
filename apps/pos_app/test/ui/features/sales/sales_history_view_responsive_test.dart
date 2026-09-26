@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sales_history_view_model.dart';
@@ -126,7 +128,8 @@ void main() {
 
       expect(find.text('Factura: 001-001-01-00000001'), findsOneWidget);
       expect(find.text('Café Espresso'), findsOneWidget);
-      expect(find.text('REALIZAR DEVOLUCIÓN'), findsOneWidget);
+      // D-14/#553: no credit-note affordance in the POS.
+      expect(find.text('REALIZAR DEVOLUCIÓN'), findsNothing);
     });
 
     testWidgets('renders single column and navigates to detail page on Sunmi V2s handheld (360x720dp)', (tester) async {
@@ -148,13 +151,56 @@ void main() {
 
       expect(find.text('Factura: 001-001-01-00000001'), findsOneWidget);
       expect(find.text('Café Espresso'), findsOneWidget);
-      expect(find.text('REALIZAR DEVOLUCIÓN'), findsOneWidget);
+      // D-14/#553: no credit-note affordance in the POS.
+      expect(find.text('REALIZAR DEVOLUCIÓN'), findsNothing);
 
       // Back navigation
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
 
       expect(find.text('Historial de Ventas'), findsOneWidget);
+    });
+  });
+
+  group('SalesHistoryView regime-aware IVA row (D-3)', () {
+    testWidgets('omits the IVA row for CUOTA_FIJA tenants', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      when(mockSaleViewModel.companyTaxRegime).thenReturn(TaxRegime.cuotaFija);
+      when(mockSaleViewModel.canReprint).thenReturn(true);
+
+      final vm = _FakeSalesHistoryViewModel(sampleInvoices, sampleItems);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('001-001-01-00000001'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Factura: 001-001-01-00000001'), findsOneWidget);
+      expect(find.text('IVA:'), findsNothing);
+      expect(find.text('IVA (15%):'), findsNothing);
+    });
+
+    testWidgets('shows a plain IVA label (no percentage literal) for REGIMEN_GENERAL tenants', (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      when(mockSaleViewModel.companyTaxRegime).thenReturn(TaxRegime.regimenGeneral);
+      when(mockSaleViewModel.canReprint).thenReturn(true);
+
+      final vm = _FakeSalesHistoryViewModel(sampleInvoices, sampleItems);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('001-001-01-00000001'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Factura: 001-001-01-00000001'), findsOneWidget);
+      expect(find.text('IVA:'), findsOneWidget);
+      expect(find.text('IVA (15%):'), findsNothing);
     });
   });
 }

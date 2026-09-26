@@ -208,15 +208,21 @@ export class ActivationService {
           `Onboarding session not found for tenant '${tenantId}'`,
         );
       }
-      if (session.firstSuccessfulSaleAt) {
-        return { claimed: false, ticketId: null };
-      }
 
+      // Issue #556 re-activation fix: the verification ticket binds to THIS
+      // attempt unconditionally. The tenant-level firstSuccessfulSaleAt
+      // marker is first-ever only — on re-activation (wipe + re-link) the
+      // marker is already set by a previous attempt, and skipping the bind
+      // here left the new attempt without evidence (finalize evaluated
+      // VERIFICATION_SALE_EVIDENCE_MISSING on an all-PASS attempt).
       attempt.verificationTicketId = dto.ticketId;
       await aRepo.save(attempt);
-      session.firstSuccessfulSaleAt = new Date(
-        dto.anchoredOccurredAt || dto.deviceOccurredAt,
-      );
+
+      if (!session.firstSuccessfulSaleAt) {
+        session.firstSuccessfulSaleAt = new Date(
+          dto.anchoredOccurredAt || dto.deviceOccurredAt,
+        );
+      }
       session.lastActivityAt = new Date();
       session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
       await sRepo.save(session);
@@ -461,13 +467,18 @@ export class ActivationService {
           );
         }
 
-        // 5. Normative check status constraint: Only POST_RECONNECT_SYNC may be WARNING
+        // 5. Normative check status constraint: Only whitelisted checks may be
+        // WARNING. Issue #561 (R1): SALE_RECEIPT_PATH joins POST_RECONNECT_SYNC
+        // as the only WARNING-tolerant checks — SALE_RECEIPT_PATH WARNING with
+        // evidence ref RECEIPT_SKIPPED_BY_USER_CONFIG means the owner disabled
+        // auto-print and the device skipped the receipt by user config.
         if (
           dto.status === ActivationCheckStatus.WARNING &&
-          dto.checkCode !== ActivationCheckCode.POST_RECONNECT_SYNC
+          dto.checkCode !== ActivationCheckCode.POST_RECONNECT_SYNC &&
+          dto.checkCode !== ActivationCheckCode.SALE_RECEIPT_PATH
         ) {
           throw new BadRequestException(
-            `INVALID_CHECK_STATUS: Only POST_RECONNECT_SYNC may have WARNING status. Check '${dto.checkCode}' accepts only PASS | FAIL`,
+            `INVALID_CHECK_STATUS: Only POST_RECONNECT_SYNC and SALE_RECEIPT_PATH may have WARNING status. Check '${dto.checkCode}' accepts only PASS | FAIL`,
           );
         }
 
@@ -658,7 +669,13 @@ export class ActivationService {
               firstFailedCode = `CHECK_FAILED_${check.checkCode}`;
             }
           } else if (check.status === ActivationCheckStatus.WARNING) {
-            if (check.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC) {
+            // Issue #561 (R1): explicit whitelist — ONLY these two checks
+            // tolerate WARNING at finalization. Any other check WARNING keeps
+            // failing the attempt (INVALID_WARNING_*). No generic bypass.
+            if (
+              check.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC ||
+              check.checkCode === ActivationCheckCode.SALE_RECEIPT_PATH
+            ) {
               warningCheck = check;
             } else {
               if (!firstFailedCode) {
@@ -685,15 +702,22 @@ export class ActivationService {
           attempt.status = ActivationAttemptStatus.FAIL;
           attempt.failureCode = firstFailedCode;
         } else if (warningCheck) {
-          // PASS_WITH_WARNING: all local required checks = PASS and POST_RECONNECT_SYNC = WARNING
+          // PASS_WITH_WARNING: all local required checks = PASS and the only
+          // WARNING is on a whitelisted check (POST_RECONNECT_SYNC transient
+          // sync, or SALE_RECEIPT_PATH skipped by user auto-print config).
           attempt.status = ActivationAttemptStatus.PASS_WITH_WARNING;
           attempt.warningsCount = 1;
+
+          const warningCode =
+            warningCheck.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC
+              ? 'POST_RECONNECT_SYNC_TRANSIENT'
+              : 'SALE_RECEIPT_PATH_SKIPPED_BY_USER_CONFIG';
 
           // Persist ActivationFollowUp
           const followUp = fRepo.create({
             tenantId: trimmedTenant,
             activationAttemptId: attempt.id,
-            warningCode: 'POST_RECONNECT_SYNC_TRANSIENT',
+            warningCode,
             status: ActivationFollowUpStatus.OPEN,
             openedAt: now,
             openedBy: actorUserId || 'SYSTEM_FINALIZER',
@@ -1093,21 +1117,27 @@ export class ActivationService {
         }
       }
 
-      await this.changeLogService.log({
-        tenantId: trimmedTenant,
-        actor: actorUserId
-          ? { userId: actorUserId }
-          : { ref: 'SUPPORT_OPERATOR' },
-        action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
-        targetType: 'ActivationAttempt',
-        targetId: attempt.id,
-        changes: {
-          overrideAction: dto.overrideAction,
-          reason,
-          evidenceRef: dto.evidenceRef || null,
-          notes: dto.notes || null,
+      // Issue #512 slice 7: the audit entry rides the caller's tenant-bound
+      // transaction manager so the override and its audit log commit
+      // atomically inside the same bound transaction.
+      await this.changeLogService.log(
+        {
+          tenantId: trimmedTenant,
+          actor: actorUserId
+            ? { userId: actorUserId }
+            : { ref: 'SUPPORT_OPERATOR' },
+          action: 'ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE',
+          targetType: 'ActivationAttempt',
+          targetId: attempt.id,
+          changes: {
+            overrideAction: dto.overrideAction,
+            reason,
+            evidenceRef: dto.evidenceRef || null,
+            notes: dto.notes || null,
+          },
         },
-      });
+        manager,
+      );
 
       return {
         attempt,
@@ -1202,10 +1232,13 @@ export class ActivationService {
 
         let auditTrail: ChangeLog[] = [];
         try {
+          // Issue #512 slice 7: the read rides the tenant-bound transaction
+          // manager this diagnostic already runs inside.
           auditTrail = await this.changeLogService.findByTarget(
             trimmedTenant,
             'ActivationAttempt',
             attempt.id,
+            manager,
           );
         } catch {
           // Table not present or query error; ignore
@@ -1263,6 +1296,33 @@ export class ActivationService {
         };
       },
     );
+  }
+
+  /**
+   * Reads the persisted provisioning slug for the tenant (issue #556 slice
+   * 11, OD-03). `tenants` is a global (non-RLS) table; the slug is the
+   * stable provisioning identifier the POS stores for the stage-2 optional
+   * cloud login context. It is NOT recomputed from the display name: a
+   * tenant rename leaves the slug stable by design.
+   */
+  private async readPersistedTenantSlug(tenantId: string): Promise<string> {
+    const rows: unknown = await this.dataSource.query(
+      'SELECT slug FROM tenants WHERE id = $1',
+      [tenantId],
+    );
+    const firstRow: unknown = Array.isArray(rows)
+      ? (rows as unknown[])[0]
+      : undefined;
+    const slug =
+      firstRow && typeof (firstRow as Record<string, unknown>).slug === 'string'
+        ? (firstRow as { slug: string }).slug
+        : undefined;
+    if (!slug) {
+      throw new NotFoundException(
+        `Tenant '${tenantId}' has no provisioning slug`,
+      );
+    }
+    return slug;
   }
 
   /**
@@ -1364,6 +1424,7 @@ export class ActivationService {
     return {
       credentialId: result.credential.id,
       tenantId: result.credential.tenantId,
+      slug: await this.readPersistedTenantSlug(trimmedTenant),
       deviceId: canonicalDeviceId,
       scopes: [...result.credential.scopes],
       credentialVersion: result.credential.version,
@@ -1473,6 +1534,7 @@ export class ActivationService {
     return {
       credentialId: confirmed.id,
       tenantId: confirmed.tenantId,
+      slug: await this.readPersistedTenantSlug(trimmedTenant),
       deviceId: canonicalDeviceId,
       scopes: [...confirmed.scopes],
       credentialVersion: confirmed.version,

@@ -61,6 +61,7 @@ import { OnboardingFeatureRolloutService } from '../../src/modules/onboarding/se
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { PermissionsGuard } from '../../src/modules/identity/guards/permissions.guard';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
@@ -146,6 +147,7 @@ describe('ONB1.10G: Rollback Rehearsal & Controlled Degradation Suite (PostgreSQ
     await dataSource.getRepository(Tenant).save({
       id: tenantId,
       name: 'Rollback Invariants Tenant',
+      slug: normalizeTenantSlug('Rollback Invariants Tenant'),
       is_active: true,
     });
 

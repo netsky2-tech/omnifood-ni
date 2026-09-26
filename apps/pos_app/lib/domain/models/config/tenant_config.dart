@@ -12,6 +12,7 @@ class TenantConfig with _$TenantConfig {
     @Default(TenantOperationMode.foodparkQsr) TenantOperationMode operationMode,
     @Default('') String tenantId,
     @Default('') String tenantName,
+    @Default('') String tenantSlug,
     @Default(false) bool buzzerPagerRequired,
     @Default(false) bool tableServiceEnabled,
     @Default(false) bool autoPrintKitchenTicket,

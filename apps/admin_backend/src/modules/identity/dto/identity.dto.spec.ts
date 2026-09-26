@@ -4,7 +4,9 @@ import { plainToInstance } from 'class-transformer';
 import {
   ActivateCapabilityDto,
   CreateAuditLogDto,
+  LoginDto,
   PushAuditLogsDto,
+  RefreshTokenDto,
 } from './identity.dto';
 
 const validAuditLog = {
@@ -177,5 +179,89 @@ describe('ActivateCapabilityDto', () => {
     ],
   ])('rejects a %s activation reason payload', async (_, input) => {
     await expect(transformActivateCapability(input)).rejects.toThrow();
+  });
+});
+
+describe('LoginDto / RefreshTokenDto required tenantSlug (issue #556 stage 12d)', () => {
+  const pipe = new ValidationPipe({
+    transform: true,
+    whitelist: true,
+    forbidNonWhitelisted: true,
+  });
+
+  const transformLogin = async (input: Record<string, unknown>) =>
+    pipe.transform({ ...input }, { type: 'body', metatype: LoginDto });
+
+  const transformRefresh = async (input: Record<string, unknown>) =>
+    pipe.transform({ ...input }, { type: 'body', metatype: RefreshTokenDto });
+
+  const validLogin = {
+    email: 'cashier@omnifood.ni',
+    pass: 'Password123!',
+    tenantSlug: 'mi-negocio',
+  };
+
+  const validRefresh = {
+    userId: 'd6df2e11-9a37-4fc9-a512-2b89a43a9a42',
+    refreshToken: 'token',
+    tenantSlug: 'mi-negocio',
+  };
+
+  it('rejects login without tenantSlug (the legacy window is closed)', async () => {
+    await expect(
+      transformLogin({
+        email: validLogin.email,
+        pass: validLogin.pass,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a blank tenantSlug on login', async () => {
+    await expect(
+      transformLogin({ ...validLogin, tenantSlug: '   ' }),
+    ).rejects.toThrow();
+    await expect(
+      transformLogin({ ...validLogin, tenantSlug: '' }),
+    ).rejects.toThrow();
+  });
+
+  it('accepts a tenantSlug up to 50 chars on login', async () => {
+    const dto = (await transformLogin({
+      ...validLogin,
+      tenantSlug: 'm'.repeat(50),
+    })) as LoginDto;
+    expect(dto.tenantSlug).toBe('m'.repeat(50));
+  });
+
+  it('rejects a tenantSlug longer than 50 chars on login', async () => {
+    await expect(
+      transformLogin({ ...validLogin, tenantSlug: 'm'.repeat(51) }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects a non-string tenantSlug on login', async () => {
+    await expect(
+      transformLogin({ ...validLogin, tenantSlug: 42 }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects refresh without tenantSlug (the legacy window is closed)', async () => {
+    await expect(
+      transformRefresh({
+        userId: validRefresh.userId,
+        refreshToken: validRefresh.refreshToken,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('accepts refresh with a tenantSlug', async () => {
+    const dto = (await transformRefresh(validRefresh)) as RefreshTokenDto;
+    expect(dto.tenantSlug).toBe('mi-negocio');
+  });
+
+  it('rejects a tenantSlug longer than 50 chars on refresh', async () => {
+    await expect(
+      transformRefresh({ ...validRefresh, tenantSlug: 'm'.repeat(51) }),
+    ).rejects.toThrow();
   });
 });

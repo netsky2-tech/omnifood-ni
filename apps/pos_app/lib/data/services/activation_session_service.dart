@@ -54,7 +54,7 @@ class ActivationSessionNotPreparedException implements Exception {
 
   const ActivationSessionNotPreparedException([
     this.message =
-        'Activation phase refused: no attempt was resolved by prepare(). Run prepare() successfully before driving any activation phase.',
+        'No se puede iniciar la fase: falta preparar el intento de activación.',
   ]);
 
   @override

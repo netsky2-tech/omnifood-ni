@@ -2,7 +2,7 @@ import { render, screen, waitFor, renderHook, act, fireEvent } from "@testing-li
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginPage } from "@/features/auth/login-page";
 import { ProtectedRoute } from "@/app/protected-route";
 import { AuthGate } from "@/app/auth-gate";
@@ -33,13 +33,36 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+const originalLocation = window.location;
+
+// LoginPage derives the tenant slug from the host only; a subdomain host is
+// required for the credentials form to render.
+function setHostname(hostname: string) {
+  Object.defineProperty(window, "location", {
+    writable: true,
+    value: { hostname },
+  });
+}
+
+function restoreLocation() {
+  Object.defineProperty(window, "location", {
+    writable: true,
+    value: originalLocation,
+  });
+}
+
 describe("W1 — LoginPage", () => {
   beforeEach(() => {
+    setHostname("soho.localhost");
     vi.clearAllMocks();
     useAuthStore.setState({
       user: null, tenant: null, isAuthenticated: false, hydrated: false,
     });
     useTenantContext.setState({ tenant: null, resolvedFrom: null });
+  });
+
+  afterEach(() => {
+    restoreLocation();
   });
 
   it("renders form fields", () => {
@@ -114,11 +137,16 @@ describe("W1 — LoginPage", () => {
 
 describe("W1 — LoginPage error states", () => {
   beforeEach(() => {
+    setHostname("soho.localhost");
     vi.clearAllMocks();
     useAuthStore.setState({
       user: null, tenant: null, isAuthenticated: false, hydrated: false,
     });
     useTenantContext.setState({ tenant: null, resolvedFrom: null });
+  });
+
+  afterEach(() => {
+    restoreLocation();
   });
 
   it("shows credential error on login failure", async () => {
@@ -154,11 +182,16 @@ describe("W1 — LoginPage error states", () => {
 
 describe("W1 — LoginPage loading state", () => {
   beforeEach(() => {
+    setHostname("soho.localhost");
     vi.clearAllMocks();
     useAuthStore.setState({
       user: null, tenant: null, isAuthenticated: false, hydrated: false,
     });
     useTenantContext.setState({ tenant: null, resolvedFrom: null });
+  });
+
+  afterEach(() => {
+    restoreLocation();
   });
 
   it("shows loading text and disables button during submission", async () => {

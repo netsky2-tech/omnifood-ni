@@ -45,6 +45,31 @@ export default tseslint.config(
     },
   },
   {
+    files: ['src/scripts/**/*.ts'],
+    rules: {
+      // Flat config replaces (does not merge) per-file rule arrays, so the
+      // global restricted-syntax selectors are repeated here to keep the
+      // focused-Jest guard in addition to the scripts-only RLS guard.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.object.name=/^(describe|it|test)$/][callee.property.name='only']",
+          message: 'Focused Jest tests must not be committed.',
+        },
+        {
+          selector: "CallExpression[callee.name=/^(fdescribe|fit)$/]",
+          message: 'Focused Jest tests must not be committed.',
+        },
+        {
+          selector: 'CallExpression[callee.property.name="transaction"]',
+          message:
+            'Use runInTenantTransaction() in scripts. dataSource.transaction without bindTenantContext creates RLS bypass risk.',
+        },
+      ],
+    },
+  },
+  {
     files: ['**/*.spec.ts', '**/*.e2e-spec.ts'],
     rules: {
       '@typescript-eslint/unbound-method': 'off',

@@ -38,6 +38,7 @@ import { OnboardingSessionService } from './onboarding-session.service';
 import { OnboardingReadinessEvaluator } from './onboarding-readiness.evaluator';
 import { OnboardingStateReconciler } from './onboarding-state.reconciler';
 import { ConflictException, BadRequestException } from '@nestjs/common';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -183,6 +184,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       await tenantRepo.save({
         id: tenantId,
         name: 'Restaurante El Fundador',
+        slug: normalizeTenantSlug('Restaurante El Fundador'),
         ruc: 'J0310000001234',
         is_active: true,
       });
@@ -251,6 +253,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
 
       const changeLogService = new ChangeLogService(
         dataSource.getRepository(ChangeLog),
+        // Issue #512 slice 7: change_log is tenant-RLS protected, so the
+        // service binds its own tenant transactions through the DataSource.
+        dataSource,
       );
 
       const activationService = new ActivationService(
@@ -442,6 +447,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       await tenantRepo.save({
         id: tenantId,
         name: 'Sucursal Warning/Fail',
+        slug: normalizeTenantSlug('Sucursal Warning/Fail'),
         ruc: 'J0310000009999',
         is_active: true,
       });
@@ -497,6 +503,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
 
       const changeLogService = new ChangeLogService(
         dataSource.getRepository(ChangeLog),
+        // Issue #512 slice 7: change_log is tenant-RLS protected, so the
+        // service binds its own tenant transactions through the DataSource.
+        dataSource,
       );
 
       const activationService = new ActivationService(
@@ -668,6 +677,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       await tenantRepo.save({
         id: tenantId,
         name: 'Restaurante Convergencia Real',
+        slug: normalizeTenantSlug('Restaurante Convergencia Real'),
         ruc: 'J0310000009999',
         is_active: true,
       });
@@ -727,7 +737,12 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         dummyReconciler,
       );
 
-      const changeLogService = new ChangeLogService(changeLogRepo);
+      const changeLogService = new ChangeLogService(
+        changeLogRepo,
+        // Issue #512 slice 7: change_log is tenant-RLS protected, so the
+        // service binds its own tenant transactions through the DataSource.
+        dataSource,
+      );
 
       const activationService = new ActivationService(
         attemptRepo,

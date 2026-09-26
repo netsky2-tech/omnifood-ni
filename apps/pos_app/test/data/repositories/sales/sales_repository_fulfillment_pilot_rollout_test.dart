@@ -47,6 +47,9 @@ class _FakePrinterPort implements PrinterPort {
     bool isTaxExempt = false,
     int paperWidthMm = 58,
     PostPaidFeedback? loyaltyFeedback,
+    String? fiscalAuthorizationNumber,
+    bool isReprint = false,
+    DateTime? reprintAt,
   }) async {
     if (failReceipt) {
       return PrinterResult.failure(PrinterStatus.error, 'Receipt failed');
@@ -130,8 +133,6 @@ void main() {
     numberingService = MockDgiNumberingService();
     processInventoryUseCase = MockProcessSaleInventoryUseCase();
     final inventoryRepository = MockInventoryRepository();
-
-    when(numberingService.isRangeExhausted()).thenAnswer((_) async => false);
     when(
       numberingService.getNextNumber(),
     ).thenAnswer((_) async => '001-001-01-00000001');

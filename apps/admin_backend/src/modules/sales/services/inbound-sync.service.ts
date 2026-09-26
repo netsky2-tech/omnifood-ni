@@ -94,10 +94,10 @@ export class InboundSyncService {
    * `runInTenantTransaction`), every repository read below resolves through
    * that manager so the queries run on the transaction's own connection and
    * honor its transaction-local `app.tenant_id` RLS binding. For the
-   * tenant-protected `products`, `insumos`, `recipes`, `recipe_versions` and
-   * `recipe_details` tables the bound manager is mandatory (issue #512 slice
-   * 1 part A for `products`/`insumos`, slice 2 part A for the recipe
-   * tables): calls without one fail closed with a 500 instead of silently
+   * tenant-protected `products`, `insumos`, `recipes`, `recipe_versions`,
+   * `recipe_details` and `users` tables the bound manager is mandatory
+   * (issue #512 slice 1 part A for `products`/`insumos`, slice 2 part A for
+   * the recipe tables, issue #581 for `users`): calls without one fail closed with a 500 instead of silently
    * reading through pooled repositories that lack the tenant binding.
    * Untenant-protected tables keep the pooled fallback.
    */
@@ -688,9 +688,10 @@ export class InboundSyncService {
 
   /**
    * One-way cloud-to-POS projection of `forensic_alerts` (ST-05, issue #314).
-   * The table carries no row-level security policy and no `updated_at`, so
-   * tenant isolation comes from the explicit `tenant_id` predicate and the
-   * incremental cursor is `created_at` alone. The read must ride the bound
+   * The table carries a tenant RLS policy (issue #512 T3 slice 7) and no
+   * `updated_at`, so tenant isolation comes from the bound transaction, the
+   * explicit `tenant_id` predicate, and the incremental cursor is
+   * `created_at` alone. The read must ride the bound
    * transaction manager: without one there is no repository to read through
    * (the entity is deliberately not registered forFeature — no module owns
    * it), and an unbound pooled read would bypass tenant isolation. Every
@@ -737,8 +738,18 @@ export class InboundSyncService {
     sinceDate: Date | null,
     entityManager?: EntityManager,
   ): Promise<InboundSyncUserDto[]> {
-    const userRepository =
-      entityManager?.getRepository(User) ?? this.userRepository;
+    // Issue #581: `users` is a direct:SIUD RLS-forced table, so the read
+    // must ride a tenant-bound transaction manager, same as
+    // fetchProductDeltas. All production callers (the inbound controller's
+    // runInTenantTransaction handler and terminal priming) supply one;
+    // failing closed beats silently reading through a pooled, unbound
+    // connection that returns zero rows under a NOBYPASSRLS role.
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound user sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const userRepository = entityManager.getRepository(User);
     const qb = userRepository
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.security_profile', 'security_profile')

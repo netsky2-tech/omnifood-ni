@@ -24,6 +24,15 @@ import { TenantCapabilityEvent } from '../../src/modules/identity/entities/tenan
 import { AppPermission } from '../../src/modules/identity/security/permissions.enum';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 
+// Bound-transaction fake for issue #581: audit-trail service methods now run
+// inside runInTenantTransaction, which needs DataSource.transaction + a manager
+// exposing query (set_config binding) and getRepository. The manager resolves
+// repositories lazily so beforeAll can wire auditRepository after these consts.
+const boundTransactionManager = {
+  query: jest.fn(),
+  getRepository: jest.fn(),
+};
+
 @Global()
 @Module({
   providers: [
@@ -32,6 +41,10 @@ import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.t
       useValue: {
         entityMetadatas: [],
         getRepository: jest.fn().mockReturnValue({}),
+        transaction: jest.fn(
+          async (work: (manager: unknown) => unknown) =>
+            work(boundTransactionManager),
+        ),
       },
     },
   ],
@@ -118,6 +131,7 @@ describe('Forensic Audit Queries & Drawer Logs (e2e) (Slice 10.3)', () => {
       save: jest.fn(),
       findOne: jest.fn(),
     };
+    boundTransactionManager.getRepository.mockReturnValue(auditRepository);
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [

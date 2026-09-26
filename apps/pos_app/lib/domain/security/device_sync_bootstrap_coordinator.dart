@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../../data/ports/activation_sync_port.dart';
 import 'device_sync_credential_coordinator.dart';
@@ -38,12 +39,18 @@ class DeviceSyncBootstrapCoordinator {
     Future<String?> Function()? resolveAttemptId,
     DeviceSyncCredentialCoordinator? credentialCoordinator,
     DateTime Function()? nowUtc,
+
+    /// Optional write-through sink for the tenant slug captured from the
+    /// provisioning/confirm response (issue #556). Called after a successful
+    /// commit; failures are swallowed so slug capture never breaks bootstrap.
+    Future<void> Function(String tenantSlug)? onTenantSlugCaptured,
   }) : _store = store,
        _activationSyncPort = activationSyncPort,
        _resolveDeviceId = resolveDeviceId,
        _resolveAttemptId = resolveAttemptId,
        _credentialCoordinator = credentialCoordinator,
-       _nowUtc = nowUtc ?? (() => DateTime.now().toUtc());
+       _nowUtc = nowUtc ?? (() => DateTime.now().toUtc()),
+       _onTenantSlugCaptured = onTenantSlugCaptured;
 
   final DeviceSyncCredentialStore _store;
   final ActivationSyncPort _activationSyncPort;
@@ -51,6 +58,7 @@ class DeviceSyncBootstrapCoordinator {
   final Future<String?> Function()? _resolveAttemptId;
   final DeviceSyncCredentialCoordinator? _credentialCoordinator;
   final DateTime Function() _nowUtc;
+  final Future<void> Function(String tenantSlug)? _onTenantSlugCaptured;
 
   DeviceSyncBootstrapResult? _lastResult;
   String? _lastError;
@@ -112,6 +120,7 @@ class DeviceSyncBootstrapCoordinator {
         await _store.stageCandidate(recordToCommit);
         await _store.commitCandidate();
         _credentialCoordinator?.invalidateAccessToken();
+        await _captureTenantSlug(recordToCommit);
 
         final result = DeviceSyncBootstrapResult(
           status: DeviceSyncBootstrapStatus.confirmedStagedCandidate,
@@ -267,6 +276,7 @@ class DeviceSyncBootstrapCoordinator {
     await _store.stageCandidate(recordToCommit);
     await _store.commitCandidate();
     _credentialCoordinator?.invalidateAccessToken();
+    await _captureTenantSlug(recordToCommit);
 
     final result = DeviceSyncBootstrapResult(
       status: DeviceSyncBootstrapStatus.provisionedAndConfirmed,
@@ -275,6 +285,21 @@ class DeviceSyncBootstrapCoordinator {
     _lastResult = result;
     _lastError = null;
     return result;
+  }
+
+  /// Write-through capture of the provisioned tenant slug (issue #556).
+  /// Best-effort: failures are logged, never propagated to the lifecycle.
+  Future<void> _captureTenantSlug(DeviceSyncCredentialRecord record) async {
+    final slug = record.slug.trim();
+    final sink = _onTenantSlugCaptured;
+    if (slug.isEmpty || sink == null) return;
+    try {
+      await sink(slug);
+    } catch (e) {
+      debugPrint(
+        '[DeviceSyncBootstrap] Tenant slug capture failed (non-fatal): $e',
+      );
+    }
   }
 
   DeviceSyncCredentialRecord _resolveRecordToCommit({

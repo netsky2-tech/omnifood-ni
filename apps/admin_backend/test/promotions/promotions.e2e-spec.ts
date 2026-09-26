@@ -4,6 +4,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { PromotionsController } from '../../src/modules/promotions/controllers/promotions.controller';
@@ -25,6 +26,20 @@ describe('Promotions Module (E2E / Integration)', () => {
   let jwtService: JwtService;
 
   let dbPromotions: Promotion[] = [];
+
+  // The tenant-bound transaction fake, copied from
+  // sales-reports.e2e-spec.ts: the manager hands back the same repository
+  // mock the pooled token provides, so PromotionsService's trailing
+  // DataSource dependency resolves and every bound write observes the same
+  // in-memory fixtures as the pooled reads.
+  const transactionalDataSource = {
+    transaction: jest.fn(async (work: (manager: unknown) => Promise<unknown>) =>
+      work({
+        query: jest.fn(async () => []),
+        getRepository: jest.fn(() => promotionRepo),
+      }),
+    ),
+  };
 
   const promotionRepo = {
     find: jest.fn(
@@ -101,6 +116,7 @@ describe('Promotions Module (E2E / Integration)', () => {
           provide: getRepositoryToken(Promotion),
           useValue: promotionRepo,
         },
+        { provide: DataSource, useValue: transactionalDataSource },
       ],
     }).compile();
 

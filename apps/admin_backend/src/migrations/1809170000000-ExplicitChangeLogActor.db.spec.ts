@@ -156,7 +156,10 @@ describe('ExplicitChangeLogActor1809170000000 — real PostgreSQL', () => {
       );
 
       const constraint = (await queryRunner.query(
-        `SELECT conname FROM pg_constraint WHERE conname = 'change_log_actor_exactly_one'`,
+        // Schema-filtered: an unfiltered conname match would also count the
+        // same-named constraint in the fully migrated public schema once the
+        // developer/CI database is current (issue #556 slice 11 gate note).
+        `SELECT conname FROM pg_constraint WHERE conname = 'change_log_actor_exactly_one' AND connamespace = current_schema()::regnamespace`,
       )) as Array<{ conname: string }>;
       expect(constraint).toHaveLength(1);
     });

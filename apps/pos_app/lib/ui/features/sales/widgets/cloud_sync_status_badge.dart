@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/localization/label_map.dart';
 import '../../../../data/services/sync_service.dart';
 import '../../../../data/services/network_connectivity_service.dart';
 
@@ -284,7 +285,11 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    lastError,
+                    // Known discrete sync error codes render as Spanish
+                    // labels (issue #587); composed summaries and arbitrary
+                    // exception dumps pass through unchanged — the detail
+                    // box is diagnostic.
+                    localize(lastError, kSyncErrorLabels),
                     style: TextStyle(color: Colors.red.shade900, fontSize: 11),
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,

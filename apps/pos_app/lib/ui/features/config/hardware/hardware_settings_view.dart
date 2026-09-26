@@ -307,6 +307,10 @@ class HardwareSettingsView extends StatelessWidget {
                       initialPaperWidthMm: config.paperWidthMm,
                       initialTaxRegime: taxRegime,
                       printerPort: viewModel.printerPort,
+                      // D-17: the preview must show what the paper will
+                      // show — the value already loaded in this view's
+                      // config, no re-read.
+                      fiscalAuthorizationNumber: config.dgiAuthorizationCode,
                     );
                   },
                 ),

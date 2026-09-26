@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { LegacyClassificationService } from './legacy-classification.service';
 import {
   LoyaltyProgram,
@@ -11,6 +11,37 @@ import { CustomerPointTransaction } from '../../customers/entities/customer-poin
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { RewardDefinition } from '../entities/reward-definition.entity';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
+
+/**
+ * Issue #512 slice 4: passthrough spy over `dataSource.transaction` that
+ * records the tenant-context binding SQL issued on each unit manager, without
+ * changing any observable behavior.
+ */
+function captureTenantBinding(source: DataSource): unknown[][] {
+  const actual = source.transaction.bind(source);
+  const bindingCalls: unknown[][] = [];
+  jest.spyOn(source, 'transaction').mockImplementation(((
+    ...args: unknown[]
+  ) => {
+    const cb = args[args.length - 1] as (
+      manager: EntityManager,
+    ) => Promise<unknown>;
+    return actual(async (manager: EntityManager) => {
+      const rawQuery = manager.query.bind(manager);
+      jest
+        .spyOn(manager, 'query')
+        .mockImplementation(async (sql: string, params?: unknown[]) => {
+          if (sql === TENANT_CONTEXT_SET_CONFIG_SQL) {
+            bindingCalls.push(params);
+          }
+          return rawQuery(sql, params);
+        });
+      return cb(manager);
+    });
+  }) as never);
+  return bindingCalls;
+}
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -116,6 +147,7 @@ async function createTestHarness() {
     dataSource.getRepository(CustomerPointTransaction),
     dataSource.getRepository(CustomerLoyaltyAccountProjection),
     dataSource.getRepository(Customer),
+    dataSource,
   );
 
   return {
@@ -226,6 +258,27 @@ describe('LegacyClassificationService (db)', () => {
 
       expect(second.projection_version).toBe(first.projection_version + 1);
       expect(second.balance_units).toBe(first.balance_units);
+    });
+  });
+
+  describe('Tenant binding (issue #512 slice 4)', () => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('binds the classifyLegacyTransactions access through the tenant transaction (issue #512 slice 4)', async () => {
+      const bindingCalls = captureTenantBinding(harness.dataSource);
+      const pooledQbSpy = jest.spyOn(harness.txRepo, 'createQueryBuilder');
+
+      await harness.service.classifyLegacyTransactions('tenant-1');
+
+      // A tenant transaction must be opened for the access...
+      expect(harness.dataSource.transaction).toHaveBeenCalled();
+      // ...with the transaction-local binding SQL issued on the unit manager
+      // with the trimmed tenant id before any protected access.
+      expect(bindingCalls).toContainEqual(['tenant-1']);
+      // The pooled repository property must not be used for the bulk update.
+      expect(pooledQbSpy).not.toHaveBeenCalled();
     });
   });
 });

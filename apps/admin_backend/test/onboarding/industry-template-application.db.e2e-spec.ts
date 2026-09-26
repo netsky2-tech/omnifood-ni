@@ -21,6 +21,7 @@ import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail
 import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #493 T2.S4a: the PRODUCTION application paths that touch the
@@ -118,7 +119,7 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
     // Tenant names are unique; suffix with the run's tenant ids so a shared
     // provisioned database can never collide with a previous run.
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantApplyId,
         `Apply Tenant (S4a) ${tenantApplyId}`,
@@ -128,6 +129,10 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
         `Preview Tenant (S4a) ${tenantPreviewId}`,
         tenantRollbackId,
         `Rollback Tenant (S4a) ${tenantRollbackId}`,
+        normalizeTenantSlug(`Apply Tenant (S4a) ${tenantApplyId}`),
+        normalizeTenantSlug(`Foreign Tenant (S4a) ${tenantForeignId}`),
+        normalizeTenantSlug(`Preview Tenant (S4a) ${tenantPreviewId}`),
+        normalizeTenantSlug(`Rollback Tenant (S4a) ${tenantRollbackId}`),
       ],
     );
 

@@ -21,6 +21,7 @@ import {
   InvoiceItemModifier,
 } from '../../src/modules/sales/entities/invoice-item-modifier.entity';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #493 T2.S4b: the last template-path flow still using pooled,
@@ -111,8 +112,8 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
 
   async function seedTenantWithProducts(tenantId: string, label: string) {
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2)`,
-      [tenantId, `${label} ${tenantId}`],
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
+      [tenantId, `${label} ${tenantId}`, normalizeTenantSlug(`${label} ${tenantId}`)],
     );
     return admin.query(
       `INSERT INTO products (id, tenant_id, name, uom)
@@ -180,9 +181,10 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
     // recipe + unknown-provenance recipe.
     const scanProductId = randomUUID();
     const scanCustomProductId = randomUUID();
-    await admin.query(`INSERT INTO tenants (id, name) VALUES ($1, $2)`, [
+    await admin.query(`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`, [
       tenantScanId,
       `Scan Tenant (S4b) ${tenantScanId}`,
+      normalizeTenantSlug(`Scan Tenant (S4b) ${tenantScanId}`),
     ]);
     await admin.query(
       `INSERT INTO products (id, tenant_id, name, uom) VALUES ($1, $2, 'Capuchino 8oz', 'UN'), ($3, $2, 'Plato Secreto', 'UN')`,
@@ -209,9 +211,10 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
 
     // tenantUsage: NO session; usage comes from an invoice item only.
     const usageProductId = randomUUID();
-    await admin.query(`INSERT INTO tenants (id, name) VALUES ($1, $2)`, [
+    await admin.query(`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`, [
       tenantUsageId,
       `Usage Tenant (S4b) ${tenantUsageId}`,
+      normalizeTenantSlug(`Usage Tenant (S4b) ${tenantUsageId}`),
     ]);
     await admin.query(
       `INSERT INTO products (id, tenant_id, name, uom) VALUES ($1, $2, 'Espresso Simple', 'UN')`,
@@ -228,9 +231,10 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
 
     // tenantSession: activated session, unused template recipe, no usage.
     const sessionProductId = randomUUID();
-    await admin.query(`INSERT INTO tenants (id, name) VALUES ($1, $2)`, [
+    await admin.query(`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`, [
       tenantSessionId,
       `Session Tenant (S4b) ${tenantSessionId}`,
+      normalizeTenantSlug(`Session Tenant (S4b) ${tenantSessionId}`),
     ]);
     await admin.query(
       `INSERT INTO products (id, tenant_id, name, uom) VALUES ($1, $2, 'Latte 12oz', 'UN')`,
@@ -265,9 +269,10 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
 
     // tenantAtomic: unused template recipe for the rollback proof.
     const atomicProductId = randomUUID();
-    await admin.query(`INSERT INTO tenants (id, name) VALUES ($1, $2)`, [
+    await admin.query(`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`, [
       tenantAtomicId,
       `Atomic Tenant (S4b) ${tenantAtomicId}`,
+      normalizeTenantSlug(`Atomic Tenant (S4b) ${tenantAtomicId}`),
     ]);
     await admin.query(
       `INSERT INTO products (id, tenant_id, name, uom) VALUES ($1, $2, 'Espresso Doble', 'UN')`,

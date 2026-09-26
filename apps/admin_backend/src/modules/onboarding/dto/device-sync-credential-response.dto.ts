@@ -8,6 +8,11 @@ import { ActivationAttempt } from '../entities/activation-attempt.entity';
 export class DeviceSyncCredentialResponseDto {
   credentialId!: string;
   tenantId!: string;
+  // Issue #556 slice 11: the PERSISTED provisioning slug (stable identifier,
+  // not the display name). The POS stores it as TenantConfig.tenantSlug for
+  // the stage-2 optional cloud login context. Key stays `slug`, mirroring
+  // the getMe response.
+  slug!: string;
   deviceId!: string;
   scopes!: string[];
   credentialVersion!: number;

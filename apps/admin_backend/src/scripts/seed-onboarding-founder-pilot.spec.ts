@@ -4,6 +4,7 @@ import {
   isFounderPilotPlaceholderRuc,
   Q80_TERMINAL_ID,
 } from './seed-onboarding-founder-pilot';
+import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 import { isValidRuc } from '../modules/onboarding/utils/nicaragua-fiscal.validator';
 
 describe('buildFounderPilotFixture', () => {
@@ -55,5 +56,31 @@ describe('buildFounderPilotFixture', () => {
     expect(() =>
       buildFounderPilotFixture({ ONBOARDING_FOUNDER_RUC: 'CF-12345' }),
     ).toThrow(/ONBOARDING_FOUNDER_RUC/);
+  });
+});
+
+describe('founder pilot tenant slug (issue #556 slice 11)', () => {
+  it('derives the tenant slug from the tenant name with the canonical normalization rule', () => {
+    const fixture = buildFounderPilotFixture({});
+
+    expect(fixture.tenantSlug).toBe(normalizeTenantSlug(fixture.tenantName));
+    expect(fixture.tenantSlug).toMatch(/^[a-z0-9-]+$/);
+    expect(fixture.tenantSlug.length).toBeLessThanOrEqual(50);
+  });
+
+  it('honors an explicit operator slug override when provided', () => {
+    const fixture = buildFounderPilotFixture({
+      ONBOARDING_FOUNDER_TENANT_SLUG: 'founder-pilot-custom',
+    });
+
+    expect(fixture.tenantSlug).toBe('founder-pilot-custom');
+  });
+
+  it('rejects a malformed operator slug override', () => {
+    expect(() =>
+      buildFounderPilotFixture({
+        ONBOARDING_FOUNDER_TENANT_SLUG: 'Not A Slug!',
+      }),
+    ).toThrow(/ONBOARDING_FOUNDER_TENANT_SLUG/);
   });
 });

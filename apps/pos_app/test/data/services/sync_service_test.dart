@@ -93,6 +93,7 @@ class MockSalesRepository implements SalesRepository {
     required UserRole authorizedByRole,
     RefundReasonPolicy refundReasonPolicy =
         RefundReasonPolicy.restockOriginalBom,
+    String? terminalId,
     List<CreditNoteRefundLine>? lines,
   }) async => throw UnimplementedError();
 
@@ -125,8 +126,16 @@ class MockSalesRepository implements SalesRepository {
   }) async => throw UnimplementedError();
 
   @override
-  Future<void> voidInvoice(String invoiceId, String reason) async =>
+  Future<ReprintPreparation> prepareReprintInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async =>
       throw UnimplementedError();
+
+  @override
+  Future<void> voidInvoice(String invoiceId, String reasonCode,
+      {String? reasonDetail}) async => throw UnimplementedError();
 }
 
 class FakeAuditRepository implements AuditRepository {
@@ -2715,6 +2724,9 @@ void main() {
           expect(savedProduct, isNotNull);
           expect(savedProduct!.name, 'Café Espresso Doble');
           expect(savedProduct.sellPrice, 55.0);
+          // B2e D-3 fail-closed: the delta omits taxRate, so the stored rate
+          // must default to 0.0 (exempt), never an invented 15%.
+          expect(savedProduct.taxRate, 0.0);
 
           final savedCategory = await database.catalogValueDao
               .findByTypeAndCode('CATEGORY', 'HOT_BEVERAGE');

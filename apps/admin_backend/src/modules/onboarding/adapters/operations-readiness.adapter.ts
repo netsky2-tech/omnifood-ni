@@ -22,6 +22,10 @@ export class OperationsReadinessAdapter implements OperationsReadinessPort {
     @InjectRepository(RecipeVersion)
     private readonly recipeVersionRepository: Repository<RecipeVersion>,
     @InjectRepository(Supplier)
+    // Issue #512 slice 3: the suppliers readiness count now resolves from
+    // the tenant-bound transaction manager; the pooled injection stays so
+    // the constructor signature (and the module wiring) is untouched, the
+    // slice-2 precedent for the unused recipe_versions injection.
     private readonly supplierRepository: Repository<Supplier>,
     // Issue #512 slice 1 part A: the `products` categories read resolves its
     // repository from the tenant-bound transaction manager.
@@ -50,20 +54,19 @@ export class OperationsReadinessAdapter implements OperationsReadinessPort {
       };
     }
 
-    const staffCount = await this.userRepository.count({
-      where: { tenant_id: trimmedTenant, is_active: true },
-    });
-    const additionalStaffCount = Math.max(0, staffCount - 1);
-
-    // Issue #512 slice 2 part A: the recipe_versions readiness count reads
-    // through the tenant-bound transaction manager (same transaction as the
-    // categories read). Under FORCE RLS an unbound pooled read fails closed
-    // (zero rows / error), it is not a cross-tenant leak.
-    const { publishedRecipeCount, categoryCount } =
+    // Issue #556 stage 12d: the staff count is a `users` read, and users
+    // becomes FORCE-RLS-protected — it joins the same tenant-bound
+    // transaction as the recipe/supplier/category counts so the policy sees
+    // the transaction-local app.tenant_id instead of failing closed to zero
+    // on a pooled connection.
+    const { staffCount, publishedRecipeCount, categoryCount, supplierCount } =
       await runInTenantTransaction(
         this.dataSource,
         trimmedTenant,
         async (manager) => {
+          const staffCount = await manager.getRepository(User).count({
+            where: { tenant_id: trimmedTenant, is_active: true },
+          });
           const publishedRecipeCount = await manager
             .getRepository(RecipeVersion)
             .count({
@@ -84,16 +87,20 @@ export class OperationsReadinessAdapter implements OperationsReadinessPort {
             )
             .getRawMany();
 
+          const supplierCount = await manager.getRepository(Supplier).count({
+            where: { tenant_id: trimmedTenant, is_active: true },
+          });
+
           return {
+            staffCount,
             publishedRecipeCount,
             categoryCount: categoriesRaw.length,
+            supplierCount,
           };
         },
       );
 
-    const supplierCount = await this.supplierRepository.count({
-      where: { tenant_id: trimmedTenant, is_active: true },
-    });
+    const additionalStaffCount = Math.max(0, staffCount - 1);
 
     const details = {
       hasAdditionalStaff: additionalStaffCount > 0,

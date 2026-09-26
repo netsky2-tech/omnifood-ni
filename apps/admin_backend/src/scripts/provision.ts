@@ -1,9 +1,12 @@
+import { randomUUID } from 'crypto';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../core/app/app.module';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../modules/tenant/entities/tenant.entity';
 import { User, UserRole } from '../modules/identity/entities/user.entity';
 import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
+import { runInTenantTransaction } from '../core/database/tenant-transaction';
+import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 import * as bcrypt from 'bcrypt';
 import * as readline from 'readline';
 
@@ -36,10 +39,18 @@ async function provision() {
     const ownerPass = await ask('Contraseña inicial: ');
     const ownerPin = await ask('PIN inicial (se recomiendan 6 dígitos): ');
 
-    await dataSource.transaction(async (manager) => {
+    // The tenant id must be known before the transaction opens: the wrapper
+    // binds the transaction-local RLS context from it. `tenants` is a public
+    // (non-RLS) table, so inserting it inside the bound callback is fine.
+    const tenantId = randomUUID();
+    await runInTenantTransaction(dataSource, tenantId, async (manager) => {
       // 1. Create Tenant
       const tenant = new Tenant();
+      tenant.id = tenantId;
       tenant.name = tenantName;
+      // Issue #556 slice 11: the stable provisioning slug, derived with the
+      // canonical normalization rule (src/modules/tenant/tenant-slug.ts).
+      tenant.slug = normalizeTenantSlug(tenantName);
       tenant.ruc = ruc || null;
       tenant.is_active = true;
       const savedTenant = await manager.save(tenant);

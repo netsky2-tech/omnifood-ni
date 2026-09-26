@@ -260,8 +260,10 @@ describe("W3 — InventoryPage", () => {
     render(<InventoryPage />, { wrapper: TestWrapper });
     screen.getByText("Alertas").click();
     await waitFor(() => {
-      expect(screen.getByText("CRITICAL")).toBeInTheDocument();
-      expect(screen.getByText("WARNING")).toBeInTheDocument();
+      // Issue #587: severity badges render human Spanish labels from the
+      // centralized alertSeverityLabels map, no longer the raw enum.
+      expect(screen.getByText("Crítica")).toBeInTheDocument();
+      expect(screen.getByText("Advertencia")).toBeInTheDocument();
     });
   });
 });

@@ -159,7 +159,8 @@ void main() {
       expect(receipt, contains('001-001-01-00004521'));
       expect(receipt, contains('T/C USD:'));
       expect(receipt, contains('SUBTOTAL:'));
-      expect(receipt, contains('IVA (15%):'));
+      expect(receipt, contains('IVA:'));
+      expect(receipt, isNot(contains('IVA (15%)')));
       expect(receipt, contains('TOTAL CORDOBAS:'));
       expect(receipt, contains('TOTAL USD:'));
       expect(receipt, contains('Efectivo USD:'));

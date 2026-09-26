@@ -700,6 +700,43 @@ describe('InboundSyncService', () => {
       expect(mockInsumoRepo.createQueryBuilder).not.toHaveBeenCalled();
       expect(recipeVersionQb.getMany).not.toHaveBeenCalled();
     });
+
+    it('fails closed when no manager is supplied for the protected users read (issue #581)', async () => {
+      userQb.getMany.mockResolvedValue([]);
+
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'users' }),
+      ).rejects.toThrow(
+        'Inbound user sync requires a tenant-bound transaction manager',
+      );
+
+      // Fail closed means fail before any SQL: the pooled users read must
+      // never run without the tenant binding.
+      expect(mockUserRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(userQb.getMany).not.toHaveBeenCalled();
+    });
+
+    it('reads user deltas through the bound manager repository (issue #581)', async () => {
+      userQb.getMany.mockResolvedValue([]);
+
+      const getRepository = jest.fn(() => mockUserRepo);
+      const manager = { getRepository } as never;
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'users' },
+        undefined,
+        manager,
+      );
+
+      expect(response.status).toBe('success');
+      // The User repository must be resolved through the bound manager, not
+      // the pooled constructor-injected one.
+      expect(getRepository).toHaveBeenCalledWith(User);
+      expect(userQb.where).toHaveBeenCalledWith('user.tenant_id = :tenantId', {
+        tenantId: 'tenant-abc',
+      });
+    });
   });
   describe('OHAC delivery negotiation member', () => {
     const negotiationQuery = { ohacPosBuild: 'pos-build-1' };
@@ -981,11 +1018,9 @@ describe('InboundSyncService', () => {
     it('fails closed when the acknowledgement service is not wired', async () => {
       // A composition without OHAC must not answer as though it had recorded
       // anything, so the terminal gets a conflict rather than a silent success.
-      const bareService = new (service.constructor as new (
-        ...args: unknown[]
-      ) => typeof service)(
-        ...(Array.from({ length: 9 }, () => ({})) as unknown[]),
-      );
+      const bareService = new (
+        service.constructor as new (...args: unknown[]) => typeof service
+      )(...(Array.from({ length: 9 }, () => ({})) as unknown[]));
 
       await expect(
         bareService.acknowledgeStaffPolicyEpoch(

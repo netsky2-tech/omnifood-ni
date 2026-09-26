@@ -64,4 +64,49 @@ void main() {
 
     expect(find.byType(AlertDialog), findsNothing);
   });
+
+  testWidgets('renders user roles in Spanish in the list and the user dialog', (
+    tester,
+  ) async {
+    when(() => authRepository.getAllUsers()).thenAnswer((_) async => <User>[
+          const User(
+            id: 'user-1',
+            name: 'Marta Gerente',
+            email: 'marta@omnifood.ni',
+            role: UserRole.manager,
+            isActive: true,
+          ),
+        ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider.value(
+          value: viewModel,
+          child: const UserManagementView(),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    // List subtitle: role rendered from kUserRoleLabels, raw name absent.
+    expect(find.textContaining('Rol: Gerente'), findsOneWidget);
+    expect(find.textContaining('MANAGER'), findsNothing);
+
+    // User dialog dropdown: role options rendered from kUserRoleLabels.
+    await tester.tap(find.text('NUEVO USUARIO'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cajero'), findsOneWidget);
+    expect(find.text('Dueño'), findsNothing); // collapsed dropdown: only the selected item
+    expect(find.textContaining('CASHIER'), findsNothing);
+
+    await tester.tap(find.text('Cajero'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dueño'), findsOneWidget);
+    expect(find.text('Mesero'), findsOneWidget);
+    expect(find.textContaining('OWNER'), findsNothing);
+    expect(find.textContaining('WAITER'), findsNothing);
+  });
 }

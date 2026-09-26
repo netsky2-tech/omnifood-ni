@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/localization/label_map.dart';
 import '../../../../../domain/models/user.dart';
 import 'user_management_view_model.dart';
 
@@ -45,7 +46,7 @@ class _UserManagementViewState extends State<UserManagementView> {
                       child: Text(user.name[0].toUpperCase(), style: const TextStyle(color: Colors.white)),
                     ),
                     title: Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Rol: ${user.role.name.toUpperCase()} • ${user.isActive ? "ACTIVO" : "INACTIVO"}'),
+                    subtitle: Text('Rol: ${localize(user.role.name, kUserRoleLabels)} • ${user.isActive ? "ACTIVO" : "INACTIVO"}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -171,7 +172,7 @@ class _UserDialogState extends State<UserDialog> {
               decoration: const InputDecoration(labelText: 'Rol'),
               items: UserRole.values.map((r) => DropdownMenuItem(
                 value: r,
-                child: Text(r.name.toUpperCase()),
+                child: Text(localize(r.name, kUserRoleLabels)),
               )).toList(),
               onChanged: (val) => setState(() => _selectedRole = val!),
             ),

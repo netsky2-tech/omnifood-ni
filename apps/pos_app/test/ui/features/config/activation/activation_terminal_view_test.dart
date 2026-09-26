@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:pos_app/data/models/activation/activation_attempt_local_entity.dart';
 import 'package:pos_app/data/models/activation/activation_check_result_local_entity.dart';
+import 'package:pos_app/data/ports/activation_priming_port.dart';
 import 'package:pos_app/data/ports/activation_sync_port.dart';
 import 'package:pos_app/data/services/activation_controlled_sale_runner.dart';
 import 'package:pos_app/data/services/activation_pre_offline_runner.dart';
@@ -196,7 +197,7 @@ void main() {
       );
       expect(
           find.byKey(const Key('activation_attempt_status')), findsOneWidget);
-      expect(find.text('ASSIGNED'), findsOneWidget);
+      expect(find.text('Asignado'), findsOneWidget);
       expect(
           find.byKey(const Key('activation_blocker_code')), findsNothing);
     });
@@ -213,7 +214,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('activation_blocker_code')), findsOneWidget);
-      expect(find.text('NO_ACTIVE_ATTEMPT'), findsOneWidget);
+      // The raw NO_ACTIVE_ATTEMPT code must never render: the label map
+      // translates it to operator-facing Spanish.
+      expect(
+        find.text('No hay un intento de activación en curso.'),
+        findsOneWidget,
+      );
+      expect(find.text('NO_ACTIVE_ATTEMPT'), findsNothing);
       expect(
         find.byKey(const Key('activation_blocker_message')),
         findsOneWidget,
@@ -311,27 +318,34 @@ void main() {
 
       expect(find.byKey(const Key('check_row_TERMINAL_LINKED')),
           findsOneWidget);
-      expect(find.text('TERMINAL_LINKED'), findsOneWidget);
+      expect(find.text('Terminal vinculada'), findsOneWidget);
+      expect(find.text('Aprobado'), findsOneWidget);
       expect(find.byKey(const Key('check_row_PRINTER_AVAILABLE')),
           findsOneWidget);
-      expect(find.text('FAIL'), findsOneWidget);
+      expect(find.text('Impresora disponible'), findsOneWidget);
+      expect(find.text('Fallido'), findsOneWidget);
 
       // The runner did not report SQLITE_DURABILITY in this summary, so the
       // screen must not invent it.
       expect(find.byKey(const Key('check_row_SQLITE_DURABILITY')),
           findsNothing);
-      // The reported blockers render verbatim in the phase blockers block.
-      // The view model surfaces the same failure in errorMessage too, but the
-      // screen deduplicates the channels: the message renders exactly once.
+      // The reported blockers render with the code head localized and the
+      // reported detail preserved. The view model surfaces the same failure
+      // in errorMessage too, but the screen deduplicates the channels: the
+      // message renders exactly once.
       final blockersText = tester.widget<Text>(
         find.byKey(const Key('pre_offline_blockers')),
       );
       expect(
         blockersText.data,
-        contains('PRINTER_AVAILABLE_FAILED: Printer is not ready'),
+        'La impresora no está lista. Revise su estado en Configuración. — '
+        'Printer is not ready',
       );
       expect(
-        find.text('PRINTER_AVAILABLE_FAILED: Printer is not ready'),
+        find.text(
+          'La impresora no está lista. Revise su estado en Configuración. — '
+          'Printer is not ready',
+        ),
         findsOneWidget,
       );
     });
@@ -408,12 +422,15 @@ void main() {
       await tester.tap(find.byKey(const Key('run_pre_offline_button')));
       await tester.pumpAndSettle();
 
-      // The blockers text is rendered verbatim in the phase blockers block,
-      // and exactly once on the whole screen: the global error card must not
-      // repeat the same message.
+      // The blockers render with the code head localized and the reported
+      // detail preserved, exactly once on the whole screen: the global error
+      // card must not repeat the same failure.
       expect(find.byKey(const Key('pre_offline_blockers')), findsOneWidget);
       expect(
-        find.text('PRINTER_AVAILABLE_FAILED: Printer is not ready'),
+        find.text(
+          'La impresora no está lista. Revise su estado en Configuración. — '
+          'Printer is not ready',
+        ),
         findsOneWidget,
       );
       expect(find.byKey(const Key('activation_error')), findsNothing);
@@ -495,6 +512,8 @@ void main() {
       expect(
           find.byKey(const Key('verification_ticket_id')), findsOneWidget);
       expect(find.text('ticket-1'), findsOneWidget);
+      expect(find.text('Estado del intento: Evidencia local completa'),
+          findsOneWidget);
       expect(find.byKey(const Key('check_row_OFFLINE_SALE_PAID')),
           findsOneWidget);
     });
@@ -523,11 +542,41 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('finalized_status')), findsOneWidget);
-      expect(find.text('ACTIVATED'), findsOneWidget);
+      expect(find.text('Activado'), findsOneWidget);
+      // The backend verdict is rendered through the label map too.
+      expect(find.text('Veredicto del backend: Aprobado'), findsOneWidget);
       // The follow-up is credential provisioning and terminal readiness; the
       // screen must not claim the device credential was already created.
       expect(find.byKey(const Key('finalization_next_steps')), findsOneWidget);
       expect(find.textContaining('credencial'), findsOneWidget);
+    });
+
+    testWidgets(
+        'renders a localized priming blocker when the terminal priming '
+        'payload is unusable', (tester) async {
+      when(() => primingService.primeTerminal()).thenThrow(
+        const TerminalPrimingPayloadException(
+          'TERMINAL_PRIMING_PAYLOAD_MALFORMED',
+          'Server returned a non-object terminal priming payload',
+        ),
+      );
+
+      await tester.pumpWidget(buildWidget(viewModel));
+      await tester.pumpAndSettle();
+
+      // The raw priming failure code never reaches the operator: the
+      // blocker-code site renders the label-map translation.
+      expect(find.byKey(const Key('activation_blocker_code')), findsOneWidget);
+      expect(
+        find.text(
+          'La respuesta de preparación de la terminal no es utilizable. '
+          'Verifique la conexión e intente de nuevo.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('TERMINAL_PRIMING_PAYLOAD_MALFORMED'), findsNothing);
+      expect(find.byKey(const Key('activation_terminal_id')), findsNothing);
+      expect(find.byKey(const Key('activation_attempt_status')), findsNothing);
     });
   });
 }

@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { AuditTrailService } from './audit-trail.service';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { AuditLog } from '../entities/audit-log.entity';
 import { User, UserRole } from '../entities/user.entity';
 import { AppPermission } from '../security/permissions.enum';
@@ -18,8 +20,20 @@ describe('AuditTrailService (Slice 10.3)', () => {
     getManyAndCount: jest.fn(),
   };
 
+  // Issue #581: every access below resolves through the tenant-bound
+  // transaction manager, which hands back this functional repository mock,
+  // so the behavioral assertions keep working unchanged.
   const auditRepository = {
     createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+    save: jest.fn(),
+    findOne: jest.fn(),
+  };
+
+  // Pooled tripwire: any call here means an audit read/write escaped the
+  // bound transaction and would break the moment `audit_logs` is promoted
+  // to direct:SIUD RLS (#512 T3 slice 7).
+  const pooledAuditRepository = {
+    createQueryBuilder: jest.fn(),
     save: jest.fn(),
     findOne: jest.fn(),
   };
@@ -28,21 +42,73 @@ describe('AuditTrailService (Slice 10.3)', () => {
     findOne: jest.fn(),
   };
 
+  const manager = {
+    query: jest.fn(),
+    getRepository: jest.fn(),
+  };
+  const dataSource = {
+    transaction: jest.fn(),
+  };
+
   const testTenantId = 'tenant-1111';
 
   beforeEach(async () => {
     jest.clearAllMocks();
     auditRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+    manager.query.mockResolvedValue([]);
+    manager.getRepository.mockImplementation((entity: unknown) => {
+      if (entity === AuditLog) return auditRepository;
+      throw new Error(
+        `Unexpected repository request: ${(entity as { name?: string })?.name ?? typeof entity}`,
+      );
+    });
+    dataSource.transaction.mockImplementation(
+      (work: (transactionManager: typeof manager) => Promise<unknown>) =>
+        work(manager),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuditTrailService,
-        { provide: getRepositoryToken(AuditLog), useValue: auditRepository },
+        {
+          provide: getRepositoryToken(AuditLog),
+          useValue: pooledAuditRepository,
+        },
         { provide: getRepositoryToken(User), useValue: userRepository },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
     service = module.get<AuditTrailService>(AuditTrailService);
+  });
+
+  describe('tenant transaction binding (issue #581)', () => {
+    it('binds the tenant context on every access; pooled repo stays silent', async () => {
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[], 0]);
+      auditRepository.findOne.mockResolvedValue(null);
+      auditRepository.save.mockResolvedValue({ id: 'audit-1' });
+
+      await service.queryOverrides({}, testTenantId);
+      await service.queryDrawerOpens({}, testTenantId);
+      await service.recordManualDrawerOpen(
+        { terminalId: 'POS-01', reason: 'AUDIT_COUNT' },
+        testTenantId,
+        'cashier-1',
+      );
+
+      // Each method opens its own tenant-bound transaction and binds the
+      // tenant context with the production set_config SQL.
+      expect(dataSource.transaction).toHaveBeenCalledTimes(3);
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        [testTenantId],
+      );
+
+      // RUNTIME TEETH: the pooled repository tripwire stayed silent.
+      expect(pooledAuditRepository.createQueryBuilder).not.toHaveBeenCalled();
+      expect(pooledAuditRepository.findOne).not.toHaveBeenCalled();
+      expect(pooledAuditRepository.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('queryOverrides', () => {
@@ -168,6 +234,37 @@ describe('AuditTrailService (Slice 10.3)', () => {
             reason: 'AUDIT_COUNT',
             notes: 'Conteo de efectivo',
           }),
+        }),
+      );
+    });
+
+    it('covers the hash-chain read and the append in ONE tenant-bound transaction (issue #581)', async () => {
+      auditRepository.findOne.mockResolvedValue({
+        sequence_no: 5,
+        entry_hash: 'hash-of-entry-5',
+      });
+      auditRepository.save.mockImplementation(async (log: unknown) => log);
+
+      await service.recordManualDrawerOpen(
+        { terminalId: 'POS-01', reason: 'AUDIT_COUNT' },
+        testTenantId,
+        'cashier-1',
+      );
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(auditRepository.findOne).toHaveBeenCalledWith({
+        where: {
+          tenant_id: testTenantId,
+          device_id: 'POS-01',
+          user_id: 'cashier-1',
+          forensic_status: 'ACTIVE',
+        },
+        order: { sequence_no: 'DESC' },
+      });
+      expect(auditRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sequence_no: 6,
+          prev_hash: 'hash-of-entry-5',
         }),
       );
     });

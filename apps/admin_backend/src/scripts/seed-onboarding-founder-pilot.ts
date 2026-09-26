@@ -6,10 +6,12 @@ import { AppModule } from '../core/app/app.module';
 import { User, UserRole } from '../modules/identity/entities/user.entity';
 import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
 import { Tenant } from '../modules/tenant/entities/tenant.entity';
+import { runInTenantTransaction } from '../core/database/tenant-transaction';
 import {
   canonicalFiscalId,
   isValidRuc,
 } from '../modules/onboarding/utils/nicaragua-fiscal.validator';
+import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 
 /** The physical Q80 terminal identity, not its Wi-Fi ADB transport serial. */
 export const Q80_TERMINAL_ID = 'Q802024120001';
@@ -37,6 +39,8 @@ type FixtureEnvironment = Record<string, string | undefined>;
 export interface FounderPilotFixture {
   runId: string;
   tenantName: string;
+  /** Stable provisioning slug (issue #556): normalized from the tenant name, or the explicit ONBOARDING_FOUNDER_TENANT_SLUG override. */
+  tenantSlug: string;
   terminalId: string;
   ruc: string;
   owner: {
@@ -66,16 +70,33 @@ export function buildFounderPilotFixture(
     );
   }
 
+  // Tenant slug (issue #556 slice 11): derived with the canonical
+  // normalization rule, or taken verbatim from the explicit operator
+  // override when one is supplied.
+  const tenantName = `Founder Pilot Q80 ${runId}`;
+  const slugOverride = env.ONBOARDING_FOUNDER_TENANT_SLUG?.trim();
+  const tenantSlug = slugOverride ?? normalizeTenantSlug(tenantName);
+  if (!/^[a-z0-9-]+$/.test(tenantSlug) || tenantSlug.length > 50) {
+    throw new Error(
+      'ONBOARDING_FOUNDER_TENANT_SLUG must match [a-z0-9-] and be at most 50 characters',
+    );
+  }
+
   if (!/^\d{6}$/.test(offlinePin)) {
-    throw new Error('ONBOARDING_FOUNDER_OWNER_PIN must contain exactly six digits');
+    throw new Error(
+      'ONBOARDING_FOUNDER_OWNER_PIN must contain exactly six digits',
+    );
   }
   if (password.length < 8) {
-    throw new Error('ONBOARDING_FOUNDER_OWNER_PASSWORD must contain at least eight characters');
+    throw new Error(
+      'ONBOARDING_FOUNDER_OWNER_PASSWORD must contain at least eight characters',
+    );
   }
 
   return {
     runId,
-    tenantName: `Founder Pilot Q80 ${runId}`,
+    tenantName,
+    tenantSlug,
     terminalId: Q80_TERMINAL_ID,
     ruc,
     owner: {
@@ -105,34 +126,51 @@ async function seedFounderPilot(): Promise<void> {
   const dataSource = app.get(DataSource);
 
   try {
-    const ids = await dataSource.transaction(async (manager) => {
-      const tenant = await manager.save(
-        manager.create(Tenant, {
-          name: fixture.tenantName,
-          ruc: fixture.ruc,
-          is_active: true,
-        }),
-      );
-      const owner = await manager.save(
-        manager.create(User, {
-          tenant_id: tenant.id,
-          name: fixture.owner.name,
-          email: fixture.owner.email,
-          role: UserRole.OWNER,
-          password_hash: await bcrypt.hash(fixture.owner.password, 10),
-          is_active: true,
-        }),
-      );
-      const profile = await manager.save(
-        manager.create(SecurityProfile, {
-          user_id: owner.id,
-          pin_hash: await bcrypt.hash(fixture.owner.offlinePin, 10),
-          is_pin_enabled: true,
-          is_totp_enabled: false,
-        }),
-      );
-      return { tenantId: tenant.id, ownerId: owner.id, securityProfileId: profile.id };
-    });
+    // The tenant id must be known before the transaction opens: the wrapper
+    // binds the transaction-local RLS context from it. `tenants` is a public
+    // (non-RLS) table, so inserting it inside the bound callback is fine.
+    const tenantId = randomUUID();
+    const ids = await runInTenantTransaction(
+      dataSource,
+      tenantId,
+      async (manager) => {
+        const tenant = await manager.save(
+          manager.create(Tenant, {
+            id: tenantId,
+            name: fixture.tenantName,
+            slug: fixture.tenantSlug,
+            ruc: fixture.ruc,
+            is_active: true,
+          }),
+        );
+        // The wrapper already bound the transaction-local tenant context
+        // (SET LOCAL) before this callback ran, so every write below —
+        // including FORCE RLS parent-owned tables — is tenant-authorized.
+        const owner = await manager.save(
+          manager.create(User, {
+            tenant_id: tenant.id,
+            name: fixture.owner.name,
+            email: fixture.owner.email,
+            role: UserRole.OWNER,
+            password_hash: await bcrypt.hash(fixture.owner.password, 10),
+            is_active: true,
+          }),
+        );
+        const profile = await manager.save(
+          manager.create(SecurityProfile, {
+            user_id: owner.id,
+            pin_hash: await bcrypt.hash(fixture.owner.offlinePin, 10),
+            is_pin_enabled: true,
+            is_totp_enabled: false,
+          }),
+        );
+        return {
+          tenantId: tenant.id,
+          ownerId: owner.id,
+          securityProfileId: profile.id,
+        };
+      },
+    );
 
     // This is intentionally the only output: it is a machine-readable handoff for
     // the attached-device test. The current activation DevicePrincipal contract binds
@@ -145,6 +183,7 @@ async function seedFounderPilot(): Promise<void> {
         tenant: {
           id: ids.tenantId,
           name: fixture.tenantName,
+          slug: fixture.tenantSlug,
           ruc: fixture.ruc,
         },
         owner: {

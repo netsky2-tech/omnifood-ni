@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #512 T3 slice 2 part B: tenant isolation for the recipe-catalog
@@ -176,7 +177,7 @@ describe('recipe catalog tenant RLS (Real PostgreSQL DB, migration-built schema)
 
     // Real tenant rows first: all five tables FK to tenants(id).
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES ($1, $2), ($3, $4), ($5, $6), ($7, $8)`,
+      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $9), ($3, $4, $10), ($5, $6, $11), ($7, $8, $12)`,
       [
         tenantAId,
         'recipe-rls-tenant-a',
@@ -186,6 +187,10 @@ describe('recipe catalog tenant RLS (Real PostgreSQL DB, migration-built schema)
         'recipe-rls-tenant-c',
         tenantDId,
         'recipe-rls-tenant-d',
+                normalizeTenantSlug('recipe-rls-tenant-a'),
+        normalizeTenantSlug('recipe-rls-tenant-b'),
+        normalizeTenantSlug('recipe-rls-tenant-c'),
+        normalizeTenantSlug('recipe-rls-tenant-d'),
       ],
     );
 

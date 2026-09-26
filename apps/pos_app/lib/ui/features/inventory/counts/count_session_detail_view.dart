@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:pos_app/core/localization/label_map.dart';
 import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 
 typedef CountLineAction = Future<void> Function(String lineId);
@@ -40,7 +41,7 @@ class CountSessionDetailView extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
-                Text('Estado: ${session.status}'),
+                Text('Estado: ${localize(session.status, kCountSessionStatusLabels)}'),
                 Text('Corte: ${dateFormat.format(session.cutoffAt.toLocal())}'),
                 if (session.postedAt != null)
                   Text('Aplicado: ${dateFormat.format(session.postedAt!.toLocal())}'),

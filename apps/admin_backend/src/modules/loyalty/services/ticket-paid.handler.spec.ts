@@ -6,12 +6,33 @@ import {
   LoyaltyProgramType,
 } from '../entities/loyalty-program.entity';
 import { LoyaltyTicketSnapshot } from '../domain/loyalty-ticket-snapshot';
+import { Customer } from '../../customers/entities/customer.entity';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 
 describe('TicketPaidHandler', () => {
   let handler: TicketPaidHandler;
   let mockProgramRepo: { find: jest.Mock };
   let mockCustomerRepo: { findOne: jest.Mock };
   let mockLedgerService: { appendTransaction: jest.Mock };
+
+  // Issue #512 slice 4: manager-scoped mocks and the mock tenant transaction
+  // used by the binding guard. Constructed through a widened signature so the
+  // guard compiles while the handler gains its trailing DataSource dependency.
+  const mgrCustomerRepo = { findOne: jest.fn() };
+  const mgrProgramRepo = { find: jest.fn() };
+  const managerGetRepository = jest.fn((entity: unknown) => {
+    if (entity === Customer) return mgrCustomerRepo;
+    if (entity === LoyaltyProgram) return mgrProgramRepo;
+    return null;
+  });
+  const manager = {
+    getRepository: managerGetRepository,
+    query: jest.fn(),
+  };
+  const dataSource = {
+    transaction: jest.fn((cb: (m: unknown) => Promise<unknown>) => cb(manager)),
+    getRepository: jest.fn(),
+  };
 
   beforeEach(() => {
     mockProgramRepo = { find: jest.fn().mockResolvedValue([]) };
@@ -20,10 +41,15 @@ describe('TicketPaidHandler', () => {
       appendTransaction: jest.fn().mockResolvedValue({ id: 'tx-1' }),
     };
 
+    // Shared manager-scoped mocks: reset history between tests.
+    mgrCustomerRepo.findOne.mockReset();
+    mgrProgramRepo.find.mockReset();
+
     handler = new TicketPaidHandler(
-      mockProgramRepo as any,
-      mockCustomerRepo as any,
-      mockLedgerService as any,
+      mockProgramRepo as never,
+      mockCustomerRepo as never,
+      mockLedgerService as never,
+      dataSource as never,
     );
   });
 
@@ -76,13 +102,13 @@ describe('TicketPaidHandler', () => {
   });
 
   it('returns empty if customer not found', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue(null);
+    mgrCustomerRepo.findOne.mockResolvedValue(null);
     const result = await handler.handle(makeSnapshot());
     expect(result).toEqual([]);
   });
 
   it('returns empty if customer is inactive', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({
+    mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',
       is_active: false,
     });
@@ -91,21 +117,21 @@ describe('TicketPaidHandler', () => {
   });
 
   it('returns empty if no active programs', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({
+    mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',
       is_active: true,
     });
-    mockProgramRepo.find.mockResolvedValue([]);
+    mgrProgramRepo.find.mockResolvedValue([]);
     const result = await handler.handle(makeSnapshot());
     expect(result).toEqual([]);
   });
 
   it('generates EARN for one active SPEND program', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({
+    mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',
       is_active: true,
     });
-    mockProgramRepo.find.mockResolvedValue([makeProgram()]);
+    mgrProgramRepo.find.mockResolvedValue([makeProgram()]);
 
     const result = await handler.handle(makeSnapshot());
 
@@ -117,11 +143,11 @@ describe('TicketPaidHandler', () => {
   });
 
   it('generates EARN for multiple programs', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({
+    mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',
       is_active: true,
     });
-    mockProgramRepo.find.mockResolvedValue([
+    mgrProgramRepo.find.mockResolvedValue([
       makeProgram({
         id: 'prog-1',
         program_type: LoyaltyProgramType.SPEND_POINTS,
@@ -140,11 +166,11 @@ describe('TicketPaidHandler', () => {
   });
 
   it('skips INACTIVE programs even if returned', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({
+    mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',
       is_active: true,
     });
-    mockProgramRepo.find.mockResolvedValue([
+    mgrProgramRepo.find.mockResolvedValue([
       makeProgram({
         id: 'prog-inactive',
         status: LoyaltyProgramStatus.INACTIVE,
@@ -156,11 +182,11 @@ describe('TicketPaidHandler', () => {
   });
 
   it('skips programs outside earning window (before starts_at)', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({
+    mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',
       is_active: true,
     });
-    mockProgramRepo.find.mockResolvedValue([
+    mgrProgramRepo.find.mockResolvedValue([
       makeProgram({ starts_at: new Date('2026-10-01T00:00:00Z') }),
     ]);
 
@@ -171,11 +197,11 @@ describe('TicketPaidHandler', () => {
   });
 
   it('skips programs outside earning window (after ends_at)', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({
+    mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',
       is_active: true,
     });
-    mockProgramRepo.find.mockResolvedValue([
+    mgrProgramRepo.find.mockResolvedValue([
       makeProgram({ ends_at: new Date('2026-08-01T00:00:00Z') }),
     ]);
 
@@ -186,11 +212,11 @@ describe('TicketPaidHandler', () => {
   });
 
   it('sends idempotency key with correct format', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({
+    mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',
       is_active: true,
     });
-    mockProgramRepo.find.mockResolvedValue([makeProgram()]);
+    mgrProgramRepo.find.mockResolvedValue([makeProgram()]);
 
     await handler.handle(makeSnapshot({ ticketId: 'ticket-42' }));
 
@@ -200,11 +226,11 @@ describe('TicketPaidHandler', () => {
   });
 
   it('is idempotent: calling twice with same ticket does not duplicate', async () => {
-    mockCustomerRepo.findOne.mockResolvedValue({
+    mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',
       is_active: true,
     });
-    mockProgramRepo.find.mockResolvedValue([makeProgram()]);
+    mgrProgramRepo.find.mockResolvedValue([makeProgram()]);
 
     await handler.handle(makeSnapshot({ ticketId: 'ticket-idem' }));
     await handler.handle(makeSnapshot({ ticketId: 'ticket-idem' }));
@@ -212,5 +238,33 @@ describe('TicketPaidHandler', () => {
     expect(mockLedgerService.appendTransaction).toHaveBeenCalledTimes(2);
     const calls = mockLedgerService.appendTransaction.mock.calls;
     expect(calls[0][0].idempotencyKey).toBe(calls[1][0].idempotencyKey);
+  });
+
+  it('binds the handle access through the tenant transaction (issue #512 slice 4)', async () => {
+    mgrCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+    });
+    mgrProgramRepo.find.mockResolvedValue([]);
+    managerGetRepository.mockClear();
+    manager.query.mockClear();
+    dataSource.transaction.mockClear();
+
+    await handler.handle(makeSnapshot());
+
+    // A tenant transaction must be opened exactly once for the reads...
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    // ...with the transaction-local binding SQL issued on the unit manager
+    // with the trimmed tenant id before any protected access.
+    expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-1',
+    ]);
+    // The protected reads must resolve their repositories from the bound
+    // manager; the earning loop goes through the (mocked) ledger service.
+    expect(managerGetRepository).toHaveBeenCalledWith(Customer);
+    expect(managerGetRepository).toHaveBeenCalledWith(LoyaltyProgram);
+    // The pooled repository properties must not be used.
+    expect(mockCustomerRepo.findOne).not.toHaveBeenCalled();
+    expect(mockProgramRepo.find).not.toHaveBeenCalled();
   });
 });

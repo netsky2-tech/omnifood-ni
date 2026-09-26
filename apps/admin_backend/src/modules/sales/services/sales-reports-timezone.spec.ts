@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { SalesReportsService } from './sales-reports.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -32,6 +33,26 @@ describe('SalesReportsService — America/Managua Business Day Boundaries Regres
         {
           provide: getRepositoryToken(User),
           useValue: { find: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          // Issue #581 WU1: the dashboard invoice read now runs inside the
+          // tenant-bound transaction manager; this fake invokes the callback
+          // with a manager that hands back the same invoice repo mock, so
+          // the where-clause assertion below keeps its original target and
+          // the timezone coverage is unchanged.
+          provide: DataSource,
+          useValue: {
+            transaction: jest.fn(
+              (work: (manager: unknown) => Promise<unknown>) =>
+                work({
+                  query: jest.fn(async () => []),
+                  getRepository: jest.fn((entity: unknown) => {
+                    if (entity === Invoice) return invoiceRepo;
+                    throw new Error('Unexpected repository request');
+                  }),
+                }),
+            ),
+          },
         },
       ],
     }).compile();

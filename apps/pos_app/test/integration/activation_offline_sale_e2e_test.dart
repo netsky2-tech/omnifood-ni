@@ -89,7 +89,7 @@ void main() {
               LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'),
             );
             await db1.localConfigDao.saveConfig(
-              LocalConfigEntity(key: 'dgi_current_seq', value: '1'),
+              LocalConfigEntity(key: 'dgi_current_number', value: '1'),
             );
             await db1.localConfigDao.saveConfig(
               LocalConfigEntity(key: 'dgi_range_end', value: '500'),

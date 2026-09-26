@@ -74,10 +74,11 @@ async function withIsolatedRolloutSchema(
       CREATE TABLE IF NOT EXISTS tenants (
         id varchar PRIMARY KEY,
         name varchar NOT NULL,
-        slug varchar,
+        slug varchar NOT NULL,
         ruc varchar,
         created_at timestamptz DEFAULT now()
       );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_slug ON tenants (slug);
 
       CREATE TABLE IF NOT EXISTS products (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

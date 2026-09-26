@@ -223,7 +223,9 @@ class InsumoViewModel with ChangeNotifier {
     required double stock,
     required double averageCost,
     required double sellPrice,
-    double taxRate = 0.15,
+    // B2e D-3 fail-closed: the editor defaults to exempt; a concrete rate
+    // must be an explicit operator decision, never an invented 15%.
+    double taxRate = 0.0,
     bool isTaxExempt = false,
   }) async {
     _isLoading = true;

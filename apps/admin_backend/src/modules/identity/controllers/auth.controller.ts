@@ -27,12 +27,16 @@ export class AuthController {
 
   @Post('login')
   async login(@Body() body: LoginDto) {
-    return this.authService.login(body.email, body.pass);
+    return this.authService.login(body.email, body.pass, body.tenantSlug);
   }
 
   @Post('refresh')
   async refresh(@Body() body: RefreshTokenDto) {
-    return this.authService.refreshTokens(body.userId, body.refreshToken);
+    return this.authService.refreshTokens(
+      body.userId,
+      body.refreshToken,
+      body.tenantSlug,
+    );
   }
 
   @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
@@ -53,8 +57,13 @@ export class AuthController {
   @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
   @UseInterceptors(TenantInterceptor)
   @Get('me')
-  async getMe(@Req() req: { user?: { sub?: string } }) {
-    return this.authService.getMe(req.user?.sub || '');
+  async getMe(@Req() req: { user?: { sub?: string; tenant_id?: string } }) {
+    // Issue #556 stage 12d: the tenant id comes from the JWT (never from
+    // the client body) so the self read binds the matching tenant context.
+    return this.authService.getMe(
+      req.user?.sub || '',
+      req.user?.tenant_id || '',
+    );
   }
 
   @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)

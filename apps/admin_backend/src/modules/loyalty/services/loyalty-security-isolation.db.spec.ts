@@ -18,6 +18,7 @@ import {
 } from '../entities/reward-definition.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -61,7 +62,7 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
     await bootstrap.query(`CREATE TABLE "${schema}".tenants (
-      id text PRIMARY KEY, name text NOT NULL, ruc text, is_active boolean DEFAULT true,
+      id text PRIMARY KEY, name text NOT NULL, slug text NOT NULL, ruc text, is_active boolean DEFAULT true,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);
 
@@ -145,12 +146,13 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
     txRepo = dataSource.getRepository(CustomerPointTransaction);
     projRepo = dataSource.getRepository(CustomerLoyaltyAccountProjection);
 
-    ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
+    ledgerService = new LoyaltyLedgerService(txRepo, projRepo, dataSource);
     loyaltyService = new LoyaltyService(
       progRepo,
       rewardRepo,
       projRepo,
       custRepo,
+      dataSource,
     );
     redemptionService = new RedemptionService(
       progRepo,
@@ -159,12 +161,13 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
       txRepo,
       ledgerService,
       loyaltyService,
+      dataSource,
     );
 
     // Setup Tenant Alpha and Tenant Beta
     await tenantRepo.save([
-      { id: tenantA, name: 'Tenant Alpha (Burgers)', is_active: true },
-      { id: tenantB, name: 'Tenant Beta (Tacos)', is_active: true },
+      { id: tenantA, name: 'Tenant Alpha (Burgers)', slug: normalizeTenantSlug('Tenant Alpha (Burgers)'), is_active: true },
+      { id: tenantB, name: 'Tenant Beta (Tacos)', slug: normalizeTenantSlug('Tenant Beta (Tacos)'), is_active: true },
     ]);
 
     const cA = await custRepo.save({

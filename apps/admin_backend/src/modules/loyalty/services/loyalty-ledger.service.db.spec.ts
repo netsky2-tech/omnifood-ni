@@ -106,6 +106,7 @@ async function createTestHarness() {
   const ledgerService = new LoyaltyLedgerService(
     dataSource.getRepository(CustomerPointTransaction),
     dataSource.getRepository(CustomerLoyaltyAccountProjection),
+    dataSource,
   );
 
   return {

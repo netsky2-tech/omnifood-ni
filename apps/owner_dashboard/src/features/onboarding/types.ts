@@ -225,6 +225,53 @@ export interface ActivationAttempt {
 }
 
 /**
+ * Response of POST /onboarding/activation/linking-codes, matched against the
+ * backend contract in apps/admin_backend/src/modules/onboarding/:
+ * DeviceLinkingController.generateLinkingCode returns exactly
+ * `{ code, expiresAt }` (GenerateLinkingCodeResult in
+ * services/device-linking.service.ts). The plaintext code is returned exactly
+ * ONCE — only its bcrypt hash is persisted server-side — and `expiresAt`
+ * serializes as an ISO string over JSON. There is no `id` field.
+ */
+export interface GenerateLinkingCodeResponse {
+  code: string;
+  expiresAt: string;
+}
+
+/**
+ * Linking code lifecycle, verified against `DeviceLinkingCodeStatus` in
+ * apps/admin_backend/src/modules/onboarding/entities/device-linking-code.entity.ts.
+ */
+export const LinkingCodeStatus = {
+  ACTIVE: "ACTIVE",
+  CLAIMED: "CLAIMED",
+  EXPIRED: "EXPIRED",
+  REVOKED: "REVOKED",
+} as const;
+
+export type LinkingCodeStatus = (typeof LinkingCodeStatus)[keyof typeof LinkingCodeStatus];
+
+/**
+ * Safe projection of a device linking code as returned by
+ * GET /onboarding/activation/linking-codes (issue #569 single linking flow),
+ * matched against LinkingCodeResponseDto in
+ * apps/admin_backend/src/modules/onboarding/dto/linking-code-response.dto.ts.
+ * Deliberately excludes codeHash and tenantId. Timestamps serialize as ISO
+ * strings over JSON; the plaintext code is never included (it is returned
+ * exactly once by the POST generation endpoint).
+ */
+export interface LinkingCodeResponse {
+  id: string;
+  status: LinkingCodeStatus;
+  /** Bound device id once the POS claimed the code; null while ACTIVE. */
+  deviceId: string | null;
+  expiresAt: string;
+  /** Set when the code transitioned to CLAIMED; null otherwise. */
+  claimedAt: string | null;
+  createdAt: string;
+}
+
+/**
  * Body for POST /onboarding/activation/attempts. The backend accepts exactly
  * these whitelisted fields (global validation pipe: whitelist +
  * forbidNonWhitelisted). Tenant and actor identity come from the JWT and must

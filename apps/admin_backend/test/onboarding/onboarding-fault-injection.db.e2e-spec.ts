@@ -14,6 +14,7 @@ import { ProductImportSession } from '../../src/modules/onboarding/entities/prod
 import { LegacyOnboardingMigrationReceipt } from '../../src/modules/onboarding/entities/legacy-migration-receipt.entity';
 import { ImportStagingService } from '../../src/modules/onboarding/services/import-staging.service';
 import { CanonicalCsvParserService } from '../../src/modules/onboarding/services/canonical-csv-parser.service';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 const postgresConnection = {
   host: process.env.DB_HOST?.trim() ?? '127.0.0.1',
@@ -84,6 +85,7 @@ async function withFaultInjectionIsolatedSchema(
       tenantRepo.create({
         id: tenantId,
         name: 'Fault Injection Tenant',
+        slug: normalizeTenantSlug('Fault Injection Tenant'),
         is_active: true,
       }),
     );

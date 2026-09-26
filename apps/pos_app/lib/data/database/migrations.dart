@@ -2438,6 +2438,64 @@ final migration53_54 = Migration(53, 54, (database) async {
   await addColumn('local_authorization_sequence INTEGER NOT NULL DEFAULT 0');
 });
 
+final migration54_55 = Migration(54, 55, (database) async {
+  // B1a-4 (D-11): shift (turno) membership for invoices. Nullable and
+  // permanent: historical rows cannot be backfilled because the data was
+  // never recorded (D-9, owner-accepted). New sales get the id of the
+  // cashier's own open session (user + terminal) at checkout; sales with no
+  // matching open session persist null.
+  //
+  // Tradeoff, do not "fix" the missing FK here: SQLite's ALTER TABLE ADD
+  // COLUMN cannot attach a FOREIGN KEY to an existing column without a full
+  // table rebuild. Recreating the fiscal `invoices` table (unique indexes,
+  // DGI numbering sequence, append-only #526 AC-11 policy) is not worth it
+  // for this advisory guard column, so upgraded databases carry shift_id
+  // without the FK while fresh installs get it from the Floor-generated DDL.
+  // Same guarded pattern as migration53_54 (SQLite has no ADD COLUMN IF NOT
+  // EXISTS), so the migration is safe to re-run.
+  // Same pattern as the authority-immutability guard above (and 20 other
+  // sqlite_master checks in this file): the fiscal table can legitimately
+  // be absent on synthetic legacy upgrade paths (e.g. the sync_service
+  // regression DB opens at version 24 and creates only the tables it
+  // needs). Skip both statements when the table does not exist: a v54
+  // database without `invoices` cannot contain invoice rows to migrate,
+  // and fresh installs create the column from the Floor-generated DDL.
+  // Real v54 installs always have the table (created in onCreate; no
+  // migration ever drops invoices), so the guard cannot silently skip a
+  // migration that should have run.
+  final invoicesTables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'invoices'",
+  );
+  if (invoicesTables.isEmpty) return;
+  final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+  final names = columns.map((column) => column['name'] as String).toSet();
+  if (!names.contains('shift_id')) {
+    await database.execute('ALTER TABLE invoices ADD COLUMN shift_id TEXT');
+  }
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_invoices_shift_id ON invoices (shift_id)',
+  );
+  // D-12 (added in place, never as migration55_56: migration54_55 shipped
+  // only on this branch and no device ever ran it). Same guarded pattern;
+  // the sqlite_master guard above covers this statement too.
+  if (!names.contains('local_issue_date')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN local_issue_date TEXT',
+    );
+  }
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_invoices_local_issue_date '
+    'ON invoices (local_issue_date)',
+  );
+  // B1r (D-13, third in-place extension — still never shipped): the
+  // immutable fiscal header snapshot for faithful reprints.
+  if (!names.contains('fiscal_header_snapshot')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN fiscal_header_snapshot TEXT',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2483,7 +2541,72 @@ final allMigrations = [
   migration51_52,
   migration52_53,
   migration53_54,
+  migration54_55,
+  migration55_56,
 ];
+
+/// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open
+/// application-layer default.
+///
+/// Historical note: SQLite cannot ALTER COLUMN DEFAULT, so the schema-level
+/// `tax_rate REAL NOT NULL` columns carry no invented default; the old 0.15
+/// lived in the Dart constructors/mappers. Devices provisioned while that
+/// default was active may hold product/invoice-item rows written at 15% even
+/// though the operator never chose a rate.
+///
+/// The reconciliation is deliberately CONDITIONAL: only where the device's
+/// persisted regime (`local_configs` key `tax_regime`) is CUOTA_FIJA can a
+/// 15% rate be known-wrong for every receipt the terminal prints, so only
+/// there are 0.15 rows rewritten to 0.0. Under REGIMEN_GENERAL a 0.15 row may
+/// be a legitimately configured rate and is left untouched. When the regime
+/// is unknown (missing key or table) the migration is a strict no-op —
+/// fail-closed, never an unconditional rewrite.
+///
+/// Historical amounts (`invoice_items.tax_amount`, `total`, invoice totals)
+/// are intentionally NOT recomputed: they are the historical record of what
+/// the sale captured and DGI norms forbid rewriting issued documents; the
+/// receipt/report layers already derive the displayed IVA from the regime.
+final migration55_56 = Migration(55, 56, (database) async {
+  final configsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'local_configs'",
+  );
+  if (configsTable.isEmpty) return;
+
+  final regimeRows = await database.query(
+    'local_configs',
+    columns: ['value'],
+    where: 'key = ?',
+    whereArgs: ['tax_regime'],
+    limit: 1,
+  );
+  final regime = regimeRows.isEmpty
+      ? ''
+      : ((regimeRows.single['value'] as String?) ?? '').trim();
+  if (regime != 'CUOTA_FIJA') return;
+
+  final productsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'products'",
+  );
+  if (productsTable.isNotEmpty) {
+    await database.execute(
+      'UPDATE products SET tax_rate = 0.0 WHERE tax_rate = 0.15',
+    );
+  }
+
+  final itemsTable = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'invoice_items'",
+  );
+  if (itemsTable.isNotEmpty) {
+    await database.execute(
+      'UPDATE invoice_items SET original_tax_rate = 0.0 '
+      'WHERE original_tax_rate = 0.15',
+    );
+    await database.execute(
+      'UPDATE invoice_items SET applied_tax_rate = 0.0 '
+      'WHERE applied_tax_rate = 0.15',
+    );
+  }
+});
 
 /// Catalog mapping identity is additive: historical products remain usable.
 final migration47_48 = Migration(47, 48, (database) async {

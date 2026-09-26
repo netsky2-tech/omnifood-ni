@@ -4,37 +4,29 @@ import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sales_history_view_model.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/sales/sales_history_view.dart';
 import 'sale_view_security_flows_test.mocks.dart';
 
-/// AC-13 regression guard: the credit-note dialog must report the outcome it
-/// actually observed. A locally-created credit note is NOT an accepted one,
-/// so the success copy must claim only local registration pending sync, and
-/// a failure must keep the dialog open (the typed reason must not be lost).
+/// D-14 / #553 Part 1: the POS no longer offers credit-note issuance. The
+/// Backoffice (B1c-2) is the emitter for cross-day corrections; until DSI-6
+/// re-enables POS-side issuance behind reauthentication evidence, the
+/// affordance is ABSENT for every role — a hidden-by-role button would imply
+/// some role may still use it, and a disabled never-enabling control would
+/// be noise beside the real action (ANULAR).
 ///
-/// The legacy string 'Nota de Crédito emitida correctamente' asserted an
-/// upstream acceptance the POS never observed; its absence is asserted in
-/// every scenario below.
+/// AC-13 regression guard (from 6dcadf13, reworked as absence tests): no
+/// credit-note affordance can show any success message — in particular the
+/// legacy 'Nota de Crédito emitida correctamente' string asserted an
+/// upstream acceptance the POS never observed. With no affordance, it can
+/// never appear.
 void main() {
   late MockSaleViewModel mockSaleViewModel;
   late _FakeSalesHistoryViewModel fakeHistoryViewModel;
 
-  const testItem = InvoiceItem(
-    id: 'item-1',
-    invoiceId: 'inv-1',
-    productId: 'prod-1',
-    productName: 'Café Espresso',
-    quantity: 2,
-    unitPrice: 50.0,
-    originalTaxRate: 0.15,
-    appliedTaxRate: 0.15,
-    taxAmount: 15.0,
-    total: 115.0,
-  );
-
-  Invoice buildInvoice() => Invoice(
+  Invoice buildInvoice({bool isCanceled = false}) => Invoice(
         id: 'inv-1',
         number: '001-001-01-00000001',
         createdAt: DateTime(2026, 8, 27, 10, 30),
@@ -42,15 +34,20 @@ void main() {
         subtotal: 100.0,
         totalTax: 15.0,
         total: 115.0,
-        isCanceled: false,
+        isCanceled: isCanceled,
       );
 
   setUp(() {
     mockSaleViewModel = MockSaleViewModel();
-    fakeHistoryViewModel = _FakeSalesHistoryViewModel([testItem]);
+    fakeHistoryViewModel = _FakeSalesHistoryViewModel(const []);
   });
 
-  Future<void> pumpDetailScreen(WidgetTester tester) async {
+  Future<void> pumpDetailScreen(
+    WidgetTester tester, {
+    UserRole role = UserRole.cashier,
+    bool isCanceled = false,
+  }) async {
+    when(mockSaleViewModel.canVoidInvoice).thenReturn(role != UserRole.waiter);
     await tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -60,99 +57,49 @@ void main() {
           ChangeNotifierProvider<SaleViewModel>.value(value: mockSaleViewModel),
         ],
         child: MaterialApp(
-          home: InvoiceDetailScreen(invoice: buildInvoice()),
+          home: InvoiceDetailScreen(invoice: buildInvoice(isCanceled: isCanceled)),
         ),
       ),
     );
     await tester.pumpAndSettle();
-
-    await tester.tap(find.text('REALIZAR DEVOLUCIÓN'));
-    await tester.pumpAndSettle();
   }
 
-  Future<void> tapProcess(WidgetTester tester) async {
-    await tester.tap(find.text('PROCESAR'));
-    await tester.pump(); // start the async callback
-    await tester.pump(const Duration(milliseconds: 400)); // snackbar animation
-  }
+  group('D-14: the credit-note action is absent for every role', () {
+    for (final role in UserRole.values) {
+      testWidgets('$role: no REALIZAR DEVOLUCIÓN affordance on the panel',
+          (tester) async {
+        await pumpDetailScreen(tester, role: role);
 
-  testWidgets(
-    'role-denied processReturn shows the error, keeps the dialog open, and never shows the legacy success copy',
-    (tester) async {
-      when(mockSaleViewModel.errorMessage).thenReturn('Acceso denegado.');
-      when(mockSaleViewModel.processReturn(any, any)).thenAnswer(
-        (_) async => false,
-      );
+        expect(find.text('REALIZAR DEVOLUCIÓN'), findsNothing);
+        expect(find.text('Confirmar Devolución'), findsNothing);
+        // The dialog cannot be reached, so the view model's parked method is
+        // never invoked from the widget tree.
+        verifyNever(mockSaleViewModel.processReturn(any, any));
+      });
+    }
 
-      await pumpDetailScreen(tester);
-      await tapProcess(tester);
+    testWidgets(
+        'a canceled invoice shows no correction affordance either (AC-3)',
+        (tester) async {
+      await pumpDetailScreen(tester, role: UserRole.owner, isCanceled: true);
 
-      // The dialog stays open so the typed reason is not lost.
-      expect(find.text('Confirmar Devolución'), findsOneWidget);
-      expect(find.text('Devolución de cliente'), findsOneWidget);
-      // The Spanish error is surfaced.
-      expect(find.text('Acceso denegado.'), findsOneWidget);
-      // AC-13 regression guard: neither the legacy nor the honest success
-      // copy may appear on a failure path.
+      expect(find.text('REALIZAR DEVOLUCIÓN'), findsNothing);
+      expect(find.text('ANULAR FACTURA'), findsNothing);
+      expect(find.text('ANULADA'), findsOneWidget);
+      verifyNever(mockSaleViewModel.processReturn(any, any));
+    });
+
+    testWidgets('AC-13: no credit-note success copy can ever be shown',
+        (tester) async {
+      await pumpDetailScreen(tester, role: UserRole.owner);
+
+      // No affordance exists, so no path can render a credit-note success
+      // message — the legacy acceptance string least of all.
+      expect(find.textContaining('Nota de Crédito'), findsNothing);
       expect(find.textContaining('emitida correctamente'), findsNothing);
-      expect(
-        find.text('Nota de Crédito registrada. Pendiente de validación al sincronizar.'),
-        findsNothing,
-      );
-      // A failed local operation must not refresh the history list.
-      expect(fakeHistoryViewModel.loadInvoicesCalls, 0);
-    },
-  );
-
-  testWidgets(
-    'not-found processReturn shows the error, keeps the dialog open, and never shows the legacy success copy',
-    (tester) async {
-      when(mockSaleViewModel.errorMessage)
-          .thenReturn('Factura no encontrada: 001-001-01-00000001');
-      when(mockSaleViewModel.processReturn(any, any)).thenAnswer(
-        (_) async => false,
-      );
-
-      await pumpDetailScreen(tester);
-      await tapProcess(tester);
-
-      expect(find.text('Confirmar Devolución'), findsOneWidget);
-      expect(find.text('Devolución de cliente'), findsOneWidget);
-      expect(
-        find.text('Factura no encontrada: 001-001-01-00000001'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('emitida correctamente'), findsNothing);
-      expect(
-        find.text('Nota de Crédito registrada. Pendiente de validación al sincronizar.'),
-        findsNothing,
-      );
-      expect(fakeHistoryViewModel.loadInvoicesCalls, 0);
-    },
-  );
-
-  testWidgets(
-    'successful processReturn shows the pending-validation wording, closes the dialog, and never shows the legacy success copy',
-    (tester) async {
-      when(mockSaleViewModel.processReturn(any, any)).thenAnswer(
-        (_) async => true,
-      );
-
-      await pumpDetailScreen(tester);
-      await tapProcess(tester);
-
-      // The note was registered locally only: the confirmation must claim
-      // pending validation, never upstream acceptance.
-      expect(
-        find.text('Nota de Crédito registrada. Pendiente de validación al sincronizar.'),
-        findsOneWidget,
-      );
-      // AC-13 regression guard: the old string asserting acceptance is gone.
-      expect(find.textContaining('emitida correctamente'), findsNothing);
-      expect(find.text('Confirmar Devolución'), findsNothing);
-      expect(fakeHistoryViewModel.loadInvoicesCalls, 1);
-    },
-  );
+      verifyNever(mockSaleViewModel.processReturn(any, any));
+    });
+  });
 }
 
 class _FakeSalesHistoryViewModel extends ChangeNotifier

@@ -41,6 +41,7 @@ import {
   rebindTenantColumnToUuid,
 } from '../support/rls-test-shape.helper';
 import { resolveTenantRlsPredicate } from '../../src/core/database/tenant-rls-policy';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -223,8 +224,8 @@ async function withIsolatedSchema(
       [otherTenantId, `Regularization RLS Tenant B ${schemaPrefix}`],
     ] as const) {
       await admin.query(
-        `INSERT INTO tenants (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, now(), now())`,
-        [id, name],
+        `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
+        [id, name, normalizeTenantSlug(name)],
       );
     }
 

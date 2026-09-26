@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
+  DataSource,
   FindOptionsWhere,
   LessThanOrEqual,
   MoreThanOrEqual,
   Repository,
 } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Invoice } from '../entities/invoice.entity';
 import { User } from '../../identity/entities/user.entity';
 import {
@@ -30,6 +32,11 @@ export class FiscalReportsService {
     private readonly invoiceRepo: Repository<Invoice>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    // Issue #556 stage 12d F1: the users read is bound through the
+    // tenant-bound transaction manager (FORCE RLS on users fails closed
+    // on a pooled connection); the pooled injection stays for module
+    // wiring and as the spec's runtime-teeth tripwire.
+    private readonly dataSource: DataSource,
   ) {}
 
   async getMonthlySummary(
@@ -41,15 +48,23 @@ export class FiscalReportsService {
       query?.month,
     );
 
-    const invoices = await this.invoiceRepo.find({
-      where: {
-        tenant_id: tenantId,
-        isCanceled: false,
-        created_at: Between(start, end),
-      },
-      relations: ['items'],
-      order: { created_at: 'ASC' },
-    });
+    // Issue #581 WU1: invoices is a direct:SIUD RLS-forced table — the
+    // pooled find silently returned zero rows under the production
+    // NOBYPASSRLS role. Bound read, identical query semantics.
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: {
+            tenant_id: tenantId,
+            isCanceled: false,
+            created_at: Between(start, end),
+          },
+          relations: ['items'],
+          order: { created_at: 'ASC' },
+        }),
+    );
 
     let totalGrossSales = 0;
     let totalTaxableSales = 0;
@@ -151,14 +166,29 @@ export class FiscalReportsService {
       whereClause.created_at = LessThanOrEqual(end);
     }
 
-    const invoices = await this.invoiceRepo.find({
-      where: whereClause,
-      order: { created_at: 'DESC' },
-    });
+    // Issue #581 WU1: bound invoice read (see getMonthlySummary) — joins
+    // the users read, which was already bound in issue #556 stage 12d F1.
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: whereClause,
+          order: { created_at: 'DESC' },
+        }),
+    );
 
-    const users = await this.userRepo.find({
-      where: { tenant_id: tenantId },
-    });
+    // Issue #556 stage 12d F1: users is FORCE-RLS-protected — a pooled
+    // read here silently returned zero rows and every voided-invoice row
+    // lost its cashier name. Bound read, identical query semantics.
+    const users = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(User).find({
+          where: { tenant_id: tenantId },
+        }),
+    );
     const userMap = new Map<string, string>();
     for (const u of users) {
       userMap.set(u.id, u.name);
@@ -214,10 +244,16 @@ export class FiscalReportsService {
       whereClause.created_at = LessThanOrEqual(end);
     }
 
-    const invoices = await this.invoiceRepo.find({
-      where: whereClause,
-      order: { created_at: 'ASC' },
-    });
+    // Issue #581 WU1: bound invoice read (see getMonthlySummary).
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: whereClause,
+          order: { created_at: 'ASC' },
+        }),
+    );
 
     const seriesMap = new Map<string, number[]>();
 
@@ -327,8 +363,7 @@ export class FiscalReportsService {
       .split('-')
       .map((v) => parseInt(v, 10));
 
-    const year =
-      yearParam != null && yearParam >= 2000 ? yearParam : currY;
+    const year = yearParam != null && yearParam >= 2000 ? yearParam : currY;
     const month =
       monthParam != null && monthParam >= 1 && monthParam <= 12
         ? monthParam

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { CashShiftService } from './cash-shift.service';
 import {
   CashShiftSession,
@@ -15,8 +16,29 @@ describe('CashShiftService', () => {
   let service: CashShiftService;
   let shiftRepo: jest.Mocked<Repository<CashShiftSession>>;
   let movementRepo: jest.Mocked<Repository<CashMovement>>;
+  // The tenant-bound transaction fake: the manager hands back the same
+  // repository mocks the pooled tokens provide, so the existing behavior
+  // assertions keep working unchanged while the guard test below proves the
+  // binding itself with isolated instrumented fakes.
+  let transactionalManager: {
+    query: jest.Mock;
+    getRepository: jest.Mock;
+  };
+  let transactionalDataSource: { transaction: jest.Mock };
 
   beforeEach(async () => {
+    transactionalManager = {
+      query: jest.fn(async () => []),
+      getRepository: jest.fn((entity: unknown) =>
+        entity === CashShiftSession ? shiftRepo : movementRepo,
+      ),
+    };
+    transactionalDataSource = {
+      transaction: jest.fn(
+        async (work: (manager: unknown) => Promise<unknown>) =>
+          work(transactionalManager),
+      ),
+    };
     shiftRepo = {
       findOne: jest.fn(),
       find: jest.fn(),
@@ -43,6 +65,7 @@ describe('CashShiftService', () => {
           provide: getRepositoryToken(CashMovement),
           useValue: movementRepo,
         },
+        { provide: DataSource, useValue: transactionalDataSource },
       ],
     }).compile();
 
@@ -255,6 +278,160 @@ describe('CashShiftService', () => {
       expect(closed.difference_nio).toBe(50.0);
       expect(closed.difference_usd).toBe(20.0);
       expect(closed.z_report_sequence).toBe(1);
+    });
+  });
+
+  // Issue #512 slice 5: the cash tables are now tenant-RLS protected, so
+  // every cash access must run inside a tenant-bound transaction. This guard
+  // has RUNTIME teeth: it injects a fake DataSource whose transaction()
+  // hands back a manager that records the set_config binding and hands out
+  // instrumented repositories, while the pooled repositories stand beside it
+  // as tripwires. If any bound access is reverted to the pooled repository
+  // (while the constructor keeps declaring dataSource), the pooled tripwire
+  // records a call and this test fails at runtime, not at compile time.
+  describe('tenant transaction binding', () => {
+    it('binds the cash shift access through the tenant transaction (issue #512 slice 5)', async () => {
+      // Pooled tripwires: any call here means an access escaped the bound
+      // transaction and would hit RLS on a connection with no tenant bound.
+      const pooledShift = {
+        findOne: jest.fn(),
+        create: jest.fn(),
+        save: jest.fn(),
+        count: jest.fn(),
+      };
+      const pooledMovement = {
+        create: jest.fn(),
+        save: jest.fn(),
+      };
+
+      // Bound instrumented repositories handed out by the transaction manager.
+      const boundShift = {
+        findOne: jest.fn(),
+        create: jest.fn(),
+        save: jest.fn(async (entity: unknown) => entity),
+        count: jest.fn(),
+      };
+      const boundMovement = {
+        create: jest.fn(),
+        save: jest.fn(async (entity: unknown) => entity),
+      };
+
+      const setConfigCalls: Array<[string, string[]]> = [];
+      const boundManager = {
+        query: jest.fn(async (sql: string, params: string[]) => {
+          setConfigCalls.push([sql, params]);
+          return [];
+        }),
+        getRepository: jest.fn((entity: unknown) =>
+          entity === CashShiftSession ? boundShift : boundMovement,
+        ),
+      };
+      const boundDataSource = {
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            work(boundManager),
+        ),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          CashShiftService,
+          {
+            provide: getRepositoryToken(CashShiftSession),
+            useValue: pooledShift,
+          },
+          {
+            provide: getRepositoryToken(CashMovement),
+            useValue: pooledMovement,
+          },
+          { provide: DataSource, useValue: boundDataSource },
+        ],
+      }).compile();
+      const bound = module.get<CashShiftService>(CashShiftService);
+
+      // Exercise every method: the two read-only lookups plus the three
+      // logical write units (openShift, recordCashMovement,
+      // closeShiftWithZReport), each of which must be its own transaction.
+      boundShift.findOne.mockResolvedValueOnce(null); // getActiveShiftByTerminal
+      expect(
+        await bound.getActiveShiftByTerminal('tenant-1', 'term-main'),
+      ).toBeNull();
+
+      boundShift.findOne.mockResolvedValueOnce(null); // getCashShiftById
+      await expect(
+        bound.getCashShiftById('tenant-1', 'shift-404'),
+      ).rejects.toThrow('Turno de caja shift-404 no encontrado.');
+
+      boundShift.findOne.mockResolvedValueOnce(null); // openShift read
+      boundShift.create.mockReturnValueOnce({
+        id: 'shift-1',
+      });
+      await bound.openShift('tenant-1', {
+        terminalId: 'term-main',
+        cashierId: 'user-cajero',
+        cashierName: 'Juan Pérez',
+        initialFloatNio: 1000.0,
+        initialFloatUsd: 50.0,
+      });
+
+      boundShift.findOne.mockResolvedValueOnce({
+        id: 'shift-1',
+        tenant_id: 'tenant-1',
+        status: CashShiftStatus.OPEN,
+        expected_cash_nio: 1000.0,
+        expected_cash_usd: 50.0,
+      }); // recordCashMovement read
+      boundMovement.create.mockReturnValueOnce({
+        id: 'mov-1',
+      });
+      await bound.recordCashMovement('tenant-1', 'shift-1', {
+        terminalId: 'term-main',
+        type: CashMovementType.CASH_IN,
+        amountNio: 500.0,
+        amountUsd: 0.0,
+        reason: 'Ingreso cambio menudo',
+      });
+
+      boundShift.findOne.mockResolvedValueOnce({
+        id: 'shift-1',
+        tenant_id: 'tenant-1',
+        status: CashShiftStatus.OPEN,
+        expected_cash_nio: 1000.0,
+        expected_cash_usd: 50.0,
+      }); // closeShiftWithZReport read
+      boundShift.count.mockResolvedValueOnce(0);
+      await bound.closeShiftWithZReport('tenant-1', 'shift-1', {
+        finalCountedNio: 1000.0,
+        finalCountedUsd: 50.0,
+      });
+
+      // FIVE logical units, FIVE transactions, each binding the tenant
+      // context exactly once with the production set_config SQL.
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(5);
+      expect(setConfigCalls).toHaveLength(5);
+      for (const [sql, params] of setConfigCalls) {
+        expect(sql).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
+        expect(params).toEqual(['tenant-1']);
+      }
+
+      // Every access resolved through the bound manager's repositories...
+      expect(boundShift.findOne).toHaveBeenCalledTimes(5);
+      expect(boundShift.create).toHaveBeenCalledTimes(1);
+      expect(boundShift.save).toHaveBeenCalledTimes(3); // open + movement + close
+      expect(boundShift.count).toHaveBeenCalledTimes(1);
+      expect(boundMovement.create).toHaveBeenCalledTimes(1);
+      expect(boundMovement.save).toHaveBeenCalledTimes(1);
+      // ...and the manager handed out only tenant-bound repositories.
+      expect(boundManager.getRepository).toHaveBeenCalledTimes(12);
+
+      // RUNTIME TEETH: the pooled tripwires stayed silent. A reverted access
+      // lands here and fails this assertion — no compile error involved.
+      expect(pooledShift.findOne).not.toHaveBeenCalled();
+      expect(pooledShift.create).not.toHaveBeenCalled();
+      expect(pooledShift.save).not.toHaveBeenCalled();
+      expect(pooledShift.count).not.toHaveBeenCalled();
+      expect(pooledMovement.create).not.toHaveBeenCalled();
+      expect(pooledMovement.save).not.toHaveBeenCalled();
     });
   });
 });

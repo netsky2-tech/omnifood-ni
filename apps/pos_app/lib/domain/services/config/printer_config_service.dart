@@ -26,6 +26,18 @@ class PrinterConfigService {
   /// profile. The local value therefore wins over the projection until the next
   /// fiscal resync restores it — that override is intentional (offline-first).
   static const String fiscalRucKey = 'ruc';
+
+  /// D-17 (P0): fiscal authorization number. Written by the operator from
+  /// the POS business profile (like [fiscalRucKey]); read into
+  /// [PrinterConfig.dgiAuthorizationCode] and printed at the bottom-right of
+  /// the invoice (DT 09-2007 QUINTO).
+  ///
+  /// D-21 consolidation (#551): the legacy backing pair
+  /// (`dgi_authorization_date` / `dgi_authorization_document`) was removed
+  /// from the model and this service. Rows persisted by older builds stay in
+  /// `local_configs` and are simply ignored on read — no destructive
+  /// migration, and nothing resurrects them.
+  static const String dgiAuthorizationCodeKey = 'dgi_authorization_code';
   static const String headerAddressKey = 'printer_header_address';
   static const String headerPhoneKey = 'printer_header_phone';
   static const String logoBase64Key = 'printer_logo_base64';
@@ -68,7 +80,7 @@ class PrinterConfigService {
     await _configDao.saveConfig(LocalConfigEntity(
       key: driverTypeKey,
       value: _driverCode(driverType),
-      description: 'Printer driver type',
+      description: 'Tipo de controlador de impresora',
     ));
     await _configDao.saveConfig(LocalConfigEntity(
       key: paperWidthMmKey,
@@ -128,6 +140,8 @@ class PrinterConfigService {
     final logoHeight = int.tryParse(logoHeightEntity?.value ?? '');
     final isLogoEnabled = isLogoEnabledEntity?.value.trim().toLowerCase() == 'true';
     final taxRegimeEntity = await _configDao.getConfigByKey('tax_regime');
+    final authCodeEntity =
+        await _configDao.getConfigByKey(dgiAuthorizationCodeKey);
 
     return PrinterConfig(
       driverType: driverType,
@@ -144,6 +158,7 @@ class PrinterConfigService {
       headerAddress: addressEntity?.value,
       headerPhone: phoneEntity?.value,
       taxRegime: taxRegimeEntity?.value,
+      dgiAuthorizationCode: authCodeEntity?.value,
       logoBase64: logoBase64Entity?.value,
       logoWidth: logoWidth,
       logoHeight: logoHeight,
@@ -173,7 +188,7 @@ class PrinterConfigService {
       await _configDao.saveConfig(LocalConfigEntity(
         key: driverTypeKey,
         value: _driverCode(config.driverType),
-        description: 'Printer driver type',
+        description: 'Tipo de controlador de impresora',
       ));
     }
     await _configDao.saveConfig(LocalConfigEntity(
@@ -243,6 +258,14 @@ class PrinterConfigService {
         description: 'Phone for printed tickets',
       ));
     }
+
+    // D-21 (#551): the fiscal authorization keys are business-profile data,
+    // exactly like the projected `ruc` key ([fiscalRucKey]): they are written
+    // by the business profile and the DGI projection, never by printer saves.
+    // A printer save carrying them would round-trip printer config into
+    // fiscal identity (the contamination [savePrinterConfig] exists to
+    // prevent). The legacy D-17 backing pair is gone from the model, so a
+    // save can never resurrect it.
 
     if (config.logoBase64 != null) {
       await _configDao.saveConfig(LocalConfigEntity(

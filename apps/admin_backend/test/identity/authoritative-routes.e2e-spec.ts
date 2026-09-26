@@ -255,7 +255,24 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
         },
         { provide: CatalogService, useValue: catalogService },
         { provide: getRepositoryToken(User), useValue: users },
-        { provide: DataSource, useValue: {} },
+        {
+          // Issue #556 stage 12d: login resolves the tenant slug through
+          // `query` and binds the user read through the transaction manager.
+          provide: DataSource,
+          useValue: {
+            query: jest
+              .fn()
+              .mockResolvedValue([
+                { id: 'tenant-A', slug: 'founder-slug', is_active: true },
+              ]),
+            transaction: jest.fn((operation: (manager: unknown) => unknown) =>
+              operation({
+                query: jest.fn().mockResolvedValue(undefined),
+                getRepository: jest.fn().mockReturnValue(users),
+              }),
+            ),
+          },
+        },
       ],
     })
       // The device transport guard is declared per-route on movements/sync and
@@ -326,7 +343,11 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
   it('permits an active manager using an access token issued by login', async () => {
     const login = await request(app.getHttpServer())
       .post('/identity/login')
-      .send({ email: currentUser.email, pass: 'correct-password' })
+      .send({
+        email: currentUser.email,
+        pass: 'correct-password',
+        tenantSlug: 'founder-slug',
+      })
       .expect(201);
     const loginBody = login.body as { access_token: string };
     const accessToken = loginBody.access_token;

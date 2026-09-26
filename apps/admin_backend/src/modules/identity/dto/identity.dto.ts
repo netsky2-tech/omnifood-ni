@@ -11,6 +11,7 @@ import {
   Allow,
   ValidateIf,
   ValidateBy,
+  Matches,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
@@ -56,6 +57,19 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty({ message: 'La contraseña es requerida' })
   pass: string;
+
+  /**
+   * REQUIRED pre-auth tenant CONTEXT (issue #556 stage 12d): the server
+   * resolves it to a tenant id and binds the transaction BEFORE the user
+   * lookup. Never authority — post-login authority stays the JWT tenant_id.
+   * The legacy no-slug login path is removed: old POS builds without this
+   * field fail validation by design (backend+POS deploy in sync).
+   */
+  @IsString()
+  @IsNotEmpty({ message: 'El tenant es requerido' })
+  @Matches(/\S/, { message: 'El tenant es requerido' })
+  @MaxLength(50)
+  tenantSlug: string;
 }
 
 export class RefreshTokenDto {
@@ -66,6 +80,18 @@ export class RefreshTokenDto {
   @IsString()
   @IsNotEmpty()
   refreshToken: string;
+
+  /**
+   * REQUIRED pre-auth tenant CONTEXT: same contract as LoginDto.tenantSlug —
+   * resolved and bound server-side before the user row is read, never
+   * trusted as authority. The unbound refresh branch is removed (issue #556
+   * stage 12d): old POS builds without this field fail validation by design.
+   */
+  @IsString()
+  @IsNotEmpty({ message: 'El tenant es requerido' })
+  @Matches(/\S/, { message: 'El tenant es requerido' })
+  @MaxLength(50)
+  tenantSlug: string;
 }
 
 export class CreateAuditLogDto {

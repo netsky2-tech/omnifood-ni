@@ -603,7 +603,7 @@ void main() {
         expect(ticket, contains('Cliente:'));
         expect(ticket, contains('Corporación Turística de'));
         expect(ticket, contains('SUBTOTAL:'));
-        expect(ticket, contains('IVA (15%):'));
+        expect(ticket, contains('IVA:'));
         expect(ticket, contains('TOTAL CORDOBAS:'));
         expect(ticket, contains('T/C USD:'));
         expect(ticket, contains('TOTAL USD:'));
@@ -931,9 +931,10 @@ void main() {
         expect(ticket, contains('REGIMEN: CUOTA FIJA'));
         expect(ticket, contains('PUPUSERIA EL CHALATECO'));
         expect(ticket, contains('Santos Morales Rizo'));
-        // Cuota Fija shows SUBTOTAL and TOTAL CORDOBAS, but never IVA (15%) or VENTA EXENTA
+        // Cuota Fija shows SUBTOTAL and TOTAL CORDOBAS, but never an IVA line or VENTA EXENTA
         expect(ticket, contains('SUBTOTAL:'));
-        expect(ticket, isNot(contains('IVA (15%):')));
+        expect(ticket, isNot(contains('IVA:')));
+        expect(ticket, isNot(contains('IVA (15%)')));
         expect(ticket, isNot(contains('VENTA EXENTA')));
         expect(ticket, contains('TOTAL CORDOBAS:'));
         expect(ticket, contains('CONTRIBUYENTE DE CUOTA FIJA'));
@@ -942,7 +943,7 @@ void main() {
     );
 
     test(
-      'REGIMEN GENERAL (Standard): Title is FACTURA DE VENTA, shows REGIMEN: GENERAL, Subtotal & IVA 15%',
+      'REGIMEN GENERAL (Standard): Title is FACTURA DE VENTA, shows REGIMEN: GENERAL, Subtotal & plain IVA label',
       () {
         final f58 = ReceiptLayoutFormatter.format58mm();
         final ticket = f58.formatInvoiceText(
@@ -958,7 +959,8 @@ void main() {
         expect(ticket, contains('FACTURA DE VENTA'));
         expect(ticket, contains('REGIMEN: GENERAL'));
         expect(ticket, contains('SUBTOTAL:'));
-        expect(ticket, contains('IVA (15%):'));
+        expect(ticket, contains('IVA:'));
+        expect(ticket, isNot(contains('IVA (15%)')));
         expect(ticket, contains('TOTAL CORDOBAS:'));
         expect(ticket, isNot(contains('VENTA EXENTA')));
       },

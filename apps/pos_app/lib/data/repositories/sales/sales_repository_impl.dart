@@ -5,6 +5,9 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
+import 'package:pos_app/domain/usecases/sales/issue_date.dart';
+import 'package:pos_app/domain/usecases/sales/void_decision.dart'
+    show reprintSnapshotUnavailableCode;
 import 'package:pos_app/data/mappers/inventory_mapper.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
@@ -22,6 +25,9 @@ import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/domain/models/config/tax_regime.dart';
+import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
@@ -119,9 +125,6 @@ class SalesRepositoryImpl implements SalesRepository {
     if (fulfillmentContext != null) {
       await _validateFulfillmentContext(fulfillmentContext);
     }
-    if (await numberingService.isRangeExhausted()) {
-      throw Exception('DGI Authorized Numbering Range exhausted.');
-    }
 
     final finalNumber = await numberingService.getNextNumber();
     final nextDgiSequence = _nextDgiSequence(finalNumber);
@@ -156,7 +159,30 @@ class SalesRepositoryImpl implements SalesRepository {
       ),
     );
 
-    final invoiceEntity = SalesMapper.toInvoiceEntity(updatedInvoice);
+    // B1a-4 (D-11): bind the sale to the cashier's own open shift, resolved
+    // from the sale's own user + terminal (offline lookup, no network). When
+    // no matching open session exists, persist null rather than inventing a
+    // shift: B1a-2's guard treats null as "unknown", never as "different".
+    final openShiftSession = await database.cashierSessionDao
+        .getActiveSessionForUserAndTerminal(
+      updatedInvoice.userId,
+      terminalId,
+    );
+    final invoiceEntity = SalesMapper.toInvoiceEntity(updatedInvoice)
+      ..shiftId = openShiftSession?.id
+      // D-12: the local calendar issue date is fixed at issuance. Stored,
+      // never recomputed at void time from the epoch createdAt — deriving it
+      // then would re-interpret the ticket under the device's CURRENT
+      // timezone, and that boundary is what decides voidability.
+      ..localIssueDate = localCalendarDate(updatedInvoice.createdAt)
+      // D-13: immutable fiscal header snapshot, taken at issuance from the
+      // same config the print path reads. Key resolution MIRRORS
+      // printer_config_service exactly (printer_header_* first, then the
+      // business-profile fallbacks; ruc = the fiscal ruc key) — do not
+      // "simplify" the fallbacks: they decide which key feeds legal
+      // documents. Only non-blank values enter the JSON; a blank config
+      // stores null and reprints fail closed later.
+      ..fiscalHeaderSnapshot = await _buildFiscalHeaderSnapshot();
     final itemEntities = resolvedItems.map(SalesMapper.toItemEntity).toList();
     final paymentEntities = payments.map(SalesMapper.toPaymentEntity).toList();
     final movementEntities = isFrozenSale
@@ -472,43 +498,229 @@ class SalesRepositoryImpl implements SalesRepository {
     await invoiceDao.updateSyncStatusForIds(invoiceIds, 'synced');
   }
 
+  /// #548: the single copy point for invoice rewrites. Carries EVERY column
+  /// of [InvoiceEntity]; only the named overrides differ from [entity].
+  /// The pre-#548 voidInvoice/markAsFailed rebuilt the entity from a partial
+  /// field list, which fabricated data: non-nullable columns (the BCN and
+  /// commercial rates) silently fell back to constructor defaults, and
+  /// nullable columns (inventory provenance, shift membership) to null.
+  /// Adding a column to InvoiceEntity means adding it here; the full-column
+  /// preservation tests in sales_repository_impl_test.dart enforce it.
+  InvoiceEntity _copyInvoiceEntity(
+    InvoiceEntity entity, {
+    bool? isCanceled,
+    String? voidReason,
+    String? syncStatus,
+  }) {
+    return InvoiceEntity(
+      id: entity.id,
+      number: entity.number,
+      createdAt: entity.createdAt,
+      userId: entity.userId,
+      subtotal: entity.subtotal,
+      totalTax: entity.totalTax,
+      total: entity.total,
+      isCanceled: isCanceled ?? entity.isCanceled,
+      voidReason: voidReason ?? entity.voidReason,
+      syncStatus: syncStatus ?? entity.syncStatus,
+      paymentStatus: entity.paymentStatus,
+      type: entity.type,
+      customerId: entity.customerId,
+      globalTaxOverride: entity.globalTaxOverride,
+      relatedInvoiceId: entity.relatedInvoiceId,
+      originInvoiceId: entity.originInvoiceId,
+      refundReasonPolicy: entity.refundReasonPolicy,
+      refundReasonCode: entity.refundReasonCode,
+      authorizedByUserId: entity.authorizedByUserId,
+      authorizedByRole: entity.authorizedByRole,
+      terminalId: entity.terminalId,
+      sourceSequence: entity.sourceSequence,
+      idempotencyKey: entity.idempotencyKey,
+      payloadHash: entity.payloadHash,
+      inventoryPolicyVersion: entity.inventoryPolicyVersion,
+      inventoryOutcome: entity.inventoryOutcome,
+      inventoryOutcomeReason: entity.inventoryOutcomeReason,
+      bcnOfficialRate: entity.bcnOfficialRate,
+      commercialRate: entity.commercialRate,
+      totalUsd: entity.totalUsd,
+      shiftId: entity.shiftId,
+      localIssueDate: entity.localIssueDate,
+      fiscalHeaderSnapshot: entity.fiscalHeaderSnapshot,
+    );
+  }
+
+  /// D-13: builds the immutable fiscal header snapshot from the same config
+  /// keys (and fallback order) printer_config_service reads for the live
+  /// print path. Null when every value is blank: an unconfigured business
+  /// has no header to reproduce, and reprints of such rows fail closed
+  /// instead of printing a fabricated default header.
+  Future<String?> _buildFiscalHeaderSnapshot() async {
+    Future<LocalConfigEntity?> read(String key) =>
+        database.localConfigDao.getConfigByKey(key);
+
+    String? nonBlank(LocalConfigEntity? entity) {
+      final value = entity?.value.trim() ?? '';
+      return value.isEmpty ? null : value;
+    }
+
+    final businessName = nonBlank(await read('printer_header_business_name')) ??
+        nonBlank(await read('business_name'));
+    final ruc = nonBlank(await read('ruc'));
+    final address =
+        nonBlank(await read('printer_header_address')) ?? nonBlank(await read('address'));
+    final phone =
+        nonBlank(await read('printer_header_phone')) ?? nonBlank(await read('phone'));
+    final fiscalAuthorizationNumber = nonBlank(await read('dgi_authorization_code'));
+    // JD-B-003/A-003: the tax regime is part of the fiscal header — a
+    // reprint renders the regime AS ISSUED. Same key loadCompanyTaxRegime
+    // reads.
+    final taxRegime = nonBlank(await read('tax_regime'));
+
+    final snapshot = <String, String>{};
+    void put(String key, String? value) {
+      if (value != null) snapshot[key] = value;
+    }
+
+    put('businessName', businessName);
+    put('ruc', ruc);
+    put('address', address);
+    put('phone', phone);
+    put('fiscalAuthorizationNumber', fiscalAuthorizationNumber);
+    put('taxRegime', taxRegime);
+    // The regime is REQUIRED for a faithful reprint (JD-B-003/A-003): a
+    // snapshot without it is INCOMPLETE and the reprint fails closed (same
+    // named denial as a missing snapshot), never a live fallback.
+    return snapshot.containsKey('taxRegime') ? jsonEncode(snapshot) : null;
+  }
+
+  /// D-13: assembles a faithful reprint of the document AS ISSUED. The
+  /// header comes from the immutable fiscal snapshot taken at checkout —
+  /// NEVER from current config. Writes the REPRINT_REQUESTED audit entry at
+  /// request acceptance (before any printing happens; a failed print does
+  /// not un-audit the request — the void precedent). Print-only: nothing in
+  /// this path consumes a correlativo.
+  @override
+  Future<ReprintPreparation> prepareReprintInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async {
+    final trimmedCode = reasonCode.trim();
+    if (trimmedCode.isEmpty) {
+      throw ArgumentError(
+        'A reprint reason code is mandatory (D-13).',
+      );
+    }
+    final trimmedDetail = reasonDetail?.trim();
+
+    final entity = await invoiceDao.getInvoiceById(invoiceId);
+    if (entity == null) {
+      throw StateError('Invoice $invoiceId not found');
+    }
+
+    // Fail closed: pre-snapshot rows cannot be reproduced faithfully, and
+    // there is no fallback to live config (that would fabricate a legal
+    // document). No backfill either — the values were never recorded.
+    final rawSnapshot = entity.fiscalHeaderSnapshot?.trim() ?? '';
+    if (rawSnapshot.isEmpty) {
+      throw StateError(
+        '$reprintSnapshotUnavailableCode: invoice $invoiceId predates the fiscal header snapshot',
+      );
+    }
+    final Map<String, dynamic> snapshot;
+    TaxRegime snapshotRegime;
+    // JD-B-003/A-003 (R2-7): ANY anomaly decoding or parsing the snapshot —
+    // corrupted jsonb, a non-string regime, an unknown regime code — maps to
+    // the named denial. Nothing may throw past REPRINT_SNAPSHOT_UNAVAILABLE.
+    try {
+      snapshot = jsonDecode(rawSnapshot) as Map<String, dynamic>;
+      final rawRegime = snapshot['taxRegime'];
+      if (rawRegime is! String) {
+        throw const FormatException('taxRegime is missing or not a string');
+      }
+      final parsed = TaxRegime.fromString(rawRegime);
+      if (parsed == null) {
+        throw const FormatException('taxRegime is not a known regime code');
+      }
+      snapshotRegime = parsed;
+    } catch (_) {
+      throw StateError(
+        '$reprintSnapshotUnavailableCode: the fiscal header snapshot of invoice $invoiceId is corrupted or incomplete',
+      );
+    }
+    final header = snapshot.map(
+      (key, value) => MapEntry(key, value is String ? value : ''),
+    );
+
+    final items =
+        (await itemDao.getItemsByInvoiceId(invoiceId))
+            .map(SalesMapper.toItemDomain)
+            .toList();
+    final payments =
+        (await paymentDao.getPaymentsByInvoiceId(invoiceId))
+            .map(SalesMapper.toPaymentDomain)
+            .toList();
+    final invoice = SalesMapper.toInvoiceDomain(entity);
+
+    await auditRepository.log(
+      'REPRINT_REQUESTED',
+      metadata: jsonEncode(<String, String>{
+        'invoice_id': invoiceId,
+        'number': entity.number,
+        'reason_code': trimmedCode,
+        if (trimmedDetail != null && trimmedDetail.isNotEmpty)
+          'reason_detail': trimmedDetail,
+        'reprint_at': DateTime.now().toIso8601String(),
+      }),
+    );
+
+    return ReprintPreparation(
+      invoice: invoice,
+      fiscalHeader: header,
+      taxRegime: snapshotRegime,
+      items: items,
+      payments: payments,
+    );
+  }
+
   Future<void> markAsFailed(String invoiceId) async {
     final entity = await invoiceDao.getInvoiceById(invoiceId);
     if (entity != null) {
-      final updated = InvoiceEntity(
-        id: entity.id,
-        number: entity.number,
-        createdAt: entity.createdAt,
-        userId: entity.userId,
-        subtotal: entity.subtotal,
-        totalTax: entity.totalTax,
-        total: entity.total,
-        isCanceled: entity.isCanceled,
-        voidReason: entity.voidReason,
-        syncStatus: 'failed',
-        paymentStatus: entity.paymentStatus,
-        type: entity.type,
-        customerId: entity.customerId,
-        globalTaxOverride: entity.globalTaxOverride,
-        relatedInvoiceId: entity.relatedInvoiceId,
-        originInvoiceId: entity.originInvoiceId,
-        refundReasonPolicy: entity.refundReasonPolicy,
-        refundReasonCode: entity.refundReasonCode,
-        authorizedByUserId: entity.authorizedByUserId,
-        authorizedByRole: entity.authorizedByRole,
-        terminalId: entity.terminalId,
-        sourceSequence: entity.sourceSequence,
-        idempotencyKey: entity.idempotencyKey,
-        payloadHash: entity.payloadHash,
-      );
+      final updated = _copyInvoiceEntity(entity, syncStatus: 'failed');
       await invoiceDao.updateInvoice(updated);
     }
   }
 
   @override
-  Future<void> voidInvoice(String invoiceId, String reason) async {
+  Future<void> voidInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async {
+    // D-15/#525 AC-6: the reason is mandatory at the repository boundary.
+    // This throws BEFORE any read or write: an unreasoned void must never
+    // reach the fiscal engine, not even partially.
+    final trimmedCode = reasonCode.trim();
+    if (trimmedCode.isEmpty) {
+      throw ArgumentError(
+        'A void reason code is mandatory (D-15, #525 AC-6).',
+      );
+    }
+    final trimmedDetail = reasonDetail?.trim();
+    final effectiveReason = (trimmedDetail == null || trimmedDetail.isEmpty)
+        ? trimmedCode
+        : '$trimmedCode \u2014 $trimmedDetail';
+
     final entity = await invoiceDao.getInvoiceById(invoiceId);
     if (entity == null) return;
+    // D-15/#525 AC-3: a canceled invoice can never be voided again. This is
+    // an invariant violation (caller bug), not an operator-facing policy
+    // denial — hence StateError instead of a VoidDecision case.
+    if (entity.isCanceled) {
+      throw StateError(
+        'Invoice \$invoiceId is already canceled; void cannot re-run (AC-3).',
+      );
+    }
 
     // Build the compensating inventory reversal BEFORE opening the write
     // transaction. The versioned reversal can throw (e.g. a missing
@@ -535,15 +747,65 @@ class SalesRepositoryImpl implements SalesRepository {
         )
         .toList();
 
+    // B1a-2 (D-15): the loyalty reversal rides the SAME transaction. The
+    // sale granted/consumed points through customer_point_transactions (the
+    // view model's try/catch is not trustworthy evidence) — the void
+    // compensates the NET points of the invoice with one 'adjust'
+    // transaction and a relative balance update, atomic with the flag flip.
+    // No customer or no point transactions → clean no-op. The idempotency
+    // key documents the reversal; note the idempotency_key index on
+    // customer_point_transactions is NOT unique, so data-layer uniqueness is
+    // not enforced — protection is the double-void guard above plus the
+    // transaction's all-or-nothing rollback.
+    CustomerPointTransactionEntity? loyaltyReversal;
+    int? loyaltyReversalUpdatedAt;
+    if (entity.customerId != null && entity.customerId!.trim().isNotEmpty) {
+      final pointTxs = await database.customerPointTransactionDao
+          .getTransactionsByInvoice(invoiceId);
+      if (pointTxs.isNotEmpty) {
+        final reversalDelta =
+            -pointTxs.fold<double>(0, (sum, tx) => sum + tx.points);
+        final customer =
+            await database.customerDao.getCustomerById(entity.customerId!);
+        if (customer != null && reversalDelta != 0) {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          loyaltyReversal = CustomerPointTransactionEntity(
+            id: const Uuid().v4(),
+            customerId: entity.customerId!,
+            invoiceId: invoiceId,
+            type: 'adjust',
+            points: reversalDelta,
+            // Snapshot of the expected post-reversal balance, from the same
+            // fresh read the sale path uses. The row update itself is
+            // relative (points_balance = points_balance + delta) inside the
+            // transaction, so a concurrent adjustment cannot be lost.
+            balanceAfter: customer.pointsBalance + reversalDelta,
+            conversionRate: pointTxs.first.conversionRate,
+            reason: 'Reversal by void',
+            createdAt: now,
+            syncStatus: 'pending',
+            reversalOfTransactionId: pointTxs.first.id,
+            idempotencyKey: 'void-reversal:$invoiceId',
+          );
+          loyaltyReversalUpdatedAt = now;
+        }
+      }
+    }
+
     // Prepare the forensic hash-chained audit entry WITHOUT inserting,
     // so the audit row is persisted in the same atomic unit as the
     // cancellation (see below). Returns null when there is no current
-    // user, mirroring auditRepository.log().
+    // user, mirroring auditRepository.log(). The structured reason is the
+    // D-15 metrics hook: reason_code/reason_detail ride the existing keys
+    // (#548 lesson: jsonEncode, never raw interpolation).
     final preparedAudit = await auditRepository.prepareLog(
       'SALE_VOIDED',
       metadata: jsonEncode(<String, String>{
         'invoice_id': invoiceId,
-        'reason': reason,
+        'reason': effectiveReason,
+        'reason_code': trimmedCode,
+        if (trimmedDetail != null && trimmedDetail.isNotEmpty)
+          'reason_detail': trimmedDetail,
       }),
     );
     final auditEntity = preparedAudit == null
@@ -552,36 +814,19 @@ class SalesRepositoryImpl implements SalesRepository {
 
     // DGI forbids deleting invoices — cancellation is a flag flip, never
     // a row deletion. syncStatus is reset to 'pending' so the cancelled
-    // invoice re-syncs upstream.
-    final canceledInvoice = InvoiceEntity(
-      id: entity.id,
-      number: entity.number,
-      createdAt: entity.createdAt,
-      userId: entity.userId,
-      subtotal: entity.subtotal,
-      totalTax: entity.totalTax,
-      total: entity.total,
+    // invoice re-syncs upstream. #548: copied through the full-column
+    // helper so no fiscal/provenance column (rates, inventory outcome,
+    // shift membership) is fabricated during the rewrite.
+    final canceledInvoice = _copyInvoiceEntity(
+      entity,
       isCanceled: true,
-      voidReason: reason,
+      voidReason: effectiveReason,
       syncStatus: 'pending',
-      paymentStatus: entity.paymentStatus,
-      type: entity.type,
-      customerId: entity.customerId,
-      globalTaxOverride: entity.globalTaxOverride,
-      relatedInvoiceId: entity.relatedInvoiceId,
-      originInvoiceId: entity.originInvoiceId,
-      refundReasonPolicy: entity.refundReasonPolicy,
-      refundReasonCode: entity.refundReasonCode,
-      authorizedByUserId: entity.authorizedByUserId,
-      authorizedByRole: entity.authorizedByRole,
-      terminalId: entity.terminalId,
-      sourceSequence: entity.sourceSequence,
-      idempotencyKey: entity.idempotencyKey,
-      payloadHash: entity.payloadHash,
     );
 
     // Persist EVERYTHING in a single Floor @transaction:
-    //   reversal movements + insumo stock + isCanceled flag + audit log.
+    //   reversal movements + insumo stock + isCanceled flag + loyalty
+    //   reversal + audit log.
     // A DAO failure after any inner write rolls back the whole unit, so
     // no partial reversal/cancellation/audit state can be committed.
     await transactionDao.executeVoidTransaction(
@@ -589,6 +834,8 @@ class SalesRepositoryImpl implements SalesRepository {
       canceledInvoice,
       auditEntity,
       false,
+      loyaltyReversal,
+      loyaltyReversalUpdatedAt,
     );
   }
 
@@ -601,6 +848,7 @@ class SalesRepositoryImpl implements SalesRepository {
     RefundReasonPolicy refundReasonPolicy =
         RefundReasonPolicy.restockOriginalBom,
     List<CreditNoteRefundLine>? lines,
+    String? terminalId,
   }) async {
     if (authorizedByRole == UserRole.cashier ||
         authorizedByRole == UserRole.waiter) {
@@ -612,9 +860,6 @@ class SalesRepositoryImpl implements SalesRepository {
     final sanitizedReason = reason.trim();
     if (sanitizedReason.isEmpty) {
       throw StateError('Credit note reason must not be blank.');
-    }
-    if (await numberingService.isRangeExhausted()) {
-      throw Exception('DGI Authorized Numbering Range exhausted.');
     }
 
     final original = await invoiceDao.getInvoiceById(originalInvoiceId);
@@ -647,9 +892,12 @@ class SalesRepositoryImpl implements SalesRepository {
     final creditNoteId = const Uuid().v4();
     final creditNoteNumber = await numberingService.getNextNumber();
     final now = DateTime.now();
-    final terminalId = 'pos-${original.userId}';
+    // The document's own terminal column keeps the historical derived value;
+    // the ISSUANCE SHIFT lookup uses the caller-supplied real terminal only
+    // (JD-B-002/R2-3).
+    final documentTerminalId = 'pos-${original.userId}';
     final sourceSequence = await transactionDao.getNextInvoiceSourceSequence(
-      terminalId,
+      documentTerminalId,
     );
     final payloadHash = _buildCreditNotePayloadHash(
       creditNoteId: creditNoteId,
@@ -659,6 +907,24 @@ class SalesRepositoryImpl implements SalesRepository {
       lines: selectedItems,
     );
 
+    // JD-B-002: rates copy from the ORIGIN invoice (the server path already
+    // does this) — never the constructor defaults (36.6241/36.50/0.0 would
+    // fabricate a fiscal fact). shiftId/localIssueDate = the ISSUANCE
+    // moment: the open session for the issuing user on this terminal and
+    // today's local date; null when no session is open — never invented.
+    // fiscalHeaderSnapshot = a FRESH snapshot of current config: this is a
+    // NEW document issued now, not a reprint of the origin.
+    // JD-B-002/R2-3: the issuance shift lookup uses ONLY the caller-supplied
+    // real terminal. The synthetic 'pos-<user>' value on the document is NOT
+    // used for the lookup — a synthetic match would fabricate shift
+    // membership. Null terminal (or no session on that terminal) => null
+    // shiftId, honestly.
+    final issuingSession = (terminalId != null && terminalId.trim().isNotEmpty)
+        ? await database.cashierSessionDao.getActiveSessionForUserAndTerminal(
+            authorizedByUserId.trim(),
+            terminalId.trim(),
+          )
+        : null;
     final creditNoteEntity = InvoiceEntity(
       id: creditNoteId,
       number: creditNoteNumber,
@@ -680,14 +946,20 @@ class SalesRepositoryImpl implements SalesRepository {
       refundReasonCode: sanitizedReason,
       authorizedByUserId: authorizedByUserId.trim(),
       authorizedByRole: authorizedByRole.name,
-      terminalId: terminalId,
+      terminalId: documentTerminalId,
       sourceSequence: sourceSequence,
-      idempotencyKey: 'credit-note:$terminalId:$creditNoteId',
+      idempotencyKey: 'credit-note:$documentTerminalId:$creditNoteId',
       payloadHash: payloadHash,
       paymentStatus: 'paid',
       syncStatus: refundReasonPolicy == RefundReasonPolicy.managerReviewHold
           ? 'error'
           : 'pending',
+      bcnOfficialRate: original.bcnOfficialRate,
+      commercialRate: original.commercialRate,
+      totalUsd: original.totalUsd,
+      shiftId: issuingSession?.id,
+      localIssueDate: localCalendarDate(now),
+      fiscalHeaderSnapshot: await _buildFiscalHeaderSnapshot(),
     );
 
     final itemEntities = selectedItems

@@ -29,6 +29,8 @@ void main() {
   group('BusinessProfileViewModel FX Rates & Business Config', () {
     test('loadConfig hydrates standard business details, FX rates, and operation_mode defaults',
         () async {
+      when(() => mockConfigDao.getConfigByKey(any()))
+          .thenAnswer((_) async => null);
       when(() => mockConfigDao.getConfigByKey('business_name'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'business_name', value: 'Café Managua'));
       when(() => mockConfigDao.getConfigByKey('ruc'))
@@ -57,6 +59,10 @@ void main() {
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_current_number', value: '550'));
       when(() => mockConfigDao.getConfigByKey('dgi_authorization_code'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_authorization_code', value: 'AUT-2026'));
+      when(() => mockConfigDao.getConfigByKey('dgi_range_start'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_range_start', value: ''));
+      when(() => mockConfigDao.getConfigByKey('dgi_range_end'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_range_end', value: ''));
       when(() => mockConfigDao.getConfigByKey('tax_regime'))
           .thenAnswer((_) async => LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'));
 
@@ -77,6 +83,23 @@ void main() {
       expect(viewModel.bcnOfficialRate, 36.6241);
     });
 
+    test('D-21 consolidation (#551): legacy D-17 backing keys are never read or defaulted',
+        () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+
+      await viewModel.loadConfig();
+
+      // The legacy pair stays in old local_configs rows but is ignored on
+      // read: never queried, never present in the config map, never
+      // resurrected by loadConfig.
+      verifyNever(() =>
+          mockConfigDao.getConfigByKey('dgi_authorization_date'));
+      verifyNever(() =>
+          mockConfigDao.getConfigByKey('dgi_authorization_document'));
+      expect(viewModel.config.containsKey('dgi_authorization_date'), isFalse);
+      expect(viewModel.config.containsKey('dgi_authorization_document'), isFalse);
+    });
+
     test('saveConfig persists commercial and official exchange rates and operation mode',
         () async {
       when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
@@ -93,7 +116,6 @@ void main() {
         'operation_mode': 'RESTAURANT',
         'dgi_prefix': '001-001-01-',
         'dgi_range_start': '1',
-        'dgi_range_end': '10000',
         'dgi_current_number': '550',
         'dgi_authorization_code': 'AUT-2026',
         'tax_regime': 'REGIMEN_GENERAL',
@@ -108,7 +130,7 @@ void main() {
       expect(viewModel.taxRegime?.name, 'regimenGeneral');
       expect(viewModel.operationMode, TenantOperationMode.restaurant);
       expect(viewModel.commercialRate, 36.80);
-      verify(() => mockConfigDao.saveConfig(any())).called(15);
+      verify(() => mockConfigDao.saveConfig(any())).called(14);
     });
 
     test('operator RUC override is deliberate: it persists under the local issuer key the printer config reads',
@@ -340,6 +362,162 @@ void main() {
       expect(printedLogs.any((log) => log.contains('MALFORMED_JSON_SYNTAX')), isFalse);
       expect(printedLogs.any((log) => log.contains('FormatException')), isFalse);
       expect(printedLogs.any((log) => log.contains('Exception')), isFalse);
+    });
+  });
+  group('B2a (D-16/D-1): the fiscal range is nullable and never rewritten', () {
+    test('the defaults map carries NO invented range fiction', () {
+      // D-16 regression: the old defaults prefilled 1..10000.
+      expect(
+        BusinessProfileViewModel(mockConfigDao).config['dgi_range_start'],
+        '',
+      );
+    });
+
+    test('D-21: the retired dgi_range_end key is absent from the defaults map', () {
+      final config = BusinessProfileViewModel(mockConfigDao).config;
+      expect(config.containsKey('dgi_range_end'), isFalse);
+    });
+
+    test('D-21: the new authorization date keys default to empty strings', () {
+      final config = BusinessProfileViewModel(mockConfigDao).config;
+      expect(config['dgi_authorization_issued_at'], '');
+      expect(config['dgi_authorization_expires_at'], '');
+      expect(config['dgi_authorization_code'], '');
+    });
+
+    test('D-21: saveConfig drops the retired dgi_range_end key entirely, even with a value',
+        () async {
+      when(() => mockConfigDao.getConfigByKey(any()))
+          .thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      final vm = BusinessProfileViewModel(mockConfigDao);
+      await vm.saveConfig({
+        'business_name': 'Mi Negocio',
+        // Legacy clients/forms may still send the retired key with a value;
+        // D-21 retires it: it must never be written again.
+        'dgi_range_end': '10000',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final writtenKeys = written.map((e) => e.key).toSet();
+      expect(writtenKeys, isNot(contains('dgi_range_end')));
+      expect(writtenKeys, contains('business_name'));
+    });
+
+    test('D-21: saveConfig persists the new authorization date keys when provided',
+        () async {
+      when(() => mockConfigDao.getConfigByKey(any()))
+          .thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      final vm = BusinessProfileViewModel(mockConfigDao);
+      await vm.saveConfig({
+        'dgi_authorization_code': 'DGI-SFC-2024-00123',
+        'dgi_authorization_issued_at': '2026-01-15',
+        'dgi_authorization_expires_at': '2026-02-14',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final byKey = {for (final e in written) e.key: e.value};
+      expect(byKey['dgi_authorization_code'], 'DGI-SFC-2024-00123');
+      expect(byKey['dgi_authorization_issued_at'], '2026-01-15');
+      expect(byKey['dgi_authorization_expires_at'], '2026-02-14');
+    });
+
+    test('saving with blank range values never writes the sequence keys (D-1)',
+        () async {
+      when(() => mockConfigDao.getConfigByKey(any()))
+          .thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      // A persisted sequence exists (set by a previous provisioning).
+      final persisted = LocalConfigEntity(
+        key: 'dgi_range_start',
+        value: '500',
+      );
+      when(() => mockConfigDao.getConfigByKey('dgi_range_start'))
+          .thenAnswer((_) async => persisted);
+
+      final vm = BusinessProfileViewModel(mockConfigDao);
+      await vm.saveConfig({
+        'business_name': 'Mi Negocio',
+        'ruc': 'A0011234567890',
+        // Blank range values in the form = not configured.
+        'dgi_range_start': '',
+        'dgi_range_end': '',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final byKey = {for (final e in written) e.key: e.value};
+      // Other profile fields persist; the sequence keys are SKIPPED — the
+      // persisted 500 cannot be resurrected as blank or rewritten.
+      expect(byKey['business_name'], 'Mi Negocio');
+      expect(byKey.containsKey('dgi_range_start'), isFalse);
+      expect(byKey.containsKey('dgi_range_end'), isFalse);
+      expect(byKey.containsKey('dgi_current_number'), isFalse);
+    });
+
+    test('saving a profile with untouched fiscal fields leaves the sequence '
+        'ABSENT (JD-A-001): getNextNumber would fail closed', () async {
+      when(() => mockConfigDao.getConfigByKey(any()))
+          .thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      final vm = BusinessProfileViewModel(mockConfigDao);
+      await vm.saveConfig({
+        'business_name': 'Mi Negocio',
+        'dgi_prefix': '',
+        'dgi_range_start': '',
+        'dgi_range_end': '',
+        'dgi_current_number': '',
+      });
+
+      // Verify what was WRITTEN (the dao mock cannot both capture writes and
+      // report reads): the four sequence keys must be absent from the
+      // captured writes — an empty-string prefix row would foreclose the
+      // activation runner's provisioning.
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final writtenKeys = written.map((e) => e.key).toSet();
+      for (final key in [
+        'dgi_prefix',
+        'dgi_range_start',
+        'dgi_range_end',
+        'dgi_current_number',
+      ]) {
+        expect(writtenKeys, isNot(contains(key)), reason: key);
+      }
+      expect(writtenKeys, contains('business_name'));
+    });
+
+    test('saving explicit sequence values still persists them (range end retired)', () async {
+      when(() => mockConfigDao.getConfigByKey(any()))
+          .thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      final vm = BusinessProfileViewModel(mockConfigDao);
+      await vm.saveConfig({
+        'dgi_range_start': '500',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final byKey = {for (final e in written) e.key: e.value};
+      expect(byKey['dgi_range_start'], '500');
     });
   });
 }

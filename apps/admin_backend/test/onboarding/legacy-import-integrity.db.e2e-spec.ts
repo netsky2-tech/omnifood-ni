@@ -12,6 +12,7 @@ import { LegacyOnboardingMigrationReceipt } from '../../src/modules/onboarding/e
 import { OnboardingSession } from '../../src/modules/onboarding/entities/onboarding-session.entity';
 import { TenantContextRequiredError } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * Issue #493 T2.S4d: the PRODUCTION legacy-import integrity paths
@@ -157,9 +158,9 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
     // Tenants: products carries FK to tenants(id), so real (synthetic-UUID)
     // tenant rows are seeded as admin. Names are unique per run.
     await admin.query(
-      `INSERT INTO tenants (id, name) VALUES
-         ($1,  $2),  ($3,  $4),  ($5,  $6),  ($7,  $8),
-         ($9,  $10), ($11, $12), ($13, $14), ($15, $16), ($17, $18)`,
+      `INSERT INTO tenants (id, name, slug) VALUES
+         ($1,  $2,  $19),  ($3,  $4,  $20),  ($5,  $6,  $21),  ($7,  $8,  $22),
+         ($9,  $10, $23), ($11, $12, $24), ($13, $14, $25), ($15, $16, $26), ($17, $18, $27)`,
       [
         tenantScanId,
         `Integrity Scan (S4d) ${tenantScanId}`,
@@ -179,6 +180,15 @@ describe('legacy import integrity application paths under migrated RLS (Real Pos
         `Integrity Kardex Probe (S4d) ${tenantKardexId}`,
         tenantForeignId,
         `Integrity Foreign (S4d) ${tenantForeignId}`,
+        normalizeTenantSlug(`Integrity Scan (S4d) ${tenantScanId}`),
+        normalizeTenantSlug(`Integrity Clean (S4d) ${tenantCleanId}`),
+        normalizeTenantSlug(`Integrity Expire (S4d) ${tenantExpireId}`),
+        normalizeTenantSlug(`Integrity Remediate (S4d) ${tenantRemediateId}`),
+        normalizeTenantSlug(`Integrity Accept (S4d) ${tenantAcceptId}`),
+        normalizeTenantSlug(`Integrity Reconcile (S4d) ${tenantReconcileId}`),
+        normalizeTenantSlug(`Integrity Rollback (S4d) ${tenantRollbackId}`),
+        normalizeTenantSlug(`Integrity Kardex Probe (S4d) ${tenantKardexId}`),
+        normalizeTenantSlug(`Integrity Foreign (S4d) ${tenantForeignId}`),
       ],
     );
 

@@ -1,12 +1,14 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { SetupCenterView } from "@/features/onboarding/setup-center-view";
 import {
   ActivationAttemptStatus,
+  LinkingCodeStatus,
   OnboardingLifecycleState,
   type ActivationAttempt,
+  type LinkingCodeResponse,
 } from "@/features/onboarding/types";
 import { useAuthStore } from "@/features/auth/auth-store";
 import { UserRole } from "@/features/users/types";
@@ -395,8 +397,23 @@ describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () =>
     });
   }
 
+  function makeClaimedCode(
+    overrides: Partial<LinkingCodeResponse> = {},
+  ): LinkingCodeResponse {
+    return {
+      id: "code-sc-claimed",
+      status: LinkingCodeStatus.CLAIMED,
+      deviceId: "POS-07",
+      expiresAt: "2026-09-03T19:15:00.000Z",
+      claimedAt: "2026-09-03T19:05:00.000Z",
+      createdAt: "2026-09-03T19:00:00.000Z",
+      ...overrides,
+    };
+  }
+
   function routeFetch(options: {
     activeAttemptSequence?: Array<ActivationAttempt | null>;
+    linkingCodes?: LinkingCodeResponse[];
     startAttemptResponse?: { status: number; body: unknown };
   }) {
     const sequence = options.activeAttemptSequence ?? [null];
@@ -428,6 +445,11 @@ describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () =>
         const response = options.startAttemptResponse;
         return okJson(response?.body ?? {}, response?.status ?? 200);
       }
+      if (url.includes("/onboarding/activation/linking-codes")) {
+        // GET is the issue #569 listing (polled every 5s); POST is the #556
+        // generation. This file only exercises the GET listing.
+        return okJson(options.linkingCodes ?? []);
+      }
       return okJson({});
     });
   }
@@ -442,7 +464,7 @@ describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () =>
       .map((call) => JSON.parse(String(call[1]?.body)));
   }
 
-  it("shows the terminal id action and creates the attempt with the expected body", async () => {
+  it("detects a claimed linking code and creates the attempt with its bound deviceId", async () => {
     grantRole(UserRole.OWNER);
     const createdAttempt: ActivationAttempt = {
       id: "attempt-sc-1",
@@ -462,6 +484,7 @@ describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () =>
       updatedAt: "2026-09-03T19:00:00.000Z",
     };
     routeFetch({
+      linkingCodes: [makeClaimedCode()],
       activeAttemptSequence: [null, createdAttempt],
       startAttemptResponse: { status: 201, body: createdAttempt },
     });
@@ -477,45 +500,25 @@ describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () =>
       expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("activation-terminal-id-input")).toBeInTheDocument();
-    expect(screen.getByTestId("create-activation-attempt-btn")).toBeEnabled();
+    // Issue #569 single linking flow: the claimed code's bound deviceId is
+    // detected automatically; there is no manual terminal-id input anymore.
+    const item = await screen.findByTestId("claimed-terminal-item");
+    expect(screen.getByTestId("claimed-terminal-device-id")).toHaveTextContent("POS-07");
 
-    await user.type(screen.getByTestId("activation-terminal-id-input"), "POS-07");
-    await user.click(screen.getByTestId("create-activation-attempt-btn"));
+    await user.click(within(item).getByTestId("start-activation-for-terminal-btn"));
 
     await waitFor(() => {
       expect(sentActivationPosts()).toHaveLength(1);
     });
     const body = sentActivationPosts()[0] as Record<string, unknown>;
     expect(Object.keys(body).sort()).toEqual(["candidateTerminalId", "idempotencyKey"]);
-    expect(body.candidateTerminalId).toBe("POS-07");
+    // The candidate terminal id comes exclusively from the claimed code's
+    // bound deviceId, never from a manually transcribed value.
+    expect(body.candidateTerminalId).toBe(makeClaimedCode().deviceId);
 
     expect(await screen.findByTestId("activation-awaiting-device-checks")).toHaveTextContent(
       "POS-07",
     );
-  });
-
-  it("does not issue a request when the terminal id is empty and tells the user why", async () => {
-    grantRole(UserRole.OWNER);
-    routeFetch({});
-    const user = userEvent.setup();
-
-    render(
-      <TestWrapper>
-        <SetupCenterView />
-      </TestWrapper>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByTestId("create-activation-attempt-btn"));
-
-    expect(await screen.findByTestId("activation-terminal-id-error")).toHaveTextContent(
-      /ID de terminal/i,
-    );
-    expect(sentActivationPosts()).toHaveLength(0);
   });
 
   it("keeps the action unavailable without the activation permission and shows the guard note", async () => {
@@ -533,10 +536,13 @@ describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () =>
     });
 
     expect(screen.getByTestId("start-pos-terminal-btn")).toHaveClass("opacity-60");
-    expect(screen.queryByTestId("activation-terminal-id-input")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("create-activation-attempt-btn")).not.toBeInTheDocument();
+    // Without the permission there is no manual terminal-id input and no
+    // claimed-terminal activation action to trigger the mutation.
+    expect(screen.queryByTestId("claimed-terminal-item")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("start-activation-for-terminal-btn")).not.toBeInTheDocument();
     expect(screen.getByTestId("activation-permission-guard-note")).toHaveTextContent(
       /onboarding:activation:manage/i,
     );
+    expect(sentActivationPosts()).toHaveLength(0);
   });
 });

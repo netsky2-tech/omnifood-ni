@@ -23,6 +23,7 @@ import {
 } from '../dto/permission-matrix.dto';
 import { AuthService } from './auth.service';
 import { bindRlsTenantContext } from '../human-authorization/rls/tenant-context';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { markTenantPublicationDirty } from '../human-authorization/services/tenant-publication-marker';
 
 /**
@@ -45,6 +46,9 @@ export class UserService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRepository(AuditLog)
+    // Issue #581: logAction no longer reads this pooled repository — every
+    // audit write resolves through the caller's bound transaction manager.
+    // Kept for Nest DI compatibility only.
     private auditRepository: Repository<AuditLog>,
     @InjectRepository(SecurityProfile)
     private securityProfileRepository: Repository<SecurityProfile>,
@@ -53,14 +57,25 @@ export class UserService {
   ) {}
 
   async findByTenant(tenantId: string): Promise<User[]> {
-    return this.userRepository.find({
-      where: { tenant_id: tenantId, is_active: true },
-      select: ['id', 'email', 'name', 'role', 'created_at', 'is_active'],
-    });
+    // Issue #556 stage 12d: users is FORCE-RLS-protected, so the staff list
+    // read runs through the tenant-bound transaction manager (the tenant id
+    // arrives from the JWT via the controller, @GetTenantId()).
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      manager.getRepository(User).find({
+        where: { tenant_id: tenantId, is_active: true },
+        select: ['id', 'email', 'name', 'role', 'created_at', 'is_active'],
+      }),
+    );
   }
 
-  async findById(id: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { id, is_active: true } });
+  async findById(id: string, tenantId: string): Promise<User | null> {
+    // Issue #556 stage 12d: defensive bound read (no production callers
+    // today); the tenant id keeps the read tenant-scoped under FORCE RLS.
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      manager
+        .getRepository(User)
+        .findOne({ where: { id, tenant_id: tenantId, is_active: true } }),
+    );
   }
 
   async create(
@@ -304,33 +319,43 @@ export class UserService {
     userId: string,
     tenantId: string,
   ): Promise<UserEffectivePermissionsDto> {
-    const user = await this.userRepository.findOne({
-      where: { id: userId, tenant_id: tenantId, is_active: true },
-    });
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
+    // Issue #512 T3 slice 9 rework: the security_profiles read is denied by
+    // its FORCE RLS policy on a pooled connection, so the user lookup and
+    // the dependent profile lookup run in one tenant-bound transaction (the
+    // tenant id arrives from the JWT via the controller, @GetTenantId()).
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const user = await manager.getRepository(User).findOne({
+          where: { id: userId, tenant_id: tenantId, is_active: true },
+        });
+        if (!user) {
+          throw new NotFoundException('Usuario no encontrado');
+        }
 
-    const profile = await this.securityProfileRepository.findOne({
-      where: { user_id: user.id },
-    });
+        const profile = await manager.getRepository(SecurityProfile).findOne({
+          where: { user_id: user.id },
+        });
 
-    const customPermissions = (profile?.custom_permissions ??
-      []) as AppPermission[];
-    const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
-      []) as AppPermission[];
-    const effectivePermissions = resolveEffectivePermissions(
-      user.role,
-      customPermissions,
+        const customPermissions = (profile?.custom_permissions ??
+          []) as AppPermission[];
+        const rolePermissions = (DEFAULT_ROLE_PERMISSIONS[user.role] ??
+          []) as AppPermission[];
+        const effectivePermissions = resolveEffectivePermissions(
+          user.role,
+          customPermissions,
+        );
+
+        return {
+          user_id: user.id,
+          role: user.role,
+          role_permissions: rolePermissions,
+          custom_permissions: customPermissions,
+          effective_permissions: effectivePermissions,
+        };
+      },
     );
-
-    return {
-      user_id: user.id,
-      role: user.role,
-      role_permissions: rolePermissions,
-      custom_permissions: customPermissions,
-      effective_permissions: effectivePermissions,
-    };
   }
 
   async setCustomPermissions(
@@ -398,11 +423,13 @@ export class UserService {
     targetId: string,
     tenantId: string,
     adminId: string,
-    manager?: EntityManager,
+    manager: EntityManager,
   ) {
-    const repo = manager
-      ? manager.getRepository(AuditLog)
-      : this.auditRepository;
+    // Issue #581: the bound manager is required. Every caller runs inside a
+    // tenant-bound transaction and already supplies one; `audit_logs` is a
+    // debt table today but becomes direct:SIUD RLS in #512 T3 slice 7, so
+    // the old pooled fallback is removed instead of waiting to break.
+    const repo = manager.getRepository(AuditLog);
 
     const lastLog =
       typeof repo.findOne === 'function'

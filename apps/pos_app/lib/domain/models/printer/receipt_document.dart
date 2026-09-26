@@ -228,6 +228,20 @@ class ReceiptDocument {
   /// Reason recorded when the invoice was voided. Null for active invoices.
   final String? voidReason;
 
+  /// D-13: true when this document is a REIMPRESIÓN — it reproduces the
+  /// immutable fiscal snapshot taken at issuance, never current config.
+  final bool isReprint;
+
+  /// D-13: when this reprint was requested (printed on the copy next to the
+  /// REIMPRESIÓN banner; the audit trail is the source of truth — no
+  /// reprint counter is persisted).
+  final DateTime? reprintAt;
+
+  /// D-17 (P0): fiscal authorization number, printed at the bottom-right of
+  /// the document (DT 09-2007 QUINTO). Null when the business has not
+  /// configured it — null prints nothing, never a placeholder.
+  final String? fiscalAuthorizationNumber;
+
   const ReceiptDocument({
     required this.businessName,
     this.legalName,
@@ -261,6 +275,9 @@ class ReceiptDocument {
     this.globalTaxOverride = false,
     this.isCanceled = false,
     this.voidReason,
+    this.fiscalAuthorizationNumber,
+    this.isReprint = false,
+    this.reprintAt,
   }) : grossSubtotal = grossSubtotal ?? (discountTotal > 0 ? (subtotal + discountTotal) : subtotal);
 
   bool get isCuotaFija => taxRegime.isCuotaFija;
@@ -300,6 +317,9 @@ class ReceiptDocument {
         globalTaxOverride: globalTaxOverride,
         isCanceled: isCanceled,
         voidReason: voidReason,
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+        isReprint: isReprint,
+        reprintAt: reprintAt,
       );
   String get regimeHeader => taxRegime.receiptRegimeHeader;
   String? get fiscalNotice => taxRegime.fiscalNotice;
@@ -322,6 +342,9 @@ class ReceiptDocument {
     bool isTaxExempt = false,
     String? footerMessage,
     List<int>? logoRasterBytes,
+    String? fiscalAuthorizationNumber,
+    bool isReprint = false,
+    DateTime? reprintAt,
   }) {
     final receiptLines = items
         .map((item) => ReceiptLine.fromInvoiceItem(item, taxRegime: taxRegime))
@@ -416,6 +439,14 @@ class ReceiptDocument {
       globalTaxOverride: invoice.globalTaxOverride,
       isCanceled: invoice.isCanceled,
       voidReason: invoice.voidReason,
+      // D-17: trimmed and dropped when blank, so a blank-looking value can
+      // never reach the paper (same honesty rule as the other header facts).
+      fiscalAuthorizationNumber:
+          (fiscalAuthorizationNumber != null && fiscalAuthorizationNumber.trim().isNotEmpty)
+              ? fiscalAuthorizationNumber.trim()
+              : null,
+      isReprint: isReprint,
+      reprintAt: reprintAt,
     );
   }
 

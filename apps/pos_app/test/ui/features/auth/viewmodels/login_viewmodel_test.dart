@@ -10,34 +10,59 @@ void main() {
   late _MockAuthRepository authRepository;
   late LoginViewModel viewModel;
 
+  setUpAll(() {
+    registerFallbackValue(<String, dynamic>{});
+  });
+
   setUp(() {
     authRepository = _MockAuthRepository();
     viewModel = LoginViewModel(authRepository);
   });
 
-  test('uses offline fallback when online login fails', () async {
-    final offlineUser = User(
-      id: 'u-1',
-      name: 'Cashier One',
-      role: UserRole.cashier,
-      isActive: true,
-      email: 'cashier@omnifood.ni',
-      tenantId: 'tenant-1',
-    );
+  User offlineUser() => const User(
+        id: 'u-1',
+        name: 'Cashier One',
+        role: UserRole.cashier,
+        isActive: true,
+        email: 'cashier@omnifood.ni',
+        tenantId: 'tenant-1',
+      );
 
-    when(() => authRepository.loginOnline(any(), any())).thenAnswer((_) async => null);
-    when(() => authRepository.loginOffline(any(), any())).thenAnswer((_) async => offlineUser);
+  void stubSuccessfulLogin(User? onlineUser) {
+    when(() => authRepository.loginOnline(
+          any(),
+          any(),
+          tenantSlug: any(named: 'tenantSlug'),
+        )).thenAnswer((_) async => onlineUser);
+    when(() => authRepository.loginOffline(any(), any()))
+        .thenAnswer((_) async => offlineUser());
+  }
+
+  test('uses offline fallback when online login fails', () async {
+    when(() => authRepository.loginOnline(
+          any(),
+          any(),
+          tenantSlug: any(named: 'tenantSlug'),
+        )).thenAnswer((_) async => null);
+    when(() => authRepository.loginOffline(any(), any()))
+        .thenAnswer((_) async => offlineUser());
 
     final result = await viewModel.login('cashier@omnifood.ni', '1234');
 
     expect(result, isTrue);
     expect(viewModel.error, isNull);
-    verify(() => authRepository.loginOffline('cashier@omnifood.ni', '1234')).called(1);
+    verify(() => authRepository.loginOffline('cashier@omnifood.ni', '1234'))
+        .called(1);
   });
 
   test('sets generic offline error when online and fallback auth both fail', () async {
-    when(() => authRepository.loginOnline(any(), any())).thenAnswer((_) async => null);
-    when(() => authRepository.loginOffline(any(), any())).thenAnswer((_) async => null);
+    when(() => authRepository.loginOnline(
+          any(),
+          any(),
+          tenantSlug: any(named: 'tenantSlug'),
+        )).thenAnswer((_) async => null);
+    when(() => authRepository.loginOffline(any(), any()))
+        .thenAnswer((_) async => null);
 
     final result = await viewModel.login('cashier@omnifood.ni', 'bad');
 
@@ -46,23 +71,83 @@ void main() {
       viewModel.error,
       equals('Error de autenticación. Verifique sus credenciales o conexión.'),
     );
-    verify(() => authRepository.loginOffline('cashier@omnifood.ni', 'bad')).called(1);
+    verify(() => authRepository.loginOffline('cashier@omnifood.ni', 'bad'))
+        .called(1);
   });
 
   test('clears error when login succeeds after offline fallback', () async {
-    final user = User(
-      id: 'u-1',
-      name: 'Cashier One',
-      role: UserRole.cashier,
-      isActive: true,
-      email: 'cashier@omnifood.ni',
-      tenantId: 'tenant-1',
-    );
-    when(() => authRepository.loginOnline(any(), any())).thenAnswer((_) async => user);
+    stubSuccessfulLogin(null);
 
     final result = await viewModel.login('cashier@omnifood.ni', '1234');
 
     expect(result, isTrue);
     expect(viewModel.error, isNull);
+  });
+
+  test('threads the stored tenant slug from the resolver into loginOnline', () async {
+    var resolverCalls = 0;
+    viewModel = LoginViewModel(
+      authRepository,
+      resolveTenantSlug: () async {
+        resolverCalls++;
+        return 'omnifood-managua';
+      },
+    );
+    stubSuccessfulLogin(offlineUser());
+
+    final result = await viewModel.login('cashier@omnifood.ni', '1234');
+
+    expect(result, isTrue);
+    expect(resolverCalls, 1);
+    verify(() => authRepository.loginOnline(
+          'cashier@omnifood.ni',
+          '1234',
+          tenantSlug: 'omnifood-managua',
+        )).called(1);
+  });
+
+  test('passes the raw resolver value through (repository owns trim/omit contract)', () async {
+    viewModel = LoginViewModel(
+      authRepository,
+      resolveTenantSlug: () async => '   ',
+    );
+    stubSuccessfulLogin(offlineUser());
+
+    await viewModel.login('cashier@omnifood.ni', '1234');
+
+    verify(() => authRepository.loginOnline(
+          'cashier@omnifood.ni',
+          '1234',
+          tenantSlug: '   ',
+        )).called(1);
+  });
+
+  test('legacy installs without a slug resolver still reach loginOnline', () async {
+    stubSuccessfulLogin(offlineUser());
+
+    await viewModel.login('cashier@omnifood.ni', '1234');
+
+    verify(() => authRepository.loginOnline(
+          'cashier@omnifood.ni',
+          '1234',
+          tenantSlug: null,
+        )).called(1);
+  });
+
+  test('resolver failures never block login (slug is pre-auth context, not authority)', () async {
+    viewModel = LoginViewModel(
+      authRepository,
+      resolveTenantSlug: () async => throw StateError('config store unavailable'),
+    );
+    stubSuccessfulLogin(offlineUser());
+
+    final result = await viewModel.login('cashier@omnifood.ni', '1234');
+
+    expect(result, isTrue);
+    verify(() => authRepository.loginOnline(
+          'cashier@omnifood.ni',
+          '1234',
+          tenantSlug: null,
+        )).called(1);
   });
 }

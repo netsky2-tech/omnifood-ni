@@ -8,6 +8,8 @@ import {
   fetchOnboardingCatalogSummary,
   startActivationAttempt,
   fetchActiveActivationAttempt,
+  generateLinkingCode,
+  fetchLinkingCodes,
 } from "./onboarding-api";
 import {
   OnboardingLifecycleState,
@@ -27,6 +29,7 @@ export const onboardingKeys = {
   readiness: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "readiness"] as const,
   catalogSummary: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "catalog-summary"] as const,
   activationAttempt: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "activation-attempt"] as const,
+  linkingCodes: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "linking-codes"] as const,
 };
 
 export function calculateSetupCenterProgress(
@@ -244,6 +247,22 @@ export function useActiveActivationAttempt() {
 }
 
 /**
+ * Polls the tenant's linking codes every 5 seconds (issue #569 single
+ * linking flow): the owner generates a code and keeps this view open; when
+ * the POS claims the code the status flips ACTIVE -> CLAIMED and the setup
+ * center offers one-click activation for the claimed deviceId. Polling (not
+ * push) matches the offline-first reality where the POS and the dashboard
+ * share no direct channel.
+ */
+export function useLinkingCodes() {
+  return useQuery({
+    queryKey: onboardingKeys.linkingCodes(),
+    queryFn: fetchLinkingCodes,
+    refetchInterval: 5000,
+  });
+}
+
+/**
  * Creates an activation attempt for a terminal. The idempotency key is
  * generated per submission and kept stable across retries of the same
  * submission so the backend replays the existing attempt instead of failing
@@ -278,5 +297,17 @@ export function useStartActivationAttempt() {
       queryClient.invalidateQueries({ queryKey: onboardingKeys.readiness() });
       queryClient.invalidateQueries({ queryKey: onboardingKeys.activationAttempt() });
     },
+  });
+}
+
+/**
+ * Generates a single-use terminal linking code (issue #556 stage 12c). No
+ * cache invalidation: generating a code does not change the onboarding
+ * session, readiness snapshot or activation attempt state — the code is
+ * ephemeral display-only data owned by the calling component.
+ */
+export function useGenerateLinkingCode() {
+  return useMutation({
+    mutationFn: () => generateLinkingCode(),
   });
 }

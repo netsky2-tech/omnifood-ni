@@ -56,7 +56,8 @@ class ProductEntity {
     this.createdAt,
     this.inventoryPolicy,
     this.directStockInsumoId,
-    this.taxRate = 0.15,
+    // B2e D-3 fail-closed default: exempt unless the backend sends a rate.
+    this.taxRate = 0.0,
     this.isTaxExempt = false,
     this.tenantId,
   });

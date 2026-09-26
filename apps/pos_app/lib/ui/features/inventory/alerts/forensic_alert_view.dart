@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_app/core/localization/label_map.dart';
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:provider/provider.dart';
 
@@ -211,8 +212,11 @@ class _ForensicAlertCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                Chip(label: Text(alert.severity.toUpperCase())),
-                Chip(label: Text(alert.alertType)),
+                Chip(label: Text(localize(alert.severity, kForensicSeverityLabels))),
+                Chip(label: Text(localize(alert.alertType, kForensicAlertTypeLabels))),
+                // Lifecycle status arrives already localized from the view
+                // model's `statusFor`; kept as-is (copy mirrored in
+                // kForensicAlertStatusLabels).
                 Chip(label: Text(status)),
               ],
             ),
@@ -221,7 +225,8 @@ class _ForensicAlertCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Detectada: $createdAt'),
             if (metadata['item'] != null) Text('Ítem: ${metadata['item']}'),
-            if (metadata['movementType'] != null) Text('Movimiento: ${metadata['movementType']}'),
+            if (metadata['movementType'] != null)
+              Text('Movimiento: ${localize(metadata['movementType'].toString(), kForensicMovementTypeLabels)}'),
             if (metadata['currentStock'] != null)
               Text(
                 'Stock actual: ${metadata['currentStock']}',

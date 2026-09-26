@@ -30,6 +30,9 @@ import 'package:pos_app/domain/services/sales/post_paid_feedback_service.dart';
 import 'package:pos_app/domain/services/sales/customer_identification_service.dart';
 import 'package:pos_app/domain/services/sales/loyalty_reward_interaction_service.dart';
 import 'package:pos_app/domain/services/sales/loyalty_evaluation_service.dart';
+import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
+import 'package:pos_app/domain/usecases/sales/void_decision.dart';
+import 'package:pos_app/ui/features/sales/sales_permissions.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_evaluation.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_program.dart';
 import 'package:pos_app/domain/models/loyalty/reward_definition.dart';
@@ -194,6 +197,17 @@ class SaleViewModel extends ChangeNotifier {
 
   Invoice? _lastProcessedInvoice;
   Invoice? get lastProcessedInvoice => _lastProcessedInvoice;
+
+  /// Whether the LAST void's ANULADO copy actually printed. The success
+  /// SnackBar branches on this: claiming a print that did not happen would
+  /// be the same fabrication failure #548 called out.
+  bool _lastVoidPrintSucceeded = false;
+  bool get lastVoidPrintSucceeded => _lastVoidPrintSucceeded;
+
+  /// Whether the LAST reprint's copy actually printed (D-13 honesty rule:
+  /// the SnackBar claims only what happened; the audit stands either way).
+  bool _lastReprintPrintSucceeded = false;
+  bool get lastReprintPrintSucceeded => _lastReprintPrintSucceeded;
 
   PostPaidFeedback? _lastPostPaidFeedback;
   PostPaidFeedback? get lastPostPaidFeedback => _lastPostPaidFeedback;
@@ -623,9 +637,17 @@ class SaleViewModel extends ChangeNotifier {
   bool get canManageCashDrawer =>
       _currentUserRole == UserRole.owner ||
       _currentUserRole == UserRole.manager;
+
+  /// D-15: the void gate is permission-based (SalesPermission resolver),
+  /// never a role-label check. Owner/manager hold sales.void.any, cashier
+  /// holds sales.void.own_current_shift, waiter holds nothing. The actual
+  /// three-predicate evaluation happens in [voidInvoice].
   bool get canVoidInvoice =>
-      _currentUserRole == UserRole.owner ||
-      _currentUserRole == UserRole.manager;
+      resolveSalesPermissions(_currentUserRole).isNotEmpty;
+
+  /// D-13: reprint capability (owner/manager/cashier; never waiter).
+  bool get canReprint => hasSalesPermission(
+      _currentUserRole, SalesPermission.reprintDocument);
 
   bool _isSupervisorOverrideActive = false;
   bool get isSupervisorOverrideActive => _isSupervisorOverrideActive;
@@ -935,7 +957,18 @@ class SaleViewModel extends ChangeNotifier {
 
   Future<void> checkActiveSession() async {
     await loadCompanyTaxRegime();
-    final sessionEntity = await _database.cashierSessionDao.getActiveSession();
+    // Issue #552: the open-session lookup is scoped to BOTH the acting user
+    // and the terminal — the same two values openSession/checkout stamp.
+    // The topology-blind getActiveSession() would bind a cashier to another
+    // cashier's concurrent shift. No logged-in user means no user+terminal
+    // session can match.
+    final user = await _authRepository.getCurrentUser();
+    final effectiveTerminalId =
+        _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01';
+    final sessionEntity = user == null
+        ? null
+        : await _database.cashierSessionDao
+            .getActiveSessionForUserAndTerminal(user.id, effectiveTerminalId);
     if (sessionEntity != null) {
       _activeSession = SalesMapper.toSessionDomain(sessionEntity);
       _sessionExpected = {
@@ -969,6 +1002,12 @@ class SaleViewModel extends ChangeNotifier {
     final session = CashierSession(
       id: const Uuid().v4(),
       userId: user.id,
+      // D-15 (JD-A-002): the session MUST carry the same terminal the sale
+      // path stamps on invoices — otherwise
+      // getActiveSessionForUserAndTerminal never matches and every cashier
+      // void degrades to deniedShiftUnknown. Mirrors the effectiveTerminalId
+      // resolution below (and CashShiftViewModel's opener).
+      terminalId: _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01',
       openedAt: DateTime.now(),
       tipoModelo: tipoModelo,
       openingBalance: balance,
@@ -1434,6 +1473,7 @@ class SaleViewModel extends ChangeNotifier {
             isTaxExempt: _isGlobalTaxExempt,
             paperWidthMm: printerConfig.paperWidthMm,
             loyaltyFeedback: _lastPostPaidFeedback,
+            fiscalAuthorizationNumber: printerConfig.dgiAuthorizationCode,
           );
 
           if (!printResult.isSuccess) {
@@ -1468,19 +1508,40 @@ class SaleViewModel extends ChangeNotifier {
       _consumeOverride();
     } catch (e, stackTrace) {
       debugPrint('[SaleViewModel] Error al procesar la venta: $e\n$stackTrace');
-      _errorMessage = 'Error al procesar la venta: $e';
+      // D-16: the fiscal sequence states are configuration states the
+      // operator acts on — surface the directive message without the raw
+      // error wrapper.
+      if (e is FiscalSequenceUnconfiguredError) {
+        _errorMessage = e.message;
+      } else {
+        _errorMessage = 'Error al procesar la venta: $e';
+      }
       notifyListeners();
       rethrow;
     }
   }
 
-  /// Manually triggers a reprint of the last successfully processed invoice.
-  Future<bool> reprintLastInvoice() async {
-    if (_lastProcessedInvoice == null) return false;
+  /// Prints a committed invoice copy on the SAME printer path the sale used
+  /// (config + resolver + printInvoice). Shared by the reprint and the
+  /// ANULADO copy — never build a second printer path. [cashierName] is the
+  /// document identity: the void passes the VOIDER's name (AC-9); reprints
+  /// pass null and keep the historical behavior. B1d's chain rule: the
+  /// fiscal authorization number rides this call site too.
+  Future<bool> _printInvoiceCopy(
+    Invoice invoice, {
+    String? cashierName,
+    Map<String, String>? fiscalHeader,
+    TaxRegime? snapshotRegimeProvided,
+
+    /// D-13: when a fiscal snapshot is provided the header comes from it —
+    /// NEVER from live config. A reprint reproduces the document as issued.
+    bool isReprint = false,
+    DateTime? reprintAt,
+  }) async {
     try {
       final config = await _printerConfigService.getPrinterConfig();
       final items = await _database.invoiceItemDao.getItemsByInvoiceId(
-        _lastProcessedInvoice!.id,
+        invoice.id,
       );
       final domainItems = items
           .map(
@@ -1503,7 +1564,7 @@ class SaleViewModel extends ChangeNotifier {
           .toList();
 
       final payments = await _database.paymentDao.getPaymentsByInvoiceId(
-        _lastProcessedInvoice!.id,
+        invoice.id,
       );
       final domainPayments = payments
           .map(
@@ -1534,7 +1595,8 @@ class SaleViewModel extends ChangeNotifier {
           final rawBytes = base64Decode(config.logoBase64!);
           if (ThermalLogoProcessor.isPng(rawBytes)) {
             logoRasterBytes = rawBytes;
-          } else if (config.logoWidth != null && config.logoHeight != null) {
+          } else if (config.logoWidth != null &&
+              config.logoHeight != null) {
             logoRasterBytes = ThermalLogoProcessor.buildEscPosRasterFrom1Bit(
               raw1BitBitmap: rawBytes,
               width: config.logoWidth!,
@@ -1550,27 +1612,55 @@ class SaleViewModel extends ChangeNotifier {
           ? _printerPort
           : PrinterResolver.resolve(config);
 
-      if (_companyTaxRegime == null) {
-        _lastPrintError =
-            'Empresa sin régimen fiscal DGI configurado. No se puede reimprimir.';
-        notifyListeners();
-        return false;
+      // D-13 (JD-B-003/R2-5): when a fiscal snapshot is provided it is
+      // AUTHORITATIVE — its regime governs and the live-regime guard does
+      // NOT apply (a complete snapshot must reprint even with absent live
+      // config). The live guard only governs the non-snapshot path.
+      final fromSnapshot = fiscalHeader != null;
+      final TaxRegime effectiveRegime;
+      if (fromSnapshot) {
+        // R2-6: consume the engine-parsed regime; fall back to parsing the
+        // header only for direct callers that pass raw header values.
+        final snapshotRegime = snapshotRegimeProvided ??
+            TaxRegime.fromString(fiscalHeader['taxRegime']);
+        if (snapshotRegime == null) {
+          _lastPrintError =
+              'Empresa sin régimen fiscal DGI configurado. No se puede reimprimir.';
+          notifyListeners();
+          return false;
+        }
+        effectiveRegime = snapshotRegime;
+      } else {
+        if (_companyTaxRegime == null) {
+          _lastPrintError =
+              'Empresa sin régimen fiscal DGI configurado. No se puede reimprimir.';
+          notifyListeners();
+          return false;
+        }
+        effectiveRegime = _companyTaxRegime!;
       }
-
       final res = await activePrinterPort.printInvoice(
-        _lastProcessedInvoice!,
+        invoice,
         items: domainItems,
         payments: domainPayments,
-        businessName: config.headerBusinessName,
-        legalName: config.headerLegalName,
-        ruc: config.fiscalRuc,
-        address: config.headerAddress,
-        phone: config.headerPhone,
+        businessName: fromSnapshot
+            ? fiscalHeader['businessName']
+            : config.headerBusinessName,
+        legalName:
+            fromSnapshot ? null : config.headerLegalName,
+        ruc: fromSnapshot ? fiscalHeader['ruc'] : config.fiscalRuc,
+        address: fromSnapshot ? fiscalHeader['address'] : config.headerAddress,
+        phone: fromSnapshot ? fiscalHeader['phone'] : config.headerPhone,
+        cashierName: cashierName,
         logoRasterBytes: logoRasterBytes,
-        taxRegime: _companyTaxRegime!,
-        isTaxExempt:
-            _lastProcessedInvoice?.globalTaxOverride ?? _isGlobalTaxExempt,
+        taxRegime: effectiveRegime,
+        isTaxExempt: invoice.globalTaxOverride,
         paperWidthMm: config.paperWidthMm,
+        fiscalAuthorizationNumber: fromSnapshot
+            ? fiscalHeader['fiscalAuthorizationNumber']
+            : config.dgiAuthorizationCode,
+        isReprint: isReprint,
+        reprintAt: reprintAt,
       );
 
       if (!res.isSuccess) {
@@ -1586,6 +1676,78 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
+  /// D-13: reprints ANY issued invoice from its immutable fiscal snapshot.
+  /// Honest return: true = the reprint request was accepted by the engine
+  /// (audit committed); the print outcome is reported separately through
+  /// [lastReprintPrintSucceeded] — a failed print does not un-happen the
+  /// accepted request (the void precedent). Policy denials set
+  /// [errorMessage] to the specific Spanish message.
+  Future<bool> reprintInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async {
+    // The role is resolved from the freshly fetched principal (same pattern
+    // as the void guard) so the check never depends on the async initial
+    // role load.
+    final currentUser = await _authRepository.getCurrentUser();
+    if (!hasSalesPermission(
+      currentUser?.role,
+      SalesPermission.reprintDocument,
+    )) {
+      _errorMessage = 'No tiene permiso para reimprimir comprobantes.';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final preparation = await _salesRepository.prepareReprintInvoice(
+        invoiceId,
+        reasonCode,
+        reasonDetail: reasonDetail,
+      );
+
+      _lastReprintPrintSucceeded = false;
+      _lastReprintPrintSucceeded = await _printInvoiceCopy(
+        preparation.invoice,
+        fiscalHeader: preparation.fiscalHeader,
+        snapshotRegimeProvided: preparation.taxRegime,
+        isReprint: true,
+        reprintAt: DateTime.now(),
+      );
+
+      _errorMessage = null;
+      return true;
+    } on StateError catch (error) {
+      // Named engine denials carry the operator-facing Spanish copy.
+      _errorMessage = error.message.contains(reprintSnapshotUnavailableCode)
+          ? reprintSnapshotUnavailableMessage
+          : 'No se pudo reimprimir el comprobante.';
+      // ignore: avoid_print
+      print('REPRINT-DEBUG StateError: ' + error.message);
+      return false;
+    } catch (error) {
+      // ignore: avoid_print
+      print('REPRINT-DEBUG generic: ' + error.toString());
+      _errorMessage = 'No se pudo reimprimir el comprobante.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// PARKED BY DESIGN (D-14 / #553 Part 1, B1c-1): POS-side credit-note
+  /// issuance has NO production call site — the UI affordance was removed
+  /// and the Backoffice (B1c-2) is the emitter for cross-day corrections.
+  /// This method is retained, UI-less, pending DSI-6
+  /// (openspec/changes/device-sync-credit-note-authorization), which will
+  /// restore POS-side issuance behind reauthentication evidence. Its tests
+  /// stay green as the defense-in-depth contract for that return; do not
+  /// delete this method as "dead code" without reading DSI-6 first.
+  ///
   /// Returns true only when the credit note was created locally. A locally
   /// created note is still pending validation at sync time; this result
   /// never claims upstream acceptance.
@@ -1625,6 +1787,8 @@ class SaleViewModel extends ChangeNotifier {
         authorizedByRole: role ?? UserRole.cashier,
         refundReasonPolicy: refundReasonPolicy,
         lines: lines,
+        // JD-B-002/R2-3: the issuing terminal — same source as the sale path.
+        terminalId: _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01',
       );
 
       _errorMessage = null;
@@ -1638,22 +1802,89 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> voidInvoice(String invoiceId, String reason) async {
+  /// D-15: voids an invoice under the three-predicate guard (own invoice +
+  /// open current shift + same local calendar date). Returns true only when
+  /// the void is committed locally (the processReturn precedent: nothing
+  /// more is claimed). Every policy denial sets [errorMessage] to the
+  /// guard's specific Spanish message and returns false; repository
+  /// invariant errors (double void, loyalty) surface as the honest generic
+  /// message because they are bugs reaching the UI, not policy.
+  Future<bool> voidInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+  }) async {
     final currentUser = await _authRepository.getCurrentUser();
-    final role = currentUser?.role;
-    if (role == UserRole.cashier || role == UserRole.waiter) {
-      _errorMessage = 'Acceso denegado.';
+    if (currentUser == null) {
+      _errorMessage = 'Debe iniciar sesión para anular facturas.';
       notifyListeners();
-      return;
+      return false;
     }
 
     _isLoading = true;
     notifyListeners();
     try {
-      await _salesRepository.voidInvoice(invoiceId, reason);
+      // Guard inputs come from the data layer: the domain Invoice
+      // deliberately does not carry shift membership or the local issue
+      // date (B1a-4 Option A).
+      final entity = await _database.invoiceDao.getInvoiceById(invoiceId);
+      if (entity == null) {
+        _errorMessage = 'No se encontró la factura solicitada.';
+        return false;
+      }
+
+      // Ratified terminal fallback: the shift that owns the ticket lives on
+      // the ticket's terminal (same convention as the checkout site).
+      final session = await _database.cashierSessionDao
+          .getActiveSessionForUserAndTerminal(
+        currentUser.id,
+        entity.terminalId ?? 'pos-${currentUser.id}',
+      );
+      final decision = evaluateVoidRequest(
+        actorCanVoidAny: hasSalesPermission(
+            currentUser.role, SalesPermission.voidAnyInvoice),
+        actorCanVoidOwnCurrentShift: hasSalesPermission(
+            currentUser.role, SalesPermission.voidOwnCurrentShiftSale),
+        actorUserId: currentUser.id,
+        invoiceUserId: entity.userId,
+        invoiceShiftId: entity.shiftId,
+        invoiceLocalIssueDate: entity.localIssueDate,
+        invoiceCreatedAt:
+            DateTime.fromMillisecondsSinceEpoch(entity.createdAt),
+        currentShiftId: session?.id,
+        comparedTo: DateTime.now(),
+      );
+      if (!decision.isAllowed) {
+        _errorMessage = decision.uiMessage;
+        return false;
+      }
+
+      await _salesRepository.voidInvoice(
+        invoiceId,
+        reasonCode,
+        reasonDetail: reasonDetail,
+      );
+
+      // AC-10: print the ANULADO copy on the same printer path the sale
+      // used, with the VOIDER's name as the document identity (AC-9).
+      _lastVoidPrintSucceeded = false;
+      final voided = await _salesRepository.getInvoiceById(invoiceId);
+      if (voided != null) {
+        _lastProcessedInvoice = voided;
+        _lastVoidPrintSucceeded = await _printInvoiceCopy(
+          voided,
+          cashierName: currentUser.name,
+        );
+      }
+
       _errorMessage = null;
+      return true;
+    } on StateError {
+      _errorMessage = 'No se pudo anular la factura.';
+      return false;
     } catch (e) {
-      _errorMessage = 'Error al anular factura: $e';
+      _errorMessage = 'No se pudo anular la factura.';
+      return false;
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -84,6 +84,15 @@ class FiscalProjectionKeys {
   static const String lastAppliedFiscalRevision = 'last_applied_fiscal_revision';
   static const String lastAppliedFiscalFingerprint = 'last_applied_fiscal_fingerprint';
   static const String pricesIncludeTax = 'prices_include_tax';
+
+  /// D-21 (#554): DGI authorization letter data projected from the fiscal
+  /// snapshot (U1 backend fields). Optional mirrors: present in the snapshot
+  /// -> written; absent/null/blank -> the local key is NOT written (absence
+  /// looks like absence). They are never deleted here — the POS form remains
+  /// the offline master of its locally-entered authorization values.
+  static const String dgiAuthorizationCode = 'dgi_authorization_code';
+  static const String dgiAuthorizationIssuedAt = 'dgi_authorization_issued_at';
+  static const String dgiAuthorizationExpiresAt = 'dgi_authorization_expires_at';
 }
 
 final RegExp _fingerprintRegex = RegExp(r'^[a-zA-Z0-9_\-\.]{8,}$');
@@ -592,6 +601,27 @@ class FiscalInboxHandler {
     } else {
       keysToDelete.add(FiscalProjectionKeys.commercialExchangeRate);
     }
+
+    // D-21 (#554): optional DGI authorization mirrors. Written only when the
+    // snapshot carries a non-blank value; never deleted when absent, so an
+    // operator-entered local value (POS form master) is preserved.
+    final dgiAuthorizationMirrors = <String, String>{
+      FiscalProjectionKeys.dgiAuthorizationCode:
+        rawEnvelope['dgiAuthorizationCode']?.toString().trim() ?? '',
+      FiscalProjectionKeys.dgiAuthorizationIssuedAt:
+        rawEnvelope['dgiAuthorizationIssuedAt']?.toString().trim() ?? '',
+      FiscalProjectionKeys.dgiAuthorizationExpiresAt:
+        rawEnvelope['dgiAuthorizationExpiresAt']?.toString().trim() ?? '',
+    };
+    dgiAuthorizationMirrors.forEach((key, value) {
+      if (value.isNotEmpty) {
+        projections.add(LocalConfigEntity(
+          key: key,
+          value: value,
+          description: 'Projected DGI authorization field from fiscal snapshot',
+        ));
+      }
+    });
 
     final taxConfig = _buildTaxConfig(
       rawEnvelope: rawEnvelope,

@@ -35,6 +35,7 @@ import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { INVENTORY_COST_QUERY_PORT } from '../../src/modules/loyalty/domain/inventory-cost-query.port';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
   createIdentityJwtConfigProvider,
   signIdentityJwtAccessToken,
@@ -82,7 +83,7 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
     await bootstrap.query(`CREATE TABLE "${schema}".tenants (
-      id text PRIMARY KEY, name text NOT NULL, ruc text, is_active boolean DEFAULT true,
+      id text PRIMARY KEY, name text NOT NULL, slug text NOT NULL, ruc text, is_active boolean DEFAULT true,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);
 
@@ -173,6 +174,7 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
     await tenantRepo.save({
       id: tenantId,
       name: 'Cutover E2E Tenant',
+      slug: normalizeTenantSlug('Cutover E2E Tenant'),
       is_active: true,
     });
 
@@ -205,23 +207,30 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
     });
     rewardId = reward.id;
 
-    const ledgerService = new LoyaltyLedgerService(txRepo, projRepo);
+    const ledgerService = new LoyaltyLedgerService(
+      txRepo,
+      projRepo,
+      dataSource,
+    );
     const loyaltyService = new LoyaltyService(
       progRepo,
       rewardRepo,
       projRepo,
       custRepo,
+      dataSource,
     );
     const ticketPaidHandler = new TicketPaidHandler(
       progRepo,
       custRepo,
       ledgerService,
+      dataSource,
     );
     const legacyClassificationService = new LegacyClassificationService(
       progRepo,
       txRepo,
       projRepo,
       custRepo,
+      dataSource,
     );
     const redemptionService = new RedemptionService(
       progRepo,
@@ -230,6 +239,7 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
       txRepo,
       ledgerService,
       loyaltyService,
+      dataSource,
     );
     const profitAwareService = new LoyaltyProfitAwareService(
       rewardRepo,
@@ -242,8 +252,9 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
           canonicalBasePriceNio: 25,
         }),
       },
+      dataSource,
     );
-    const customersService = new CustomersService(custRepo, txRepo);
+    const customersService = new CustomersService(custRepo, txRepo, dataSource);
 
     // Initial seed: 100 units in customer account
     await ledgerService.appendTransaction({

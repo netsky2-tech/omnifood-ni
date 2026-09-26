@@ -44,6 +44,9 @@ import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
 import 'data/services/terminal_identity_service.dart';
 import 'ui/features/auth/viewmodels/login_viewmodel.dart';
+import 'ui/features/auth/viewmodels/link_terminal_viewmodel.dart';
+import 'ui/features/auth/views/link_terminal_view.dart';
+import 'ui/features/auth/startup_route_resolver.dart';
 import 'ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
 import 'ui/features/inventory/items/insumo_view_model.dart';
 import 'ui/features/inventory/purchases/purchase_view_model.dart';
@@ -161,6 +164,14 @@ void main() async {
   );
   final refreshDio = Dio(productionTransportOptions(baseUrl));
 
+  // Dedicated pre-auth client for the linking code claim (issue #556):
+  // bare Dio with NO interceptors, so no Authorization header can ever be
+  // attached to the pre-auth link exchange.
+  final claimDio = Dio(productionTransportOptions(baseUrl));
+
+  // Tenant configuration store (slug write-through from provisioning, issue #556)
+  final tenantConfigService = TenantConfigService(database.localConfigDao);
+
   // Dedicated Device Sync Infrastructure
   final deviceSyncExchangeDio = Dio(productionTransportOptions(baseUrl));
   final deviceSyncStore = ResilientDeviceSyncCredentialStore(
@@ -190,6 +201,7 @@ void main() async {
     activationSyncPort: activationSyncPort,
     resolveDeviceId: () async => deviceId,
     credentialCoordinator: deviceSyncCoordinator,
+    onTenantSlugCaptured: (slug) => tenantConfigService.persistTenantSlug(slug),
   );
 
   final authRepository = AuthRepositoryImpl(
@@ -201,6 +213,7 @@ void main() async {
     credentialCoordinator: credentialCoordinator,
     bootstrapCoordinator: deviceSyncBootstrapCoordinator,
     cleaner: legacyHumanCredentialCleaner,
+    claimDio: claimDio,
   );
 
   // Add Cloud Auth, Automatic Refresh & Path Normalization Interceptor
@@ -210,6 +223,7 @@ void main() async {
       refreshDio: refreshDio,
       clientDio: dio,
       tokenFallback: () => authRepository.getAccessToken(),
+      tenantSlugResolver: () => tenantConfigService.getTenantSlug(),
       onReauthenticationRequired: () {
         debugPrint(
           "[CloudAuth] Reautenticación requerida: sesión cloud expirada o revocada.",
@@ -255,12 +269,12 @@ void main() async {
     database.localConfigDao,
     database.invoiceDao,
   );
-  // Provision initial DGI range for Pilot (Coffee Shop)
-  await numberingService.initializeRange(
-    prefix: '001-001-01-',
-    start: 1,
-    end: 1000,
-  );
+  // D-1/D-16: the boot sequence NEVER writes fiscal numbering. The
+  // 1-1000 pilot provisioning that ran here on every boot manufactured the
+  // duplicate invoice numbers B0.4 fails closed on. An unconfigured
+  // sequence stays absent: the first sale fails with
+  // FISCAL_SEQUENCE_UNCONFIGURED and directs configuration instead of
+  // materializing a fiction.
 
   final processInventoryUseCase = ProcessSaleInventoryUseCase(movementEngine);
   final reverseInventoryUseCase = ReverseSaleInventoryUseCase(movementEngine);
@@ -329,7 +343,9 @@ void main() async {
   );
 
   final connectivityService = NetworkConnectivityService(dio);
-  connectivityService.start();
+  // NOTE: connectivityService.start() fires GET /v1/health. Like background
+  // sync, it must stay gated until the terminal is linked (issue #556):
+  // started below, alongside syncService.start(), only when linked.
 
   final syncService = SyncService(
     auditRepository,
@@ -339,12 +355,37 @@ void main() async {
     database: database,
     connectivityService: connectivityService,
   );
-  syncService.start();
+
+  // Issue #556: pre-auth linking gate, resolved BEFORE any login attempt or
+  // backend traffic. Terminals without a stored tenant slug are gated
+  // behind terminal linking and background sync stays stopped until the
+  // terminal is linked (wiring-only gate; SyncService itself is untouched).
+  final storedTenantSlug = await tenantConfigService.getTenantSlug();
+  final initialRoute = resolveStartupRoute(storedTenantSlug);
+  final isTerminalLinked = initialRoute == '/';
+  if (isTerminalLinked) {
+    connectivityService.start();
+    syncService.start();
+  }
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => LoginViewModel(authRepository)),
+        ChangeNotifierProvider(
+          create: (_) => LoginViewModel(
+            authRepository,
+            resolveTenantSlug: () => tenantConfigService.getTenantSlug(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => LinkTerminalViewModel(
+            authRepository,
+            deviceId: deviceId,
+            persistTenantSlug: (slug) => tenantConfigService.persistTenantSlug(slug),
+            persistTenantId: (tenantId) =>
+                tenantConfigService.persistTenantId(tenantId),
+          ),
+        ),
         ChangeNotifierProvider(
           create: (_) => LockScreenViewModel(authRepository, database.userDao),
         ),
@@ -437,8 +478,15 @@ void main() async {
             final saleVm = ctx.read<SaleViewModel>();
             final vm = CashShiftViewModel.fromDatabase(
               database: database,
-              currentUserId: 'user-cajero',
+              // Issue #552: the acting user id is resolved from the auth
+              // identity source at action time (AuthRepository.getCurrentUser),
+              // never from a hard-coded literal.
+              authRepository: authRepository,
               currentUserRole: saleVm.currentUserRole,
+              // FC-1 (JD-A-002 residual): the cash-shift opener must stamp
+              // the SAME terminal the sale path does, or the void guard's
+              // scoped session lookup never matches for shifts opened here.
+              currentTerminalId: deviceId,
             );
             vm.init();
             return vm;
@@ -486,13 +534,16 @@ void main() async {
         ),
         Provider<NetworkConnectivityService>.value(value: connectivityService),
         Provider<TenantConfigService>(
-          create: (_) => TenantConfigService(database.localConfigDao),
+          create: (_) => tenantConfigService,
         ),
         Provider<PrinterConfigService>(
           create: (_) => PrinterConfigService(database.localConfigDao),
         ),
       ],
-      child: MyApp(alertService: alertService),
+      child: MyApp(
+        alertService: alertService,
+        initialRoute: initialRoute,
+      ),
     ),
   );
 }
@@ -603,8 +654,23 @@ class MyApp extends StatelessWidget {
           ),
         ),
         initialRoute: initialRoute,
-        routes: {
+        onGenerateInitialRoutes: (String initialRouteName) {
+          // Single-route initial stack: Flutter's default would root the
+          // stack at '/', letting back navigation pop '/link' and reveal
+          // login on an unlinked terminal (issue #556 gate bypass).
+          return resolveInitialRouteStack(initialRouteName).map((name) {
+            final builder = _routes[name] ?? _routes['/']!;
+            return MaterialPageRoute<void>(builder: builder);
+          }).toList();
+        },
+        routes: _routes,
+      ),
+    );
+  }
+
+  Map<String, WidgetBuilder> get _routes => {
           '/': (context) => const LoginView(),
+          linkTerminalRoute: (context) => const LinkTerminalView(),
           '/lock': (context) => const LockScreenView(),
           '/home': (context) => const SaleView(),
           '/sales': (context) => const SaleView(),
@@ -689,10 +755,7 @@ class MyApp extends StatelessWidget {
           '/config/terminal': (context) => const TerminalIdentityView(),
           '/config/activation': (context) => const ActivationTerminalView(),
           '/identity/audit': (context) => const AuditLogView(),
-        },
-      ),
-    );
-  }
+        };
 }
 
 class PlaceholderHome extends StatelessWidget {

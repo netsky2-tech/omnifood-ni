@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import {
   UnauthorizedException,
   ForbiddenException,
@@ -7,6 +8,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { SupervisorOverrideService } from './supervisor-override.service';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { User, UserRole } from '../entities/user.entity';
 import { SecurityProfile } from '../entities/security-profile.entity';
 import { AuditLog } from '../entities/audit-log.entity';
@@ -30,6 +32,18 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
     save: jest.fn(),
   };
 
+  // The tenant-bound transaction fake: the manager hands back the same
+  // repository mocks the pooled tokens provide, so the existing behavior
+  // assertions keep working unchanged while the binding guard below proves
+  // the binding itself with isolated instrumented fakes.
+  const manager = {
+    query: jest.fn(),
+    getRepository: jest.fn(),
+  };
+  const dataSource = {
+    transaction: jest.fn(),
+  };
+
   const jwtService = {
     sign: jest.fn().mockReturnValue('signed.ephemeral.token'),
   };
@@ -49,6 +63,22 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
+    manager.query.mockResolvedValue(undefined);
+    manager.getRepository.mockImplementation((entity: unknown) => {
+      if (entity === User) return userRepository;
+      if (entity === SecurityProfile) return securityProfileRepository;
+      // Issue #581: the override audit write rides its own tenant-bound
+      // transaction, so the manager hands back the audit repository too.
+      if (entity === AuditLog) return auditRepository;
+      throw new Error(
+        `Unexpected repository request: ${(entity as { name?: string })?.name ?? typeof entity}`,
+      );
+    });
+    dataSource.transaction.mockImplementation(
+      (work: (transactionManager: typeof manager) => Promise<unknown>) =>
+        work(manager),
+    );
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SupervisorOverrideService,
@@ -58,6 +88,7 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
           useValue: securityProfileRepository,
         },
         { provide: getRepositoryToken(AuditLog), useValue: auditRepository },
+        { provide: DataSource, useValue: dataSource },
         { provide: JwtService, useValue: jwtService },
         { provide: IDENTITY_JWT_CONFIG, useValue: mockJwtConfig },
       ],
@@ -344,6 +375,128 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
           requestingUserId,
         ),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  // Issue #512 T3 slice 9 rework: security_profiles is now tenant-RLS
+  // FORCE-protected, so the supervisor and security-profile reads inside
+  // authorizeOverride must run through the tenant-bound transaction manager.
+  // This guard has RUNTIME teeth: it injects a fake DataSource whose
+  // transaction() hands back a manager that records the set_config binding
+  // and hands out instrumented repositories, while the pooled repositories
+  // stand beside it as tripwires. If any read is reverted to the pooled
+  // repository, the tripwire records the call and this test fails at
+  // runtime, not at compile time.
+  describe('tenant transaction binding', () => {
+    it('binds the supervisor and profile reads through the tenant transaction; pooled repos stay silent', async () => {
+      // Pooled tripwires: any call here means a read or the audit write
+      // escaped a bound transaction and would hit RLS with no tenant bound.
+      const pooledUser = { findOne: jest.fn() };
+      const pooledProfile = { findOne: jest.fn() };
+      // Issue #581: the audit write is bound too, so the pooled audit repo
+      // must stay silent.
+      const pooledAudit = { save: jest.fn().mockResolvedValue({ id: 'a1' }) };
+
+      const hashedPin = await bcrypt.hash('123456', 10);
+      const boundUser = {
+        findOne: jest.fn().mockResolvedValue({
+          id: supervisorId,
+          name: 'Manager Supervisor',
+          role: UserRole.MANAGER,
+          tenant_id: testTenantId,
+          is_active: true,
+        }),
+      };
+      const boundProfile = {
+        findOne: jest.fn().mockResolvedValue({
+          user_id: supervisorId,
+          pin_hash: hashedPin,
+          is_pin_enabled: true,
+          custom_permissions: [],
+        }),
+      };
+
+      const setConfigCalls: Array<[string, string[]]> = [];
+      const boundAudit = { save: jest.fn().mockResolvedValue({ id: 'a1' }) };
+      const boundManager = {
+        query: jest.fn(async (sql: string, params: string[]) => {
+          setConfigCalls.push([sql, params]);
+          return [];
+        }),
+        getRepository: jest.fn((entity: unknown) =>
+          entity === User
+            ? boundUser
+            : entity === SecurityProfile
+              ? boundProfile
+              : entity === AuditLog
+                ? boundAudit
+                : null,
+        ),
+      };
+      const boundDataSource = {
+        transaction: jest.fn(
+          async (work: (manager: unknown) => Promise<unknown>) =>
+            work(boundManager),
+        ),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        providers: [
+          SupervisorOverrideService,
+          { provide: getRepositoryToken(User), useValue: pooledUser },
+          {
+            provide: getRepositoryToken(SecurityProfile),
+            useValue: pooledProfile,
+          },
+          { provide: getRepositoryToken(AuditLog), useValue: pooledAudit },
+          { provide: DataSource, useValue: boundDataSource },
+          { provide: JwtService, useValue: jwtService },
+          { provide: IDENTITY_JWT_CONFIG, useValue: mockJwtConfig },
+        ],
+      }).compile();
+      const bound = module.get<SupervisorOverrideService>(
+        SupervisorOverrideService,
+      );
+
+      const response = await bound.authorizeOverride(
+        {
+          supervisorId,
+          credential: '123456',
+          method: 'PIN',
+          permissionRequired: AppPermission.SALES_VOID_INVOICE,
+          context: { reason: 'binding guard' },
+        },
+        testTenantId,
+        requestingUserId,
+      );
+      expect(response.authorized).toBe(true);
+
+      // ONE transaction for the read unit and ONE for the audit write,
+      // each binding the tenant context exactly once with the production
+      // set_config SQL (issue #581: the write is bound too).
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(2);
+      expect(setConfigCalls).toHaveLength(2);
+      expect(setConfigCalls[0][0]).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
+      expect(setConfigCalls[0][1]).toEqual([testTenantId]);
+      expect(setConfigCalls[1][0]).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
+      expect(setConfigCalls[1][1]).toEqual([testTenantId]);
+
+      // Both reads resolved through the bound manager's repositories.
+      expect(boundUser.findOne).toHaveBeenCalledTimes(1);
+      expect(boundProfile.findOne).toHaveBeenCalledTimes(1);
+      // The audit write resolved through the bound manager as well.
+      expect(boundAudit.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'SUPERVISOR_OVERRIDE_APPROVED',
+          tenant_id: testTenantId,
+        }),
+      );
+
+      // RUNTIME TEETH: the pooled read tripwires stayed silent. A reverted
+      // read or write lands here and fails this assertion.
+      expect(pooledUser.findOne).not.toHaveBeenCalled();
+      expect(pooledProfile.findOne).not.toHaveBeenCalled();
+      expect(pooledAudit.save).not.toHaveBeenCalled();
     });
   });
 });

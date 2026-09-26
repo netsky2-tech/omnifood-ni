@@ -41,6 +41,7 @@ import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-it
 import { Payment } from '../../src/modules/sales/entities/payment.entity';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../src/core/database/tenant-transaction';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
+import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
 /**
  * THE REAL RLS PROOF for the onboarding activation-attempt path (issue #493
@@ -251,6 +252,7 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     await admin.getRepository(Tenant).save({
       id: tenantId,
       name: `Activation RLS Proof Tenant ${label} ${tenantId}`,
+      slug: normalizeTenantSlug(`Activation RLS Proof Tenant ${label} ${tenantId}`),
       ruc: 'J0310000004321',
       is_active: true,
     });
@@ -365,7 +367,9 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
       onboardingCatalogService,
       readinessStub as never,
       runtime,
-      new ChangeLogService(runtime.getRepository(ChangeLog)),
+      // Issue #512 slice 7: change_log is tenant-RLS protected, so the
+      // service binds its own tenant transactions through the DataSource.
+      new ChangeLogService(runtime.getRepository(ChangeLog), runtime),
     );
 
     // ---- Fixture seeding (admin, superuser, bypasses the FORCED RLS) ----

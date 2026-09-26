@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Eye, EyeOff } from "lucide-react";
 import { useLogin } from "@/features/auth/auth-hooks";
+import { resolveTenantSlug } from "@/lib/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -17,6 +18,10 @@ type LoginForm = z.infer<typeof loginSchema>;
 export function LoginPage() {
   const loginMutation = useLogin();
   const [showPassword, setShowPassword] = useState(false);
+  // The tenant slug comes ONLY from the host subdomain (soho.nhilospos.com -> soho);
+  // there is no manual entry. Without a tenant subdomain (apex domain, localhost,
+  // IP address) the login fails closed instead of asking for a slug.
+  const tenantSlug = resolveTenantSlug(window.location.hostname);
 
   const {
     register,
@@ -26,9 +31,39 @@ export function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  if (!tenantSlug) {
+    return (
+      <div className="fixed inset-0 flex overflow-y-auto overscroll-contain items-center justify-center bg-muted/30 px-4 py-8">
+        <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 sm:p-8 shadow-lg my-auto">
+          <div className="mb-8 text-center">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white p-2 mb-3 shadow-md border border-border">
+              <img
+                src="/logo.png"
+                alt="NHILOS POS"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">NHILOS POS</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Panel de administración
+            </p>
+          </div>
+          <div
+            className="rounded-md border border-amber-500/30 bg-amber-500/10 p-4 text-center"
+            role="alert"
+          >
+            <p className="text-sm text-foreground">
+              Accedé desde el subdominio de tu comercio (ej.: soho.localhost)
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const onSubmit = (data: LoginForm) => {
     if (loginMutation.isPending) return;
-    loginMutation.mutate(data);
+    loginMutation.mutate({ ...data, tenantSlug });
   };
 
   return (

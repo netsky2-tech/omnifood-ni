@@ -5,7 +5,8 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { randomUUID } from 'crypto';
 import {
   LoyaltyProgram,
@@ -40,6 +41,10 @@ export class RedemptionService {
     private readonly txRepo: Repository<CustomerPointTransaction>,
     private readonly ledgerService: LoyaltyLedgerService,
     private readonly loyaltyService: LoyaltyService,
+    // Issue #512 slice 4: the tenant-bound transaction manager is the only
+    // access path to the customers/loyalty tables; the pooled repositories
+    // above stay declared for Nest DI compatibility only.
+    private readonly dataSource: DataSource,
   ) {}
 
   async createRedemptionIntent(params: {
@@ -51,54 +56,65 @@ export class RedemptionService {
   }): Promise<RedemptionIntent> {
     const { tenantId, customerId, ticketId, loyaltyProgramId, rewardId } =
       params;
-
-    // 1. Customer must exist and be active
-    const customer = await this.customerRepo.findOne({
-      where: { id: customerId, tenant_id: tenantId },
-    });
-    if (!customer || !customer.is_active) {
-      throw new NotFoundException('Customer not found or inactive');
-    }
-
-    // 2. Program must be ACTIVE
-    const program = await this.programRepo.findOne({
-      where: { id: loyaltyProgramId, tenant_id: tenantId },
-    });
-    if (!program) {
-      throw new NotFoundException('Loyalty program not found');
-    }
-    if (program.status !== LoyaltyProgramStatus.ACTIVE) {
-      throw new BadRequestException(
-        `Program is ${program.status.toLowerCase()}, not active`,
-      );
-    }
-
-    // 3. Reward must be ACTIVE and within its window
-    const reward = await this.rewardRepo.findOne({
-      where: {
-        id: rewardId,
-        tenant_id: tenantId,
-        loyalty_program_id: loyaltyProgramId,
-      },
-    });
-    if (!reward) {
-      throw new NotFoundException('Reward not found');
-    }
-    if (reward.status !== RewardStatus.ACTIVE) {
-      throw new BadRequestException('Reward is inactive');
-    }
-
     const now = new Date();
-    if (reward.starts_at && now < reward.starts_at) {
-      throw new BadRequestException(
-        'Reward is not yet available (not within window)',
-      );
-    }
-    if (reward.ends_at && now >= reward.ends_at) {
-      throw new BadRequestException('Reward has expired');
-    }
 
-    // 4. Balance must be sufficient
+    // Unit: customer / program / reward reads (issue #512 slice 4). The
+    // balance check below must NOT run inside this unit: it opens its own
+    // tenant transaction and nested units would borrow a second connection.
+    const { reward } = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        // 1. Customer must exist and be active
+        const customer = await manager.getRepository(Customer).findOne({
+          where: { id: customerId, tenant_id: tenantId },
+        });
+        if (!customer || !customer.is_active) {
+          throw new NotFoundException('Customer not found or inactive');
+        }
+
+        // 2. Program must be ACTIVE
+        const program = await manager.getRepository(LoyaltyProgram).findOne({
+          where: { id: loyaltyProgramId, tenant_id: tenantId },
+        });
+        if (!program) {
+          throw new NotFoundException('Loyalty program not found');
+        }
+        if (program.status !== LoyaltyProgramStatus.ACTIVE) {
+          throw new BadRequestException(
+            `Program is ${program.status.toLowerCase()}, not active`,
+          );
+        }
+
+        // 3. Reward must be ACTIVE and within its window
+        const reward = await manager.getRepository(RewardDefinition).findOne({
+          where: {
+            id: rewardId,
+            tenant_id: tenantId,
+            loyalty_program_id: loyaltyProgramId,
+          },
+        });
+        if (!reward) {
+          throw new NotFoundException('Reward not found');
+        }
+        if (reward.status !== RewardStatus.ACTIVE) {
+          throw new BadRequestException('Reward is inactive');
+        }
+
+        if (reward.starts_at && now < reward.starts_at) {
+          throw new BadRequestException(
+            'Reward is not yet available (not within window)',
+          );
+        }
+        if (reward.ends_at && now >= reward.ends_at) {
+          throw new BadRequestException('Reward has expired');
+        }
+
+        return { reward };
+      },
+    );
+
+    // 4. Balance must be sufficient (opens its own tenant transaction)
     const balance = await this.loyaltyService.getCustomerBalance(
       tenantId,
       customerId,
@@ -257,13 +273,19 @@ export class RedemptionService {
     customerId: string,
   ): Promise<CustomerPointTransaction[]> {
     // Find all non-reversed EARN and REDEEM transactions for this ticket
-    const movements = await this.txRepo.find({
-      where: {
-        tenant_id: tenantId,
-        ticket_id: ticketId,
-        customer_id: customerId,
-      },
-    });
+    // (unit A, issue #512 slice 4)
+    const movements = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(CustomerPointTransaction).find({
+          where: {
+            tenant_id: tenantId,
+            ticket_id: ticketId,
+            customer_id: customerId,
+          },
+        }),
+    );
 
     // Filter to EARN and REDEEM, exclude already-reversed
     const reversible = movements.filter((m) => {
@@ -285,10 +307,16 @@ export class RedemptionService {
     for (const movement of reversible) {
       const idempotencyKey = `loyalty:reversal:${tenantId}:${movement.id}`;
 
-      // Check if already reversed (idempotency)
-      const existing = await this.txRepo.findOne({
-        where: { idempotency_key: idempotencyKey, tenant_id: tenantId },
-      });
+      // Check if already reversed (idempotency); its own leaf unit so the
+      // per-iteration independence is preserved (issue #512 slice 4).
+      const existing = await runInTenantTransaction(
+        this.dataSource,
+        tenantId,
+        (manager) =>
+          manager.getRepository(CustomerPointTransaction).findOne({
+            where: { idempotency_key: idempotencyKey, tenant_id: tenantId },
+          }),
+      );
       if (existing) continue;
 
       const reversal = await this.ledgerService.appendTransaction({

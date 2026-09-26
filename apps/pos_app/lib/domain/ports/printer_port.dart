@@ -69,6 +69,19 @@ abstract class PrinterPort {
     bool isTaxExempt = false,
     int paperWidthMm = 58,
     PostPaidFeedback? loyaltyFeedback,
+
+    /// D-17 (P0): fiscal authorization number printed at the bottom-right
+    /// of the invoice (DT 09-2007 QUINTO). Must survive the whole chain to
+    /// the rendered document — this port previously dropped customerRuc
+    /// (#540 T4); do not repeat that with this field.
+    String? fiscalAuthorizationNumber,
+
+    /// D-13: true when printing a REIMPRESIÓN of the immutable fiscal
+    /// snapshot. Must survive the whole chain to the rendered document.
+    bool isReprint = false,
+
+    /// D-13: reprint request timestamp, printed next to the banner.
+    DateTime? reprintAt,
   });
 
   /// Prints a kitchen / KDS order ticket with buzzer / table identification.

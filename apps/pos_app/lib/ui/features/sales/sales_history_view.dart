@@ -5,6 +5,9 @@ import '../../../presentation/features/sales/view_models/sales_history_view_mode
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/sales/invoice.dart';
 import '../../../domain/models/sales/invoice_item.dart';
+import '../../../domain/usecases/sales/void_decision.dart';
+// ReprintReasonCodes and the snapshot-unavailable copy live in the same module.
+import '../../../core/localization/label_map.dart';
 import '../../design_system/design_system.dart';
 
 class SalesHistoryView extends StatefulWidget {
@@ -318,13 +321,16 @@ class InvoiceDetailsPanel extends StatelessWidget {
               Text('C\$ ${invoice.subtotal.toStringAsFixed(2)}'),
             ],
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('IVA (15%):'),
-              Text('C\$ ${invoice.totalTax.toStringAsFixed(2)}'),
-            ],
-          ),
+          // D-3: under CUOTA_FIJA the tenant does not collect IVA — the row is
+          // omitted instead of showing a label that contradicts the receipts.
+          if (context.watch<SaleViewModel>().companyTaxRegime?.isCuotaFija != true)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('IVA:'),
+                Text('C\$ ${invoice.totalTax.toStringAsFixed(2)}'),
+              ],
+            ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -336,75 +342,234 @@ class InvoiceDetailsPanel extends StatelessWidget {
           
           const SizedBox(height: 24),
           
-          if (!invoice.isCanceled && invoice.type == InvoiceType.regular)
+          // D-13: REIMPRIMIR is available for ANY invoice row — canceled
+          // included; the paper then carries ANULADO and REIMPRESIÓN
+          // together (#547). Permission-gated (SalesPermission).
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const Key('reprint_invoice_button'),
+              icon: const Icon(Icons.print_outlined),
+              label: const Text('REIMPRIMIR'),
+              onPressed: context.watch<SaleViewModel>().canReprint
+                  ? () => _showReprintDialog(context)
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (!invoice.isCanceled && invoice.type == InvoiceType.regular) ...[
+            // D-14/#553: the credit-note action (REALIZAR DEVOLUCIÓN) was
+            // REMOVED, not hidden — the Backoffice is the emitter for
+            // cross-day corrections until DSI-6 re-enables POS-side
+            // issuance. ANULAR is the only correction action in the POS.
+            // D-15: the void action is permission-gated (SalesPermission),
+            // never a role-label check. The dialog collects the mandatory
+            // controlled reason (AC-6) before invoking the view model.
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.assignment_return),
-                label: const Text('REALIZAR DEVOLUCIÓN'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: colorScheme.errorContainer,
-                  foregroundColor: colorScheme.onErrorContainer,
-                ),
-                onPressed: () => _showReturnConfirmation(context),
+              child: OutlinedButton.icon(
+                key: const Key('void_invoice_button'),
+                icon: const Icon(Icons.cancel_outlined),
+                label: const Text('ANULAR FACTURA'),
+                onPressed: context.watch<SaleViewModel>().canVoidInvoice
+                    ? () => _showVoidDialog(context)
+                    : null,
               ),
             ),
+          ],
         ],
       ),
     );
   }
 
-  void _showReturnConfirmation(BuildContext context) {
-    final controller = TextEditingController(text: 'Devolución de cliente');
+  /// Neutral Spanish labels for the D-13 reprint reason codes, delegated to
+  /// the centralized map (#587 WU3); unknown codes pass through unchanged.
+  String _reprintReasonLabel(String code) =>
+      localize(code, kReprintReasonLabels);
+
+  /// D-13: reprint reason dialog — mandatory controlled code + optional
+  /// detail. On success the SnackBar claims only the print outcome; the
+  /// list is NOT reloaded (a reprint writes no invoice data).
+  void _showReprintDialog(BuildContext context) {
+    String? selectedCode;
+    final detailController = TextEditingController();
+    var submitting = false;
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Confirmar Devolución'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('¿Está seguro de emitir una Nota de Crédito para la factura ${invoice.number}?'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Motivo de devolución'),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Reimprimir Comprobante'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Seleccione el motivo de la reimpresión de ${invoice.number}:'),
+              const SizedBox(height: 8),
+              ...ReprintReasonCodes.all.map(
+                (code) => RadioListTile<String>(
+                  value: code,
+                  groupValue: selectedCode,
+                  title: Text(_reprintReasonLabel(code)),
+                  onChanged: (value) =>
+                      setDialogState(() => selectedCode = value),
+                ),
+              ),
+              TextField(
+                controller: detailController,
+                decoration: const InputDecoration(
+                  labelText: 'Detalle (opcional)',
+                  hintText: 'Describa el motivo si lo considera necesario',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCELAR'),
+            ),
+            ElevatedButton(
+              key: const Key('confirm_reprint_button'),
+              onPressed: selectedCode == null || submitting
+                  ? null
+                  : () async {
+                      setDialogState(() => submitting = true);
+                      final saleViewModel = context.read<SaleViewModel>();
+                      final messenger = ScaffoldMessenger.of(context);
+                      final detail = detailController.text.trim();
+                      final ok = await saleViewModel.reprintInvoice(
+                        invoice.id,
+                        selectedCode!,
+                        reasonDetail: detail.isEmpty ? null : detail,
+                      );
+                      final printed = saleViewModel.lastReprintPrintSucceeded;
+                      if (!context.mounted) return;
+                      if (ok) {
+                        Navigator.pop(dialogContext);
+                        // Honesty rule: only claim the print if it happened.
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              printed
+                                  ? 'Comprobante REIMPRESIÓN impreso.'
+                                  : 'Comprobante REIMPRESIÓN no pudo imprimirse.',
+                            ),
+                          ),
+                        );
+                        // No list reload: a reprint writes no invoice data.
+                      } else {
+                        setDialogState(() => submitting = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              saleViewModel.errorMessage ??
+                                  'No se pudo reimprimir el comprobante.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+              child: const Text('REIMPRIMIR'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCELAR')),
-          ElevatedButton(
-            onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              final registered = await context
-                  .read<SaleViewModel>()
-                  .processReturn(invoice.number, controller.text);
-              if (!context.mounted) return;
-              if (registered) {
-                Navigator.pop(dialogContext);
-                messenger.showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Nota de Crédito registrada. Pendiente de validación al sincronizar.',
-                    ),
-                  ),
-                );
-                context.read<SalesHistoryViewModel>().loadInvoices();
-              } else {
-                // Keep the dialog open so the typed reason is not lost,
-                // and surface the error returned by the view model.
-                final error =
-                    context.read<SaleViewModel>().errorMessage ??
-                        'No se pudo registrar la Nota de Crédito.';
-                messenger.showSnackBar(
-                  SnackBar(content: Text(error)),
-                );
-              }
-            }, 
-            child: const Text('PROCESAR'),
-          ),
-        ],
       ),
     );
   }
+
+  /// Neutral Spanish labels for the D-15 controlled reason codes (AC-6/AC-7),
+  /// delegated to the centralized map (#587 WU3); unknown codes pass through
+  /// unchanged.
+  String _voidReasonLabel(String code) => localize(code, kVoidReasonLabels);
+
+  void _showVoidDialog(BuildContext context) {
+    String? selectedCode;
+    final detailController = TextEditingController();
+    var submitting = false;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Anular Factura'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Seleccione el motivo de la anulación de ${invoice.number}:'),
+              const SizedBox(height: 8),
+              ...VoidReasonCodes.all.map(
+                (code) => RadioListTile<String>(
+                  value: code,
+                  groupValue: selectedCode,
+                  title: Text(_voidReasonLabel(code)),
+                  onChanged: (value) =>
+                      setDialogState(() => selectedCode = value),
+                ),
+              ),
+              TextField(
+                controller: detailController,
+                decoration: const InputDecoration(
+                  labelText: 'Detalle (opcional)',
+                  hintText: 'Describa el motivo si lo considera necesario',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCELAR'),
+            ),
+            ElevatedButton(
+              key: const Key('confirm_void_button'),
+              onPressed: selectedCode == null || submitting
+                  ? null
+                  : () async {
+                      setDialogState(() => submitting = true);
+                      final saleViewModel = context.read<SaleViewModel>();
+                      final messenger = ScaffoldMessenger.of(context);
+                      final detail = detailController.text.trim();
+                      final ok = await saleViewModel.voidInvoice(
+                        invoice.id,
+                        selectedCode!,
+                        reasonDetail: detail.isEmpty ? null : detail,
+                      );
+                      final printed = saleViewModel.lastVoidPrintSucceeded;
+                      if (!context.mounted) return;
+                      if (ok) {
+                        Navigator.pop(dialogContext);
+                        // Honesty rule: only claim the print if it happened.
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              printed
+                                  ? 'Factura anulada. Se imprimió el comprobante ANULADO.'
+                                  : 'Factura anulada. No se pudo imprimir el comprobante ANULADO.',
+                            ),
+                          ),
+                        );
+                        await context
+                            .read<SalesHistoryViewModel>()
+                            .loadInvoices();
+                      } else {
+                        // Denial: the dialog stays open with the typed reason
+                        // preserved; the specific guard message is surfaced.
+                        setDialogState(() => submitting = false);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              saleViewModel.errorMessage ??
+                                  'No se pudo anular la factura.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+              child: const Text('ANULAR'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 }

@@ -360,6 +360,11 @@ class InvoiceFiscalCalculator {
     List<ReceiptPayment>? payments,
     List<int>? logoRasterBytes,
     List<CartItem>? sourceCart,
+
+    /// D-17 (P0): fiscal authorization number printed at the bottom-right of
+    /// the document (DT 09-2007 QUINTO). Null when unconfigured — null
+    /// renders nothing on paper, never a placeholder.
+    String? fiscalAuthorizationNumber,
   }) {
     final effectivePayments = <ReceiptPayment>[];
     if (payments != null && payments.isNotEmpty) {
@@ -454,6 +459,10 @@ class InvoiceFiscalCalculator {
       footerMessage: footerMessage,
       logoRasterBytes: logoRasterBytes,
       isTaxExempt: isDocTaxExempt,
+      fiscalAuthorizationNumber:
+          (fiscalAuthorizationNumber != null && fiscalAuthorizationNumber.trim().isNotEmpty)
+              ? fiscalAuthorizationNumber.trim()
+              : null,
     );
   }
 }

@@ -5,8 +5,10 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { SetupCenterView } from "@/features/onboarding/setup-center-view";
 import {
   ActivationAttemptStatus,
+  LinkingCodeStatus,
   OnboardingLifecycleState,
   type ActivationAttempt,
+  type LinkingCodeResponse,
 } from "@/features/onboarding/types";
 import { useAuthStore } from "@/features/auth/auth-store";
 import { UserRole } from "@/features/users/types";
@@ -151,15 +153,32 @@ function makeAttempt(
   };
 }
 
+function makeClaimedCode(
+  overrides: Partial<LinkingCodeResponse> = {},
+): LinkingCodeResponse {
+  return {
+    id: "code-l104b-claimed",
+    status: LinkingCodeStatus.CLAIMED,
+    deviceId: "POS-01",
+    expiresAt: "2026-09-05T11:15:00.000Z",
+    claimedAt: "2026-09-05T11:05:00.000Z",
+    createdAt: "2026-09-05T11:00:00.000Z",
+    ...overrides,
+  };
+}
+
 /**
  * URL-based fetch routing, mirroring the conventions of
  * onboarding-sale-ready-review.test.tsx but exposing the activation attempt
  * behavior needed for this slice. `activeAttemptSequence` shifts one entry per
  * GET to /attempts/active and repeats the last one (the create mutation
  * invalidates the active-attempt query, so the refetch sees the new attempt).
+ * `linkingCodes` is returned on every GET of the listing endpoint (polled
+ * every 5s by useLinkingCodes, issue #569 single linking flow).
  */
 function routeFetch(options: {
   activeAttemptSequence?: Array<ActivationAttempt | null>;
+  linkingCodes?: LinkingCodeResponse[];
   startAttemptResponse?: { status: number; body: unknown };
 }) {
   const sequence = options.activeAttemptSequence ?? [null];
@@ -191,6 +210,11 @@ function routeFetch(options: {
       const response = options.startAttemptResponse;
       return okJson(response?.body ?? {}, response?.status ?? 200);
     }
+    if (url.includes("/onboarding/activation/linking-codes")) {
+      // GET is the issue #569 listing; POST is the #556 generation. This file
+      // only exercises the GET listing.
+      return okJson(options.linkingCodes ?? []);
+    }
     return okJson({});
   });
 }
@@ -214,15 +238,15 @@ async function renderSaleReadyCenter() {
 }
 
 describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => {
-  it("keeps the create action unavailable without onboarding:activation:manage and shows the guard note", async () => {
+  it("keeps the activation action unavailable without onboarding:activation:manage and shows the guard note", async () => {
     authUser(UserRole.CASHIER);
     routeFetch({});
 
     await renderSaleReadyCenter();
 
     expect(screen.getByTestId("start-pos-terminal-btn")).toHaveClass("opacity-60");
-    expect(screen.queryByTestId("activation-terminal-id-input")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("create-activation-attempt-btn")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("claimed-terminal-item")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("start-activation-for-terminal-btn")).not.toBeInTheDocument();
     expect(screen.getByTestId("activation-permission-guard-note")).toHaveTextContent(
       /onboarding:activation:manage/i,
     );
@@ -232,52 +256,23 @@ describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => 
     expect(posts).toHaveLength(0);
   });
 
-  it("offers the terminal id action to a user with onboarding:activation:manage", async () => {
+  it("offers the one-click activation for a claimed terminal to a user with onboarding:activation:manage", async () => {
     authUser(UserRole.OWNER);
-    routeFetch({});
+    routeFetch({ linkingCodes: [makeClaimedCode()] });
 
     await renderSaleReadyCenter();
 
-    expect(screen.getByTestId("activation-terminal-id-input")).toBeInTheDocument();
-    expect(screen.getByTestId("create-activation-attempt-btn")).toBeEnabled();
+    expect(await screen.findByTestId("claimed-terminal-item")).toBeInTheDocument();
+    expect(screen.getByTestId("claimed-terminal-device-id")).toHaveTextContent("POS-01");
+    expect(screen.getByTestId("start-activation-for-terminal-btn")).toBeEnabled();
     expect(screen.getByTestId("activation-hint")).toBeInTheDocument();
   });
 
-  it("does not issue any request when the terminal id is empty", async () => {
-    authUser(UserRole.OWNER);
-    routeFetch({});
-    const user = userEvent.setup();
-
-    await renderSaleReadyCenter();
-
-    await user.click(screen.getByTestId("create-activation-attempt-btn"));
-
-    expect(await screen.findByTestId("activation-terminal-id-error")).toHaveTextContent(
-      /ID de terminal/i,
-    );
-    expect(sentActivationPosts()).toHaveLength(0);
-  });
-
-  it("does not issue any request when the terminal id is whitespace-only", async () => {
-    authUser(UserRole.OWNER);
-    routeFetch({});
-    const user = userEvent.setup();
-
-    await renderSaleReadyCenter();
-
-    await user.type(screen.getByTestId("activation-terminal-id-input"), "   ");
-    await user.click(screen.getByTestId("create-activation-attempt-btn"));
-
-    expect(await screen.findByTestId("activation-terminal-id-error")).toHaveTextContent(
-      /ID de terminal/i,
-    );
-    expect(sentActivationPosts()).toHaveLength(0);
-  });
-
-  it("creates the attempt with exactly the expected body and surfaces the awaiting state", async () => {
+  it("creates the attempt from the claimed deviceId with exactly the expected body and surfaces the awaiting state", async () => {
     authUser(UserRole.OWNER);
     const createdAttempt = makeAttempt();
     routeFetch({
+      linkingCodes: [makeClaimedCode()],
       activeAttemptSequence: [null, createdAttempt],
       startAttemptResponse: { status: 201, body: createdAttempt },
     });
@@ -285,8 +280,8 @@ describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => 
 
     await renderSaleReadyCenter();
 
-    await user.type(screen.getByTestId("activation-terminal-id-input"), "POS-01");
-    await user.click(screen.getByTestId("create-activation-attempt-btn"));
+    const item = await screen.findByTestId("claimed-terminal-item");
+    await user.click(within(item).getByTestId("start-activation-for-terminal-btn"));
 
     await waitFor(() => {
       expect(sentActivationPosts()).toHaveLength(1);
@@ -295,10 +290,11 @@ describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => 
     const posts = sentActivationPosts();
     expect(posts).toHaveLength(1);
     const body = posts[0] as Record<string, unknown>;
-    // Exactly the data-layer DTO: terminal id + stable idempotency key. Tenant
-    // and actor identity come from the JWT and must never be sent.
+    // Exactly the data-layer DTO: the claimed code's bound deviceId + stable
+    // idempotency key. Tenant and actor identity come from the JWT and must
+    // never be sent.
     expect(Object.keys(body).sort()).toEqual(["candidateTerminalId", "idempotencyKey"]);
-    expect(body.candidateTerminalId).toBe("POS-01");
+    expect(body.candidateTerminalId).toBe(makeClaimedCode().deviceId);
     expect(typeof body.idempotencyKey).toBe("string");
     expect(body.idempotencyKey).toBeTruthy();
 
@@ -336,6 +332,7 @@ describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => 
   it("surfaces a failed attempt with its outcome and keeps a retry path", async () => {
     authUser(UserRole.OWNER);
     routeFetch({
+      linkingCodes: [makeClaimedCode()],
       activeAttemptSequence: [
         makeAttempt({ status: ActivationAttemptStatus.FAIL, failureCode: "DEVICE_CHECKS_FAILED" }),
       ],
@@ -346,10 +343,11 @@ describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => 
     const panel = await screen.findByTestId("activation-attempt-failed");
     expect(panel).toHaveTextContent(/\bfall\w*/i);
     expect(panel).toHaveTextContent(/terminal.*revisada antes de intentar/i);
-    // The operator may retry: the create form stays reachable, never replaced
-    // by a bare form without the previous outcome explained.
-    expect(screen.getByTestId("activation-terminal-id-input")).toBeInTheDocument();
-    expect(screen.getByTestId("create-activation-attempt-btn")).toBeEnabled();
+    // The operator may retry via the claimed-device one-click path: the
+    // detection list stays reachable, never replaced by a bare form without
+    // the previous outcome explained.
+    expect(screen.getByTestId("start-activation-for-terminal-btn")).toBeEnabled();
+    expect(screen.queryByTestId("activation-terminal-id-input")).not.toBeInTheDocument();
     expect(screen.queryByTestId("activation-awaiting-device-checks")).not.toBeInTheDocument();
     // The dashboard does not fetch checks: no check data may be rendered.
     expect(within(panel).queryByText(/PASS|FAIL/i)).not.toBeInTheDocument();
@@ -404,14 +402,15 @@ describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => 
     async (status, backendMessage, expectedPattern) => {
       authUser(UserRole.OWNER);
       routeFetch({
+        linkingCodes: [makeClaimedCode()],
         startAttemptResponse: { status, body: { statusCode: status, message: backendMessage } },
       });
       const user = userEvent.setup();
 
       await renderSaleReadyCenter();
 
-      await user.type(screen.getByTestId("activation-terminal-id-input"), "POS-01");
-      await user.click(screen.getByTestId("create-activation-attempt-btn"));
+      const item = await screen.findByTestId("claimed-terminal-item");
+      await user.click(within(item).getByTestId("start-activation-for-terminal-btn"));
 
       const errorBox = await screen.findByTestId("activation-attempt-error");
       expect(errorBox).toHaveTextContent(expectedPattern);
