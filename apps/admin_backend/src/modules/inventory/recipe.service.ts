@@ -21,7 +21,7 @@ import {
 } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 import { Insumo } from './entities/insumo.entity';
-import { Product } from './entities/product.entity';
+import { Product, ProductType } from './entities/product.entity';
 import { UomConversion } from './entities/uom-conversion.entity';
 import { SyncRecipeVersionDocumentDto } from './dto/sync-recipe-version-document.dto';
 import { RecipeSuggestionListItemDto } from './dto/recipe-version-response.dto';
@@ -30,6 +30,19 @@ import { UomConversionCalculator } from './uom-conversion-calculator';
 const SCALE_4 = 4;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
+
+// Issue #611: only product types the consumption side actually reads may
+// carry a recipe. The cloud recipe branch in SaleInventoryOutcomeService
+// admits exactly PREPARED | COMPOUND (SIMPLE yields noImpact without an
+// explicit insumo mapping), so this set is derived from the same ProductType
+// enum to keep the write-side guard and the read-side branch in agreement.
+// Single source of truth for the predicate remains the ProductType enum; if
+// the outcome service ever widens its branch, this constant must move with
+// it (ideally into a shared helper next to the entity).
+const RECIPE_ALLOWED_PRODUCT_TYPES: readonly ProductType[] = [
+  ProductType.COMPOUND,
+  ProductType.PREPARED,
+];
 
 export interface RecipeComponentInput {
   insumoId: string;
@@ -108,6 +121,14 @@ export class RecipeService {
       async (manager) => {
         const recipeVersionRepo = manager.getRepository(RecipeVersion);
         const recipeDetailRepo = manager.getRepository(RecipeDetail);
+
+        // Issue #611: type guard rides the same tenant-bound transaction as
+        // the write below — no unbound read, no check/write divergence window.
+        await this.assertProductTypeSupportsRecipe(
+          manager,
+          input.tenantId,
+          input.productId,
+        );
 
         const activeVersion = await recipeVersionRepo.findOne({
           where: {
@@ -215,6 +236,15 @@ export class RecipeService {
         ) {
           return draft;
         }
+
+        // Issue #611: the draft is about to become the live recipe, so the
+        // product type is validated inside this same tenant-bound
+        // transaction, before the prior active version is deactivated.
+        await this.assertProductTypeSupportsRecipe(
+          manager,
+          tenantId,
+          draft.product_id,
+        );
 
         // Deactivate prior active version for this product
         const priorActive = await recipeVersionRepo.findOne({
@@ -662,6 +692,42 @@ export class RecipeService {
       return null;
     }
     return parsed;
+  }
+
+  /**
+   * Issue #611: a recipe version must never become live on a product no
+   * consumption branch reads. Both consumption branches key off
+   * `product.product_type`; only PREPARED | COMPOUND reach the recipe branch
+   * in SaleInventoryOutcomeService. Must be called inside the caller's
+   * tenant-bound transaction so the check and the write see the same data.
+   *
+   * A missing product row preserves the pre-existing behaviour (the callers
+   * never treated absence as an error here); only an existing row with a
+   * non-recipe type is rejected.
+   *
+   * The message is operator-facing UI text (neutral Spanish, usted): it names
+   * the product and points to the catalog fix. It must never be machine-read
+   * (no reasonCode, invoice field, or snapshot payload).
+   */
+  private async assertProductTypeSupportsRecipe(
+    manager: EntityManager,
+    tenantId: string,
+    productId: string,
+  ): Promise<void> {
+    const product = await manager.getRepository(Product).findOne({
+      where: { id: productId, tenant_id: tenantId },
+      select: { id: true, name: true, product_type: true },
+    });
+
+    if (!product) {
+      return;
+    }
+
+    if (!RECIPE_ALLOWED_PRODUCT_TYPES.includes(product.product_type)) {
+      throw new BadRequestException(
+        `El producto "${product.name}" es de tipo ${product.product_type} y no admite recetas: una receta requiere un producto de tipo Compuesto o Preparado. Corrija el tipo del producto en Catálogo → tipo de producto.`,
+      );
+    }
   }
 
   private async assertProductExistsForTenant(
