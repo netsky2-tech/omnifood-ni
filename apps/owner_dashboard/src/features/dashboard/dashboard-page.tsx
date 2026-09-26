@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { KpiCard } from "@/components/kpi-card";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
+import { KpiStrip } from "./kpi-strip";
 
 import { formatLocalDate } from "@/lib/utils";
 
@@ -61,25 +61,13 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Ventas Brutas"
-          value={formatCurrency(data?.grossSales ?? 0)}
-          subtitle={`${data?.invoiceCount ?? 0} facturas`}
-        />
-        <KpiCard
-          label="Ticket Promedio"
-          value={formatCurrency(data?.ticketAverage ?? 0)}
-        />
-        <KpiCard
-          label="Impuestos (IVA)"
-          value={formatCurrency(data?.totalTax ?? 0)}
-        />
-        <KpiCard
-          label="Descuentos"
-          value={formatCurrency(data?.totalDiscounts ?? 0)}
-        />
-      </div>
+      {/* Dashboard V2 Batch 4: regime-aware executive KPI strip (FR-KPI-01..05,
+          FR-FISCAL-01..04). Legacy grossSales is no longer rendered as the
+          "Ventas Brutas" hero here; it remains in "Resumen de Ventas" below
+          while existing consumers migrate (arch spec §7.3). */}
+      <KpiStrip
+        range={{ start: range.startDate, end: range.endDate }}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
