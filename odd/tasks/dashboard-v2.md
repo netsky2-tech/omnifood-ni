@@ -8,8 +8,9 @@
 **Base:** `main` @ `a9a381d4`
 **Status:** in progress — audit chain closed through v0.3 (`e61fe291`); PRD v1.0 + architecture
 spec v0.2 imported as inputs (`735a429b`); gates verified, spec at v0.3 (`7013023f`); execution
-roadmap v1.0 issued (`d8e5aa7d`); **Batch 1 (reporting semantics foundation) implemented** on top
-of the post-#592 bound reads after realigning the branch with main (`437ebc34`).
+roadmap v1.0 issued (`d8e5aa7d`); **Batches 1–8 implemented** (Batches 3b/5c/6/7 landed after the
+board's Batch 5 update and are reconciled below from git history; Batch 8 acceptance/hardening
+closed in the Batch 8 entry).
 
 ## Governing constraint
 
@@ -199,4 +200,86 @@ discipline: evidence first, decisions second, PRD third, implementation batches 
   2. Hourly widget for multi-day ranges shows only the range's last day (single-day endpoint) —
      caption discloses; needs product acceptance or a range-capable endpoint.
   3. Legacy "Métodos de Pago" card still coexists with PaymentMix (page-test owns it) —
-     deduplication decision pending Batch 8 cleanup.
+     deduplication decision pending Batch 8 cleanup. *(Resolved in Batch 5c: see below.)*
+
+### Batch 3b — freshness participation policy (backend)
+
+- **Status:** done (`9d6c844e`).
+- **Delivered:** freshness participation keyed on the first sync checkpoint — a provisioned
+  device with no historical ACCEPTED receipt is display-only `PENDING` and never holds the tenant
+  at PARTIAL/STALE (founder freshness participation policy; AC-09A posture).
+- **Evidence:** behavior owned by `sync-health.service.spec.ts` + `freshness-derivation.spec.ts`;
+  re-proven end-to-end in the Batch 8 DB acceptance proof (tenant B stale / tenant A fresh
+  isolation tests).
+
+### Batch 5c — reporting debts + frontend consumption
+
+- **Status:** done (`87bbbd54` backend, `8e5578d2` frontend).
+- **Delivered:** pre-tax `netRevenueNio` for top products (FR-PRODUCT-01 debt); hourly range
+  endpoint (2–60 day averaged distribution); legacy "Métodos de Pago" card removed — PaymentMix
+  is the single payment surface.
+- **Evidence:** `dashboard-v2-charts.spec.tsx` owns the reconciled contracts; full dashboard
+  suite green through Batch 8.
+
+### Batch 6 — Attention Required (frontend + two backend contracts)
+
+- **Status:** done (6a `276b5577` + AG-07 storage `eddfc896`; 6b `c6c09833`).
+- **Delivered:** 6a — card reconciliation summary contract (spec §15) and audit executive summary
+  contract (spec §16) as bound reads; AG-07 — additive `severity` column with deterministic
+  ingestion classifier (storage layer). 6b — `AttentionBand` (five signals: stock, vouchers,
+  voids, sequence, audit; severity model Critical/Warning/Info; deep-links only) and the AG-06
+  cost permission gate on the KPI strip (AC-17, fail-closed until the backend permission chain
+  ships).
+- **Evidence:** behavior owned by `dashboard-v2-attention.spec.tsx` (frontend),
+  `card-reconciliation-summary.*` / `audit-summary.*` / `audit-risk-classifier.spec.ts`
+  (backend); re-proven across both trees in Batch 8 (AC-10..AC-13 frontend; two-tenant DB proof
+  backend).
+
+### Batch 7 — Tip data-path remediation #545 (Gate E)
+
+- **Status:** done (slice 1 `122e1a21`, slice 2 `53ca5cbd`, slice 3 `2b9e1482`).
+- **Delivered:** backend voluntary-tip schema + sync DTO; POS voluntary tip persistence with
+  sale-time eligible-base snapshot and sync payload; reporting tip aggregation +
+  `tipsSummary` on the V2 dashboard report + `TipsSummaryCard` in the bottom management band
+  (separate flow, PRD §21.3; coverage-gated, PRD §21.4). Restaurant/Hybrid GA unblocked.
+- **Evidence:** `dashboard-v2-tips.spec.tsx` (frontend), tip schema/sync/report specs (backend);
+  AC-14/AC-15 re-proven in Batch 8.
+
+### Batch 8 — Pilot acceptance and hardening (PRD §29–30, Gates A–F)
+
+- **Status:** done (this working pass; commits owned by the orchestrator — no commits made by
+  the implementation worker).
+- **Delivered:**
+  1. `apps/owner_dashboard/src/__tests__/dashboard-v2-acceptance.spec.tsx` — frontend acceptance
+     suite over deterministic fixtures: AC-01 (Régimen General five-slot strip + full band with
+     healthy attention), AC-02 (Cuota Fija 4-card, no IVA card/zero placeholder/warning),
+     AC-03 (pre-discount + discount-rate reconciliation on the fixture), AC-04 (genuine zeros,
+     em-dash average/margin, "sin actividad", suppressed charts, alerts still visible),
+     AC-05 (Tuesday-vs-previous-Tuesday deltas + zero-base "Sin base comparable"), AC-06
+     (margin = net − salesCogs with merma excluded), AC-10..AC-13 (attention signals with
+     severity/links/audit summary), AC-14 (tips card reconciled, tips outside Net Sales),
+     AC-15 (inapplicable tips omitted without placeholders), AC-16 (top-products failure
+     isolated, page usable), AC-17 (manager without grant: no margin tile, no COGS fetch).
+  2. `apps/admin_backend/test/sales/dashboard-v2-acceptance.db.e2e-spec.ts` — two-tenant
+     isolation proof (Gate F) for all five new dashboard endpoints (`/sales/reports/dashboard`,
+     `/sales/reports/dashboard/daily-series`, `/operations/sync/freshness`,
+     `/operations/audit/summary`, `/sales/reports/card-reconciliation-summary`) over the
+     migration-built schema with the NOSUPERUSER NOBYPASSRLS runtime role, plus the backend
+     freshness scenarios: **AC-08** (complete streams 20 min old → STALE) and **AC-09A**
+     (quiet store with checkpoints current within the threshold → COMPLETE), and the backend
+     AC-03 reconciliation.
+- **AC placement note (AC-08/AC-09A):** the frontend has no freshness-state consumer yet (the
+  page badge is the legacy generatedAt cosmetic element; PRD FR-SYNC-04 forbids deriving
+  completeness from generatedAt), so both scenarios are proven against the real endpoint and
+  derivation in the backend acceptance proof. The frontend freshness-state surface remains an
+  open product/frontend follow-up — flagged, not silently absorbed.
+- **Evidence:** focused vitest 22/22; full dashboard `npx vitest run` 74 files / 1017 pass /
+  4 skip / 0 fail; backend `npx jest --config ./test/jest-e2e.json
+  sales/dashboard-v2-acceptance.db.e2e-spec.ts` 13/13 (live local Postgres available in this
+  pass, unlike Batch 1); backend `tsc --noEmit` 16 pre-existing errors
+  (`test/inventory/batch_6b_baseline_validation.spec.ts`, known baseline), 0 new.
+- **Command note:** `.db.e2e-spec.ts` suites are invisible to the default jest config
+  (rootDir `src`); they run under `test/jest-e2e.json` (same as the existing
+  `pooled-reads-rls.db.e2e-spec.ts`). The bare `npx jest <path>` form reports "No tests found".
+- **Not in this pass:** staging deployment and pilot verification (roadmap Batch 8 items 5–6,
+  human-owned); WCAG 2.1 AA a11y baseline beyond the suites' roles/labels/text-value coverage.

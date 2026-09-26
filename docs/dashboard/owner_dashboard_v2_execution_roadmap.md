@@ -163,6 +163,11 @@ isolation proof for the new endpoint/table.
 cloud additive columns, aggregation, then KPI widgets for applicable profiles only. Sale-time
 reproducibility invariant (PRD 21.2); legacy rows NULL + coverage metadata (spec §33.4).
 
+**Closure record (Batch 8 pass):** DONE — slice 1 `122e1a21` (backend tip schema + sync DTO),
+slice 2 `53ca5cbd` (POS persistence + sync payload), slice 3 `2b9e1482` (reporting aggregation +
+`tipsSummary` on the V2 report + `TipsSummaryCard`). AC-14/AC-15 proven in the Batch 8 frontend
+acceptance suite; behavior owned by `dashboard-v2-tips.spec.tsx`.
+
 ---
 
 ## Batch 8 — Pilot acceptance and hardening
@@ -173,6 +178,19 @@ reproducibility invariant (PRD 21.2); legacy rows NULL + coverage metadata (spec
 fixtures (Régimen General, Cuota Fija, mixed); sync-state matrix tests; two-tenant proofs for
 every new route; UX states (zero-sales, high-alert, large dataset, tablet, mobile); accessibility
 baseline (WCAG 2.1 AA per PRD §28); staging deployment and pilot verification.
+
+**Closure record (this pass):** DONE for the test/evidence scope —
+- `apps/owner_dashboard/src/__tests__/dashboard-v2-acceptance.spec.tsx` (22 tests): AC-01..AC-06,
+  AC-10..AC-17 over deterministic fixtures; full dashboard suite 74 files / 1017 pass / 4 skip.
+- `apps/admin_backend/test/sales/dashboard-v2-acceptance.db.e2e-spec.ts` (13 tests, live
+  Postgres, migration-built schema, NOBYPASSRLS runtime role): two-tenant isolation (Gate F) for
+  all five new dashboard endpoints + AC-08 (20-min complete → STALE) + AC-09A (quiet store with
+  fresh checkpoints → COMPLETE) + backend AC-03 reconciliation.
+- AC placement note: AC-08/AC-09A live in the backend proof (no frontend freshness-state
+  consumer exists yet; generatedAt must not signal completeness per FR-SYNC-04). The frontend
+  freshness-state surface remains an open follow-up.
+- Not covered here (human/infra-owned): staging deployment, pilot verification, dedicated WCAG
+  2.1 AA audit, large-dataset/tablet/mobile soak UX.
 
 ---
 
