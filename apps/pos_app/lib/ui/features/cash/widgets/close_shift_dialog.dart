@@ -49,8 +49,13 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
       return;
     }
 
-    final diffNio = (countedNio - activeShift.expectedNio).abs();
-    final diffUsd = (countedUsd - activeShift.expectedUsd).abs();
+    // Issue #529: re-query the net cash sales before evaluating variance,
+    // so sales recorded after the screen loaded are included and honest
+    // counts don't trip the supervisor override.
+    await vm.refreshSalesCash();
+
+    final diffNio = (countedNio - vm.effectiveExpectedNio).abs();
+    final diffUsd = (countedUsd - vm.effectiveExpectedUsd).abs();
     final hasHighVariance = diffNio > 100.0 || diffUsd > 5.0;
 
     setState(() {

@@ -1487,6 +1487,18 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
       ) as _i51.Future<List<_i58.PaymentEntity>>);
 
   @override
+  _i51.Future<List<_i58.PaymentEntity>> getCashPaymentsForShift(
+          String? shiftId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getCashPaymentsForShift,
+          [shiftId],
+        ),
+        returnValue:
+            _i51.Future<List<_i58.PaymentEntity>>.value(<_i58.PaymentEntity>[]),
+      ) as _i51.Future<List<_i58.PaymentEntity>>);
+
+  @override
   _i51.Future<int?> countPendingCardPayments() => (super.noSuchMethod(
         Invocation.method(
           #countPendingCardPayments,
