@@ -40,8 +40,17 @@ export function SalesTrendChart({
     !isSingleDay && previousStart != null && previousEnd != null,
   );
 
-  // FR-CHART-02: single day -> hourly card handles it; no trend card at all.
-  if (isSingleDay) return null;
+  // When isSingleDay is true, keep the card visible so the grid structure
+  // remains stable (pairing 2:1 with AttentionBand).
+  if (isSingleDay) {
+    return (
+      <ChartCard title="Evolución de ventas" testId="trend-card">
+        <EmptyNote testId="trend-empty">
+          Seleccione un rango de 2 o más días para ver la evolución
+        </EmptyNote>
+      </ChartCard>
+    );
+  }
 
   if (currentQuery.isPending) {
     return (
