@@ -1049,6 +1049,36 @@ describe('InvoicesService', () => {
       );
     });
 
+    it('stamps SALE movements with the invoice business timestamp, not ingestion time (AG-02)', async () => {
+      const businessCreatedAt = '2026-08-01T17:30:00.000Z';
+      receiptRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue(null);
+      txManager.createQueryBuilder().getOne.mockResolvedValue({
+        stock: 10,
+        averageCost: 2,
+        id: 'ins-1',
+        tenant_id: 'tenant-1',
+      });
+      txManager.findOne.mockResolvedValue({ id: '2001' });
+
+      await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'biz-ts-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          documentType: 'SALE',
+          invoice: { ...baseInvoice, createdAt: businessCreatedAt },
+        },
+      ]);
+
+      expect(movementRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MovementType.SALE,
+          timestamp: new Date(businessCreatedAt),
+        }),
+      );
+    });
+
     it('keeps historical SALE snapshots frozen when later ledger inserts use a different cost context', async () => {
       receiptRepo.findOne.mockResolvedValue(null);
       recipeService.findActiveVersion.mockResolvedValue(null);
@@ -1663,13 +1693,14 @@ describe('InvoicesService', () => {
           tenant_id: 'tenant-1',
         });
 
+      const fohBusinessCreatedAt = '2026-07-15T21:10:00.000Z';
       await service.syncBatch('tenant-1', [
         {
           idempotencyKey: 'bom-1',
           sourceDeviceId: 'd1',
           sourceSequence: 3,
           documentType: 'SALE',
-          invoice: baseInvoice,
+          invoice: { ...baseInvoice, createdAt: fohBusinessCreatedAt },
         },
       ]);
 
@@ -1684,10 +1715,18 @@ describe('InvoicesService', () => {
       );
       expect(bomExplosionService.explode).toHaveBeenCalled();
       expect(movementRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ insumoId: 'ins-1', quantity: -4 }),
+        expect.objectContaining({
+          insumoId: 'ins-1',
+          quantity: -4,
+          timestamp: new Date(fohBusinessCreatedAt),
+        }),
       );
       expect(movementRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ insumoId: 'ins-2', quantity: -1.5 }),
+        expect.objectContaining({
+          insumoId: 'ins-2',
+          quantity: -1.5,
+          timestamp: new Date(fohBusinessCreatedAt),
+        }),
       );
     });
 
@@ -2567,6 +2606,10 @@ describe('InvoicesService', () => {
           refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
           sourceDocumentType: 'CREDIT_NOTE',
           sourceDocumentId: 'credit-note-1',
+          // AG-02: the credit-note restock movement carries the credit note's
+          // business timestamp so restock COGS attribution aligns with its
+          // business date, not the cloud ingestion time.
+          timestamp: new Date(baseInvoice.createdAt),
         }),
       );
       expect(txManager.save).toHaveBeenCalledWith(
