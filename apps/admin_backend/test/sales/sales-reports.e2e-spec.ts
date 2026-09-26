@@ -11,6 +11,7 @@ import { ReportsController } from '../../src/modules/sales/controllers/reports.c
 import { SalesReportsService } from '../../src/modules/sales/services/sales-reports.service';
 import { FiscalReportsService } from '../../src/modules/sales/services/fiscal-reports.service';
 import { SalesExportService } from '../../src/modules/sales/services/sales-export.service';
+import { FiscalSetupService } from '../../src/modules/onboarding/services/fiscal-setup.service';
 import { Invoice } from '../../src/modules/sales/entities/invoice.entity';
 import { InvoiceItem } from '../../src/modules/sales/entities/invoice-item.entity';
 import { Payment } from '../../src/modules/sales/entities/payment.entity';
@@ -300,6 +301,10 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
           useValue: mockShiftRepo,
         },
         { provide: DataSource, useValue: transactionalDataSource },
+        {
+          provide: FiscalSetupService,
+          useValue: { getFiscalSetup: jest.fn() },
+        },
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepo,
