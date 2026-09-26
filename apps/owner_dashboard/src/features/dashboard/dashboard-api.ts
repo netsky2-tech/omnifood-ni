@@ -124,6 +124,63 @@ export async function fetchDashboardReport(
   return normalizeDashboardReport(raw);
 }
 
+/** One calendar day of the frozen daily-series contract (Batch 5b). */
+export interface DailySeriesDay {
+  date: string;
+  netSalesNio: number;
+  completedTicketCount: number;
+  /** null when the completed-ticket denominator is zero. */
+  averageTicketNetNio: number | null;
+}
+
+/** Normalized GET /sales/reports/dashboard/daily-series response. */
+export interface DailySeries {
+  days: DailySeriesDay[];
+  reportingPeriod: ReportingPeriodWire | null;
+  generatedAt: string;
+}
+
+/**
+ * Daily-series wire normalization (frozen Batch 5b contract; same rules as
+ * normalizeDashboardReport): Postgres numeric arrives as numeric strings,
+ * absent/non-finite averages stay null, garbage fails closed.
+ */
+export function normalizeDailySeries(raw: unknown): DailySeries {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  const days = Array.isArray(r.days) ? r.days : [];
+  return {
+    days: days.map((entry) => {
+      const d = (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>;
+      return {
+        date: typeof d.date === "string" ? d.date : "",
+        netSalesNio: toFiniteNumber(d.netSalesNio),
+        completedTicketCount: toFiniteNumber(d.completedTicketCount),
+        averageTicketNetNio: toNullableNumber(d.averageTicketNetNio),
+      };
+    }),
+    reportingPeriod: normalizeReportingPeriod(r.reportingPeriod),
+    generatedAt: typeof r.generatedAt === "string" ? r.generatedAt : "",
+  };
+}
+
+/**
+ * Daily series for an inclusive local calendar-day range (2–60 days; every
+ * calendar day present, zero days included). Backend contract under
+ * construction in apps/admin_backend — consumed here strictly per the frozen
+ * wire contract, never by probing a live backend.
+ */
+export async function fetchDailySeries(
+  startDate: string,
+  endDate: string,
+  opts?: ApiClientMethodOptions,
+): Promise<DailySeries> {
+  const url = `/sales/reports/dashboard/daily-series${toQueryParams({ startDate, endDate })}`;
+  const raw = opts
+    ? await api.get<unknown>(url, opts)
+    : await api.get<unknown>(url);
+  return normalizeDailySeries(raw);
+}
+
 /**
  * Fiscal regime source (FR-FISCAL-01): the tenant's configured fiscal setup,
  * never a client-side inference. Resolves to null when the payload shape is

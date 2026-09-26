@@ -1,8 +1,30 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
 import { KpiStrip } from "./kpi-strip";
+
+// Batch 5b: the performance band (charts + recharts) lives in its own lazy
+// chunk so the KPI strip never waits on chart code (PRD §25.2 bundle
+// discipline; ui_wireframe_reference.md §1 band placement).
+const PerformanceBand = lazy(() =>
+  import("./performance-band").then((m) => ({ default: m.PerformanceBand })),
+);
+
+function PerformanceBandSkeleton() {
+  return (
+    <div
+      data-testid="performance-band-skeleton"
+      className="grid grid-cols-1 gap-6 lg:grid-cols-3"
+      aria-hidden="true"
+    >
+      <div className="h-64 animate-pulse rounded-lg border border-border bg-muted/40 lg:col-span-3" />
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="h-56 animate-pulse rounded-lg border border-border bg-muted/40" />
+      ))}
+    </div>
+  );
+}
 
 import { formatLocalDate } from "@/lib/utils";
 
@@ -68,6 +90,12 @@ export function DashboardPage() {
       <KpiStrip
         range={{ start: range.startDate, end: range.endDate }}
       />
+
+      {/* Dashboard V2 Batch 5b: performance band — sales trend, hourly demand,
+          top products and payment mix (PRD §§14–17, §24 drill-down; lazy chunk). */}
+      <Suspense fallback={<PerformanceBandSkeleton />}>
+        <PerformanceBand range={{ start: range.startDate, end: range.endDate }} />
+      </Suspense>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
