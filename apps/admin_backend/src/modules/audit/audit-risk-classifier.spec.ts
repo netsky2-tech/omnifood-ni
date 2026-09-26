@@ -110,25 +110,25 @@ describe('audit-risk-classifier', () => {
 
   describe('resolveAuditSeverity (stored severity with historical NULL rule)', () => {
     it('returns the stored severity when it is a known taxonomy value', () => {
-      expect(resolveAuditSeverity('CRITICAL', 'UPDATE')).toBe('CRITICAL');
-      expect(resolveAuditSeverity('WARNING', 'UPDATE')).toBe('WARNING');
-      expect(resolveAuditSeverity('INFO', 'UPDATE')).toBe('INFO');
+      expect(resolveAuditSeverity('CRITICAL')).toBe('CRITICAL');
+      expect(resolveAuditSeverity('WARNING')).toBe('WARNING');
+      expect(resolveAuditSeverity('INFO')).toBe('INFO');
     });
 
     it('surfaces historical NULL/undefined severity rows as INFO (backfill-free rule, no history mutation)', () => {
-      expect(resolveAuditSeverity(null, 'UPDATE')).toBe('INFO');
-      expect(resolveAuditSeverity(undefined, 'UPDATE')).toBe('INFO');
-      expect(resolveAuditSeverity('', 'UPDATE')).toBe('INFO');
+      expect(resolveAuditSeverity(null)).toBe('INFO');
+      expect(resolveAuditSeverity(undefined)).toBe('INFO');
+      expect(resolveAuditSeverity('')).toBe('INFO');
     });
 
     it('surfaces an unrecognized stored value as INFO instead of escalating it', () => {
-      expect(resolveAuditSeverity('SEVERE', 'UPDATE')).toBe('INFO');
+      expect(resolveAuditSeverity('SEVERE')).toBe('INFO');
     });
 
     it('prefers the persisted column over re-derivation (single severity source, spec §16.2)', () => {
       // A row persisted as CRITICAL must stay CRITICAL even though its
       // action alone would classify lower: the stored value is authoritative.
-      expect(resolveAuditSeverity('CRITICAL', 'UPDATE')).toBe('CRITICAL');
+      expect(resolveAuditSeverity('CRITICAL')).toBe('CRITICAL');
     });
   });
 });

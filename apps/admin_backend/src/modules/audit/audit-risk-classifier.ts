@@ -78,7 +78,6 @@ export function classifyAuditSeverity(action: string): AuditSeverity {
  */
 export function resolveAuditSeverity(
   storedSeverity: string | null | undefined,
-  _action: string,
 ): AuditSeverity {
   const normalized = String(storedSeverity ?? '')
     .trim()

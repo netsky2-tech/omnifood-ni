@@ -412,6 +412,14 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   // Dashboard V2 Batch 3: sync freshness read (GET /operations/sync/freshness);
   // same human session-JWT transport class as ReportsController.
   { controller: 'SyncHealthController', transport: 'human' },
+  // Dashboard V2 Batch 6a: audit/security executive summary read
+  // (GET /operations/audit/summary); same human session-JWT transport
+  // class as the other dashboard-consumed read endpoints.
+  { controller: 'AuditSummaryController', transport: 'human' },
+  // Dashboard V2 Batch 6a: card reconciliation summary read
+  // (GET /sales/reports/card-reconciliation-summary, spec §15 route);
+  // same human session-JWT transport class as ReportsController.
+  { controller: 'CardReconciliationSummaryController', transport: 'human' },
   { controller: 'CashShiftController', transport: 'human' },
   {
     controller: 'InvoicesController',

@@ -66,7 +66,11 @@ export class ChangeLog {
    * Nullable: rows written before this column existed keep NULL and surface
    * as INFO through resolveAuditSeverity — history is never backfilled.
    */
-  @Column({ type: 'varchar', length: AUDIT_SEVERITY_COLUMN_LENGTH, nullable: true })
+  @Column({
+    type: 'varchar',
+    length: AUDIT_SEVERITY_COLUMN_LENGTH,
+    nullable: true,
+  })
   severity: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })

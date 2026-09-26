@@ -6,14 +6,8 @@ import {
   resolveReportingBounds,
   ReportingPeriodValidationError,
 } from '../../core/reporting/reporting-period';
-import {
-  resolveAuditSeverity,
-  AuditSeverity,
-} from './audit-risk-classifier';
-import {
-  AuditExecutiveSummaryDto,
-  AuditExecutiveSummaryLatestHighSeverityDto,
-} from './audit-executive-summary.dto';
+import { resolveAuditSeverity, AuditSeverity } from './audit-risk-classifier';
+import { AuditExecutiveSummaryDto } from './audit-executive-summary.dto';
 
 /**
  * Owner Dashboard V2 — audit/security executive summary service
@@ -86,7 +80,7 @@ export class AuditSummaryService {
       ['INFO', 0],
     ]);
     for (const row of rows.severityCounts) {
-      const severity = resolveAuditSeverity(row.severity, '');
+      const severity = resolveAuditSeverity(row.severity);
       countBySeverity.set(
         severity,
         (countBySeverity.get(severity) ?? 0) + Number(row.count),
