@@ -3786,4 +3786,79 @@ describe('InvoicesService', () => {
       expect(payload.localIssueDate).toBeUndefined();
     });
   });
+
+  describe('tip columns (Batch 7 Slice 1, PRD §21 / AD-10)', () => {
+    const baseDto = {
+      id: 'inv-tip-1',
+      number: '004',
+      createdAt: new Date().toISOString(),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+      paymentStatus: 'PAID',
+      items: [],
+      payments: [],
+    };
+
+    it('persists tip fields accurately on the sync upsert payload', async () => {
+      const dto: SyncInvoiceDto = {
+        ...baseDto,
+        tipAmountNio: 50,
+        tipAmountUsd: 1.37,
+        tipPercentage: 10,
+        tipEligibleBaseNio: 500,
+      };
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'inv-tip-1',
+          tipAmountNio: 50,
+          tipAmountUsd: 1.37,
+          tipPercentage: 10,
+          tipEligibleBaseNio: 500,
+        }),
+        ['id'],
+      );
+    });
+
+    it('persists explicit nulls so legacy invoices stay null (AD-10, no backfill)', async () => {
+      // The POS emits JSON null for legacy invoices; @IsOptional() admits it
+      // and the DTO's `number` typing does not model null, hence the cast.
+      const dto = {
+        ...baseDto,
+        tipAmountNio: null,
+        tipAmountUsd: null,
+        tipPercentage: null,
+        tipEligibleBaseNio: null,
+      } as SyncInvoiceDto;
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipAmountNio: null,
+          tipAmountUsd: null,
+          tipPercentage: null,
+          tipEligibleBaseNio: null,
+        }),
+        ['id'],
+      );
+    });
+
+    it('leaves legacy payloads without tip fields untouched (no fabricated zero tips)', async () => {
+      const dto: SyncInvoiceDto = { ...baseDto };
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledTimes(1);
+      const payload = invoiceRepo.upsert.mock.calls[0][0];
+      expect(payload.tipAmountNio).toBeUndefined();
+      expect(payload.tipAmountUsd).toBeUndefined();
+      expect(payload.tipPercentage).toBeUndefined();
+      expect(payload.tipEligibleBaseNio).toBeUndefined();
+    });
+  });
 });
