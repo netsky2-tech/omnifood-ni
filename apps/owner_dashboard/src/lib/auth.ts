@@ -66,7 +66,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResponse
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
   };
-  setTokens(tokens);
+  setTokens(tokens, credentials.tenantSlug);
   return data;
 }
 

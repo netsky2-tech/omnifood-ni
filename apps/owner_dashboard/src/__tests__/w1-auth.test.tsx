@@ -378,10 +378,13 @@ describe("W1 — useLogin hook", () => {
       },
       { auth: false },
     );
-    expect(vi.mocked(apiModule.setTokens)).toHaveBeenCalledWith({
-      accessToken: "new-at",
-      refreshToken: "new-rt",
-    });
+    expect(vi.mocked(apiModule.setTokens)).toHaveBeenCalledWith(
+      {
+        accessToken: "new-at",
+        refreshToken: "new-rt",
+      },
+      "t",
+    );
   });
 });
 

@@ -59,7 +59,7 @@ describe("W1 — API integration (fetch-level)", () => {
   });
 
   it("refreshAccessToken posts to /identity/refresh and updates tokens", async () => {
-    apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" });
+    apiModule.setTokens({ accessToken: "old-at", refreshToken: "old-rt" }, "soho");
     vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: true,
       json: async () => ({ accessToken: "new-at", refreshToken: "new-rt" }),
@@ -71,7 +71,7 @@ describe("W1 — API integration (fetch-level)", () => {
       "/api/identity/refresh",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ refreshToken: "old-rt" }),
+        body: JSON.stringify({ refreshToken: "old-rt", tenantSlug: "soho" }),
       }),
     );
     expect(newToken).toBe("new-at");
