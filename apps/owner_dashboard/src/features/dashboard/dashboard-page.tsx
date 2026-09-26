@@ -97,37 +97,11 @@ export function DashboardPage() {
         <PerformanceBand range={{ start: range.startDate, end: range.endDate }} />
       </Suspense>
 
+      {/* Dashboard V2 Batch 5c: the legacy "Métodos de Pago" card was removed
+          — the PaymentMixChart in the performance band above is now the single
+          payment-composition surface (same paymentMethodsBreakdown, net of
+          changeGiven, with original-currency USD slots and percent labels). */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-card-foreground">
-            Métodos de Pago
-          </h2>
-          <div className="space-y-3">
-            {[
-              { label: "Efectivo NIO", value: data?.paymentMethodsBreakdown.cashNio ?? 0 },
-              { label: "Efectivo USD", value: data?.paymentMethodsBreakdown.cashUsd ?? 0 },
-              { label: "Tarjeta NIO", value: data?.paymentMethodsBreakdown.cardNio ?? 0 },
-              { label: "Tarjeta USD", value: data?.paymentMethodsBreakdown.cardUsd ?? 0 },
-              { label: "Otros", value: data?.paymentMethodsBreakdown.other ?? 0 },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{item.label}</span>
-                <span className="font-medium tabular-nums text-card-foreground">
-                  {formatCurrency(item.value)}
-                </span>
-              </div>
-            ))}
-            <div className="border-t border-border pt-3">
-              <div className="flex items-center justify-between text-sm font-semibold">
-                <span className="text-foreground">Total NIO</span>
-                <span className="tabular-nums text-foreground">
-                  {formatCurrency(data?.paymentMethodsBreakdown.totalNio ?? 0)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-card-foreground">
             Resumen de Ventas

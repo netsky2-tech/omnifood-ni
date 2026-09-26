@@ -3,22 +3,22 @@
  *
  * Authority: PRD §15 (FR-HOURLY-01..03), §23, §24, §25.3.
  *
- * Consumes the existing GET /sales/reports/hourly-sales route, which reports a
- * single local day. For a multi-day range the card reports the range's most
- * recent day explicitly in the caption — the backend never silently averages
- * days it does not aggregate (FR-HOURLY-03 reconciliation is a backend debt,
- * tracked outside this batch).
+ * Consumes GET /sales/reports/hourly-sales (Batch 5c wire contract). A single
+ * day queries with `date`; a multi-day range queries with `startDate`/`endDate`
+ * and the backend returns the per-hour distribution aggregated across the
+ * whole range — the card displays it as an average per hour, labeled with
+ * `meta.dayCount` (FR-HOURLY-01/03, no silent single-day substitution).
  *
- * A day with no sales renders an explicit "sin actividad" state, never a
- * meaningless flat chart.
+ * A day/range with no sales renders an explicit "sin actividad" state, never
+ * a meaningless flat chart.
  */
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { buildHourlyBars, compactNio, formatNio } from "./chart-domain";
 import { ChartCard, EmptyNote, WidgetError, WidgetSkeleton } from "./chart-card";
 import { useHourlyReport } from "./use-dashboard-charts";
 
-export function HourlySalesChart({ date }: { date: string }) {
-  const query = useHourlyReport(date);
+export function HourlySalesChart({ start, end }: { start: string; end: string }) {
+  const query = useHourlyReport(start, end);
 
   let body;
   if (query.isPending) {
@@ -35,10 +35,15 @@ export function HourlySalesChart({ date }: { date: string }) {
     if (!hasActivity) {
       body = <EmptyNote testId="hourly-empty">sin actividad</EmptyNote>;
     } else {
+      const dayCount = query.data.dayCount;
+      const rangeCaption =
+        dayCount > 1
+          ? `Promedio por hora en ${dayCount} días (${start} — ${end})`
+          : `Día: ${query.data.date || start}`;
       body = (
         <>
           <p data-testid="hourly-caption" className="mb-2 text-xs text-muted-foreground">
-            Día: {date} · Horario con actividad: {String(firstActiveHour).padStart(2, "0")}:00 –{" "}
+            {rangeCaption} · Horario con actividad: {String(firstActiveHour).padStart(2, "0")}:00 –{" "}
             {String(lastActiveHour).padStart(2, "0")}:00
           </p>
           <div role="img" aria-label="Ventas por hora del día">

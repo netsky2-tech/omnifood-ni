@@ -7,15 +7,15 @@
  *
  * Authority: PRD §14–§17, §23, §25.3 (color-never-alone). Revenue/currency
  * honesty is encoded here so the cards can display it verbatim:
- * - top-products `totalRevenue` sums tax-inclusive invoice line totals
- *   (backend `invoices.service`: line `total` includes `taxAmount`; invoice
- *   `subtotal = total - totalTax`), so it is NOT pre-tax Net Sales
- *   (FR-PRODUCT-01 gap, surfaced on the card).
+ * - top-products `netRevenueNio` is the post-discount, pre-tax Net Sales
+ *   contribution per product (backend Batch 5c; reconciles line-by-line with
+ *   the executive KPI `netSalesNio`, FR-PRODUCT-01). The deprecated
+ *   tax-inclusive `totalRevenue` is never displayed.
  * - payment slots `cashUsd`/`cardUsd` carry original-currency amounts net of
  *   change; NIO slots and `totalNio` are the NIO consolidation (AG-08 net).
  */
 import type { DailySeriesDay } from "./dashboard-api";
-import type { HourlySalesBucket, PaymentMethodsBreakdown, TopProductItem } from "@/features/sales/types";
+import type { PaymentMethodsBreakdown } from "@/features/sales/types";
 
 /** One trend row: current day plus the comparison value at the same range position. */
 export interface TrendRow {
@@ -114,17 +114,34 @@ export function hourLabel(hour: number): string {
 }
 
 /**
+ * Wire bucket shape accepted by buildHourlyBars. Structurally compatible with
+ * the legacy `HourlySalesBucket`; the adapter reads the V2 additive
+ * `netSalesNio` (post-discount, pre-tax per bucket, FR-HOURLY-03) and never
+ * the deprecated tax-inclusive `totalSales`.
+ */
+export interface HourlyWireBucket {
+  hour: unknown;
+  invoiceCount?: unknown;
+  /** V2 Net Sales per bucket (post-discount, pre-tax; FR-HOURLY-03). */
+  netSalesNio?: unknown;
+  /** @deprecated legacy tax-inclusive bucket total; never displayed. */
+  totalSales?: unknown;
+}
+
+/**
  * Fills the full 24h domain: buckets missing from the wire are zero-sale
- * inactivity gaps, never dropped points (Batch 5b scope 3).
+ * inactivity gaps, never dropped points (Batch 5b scope 3). Sales are read
+ * from the V2 `netSalesNio` bucket field; absent/garbage values fail closed
+ * to 0.
  */
 export function buildHourlyBars(
-  hourly: HourlySalesBucket[] | null | undefined,
+  hourly: HourlyWireBucket[] | null | undefined,
 ): HourlyBarsResult {
   const wire = Array.isArray(hourly) ? hourly : [];
   const salesByHour = new Map<number, number>();
   for (const b of wire) {
     const hour = Math.trunc(Number(b?.hour));
-    const sales = Number(b?.totalSales);
+    const sales = Number(b?.netSalesNio);
     if (Number.isInteger(hour) && hour >= 0 && hour <= 23 && Number.isFinite(sales)) {
       salesByHour.set(hour, (salesByHour.get(hour) ?? 0) + sales);
     }
@@ -147,35 +164,50 @@ export interface TopProductRow {
   name: string;
   /** Backend line-item quantity (`totalQuantity`) — a real units field. */
   units: number;
-  /** Backend line total (tax-inclusive) — NOT pre-tax Net Sales. */
+  /** Backend `netRevenueNio`: post-discount, pre-tax Net Sales contribution (FR-PRODUCT-01). */
   revenue: number;
   /** Client-side share of the listed rows' revenue; null on a zero base. */
   sharePercent: number | null;
 }
 
-const TOP_PRODUCTS_BASIS_NOTE =
-  "Base monetaria: total de línea con IVA incluido según el endpoint existente; no equivale a Ventas Netas (pre-IVA).";
+/**
+ * Wire item shape accepted by buildTopProductRows. Structurally compatible
+ * with the legacy `TopProductItem`; the adapter reads the V2 additive
+ * `netRevenueNio` and never the deprecated tax-inclusive `totalRevenue`.
+ */
+export interface TopProductWireItem {
+  productId: unknown;
+  productName: unknown;
+  totalQuantity: unknown;
+  /** V2 Net Sales contribution (post-discount, pre-tax; FR-PRODUCT-01). */
+  netRevenueNio?: unknown;
+  /** @deprecated legacy tax-inclusive line total; never displayed. */
+  totalRevenue?: unknown;
+}
 
 /**
- * Maps the existing GET /sales/reports/top-products response. The endpoint
- * provides units and revenue but no share field: share is computed here over
- * the listed rows' revenue sum and labeled as such (Batch 5b gap finding).
+ * Maps GET /sales/reports/top-products (Batch 5c-backend reconciled contract).
+ * Revenue is `netRevenueNio`: post-discount, pre-tax Net Sales per product,
+ * reconciled line-by-line with the KPI `netSalesNio` (FR-PRODUCT-01). The
+ * endpoint provides units and revenue but no share field: share is computed
+ * here over the listed rows' revenue sum and labeled as such.
  */
 export function buildTopProductRows(
-  products: TopProductItem[] | null | undefined,
+  products: TopProductWireItem[] | null | undefined,
   limit = 5,
-): { rows: TopProductRow[]; revenueBasisNote: string } {
+): { rows: TopProductRow[] } {
   const wire = Array.isArray(products) ? products : [];
   const listed = wire.slice(0, Math.max(0, limit));
-  const listedRevenue = listed.reduce((sum, p) => sum + (Number(p?.totalRevenue) || 0), 0);
+  const revenueOf = (p: TopProductWireItem | undefined) =>
+    Number.isFinite(Number(p?.netRevenueNio)) ? Number(p?.netRevenueNio) : 0;
+  const listedRevenue = listed.reduce((sum, p) => sum + revenueOf(p), 0);
   return {
     rows: listed.map((p) => ({
       name: typeof p?.productName === "string" && p.productName !== "" ? p.productName : "Producto sin nombre",
       units: Number(p?.totalQuantity) || 0,
-      revenue: Number(p?.totalRevenue) || 0,
-      sharePercent: percentOf(Number(p?.totalRevenue) || 0, listedRevenue),
+      revenue: revenueOf(p),
+      sharePercent: percentOf(revenueOf(p), listedRevenue),
     })),
-    revenueBasisNote: TOP_PRODUCTS_BASIS_NOTE,
   };
 }
 

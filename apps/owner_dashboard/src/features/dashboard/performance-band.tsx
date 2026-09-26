@@ -70,9 +70,10 @@ export function PerformanceBand({ range, today }: PerformanceBandProps) {
       </ChartCellBoundary>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <ChartCellBoundary>
-          {/* The hourly route reports a single day: use the range's most
-              recent day and say so in the card caption. */}
-          <HourlySalesChart date={period.currentEnd} />
+          {/* Batch 5c: a single day queries with `date`; a multi-day range
+              queries with `startDate`/`endDate` and the card shows the
+              averaged per-hour distribution (FR-HOURLY-01/03). */}
+          <HourlySalesChart start={period.currentStart} end={period.currentEnd} />
         </ChartCellBoundary>
         <ChartCellBoundary>
           <TopProductsChart start={period.currentStart} end={period.currentEnd} />

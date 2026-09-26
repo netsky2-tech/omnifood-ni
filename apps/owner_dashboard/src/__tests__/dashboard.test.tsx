@@ -6,8 +6,8 @@ import { useSalesDashboard } from "@/features/sales/use-sales-reports";
 
 // Dashboard V2 Batch 4 (#544): the legacy KPI grid was replaced by the
 // regime-aware strip. The mock below keeps these page-level tests focused on
-// their own concerns (Resumen de Ventas, payment methods, loading/error
-// states); the strip's own behavior matrix lives in dashboard-v2-strip.spec.tsx.
+// their own concerns (Resumen de Ventas, loading/error states); the strip's
+// own behavior matrix lives in dashboard-v2-strip.spec.tsx.
 vi.mock("@/features/dashboard/use-dashboard-kpis", () => ({
   useDashboardKpis: vi.fn(() => ({
     period: {
@@ -88,11 +88,13 @@ describe("DashboardPage", () => {
     expect(screen.queryByText("IVA generado")).not.toBeInTheDocument();
   });
 
-  it("renders payment methods", () => {
+  it("renders Resumen de Ventas without the legacy Métodos de Pago card", () => {
+    // Batch 5c: the legacy "Métodos de Pago" card was removed — the
+    // PaymentMixChart in the performance band is the single payment surface.
     render(<DashboardPage />, { wrapper: TestWrapper });
-    expect(screen.getByText("Métodos de Pago")).toBeInTheDocument();
-    expect(screen.getByText("Efectivo NIO")).toBeInTheDocument();
-    expect(screen.getByText("Tarjeta NIO")).toBeInTheDocument();
+    expect(screen.queryByText("Métodos de Pago")).not.toBeInTheDocument();
+    expect(screen.queryByText("Efectivo NIO")).not.toBeInTheDocument();
+    expect(screen.getByText("Resumen de Ventas")).toBeInTheDocument();
   });
 
   it("renders freshness badge", () => {

@@ -3,14 +3,15 @@
  *
  * Authority: PRD §16 (FR-PRODUCT-01..03), §23, §24, §25.3.
  *
- * Consumes the existing GET /sales/reports/top-products route. Contract
- * findings surfaced honestly on the card (Batch 5b scope 4):
+ * Consumes GET /sales/reports/top-products (Batch 5c-backend reconciled
+ * contract):
  * - units: the endpoint's `totalQuantity` is a real units field — rendered.
  * - share %: the endpoint provides none; the share is computed client-side
  *   over the listed rows' revenue and labeled as a listed-share.
- * - revenue basis: `totalRevenue` sums tax-inclusive invoice line totals, so
- *   the card carries a visible note that it is not pre-tax Net Sales
- *   (FR-PRODUCT-01 reconciliation gap — flagged, not invented away).
+ * - revenue: `netRevenueNio` is post-discount, pre-tax Net Sales, reconciled
+ *   line-by-line with the executive KPI `netSalesNio` (FR-PRODUCT-01). The
+ *   Batch 5b tax-inclusive disclaimer is gone: the card now matches the KPI
+ *   basis exactly.
  */
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { buildTopProductRows, compactNio, formatNio } from "./chart-domain";
@@ -35,7 +36,7 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
       />
     );
   } else {
-    const { rows, revenueBasisNote } = buildTopProductRows(query.data.products);
+    const { rows } = buildTopProductRows(query.data.products);
     if (rows.length === 0) {
       body = <EmptyNote testId="top-products-empty">sin datos de productos en este periodo</EmptyNote>;
     } else {
@@ -73,7 +74,7 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
             </ResponsiveContainer>
           </div>
           <p data-testid="top-products-note" className="mt-2 text-xs text-muted-foreground">
-            {revenueBasisNote} Participación calculada sobre los productos listados.
+            Participación calculada sobre los productos listados. Base: Ventas Netas (post-descuento, pre-IVA).
           </p>
         </>
       );

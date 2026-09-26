@@ -164,11 +164,14 @@ describe("W2 — DashboardPage", () => {
     expect(screen.queryByText("IVA generado")).not.toBeInTheDocument();
   });
 
-  it("renders payment methods", () => {
+  it("renders Resumen de Ventas without the legacy Métodos de Pago card", () => {
+    // Batch 5c: the legacy "Métodos de Pago" card was removed from the page —
+    // the PaymentMixChart in the performance band is the single payment
+    // surface (its own behavior matrix lives in dashboard-v2-charts.spec.tsx).
     render(<DashboardPage />, { wrapper: TestWrapper });
-    expect(screen.getByText("Métodos de Pago")).toBeInTheDocument();
-    expect(screen.getByText("Efectivo NIO")).toBeInTheDocument();
-    expect(screen.getByText("Tarjeta NIO")).toBeInTheDocument();
+    expect(screen.queryByText("Métodos de Pago")).not.toBeInTheDocument();
+    expect(screen.queryByText("Efectivo NIO")).not.toBeInTheDocument();
+    expect(screen.getByText("Resumen de Ventas")).toBeInTheDocument();
   });
 
   it("renders freshness badge", () => {

@@ -182,6 +182,65 @@ export async function fetchDailySeries(
 }
 
 /**
+ * Hourly distribution (FR-HOURLY-01/03, Batch 5c wire contract).
+ *
+ * Single-day mode queries with `date`; multi-day ranges query with
+ * `startDate`/`endDate` (mutually exclusive per HourlySalesQueryDto) and get
+ * the aggregated per-hour distribution across the whole range. Buckets carry
+ * the V2 `netSalesNio` (post-discount, pre-tax; reconciles with the executive
+ * KPI, FR-HOURLY-03); the deprecated tax-inclusive `totalSales` is never read.
+ */
+export interface HourlyBucketV2 {
+  hour: number;
+  invoiceCount: number;
+  netSalesNio: number;
+}
+
+export interface HourlyReportV2 {
+  /** Requested day (single-day mode) or range start (range mode). */
+  date: string;
+  /** Local calendar days aggregated in the response; 1 in single-day mode. */
+  dayCount: number;
+  hourly: HourlyBucketV2[];
+  generatedAt: string;
+}
+
+export type HourlyQuery = { date: string } | { startDate: string; endDate: string };
+
+export function normalizeHourlyReport(raw: unknown): HourlyReportV2 {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  const buckets = Array.isArray(r.hourly) ? r.hourly : [];
+  const meta = (typeof r.meta === "object" && r.meta !== null ? r.meta : {}) as Record<string, unknown>;
+  const dayCount = Number(meta.dayCount);
+  return {
+    date: typeof r.date === "string" ? r.date : "",
+    dayCount: Number.isFinite(dayCount) && dayCount >= 1 ? Math.trunc(dayCount) : 1,
+    hourly: buckets.map((entry) => {
+      const b = (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>;
+      return {
+        hour: toFiniteNumber(b.hour),
+        invoiceCount: toFiniteNumber(b.invoiceCount),
+        netSalesNio: toFiniteNumber(b.netSalesNio),
+      };
+    }),
+    generatedAt: typeof r.generatedAt === "string" ? r.generatedAt : "",
+  };
+}
+
+export async function fetchHourlyReport(
+  query: HourlyQuery,
+  opts?: ApiClientMethodOptions,
+): Promise<HourlyReportV2> {
+  const params =
+    "date" in query
+      ? { date: query.date }
+      : { startDate: query.startDate, endDate: query.endDate };
+  const url = `/sales/reports/hourly-sales${toQueryParams(params)}`;
+  const raw = opts ? await api.get<unknown>(url, opts) : await api.get<unknown>(url);
+  return normalizeHourlyReport(raw);
+}
+
+/**
  * Fiscal regime source (FR-FISCAL-01): the tenant's configured fiscal setup,
  * never a client-side inference. Resolves to null when the payload shape is
  * unexpected; network/auth failures reject and surface as fiscal-unknown.

@@ -25,9 +25,12 @@ import {
   buildTrendRows,
   isZeroSeries,
 } from "@/features/dashboard/chart-domain";
-import { fetchDailySeries } from "@/features/dashboard/dashboard-api";
 import {
-  fetchHourlySales,
+  fetchDailySeries,
+  fetchHourlyReport,
+  normalizeHourlyReport,
+} from "@/features/dashboard/dashboard-api";
+import {
   fetchSalesDashboard,
   fetchTopProducts,
 } from "@/features/sales/sales-api";
@@ -37,11 +40,11 @@ vi.mock("@/lib/tenant", () => ({ useTenantId: () => "tenant-1" }));
 vi.mock("@/features/dashboard/dashboard-api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   fetchDailySeries: vi.fn(),
+  fetchHourlyReport: vi.fn(),
 }));
 
 vi.mock("@/features/sales/sales-api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  fetchHourlySales: vi.fn(),
   fetchSalesDashboard: vi.fn(),
   fetchTopProducts: vi.fn(),
 }));
@@ -122,10 +125,16 @@ const dailySeriesPayload = (days: unknown[]) => ({
   generatedAt: "2026-09-23T21:54:00Z",
 });
 
-const hourlyPayload = (buckets: { hour: number; invoiceCount: number; totalSales: number }[]) => ({
-  date: RANGE.end,
-  totalSales: buckets.reduce((s, b) => s + b.totalSales, 0),
-  totalInvoices: buckets.reduce((s, b) => s + b.invoiceCount, 0),
+/**
+ * Normalized HourlyReportV2 (what fetchHourlyReport resolves to after wire
+ * normalization — the mocked fetch must mimic that contract, not the raw wire).
+ */
+const hourlyPayload = (
+  buckets: { hour: number; invoiceCount: number; netSalesNio: number; totalSales?: number }[],
+  dayCount = 1,
+) => ({
+  date: dayCount > 1 ? RANGE.start : RANGE.end,
+  dayCount,
   generatedAt: "2026-09-23T21:54:00Z",
   hourly: buckets,
 });
@@ -162,7 +171,7 @@ function renderWithProviders(ui: ReactElement) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchDailySeries).mockResolvedValue(dailySeriesPayload([]) as never);
-  vi.mocked(fetchHourlySales).mockResolvedValue(hourlyPayload([]) as never);
+  vi.mocked(fetchHourlyReport).mockResolvedValue(hourlyPayload([]) as never);
   vi.mocked(fetchTopProducts).mockResolvedValue({
     startDate: RANGE.start,
     endDate: RANGE.end,
@@ -214,10 +223,10 @@ describe("chart-domain — trend adapters (pure)", () => {
 });
 
 describe("chart-domain — hourly adapter (pure)", () => {
-  it("fills the full 24h domain and marks inactivity gaps", () => {
+  it("fills the full 24h domain from V2 netSalesNio buckets and marks inactivity gaps", () => {
     const { bars, hasActivity } = buildHourlyBars([
-      { hour: 7, invoiceCount: 3, totalSales: 900 },
-      { hour: 12, invoiceCount: 5, totalSales: 1500 },
+      { hour: 7, invoiceCount: 3, netSalesNio: 900 },
+      { hour: 12, invoiceCount: 5, netSalesNio: 1500 },
     ]);
 
     expect(bars).toHaveLength(24);
@@ -227,10 +236,20 @@ describe("chart-domain — hourly adapter (pure)", () => {
     expect(bars[23]).toMatchObject({ hour: 23, sales: 0 });
   });
 
+  it("never falls back to the deprecated tax-inclusive totalSales bucket field", () => {
+    // Batch 5c V2 semantics: a legacy-only payload must fail closed to zero
+    // sales, not silently display the post-tax total.
+    const { bars, hasActivity } = buildHourlyBars([
+      { hour: 9, invoiceCount: 3, totalSales: 900 } as never,
+    ]);
+    expect(hasActivity).toBe(false);
+    expect(bars[9]).toMatchObject({ hour: 9, sales: 0 });
+  });
+
   it("derives a zero-padded business-hours caption from first to last active hour", () => {
     const { firstActiveHour, lastActiveHour } = buildHourlyBars([
-      { hour: 7, invoiceCount: 3, totalSales: 900 },
-      { hour: 20, invoiceCount: 5, totalSales: 1500 },
+      { hour: 7, invoiceCount: 3, netSalesNio: 900 },
+      { hour: 20, invoiceCount: 5, netSalesNio: 1500 },
     ]);
     expect(firstActiveHour).toBe(7);
     expect(lastActiveHour).toBe(20);
@@ -244,9 +263,9 @@ describe("chart-domain — hourly adapter (pure)", () => {
 
 describe("chart-domain — top-products adapter (pure)", () => {
   const products = [
-    { productId: "p1", productName: "Cappuccino", totalQuantity: 214, totalRevenue: 10080 },
-    { productId: "p2", productName: "Latte", totalQuantity: 186, totalRevenue: 8060 },
-    { productId: "p3", productName: "Croissant", totalQuantity: 98, totalRevenue: 4320 },
+    { productId: "p1", productName: "Cappuccino", totalQuantity: 214, netRevenueNio: 10080 },
+    { productId: "p2", productName: "Latte", totalQuantity: 186, netRevenueNio: 8060 },
+    { productId: "p3", productName: "Croissant", totalQuantity: 98, netRevenueNio: 4320 },
   ];
 
   it("computes share percent of the listed revenue sum and keeps backend order", () => {
@@ -262,14 +281,16 @@ describe("chart-domain — top-products adapter (pure)", () => {
     expect(rows).toHaveLength(2);
 
     const zeroBase = buildTopProductRows([
-      { productId: "p1", productName: "X", totalQuantity: 0, totalRevenue: 0 },
+      { productId: "p1", productName: "X", totalQuantity: 0, netRevenueNio: 0 },
     ]);
     expect(zeroBase.rows[0]?.sharePercent).toBeNull();
   });
 
-  it("carries an honest tax-inclusive revenue-basis note (PRD FR-PRODUCT-01 gap)", () => {
-    const { revenueBasisNote } = buildTopProductRows(products);
-    expect(revenueBasisNote.toLowerCase()).toContain("iva");
+  it("reads V2 netRevenueNio and never the deprecated tax-inclusive totalRevenue", () => {
+    const { rows } = buildTopProductRows([
+      { productId: "p1", productName: "Cappuccino", totalQuantity: 214, netRevenueNio: 8000, totalRevenue: 10080 },
+    ]);
+    expect(rows[0]?.revenue).toBe(8000);
   });
 });
 
@@ -376,8 +397,36 @@ describe("SalesTrend — states (PRD §14/§23)", () => {
   });
 });
 
+describe("normalizeHourlyReport — Batch 5c hourly wire (pure)", () => {
+  it("normalizes buckets to V2 netSalesNio and carries meta.dayCount", () => {
+    const report = normalizeHourlyReport({
+      date: "2026-09-18",
+      totalSales: 999,
+      meta: { dayCount: 6 },
+      generatedAt: "2026-09-23T21:54:00Z",
+      hourly: [
+        { hour: 8, invoiceCount: 2, netSalesNio: "450.5", totalSales: 600 },
+        { hour: "9", invoiceCount: 1, netSalesNio: 100 },
+        { hour: 25, invoiceCount: 1, netSalesNio: 0 },
+      ],
+    });
+    expect(report.date).toBe("2026-09-18");
+    expect(report.dayCount).toBe(6);
+    expect(report.hourly[0]).toEqual({ hour: 8, invoiceCount: 2, netSalesNio: 450.5 });
+    expect(report.hourly[1]).toEqual({ hour: 9, invoiceCount: 1, netSalesNio: 100 });
+    expect(report.hourly).toHaveLength(3);
+  });
+
+  it("fails closed: missing meta defaults to dayCount 1 and garbage buckets to empty", () => {
+    const report = normalizeHourlyReport({ hourly: "nope" });
+    expect(report.dayCount).toBe(1);
+    expect(report.hourly).toEqual([]);
+    expect(report.date).toBe("");
+  });
+});
+
 describe("HourlySales — states (PRD §15/§23)", () => {
-  it("renders 'sin actividad' for a zero day and never a meaningless chart", async () => {
+  it("renders 'sin actividad' for a zero range and never a meaningless chart", async () => {
     renderWithProviders(<PerformanceBand range={RANGE} today="2026-09-23" />);
 
     await waitFor(() => {
@@ -386,13 +435,16 @@ describe("HourlySales — states (PRD §15/§23)", () => {
     expect(screen.getByText(/sin actividad/i)).toBeInTheDocument();
   });
 
-  it("renders the business-hours caption and the reported day for data days", async () => {
-    vi.mocked(fetchHourlySales).mockResolvedValue(
-      hourlyPayload([
-        { hour: 7, invoiceCount: 3, totalSales: 900 },
-        { hour: 12, invoiceCount: 5, totalSales: 1500 },
-        { hour: 20, invoiceCount: 2, totalSales: 600 },
-      ]) as never,
+  it("queries a multi-day range with startDate/endDate and shows the averaged caption", async () => {
+    vi.mocked(fetchHourlyReport).mockResolvedValue(
+      hourlyPayload(
+        [
+          { hour: 7, invoiceCount: 3, netSalesNio: 900 },
+          { hour: 12, invoiceCount: 5, netSalesNio: 1500 },
+          { hour: 20, invoiceCount: 2, netSalesNio: 600 },
+        ],
+        6,
+      ) as never,
     );
 
     renderWithProviders(<PerformanceBand range={RANGE} today="2026-09-23" />);
@@ -400,13 +452,38 @@ describe("HourlySales — states (PRD §15/§23)", () => {
     await waitFor(() => {
       expect(screen.getByTestId("hourly-caption")).toBeInTheDocument();
     });
+    expect(fetchHourlyReport).toHaveBeenCalledWith(
+      { startDate: RANGE.start, endDate: RANGE.end },
+      expect.anything(),
+    );
+    expect(screen.getByTestId("hourly-caption").textContent).toContain("Promedio por hora en 6 días");
     expect(screen.getByTestId("hourly-caption").textContent).toContain("07:00");
     expect(screen.getByTestId("hourly-caption").textContent).toContain("20:00");
-    expect(screen.getByTestId("hourly-caption").textContent).toContain(RANGE.end);
+  });
+
+  it("queries a single day with date and reports the day caption", async () => {
+    vi.mocked(fetchHourlyReport).mockResolvedValue(
+      hourlyPayload([
+        { hour: 7, invoiceCount: 3, netSalesNio: 900 },
+        { hour: 20, invoiceCount: 2, netSalesNio: 600 },
+      ]) as never,
+    );
+
+    renderWithProviders(
+      <PerformanceBand range={{ start: "2026-09-23", end: "2026-09-23" }} today="2026-09-23" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("hourly-caption")).toBeInTheDocument();
+    });
+    expect(fetchHourlyReport).toHaveBeenCalledWith({ date: "2026-09-23" }, expect.anything());
+    expect(screen.getByTestId("hourly-caption").textContent).toContain("Día: 2026-09-23");
+    expect(screen.getByTestId("hourly-caption").textContent).toContain("07:00");
+    expect(screen.getByTestId("hourly-caption").textContent).toContain("20:00");
   });
 
   it("isolates an hourly failure from siblings", async () => {
-    vi.mocked(fetchHourlySales).mockRejectedValue(new Error("hourly down"));
+    vi.mocked(fetchHourlyReport).mockRejectedValue(new Error("hourly down"));
 
     renderWithProviders(<PerformanceBand range={RANGE} today="2026-09-23" />);
 
@@ -418,14 +495,14 @@ describe("HourlySales — states (PRD §15/§23)", () => {
 });
 
 describe("TopProducts — states (PRD §16/§23)", () => {
-  it("renders product name, units, revenue and share from the existing endpoint", async () => {
+  it("renders product name, units, net revenue and share from the reconciled endpoint", async () => {
     vi.mocked(fetchTopProducts).mockResolvedValue({
       startDate: RANGE.start,
       endDate: RANGE.end,
       generatedAt: "2026-09-23T21:54:00Z",
       products: [
-        { productId: "p1", productName: "Cappuccino", totalQuantity: 214, totalRevenue: 10080 },
-        { productId: "p2", productName: "Latte", totalQuantity: 186, totalRevenue: 8060 },
+        { productId: "p1", productName: "Cappuccino", totalQuantity: 214, netRevenueNio: 10080, totalRevenue: 12000 },
+        { productId: "p2", productName: "Latte", totalQuantity: 186, netRevenueNio: 8060, totalRevenue: 9500 },
       ],
     } as never);
 
@@ -435,17 +512,18 @@ describe("TopProducts — states (PRD §16/§23)", () => {
       expect(screen.getByText("Cappuccino")).toBeInTheDocument();
     });
     expect(screen.getByText(/214\s*u/i)).toBeInTheDocument();
+    // Net revenue (post-discount, pre-tax), not the tax-inclusive total.
     expect(screen.getByText(/C\$10,080\.00/)).toBeInTheDocument();
     expect(screen.getAllByText(/\d+(?:\.\d+)?%/).length).toBeGreaterThanOrEqual(2);
   });
 
-  it("shows the honest tax-inclusive revenue-basis note on the card", async () => {
+  it("drops the tax-inclusive disclaimer and states the Net Sales basis on the card", async () => {
     vi.mocked(fetchTopProducts).mockResolvedValue({
       startDate: RANGE.start,
       endDate: RANGE.end,
       generatedAt: "2026-09-23T21:54:00Z",
       products: [
-        { productId: "p1", productName: "Cappuccino", totalQuantity: 214, totalRevenue: 10080 },
+        { productId: "p1", productName: "Cappuccino", totalQuantity: 214, netRevenueNio: 10080 },
       ],
     } as never);
 
@@ -454,7 +532,9 @@ describe("TopProducts — states (PRD §16/§23)", () => {
     await waitFor(() => {
       expect(screen.getByTestId("top-products-note")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("top-products-note").textContent.toLowerCase()).toContain("iva");
+    const note = screen.getByTestId("top-products-note").textContent ?? "";
+    expect(note.toLowerCase()).not.toContain("no equivale");
+    expect(note).toContain("Ventas Netas");
   });
 
   it("renders an explicit empty state and isolates endpoint failures", async () => {
@@ -520,15 +600,15 @@ describe("PaymentMix — states (PRD §17/§23)", () => {
 
 describe("PerformanceBand — composition and drill-down (PRD §24)", () => {
   it("exposes navigation-only drill-down links to Sales for every insight card", async () => {
-    vi.mocked(fetchHourlySales).mockResolvedValue(
-      hourlyPayload([{ hour: 12, invoiceCount: 5, totalSales: 1500 }]) as never,
+    vi.mocked(fetchHourlyReport).mockResolvedValue(
+      hourlyPayload([{ hour: 12, invoiceCount: 5, netSalesNio: 1500 }], 6) as never,
     );
     vi.mocked(fetchTopProducts).mockResolvedValue({
       startDate: RANGE.start,
       endDate: RANGE.end,
       generatedAt: "2026-09-23T21:54:00Z",
       products: [
-        { productId: "p1", productName: "Cappuccino", totalQuantity: 214, totalRevenue: 10080 },
+        { productId: "p1", productName: "Cappuccino", totalQuantity: 214, netRevenueNio: 10080 },
       ],
     } as never);
 

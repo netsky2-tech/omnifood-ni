@@ -9,16 +9,17 @@
  * - SalesTrend: GET /sales/reports/dashboard/daily-series (frozen Batch 5b
  *   contract, backend under concurrent construction — consumed only through
  *   the wire normalization in dashboard-api).
- * - HourlySales: existing GET /sales/reports/hourly-sales (single day).
+ * - HourlySales: GET /sales/reports/hourly-sales (Batch 5c wire, via the
+ *   normalization in dashboard-api): single-day mode when start === end,
+ *   aggregated multi-day distribution otherwise.
  * - TopProducts: existing GET /sales/reports/top-products.
  * - PaymentMix: existing GET /sales/reports/dashboard (Batch-1
  *   paymentMethodsBreakdown, net of changeGiven server-side).
  */
 import { useQuery } from "@tanstack/react-query";
 import { useTenantId } from "@/lib/tenant";
-import { fetchDailySeries } from "./dashboard-api";
+import { fetchDailySeries, fetchHourlyReport } from "./dashboard-api";
 import {
-  fetchHourlySales,
   fetchSalesDashboard,
   fetchTopProducts,
 } from "@/features/sales/sales-api";
@@ -37,12 +38,21 @@ export function useDailySeries(start: string, end: string, enabled = true) {
   });
 }
 
-/** Existing single-day hourly route, keyed identically to the sales module hook. */
-export function useHourlyReport(date: string) {
+/**
+ * Hourly distribution for an inclusive local range (FR-HOURLY-01/03): a
+ * single day queries with `date`; a multi-day range queries with
+ * `startDate`/`endDate` and gets the averaged per-hour distribution plus
+ * `meta.dayCount`.
+ */
+export function useHourlyReport(start: string, end: string) {
   const tenantId = useTenantId();
   return useQuery({
-    queryKey: ["sales", tenantId, "hourly", date],
-    queryFn: ({ signal }) => fetchHourlySales(date, { signal }),
+    queryKey: ["sales", tenantId, "hourly", start, end],
+    queryFn: ({ signal }) =>
+      fetchHourlyReport(
+        start === end ? { date: start } : { startDate: start, endDate: end },
+        { signal },
+      ),
     staleTime: STALE_2_MIN,
     retry: false,
   });
