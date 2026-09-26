@@ -30,6 +30,7 @@ import { ProductInventoryMappingVersion } from '../inventory/entities/product-in
 import { CashShiftService } from './services/cash-shift.service';
 import { CashShiftController } from './controllers/cash-shift.controller';
 import { SalesReportsService } from './services/sales-reports.service';
+import { SyncHealthModule } from './sync-health/sync-health.module';
 import { FiscalReportsService } from './services/fiscal-reports.service';
 import { SalesExportService } from './services/sales-export.service';
 import { SaleInventoryOutcomeService } from './services/sale-inventory-outcome.service';
@@ -48,6 +49,9 @@ import { forwardRef } from '@nestjs/common';
     HumanAuthorizationModule,
     DeviceSyncModule,
     InventoryModule,
+    // Dashboard V2 Batch 3: sync freshness read model; reads the sync
+    // receipt/outbox tables through tenant-bound transactions only.
+    SyncHealthModule,
     forwardRef(() => OnboardingModule),
     TypeOrmModule.forFeature([
       Invoice,

@@ -409,6 +409,9 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
     transport: 'device',
   },
   { controller: 'ReportsController', transport: 'human' },
+  // Dashboard V2 Batch 3: sync freshness read (GET /operations/sync/freshness);
+  // same human session-JWT transport class as ReportsController.
+  { controller: 'SyncHealthController', transport: 'human' },
   { controller: 'CashShiftController', transport: 'human' },
   {
     controller: 'InvoicesController',
