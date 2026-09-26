@@ -7246,6 +7246,14 @@ class _$AuthorityProjectionDao extends AuthorityProjectionDao {
   }
 
   @override
+  Future<int?> countInsumosByTenant(String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM authority_insumos WHERE tenant_id = ?1',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [tenantId]);
+  }
+
+  @override
   Future<void> insertInsumo(AuthorityInsumoEntity insumo) async {
     await _authorityInsumoEntityInsertionAdapter.insert(
         insumo, OnConflictStrategy.abort);

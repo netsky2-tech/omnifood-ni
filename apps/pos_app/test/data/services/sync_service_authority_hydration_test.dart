@@ -13,6 +13,7 @@ import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
+import 'package:pos_app/domain/services/inventory/authority_hydration_status.dart';
 
 class MockAuditRepository extends Mock implements AuditRepository {
   @override
@@ -233,6 +234,111 @@ void main() {
     return rows.first['c'] as int;
   }
 
+  Future<String?> configValue(String key) async =>
+      (await database.localConfigDao.getConfigByKey(key))?.value;
+
+  test(
+      'U4: a successful hydration stamps applied + timestamp + empty reason',
+      () async {
+    stubDeltas({
+      'products': [
+        {
+          'id': 'prod-pizza',
+          'name': 'Pizza',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'PREPARED',
+        }
+      ],
+      'recipeVersions': [
+        wireVersion(
+          insumos: [wireClosureInsumo(id: 'ins-1')],
+          components: [wireComponent()],
+        ),
+      ],
+    });
+
+    final result = await syncService.pullInboundDeltas();
+
+    expect(result, isNotNull);
+    expect(await configValue(AuthorityHydrationStatus.resultKey), 'applied');
+    final lastAt = await configValue(AuthorityHydrationStatus.lastAtKey);
+    expect(lastAt, isNotNull);
+    expect(lastAt, isNotEmpty);
+    expect(DateTime.tryParse(lastAt!), isNotNull);
+    expect(await configValue(AuthorityHydrationStatus.reasonKey), '');
+    // The applied-ever marker is stamped on success and never overwritten
+    // by a later refusal (#519 U5 row-primary semantics).
+    final appliedAt = await configValue(AuthorityHydrationStatus.appliedAtKey);
+    expect(appliedAt, isNotNull);
+    expect(DateTime.tryParse(appliedAt!), isNotNull);
+  });
+
+  test('U4: a refused payload stamps refused + the machine reason', () async {
+    stubDeltas({
+      'products': [
+        {
+          'id': 'prod-pizza',
+          'name': 'Pizza',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'PREPARED',
+        }
+      ],
+      'recipeVersions': [
+        wireVersion(
+          tenantId: 'tenant-alpha',
+          insumos: [wireClosureInsumo(tenantId: 'tenant-beta')],
+          components: [wireComponent()],
+        ),
+      ],
+    });
+
+    final result = await syncService.pullInboundDeltas();
+
+    expect(result, isNotNull);
+    expect(result!.authorityHydrationFailed, isTrue);
+    expect(await configValue(AuthorityHydrationStatus.resultKey), 'refused');
+    expect(
+      await configValue(AuthorityHydrationStatus.reasonKey),
+      result.authorityHydrationFailureReason,
+    );
+    expect(await configValue(AuthorityHydrationStatus.reasonKey), isNotEmpty);
+    final lastAt = await configValue(AuthorityHydrationStatus.lastAtKey);
+    expect(lastAt, isNotNull);
+    expect(DateTime.tryParse(lastAt!), isNotNull);
+    // A refusal must never stamp or overwrite the applied-ever marker.
+    expect(await configValue(AuthorityHydrationStatus.appliedAtKey), isNull);
+  });
+
+  test('U4: a legacy response without the recipeVersions key stamps nothing',
+      () async {
+    stubDeltas({
+      'products': [
+        {
+          'id': 'prod-pizza',
+          'name': 'Pizza',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'PREPARED',
+        }
+      ],
+      'insumos': [],
+    });
+
+    final result = await syncService.pullInboundDeltas();
+
+    expect(result, isNotNull);
+    expect(
+      await configValue(AuthorityHydrationStatus.lastAtKey),
+      isNull,
+      reason: 'a legacy pull must never claim a hydration verdict',
+    );
+    expect(await configValue(AuthorityHydrationStatus.resultKey), isNull);
+    expect(await configValue(AuthorityHydrationStatus.reasonKey), isNull);
+    expect(await configValue(AuthorityHydrationStatus.appliedAtKey), isNull);
+  });
+
   test(
       'recipeVersions delta is adapted and hydrated; outcome reported in the result',
       () async {
@@ -337,5 +443,58 @@ void main() {
     expect(await countRows('authority_insumos'), 0);
     expect(await countRows('authority_recipe_versions'), 0);
     expect(await countRows('authority_recipe_version_components'), 0);
+  });
+
+  test(
+      'U4: a blocked verdict write still cannot fail the pull (Q80 invariant)',
+      () async {
+    // Failure injected the way production actually hits it: the local write
+    // itself refuses. `saveConfig` is an INSERT OR REPLACE, so a BEFORE INSERT
+    // trigger scoped to the authority keys aborts exactly the telemetry write
+    // and leaves every other table working.
+    await database.database.execute('''
+      CREATE TRIGGER test_block_authority_verdict_writes
+      BEFORE INSERT ON local_configs
+      WHEN NEW.key LIKE 'authority_hydration%'
+      BEGIN
+        SELECT RAISE(ABORT, 'test: authority verdict write blocked');
+      END;
+    ''');
+
+    stubDeltas({
+      'products': [
+        {
+          'id': 'prod-pizza',
+          'name': 'Pizza',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'PREPARED',
+        }
+      ],
+      'recipeVersions': [
+        wireVersion(
+          insumos: [wireClosureInsumo(id: 'ins-1')],
+          components: [wireComponent()],
+        ),
+      ],
+    });
+
+    // The invariant this unit promised: hydration trouble is reported as a
+    // value and never blocks a sale or a pull. Telemetry is downstream of the
+    // hydration it describes, so a telemetry failure must not reach backwards
+    // and undo the fact that the authority rows landed.
+    final result = await syncService.pullInboundDeltas();
+
+    expect(result, isNotNull);
+    expect(result!.authorityHydrationFailed, isFalse);
+    expect(result.authorityVersionsCount, 1);
+    // The authority facts survived: hydration ran before the verdict write.
+    expect(await countRows('authority_recipe_versions'), 1);
+    expect(await countRows('authority_insumos'), 1);
+    // And nothing was stamped, which is the accepted cost of best-effort
+    // telemetry: the classifier stays `notHydrated`-adjacent rather than
+    // claiming a verdict that was never persisted.
+    expect(await configValue(AuthorityHydrationStatus.resultKey), isNull);
+    expect(await configValue(AuthorityHydrationStatus.lastAtKey), isNull);
   });
 }
