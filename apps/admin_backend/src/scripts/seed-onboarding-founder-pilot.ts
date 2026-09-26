@@ -6,7 +6,7 @@ import { AppModule } from '../core/app/app.module';
 import { User, UserRole } from '../modules/identity/entities/user.entity';
 import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
 import { Tenant } from '../modules/tenant/entities/tenant.entity';
-import { bindTenantContext } from '../core/database/tenant-transaction';
+import { runInTenantTransaction } from '../core/database/tenant-transaction';
 import {
   canonicalFiscalId,
   isValidRuc,
@@ -83,10 +83,14 @@ export function buildFounderPilotFixture(
   }
 
   if (!/^\d{6}$/.test(offlinePin)) {
-    throw new Error('ONBOARDING_FOUNDER_OWNER_PIN must contain exactly six digits');
+    throw new Error(
+      'ONBOARDING_FOUNDER_OWNER_PIN must contain exactly six digits',
+    );
   }
   if (password.length < 8) {
-    throw new Error('ONBOARDING_FOUNDER_OWNER_PASSWORD must contain at least eight characters');
+    throw new Error(
+      'ONBOARDING_FOUNDER_OWNER_PASSWORD must contain at least eight characters',
+    );
   }
 
   return {
@@ -122,39 +126,51 @@ async function seedFounderPilot(): Promise<void> {
   const dataSource = app.get(DataSource);
 
   try {
-    const ids = await dataSource.transaction(async (manager) => {
-      const tenant = await manager.save(
-        manager.create(Tenant, {
-          name: fixture.tenantName,
-          slug: fixture.tenantSlug,
-          ruc: fixture.ruc,
-          is_active: true,
-        }),
-      );
-      // Bind the transaction-local tenant context before any protected-table
-      // write: FORCE RLS on parent-owned/direct tables denies unbound writes
-      // from the non-owner runtime role.
-      await bindTenantContext(manager, tenant.id);
-      const owner = await manager.save(
-        manager.create(User, {
-          tenant_id: tenant.id,
-          name: fixture.owner.name,
-          email: fixture.owner.email,
-          role: UserRole.OWNER,
-          password_hash: await bcrypt.hash(fixture.owner.password, 10),
-          is_active: true,
-        }),
-      );
-      const profile = await manager.save(
-        manager.create(SecurityProfile, {
-          user_id: owner.id,
-          pin_hash: await bcrypt.hash(fixture.owner.offlinePin, 10),
-          is_pin_enabled: true,
-          is_totp_enabled: false,
-        }),
-      );
-      return { tenantId: tenant.id, ownerId: owner.id, securityProfileId: profile.id };
-    });
+    // The tenant id must be known before the transaction opens: the wrapper
+    // binds the transaction-local RLS context from it. `tenants` is a public
+    // (non-RLS) table, so inserting it inside the bound callback is fine.
+    const tenantId = randomUUID();
+    const ids = await runInTenantTransaction(
+      dataSource,
+      tenantId,
+      async (manager) => {
+        const tenant = await manager.save(
+          manager.create(Tenant, {
+            id: tenantId,
+            name: fixture.tenantName,
+            slug: fixture.tenantSlug,
+            ruc: fixture.ruc,
+            is_active: true,
+          }),
+        );
+        // The wrapper already bound the transaction-local tenant context
+        // (SET LOCAL) before this callback ran, so every write below —
+        // including FORCE RLS parent-owned tables — is tenant-authorized.
+        const owner = await manager.save(
+          manager.create(User, {
+            tenant_id: tenant.id,
+            name: fixture.owner.name,
+            email: fixture.owner.email,
+            role: UserRole.OWNER,
+            password_hash: await bcrypt.hash(fixture.owner.password, 10),
+            is_active: true,
+          }),
+        );
+        const profile = await manager.save(
+          manager.create(SecurityProfile, {
+            user_id: owner.id,
+            pin_hash: await bcrypt.hash(fixture.owner.offlinePin, 10),
+            is_pin_enabled: true,
+            is_totp_enabled: false,
+          }),
+        );
+        return {
+          tenantId: tenant.id,
+          ownerId: owner.id,
+          securityProfileId: profile.id,
+        };
+      },
+    );
 
     // This is intentionally the only output: it is a machine-readable handoff for
     // the attached-device test. The current activation DevicePrincipal contract binds

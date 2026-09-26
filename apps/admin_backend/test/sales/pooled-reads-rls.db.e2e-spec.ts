@@ -129,6 +129,13 @@ describe('pooled reads vs tenant-bound RLS gate (Real PostgreSQL DB, migration-b
       runtime.getRepository(Invoice),
       stubPooledRepo(),
       runtime,
+      // FiscalSetupService backs exportSalesBook's fiscal config resolution;
+      // the gate paths under test never reach it (typed stub, no DI needed).
+      {
+        getFiscalSetup: async () => {
+          throw new Error('not exercised in the pooled-reads gate');
+        },
+      } as never,
     );
     // The InboundSync paths under test (types='users') never touch the
     // pooled product/catalog/insumo/recipe repositories, and WU2 made the
@@ -335,9 +342,9 @@ describe('pooled reads vs tenant-bound RLS gate (Real PostgreSQL DB, migration-b
     try {
       // Gate teeth for the probe itself: the GUC really is unset, so the
       // zero rows below come from RLS evaluation, never from missing data.
-      const guc = (await probes.query(
+      const guc = await probes.query(
         `SELECT current_setting('app.tenant_id', true) AS v`,
-      )) as Array<{ v: string | null }>;
+      );
       expect(guc[0].v).toBeNull();
 
       const pooledInvoices = await probes
