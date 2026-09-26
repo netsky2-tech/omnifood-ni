@@ -12,6 +12,7 @@
  * output — never from the domain module.
  */
 import { useDashboardKpis } from "./use-dashboard-kpis";
+import { useCanViewInventoryCost } from "@/features/auth/permissions";
 import type { ComparisonPeriod, LocalDateRange } from "./domain/comparison-period";
 
 const MS_PER_DAY = 86_400_000;
@@ -131,7 +132,10 @@ export interface KpiStripProps {
 }
 
 export function KpiStrip({ range, today }: KpiStripProps) {
-  const kpis = useDashboardKpis(range, today);
+  // AG-06 / AC-17: cost visibility gate. Fail-closed until the backend
+  // permission chain ships — only OWNER passes without an explicit grant.
+  const canViewCost = useCanViewInventoryCost();
+  const kpis = useDashboardKpis(range, today, { canViewCost });
   const label = comparisonLabel(kpis.period);
 
   if (kpis.isSalesPending && !kpis.snapshot) {
@@ -183,14 +187,18 @@ export function KpiStrip({ range, today }: KpiStripProps) {
           delta={snapshot.deltas.averageTicket}
           deltaLabel={label}
         />
-        <Tile
-          label="Margen Bruto"
-          value={snapshot.margin ? `${snapshot.margin.percent.toFixed(1)}%` : "—"}
-          delta={snapshot.deltas.marginPp}
-          deltaUnit=" pp"
-          deltaLabel={label}
-          subtitle={snapshot.margin ? formatCurrencyValue(snapshot.margin.amount) : undefined}
-        />
+        {/* AC-17: the cost/margin widget is omitted entirely for users
+            without the cost grant — no placeholder, no leaked numerics. */}
+        {canViewCost && (
+          <Tile
+            label="Margen Bruto"
+            value={snapshot.margin ? `${snapshot.margin.percent.toFixed(1)}%` : "—"}
+            delta={snapshot.deltas.marginPp}
+            deltaUnit=" pp"
+            deltaLabel={label}
+            subtitle={snapshot.margin ? formatCurrencyValue(snapshot.margin.amount) : undefined}
+          />
+        )}
         {showIvaCard && (
           <Tile
             label="IVA generado"

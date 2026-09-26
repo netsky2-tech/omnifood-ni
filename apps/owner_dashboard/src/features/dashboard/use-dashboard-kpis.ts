@@ -50,7 +50,21 @@ function useCogsRangeQuery(tenantId: string, start: string, end: string, enabled
   });
 }
 
-export function useDashboardKpis(range: LocalDateRange, today?: string): DashboardKpis {
+export interface DashboardKpisOptions {
+  /**
+   * AG-06 / AC-17 gate: when false, the COGS reads are never fired and the
+   * margin KPI is omitted — a permission-limited Manager must neither see
+   * nor trigger a fetch of sensitive cost figures.
+   */
+  canViewCost?: boolean;
+}
+
+export function useDashboardKpis(
+  range: LocalDateRange,
+  today?: string,
+  options: DashboardKpisOptions = {},
+): DashboardKpis {
+  const { canViewCost = true } = options;
   const tenantId = useTenantId();
   const now = today ?? formatLocalDate(new Date());
   const period = resolveComparisonPeriod(range, now);
@@ -67,13 +81,13 @@ export function useDashboardKpis(range: LocalDateRange, today?: string): Dashboa
     tenantId,
     period.currentStart,
     period.currentEnd,
-    currentQuery.isSuccess,
+    currentQuery.isSuccess && canViewCost,
   );
   const cogsPreviousQuery = useCogsRangeQuery(
     tenantId,
     period.previousStart,
     period.previousEnd,
-    previousQuery.isSuccess,
+    previousQuery.isSuccess && canViewCost,
   );
 
   const fiscalQuery = useQuery({

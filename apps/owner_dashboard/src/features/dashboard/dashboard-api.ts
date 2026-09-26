@@ -251,3 +251,76 @@ export async function fetchFiscalSetup(
   const raw = opts ? await api.get<unknown>("/onboarding/fiscal-setup", opts) : await api.get<unknown>("/onboarding/fiscal-setup");
   return normalizeFiscalProfile(raw);
 }
+
+// ---------------------------------------------------------------------------
+// Batch 6b — Attention Required signal reads (PRD §19, arch spec §15/§16/§18)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /sales/reports/card-reconciliation-summary (arch spec §15).
+ *
+ * Outstanding-state scoped, NOT date-range scoped (spec §15.1): the attention
+ * band labels this as current outstanding state, never as "for the selected
+ * period".
+ */
+export interface CardReconciliationSummary {
+  pendingCount: number;
+  pendingAmountNio: number;
+  /** ISO 8601 of the oldest pending row; null when nothing is pending. */
+  oldestPendingAt: string | null;
+  generatedAt: string;
+}
+
+export function normalizeCardReconciliationSummary(
+  raw: unknown,
+): CardReconciliationSummary {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  return {
+    pendingCount: toFiniteNumber(r.pendingCount),
+    pendingAmountNio: toFiniteNumber(r.pendingAmountNio),
+    oldestPendingAt: typeof r.oldestPendingAt === "string" ? r.oldestPendingAt : null,
+    generatedAt: typeof r.generatedAt === "string" ? r.generatedAt : "",
+  };
+}
+
+export async function fetchCardReconciliationSummary(
+  opts?: ApiClientMethodOptions,
+): Promise<CardReconciliationSummary> {
+  const url = "/sales/reports/card-reconciliation-summary";
+  const raw = opts ? await api.get<unknown>(url, opts) : await api.get<unknown>(url);
+  return normalizeCardReconciliationSummary(raw);
+}
+
+/**
+ * GET /operations/audit/summary (arch spec §16).
+ *
+ * Executive contract only: counts and the latest high-severity marker — no
+ * raw forensic payload ever reaches the dashboard (spec §16.1).
+ */
+export interface AuditExecutiveSummary {
+  criticalCount: number;
+  warningCount: number;
+  /** Awareness-level events; historical rows (NULL severity) surface here. */
+  infoCount: number;
+  generatedAt: string;
+}
+
+export function normalizeAuditExecutiveSummary(raw: unknown): AuditExecutiveSummary {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  return {
+    criticalCount: toFiniteNumber(r.criticalCount),
+    warningCount: toFiniteNumber(r.warningCount),
+    infoCount: toFiniteNumber(r.infoCount),
+    generatedAt: typeof r.generatedAt === "string" ? r.generatedAt : "",
+  };
+}
+
+export async function fetchAuditSummary(
+  startDate: string,
+  endDate: string,
+  opts?: ApiClientMethodOptions,
+): Promise<AuditExecutiveSummary> {
+  const url = `/operations/audit/summary${toQueryParams({ startDate, endDate })}`;
+  const raw = opts ? await api.get<unknown>(url, opts) : await api.get<unknown>(url);
+  return normalizeAuditExecutiveSummary(raw);
+}

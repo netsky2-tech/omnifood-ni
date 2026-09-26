@@ -12,11 +12,12 @@
  * in one chart can never kill its siblings (PRD FR-STATE-04).
  *
  * Layout note: the wireframe pairs the trend with "Atención requerida"
- * (2:1); that attention block is a later batch, so the trend spans the row.
+ * (2:1) — Batch 6b adds the AttentionBand in that right-hand column.
  */
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { formatLocalDate } from "@/lib/utils";
 import { resolveComparisonPeriod, type LocalDateRange } from "./domain/comparison-period";
+import { AttentionBand } from "./attention-band";
 import { SalesTrendChart } from "./sales-trend-chart";
 import { HourlySalesChart } from "./hourly-sales-chart";
 import { TopProductsChart } from "./top-products-chart";
@@ -60,14 +61,24 @@ export function PerformanceBand({ range, today }: PerformanceBandProps) {
 
   return (
     <section aria-label="Rendimiento del negocio" className="space-y-6">
-      <ChartCellBoundary>
-        <SalesTrendChart
-          currentStart={period.currentStart}
-          currentEnd={period.currentEnd}
-          previousStart={period.previousStart}
-          previousEnd={period.previousEnd}
-        />
-      </ChartCellBoundary>
+      {/* Batch 6b: trend (2/3) + Atención Requerida (1/3) per the wireframe
+          §1 2:1 row. The band's own signal isolation keeps one failed signal
+          from affecting the trend cell (FR-STATE-04/05). */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <ChartCellBoundary>
+            <SalesTrendChart
+              currentStart={period.currentStart}
+              currentEnd={period.currentEnd}
+              previousStart={period.previousStart}
+              previousEnd={period.previousEnd}
+            />
+          </ChartCellBoundary>
+        </div>
+        <ChartCellBoundary>
+          <AttentionBand range={{ start: period.currentStart, end: period.currentEnd }} />
+        </ChartCellBoundary>
+      </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <ChartCellBoundary>
           {/* Batch 5c: a single day queries with `date`; a multi-day range

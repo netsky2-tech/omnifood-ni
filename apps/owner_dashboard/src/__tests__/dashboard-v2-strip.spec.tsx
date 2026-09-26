@@ -15,6 +15,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KpiStrip, type KpiStripProps } from "@/features/dashboard/kpi-strip";
+import { useAuthStore } from "@/features/auth/auth-store";
 import {
   fetchDashboardReport,
   fetchFiscalSetup,
@@ -122,6 +123,22 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockCogsDefault();
   vi.mocked(fetchFiscalSetup).mockResolvedValue({ regime: "CUOTA_FIJA" });
+  // Batch 6b (AG-06/AC-17): the strip now gates cost surfaces behind the
+  // inventory cost permission. These suites exercise the full strip, so they
+  // run as OWNER; permission-limited cases live in the attention spec.
+  useAuthStore.setState({
+    user: {
+      id: "user-1",
+      email: "owner@test.ni",
+      name: "Owner",
+      role: "OWNER",
+      tenantId: "tenant-1",
+      active: true,
+    },
+    tenant: { id: "tenant-1", name: "Test", slug: "test", ruc: "", active: true },
+    isAuthenticated: true,
+    hydrated: true,
+  });
 });
 
 describe("normalizeDashboardReport (wire string-number normalization)", () => {
