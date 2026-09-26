@@ -124,11 +124,39 @@ discipline: evidence first, decisions second, PRD third, implementation batches 
   untouched lines 348–448 of `invoices.service.ts`, owned by main).
 - **Not run:** DB e2e suites (no local Postgres in this pass); the #592 NOBYPASSRLS gate covers the
   executors we preserved unchanged.
-- **Goal:** Convert the approved architecture into small evidence-gated slices per spec §38:
-  semantic/reporting normalization → freshness foundation (AG-03/AG-04) → frontend executive
-  composition (regime-aware strip, trend, hourly, top products, payment mix) → attention summaries
-  (AG-07) → tip data-path remediation (#545) → pilot/acceptance/hardening. Sequence AG-06 (cost
-  permission) before any margin widget; include the AG-08 over-tender net fix in the reporting
-  normalization slice.
-- **Commits:** pending
-- **Evidence:** pending
+
+### Batch 2 — Comparison-period utility (frontend)
+
+- **Status:** done (`421ac50b`)
+- **Delivered:** pure `resolveComparisonPeriod` (presets today/yesterday/last7/last30/thisMonth/
+  prevMonth/thisYear + explicit local ranges; injectable `now`; UTC-space calendar math; strict
+  `TypeError` on malformed/impossible/inverted input). Previous range never overlaps current.
+- **Product flag:** PRD §9.3 leaves complete-month presets undefined; implemented as
+  calendar-anchored MoM (Nov 1–30 vs Oct 1–30 with clamping), not a sliding window. Comment
+  corrected after review (the original worker comment claimed a false overlap property for the
+  alternative reading). Needs founder confirmation, not blocking Batch 4.
+- **Evidence:** vitest 25/25 (leap 2028-02-29 YTD+MTD, 31st clamping both directions, year
+  boundaries, rejection paths); `oxlint` clean on the new module; `tsc -b` shows only the
+  **pre-existing** main-owned error `setup-center-view.tsx(718,76)` (last touched by `cb1844e7`).
+- **Known environmental failures:** dashboard typecheck red on `setup-center-view.tsx` since main
+  (not introduced here); dashboard uses `oxlint`, not eslint.
+
+### Batch 3 — Freshness foundation (backend)
+
+- **Status:** done (`bf58a15e`)
+- **Delivered:** `sync-health/` — pure `deriveSyncFreshness` (4-state rollup per PRD §20, quiet
+  store COMPLETE, conservative `lastCompleteAt`), `DASHBOARD_FRESHNESS_THRESHOLD_MINUTES` config
+  (default 5, fail-closed), tenant-bound service (single transaction, `set_config` first-statement
+  guards per #592), `GET /operations/sync/freshness` (route per spec §17.12), canonical `human`
+  transport declaration in the route-registry ratchet.
+- **No new tables:** receipts + `STAGED_FUTURE` outbox rows already prove watermarks and gaps;
+  a hole below the watermark is physically unreachable under strict ordered acceptance — PARTIAL
+  derives from staged-ahead evidence only. No heartbeats were invented.
+- **Incidents:** a duplicate delegation briefly collided with the still-running original writer;
+  the duplicate stopped with zero writes (single-writer discipline held). Parent's combined
+  sales+core run caught the unclassified-route ratchet the worker's scoped run missed.
+- **Evidence:** sync-health 4 suites / 31 tests; sales+core combined 48 suites / 725 (1 pre-existing
+  skip); tsc delta 0 (16 known); eslint 0 problems on all touched files.
+- **Product follow-ups (non-blocking):** active-but-never-synced device holds tenant at PARTIAL
+  (§17.2 intended — confirm posture); terminal `label` falls back to device id (AG-03 display-name
+  residual).
