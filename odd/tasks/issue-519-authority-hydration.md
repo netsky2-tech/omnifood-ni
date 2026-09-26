@@ -22,7 +22,9 @@ Branch: `fix/519-kardex-server-comp` · Base: `origin/main` · Issue: #519 · Pl
 
 | Hydrator requires | Backend delta provides | Consequence |
 |---|---|---|
-| `recipeVersions[].effectiveFrom` (or `fechaInicioVigencia`), **required** | `effectiveAt` | `FormatException` → whole payload rejected |
+| `recipeVersions[].effectiveFrom` (or `fechaInicioVigencia`) **required** | `effectiveAt` | `FormatException` → whole payload rejected |
+
+Correction found while implementing U2: the effective-date break is **a name that matches no alias, not a missing-key-tolerant parser**. `fromJson` already accepts several spellings (`effectiveFrom` \| `fechaInicioVigencia`, `recipeVersionId` \| `id`, `recipeVersionId` \| `versionId`), which is why "just feed the delta in" looked plausible; the delta's `effectiveAt` matches none of them, so the required check fails and the whole payload raises. Kept here because it is the reason U2 is an adapter and not a passthrough.
 | `insumos[].uom`, **required** | `purchaseUom` / `consumptionUom` (no `uom`) | `FormatException` |
 | `components[]` at **root** | `components[]` **nested inside each version** | components silently `[]` → version with zero components |
 | `components[].ordinal` | `componentOrdinal` | ordinal defaults to `0` for every line |
@@ -48,8 +50,14 @@ One PR: the backend producer and the POS consumer are one contract change; landi
 | **U5** | POS | Fail-closed guard (issue A3): a tenant-bound `prepared`/`compound` line gets a *distinct* reason — `AUTHORITY_UNHYDRATED` vs `MISSING_PUBLISHED_RECIPE`. This is the unit that stops the next bug of this class | `checkout_inventory_preparation_service.dart`, `sale_inventory_outcome_planner.dart` | U3, U4 |
 | **U6** | POS | Integration test on a **migrated** DB seeded **through the sync path** (not `synchronize:true`, not `inMemoryDatabaseBuilder`, which skips migrations): one dish sale and one resale sale each produce kardex movements with non-zero `stock_before`/`stock_after` | `test/integration/…` (new) + migrated-DB helper | U2-U5 |
 
+**Landed as delivered:** U1 `40e5cf7f` · U2+U3 `d4b7f1dc` · U4+U5 `ad802ee7` · U6 `30ba3915`.
+
+**Found on the way and filed instead of absorbed:**- **#601** — `NegativeStockRegularizationService` orphan lifecycle (A4 / F8). Kept out of this PR deliberately: it is a `PROVISIONAL → REGULARIZED` retrocalculation with a lineage hash, and it is *masked* by #519 — it only becomes observable once sales produce movements again.
+- ~~**#602** — a fresh install gets the `authority_%` tables **without** their immutability triggers~~ **RETRACTED the same day; #602 closed as not-a-gap.** The claim came from a citation I never matched to the file: the callback is at `migrations.dart:108-122`, and its `onCreate` calls `_createAuthorityImmutabilityTriggers` explicitly, which `main.dart:135` registers. Executed proof: a fresh in-memory DB built exactly the way `main.dart` builds it (so `onCreate` only, no upgrade) reports all four triggers — `authority_recipe_versions_block_update/_delete`, `authority_components_block_update/_delete`. The `grep → 0` in `app_database.g.dart` was true but proved nothing: triggers come from the registered callback, never from generated entity DDL. **Residual, worth keeping as a note rather than an issue: the four authority triggers are asserted by no test today, so a future refactor of that callback could silently drop them.** Lesson recorded: a `grep` on one file is not a runtime fact — build the state and read it back.
+- U6 also pins a behaviour the verdict keys only imply: a legacy response with no `recipeVersions` key must leave all four keys **untouched**, because stamping them would let a never-hydrated terminal classify as `hydratedEmpty` — the exact ambiguity that hid this bug.
+
 **Deliberately NOT in this change** (each needs its own issue, do not silently expand scope):
-- **A4** `NegativeStockRegularizationService` wiring (F8) — separate lifecycle (`PROVISIONAL → REGULARIZED`, lineage hash), needs its own design review.
+- **A4** `NegativeStockRegularizationService` wiring (F8) → **#601** — separate lifecycle (`PROVISIONAL → REGULARIZED`, lineage hash), needs its own design review.
 - **B3b** #524 movements carrying real stock levels; **B3c** backend ledger authority + idempotent compensation — server-side compensation alone does not protect the local kardex while offline, so it stays behind H1-H3.
 - **Supersession/rebuild**: hydration is insert-if-absent with no supersession or delete path, so local authority rows accumulate. Today's read query (`publication_state='PUBLISHED' AND is_active=1 AND effective window`) makes staleness *correct-but-fat*, not wrong. Unbounded growth needs a rebuild strategy, not a patch.
 - **#518** resale mapping create path (F9): SIMPLE resale items still depend on `mappingVersionId` arriving from the cloud.
