@@ -4,6 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
 
+// Sync-freshness wiring (PRD §20): the page now consumes the real
+// useSyncFreshness hook; mock it so these page-level tests never hit the API
+// client. The badge's own state matrix lives in dashboard-v2-freshness.spec.tsx.
+vi.mock("@/features/dashboard/use-sync-freshness", () => ({
+  useSyncFreshness: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+
 // Dashboard V2 Batch 4 (#544): the legacy KPI grid was replaced by the
 // regime-aware strip. The mock below keeps these page-level tests focused on
 // their own concerns (Resumen de Ventas, loading/error states); the strip's

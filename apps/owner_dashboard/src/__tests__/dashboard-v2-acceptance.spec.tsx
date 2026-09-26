@@ -11,12 +11,12 @@
  * QueryClient. Every fixture total reconciles by construction so the Gate A
  * KPI contract is exercised end-to-end, not re-derived per widget.
  *
- * AC coverage placement note: AC-08 (stale complete sync) and AC-09A (quiet
- * store with fresh checkpoints stays COMPLETE) are freshness-derivation
- * behaviors. The frontend has NO freshness-state consumer (the page badge is
- * the legacy generatedAt cosmetic element; PRD FR-SYNC-04 forbids deriving
- * completeness from generatedAt), so both scenarios are proven against the
- * real endpoint and derivation in the backend acceptance integration proof:
+ * AC coverage placement note: AC-08 (stale complete sync), AC-09 (unknown
+ * sync) and AC-09A (quiet store with fresh checkpoints stays COMPLETE) are
+ * asserted visually through the freshness badge, which is wired to the real
+ * GET /operations/sync/freshness read model (PRD §20, FR-SYNC-01..05). The
+ * state derivation rules behind each scenario are additionally proven against
+ * the real endpoint in the backend acceptance integration proof:
  * test/sales/dashboard-v2-acceptance.db.e2e-spec.ts (AC-08/AC-09A describes).
  */
 import type { ComponentProps, ReactElement } from "react";
@@ -36,7 +36,9 @@ import {
   fetchDashboardReport,
   fetchFiscalSetup,
   fetchHourlyReport,
+  fetchSyncFreshness,
   normalizeDashboardReport,
+  type DashboardV2Report,
 } from "@/features/dashboard/dashboard-api";
 import { fetchAlerts, fetchCogs } from "@/features/inventory/inventory-api";
 import {
@@ -62,6 +64,7 @@ vi.mock("@/features/dashboard/dashboard-api", async (importOriginal) => ({
   fetchHourlyReport: vi.fn(),
   fetchAuditSummary: vi.fn(),
   fetchCardReconciliationSummary: vi.fn(),
+  fetchSyncFreshness: vi.fn(),
 }));
 
 vi.mock("@/features/inventory/inventory-api", async (importOriginal) => ({
@@ -103,11 +106,8 @@ window.ResizeObserver =
 // ---------------------------------------------------------------------------
 
 const DAY = "2026-09-23";
-const DAY_PREVIOUS = "2026-09-16";
 const TUESDAY = "2026-09-22";
-const TUESDAY_PREVIOUS = "2026-09-15";
 const WEEK = { start: "2026-09-18", end: DAY };
-const WEEK_PREVIOUS = { start: "2026-09-12", end: "2026-09-17" };
 const GENERATED_AT = "2026-09-23T21:54:00Z";
 
 /**
@@ -224,6 +224,28 @@ const TIPS_APPLICABLE = {
   tipCoverage: { recordedInvoicesCount: 3, totalInvoicesCount: 4 },
 };
 
+/**
+ * Sync-freshness fixture (Batch 3 endpoint contract, PRD §20). The default
+ * keeps the non-freshness page tests in the healthy COMPLETE state; the
+ * AC-08/AC-09/AC-09A scenarios override per case.
+ */
+const freshnessFixture = (overrides: Record<string, unknown> = {}) => ({
+  state: "COMPLETE",
+  thresholdMinutes: 5,
+  lastCompleteAt: "2026-09-23T21:52:00Z",
+  perTerminal: [
+    {
+      terminalId: "term-1",
+      label: "Caja 1",
+      state: "COMPLETE",
+      acceptedThroughSequence: 41,
+      lastReceiptAt: "2026-09-23T21:52:30Z",
+    },
+  ],
+  evaluatedAt: GENERATED_AT,
+  ...overrides,
+});
+
 // ---------------------------------------------------------------------------
 // Mock helpers
 // ---------------------------------------------------------------------------
@@ -240,9 +262,9 @@ function mockDashboardReport(
   const currentKeys = new Set([currentKey, formatLocalDate(new Date())]);
   vi.mocked(fetchDashboardReport).mockImplementation(((start: string) => {
     if (currentKeys.has(start)) {
-      return Promise.resolve({ ...SALES_DAY, ...current });
+      return Promise.resolve({ ...SALES_DAY, ...current } as unknown as DashboardV2Report);
     }
-    return Promise.resolve({ ...SALES_DAY, ...previous });
+    return Promise.resolve({ ...SALES_DAY, ...previous } as unknown as DashboardV2Report);
   }) as typeof fetchDashboardReport);
 }
 
@@ -393,6 +415,7 @@ beforeEach(() => {
   mockCogs(18740);
   mockHealthyAttention();
   mockCharts();
+  vi.mocked(fetchSyncFreshness).mockResolvedValue(freshnessFixture() as never);
   vi.mocked(useSalesDashboard).mockReturnValue({
     data: {
       grossSales: 56425.7,
@@ -670,18 +693,101 @@ describe("AC-06 — COGS / Gross Margin reconciliation (Gate A)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// AC-08 / AC-09A — Freshness
+// AC-08 / AC-09 / AC-09A — Freshness (PRD §20, FR-SYNC-01..05)
 //
-// Verified against the real endpoint + derivation in
-// apps/admin_backend/test/sales/dashboard-v2-acceptance.db.e2e-spec.ts:
-// - AC-08: complete streams 20 minutes old roll up to STALE, not COMPLETE.
-// - AC-09A: a quiet store (no business activity for 30 minutes) with
-//   checkpoints current within the threshold stays COMPLETE.
-// The frontend has no freshness-state consumer yet (the page badge is the
-// legacy generatedAt cosmetic element; PRD FR-SYNC-04 forbids using
-// generatedAt as a completeness signal), so there is nothing to assert here
-// without inventing a surface outside this batch's edit surfaces.
+// The freshness badge is now wired to the real GET /operations/sync/freshness
+// read model, so the tenant-level states are asserted visually in the DOM
+// (state attribute + explicit text; color is never the only signal). The
+// derivation rules behind each state are additionally pinned against the real
+// endpoint + derivation in
+// apps/admin_backend/test/sales/dashboard-v2-acceptance.db.e2e-spec.ts.
 // ---------------------------------------------------------------------------
+
+describe("AC-08 / AC-09 / AC-09A — freshness badge (FR-SYNC-01..05)", () => {
+  it("AC-08: complete streams 20 minutes old show STALE, not COMPLETE", async () => {
+    mockDashboardReport({});
+    vi.mocked(fetchSyncFreshness).mockResolvedValue(
+      freshnessFixture({
+        state: "STALE",
+        lastCompleteAt: "2026-09-23T21:34:00Z",
+      }) as never,
+    );
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("freshness-badge")).toHaveAttribute(
+        "data-freshness-state",
+        "STALE",
+      );
+    });
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain("Sincronización demorada (>5 min)");
+    expect(badge.textContent).toContain("· hasta ");
+    expect(badge.textContent).not.toContain("Datos completos");
+  });
+
+  it("AC-09: no completeness metadata shows UNKNOWN and never substitutes generatedAt", async () => {
+    mockDashboardReport({});
+    vi.mocked(fetchSyncFreshness).mockResolvedValue(
+      freshnessFixture({
+        state: "UNKNOWN",
+        lastCompleteAt: null,
+        perTerminal: [],
+      }) as never,
+    );
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("freshness-badge")).toHaveAttribute(
+        "data-freshness-state",
+        "UNKNOWN",
+      );
+    });
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain(
+      "Estado de sincronización desconocido",
+    );
+    // FR-SYNC-04 / AC-09: generatedAt remains separate technical metadata —
+    // it appears only in its own labeled caption, never as a freshness claim.
+    expect(badge.textContent).not.toContain("Actualizado");
+    expect(screen.getByText(/Reporte generado:/)).toBeInTheDocument();
+  });
+
+  it("AC-09A: a quiet store with current checkpoints stays COMPLETE", async () => {
+    mockDashboardReport({});
+    // No business activity for 30 minutes, but the sync checkpoint proves no
+    // pending work: COMPLETE with no time claims — never STALE (AC-09A).
+    vi.mocked(fetchSyncFreshness).mockResolvedValue(
+      freshnessFixture({
+        lastCompleteAt: null,
+        perTerminal: [
+          {
+            terminalId: "term-1",
+            label: "Caja 1",
+            state: "COMPLETE",
+            acceptedThroughSequence: 41,
+            lastReceiptAt: null,
+          },
+        ],
+      }) as never,
+    );
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("freshness-badge")).toHaveAttribute(
+        "data-freshness-state",
+        "COMPLETE",
+      );
+    });
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain("Datos completos");
+    expect(badge.textContent).not.toContain("demorada");
+    expect(badge.textContent).not.toContain("parcial");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // AC-10..AC-13 — Attention Required signals

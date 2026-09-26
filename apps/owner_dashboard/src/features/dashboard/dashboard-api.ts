@@ -381,3 +381,102 @@ export async function fetchAuditSummary(
   const raw = opts ? await api.get<unknown>(url, opts) : await api.get<unknown>(url);
   return normalizeAuditExecutiveSummary(raw);
 }
+
+// ---------------------------------------------------------------------------
+// Sync freshness (PRD §20, FR-SYNC-01..05; arch spec §17.12)
+// ---------------------------------------------------------------------------
+
+/** Top-level tenant freshness state (SyncFreshnessDto.state). */
+export type SyncFreshnessState = "COMPLETE" | "STALE" | "PARTIAL" | "UNKNOWN";
+
+/**
+ * Terminal-level state: 'PENDING' is display-only (a provisioned device with
+ * no first successful checkpoint) and never appears in the top-level state.
+ */
+export type SyncFreshnessTerminalState = SyncFreshnessState | "PENDING";
+
+export interface SyncFreshnessTerminal {
+  terminalId: string;
+  label: string | null;
+  state: SyncFreshnessTerminalState;
+  acceptedThroughSequence: number | null;
+  lastReceiptAt: string | null;
+}
+
+/**
+ * GET /operations/sync/freshness response (apps/admin_backend
+ * SyncFreshnessDto). `evaluatedAt` is technical metadata only (FR-SYNC-04):
+ * freshness meaning lives in `state`/`lastCompleteAt`, derived from confirmed
+ * receipt watermarks — never from report generation time.
+ */
+export interface SyncFreshnessResponse {
+  state: SyncFreshnessState;
+  /** Platform freshness target in minutes (FR-SYNC-03, server-configured). */
+  thresholdMinutes: number;
+  /** Oldest confirmed watermark; null for PARTIAL/UNKNOWN. */
+  lastCompleteAt: string | null;
+  perTerminal: SyncFreshnessTerminal[];
+  evaluatedAt: string;
+}
+
+const FRESHNESS_STATES: readonly SyncFreshnessState[] = [
+  "COMPLETE",
+  "STALE",
+  "PARTIAL",
+  "UNKNOWN",
+];
+const TERMINAL_STATES: readonly SyncFreshnessTerminalState[] = [
+  ...FRESHNESS_STATES,
+  "PENDING",
+];
+
+function toFreshnessState(value: unknown): SyncFreshnessState {
+  return FRESHNESS_STATES.includes(value as SyncFreshnessState)
+    ? (value as SyncFreshnessState)
+    : "UNKNOWN";
+}
+
+function toTerminalState(value: unknown): SyncFreshnessTerminalState {
+  return TERMINAL_STATES.includes(value as SyncFreshnessTerminalState)
+    ? (value as SyncFreshnessTerminalState)
+    : "UNKNOWN";
+}
+
+/**
+ * Fail-closed wire normalization: an unrecognized state degrades to UNKNOWN
+ * (never silently to COMPLETE) and the freshness threshold defaults to the
+ * FR-SYNC-03 platform target of 5 minutes when the server omits it.
+ */
+export function normalizeSyncFreshness(raw: unknown): SyncFreshnessResponse {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  const terminals = Array.isArray(r.perTerminal) ? r.perTerminal : [];
+  const threshold = toNullableNumber(r.thresholdMinutes);
+  return {
+    state: toFreshnessState(r.state),
+    thresholdMinutes:
+      threshold !== null && threshold > 0 ? Math.trunc(threshold) : 5,
+    lastCompleteAt: typeof r.lastCompleteAt === "string" ? r.lastCompleteAt : null,
+    perTerminal: terminals.map((entry) => {
+      const t = (typeof entry === "object" && entry !== null ? entry : {}) as Record<
+        string,
+        unknown
+      >;
+      return {
+        terminalId: typeof t.terminalId === "string" ? t.terminalId : "",
+        label: typeof t.label === "string" ? t.label : null,
+        state: toTerminalState(t.state),
+        acceptedThroughSequence: toNullableNumber(t.acceptedThroughSequence),
+        lastReceiptAt: typeof t.lastReceiptAt === "string" ? t.lastReceiptAt : null,
+      };
+    }),
+    evaluatedAt: typeof r.evaluatedAt === "string" ? r.evaluatedAt : "",
+  };
+}
+
+export async function fetchSyncFreshness(
+  opts?: ApiClientMethodOptions,
+): Promise<SyncFreshnessResponse> {
+  const url = "/operations/sync/freshness";
+  const raw = opts ? await api.get<unknown>(url, opts) : await api.get<unknown>(url);
+  return normalizeSyncFreshness(raw);
+}

@@ -5,6 +5,7 @@ import { useSalesDashboard } from "@/features/sales/use-sales-reports";
 import { useCanViewInventoryCost } from "@/features/auth/permissions";
 import { KpiStrip } from "./kpi-strip";
 import { useDashboardKpis } from "./use-dashboard-kpis";
+import { useSyncFreshness } from "./use-sync-freshness";
 import { TipsSummaryCard } from "./tips-summary";
 
 // Batch 5b: the performance band (charts + recharts) lives in its own lazy
@@ -56,6 +57,12 @@ export function DashboardPage() {
     undefined,
     { canViewCost },
   );
+  // Dashboard V2 sync freshness (PRD §20, FR-SYNC-01..05): the badge shows
+  // the real watermark-derived state; generatedAt stays technical metadata.
+  const {
+    data: freshness,
+    isLoading: isFreshnessLoading,
+  } = useSyncFreshness();
 
   if (isLoading && !data) {
     return (
@@ -90,7 +97,13 @@ export function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          {data && <FreshnessBadge generatedAt={data.generatedAt} />}
+          {data && (
+            <FreshnessBadge
+              freshness={freshness ?? null}
+              generatedAt={data.generatedAt}
+              isLoading={isFreshnessLoading}
+            />
+          )}
           <DateRangePicker value={range} onChange={setRange} />
         </div>
       </div>
