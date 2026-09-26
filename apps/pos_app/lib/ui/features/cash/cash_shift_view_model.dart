@@ -28,6 +28,12 @@ class CashShiftViewModel extends ChangeNotifier {
   CashierSessionEntity? _lastClosedShift;
   List<CashMovementEntity> _movements = [];
   int _pendingVouchersCount = 0;
+  // Issue #529: net cash-sales totals for the active shift, cached by
+  // [refreshSalesCash] and recomputed freshly at close time. `_activeShift`
+  // keeps its base expected figure (opening float + manual movements);
+  // the sales cash rides on top via [effectiveExpectedNio/Usd].
+  double _salesCashNio = 0.0;
+  double _salesCashUsd = 0.0;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -83,6 +89,17 @@ class CashShiftViewModel extends ChangeNotifier {
 
   CashierSessionEntity? get activeShift => _activeShift;
   CashierSessionEntity? get lastClosedShift => _lastClosedShift;
+
+  /// Issue #529: what the drawer SHOULD contain right now —
+  /// opening float + manual movements (already tracked by
+  /// `_activeShift.expectedNio/Usd`) + net cash sales of non-canceled
+  /// invoices in the shift. Blind-count variance must be measured against
+  /// this, not against the base figure.
+  double get effectiveExpectedNio =>
+      (_activeShift?.expectedNio ?? 0) + _salesCashNio;
+  double get effectiveExpectedUsd =>
+      (_activeShift?.expectedUsd ?? 0) + _salesCashUsd;
+
   bool get hasActiveShift => _activeShift != null && !_activeShift!.isClosed;
   List<CashMovementEntity> get movements => List.unmodifiable(_movements);
   int get pendingVouchersCount => _pendingVouchersCount;
@@ -93,6 +110,50 @@ class CashShiftViewModel extends ChangeNotifier {
 
   void setUserRole(UserRole role) {
     _currentUserRole = role;
+    notifyListeners();
+  }
+
+  /// Issue #529: sums the net cash collected by NON-canceled invoices of
+  /// [shiftId], bucketed per currency. For each cash payment the drawer
+  /// gained `amount` in `currency` and lost `changeGiven` in
+  /// `change_currency` (change may be given in the other currency, so the
+  /// buckets are adjusted independently).
+  Future<(double, double)> _computeSalesCashTotals(String shiftId) async {
+    final dao = paymentDao;
+    if (dao == null) return (0.0, 0.0);
+    final cashPayments = await dao.getCashPaymentsForShift(shiftId);
+    double nio = 0.0;
+    double usd = 0.0;
+    for (final p in cashPayments) {
+      if (p.currency == 'NIO') {
+        nio += p.amount;
+      } else if (p.currency == 'USD') {
+        usd += p.amount;
+      }
+      if (p.changeGiven > 0) {
+        if (p.changeCurrency == 'USD') {
+          usd -= p.changeGiven;
+        } else {
+          nio -= p.changeGiven;
+        }
+      }
+    }
+    return (nio, usd);
+  }
+
+  /// Issue #529: re-queries the net cash-sales totals so the effective
+  /// expected figures reflect sales recorded after the last [init]. Called
+  /// before the blind-count dialog evaluates high variance.
+  Future<void> refreshSalesCash() async {
+    final shift = _activeShift;
+    if (shift == null) {
+      _salesCashNio = 0.0;
+      _salesCashUsd = 0.0;
+      return;
+    }
+    final totals = await _computeSalesCashTotals(shift.id);
+    _salesCashNio = totals.$1;
+    _salesCashUsd = totals.$2;
     notifyListeners();
   }
 
@@ -112,8 +173,11 @@ class CashShiftViewModel extends ChangeNotifier {
             );
       if (_activeShift != null) {
         _movements = await movementDao.getMovementsByShiftId(_activeShift!.id);
+        await refreshSalesCash();
       } else {
         _movements = [];
+        _salesCashNio = 0.0;
+        _salesCashUsd = 0.0;
       }
       await refreshPendingVouchersCount();
     } catch (e) {
@@ -192,6 +256,8 @@ class CashShiftViewModel extends ChangeNotifier {
       await sessionDao.insertSession(session);
       _activeShift = session;
       _movements = [];
+      _salesCashNio = 0.0;
+      _salesCashUsd = 0.0;
       await refreshPendingVouchersCount();
       _isLoading = false;
       notifyListeners();
@@ -319,8 +385,16 @@ class CashShiftViewModel extends ChangeNotifier {
       final closedCount = (await sessionDao.countClosedSessions()) ?? 0;
       final zSequence = closedCount + 1;
 
-      final diffNio = countedNio - _activeShift!.expectedNio;
-      final diffUsd = countedUsd - _activeShift!.expectedUsd;
+      // Issue #529: expected cash includes the net cash sales of
+      // non-canceled invoices in this shift, re-queried at close time so
+      // sales recorded after the last refresh are not lost. Voiding a paid
+      // invoice drops its cash from this sum automatically.
+      final salesTotals = await _computeSalesCashTotals(_activeShift!.id);
+      final effectiveExpectedNio = _activeShift!.expectedNio + salesTotals.$1;
+      final effectiveExpectedUsd = _activeShift!.expectedUsd + salesTotals.$2;
+
+      final diffNio = countedNio - effectiveExpectedNio;
+      final diffUsd = countedUsd - effectiveExpectedUsd;
 
       final closedShift = CashierSessionEntity(
         id: _activeShift!.id,
@@ -333,8 +407,8 @@ class CashShiftViewModel extends ChangeNotifier {
         openingBalanceUsd: _activeShift!.openingBalanceUsd,
         closingCountedNio: countedNio,
         closingCountedUsd: countedUsd,
-        expectedNio: _activeShift!.expectedNio,
-        expectedUsd: _activeShift!.expectedUsd,
+        expectedNio: effectiveExpectedNio,
+        expectedUsd: effectiveExpectedUsd,
         differenceNio: diffNio,
         differenceUsd: diffUsd,
         zReportSequence: zSequence,
@@ -348,6 +422,8 @@ class CashShiftViewModel extends ChangeNotifier {
       _lastClosedShift = closedShift;
       _activeShift = null;
       _movements = [];
+      _salesCashNio = 0.0;
+      _salesCashUsd = 0.0;
 
       _isLoading = false;
       notifyListeners();

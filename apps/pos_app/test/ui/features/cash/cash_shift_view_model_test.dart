@@ -4,6 +4,8 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/data/models/sales/invoice_entity.dart';
+import 'package:pos_app/data/models/sales/payment_entity.dart';
 import 'package:pos_app/ui/features/cash/cash_shift_view_model.dart';
 
 /// Identity-source fake (issue #552): only [getCurrentUser] matters for the
@@ -281,6 +283,176 @@ void main() {
       );
       expect(closeSecond, isTrue);
       expect(viewModel.lastClosedShift!.zReportSequence, 2);
+    });
+  });
+
+  group('issue #529: blind count expected cash includes net cash sales', () {
+    /// Seeds one invoice (optionally canceled) with exactly one cash payment
+    /// attributed to [shiftId], mimicking what the checkout path persists.
+    Future<void> insertCashSale({
+      required String invoiceId,
+      required String shiftId,
+      required String paymentId,
+      required double tendered,
+      required String currency,
+      double changeGiven = 0.0,
+      String changeCurrency = 'NIO',
+      bool canceled = false,
+    }) async {
+      await database.invoiceDao.insertInvoice(
+        InvoiceEntity(
+          id: invoiceId,
+          number: 'F-0001-$invoiceId',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'user-cajero-1',
+          subtotal: tendered,
+          totalTax: 0,
+          total: tendered,
+          isCanceled: canceled,
+          shiftId: shiftId,
+        ),
+      );
+      await database.paymentDao.insertPayments([
+        PaymentEntity(
+          id: paymentId,
+          invoiceId: invoiceId,
+          method: 'cash',
+          amount: tendered,
+          currency: currency,
+          changeGiven: changeGiven,
+          changeCurrency: changeCurrency,
+        ),
+      ]);
+    }
+
+    test('expected reflects opening float + cash sale (no change)', () async {
+      await viewModel.init();
+      await viewModel.openShift(initialFloatNio: 1000.0, initialFloatUsd: 50.0);
+      final shiftId = viewModel.activeShift!.id;
+
+      await insertCashSale(
+        invoiceId: 'inv-nio-plain',
+        shiftId: shiftId,
+        paymentId: 'pay-nio-plain',
+        tendered: 200.0,
+        currency: 'NIO',
+      );
+
+      await viewModel.refreshSalesCash();
+
+      expect(viewModel.effectiveExpectedNio, 1200.0);
+      expect(viewModel.effectiveExpectedUsd, 50.0);
+    });
+
+    test('expected reflects tender minus change given in NIO', () async {
+      await viewModel.init();
+      await viewModel.openShift(initialFloatNio: 1000.0, initialFloatUsd: 50.0);
+      final shiftId = viewModel.activeShift!.id;
+
+      // Customer pays C$500 with a C$500 bill, gets C$100 back in NIO.
+      await insertCashSale(
+        invoiceId: 'inv-nio-change',
+        shiftId: shiftId,
+        paymentId: 'pay-nio-change',
+        tendered: 500.0,
+        currency: 'NIO',
+        changeGiven: 100.0,
+        changeCurrency: 'NIO',
+      );
+
+      await viewModel.refreshSalesCash();
+
+      expect(viewModel.effectiveExpectedNio, 1400.0);
+      expect(viewModel.effectiveExpectedUsd, 50.0);
+    });
+
+    test('USD cash sale and cross-currency change hit the right buckets', () async {
+      await viewModel.init();
+      await viewModel.openShift(initialFloatNio: 1000.0, initialFloatUsd: 50.0);
+      final shiftId = viewModel.activeShift!.id;
+
+      // USD tender with USD change: $20 in, $2 back -> +18 USD.
+      await insertCashSale(
+        invoiceId: 'inv-usd-change',
+        shiftId: shiftId,
+        paymentId: 'pay-usd-change',
+        tendered: 20.0,
+        currency: 'USD',
+        changeGiven: 2.0,
+        changeCurrency: 'USD',
+      );
+      // NIO tender with change given in USD: C$730 in, $1 back ->
+      // +730 NIO and -1 USD.
+      await insertCashSale(
+        invoiceId: 'inv-cross-change',
+        shiftId: shiftId,
+        paymentId: 'pay-cross-change',
+        tendered: 730.0,
+        currency: 'NIO',
+        changeGiven: 1.0,
+        changeCurrency: 'USD',
+      );
+
+      await viewModel.refreshSalesCash();
+
+      expect(viewModel.effectiveExpectedNio, 1730.0);
+      expect(viewModel.effectiveExpectedUsd, 67.0);
+    });
+
+    test('voided cash sale drops out of expected automatically', () async {
+      await viewModel.init();
+      await viewModel.openShift(initialFloatNio: 1000.0, initialFloatUsd: 0.0);
+      final shiftId = viewModel.activeShift!.id;
+
+      await insertCashSale(
+        invoiceId: 'inv-kept',
+        shiftId: shiftId,
+        paymentId: 'pay-kept',
+        tendered: 300.0,
+        currency: 'NIO',
+      );
+      await insertCashSale(
+        invoiceId: 'inv-voided',
+        shiftId: shiftId,
+        paymentId: 'pay-voided',
+        tendered: 500.0,
+        currency: 'NIO',
+        canceled: true,
+      );
+
+      await viewModel.refreshSalesCash();
+
+      // Only the non-canceled invoice's cash counts.
+      expect(viewModel.effectiveExpectedNio, 1300.0);
+    });
+
+    test('closing the shift persists recomputed expected and differences', () async {
+      await viewModel.init();
+      await viewModel.openShift(initialFloatNio: 1000.0, initialFloatUsd: 50.0);
+      final shiftId = viewModel.activeShift!.id;
+
+      await insertCashSale(
+        invoiceId: 'inv-close',
+        shiftId: shiftId,
+        paymentId: 'pay-close',
+        tendered: 200.0,
+        currency: 'NIO',
+      );
+
+      // No refreshSalesCash() here on purpose: the close must re-query the
+      // freshest cash sales itself.
+      final closeSuccess = await viewModel.closeShiftWithBlindCount(
+        countedNio: 1210.0,
+        countedUsd: 48.0,
+      );
+
+      expect(closeSuccess, isTrue);
+      final closed = viewModel.lastClosedShift!;
+      // Expected = opening (1000) + net cash sales (200) = 1200.
+      expect(closed.expectedNio, 1200.0);
+      expect(closed.expectedUsd, 50.0);
+      expect(closed.differenceNio, 10.0);
+      expect(closed.differenceUsd, -2.0);
     });
   });
 }
