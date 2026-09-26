@@ -181,6 +181,7 @@ void main() {
         averageCost: 60.0,
         sku: 'BUR-001',
         sellPrice: 180.0,
+        taxRate: 0.15,
         isActive: true,
       );
 
@@ -192,6 +193,7 @@ void main() {
         averageCost: 20.0,
         sku: 'TAC-001',
         sellPrice: 60.0,
+        taxRate: 0.15,
         isActive: true,
       );
 
@@ -203,6 +205,7 @@ void main() {
         averageCost: 30.0,
         sku: 'BEER-001',
         sellPrice: 60.0,
+        taxRate: 0.15,
         isActive: true,
       );
 
@@ -214,6 +217,7 @@ void main() {
         averageCost: 25.0,
         sku: 'SMOOTH-001',
         sellPrice: 80.0,
+        taxRate: 0.15,
         isActive: true,
       );
 

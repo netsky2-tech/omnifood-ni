@@ -69,6 +69,7 @@ void main() {
     stock: 50.0,
     sku: 'HMB-01',
     category: 'Comida',
+    taxRate: 0.15,
   );
 
   setUp(() {
