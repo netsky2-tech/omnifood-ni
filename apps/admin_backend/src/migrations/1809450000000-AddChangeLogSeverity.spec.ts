@@ -30,9 +30,7 @@ describe('AddChangeLogSeverity1809450000000', () => {
     expect(sql).toContain(
       'CREATE INDEX IF NOT EXISTS idx_change_log_tenant_severity_created',
     );
-    expect(sql).toContain(
-      'ON change_log (tenant_id, severity, created_at)',
-    );
+    expect(sql).toContain('ON change_log (tenant_id, severity, created_at)');
   });
 
   it('is idempotent when re-applied', async () => {
@@ -51,7 +49,9 @@ describe('AddChangeLogSeverity1809450000000', () => {
     await migration.down(queryRunner);
 
     const sql = queries.join('\n');
-    expect(sql).toContain('DROP INDEX IF EXISTS idx_change_log_tenant_severity_created');
+    expect(sql).toContain(
+      'DROP INDEX IF EXISTS idx_change_log_tenant_severity_created',
+    );
     expect(sql).toContain('DROP COLUMN IF EXISTS severity');
     // The audit history itself is never touched (DGI: audit entries are
     // never deleted).
