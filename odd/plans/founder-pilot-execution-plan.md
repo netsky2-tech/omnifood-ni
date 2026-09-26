@@ -13,6 +13,29 @@ Every unit below maps to acceptance criteria (`AC-n`) in its issue body. An item
 
 ---
 
+## Delivery log — 2026-09-26
+
+Executed and observed, not asserted. Every identity below is a merge commit or an open PR.
+
+| Work | Evidence | State |
+|---|---|---|
+| D-21 fiscal authorization redesign (#554) | PR #588 merged, issue closed | done |
+| Fiscal facts reach the cloud (#551) | PR #591 merged, issue closed | done |
+| Session scoping (#552) | PR #593 merged, issue closed | done |
+| D-3 IVA regime (B2e) | PR #596 merged | done, see the fixture lesson in the B2e row |
+| Fixtures that assumed the old IVA default | PR #600 merged (11 `taxRate: 0.15`, no assertion touched) | done |
+| Blind-count cash model (#529) | PR #598 merged, issue closed: `expected = openingFloat + net cash of non-canceled invoices in shift + manual movements`; voids drop out through `is_canceled = 0` | done |
+| Authority hydration (B3a / #519) | #603 backend closure · #604 adapter+pull · #605 verdict+guard · #606 fence (closes #519) | open, awaiting CI + merge in that order |
+
+**Filed while working, deliberately kept out of those PRs:**
+- **#601** — `NegativeStockRegularizationService` has zero callers (sale and purchase hooks unwired). Invisible until now because #519 meant no sale ever produced a movement; it becomes observable the moment B3a ships.
+- ~~**#602** — a fresh install creates the `authority_%` tables **without** their immutability triggers~~ **retracted the same day and closed as not-a-gap.** My citation pointed at the wrong lines: `migrations.dart:108-122` shows the registered `onCreate` calling `_createAuthorityImmutabilityTriggers`, and a fresh DB built the way `main.dart` builds it reports all four triggers when read back from `sqlite_master`. The `grep → 0` on the generated DDL was a true observation that proved nothing — triggers never come from entity DDL. Kept as a note, not an issue: those four triggers have no test asserting them today. **Lesson for this plan's evidence rule: a `grep` on one file is not a runtime fact; build the state and read it back.**
+- **#524** stays the fence for `previousStock`/`newStock` persisting as 0 on the frozen path (B3b).
+
+**Deferred by the owner, not by neglect:** Batch 6 operator manuals. **#534 (B0.2)** still needs the physical-device measurements and now decides only B3b/B3c, not B3a.
+
+---
+
 ## Owner directives — 2026-09-24 (binding; they re-shape this plan)
 
 Eight decisions issued in reply to the #535 questions. **These are the accountant's answers, relayed by the owner** — not owner-only engineering posture, which is what an earlier draft of this section claimed. That distinction matters for what stays open: they close every question of *interpretation*, so no batch is blocked on a legal reading anymore. Three questions of *fact* remain, and no amount of code reading answers them — the range DGI actually authorized for SOHO, the authorization letter's number and date, and the filing procedure for a dead terminal. D-8 names the first of those as a blocker on purpose.
@@ -205,7 +228,7 @@ What that resolves at once: the D-10 single-operator case (no supervisor require
 | B2c | **Same-day cancellation guard:** later-day reversal must route to a credit note, never an anulación; unblock the credit-note path the guard rejects | #539 S2 · #525 V6 · #522 | Q3, Q4c |
 | B2d | Contingency stop in place **before opening**: 1.8-compliant preprinted stop, different series, numbering **reported to the Administración de Rentas**; back-entry cross-reference | #539 S3 · #531 G5.4 | Q5 |
 | B2b | Incident procedure adopted by the client + operator-performable backup | #526 B4,B3 · #531 G5.1 | Q3 |
-| B2e | **New, from D-3.** Regime is the single source of IVA treatment: no `0.15` survives a regime check in storage, sync fallback, or reporting. The Reporte X/Z export must not print an IVA line for a Cuota Fija tenant | D-3 · #540 · #522 | B0.3 (Q3 settles the regime) |
+| B2e | **New, from D-3.** Regime is the single source of IVA treatment: no `0.15` survives a regime check in storage, sync fallback, or reporting. The Reporte X/Z export must not print an IVA line for a Cuota Fija tenant | D-3 · #540 · #522 | B0.3 (Q3 settles the regime) **DONE 2026-09-26, PR #596 merged.** The fail-closed default (missing regime → `0.0`) then broke 5 POS integration suites that relied on the old `0.15` default; fixed separately in PR #600 by making 11 fixtures state `taxRate: 0.15` explicitly. **Lesson: a fail-closed default is a behaviour change for every test that never pinned the behaviour it replaces.** |
 
 **Exit checks**
 - [ ] Boot twice: prefix/range/counter unchanged and monotonic (#526 AC-6)
@@ -227,7 +250,7 @@ What that resolves at once: the D-10 single-operator case (no supervisor require
 
 | ID | Unit | Issue | Depends |
 |---|---|---|---|
-| B3a | Hydrate authority projections at login/boot/prime; consume the `recipeVersions` delta the backend already sends | #519 (hydration) | B0.2 |
+| B3a | Hydrate authority projections at login/boot/prime; consume the `recipeVersions` delta the backend already sends | #519 (hydration) | B0.2 **DONE 2026-09-26, stacked PRs #603→#604→#605→#606.** Delivered on the inbound pull, which is the same trigger the plan asked for: `SyncService.start()` pulls at boot (`sync_service.dart:212`), every 5 min (`:221`), and after each sale. B0.2/#534 never ran, and it did not gate this unit — hydration is a measurement-independent code fact. It **does** still gate B3b/B3c. |
 | B3b | Movements carry real stock levels; persist path keeps the determinism contract | #524 · #519 (persistence) | B3a |
 | B3c | Backend ledger authority for the `APPLIED_INVENTORY_PENDING` class + idempotent compensation | #519 (authority) | B3b |
 | B3d | Resale mapping create path (the last mile) | #518 M1…M4 | B3c |
