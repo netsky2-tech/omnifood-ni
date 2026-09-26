@@ -626,6 +626,12 @@ export class InboundSyncService {
     const componentInsumoIds = [
       ...new Set(components.map((component) => component.insumo_id)),
     ];
+    // Issue #519 U1: these fetched rows are not only the eligibility gate —
+    // they are the authority facts the POS hydration needs for every
+    // component. The incremental `insumos` delta cannot guarantee that a
+    // referenced insumo is in the same page, so each version carries the
+    // closure of its own components' insumo facts.
+    const componentInsumoFacts = new Map<string, Insumo>();
     if (componentInsumoIds.length) {
       const componentInsumos = await insumoRepository
         .createQueryBuilder('componentInsumo')
@@ -644,32 +650,48 @@ export class InboundSyncService {
           'Recipe version component insumo is not eligible for inbound sync',
         );
       }
+      for (const insumo of componentInsumos) {
+        componentInsumoFacts.set(insumo.id, insumo);
+        // The POS hydrator rejects an empty `uom`, so an authority row can
+        // never be emitted with one: fail closed naming the insumo instead
+        // of letting the terminal guess between purchase and consumption.
+        if (!insumo.consumptionUom || !insumo.consumptionUom.trim()) {
+          throw new BadRequestException(
+            `Recipe version component insumo ${insumo.id} has no consumption UOM and is not eligible for inbound sync`,
+          );
+        }
+      }
     }
 
-    return items.map((rv) => ({
-      id: rv.id,
-      // Components link to this immutable identity, never to a mutable Recipe row.
-      recipeVersionId: rv.id,
-      tenantId: rv.tenant_id,
-      productId: rv.product_id,
-      recipeDocumentId: rv.pos_document_id ?? null,
-      productName: rv.product_name ?? null,
-      versionNumber: rv.version_number,
-      isActive: rv.is_active,
-      publicationState: RecipePublicationState.PUBLISHED,
-      effectiveAt: rv.fecha_inicio_vigencia,
-      effectiveUntil: rv.fecha_fin_vigencia ?? null,
-      yieldQuantity: Number(rv.yield_quantity),
-      technicalShrinkPct: Number(rv.technical_shrink_pct),
-      versionNote: rv.version_note ?? null,
-      publishedAt: rv.published_at ?? null,
-      posCreatedAt: rv.pos_created_at ?? null,
-      origin: rv.origin ?? RecipeOrigin.MANUAL,
-      suggestionState: rv.suggestion_state ?? RecipeSuggestionState.CONFIRMED,
-      createdAt: rv.created_at,
-      components: (componentsByVersionId.get(rv.id) ?? [])
-        .sort((left, right) => left.id.localeCompare(right.id))
-        .map((detail, componentOrdinal) => ({
+    return items.map((rv) => {
+      const versionComponents = (componentsByVersionId.get(rv.id) ?? []).sort(
+        (left, right) => left.id.localeCompare(right.id),
+      );
+      const versionInsumoIds = [
+        ...new Set(versionComponents.map((detail) => detail.insumo_id)),
+      ].sort((left, right) => left.localeCompare(right));
+      return {
+        id: rv.id,
+        // Components link to this immutable identity, never to a mutable Recipe row.
+        recipeVersionId: rv.id,
+        tenantId: rv.tenant_id,
+        productId: rv.product_id,
+        recipeDocumentId: rv.pos_document_id ?? null,
+        productName: rv.product_name ?? null,
+        versionNumber: rv.version_number,
+        isActive: rv.is_active,
+        publicationState: RecipePublicationState.PUBLISHED,
+        effectiveAt: rv.fecha_inicio_vigencia,
+        effectiveUntil: rv.fecha_fin_vigencia ?? null,
+        yieldQuantity: Number(rv.yield_quantity),
+        technicalShrinkPct: Number(rv.technical_shrink_pct),
+        versionNote: rv.version_note ?? null,
+        publishedAt: rv.published_at ?? null,
+        posCreatedAt: rv.pos_created_at ?? null,
+        origin: rv.origin ?? RecipeOrigin.MANUAL,
+        suggestionState: rv.suggestion_state ?? RecipeSuggestionState.CONFIRMED,
+        createdAt: rv.created_at,
+        components: versionComponents.map((detail, componentOrdinal) => ({
           id: detail.id,
           tenantId: detail.tenant_id,
           recipeVersionId: detail.recipe_version_id,
@@ -683,7 +705,26 @@ export class InboundSyncService {
           componentUom: detail.component_uom ?? null,
           referenceVersionId: detail.reference_version_id ?? null,
         })),
-    }));
+        insumos: versionInsumoIds.map((insumoId) => {
+          const insumo = componentInsumoFacts.get(insumoId);
+          // Unreachable: the eligibility gate above already threw for any
+          // insumo missing from the tenant set.
+          if (!insumo) {
+            throw new InternalServerErrorException(
+              `Recipe version component insumo ${insumoId} is missing from the fetched authority set`,
+            );
+          }
+          // Identity facts only: stock, averageCost and par levels stay in
+          // the incremental `insumos` delta.
+          return {
+            id: insumo.id,
+            tenantId: insumo.tenant_id,
+            name: insumo.name,
+            uom: insumo.consumptionUom,
+          };
+        }),
+      };
+    });
   }
 
   /**

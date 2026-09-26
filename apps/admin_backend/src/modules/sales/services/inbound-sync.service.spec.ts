@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InboundSyncService } from './inbound-sync.service';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
@@ -1018,9 +1018,11 @@ describe('InboundSyncService', () => {
     it('fails closed when the acknowledgement service is not wired', async () => {
       // A composition without OHAC must not answer as though it had recorded
       // anything, so the terminal gets a conflict rather than a silent success.
-      const bareService = new (
-        service.constructor as new (...args: unknown[]) => typeof service
-      )(...(Array.from({ length: 9 }, () => ({})) as unknown[]));
+      const bareService = new (service.constructor as new (
+        ...args: unknown[]
+      ) => typeof service)(
+        ...(Array.from({ length: 9 }, () => ({})) as unknown[]),
+      );
 
       await expect(
         bareService.acknowledgeStaffPolicyEpoch(
@@ -1208,6 +1210,161 @@ describe('InboundSyncService', () => {
       });
 
       expect(response.deltas.alerts).toEqual([]);
+    });
+  });
+
+  describe('recipe version insumo authority closure (issue #519 U1)', () => {
+    function buildRecipeVersionRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'rv-1',
+        product_id: 'prod-1',
+        tenant_id: 'tenant-abc',
+        pos_document_id: null,
+        product_name: 'Producto 1',
+        version_number: 1,
+        is_active: true,
+        fecha_inicio_vigencia: new Date('2026-08-01T00:00:00Z'),
+        fecha_fin_vigencia: null,
+        yield_quantity: '1',
+        technical_shrink_pct: '0',
+        version_note: null,
+        published_at: new Date('2026-08-01T00:00:00Z'),
+        pos_created_at: null,
+        origin: 'MANUAL',
+        suggestion_state: 'CONFIRMED',
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        ...overrides,
+      } as unknown as RecipeVersion;
+    }
+
+    function buildComponentRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'detail-1',
+        tenant_id: 'tenant-abc',
+        recipe_version_id: 'rv-1',
+        insumo_id: 'ins-1',
+        quantity: '2',
+        gross_quantity: '2',
+        technical_shrink_pct: '0',
+        ingredient_name: null,
+        ingredient_type: 'INSUMO',
+        component_uom: null,
+        reference_version_id: null,
+        ...overrides,
+      } as unknown as RecipeDetail;
+    }
+
+    function buildComponentInsumoRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'ins-1',
+        tenant_id: 'tenant-abc',
+        name: 'Leche',
+        purchaseUom: 'L',
+        consumptionUom: 'ml',
+        ...overrides,
+      } as unknown as Insumo;
+    }
+
+    async function pullRecipeVersions() {
+      return service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'recipeversions' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+    }
+
+    it('de-duplicates the per-version closure and states the consumption UOM, not the purchase UOM', async () => {
+      recipeVersionQb.getMany.mockResolvedValue([buildRecipeVersionRow()]);
+      recipeDetailQb.getMany.mockResolvedValue([
+        buildComponentRow({ id: 'detail-a', insumo_id: 'ins-1' }),
+        buildComponentRow({ id: 'detail-b', insumo_id: 'ins-1' }),
+      ]);
+      insumoQb.getMany.mockResolvedValue([buildComponentInsumoRow()]);
+
+      const response = await pullRecipeVersions();
+
+      expect(response.deltas.recipeVersions).toHaveLength(1);
+      // purchaseUom is 'L' and consumptionUom is 'ml': the closure must
+      // state the consumption UOM the backend authorities, so the POS
+      // stops guessing between the two.
+      expect(response.deltas.recipeVersions[0].insumos).toEqual([
+        {
+          id: 'ins-1',
+          tenantId: 'tenant-abc',
+          name: 'Leche',
+          uom: 'ml',
+        },
+      ]);
+    });
+
+    it('attaches only each version own closure, with [] for a componentless version', async () => {
+      recipeVersionQb.getMany.mockResolvedValue([
+        buildRecipeVersionRow({ id: 'rv-1', product_id: 'prod-1' }),
+        buildRecipeVersionRow({ id: 'rv-2', product_id: 'prod-2' }),
+        buildRecipeVersionRow({ id: 'rv-3', product_id: 'prod-3' }),
+      ]);
+      recipeDetailQb.getMany.mockResolvedValue([
+        buildComponentRow({
+          id: 'detail-1',
+          recipe_version_id: 'rv-1',
+          insumo_id: 'ins-1',
+        }),
+        buildComponentRow({
+          id: 'detail-2',
+          recipe_version_id: 'rv-2',
+          insumo_id: 'ins-2',
+        }),
+      ]);
+      insumoQb.getMany.mockResolvedValue([
+        buildComponentInsumoRow({ id: 'ins-1', consumptionUom: 'ml' }),
+        buildComponentInsumoRow({
+          id: 'ins-2',
+          name: 'Café',
+          purchaseUom: 'kg',
+          consumptionUom: 'g',
+        }),
+      ]);
+
+      const response = await pullRecipeVersions();
+
+      const [rv1, rv2, rv3] = response.deltas.recipeVersions;
+      // Per-version, not a global sibling delta key: each version carries
+      // only the insumos its own components reference.
+      expect(rv1.insumos).toEqual([
+        { id: 'ins-1', tenantId: 'tenant-abc', name: 'Leche', uom: 'ml' },
+      ]);
+      expect(rv2.insumos).toEqual([
+        { id: 'ins-2', tenantId: 'tenant-abc', name: 'Café', uom: 'g' },
+      ]);
+      // A version with no components has an empty closure, never a missing
+      // field.
+      expect(rv3.insumos).toEqual([]);
+    });
+
+    it('keeps the fail-closed eligibility error when a component references an insumo outside the tenant set', async () => {
+      recipeVersionQb.getMany.mockResolvedValue([buildRecipeVersionRow()]);
+      recipeDetailQb.getMany.mockResolvedValue([
+        buildComponentRow({ id: 'detail-foreign', insumo_id: 'ins-foreign' }),
+      ]);
+      insumoQb.getMany.mockResolvedValue([buildComponentInsumoRow()]);
+
+      await expect(pullRecipeVersions()).rejects.toThrow(
+        'Recipe version component insumo is not eligible for inbound sync',
+      );
+    });
+
+    it('fails closed naming the insumo id when the consumption UOM is empty', async () => {
+      recipeVersionQb.getMany.mockResolvedValue([buildRecipeVersionRow()]);
+      recipeDetailQb.getMany.mockResolvedValue([
+        buildComponentRow({ id: 'detail-empty', insumo_id: 'ins-empty-uom' }),
+      ]);
+      insumoQb.getMany.mockResolvedValue([
+        buildComponentInsumoRow({ id: 'ins-empty-uom', consumptionUom: '' }),
+      ]);
+
+      await expect(pullRecipeVersions()).rejects.toThrow(BadRequestException);
+      await expect(pullRecipeVersions()).rejects.toThrow('ins-empty-uom');
     });
   });
 });
