@@ -55,6 +55,16 @@ const salesPayload = (overrides: Record<string, unknown> = {}) => ({
   averageTicketNetNio: 283.74,
   totalTaxNio: 6341.25,
   totalDiscountsNio: 1564.95,
+  // Batch 7 (PRD §21): additive tips summary — the strip itself never renders
+  // tips (PRD §21.3 separation of flows); the payload is carried for the
+  // tips band consumer and must not perturb the regime matrix.
+  tipsSummary: {
+    totalTipsNio: 130,
+    tippedTicketCount: 2,
+    averageTipNio: 65,
+    tipRate: 8.13,
+    tipCoverage: { recordedInvoicesCount: 3, totalInvoicesCount: 4 },
+  },
   reportingPeriod: {
     timezone: "America/Managua",
     localStartDate: CURRENT_RANGE.start,
@@ -275,6 +285,33 @@ describe("KpiStrip — values and formatting", () => {
       expect(screen.getByText("61.4%")).toBeInTheDocument();
     });
     expect(screen.getByText(/pp/)).toBeInTheDocument();
+  });
+});
+
+describe("KpiStrip — Batch 7 additive tips payload (PRD §21)", () => {
+  it("keeps the regime matrix intact when the report carries a tips summary", async () => {
+    mockBothPeriods({}, {});
+
+    renderStrip();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("kpi-tile")).toHaveLength(4);
+    });
+    expect(screen.getByText("Ventas Netas")).toBeInTheDocument();
+    // Tips are a separate flow (PRD §21.3): no tips tile in the strip.
+    expect(screen.queryByText("Total Propinas")).not.toBeInTheDocument();
+  });
+
+  it("normalizes the tips summary through normalizeDashboardReport without breaking legacy fields", () => {
+    const report = normalizeDashboardReport(salesPayload({}));
+    expect(report.netSalesNio).toBe(48520.5);
+    expect(report.tipsSummary).toEqual({
+      totalTipsNio: 130,
+      tippedTicketCount: 2,
+      averageTipNio: 65,
+      tipRate: 8.13,
+      tipCoverage: { recordedInvoicesCount: 3, totalInvoicesCount: 4 },
+    });
   });
 });
 

@@ -54,6 +54,19 @@ export interface SalesReportingInvoiceRow {
    * bucket source for legacy rows without `localIssueDate`.
    */
   created_at?: Date | string | null;
+  /**
+   * Persisted voluntary tip amount in NIO (`invoices.tip_amount_nio`,
+   * nullable — Batch 7 Slice 1, PRD §21, AD-10). NULL means "unknown / legacy
+   * pre-remediation": historical rows are never backfilled to zero, so a
+   * genuine zero-tip sale is 0, never NULL.
+   */
+  tipAmountNio?: number | string | null;
+  /**
+   * Persisted sale-time tip-eligible base in NIO
+   * (`invoices.tip_eligible_base_nio`, nullable — PRD §21.1: the base is
+   * snapshotted at sale time and never recomputed from current rules).
+   */
+  tipEligibleBaseNio?: number | string | null;
 }
 
 export interface SalesReportingTotals {
@@ -63,6 +76,32 @@ export interface SalesReportingTotals {
   averageTicketNetNio: number | null;
   totalTaxNio: number;
   totalDiscountsNio: number;
+}
+
+/** PRD §21.1 / spec §18.7 tip-coverage metadata for one reporting period. */
+export interface SalesReportingTipCoverage {
+  /** Completed invoices with a recorded (non-NULL) V2 tip snapshot. */
+  recordedInvoicesCount: number;
+  /** All completed invoices in the period (legacy NULL rows included). */
+  totalInvoicesCount: number;
+  /** recordedInvoicesCount / totalInvoicesCount; null when the period has no completed invoices. */
+  coverageRatio: number | null;
+}
+
+/** Aggregated voluntary-tip metrics over completed invoice rows (PRD §21.2). */
+export interface SalesReportingTipsSummary {
+  /** Σ tip amounts over tip-recorded rows; null when no tip was recorded (never a fabricated 0). */
+  totalTipsNio: number | null;
+  /** Completed invoices with tipAmountNio > 0 (PRD §21.2 tipped tickets). */
+  tippedTicketCount: number;
+  /** Σ sale-time tip-eligible bases over tip-recorded rows; null when none recorded. */
+  tipEligibleBaseNio: number | null;
+  /** totalTipsNio / tippedTicketCount; null when no ticket tipped (PRD §21.2: "—"). */
+  averageTipNio: number | null;
+  /** totalTipsNio / tipEligibleBaseNio × 100; null when the base is 0 (PRD §21.2). */
+  tipRate: number | null;
+  /** Coverage metadata distinguishing legacy NULL rows from genuine zero-tip sales (AD-10). */
+  tipCoverage: SalesReportingTipCoverage;
 }
 
 const round2 = (value: number): number =>
@@ -207,6 +246,86 @@ export function computeSalesReportingTotals(
     averageTicketNetNio,
     totalTaxNio,
     totalDiscountsNio,
+  };
+}
+
+/**
+ * A completed row with a recorded (non-NULL) V2 tip snapshot. Legacy rows
+ * stay out of every tip total: NULL is "unknown", never zero (AD-10).
+ */
+function isTipRecordedRow(row: SalesReportingInvoiceRow): boolean {
+  return row.tipAmountNio !== null && row.tipAmountNio !== undefined;
+}
+
+/**
+ * Aggregates the §21.2 tip KPI set over completed (non-void) invoice rows
+ * (Dashboard V2 Batch 7 Slice 3).
+ *
+ * Semantics:
+ * - Only completed rows (isCompletedSaleRow) contribute; canceled tips are
+ *   never reported.
+ * - A row participates in tip totals when its tip snapshot is recorded
+ *   (tipAmountNio non-NULL). Legacy NULL rows are excluded from the sums but
+ *   remain in tipCoverage.totalInvoicesCount, so PARTIAL coverage is visible
+ *   instead of legacy data silently reading as "no tips" (PRD §21.1,
+ *   spec §18.7, AD-10).
+ * - tipEligibleBaseNio sums the sale-time eligible base of tip-recorded rows
+ *   — including rows where the customer declined (tip 0, base recorded) —
+ *   because §21.2 fixes the denominator to the base the POS TipEngine used
+ *   when the sale closed, not to the tickets that accepted.
+ * - PRD §21.3: tips NEVER enter Net Sales; computeSalesReportingTotals does
+ *   not read tip fields at all.
+ */
+export function computeSalesReportingTipsSummary(
+  rows: readonly SalesReportingInvoiceRow[],
+): SalesReportingTipsSummary {
+  let totalTipsNio = 0;
+  let tipEligibleBaseNio = 0;
+  let recordedInvoicesCount = 0;
+  let tippedTicketCount = 0;
+  let totalInvoicesCount = 0;
+
+  for (const row of rows) {
+    if (!isCompletedSaleRow(row)) {
+      continue;
+    }
+    totalInvoicesCount += 1;
+    if (!isTipRecordedRow(row)) {
+      continue;
+    }
+    const tip = Number(row.tipAmountNio ?? 0);
+    totalTipsNio = round2(totalTipsNio + tip);
+    tipEligibleBaseNio = round2(
+      tipEligibleBaseNio + Number(row.tipEligibleBaseNio ?? 0),
+    );
+    recordedInvoicesCount += 1;
+    if (tip > 0) {
+      tippedTicketCount += 1;
+    }
+  }
+
+  const hasRecordedTips = recordedInvoicesCount > 0;
+  return {
+    totalTipsNio: hasRecordedTips ? totalTipsNio : null,
+    tippedTicketCount,
+    tipEligibleBaseNio: hasRecordedTips ? tipEligibleBaseNio : null,
+    averageTipNio:
+      hasRecordedTips && tippedTicketCount > 0
+        ? round2(totalTipsNio / tippedTicketCount)
+        : null,
+    tipRate:
+      hasRecordedTips && tipEligibleBaseNio > 0
+        ? round2((totalTipsNio / tipEligibleBaseNio) * 100)
+        : null,
+    tipCoverage: {
+      recordedInvoicesCount,
+      totalInvoicesCount,
+      coverageRatio:
+        totalInvoicesCount > 0
+          ? Math.round((recordedInvoicesCount / totalInvoicesCount) * 100) /
+            100
+          : null,
+    },
   };
 }
 

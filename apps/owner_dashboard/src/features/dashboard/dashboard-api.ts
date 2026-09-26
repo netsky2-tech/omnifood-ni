@@ -28,6 +28,29 @@ export interface ReportingPeriodWire {
   localEndDate: string;
 }
 
+/** PRD §21.1 / spec §18.7 tip-coverage metadata (Batch 7). */
+export interface TipCoverageWire {
+  recordedInvoicesCount: number;
+  totalInvoicesCount: number;
+}
+
+/**
+ * Voluntary-tip summary (PRD §21.2, Batch 7). Tips are NEVER part of any
+ * sales total (PRD §21.3); tipCoverage distinguishes legacy NULL rows from
+ * genuine zero-tip sales (AD-10) so "no tip data" is never read as "tips
+ * disabled" (PRD §21.4).
+ */
+export interface TipsSummaryWire {
+  /** null when no tip was recorded in the period (never a fabricated 0). */
+  totalTipsNio: number | null;
+  tippedTicketCount: number;
+  /** null when no ticket tipped. */
+  averageTipNio: number | null;
+  /** null when the sale-time tip-eligible base is 0. */
+  tipRate: number | null;
+  tipCoverage: TipCoverageWire;
+}
+
 export interface DashboardV2Report {
   // Legacy — retained until all consumers migrate (arch spec §7.3).
   grossSales: number;
@@ -44,6 +67,8 @@ export interface DashboardV2Report {
   averageTicketNetNio: number | null;
   totalTaxNio: number;
   totalDiscountsNio: number;
+  /** Batch 7 (PRD §21): null when the backend did not send a usable summary. */
+  tipsSummary: TipsSummaryWire | null;
   reportingPeriod: ReportingPeriodWire | null;
   startDate?: string;
   endDate?: string;
@@ -71,6 +96,37 @@ function normalizeReportingPeriod(raw: unknown): ReportingPeriodWire | null {
   };
 }
 
+/**
+ * Tips-summary wire normalization (Batch 7, PRD §21): counts must be finite
+ * (fail closed to null — the widget is hidden, never fabricated) and nullable
+ * money/rate fields keep null, mirroring toNullableNumber discipline.
+ */
+export function normalizeTipsSummary(raw: unknown): TipsSummaryWire | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const coverage =
+    typeof r.tipCoverage === "object" && r.tipCoverage !== null
+      ? (r.tipCoverage as Record<string, unknown>)
+      : null;
+  if (!coverage) return null;
+  const recorded = toFiniteNumber(coverage.recordedInvoicesCount, Number.NaN);
+  const total = toFiniteNumber(coverage.totalInvoicesCount, Number.NaN);
+  const tipped = toFiniteNumber(r.tippedTicketCount, Number.NaN);
+  if (!Number.isFinite(recorded) || !Number.isFinite(total) || !Number.isFinite(tipped)) {
+    return null;
+  }
+  return {
+    totalTipsNio: toNullableNumber(r.totalTipsNio),
+    tippedTicketCount: Math.trunc(tipped),
+    averageTipNio: toNullableNumber(r.averageTipNio),
+    tipRate: toNullableNumber(r.tipRate),
+    tipCoverage: {
+      recordedInvoicesCount: Math.trunc(recorded),
+      totalInvoicesCount: Math.trunc(total),
+    },
+  };
+}
+
 export function normalizeDashboardReport(raw: unknown): DashboardV2Report {
   const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
   return {
@@ -86,6 +142,7 @@ export function normalizeDashboardReport(raw: unknown): DashboardV2Report {
     averageTicketNetNio: toNullableNumber(r.averageTicketNetNio),
     totalTaxNio: toFiniteNumber(r.totalTaxNio),
     totalDiscountsNio: toFiniteNumber(r.totalDiscountsNio),
+    tipsSummary: normalizeTipsSummary(r.tipsSummary),
     reportingPeriod: normalizeReportingPeriod(r.reportingPeriod),
     startDate: typeof r.startDate === "string" ? r.startDate : undefined,
     endDate: typeof r.endDate === "string" ? r.endDate : undefined,

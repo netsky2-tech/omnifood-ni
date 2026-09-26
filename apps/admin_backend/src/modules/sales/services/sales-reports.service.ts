@@ -19,6 +19,7 @@ import {
 import {
   allocateInvoiceLineNetSales,
   computeDailySalesSeries,
+  computeSalesReportingTipsSummary,
   computeSalesReportingTotals,
 } from '../../../core/reporting/sales-reporting-semantics';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
@@ -196,6 +197,13 @@ export class SalesReportsService {
     // persisted), expressed through the shared semantics helper.
     const salesTotals = computeSalesReportingTotals(invoices);
 
+    // Batch 7 Slice 3 (PRD §21): voluntary-tip aggregation over the SAME
+    // completed-row set. Tips stay strictly separate from Net Sales and every
+    // other sales total (PRD §21.3); tipCoverage lets clients distinguish
+    // legacy NULL rows from genuine zero-tip sales (AD-10) instead of
+    // interpreting missing data as "tips disabled" (PRD §21.4).
+    const tipsSummary = computeSalesReportingTipsSummary(invoices);
+
     const paymentMethodsBreakdown: PaymentMethodsBreakdownDto = {
       cashNio: round2(cashNio),
       cashUsd: round2(cashUsd),
@@ -221,6 +229,19 @@ export class SalesReportsService {
       averageTicketNetNio: salesTotals.averageTicketNetNio,
       totalTaxNio: salesTotals.totalTaxNio,
       totalDiscountsNio: salesTotals.totalDiscountsNio,
+
+      // Batch 7 (PRD §21): additive tip summary — never folded into any
+      // sales total above.
+      tipsSummary: {
+        totalTipsNio: tipsSummary.totalTipsNio,
+        tippedTicketCount: tipsSummary.tippedTicketCount,
+        averageTipNio: tipsSummary.averageTipNio,
+        tipRate: tipsSummary.tipRate,
+        tipCoverage: {
+          recordedInvoicesCount: tipsSummary.tipCoverage.recordedInvoicesCount,
+          totalInvoicesCount: tipsSummary.tipCoverage.totalInvoicesCount,
+        },
+      },
 
       paymentMethodsBreakdown,
       reportingPeriod: {

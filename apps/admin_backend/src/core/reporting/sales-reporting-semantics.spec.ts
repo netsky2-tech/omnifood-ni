@@ -1,6 +1,7 @@
 import {
   allocateInvoiceLineNetSales,
   computeDailySalesSeries,
+  computeSalesReportingTipsSummary,
   computeSalesReportingTotals,
   isCompletedSaleRow,
   resolveInvoiceLocalDayBucket,
@@ -176,6 +177,130 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
       expect(totals.netSalesNio).toBe(637.2);
       expect(totals.totalDiscountsNio).toBe(62.8);
       expect(totals.preDiscountSalesNio).toBe(700);
+    });
+  });
+
+  describe('computeSalesReportingTipsSummary (PRD §21, Batch 7)', () => {
+    it('aggregates tip metrics over a mixed recorded/zero/legacy/canceled fixture', () => {
+      const rows: SalesReportingInvoiceRow[] = [
+        // Tipped sale: tip 50 on a 500 base (numeric columns arrive as
+        // strings over the wire — same coercion as the other aggregates).
+        {
+          isCanceled: false,
+          subtotal: 500,
+          tipAmountNio: '50.00',
+          tipEligibleBaseNio: '500.00',
+        },
+        // Tipped sale on a USD-style smaller base.
+        {
+          isCanceled: false,
+          subtotal: 800,
+          tipAmountNio: 80,
+          tipEligibleBaseNio: 800,
+        },
+        // Genuine zero-tip sale: recorded, declined (PRD §21.1 vs AD-10).
+        {
+          isCanceled: false,
+          subtotal: 300,
+          tipAmountNio: 0,
+          tipEligibleBaseNio: 300,
+        },
+        // Legacy pre-remediation row: NULL tip, never backfilled (AD-10).
+        { isCanceled: false, subtotal: 200, tipAmountNio: null },
+        // Canceled sale with a tip: never reported.
+        {
+          isCanceled: true,
+          subtotal: 999,
+          tipAmountNio: 999,
+          tipEligibleBaseNio: 999,
+        },
+      ];
+
+      expect(computeSalesReportingTipsSummary(rows)).toEqual({
+        totalTipsNio: 130,
+        tippedTicketCount: 2,
+        tipEligibleBaseNio: 1600,
+        averageTipNio: 65,
+        tipRate: 8.13,
+        tipCoverage: {
+          recordedInvoicesCount: 3,
+          totalInvoicesCount: 4,
+          coverageRatio: 0.75,
+        },
+      });
+    });
+
+    it('preserves nulls on all-legacy NULL rows instead of reporting zeros (AD-10)', () => {
+      const rows: SalesReportingInvoiceRow[] = [
+        { isCanceled: false, subtotal: 500, tipAmountNio: null },
+        { isCanceled: false, subtotal: 300 },
+      ];
+
+      const summary = computeSalesReportingTipsSummary(rows);
+      expect(summary.totalTipsNio).toBeNull();
+      expect(summary.tipEligibleBaseNio).toBeNull();
+      expect(summary.tipRate).toBeNull();
+      expect(summary.averageTipNio).toBeNull();
+      expect(summary.tippedTicketCount).toBe(0);
+      expect(summary.tipCoverage).toEqual({
+        recordedInvoicesCount: 0,
+        totalInvoicesCount: 2,
+        coverageRatio: 0,
+      });
+    });
+
+    it('keeps recorded zero-tip sales distinct from legacy NULLs (full coverage, zero tips)', () => {
+      const summary = computeSalesReportingTipsSummary([
+        {
+          isCanceled: false,
+          subtotal: 500,
+          tipAmountNio: 0,
+          tipEligibleBaseNio: 500,
+        },
+      ]);
+
+      expect(summary.totalTipsNio).toBe(0);
+      expect(summary.tippedTicketCount).toBe(0);
+      expect(summary.tipEligibleBaseNio).toBe(500);
+      expect(summary.averageTipNio).toBeNull();
+      expect(summary.tipRate).toBe(0);
+      expect(summary.tipCoverage.coverageRatio).toBe(1);
+    });
+
+    it('returns null rates and averages when the period has no completed invoices', () => {
+      const summary = computeSalesReportingTipsSummary([
+        { isCanceled: true, subtotal: 500, tipAmountNio: 50 },
+      ]);
+
+      expect(summary.totalTipsNio).toBeNull();
+      expect(summary.tippedTicketCount).toBe(0);
+      expect(summary.averageTipNio).toBeNull();
+      expect(summary.tipRate).toBeNull();
+      expect(summary.tipCoverage).toEqual({
+        recordedInvoicesCount: 0,
+        totalInvoicesCount: 0,
+        coverageRatio: null,
+      });
+    });
+
+    it('never lets tips leak into Net Sales or any sales total (PRD §21.3)', () => {
+      const rows: SalesReportingInvoiceRow[] = [
+        {
+          isCanceled: false,
+          subtotal: 1000,
+          totalTax: 150,
+          tipAmountNio: 100,
+          tipEligibleBaseNio: 1000,
+        },
+      ];
+
+      const totals = computeSalesReportingTotals(rows);
+      // Net Sales is Σ subtotal only: the tip stays out (PRD §21.3).
+      expect(totals.netSalesNio).toBe(1000);
+      expect(totals.preDiscountSalesNio).toBe(1000);
+      expect(totals.totalTaxNio).toBe(150);
+      // The same rows do produce the tip totals alongside.
+      expect(computeSalesReportingTipsSummary(rows).totalTipsNio).toBe(100);
     });
   });
 

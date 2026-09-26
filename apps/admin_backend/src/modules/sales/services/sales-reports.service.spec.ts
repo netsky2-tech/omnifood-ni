@@ -363,6 +363,106 @@ describe('SalesReportsService', () => {
       });
     });
 
+    it('aggregates the tips summary over the same completed rows without touching sales totals (PRD §21, Batch 7)', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-tip-1',
+          tenant_id: tenantId,
+          subtotal: 500,
+          totalTax: 75,
+          total: 575,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T10:00:00.000Z'),
+          items: [],
+          payments: [],
+          tipAmountNio: 50,
+          tipEligibleBaseNio: 500,
+        },
+        {
+          id: 'inv-tip-2',
+          tenant_id: tenantId,
+          subtotal: 800,
+          totalTax: 120,
+          total: 920,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T12:00:00.000Z'),
+          items: [],
+          payments: [],
+          tipAmountNio: 0,
+          tipEligibleBaseNio: 800,
+        },
+        {
+          id: 'inv-legacy',
+          tenant_id: tenantId,
+          subtotal: 300,
+          totalTax: 45,
+          total: 345,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T13:00:00.000Z'),
+          items: [],
+          payments: [],
+          tipAmountNio: null,
+          tipEligibleBaseNio: null,
+        },
+      ] as Partial<Invoice>[];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getDashboard(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+      });
+
+      // Tips stay strictly separate from Net Sales / gross sales (PRD §21.3).
+      expect(result.netSalesNio).toBe(1600);
+      expect(result.grossSales).toBe(1840);
+      expect(result.tipsSummary).toEqual({
+        totalTipsNio: 50,
+        tippedTicketCount: 1,
+        averageTipNio: 50,
+        tipRate: 3.85,
+        tipCoverage: {
+          recordedInvoicesCount: 2,
+          totalInvoicesCount: 3,
+        },
+      });
+    });
+
+    it('preserves null tip totals on all-legacy NULL rows and reports the coverage gap (AD-10)', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-legacy-1',
+          tenant_id: tenantId,
+          subtotal: 500,
+          totalTax: 75,
+          total: 575,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T10:00:00.000Z'),
+          items: [],
+          payments: [],
+          tipAmountNio: null,
+          tipEligibleBaseNio: null,
+        },
+      ] as Partial<Invoice>[];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getDashboard(tenantId);
+
+      expect(result.tipsSummary).toEqual({
+        totalTipsNio: null,
+        tippedTicketCount: 0,
+        averageTipNio: null,
+        tipRate: null,
+        tipCoverage: {
+          recordedInvoicesCount: 0,
+          totalInvoicesCount: 1,
+        },
+      });
+      // Legacy NULL tips must not distort sales totals either.
+      expect(result.netSalesNio).toBe(500);
+    });
+
     it('returns null local period bounds when no range was supplied', async () => {
       mockInvoiceRepo.find.mockResolvedValue([]);
 

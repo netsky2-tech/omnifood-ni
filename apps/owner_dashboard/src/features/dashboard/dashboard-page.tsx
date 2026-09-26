@@ -2,7 +2,10 @@ import { Suspense, lazy, useState } from "react";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
+import { useCanViewInventoryCost } from "@/features/auth/permissions";
 import { KpiStrip } from "./kpi-strip";
+import { useDashboardKpis } from "./use-dashboard-kpis";
+import { TipsSummaryCard } from "./tips-summary";
 
 // Batch 5b: the performance band (charts + recharts) lives in its own lazy
 // chunk so the KPI strip never waits on chart code (PRD §25.2 bundle
@@ -44,6 +47,15 @@ function todayRange(): DateRangeValue {
 export function DashboardPage() {
   const [range, setRange] = useState<DateRangeValue>(todayRange);
   const { data, isLoading, error } = useSalesDashboard(range.startDate, range.endDate);
+  // Batch 7 (PRD §21): the tips card reads the V2 report through the same
+  // hook/cache the KpiStrip uses — one shared dashboard-v2 query, no extra
+  // fetch. COGS reads keep the AG-06/AC-17 cost gate.
+  const canViewCost = useCanViewInventoryCost();
+  const { snapshot } = useDashboardKpis(
+    { start: range.startDate, end: range.endDate },
+    undefined,
+    { canViewCost },
+  );
 
   if (isLoading && !data) {
     return (
@@ -101,7 +113,12 @@ export function DashboardPage() {
           — the PaymentMixChart in the performance band above is now the single
           payment-composition surface (same paymentMethodsBreakdown, net of
           changeGiven, with original-currency USD slots and percent labels). */}
+      {/* Dashboard V2 Batch 7: "Flujos separados de ventas" bottom band
+          (wireframe §1 row 5) — tips live strictly outside the sales summary
+          (PRD §21.3) and the card is omitted when the tip data path has no
+          coverage (PRD §21.4). */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <TipsSummaryCard summary={snapshot?.tipsSummary ?? null} />
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-card-foreground">
             Resumen de Ventas

@@ -10,7 +10,7 @@
  *
  * This module is pure data: no labels, no fetching, no React.
  */
-import type { DashboardV2Report } from "./dashboard-api";
+import type { DashboardV2Report, TipsSummaryWire } from "./dashboard-api";
 
 /** Percent change vs the previous period; null when there is no comparable base. */
 export function percentDelta(current: number, previous: number): number | null {
@@ -39,6 +39,35 @@ export function marginPercentDelta(current: GrossMargin, previous: GrossMargin):
   return current.percent - previous.percent;
 }
 
+/**
+ * PRD §21.2 Tipped Ticket Participation: tickets with tip > 0 / eligible
+ * completed tickets × 100. Null when there is no completed-ticket base —
+ * never a fabricated 0%.
+ */
+export function tipParticipationPercent(
+  tippedTicketCount: number,
+  totalInvoicesCount: number,
+): number | null {
+  if (!Number.isFinite(tippedTicketCount) || !Number.isFinite(totalInvoicesCount) || totalInvoicesCount <= 0) {
+    return null;
+  }
+  return (tippedTicketCount / totalInvoicesCount) * 100;
+}
+
+/**
+ * PRD §21.4 applicability gate (data-driven): the tips widget renders only
+ * when the tip data path has coverage in the period. A summary with zero
+ * recorded tips is NOT evidence of genuine zero-tip sales — it means the
+ * period's rows are legacy NULL (or empty), and zero placeholders are never
+ * rendered for it. Profile-level (QSR/Retail) suppression stays a page-level
+ * concern; this predicate only encodes what the wire can prove.
+ */
+export function isTipsSummaryApplicable(
+  summary: TipsSummaryWire | null,
+): summary is TipsSummaryWire {
+  return summary !== null && summary.tipCoverage.recordedInvoicesCount > 0;
+}
+
 /** Executive strip snapshot for one period. */
 export interface KpiSnapshot {
   netSalesNio: number;
@@ -47,6 +76,8 @@ export interface KpiSnapshot {
   totalTaxNio: number;
   totalDiscountsNio: number;
   margin: GrossMargin | null;
+  /** Batch 7: current-period tips summary; null when unavailable/inapplicable (PRD §21.4). */
+  tipsSummary: TipsSummaryWire | null;
   deltas: {
     netSales: number | null;
     tickets: number | null;
@@ -117,6 +148,7 @@ export function buildKpiSnapshot(
     totalTaxNio: cur.totalTaxNio,
     totalDiscountsNio: current.totalDiscountsNio,
     margin,
+    tipsSummary: current.tipsSummary,
     deltas: {
       netSales: prev ? percentDelta(cur.netSalesNio, prev.netSalesNio) : null,
       tickets: prev ? percentDelta(cur.completedTicketCount, prev.completedTicketCount) : null,

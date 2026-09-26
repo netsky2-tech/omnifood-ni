@@ -93,6 +93,34 @@ export interface ReportingPeriodMetadataDto {
   localEndDate: string | null;
 }
 
+/**
+ * PRD §21.1 / spec §18.7 tip-coverage metadata: distinguishes historical NULL
+ * legacy rows (never backfilled, AD-10) from genuine zero-tip sales so the
+ * dashboard never interprets missing tip data as "no tips".
+ */
+export interface TipCoverageDto {
+  /** Completed invoices with a recorded (non-NULL) V2 tip snapshot. */
+  recordedInvoicesCount: number;
+  /** All completed invoices in the period (legacy NULL rows included). */
+  totalInvoicesCount: number;
+}
+
+/**
+ * Voluntary-tip KPI summary (PRD §21.2, spec §18.7, Dashboard V2 Batch 7).
+ * Tips are NEVER merged into Net Sales or any other sales total (PRD §21.3).
+ */
+export interface TipsSummaryDto {
+  /** Σ tip amounts; null when no tip was recorded in the period (never a fabricated 0). */
+  totalTipsNio: number | null;
+  /** Completed invoices with tip > 0 (PRD §21.2 tipped tickets). */
+  tippedTicketCount: number;
+  /** totalTipsNio / tippedTicketCount; null when no ticket tipped. */
+  averageTipNio: number | null;
+  /** totalTipsNio / sale-time tip-eligible base × 100; null when the base is 0. */
+  tipRate: number | null;
+  tipCoverage: TipCoverageDto;
+}
+
 export interface SalesDashboardReportDto {
   /**
    * @deprecated Legacy ambiguous field: post-discount AND post-tax. Dashboard
@@ -128,6 +156,13 @@ export interface SalesDashboardReportDto {
   totalTaxNio: number;
   /** V2 discount total (same aggregation as legacy `totalDiscounts`). */
   totalDiscountsNio: number;
+
+  /**
+   * Voluntary-tip summary (PRD §21, Batch 7). Strictly separate from every
+   * sales total (PRD §21.3). Consumers must honor tipCoverage: a period with
+   * zero recorded tips is NOT evidence that tips are disabled (PRD §21.4).
+   */
+  tipsSummary?: TipsSummaryDto;
 
   paymentMethodsBreakdown: PaymentMethodsBreakdownDto;
   reportingPeriod: ReportingPeriodMetadataDto;
