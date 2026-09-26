@@ -7,8 +7,9 @@
 **Branch:** `feat/dashboard-v2`
 **Base:** `main` @ `a9a381d4`
 **Status:** in progress — audit chain closed through v0.3 (`e61fe291`); PRD v1.0 + architecture
-spec v0.2 imported as inputs (`735a429b`); Tasks 2c and 4 done: gates verified and spec issued at
-v0.3 (GATE-VERIFIED / READY FOR EXECUTION ROADMAP). Task 5 (execution roadmap) pending.
+spec v0.2 imported as inputs (`735a429b`); gates verified, spec at v0.3 (`7013023f`); execution
+roadmap v1.0 issued (`d8e5aa7d`); **Batch 1 (reporting semantics foundation) implemented** on top
+of the post-#592 bound reads after realigning the branch with main (`437ebc34`).
 
 ## Governing constraint
 
@@ -101,7 +102,28 @@ discipline: evidence first, decisions second, PRD third, implementation batches 
 
 ### Task 5 — Execution roadmap (`owner_dashboard_v2_execution_roadmap.md`)
 
-- **Status:** pending
+- **Status:** done (`d8e5aa7d`)
+- **Evidence:** eight evidence-gated batches matching spec §38; sequencing constraints from the
+  gate pass recorded (AG-06 before margin widgets; Batch 1 semantics before any V2 widget).
+
+### Batch 1 — Reporting semantics foundation (backend)
+
+- **Status:** done (`3a13c094`…`51b69c11`)
+- **Integration incident:** the branch forked 154 commits before main's #592 (tenant-bound report
+  reads). WIP written against pooled reads was reset, main merged with conflicts resolved to
+  main's versions, and the service/spec changes semantically re-ported so every report read keeps
+  the `runInTenantTransaction` manager executor. `fix(repo)` commit untracks the self-referential
+  `node_modules` symlink that `47aff9b2` committed onto main (breaks toolchains on checkout).
+- **Delivered:** `core/reporting/ReportingPeriod` + `SalesReportingSemantics` (committed with the
+  merge); additive `SalesDashboardReportDto` V2 fields + `reportingPeriod` metadata; AG-08
+  changeGiven netting (NIO/USD legs); AG-02 invoice business timestamp on the four sale-driven
+  movement creations.
+- **Evidence:** jest 44 suites / 693 pass / 1 skip (incl. #592 binding guards and 4 ported
+  behavior tests with the 200−63→137 case); `tsc --noEmit` at the 16 pre-existing errors
+  (unrelated test file); eslint clean on batch lines (4 pre-existing prettier errors remain on
+  untouched lines 348–448 of `invoices.service.ts`, owned by main).
+- **Not run:** DB e2e suites (no local Postgres in this pass); the #592 NOBYPASSRLS gate covers the
+  executors we preserved unchanged.
 - **Goal:** Convert the approved architecture into small evidence-gated slices per spec §38:
   semantic/reporting normalization → freshness foundation (AG-03/AG-04) → frontend executive
   composition (regime-aware strip, trend, hourly, top products, payment mix) → attention summaries
