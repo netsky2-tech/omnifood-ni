@@ -629,6 +629,12 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       productsCreated: 1,
       productsSkipped: 0,
       recipesCreated: 1,
+      // #523 T5/T7 — the contract grew on purpose: created recipes are
+      // pending suggestions, and nothing was skipped on the first apply.
+      // The assertion stays a closed toEqual (strict payload guardrail).
+      recipesPendingReviewMessage:
+        '1 receta creada como sugerencia pendiente de revisión',
+      recipesSkipped: [],
     });
 
     expect(dbInsumos.filter((i) => i.tenant_id === 'tenant-A')).toHaveLength(2);
@@ -673,6 +679,19 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       productsCreated: 0,
       productsSkipped: 1,
       recipesCreated: 0,
+      // #523 T5/T7 — re-apply creates nothing but must still say so as a
+      // pending-review signal, and report the skipped recipe with the real
+      // state of the version that already exists (the DRAFT created by the
+      // first apply). Strict toEqual stays closed.
+      recipesPendingReviewMessage:
+        '0 recetas creadas como sugerencias pendientes de revisión',
+      recipesSkipped: [
+        {
+          productName: 'Capuchino 8oz',
+          reason: 'VERSION_ALREADY_EXISTS',
+          existingState: 'DRAFT',
+        },
+      ],
     });
 
     // Counts remain unchanged

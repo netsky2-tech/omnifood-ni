@@ -8,11 +8,13 @@ import {
   DataSource,
   EntityManager,
   FindOptionsWhere,
+  In,
   QueryFailedError,
   Repository,
 } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
 import {
+  RecipeOrigin,
   RecipePublicationState,
   RecipeSuggestionState,
   RecipeVersion,
@@ -22,6 +24,7 @@ import { Insumo } from './entities/insumo.entity';
 import { Product } from './entities/product.entity';
 import { UomConversion } from './entities/uom-conversion.entity';
 import { SyncRecipeVersionDocumentDto } from './dto/sync-recipe-version-document.dto';
+import { RecipeSuggestionListItemDto } from './dto/recipe-version-response.dto';
 import { UomConversionCalculator } from './uom-conversion-calculator';
 
 const SCALE_4 = 4;
@@ -238,6 +241,78 @@ export class RecipeService {
         return recipeVersionRepo.save(draft);
       },
     );
+  }
+
+  async listPendingTemplateSuggestions(
+    tenantId: string,
+  ): Promise<RecipeSuggestionListItemDto[]> {
+    // #523 T4: the review step's read side. Template suggestions are recipe
+    // versions with origin INDUSTRY_TEMPLATE still in DRAFT state; without
+    // this list there is no way to obtain a recipeVersionId, so the publish
+    // route is unreachable from a UI. Every read rides the tenant-bound
+    // transaction and carries the tenant_id predicate (defense in depth
+    // under FORCE RLS), so another tenant's rows can never leak.
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      this.loadPendingSuggestions(manager, tenantId),
+    );
+  }
+
+  private async loadPendingSuggestions(
+    manager: EntityManager,
+    tenantId: string,
+  ): Promise<RecipeSuggestionListItemDto[]> {
+    const recipeVersionRepo = manager.getRepository(RecipeVersion);
+    const recipeDetailRepo = manager.getRepository(RecipeDetail);
+
+    const drafts = await recipeVersionRepo.find({
+      where: {
+        tenant_id: tenantId,
+        origin: RecipeOrigin.INDUSTRY_TEMPLATE,
+        publication_state: RecipePublicationState.DRAFT,
+      },
+      order: { created_at: 'DESC' },
+    });
+
+    if (drafts.length === 0) {
+      return [];
+    }
+
+    const draftIds = drafts.map((draft) => draft.id);
+    const draftProductIds = [...new Set(drafts.map((d) => d.product_id))];
+
+    const details = await recipeDetailRepo.find({
+      where: { tenant_id: tenantId, recipe_version_id: In(draftIds) },
+    });
+    const componentCounts = new Map<string, number>();
+    for (const detail of details) {
+      componentCounts.set(
+        detail.recipe_version_id,
+        (componentCounts.get(detail.recipe_version_id) ?? 0) + 1,
+      );
+    }
+
+    const activePublished = await recipeVersionRepo.find({
+      where: {
+        tenant_id: tenantId,
+        product_id: In(draftProductIds),
+        is_active: true,
+        publication_state: RecipePublicationState.PUBLISHED,
+      },
+    });
+    const productsWithActivePublished = new Set(
+      activePublished.map((version) => version.product_id),
+    );
+
+    return drafts.map((draft) => ({
+      recipeVersionId: draft.id,
+      productId: draft.product_id,
+      productName: draft.product_name ?? '',
+      versionNumber: draft.version_number,
+      componentCount: componentCounts.get(draft.id) ?? 0,
+      hasActivePublishedVersion: productsWithActivePublished.has(
+        draft.product_id,
+      ),
+    }));
   }
 
   async getSnapshot(

@@ -1,6 +1,16 @@
 import { Repository } from 'typeorm';
+import {
+  GUARDS_METADATA,
+  METHOD_METADATA,
+  PATH_METADATA,
+} from '@nestjs/common/constants';
+import { RequestMethod } from '@nestjs/common';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import { RecipeService } from './recipe.service';
+import { RecipeController } from './recipe.controller';
+import { AuthGuard } from '../identity/guards/auth.guard';
+import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
+import { RolesGuard } from '../identity/guards/roles.guard';
 import {
   RecipeVersion,
   RecipeOrigin,
@@ -193,5 +203,119 @@ describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () =
     expect(txManager.query.mock.invocationCallOrder[0]).toBeLessThan(
       recipeVersionRepo.findOne.mock.invocationCallOrder[0],
     );
+  });
+
+  // #523 T2/T4 — publishDraftVersion is the tested confirmation step but had
+  // zero production callers and no route: a suggestion could not be listed,
+  // selected, or accepted. These specs pin the pure wiring on the existing
+  // controller/service, never a second publish implementation.
+  describe('RecipeController publish & suggestions wiring (#523 T2/T4)', () => {
+    let controller: RecipeController;
+    let recipeService: {
+      publishDraftVersion: jest.Mock;
+      getSnapshot: jest.Mock;
+      listPendingTemplateSuggestions: jest.Mock;
+    };
+
+    beforeEach(() => {
+      recipeService = {
+        publishDraftVersion: jest.fn(),
+        getSnapshot: jest.fn(),
+        listPendingTemplateSuggestions: jest.fn(),
+      };
+      controller = new RecipeController(
+        recipeService as unknown as RecipeService,
+      );
+    });
+
+    it('exposes POST :recipeVersionId/publish bound to the existing publishDraftVersion (T2)', async () => {
+      const handler = Object.getOwnPropertyDescriptor(
+        RecipeController.prototype,
+        'publishRecipeVersion',
+      )?.value;
+      expect(typeof handler).toBe('function');
+
+      // Route metadata: POST /recipes/:recipeVersionId/publish.
+      expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(
+        ':recipeVersionId/publish',
+      );
+      expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(
+        RequestMethod.POST,
+      );
+      // Same human mutation idiom as the sibling POST that creates versions.
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
+        AuthGuard,
+        AuthoritativeCurrentUserGuard,
+        RolesGuard,
+      ]);
+
+      const published = {
+        id: 'rv-1',
+        tenant_id: 'tenant-1',
+        product_id: 'prod-1',
+        version_number: 2,
+        is_active: true,
+        publication_state: RecipePublicationState.PUBLISHED,
+      };
+      recipeService.publishDraftVersion.mockResolvedValueOnce(published);
+      recipeService.getSnapshot.mockResolvedValueOnce({
+        recipeVersion: published,
+        components: [],
+      });
+
+      const result = await controller.publishRecipeVersion('rv-1', 'tenant-1');
+
+      // The route is a caller of the tested service method, nothing more.
+      expect(recipeService.publishDraftVersion).toHaveBeenCalledWith(
+        'tenant-1',
+        'rv-1',
+      );
+      // Returns the existing sibling snapshot response shape.
+      expect(result).toEqual({
+        recipeVersion: expect.objectContaining({ id: 'rv-1' }),
+        components: [],
+      });
+    });
+
+    it('fails closed when the publish route lacks a tenant context (T2)', async () => {
+      await expect(
+        controller.publishRecipeVersion('rv-1', undefined),
+      ).rejects.toThrow('Tenant context is required');
+      expect(recipeService.publishDraftVersion).not.toHaveBeenCalled();
+    });
+
+    it('exposes GET suggestions delegating to the tenant-scoped list (T4)', async () => {
+      const handler = Object.getOwnPropertyDescriptor(
+        RecipeController.prototype,
+        'listPendingSuggestions',
+      )?.value;
+      expect(typeof handler).toBe('function');
+
+      expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe('suggestions');
+      expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(
+        RequestMethod.GET,
+      );
+
+      const suggestions = [
+        {
+          recipeVersionId: 'rv-1',
+          productId: 'prod-1',
+          productName: 'Capuchino 8oz',
+          versionNumber: 1,
+          componentCount: 2,
+          hasActivePublishedVersion: false,
+        },
+      ];
+      recipeService.listPendingTemplateSuggestions.mockResolvedValueOnce(
+        suggestions,
+      );
+
+      const result = await controller.listPendingSuggestions('tenant-1');
+
+      expect(result).toEqual(suggestions);
+      expect(recipeService.listPendingTemplateSuggestions).toHaveBeenCalledWith(
+        'tenant-1',
+      );
+    });
   });
 });

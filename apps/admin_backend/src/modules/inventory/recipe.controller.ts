@@ -9,7 +9,10 @@ import {
 } from '@nestjs/common';
 import { RecipeService } from './recipe.service';
 import { CreateRecipeVersionDto } from './dto/create-recipe-version.dto';
-import { RecipeVersionSnapshotResponseDto } from './dto/recipe-version-response.dto';
+import {
+  RecipeSuggestionListItemDto,
+  RecipeVersionSnapshotResponseDto,
+} from './dto/recipe-version-response.dto';
 import { RecipeVersion } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
@@ -117,6 +120,23 @@ export class RecipeController {
     return this.mapSnapshotToResponse(snapshot);
   }
 
+  /**
+   * #523 T4 — the review step's read side: list the recipe versions the
+   * industry templates proposed and that still await human confirmation.
+   * Single-segment path: it cannot collide with the two-segment
+   * `:recipeVersionId/snapshot` or three-segment `products/:productId/active`
+   * routes declared on this controller.
+   */
+  @Get('suggestions')
+  async listPendingSuggestions(
+    @GetTenantId() tenantId?: string,
+  ): Promise<RecipeSuggestionListItemDto[]> {
+    const normalizedTenantId = this.requireTenant(tenantId);
+    return this.recipeService.listPendingTemplateSuggestions(
+      normalizedTenantId,
+    );
+  }
+
   @Get(':recipeVersionId/snapshot')
   async getRecipeSnapshot(
     @Param('recipeVersionId') recipeVersionId: string,
@@ -163,6 +183,38 @@ export class RecipeController {
       createdVersion.id,
       normalizedTenantId,
       productId,
+    );
+
+    return this.mapSnapshotToResponse(snapshot);
+  }
+
+  /**
+   * #523 T2 — pure wiring: publish a template's DRAFT suggestion through the
+   * existing, tenant-bound, unit-tested `publishDraftVersion` (issue #512
+   * slice 2 part A). The state transitions live in the service method and
+   * are deliberately NOT re-derived here; the route only makes the tested
+   * confirmation step reachable. Returns the same snapshot response shape as
+   * the sibling routes, using the same guard idiom as the sibling POST that
+   * creates versions.
+   */
+  @Post(':recipeVersionId/publish')
+  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async publishRecipeVersion(
+    @Param('recipeVersionId') recipeVersionId: string,
+    @GetTenantId() tenantId?: string,
+  ): Promise<RecipeVersionSnapshotResponseDto> {
+    const normalizedTenantId = this.requireTenant(tenantId);
+
+    const published = await this.recipeService.publishDraftVersion(
+      normalizedTenantId,
+      recipeVersionId,
+    );
+
+    const snapshot = await this.recipeService.getSnapshot(
+      published.id,
+      normalizedTenantId,
+      published.product_id,
     );
 
     return this.mapSnapshotToResponse(snapshot);

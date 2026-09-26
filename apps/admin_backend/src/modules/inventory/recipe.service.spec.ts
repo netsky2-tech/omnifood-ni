@@ -42,6 +42,7 @@ describe('RecipeService', () => {
 
   const recipeVersionRepo = {
     findOne: jest.fn(),
+    find: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
   };
@@ -792,6 +793,122 @@ describe('RecipeService', () => {
       expect(dataSource.getRepository).not.toHaveBeenCalled();
       expect(manager.getRepository).toHaveBeenCalledWith(Product);
       expect(manager.getRepository).toHaveBeenCalledWith(Insumo);
+    });
+  });
+
+  // #523 T4 — the review step needs a list: without a read endpoint there is
+  // no way to obtain a recipeVersionId, so the publish route is unreachable
+  // from a UI and template suggestions have no exit.
+  describe('#523 T4 — listPendingTemplateSuggestions', () => {
+    const buildDraft = (
+      overrides: Partial<Record<string, unknown>> = {},
+    ): Record<string, unknown> => ({
+      id: 'rv-draft-1',
+      tenant_id: 'tenant-A',
+      product_id: 'prod-1',
+      product_name: 'Capuchino 8oz',
+      version_number: 1,
+      is_active: false,
+      origin: 'INDUSTRY_TEMPLATE',
+      publication_state: 'DRAFT',
+      created_at: new Date('2026-01-01'),
+      ...overrides,
+    });
+
+    it('lists template drafts with component counts and active-published existence', async () => {
+      recipeVersionRepo.find
+        .mockResolvedValueOnce([
+          buildDraft(),
+          buildDraft({
+            id: 'rv-draft-2',
+            product_id: 'prod-2',
+            product_name: 'Latte 12oz',
+            version_number: 3,
+          }),
+        ])
+        // Second find call: active published versions of the same tenant.
+        .mockResolvedValueOnce([{ product_id: 'prod-1' }]);
+      recipeDetailRepo.find.mockResolvedValue([
+        { recipe_version_id: 'rv-draft-1' },
+        { recipe_version_id: 'rv-draft-1' },
+        { recipe_version_id: 'rv-draft-2' },
+      ]);
+
+      const result = await service.listPendingTemplateSuggestions('tenant-A');
+
+      expect(result).toEqual([
+        {
+          recipeVersionId: 'rv-draft-1',
+          productId: 'prod-1',
+          productName: 'Capuchino 8oz',
+          versionNumber: 1,
+          componentCount: 2,
+          hasActivePublishedVersion: true,
+        },
+        {
+          recipeVersionId: 'rv-draft-2',
+          productId: 'prod-2',
+          productName: 'Latte 12oz',
+          versionNumber: 3,
+          componentCount: 1,
+          hasActivePublishedVersion: false,
+        },
+      ]);
+
+      // Only template-origin drafts in DRAFT state are suggestions.
+      expect(recipeVersionRepo.find).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenant_id: 'tenant-A',
+            origin: 'INDUSTRY_TEMPLATE',
+            publication_state: 'DRAFT',
+          }),
+        }),
+      );
+    });
+
+    it('returns an empty list and reads nothing else when the tenant has no template drafts', async () => {
+      recipeVersionRepo.find.mockResolvedValue([]);
+
+      const result = await service.listPendingTemplateSuggestions('tenant-A');
+
+      expect(result).toEqual([]);
+      expect(recipeDetailRepo.find).not.toHaveBeenCalled();
+      expect(recipeVersionRepo.find).toHaveBeenCalledTimes(1);
+    });
+
+    it('is tenant-scoped: every read rides the bound transaction with the tenant predicate', async () => {
+      recipeVersionRepo.find
+        .mockResolvedValueOnce([buildDraft()])
+        .mockResolvedValueOnce([]);
+      recipeDetailRepo.find.mockResolvedValue([]);
+
+      await service.listPendingTemplateSuggestions('tenant-B');
+
+      expect(dataSource.transaction).toHaveBeenCalled();
+      expect(manager.getRepository).toHaveBeenCalledWith(RecipeVersion);
+      expect(manager.getRepository).toHaveBeenCalledWith(RecipeDetail);
+      expect(manager.query).toHaveBeenCalledWith(
+        TENANT_CONTEXT_SET_CONFIG_SQL,
+        ['tenant-B'],
+      );
+      // The binding precedes the first protected read.
+      expect(manager.query.mock.invocationCallOrder[0]).toBeLessThan(
+        recipeVersionRepo.find.mock.invocationCallOrder[0],
+      );
+      // Component counts never cross tenants either.
+      expect(recipeDetailRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenant_id: 'tenant-B' }),
+        }),
+      );
+      expect(recipeVersionRepo.find).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          where: expect.objectContaining({ tenant_id: 'tenant-B' }),
+        }),
+      );
     });
   });
 });
