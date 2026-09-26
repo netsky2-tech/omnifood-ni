@@ -444,4 +444,57 @@ void main() {
     expect(await countRows('authority_recipe_versions'), 0);
     expect(await countRows('authority_recipe_version_components'), 0);
   });
+
+  test(
+      'U4: a blocked verdict write still cannot fail the pull (Q80 invariant)',
+      () async {
+    // Failure injected the way production actually hits it: the local write
+    // itself refuses. `saveConfig` is an INSERT OR REPLACE, so a BEFORE INSERT
+    // trigger scoped to the authority keys aborts exactly the telemetry write
+    // and leaves every other table working.
+    await database.database.execute('''
+      CREATE TRIGGER test_block_authority_verdict_writes
+      BEFORE INSERT ON local_configs
+      WHEN NEW.key LIKE 'authority_hydration%'
+      BEGIN
+        SELECT RAISE(ABORT, 'test: authority verdict write blocked');
+      END;
+    ''');
+
+    stubDeltas({
+      'products': [
+        {
+          'id': 'prod-pizza',
+          'name': 'Pizza',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'PREPARED',
+        }
+      ],
+      'recipeVersions': [
+        wireVersion(
+          insumos: [wireClosureInsumo(id: 'ins-1')],
+          components: [wireComponent()],
+        ),
+      ],
+    });
+
+    // The invariant this unit promised: hydration trouble is reported as a
+    // value and never blocks a sale or a pull. Telemetry is downstream of the
+    // hydration it describes, so a telemetry failure must not reach backwards
+    // and undo the fact that the authority rows landed.
+    final result = await syncService.pullInboundDeltas();
+
+    expect(result, isNotNull);
+    expect(result!.authorityHydrationFailed, isFalse);
+    expect(result.authorityVersionsCount, 1);
+    // The authority facts survived: hydration ran before the verdict write.
+    expect(await countRows('authority_recipe_versions'), 1);
+    expect(await countRows('authority_insumos'), 1);
+    // And nothing was stamped, which is the accepted cost of best-effort
+    // telemetry: the classifier stays `notHydrated`-adjacent rather than
+    // claiming a verdict that was never persisted.
+    expect(await configValue(AuthorityHydrationStatus.resultKey), isNull);
+    expect(await configValue(AuthorityHydrationStatus.lastAtKey), isNull);
+  });
 }
