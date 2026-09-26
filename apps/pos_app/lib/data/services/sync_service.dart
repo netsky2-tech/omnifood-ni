@@ -24,6 +24,8 @@ import '../models/user_entity.dart';
 import '../models/security_profile_entity.dart';
 import '../models/local_config_entity.dart';
 import 'fiscal_inbox_handler.dart';
+import 'authority_delta_adapter.dart';
+import 'authority_hydration_service.dart';
 import 'network_connectivity_service.dart';
 
 const Map<String, String> syncRole = {
@@ -71,6 +73,19 @@ class InboundSyncResult {
   final int alertsCount;
   final int? appliedFiscalRevision;
   final String? appliedFiscalFingerprint;
+
+  /// Authority projection rows delivered for hydration from the
+  /// `recipeVersions` delta (#519 U3). Insert-if-absent: these are rows
+  /// delivered, not rows newly written.
+  final int authorityInsumosCount;
+  final int authorityVersionsCount;
+  final int authorityComponentsCount;
+
+  /// True when the authority hydration was refused or threw. Hydration
+  /// trouble NEVER fails the pull nor blocks a sale (Q80); the outcome is
+  /// surfaced here for the caller instead.
+  final bool authorityHydrationFailed;
+  final String? authorityHydrationFailureReason;
   final String timestamp;
 
   const InboundSyncResult({
@@ -82,6 +97,11 @@ class InboundSyncResult {
     this.alertsCount = 0,
     this.appliedFiscalRevision,
     this.appliedFiscalFingerprint,
+    this.authorityInsumosCount = 0,
+    this.authorityVersionsCount = 0,
+    this.authorityComponentsCount = 0,
+    this.authorityHydrationFailed = false,
+    this.authorityHydrationFailureReason,
     required this.timestamp,
   });
 }
@@ -1793,6 +1813,67 @@ class SyncService {
           await _database!.recipeDao.insertRecipes(recipeEntities);
         }
 
+        // 4b. Recipe version authority hydration (#519 U3). Runs after the
+        // products (1) and insumos (3) handlers: the hydrator's projection
+        // is insert-if-absent, so ordering only matters for consumers, not
+        // for correctness of the writes themselves. The nested delta is
+        // adapted into the flat AuthorityHydrationPayload the hydrator
+        // expects. Standing invariant: hydration trouble must never fail
+        // the pull nor block a sale (Q80) — catch, log with a reason, and
+        // surface the outcome in InboundSyncResult.
+        var authorityInsumosCount = 0;
+        var authorityVersionsCount = 0;
+        var authorityComponentsCount = 0;
+        var authorityHydrationFailed = false;
+        String? authorityHydrationFailureReason;
+        final rawRecipeVersions = rawDeltas['recipeVersions'] as List<dynamic>?;
+        if (rawRecipeVersions == null) {
+          // Legacy backend response without the key: a no-op, not an error.
+          developer.log(
+            '[SYNC_PULL] authority_hydration_skipped reason=no_recipe_versions_key',
+            name: 'SyncService',
+          );
+        } else {
+          try {
+            final adaptation = adaptAuthorityDelta(rawRecipeVersions);
+            if (!adaptation.isSuccess) {
+              authorityHydrationFailed = true;
+              authorityHydrationFailureReason = adaptation.failureReason;
+              developer.log(
+                '[SYNC_PULL] authority_hydration_refused reason=${adaptation.failureReason}',
+                name: 'SyncService',
+              );
+            } else {
+              await AuthorityHydrationService(_database!.authorityProjectionDao)
+                  .hydrate(adaptation.payload!);
+              authorityInsumosCount = adaptation.insumoCount;
+              authorityVersionsCount = adaptation.versionCount;
+              authorityComponentsCount = adaptation.componentCount;
+              developer.log(
+                '[SYNC_PULL] authority_hydration_applied '
+                'insumos=$authorityInsumosCount '
+                'versions=$authorityVersionsCount '
+                'components=$authorityComponentsCount '
+                'tenant=${adaptation.tenantId}',
+                name: 'SyncService',
+              );
+            }
+          } catch (e, stackTrace) {
+            // The adapter reports refusals as values; reaching here means
+            // the hydration itself threw (e.g. a DAO error). Still never
+            // fails the pull.
+            authorityHydrationFailed = true;
+            authorityHydrationFailureReason = 'authority_hydration_threw';
+            developer.log(
+              '[SYNC_PULL] authority_hydration_failed '
+              'reason=authority_hydration_threw',
+              name: 'SyncService',
+              error: e,
+              stackTrace: stackTrace,
+            );
+          }
+        }
+
         // 5. Users & Security Profiles
         final rawUsers = rawDeltas['users'] as List<dynamic>? ?? const [];
         final userEntities = <UserEntity>[];
@@ -1986,6 +2067,11 @@ class SyncService {
           alertsCount: alertsCount,
           appliedFiscalRevision: appliedFiscalRevision,
           appliedFiscalFingerprint: appliedFiscalFingerprint,
+          authorityInsumosCount: authorityInsumosCount,
+          authorityVersionsCount: authorityVersionsCount,
+          authorityComponentsCount: authorityComponentsCount,
+          authorityHydrationFailed: authorityHydrationFailed,
+          authorityHydrationFailureReason: authorityHydrationFailureReason,
           timestamp:
               data['serverTime']?.toString() ??
               DateTime.now().toIso8601String(),
