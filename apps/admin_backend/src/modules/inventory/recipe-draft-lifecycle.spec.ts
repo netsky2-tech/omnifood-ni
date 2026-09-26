@@ -18,12 +18,17 @@ import {
   RecipeSuggestionState,
 } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
+import { Product, ProductType } from './entities/product.entity';
 import { UomConversionCalculator } from './uom-conversion-calculator';
 
 describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () => {
   let service: RecipeService;
   let recipeVersionRepo: jest.Mocked<Partial<Repository<RecipeVersion>>>;
   let recipeDetailRepo: jest.Mocked<Partial<Repository<RecipeDetail>>>;
+  // Issue #611: publishDraftVersion now reads the product type inside the
+  // tenant-bound transaction, so the fixture exposes a manager-scoped
+  // product repository with an explicit product_type (never undefined).
+  let productRepo: { findOne: jest.Mock };
   let uomCalculator: UomConversionCalculator;
   // Issue #512 slice 2 part A: exposed so the binding guards can assert the
   // protected reads ride the tenant-bound transaction (not the pooled repos).
@@ -45,6 +50,7 @@ describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () =
       create: jest.fn((e: any) => e) as any,
       save: jest.fn((e: any) => Promise.resolve(e)) as any,
     };
+    productRepo = { findOne: jest.fn().mockResolvedValue(null) };
     uomCalculator = new UomConversionCalculator();
 
     // Issue #512 slice 2 part A: RecipeService resolves recipe repositories
@@ -55,6 +61,7 @@ describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () =
       getRepository: jest.fn((entity: unknown) => {
         if (entity === RecipeVersion) return recipeVersionRepo;
         if (entity === RecipeDetail) return recipeDetailRepo;
+        if (entity === Product) return productRepo;
         return null;
       }),
     };
@@ -143,6 +150,16 @@ describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () =
         if (where.is_active === true) return Promise.resolve(null);
         return Promise.resolve(null);
       });
+
+    // Issue #611: the guard reads the product inside the transaction; the
+    // type is set explicitly so the test keeps exercising the publish
+    // lifecycle on a recipe-admitting product.
+    productRepo.findOne = jest.fn().mockResolvedValue({
+      id: 'prod-1',
+      tenant_id: 'tenant-1',
+      name: 'Capuchino 8oz',
+      product_type: ProductType.COMPOUND,
+    });
 
     const published = await service.publishDraftVersion(
       'tenant-1',
