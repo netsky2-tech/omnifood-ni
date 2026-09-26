@@ -160,3 +160,22 @@ discipline: evidence first, decisions second, PRD third, implementation batches 
 - **Product follow-ups (non-blocking):** active-but-never-synced device holds tenant at PARTIAL
   (§17.2 intended — confirm posture); terminal `label` falls back to device id (AG-03 display-name
   residual).
+
+### Batch 4 — Executive KPI strip + fiscal profile (frontend)
+
+- **Status:** done (`d8ec30d1`) — **closes #544** (permanent zeroed IVA card under cuota fija).
+- **Delivered:** `dashboard-api.ts` (V2 wire normalization + `fetchFiscalSetup`), `kpi-deltas.ts`
+  (pure, `previous <= 0 → null`, never fake +100%), `use-dashboard-kpis.ts` (comparison ranges via
+  Batch-2 resolver, per-part failure flags), `kpi-strip.tsx` (4-card Cuota Fija / 5th IVA slot
+  only on explicit `REGIMEN_GENERAL`, FR-FISCAL-04 warning → `/settings`, em-dash on null ticket
+  average, "sin actividad", error isolation). Margin card fetched from existing
+  `/inventory/reports/cogs` both periods — no deferral. Legacy KPI grid removed from
+  `dashboard-page.tsx`; `grossSales` survives only in Resumen de Ventas (spec §7.3).
+- **Test retargets:** `dashboard.test.tsx` + `w2-sales.test.tsx` legacy-card assertions moved to
+  the V2 matrix under a surgical Option-A grant (the removal IS the #544 fix).
+- **Evidence:** 13 new strip cases; full dashboard suite 70 files / 934 pass / 4 skip / 0 fail;
+  `tsc -b` only the known `setup-center-view.tsx` error; oxlint clean.
+- **Baseline recaptured for future batches:** dashboard `vitest run` 70/934/4 (was 63/824/4 before
+  batches 2–4 landed); backend `sales+core` 48 suites / 725 (1 skip).
+- **Product flag:** PRD §9.3 gap for complete-month comparison presets implemented as
+  calendar-anchored MoM (see Batch 2) — founder confirmation still pending.
