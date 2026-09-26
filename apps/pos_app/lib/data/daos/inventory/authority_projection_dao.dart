@@ -38,6 +38,11 @@ abstract class AuthorityProjectionDao {
     String id,
   );
 
+  /// Narrow read for the #519 U5 three-state guard: how many authority
+  /// insumos exist for a tenant. Read-only; never used to decide writes.
+  @Query('SELECT COUNT(*) FROM authority_insumos WHERE tenant_id = :tenantId')
+  Future<int?> countInsumosByTenant(String tenantId);
+
   @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertInsumo(AuthorityInsumoEntity insumo);
 
