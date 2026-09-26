@@ -1892,32 +1892,49 @@ class SyncService {
           // a later refusal — it is the "ever succeeded" marker.
           // Diagnostic only: this is a local health signal that never
           // enters an invoice or a snapshot (snapshot reasonCode whitelist
-          // untouched).
-          await _database!.localConfigDao.saveConfig(
-            LocalConfigEntity(
-              key: AuthorityHydrationStatus.lastAtKey,
-              value: DateTime.now().toUtc().toIso8601String(),
-            ),
-          );
-          await _database!.localConfigDao.saveConfig(
-            LocalConfigEntity(
-              key: AuthorityHydrationStatus.resultKey,
-              value: authorityHydrationVerdict!,
-            ),
-          );
-          await _database!.localConfigDao.saveConfig(
-            LocalConfigEntity(
-              key: AuthorityHydrationStatus.reasonKey,
-              // Cleared/empty when applied.
-              value: authorityHydrationVerdictReason ?? '',
-            ),
-          );
-          if (authorityHydrationVerdict == AuthorityHydrationStatus.appliedVerdict) {
+          // untouched). And it is best-effort in the strict sense: the write
+          // gets its own guard, because telemetry failing must never reach
+          // backwards and undo a pull whose hydration already succeeded.
+          try {
             await _database!.localConfigDao.saveConfig(
               LocalConfigEntity(
-                key: AuthorityHydrationStatus.appliedAtKey,
+                key: AuthorityHydrationStatus.lastAtKey,
                 value: DateTime.now().toUtc().toIso8601String(),
               ),
+            );
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityHydrationStatus.resultKey,
+                value: authorityHydrationVerdict!,
+              ),
+            );
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityHydrationStatus.reasonKey,
+                // Cleared/empty when applied.
+                value: authorityHydrationVerdictReason ?? '',
+              ),
+            );
+            if (authorityHydrationVerdict ==
+                AuthorityHydrationStatus.appliedVerdict) {
+              await _database!.localConfigDao.saveConfig(
+                LocalConfigEntity(
+                  key: AuthorityHydrationStatus.appliedAtKey,
+                  value: DateTime.now().toUtc().toIso8601String(),
+                ),
+              );
+            }
+          } catch (e, stackTrace) {
+            // The verdict could not be persisted. Report the absence, never
+            // the failure: the hydration outcome above stands on its own, and
+            // the classifier reads row presence as primary evidence precisely
+            // so a missing telemetry row degrades to "unknown", not to a
+            // broken pull.
+            developer.log(
+              '[SYNC_PULL] authority_hydration_verdict_not_persisted',
+              name: 'SyncService',
+              error: e,
+              stackTrace: stackTrace,
             );
           }
         }
