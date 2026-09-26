@@ -29,7 +29,7 @@ Executed and observed, not asserted. Every identity below is a merge commit or a
 
 **Filed while working, deliberately kept out of those PRs:**
 - **#601** — `NegativeStockRegularizationService` has zero callers (sale and purchase hooks unwired). Invisible until now because #519 meant no sale ever produced a movement; it becomes observable the moment B3a ships.
-- **#602** — a fresh install creates the `authority_%` tables **without** their immutability triggers (`migration49_50` adds them only on the upgrade path; the generated DDL does not). Upgraded terminals enforce append-only authority facts, newly enrolled ones do not. Found while building #606's migrated-DB fixture.
+- ~~**#602** — a fresh install creates the `authority_%` tables **without** their immutability triggers~~ **retracted the same day and closed as not-a-gap.** My citation pointed at the wrong lines: `migrations.dart:108-122` shows the registered `onCreate` calling `_createAuthorityImmutabilityTriggers`, and a fresh DB built the way `main.dart` builds it reports all four triggers when read back from `sqlite_master`. The `grep → 0` on the generated DDL was a true observation that proved nothing — triggers never come from entity DDL. Kept as a note, not an issue: those four triggers have no test asserting them today. **Lesson for this plan's evidence rule: a `grep` on one file is not a runtime fact; build the state and read it back.**
 - **#524** stays the fence for `previousStock`/`newStock` persisting as 0 on the frozen path (B3b).
 
 **Deferred by the owner, not by neglect:** Batch 6 operator manuals. **#534 (B0.2)** still needs the physical-device measurements and now decides only B3b/B3c, not B3a.
