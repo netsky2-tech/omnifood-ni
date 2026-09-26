@@ -189,6 +189,7 @@ void main() {
         stock: 50.0,
         averageCost: 100.0,
         sellPrice: 250.00,
+        taxRate: 0.15,
       );
       const beverage = Product(
         id: 'p-coke',
@@ -197,6 +198,7 @@ void main() {
         stock: 100.0,
         averageCost: 25.0,
         sellPrice: 50.00,
+        taxRate: 0.15,
       );
 
       saleViewModel.addToCart(pizza, quantity: 2); // 500

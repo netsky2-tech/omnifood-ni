@@ -79,6 +79,7 @@ void main() {
     stock: 100,
     averageCost: 25,
     sellPrice: 50,
+    taxRate: 0.15,
     category: 'Bebidas',
   );
 
@@ -89,6 +90,7 @@ void main() {
     stock: 50,
     averageCost: 60,
     sellPrice: 120,
+    taxRate: 0.15,
     category: 'Comida',
   );
 
