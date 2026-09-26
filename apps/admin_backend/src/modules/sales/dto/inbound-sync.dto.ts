@@ -133,6 +133,19 @@ export interface InboundSyncRecipeVersionComponentDto {
   referenceVersionId: string | null;
 }
 
+/**
+ * Authority fact of one insumo referenced by a recipe version's own
+ * components. Identity only: stock, averageCost and par levels stay in the
+ * incremental `insumos` delta.
+ */
+export interface InboundSyncRecipeVersionInsumoDto {
+  id: string;
+  tenantId: string;
+  name: string;
+  /** The insumo's consumption UOM, stated by the backend. */
+  uom: string;
+}
+
 export interface InboundSyncRecipeVersionDto {
   /** The immutable version identity, repeated explicitly for safe linkage. */
   id: string;
@@ -156,6 +169,16 @@ export interface InboundSyncRecipeVersionDto {
   suggestionState: string;
   createdAt: Date;
   components: InboundSyncRecipeVersionComponentDto[];
+  /**
+   * Authority facts of the insumos this version's own components reference
+   * (issue #519 U1). Deliberately per-version rather than a sibling delta
+   * key: a version must never arrive at the POS with a component whose
+   * insumo fact is missing, independently of what the incremental `insumos`
+   * cursor returned in this page. The duplication across versions is the
+   * fail-closed property; the closure may be `[]` for a version with no
+   * components.
+   */
+  insumos: InboundSyncRecipeVersionInsumoDto[];
 }
 
 /**
