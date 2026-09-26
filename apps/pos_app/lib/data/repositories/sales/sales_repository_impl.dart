@@ -546,6 +546,10 @@ class SalesRepositoryImpl implements SalesRepository {
       shiftId: entity.shiftId,
       localIssueDate: entity.localIssueDate,
       fiscalHeaderSnapshot: entity.fiscalHeaderSnapshot,
+      tipAmountNio: entity.tipAmountNio,
+      tipAmountUsd: entity.tipAmountUsd,
+      tipPercentage: entity.tipPercentage,
+      tipEligibleBaseNio: entity.tipEligibleBaseNio,
     );
   }
 
