@@ -235,14 +235,26 @@ export class SyncHealthService {
         .map((credential) => [credential.deviceId, credential]),
     );
 
-    // The device/terminal set is the union of observed sync streams and
-    // active provisioned credentials.
+    // Founder freshness participation policy: every non-excluded credential
+    // lifecycle (ACTIVE or newly provisioned PENDING) joins the evidence
+    // set. A provisioned device that has never synced resolves downstream to
+    // the display-only 'PENDING' terminal state (no accepted receipt -> no
+    // freshness participation), while explicitly revoked/retired devices
+    // stay excluded.
+    const participatingCredentialByDevice = new Map(
+      SyncHealthService.latestCredentialByDevice(credentials)
+        .filter((credential) => !excludedStatuses.includes(credential.status))
+        .map((credential) => [credential.deviceId, credential]),
+    );
+
+    // The device/terminal set is the union of observed sync streams,
+    // participating provisioned credentials, and gap-evidence rows.
     const deviceIds = new Set<string>();
     for (const stream of receiptStreams) deviceIds.add(stream.deviceId);
     for (const row of [...rejectedAbove, ...outboxPending]) {
       deviceIds.add(row.deviceId);
     }
-    for (const deviceId of activeCredentialByDevice.keys()) {
+    for (const deviceId of participatingCredentialByDevice.keys()) {
       deviceIds.add(deviceId);
     }
 

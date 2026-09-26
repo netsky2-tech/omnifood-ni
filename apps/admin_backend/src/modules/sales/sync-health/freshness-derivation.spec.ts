@@ -27,6 +27,18 @@ const buildTerminal = (
   ...overrides,
 });
 
+const buildPendingTerminal = (
+  overrides: Partial<TerminalReceiptEvidence> = {},
+): TerminalReceiptEvidence =>
+  buildTerminal({
+    terminalId: 'pos-new',
+    label: null,
+    acceptedThroughSequence: null,
+    lastReceiptAt: null,
+    gapEvidence: null,
+    ...overrides,
+  });
+
 const buildInput = (
   overrides: Partial<DeriveSyncFreshnessInput> = {},
 ): DeriveSyncFreshnessInput => ({
@@ -150,15 +162,108 @@ describe('deriveSyncFreshness (PRD §20 Gate C)', () => {
     expect(result.state).toBe('COMPLETE');
   });
 
+  it('founder policy (a) — a never-synced device is PENDING display-only and does not hold the tenant back', () => {
+    // One healthy stream + one provisioned device that has NEVER completed a
+    // first successful sync checkpoint: the rollup ignores the PENDING device.
+    const result = deriveSyncFreshness(
+      buildInput({
+        terminals: [buildTerminal(), buildPendingTerminal()],
+      }),
+    );
+
+    expect(result.state).toBe('COMPLETE');
+    expect(result.perTerminal.find((t) => t.terminalId === 'pos-new')).toEqual(
+      expect.objectContaining({
+        state: 'PENDING',
+        acceptedThroughSequence: null,
+        lastReceiptAt: null,
+      }),
+    );
+    // Complete-through is derived from participating terminals only.
+    expect(result.lastCompleteAt).toBe('2026-09-01T11:58:00.000Z');
+  });
+
+  it('founder policy (a2) — a never-synced device with staged-gap evidence is still PENDING, not PARTIAL', () => {
+    // No historical ACCEPTED receipt means no freshness participation at all,
+    // even when STAGED_FUTURE outbox rows exist: the strict posture (gap ->
+    // PARTIAL) only applies once the first checkpoint has been reached.
+    const result = deriveSyncFreshness(
+      buildInput({
+        terminals: [
+          buildTerminal(),
+          buildPendingTerminal({
+            gapEvidence: {
+              streams: [
+                {
+                  flowType: 'sales',
+                  acceptedMax: null,
+                  acceptedCount: null,
+                  minAcceptedSequence: null,
+                  rejectedAboveWatermark: 0,
+                  pendingAboveWatermark: 3,
+                },
+              ],
+            },
+          }),
+        ],
+      }),
+    );
+
+    expect(result.state).toBe('COMPLETE');
+    expect(result.perTerminal[1].state).toBe('PENDING');
+  });
+
+  it('founder policy (b) — after the first accepted receipt the strict posture applies forever (silence -> STALE)', () => {
+    // The same device, now having reached its first checkpoint, then going
+    // silent beyond the threshold: STALE per the existing rollup rules — no
+    // 24h grace, no PENDING shielding.
+    const result = deriveSyncFreshness(
+      buildInput({
+        terminals: [
+          buildTerminal({ terminalId: 'pos-01' }),
+          buildPendingTerminal({
+            terminalId: 'pos-02',
+            acceptedThroughSequence: 3,
+            lastReceiptAt: '2026-09-01T10:00:00.000Z',
+          }),
+        ],
+      }),
+    );
+
+    expect(result.perTerminal.find((t) => t.terminalId === 'pos-02')).toEqual(
+      expect.objectContaining({ state: 'STALE' }),
+    );
+    expect(result.state).toBe('STALE');
+  });
+
+  it('founder policy (c) — an all-PENDING tenant rolls up to UNKNOWN (nothing has ever proven completeness)', () => {
+    const result = deriveSyncFreshness(
+      buildInput({
+        terminals: [
+          buildPendingTerminal({ terminalId: 'pos-01' }),
+          buildPendingTerminal({ terminalId: 'pos-02' }),
+        ],
+      }),
+    );
+
+    expect(result.state).toBe('UNKNOWN');
+    expect(result.perTerminal.map((t) => t.state)).toEqual([
+      'PENDING',
+      'PENDING',
+    ]);
+    expect(result.lastCompleteAt).toBeNull();
+  });
+
   it('rolls up mixed UNKNOWN + COMPLETE as PARTIAL (one terminal cannot prove completeness)', () => {
     const result = deriveSyncFreshness(
       buildInput({
         terminals: [
           buildTerminal(),
+          // A post-checkpoint terminal whose completeness cannot be proven
+          // (contradictory watermark metadata) is a genuine UNKNOWN.
           buildTerminal({
             terminalId: 'pos-02',
-            acceptedThroughSequence: null,
-            lastReceiptAt: null,
+            lastReceiptAt: 'not-a-timestamp',
           }),
         ],
       }),
@@ -169,15 +274,10 @@ describe('deriveSyncFreshness (PRD §20 Gate C)', () => {
     expect(result.lastCompleteAt).toBeNull();
   });
 
-  it('rolls up all-UNKNOWN terminals as UNKNOWN', () => {
+  it('rolls up all-UNKNOWN terminals as UNKNOWN (post-checkpoint but unprovable)', () => {
     const result = deriveSyncFreshness(
       buildInput({
-        terminals: [
-          buildTerminal({
-            acceptedThroughSequence: null,
-            lastReceiptAt: null,
-          }),
-        ],
+        terminals: [buildTerminal({ lastReceiptAt: 'not-a-timestamp' })],
       }),
     );
 

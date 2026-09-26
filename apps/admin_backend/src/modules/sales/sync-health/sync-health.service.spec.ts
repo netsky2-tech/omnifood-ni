@@ -192,7 +192,7 @@ describe('SyncHealthService', () => {
     expect(result.state).toBe('COMPLETE');
   });
 
-  it('keeps an active provisioned terminal with no receipts as UNKNOWN and rolls the tenant up to PARTIAL', async () => {
+  it('founder policy (a) — a provisioned device that never synced shows as PENDING and does not hold the tenant back', async () => {
     await bootstrap(
       {
         receipts: [
@@ -227,10 +227,125 @@ describe('SyncHealthService', () => {
       new Date('2026-09-01T12:00:00.000Z'),
     );
 
+    // Never-handshaked device: display-only PENDING, excluded from rollup.
     expect(result.perTerminal.find((t) => t.terminalId === 'pos-02')).toEqual(
-      expect.objectContaining({ state: 'UNKNOWN', label: 'pos-02' }),
+      expect.objectContaining({
+        state: 'PENDING',
+        label: 'pos-02',
+        acceptedThroughSequence: null,
+        lastReceiptAt: null,
+      }),
     );
-    expect(result.state).toBe('PARTIAL');
+    expect(result.state).toBe('COMPLETE');
+    expect(result.lastCompleteAt).toBe('2026-09-01T11:58:00.000Z');
+  });
+
+  it('includes a newly provisioned PENDING-credential device with no receipts in the evidence list (PENDING)', async () => {
+    await bootstrap(
+      {
+        receipts: [
+          {
+            deviceId: 'pos-01',
+            flowType: 'sales',
+            acceptedMax: '10',
+            acceptedMin: '1',
+            acceptedCount: '10',
+            lastAcceptedAt: new Date('2026-09-01T11:58:00.000Z'),
+          },
+        ],
+      },
+      [
+        {
+          tenantId: TENANT_ID,
+          version: 1,
+          status: 'ACTIVE',
+          activationAttempt: { trustedTerminalId: 'pos-01' },
+        },
+        {
+          tenantId: TENANT_ID,
+          version: 1,
+          status: 'PENDING',
+          activationAttempt: { trustedTerminalId: 'pos-new' },
+        },
+      ],
+    );
+
+    const result = await service.getFreshness(
+      TENANT_ID,
+      new Date('2026-09-01T12:00:00.000Z'),
+    );
+
+    // Non-excluded credentials (PENDING/ACTIVE) participate in the evidence
+    // list even with zero receipts; they resolve to display-only PENDING.
+    expect(result.perTerminal.find((t) => t.terminalId === 'pos-new')).toEqual(
+      expect.objectContaining({
+        state: 'PENDING',
+        acceptedThroughSequence: null,
+      }),
+    );
+    expect(result.state).toBe('COMPLETE');
+  });
+
+  it('founder policy (b) — after its first accepted receipt, a silent post-checkpoint device rolls the tenant to STALE', async () => {
+    await bootstrap({
+      receipts: [
+        {
+          deviceId: 'pos-01',
+          flowType: 'sales',
+          acceptedMax: '10',
+          acceptedMin: '1',
+          acceptedCount: '10',
+          lastAcceptedAt: new Date('2026-09-01T11:58:00.000Z'),
+        },
+        {
+          deviceId: 'pos-02',
+          flowType: 'sales',
+          acceptedMax: '7',
+          acceptedMin: '1',
+          acceptedCount: '7',
+          lastAcceptedAt: new Date('2026-09-01T10:00:00.000Z'),
+        },
+      ],
+    });
+
+    const result = await service.getFreshness(
+      TENANT_ID,
+      new Date('2026-09-01T12:00:00.000Z'),
+    );
+
+    // Strict posture forever once the first checkpoint was reached.
+    expect(result.perTerminal.find((t) => t.terminalId === 'pos-02')).toEqual(
+      expect.objectContaining({ state: 'STALE', acceptedThroughSequence: 7 }),
+    );
+    expect(result.state).toBe('STALE');
+  });
+
+  it('founder policy (c) — an all-PENDING tenant rolls up to UNKNOWN', async () => {
+    await bootstrap({}, [
+      {
+        tenantId: TENANT_ID,
+        version: 1,
+        status: 'ACTIVE',
+        activationAttempt: { trustedTerminalId: 'pos-01' },
+      },
+      {
+        tenantId: TENANT_ID,
+        version: 1,
+        status: 'PENDING',
+        activationAttempt: { trustedTerminalId: 'pos-02' },
+      },
+    ]);
+
+    const result = await service.getFreshness(
+      TENANT_ID,
+      new Date('2026-09-01T12:00:00.000Z'),
+    );
+
+    expect(result.perTerminal.map((t) => t.state)).toEqual([
+      'PENDING',
+      'PENDING',
+    ]);
+    expect(result.state).toBe('UNKNOWN');
     expect(result.lastCompleteAt).toBeNull();
   });
 
