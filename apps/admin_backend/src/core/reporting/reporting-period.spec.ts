@@ -9,6 +9,7 @@ import {
   formatLocalDateKey,
   inclusiveEndBound,
   isValidLocalDateKey,
+  localDateKeySpanDays,
   localDayEndExclusiveUtc,
   localDayStartUtc,
   managuaHourBucket,
@@ -265,6 +266,15 @@ describe('ReportingPeriod (spec §6.1 — America/Managua calendar semantics)', 
       expect(formatLocalDateKey(new Date('2026-09-19T06:00:00.000Z'))).toBe(
         '2026-09-19',
       );
+    });
+
+    it('localDateKeySpanDays returns the inclusive day count between two date keys', () => {
+      expect(localDateKeySpanDays('2026-06-10', '2026-06-10')).toBe(1);
+      expect(localDateKeySpanDays('2026-06-10', '2026-06-11')).toBe(2);
+      expect(localDateKeySpanDays('2026-06-01', '2026-07-30')).toBe(60);
+      expect(localDateKeySpanDays('2026-06-01', '2026-07-31')).toBe(61);
+      // Crosses month and year boundaries without DST drift.
+      expect(localDateKeySpanDays('2026-12-31', '2027-01-01')).toBe(2);
     });
   });
 

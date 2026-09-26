@@ -10,12 +10,16 @@ import {
 } from 'typeorm';
 import {
   currentLocalDateKey,
+  localDateKeySpanDays,
   parseLocalDateKey,
   ReportingPeriodValidationError,
   resolveReportingBounds,
   ResolvedReportingBounds,
 } from '../../../core/reporting/reporting-period';
-import { computeSalesReportingTotals } from '../../../core/reporting/sales-reporting-semantics';
+import {
+  computeDailySalesSeries,
+  computeSalesReportingTotals,
+} from '../../../core/reporting/sales-reporting-semantics';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -25,6 +29,8 @@ import {
   CashierPerformanceItemDto,
   CashierPerformanceQueryDto,
   CashierPerformanceReportDto,
+  DailySeriesQueryDto,
+  DailySeriesReportDto,
   HourlySalesBucketDto,
   HourlySalesQueryDto,
   HourlySalesReportDto,
@@ -35,6 +41,10 @@ import {
   TopProductsQueryDto,
   TopProductsReportDto,
 } from '../dto/sales-reports.dto';
+
+/** PRD §14 FR-CHART-02: daily buckets for 2–60 day inclusive ranges. */
+const DAILY_SERIES_MIN_DAYS = 2;
+const DAILY_SERIES_MAX_DAYS = 60;
 
 const round2 = (value: number): number =>
   Number((Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2));
@@ -219,6 +229,87 @@ export class SalesReportsService {
       },
       startDate: query?.startDate,
       endDate: query?.endDate,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Daily Sales Trend (Dashboard V2 Batch 5a, PRD §14).
+   *
+   * §7.2 cross-widget invariant: the invoice set is selected with EXACTLY the
+   * same query as getDashboard (same tenant predicate, same completed-sale
+   * filter `isCanceled = false`, same inclusive `created_at` bounds), so
+   * `Σ days.netSalesNio === getDashboard(tenantId, query).netSalesNio` over
+   * any period. Rows are bucketed by their Managua local day
+   * (resolveInvoiceLocalDayBucket: localIssueDate, legacy fallback created_at
+   * → Managua); buckets outside the range are clamped to the nearest boundary
+   * so the parity invariant holds unconditionally.
+   *
+   * Range window: 2–60 days inclusive (FR-CHART-02). A single day must use
+   * the existing hourly route; longer ranges are a later roadmap batch.
+   */
+  async getDashboardDailySeries(
+    tenantId: string,
+    query?: DailySeriesQueryDto,
+  ): Promise<DailySeriesReportDto> {
+    const startDateStr = query?.startDate?.trim();
+    const endDateStr = query?.endDate?.trim();
+    if (!startDateStr || !endDateStr) {
+      throw new BadRequestException(
+        'startDate and endDate are both required for the daily series',
+      );
+    }
+
+    const bounds = this.resolvePeriodBounds(startDateStr, endDateStr);
+    // Both inputs were date keys, so both bounds and their local keys exist.
+    const start = bounds.startInclusiveUtc;
+    const end = bounds.endInclusiveUtc;
+    const { localStartDate, localEndDate } = bounds;
+    if (!start || !end || !localStartDate || !localEndDate) {
+      // Unreachable: both inputs were validated calendar date keys, so
+      // resolveReportingBounds always resolves both bounds (see parseDayRange).
+      throw new Error(
+        `Unresolvable daily-series bounds for '${startDateStr}'..'${endDateStr}'`,
+      );
+    }
+
+    const dayCount = localDateKeySpanDays(localStartDate, localEndDate);
+    if (dayCount < DAILY_SERIES_MIN_DAYS || dayCount > DAILY_SERIES_MAX_DAYS) {
+      throw new BadRequestException(
+        `Daily series supports a ${DAILY_SERIES_MIN_DAYS}-${DAILY_SERIES_MAX_DAYS} day range; got ${dayCount} day(s).` +
+          ' Use the hourly-sales route for a single day.',
+      );
+    }
+
+    // Issue #581 WU1 / #592: bound invoice read, identical semantics to the
+    // dashboard KPI read (same where-clause, different ordering need).
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: {
+            tenant_id: tenantId,
+            isCanceled: false,
+            created_at: Between(start, end),
+          },
+          order: { created_at: 'ASC' },
+        }),
+    );
+
+    const days = computeDailySalesSeries(
+      localStartDate,
+      localEndDate,
+      invoices,
+    );
+
+    return {
+      days,
+      reportingPeriod: {
+        timezone: 'America/Managua',
+        localStartDate,
+        localEndDate,
+      },
       generatedAt: new Date().toISOString(),
     };
   }

@@ -43,6 +43,19 @@ export class CashierPerformanceQueryDto {
   endDate?: string;
 }
 
+/**
+ * Daily Sales Trend query (PRD §14, Dashboard V2 Batch 5a). Both bounds are
+ * required: a range shorter than 2 days must use the hourly route, and the
+ * service enforces the 2–60 day inclusive window.
+ */
+export class DailySeriesQueryDto {
+  @IsString()
+  startDate!: string;
+
+  @IsString()
+  endDate!: string;
+}
+
 export interface PaymentMethodsBreakdownDto {
   cashNio: number;
   cashUsd: number;
@@ -149,4 +162,25 @@ export interface CashierPerformanceReportDto {
   endDate?: string;
   generatedAt: string;
   cashiers: CashierPerformanceItemDto[];
+}
+
+/** One daily bucket of the Sales Trend chart (PRD §14, spec §7.2 semantics). */
+export interface DailySeriesPointDto {
+  /** Managua local calendar day (YYYY-MM-DD) the bucket belongs to. */
+  date: string;
+  /** Net Sales for the day: Σ invoice.subtotal over completed rows (spec §7.2). */
+  netSalesNio: number;
+  completedTicketCount: number;
+  /** Net Sales / tickets; null on a zero-ticket day (PRD §7.5: "—"). */
+  averageTicketNetNio: number | null;
+}
+
+export interface DailySeriesReportDto {
+  /**
+   * Every calendar day of the requested range, in order. Zero-sales days are
+   * present with netSalesNio 0 and a null average (continuous chart x-axis).
+   */
+  days: DailySeriesPointDto[];
+  reportingPeriod: ReportingPeriodMetadataDto;
+  generatedAt: string;
 }

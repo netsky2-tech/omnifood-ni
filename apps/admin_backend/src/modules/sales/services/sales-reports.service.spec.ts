@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { SalesReportsService } from './sales-reports.service';
+import { DailySeriesQueryDto } from '../dto/sales-reports.dto';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Payment } from '../entities/payment.entity';
@@ -453,6 +455,280 @@ describe('SalesReportsService', () => {
     });
   });
 
+  describe('getDashboardDailySeries (Dashboard V2 Batch 5a)', () => {
+    const baseQuery = { startDate: '2026-06-10', endDate: '2026-06-13' };
+
+    it('builds a continuous ordered daily series with zero-sales gap days', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([
+        {
+          id: 'inv-a',
+          tenant_id: tenantId,
+          subtotal: 500,
+          totalTax: 75,
+          isCanceled: false,
+          localIssueDate: '2026-06-10',
+          created_at: new Date('2026-06-10T16:00:00.000Z'),
+          items: [],
+          payments: [],
+        },
+        {
+          id: 'inv-b',
+          tenant_id: tenantId,
+          subtotal: 300,
+          totalTax: 45,
+          isCanceled: false,
+          localIssueDate: '2026-06-13',
+          created_at: new Date('2026-06-13T17:00:00.000Z'),
+          items: [],
+          payments: [],
+        },
+      ]);
+
+      const result = await service.getDashboardDailySeries(tenantId, baseQuery);
+
+      // Verbatim frozen-contract shape example.
+      expect(result).toEqual({
+        days: [
+          {
+            date: '2026-06-10',
+            netSalesNio: 500,
+            completedTicketCount: 1,
+            averageTicketNetNio: 500,
+          },
+          {
+            date: '2026-06-11',
+            netSalesNio: 0,
+            completedTicketCount: 0,
+            averageTicketNetNio: null,
+          },
+          {
+            date: '2026-06-12',
+            netSalesNio: 0,
+            completedTicketCount: 0,
+            averageTicketNetNio: null,
+          },
+          {
+            date: '2026-06-13',
+            netSalesNio: 300,
+            completedTicketCount: 1,
+            averageTicketNetNio: 300,
+          },
+        ],
+        reportingPeriod: {
+          timezone: 'America/Managua',
+          localStartDate: '2026-06-10',
+          localEndDate: '2026-06-13',
+        },
+        generatedAt: expect.any(String) as unknown,
+      });
+      expect(result.days.map((d) => d.date)).toEqual([
+        '2026-06-10',
+        '2026-06-11',
+        '2026-06-12',
+        '2026-06-13',
+      ]);
+    });
+
+    it.each([
+      ['2026-08-26', '2026-08-26'],
+      ['2026-06-01', '2026-07-31'],
+    ])(
+      'rejects the %s..%s range (1 and 61 days) with BadRequestException',
+      async (startDate, endDate) => {
+        await expect(
+          service.getDashboardDailySeries(tenantId, { startDate, endDate }),
+        ).rejects.toThrow(BadRequestException);
+        // Fail fast: no database read is issued for an invalid range.
+        expect(mockInvoiceRepo.find).not.toHaveBeenCalled();
+      },
+    );
+
+    it('accepts the 2-day and 60-day range boundaries', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([]);
+
+      const two = await service.getDashboardDailySeries(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-27',
+      });
+      expect(two.days).toHaveLength(2);
+      expect(two.reportingPeriod).toEqual({
+        timezone: 'America/Managua',
+        localStartDate: '2026-08-26',
+        localEndDate: '2026-08-27',
+      });
+
+      mockInvoiceRepo.find.mockResolvedValue([]);
+      const sixty = await service.getDashboardDailySeries(tenantId, {
+        startDate: '2026-06-01',
+        endDate: '2026-07-30',
+      });
+      expect(sixty.days).toHaveLength(60);
+    });
+
+    it('requires both range bounds', async () => {
+      // The DTO declares both bounds required (class-validator 400s at the
+      // pipe); the service defends independently, so exercise it with
+      // partials cast past the type checker.
+      await expect(
+        service.getDashboardDailySeries(tenantId, {
+          startDate: '2026-08-26',
+        } as DailySeriesQueryDto),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.getDashboardDailySeries(tenantId, {
+          endDate: '2026-08-27',
+        } as DailySeriesQueryDto),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.getDashboardDailySeries(tenantId, {
+          startDate: '  ',
+          endDate: '2026-08-27',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockInvoiceRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('buckets an 18:00Z Jun 10 invoice (12:00 Managua) into Jun 10 via the legacy fallback', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([
+        {
+          id: 'inv-utc-midday',
+          tenant_id: tenantId,
+          subtotal: 120,
+          totalTax: 0,
+          isCanceled: false,
+          // Legacy row: no local_issue_date persisted.
+          localIssueDate: null,
+          created_at: new Date('2026-06-10T18:00:00.000Z'),
+          items: [],
+          payments: [],
+        },
+        {
+          id: 'inv-late-night',
+          tenant_id: tenantId,
+          subtotal: 80,
+          totalTax: 0,
+          isCanceled: false,
+          localIssueDate: null,
+          // 2026-06-11T04:30Z == 2026-06-10 22:30 Managua.
+          created_at: new Date('2026-06-11T04:30:00.000Z'),
+          items: [],
+          payments: [],
+        },
+      ]);
+
+      const result = await service.getDashboardDailySeries(tenantId, {
+        startDate: '2026-06-10',
+        endDate: '2026-06-11',
+      });
+
+      expect(result.days[0]).toEqual({
+        date: '2026-06-10',
+        netSalesNio: 200,
+        completedTicketCount: 2,
+        averageTicketNetNio: 100,
+      });
+      expect(result.days[1]).toEqual({
+        date: '2026-06-11',
+        netSalesNio: 0,
+        completedTicketCount: 0,
+        averageTicketNetNio: null,
+      });
+    });
+
+    it('prefers the persisted localIssueDate over the created_at instant', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([
+        {
+          id: 'inv-offline',
+          tenant_id: tenantId,
+          subtotal: 90,
+          totalTax: 0,
+          isCanceled: false,
+          localIssueDate: '2026-06-09',
+          created_at: new Date('2026-06-11T20:00:00.000Z'),
+          items: [],
+          payments: [],
+        },
+      ]);
+
+      const result = await service.getDashboardDailySeries(tenantId, {
+        startDate: '2026-06-09',
+        endDate: '2026-06-10',
+      });
+
+      // The sale belongs to its on-device local issue day; a bucket outside
+      // the range is clamped to the nearest boundary (parity invariant).
+      expect(result.days[0]).toMatchObject({
+        date: '2026-06-09',
+        netSalesNio: 90,
+        completedTicketCount: 1,
+      });
+      expect(result.days[1].netSalesNio).toBe(0);
+    });
+
+    it('keeps §7.2 parity: Σ days.netSalesNio == dashboard netSalesNio for the same invoice set', async () => {
+      const invoiceSet: Partial<Invoice>[] = [
+        {
+          id: 'inv-1',
+          tenant_id: tenantId,
+          subtotal: 1000,
+          totalTax: 150,
+          isCanceled: false,
+          localIssueDate: '2026-06-10',
+          created_at: new Date('2026-06-10T16:00:00.000Z'),
+          items: [],
+          payments: [],
+        },
+        {
+          id: 'inv-2',
+          tenant_id: tenantId,
+          subtotal: 250.5,
+          totalTax: 37.58,
+          isCanceled: false,
+          localIssueDate: '2026-06-11',
+          created_at: new Date('2026-06-11T17:00:00.000Z'),
+          items: [],
+          payments: [],
+        },
+        {
+          id: 'inv-void',
+          tenant_id: tenantId,
+          subtotal: 999,
+          totalTax: 0,
+          isCanceled: true,
+          localIssueDate: '2026-06-11',
+          created_at: new Date('2026-06-11T18:00:00.000Z'),
+          items: [],
+          payments: [],
+        },
+        {
+          id: 'inv-cn',
+          tenant_id: tenantId,
+          subtotal: -300,
+          totalTax: -45,
+          isCanceled: false,
+          localIssueDate: '2026-06-13',
+          created_at: new Date('2026-06-13T19:00:00.000Z'),
+          items: [],
+          payments: [],
+        },
+      ];
+      mockInvoiceRepo.find.mockResolvedValue(invoiceSet);
+
+      const [series, dashboard] = await Promise.all([
+        service.getDashboardDailySeries(tenantId, baseQuery),
+        service.getDashboard(tenantId, baseQuery),
+      ]);
+
+      const seriesNet = series.days.reduce((sum, d) => sum + d.netSalesNio, 0);
+      expect(seriesNet).toBe(dashboard.netSalesNio);
+      expect(seriesNet).toBe(950.5);
+      // Credit notes net in as persisted; voided rows are excluded.
+      expect(
+        series.days.reduce((sum, d) => sum + d.completedTicketCount, 0),
+      ).toBe(dashboard.completedTicketCount);
+    });
+  });
+
   describe('getHourlySales', () => {
     it('should calculate 24 hourly buckets correctly', async () => {
       const mockInvoices: Partial<Invoice>[] = [
@@ -821,6 +1097,33 @@ describe('SalesReportsService', () => {
       });
       expect(pooledInvoiceRepo.find).not.toHaveBeenCalled();
       expect(pooledUserRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('binds the getDashboardDailySeries invoice read through the tenant transaction; the pooled repository stays silent (#592)', async () => {
+      const boundInvoiceFind = jest.fn().mockResolvedValue([]);
+      const { service, pooledInvoiceRepo, setConfigQueries } =
+        await buildBoundService(boundInvoiceFind);
+
+      await service.getDashboardDailySeries(tenantId, {
+        startDate: '2026-06-10',
+        endDate: '2026-06-11',
+      });
+
+      expect(setConfigQueries).toEqual([
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+      ]);
+      // Identical query semantics to the dashboard KPI read: same tenant
+      // predicate, same completed-sale filter, same inclusive created_at
+      // bounds — one source of truth for the invoice set (spec §7.2 parity).
+      expect(boundInvoiceFind).toHaveBeenCalledWith({
+        where: {
+          tenant_id: tenantId,
+          isCanceled: false,
+          created_at: expect.anything(),
+        },
+        order: { created_at: 'ASC' },
+      });
+      expect(pooledInvoiceRepo.find).not.toHaveBeenCalled();
     });
   });
 });

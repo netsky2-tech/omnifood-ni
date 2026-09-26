@@ -24,12 +24,30 @@
  * catalog or tax rules (spec §7.1).
  */
 
+import {
+  addLocalDays,
+  formatLocalDateKey,
+  isValidLocalDateKey,
+  parseLocalDateKey,
+} from './reporting-period';
+
 /** Structural view of a persisted invoice row (avoids coupling core to modules). */
 export interface SalesReportingInvoiceRow {
   isCanceled: boolean;
   subtotal: number | string | null;
   totalTax?: number | string | null;
   items?: ReadonlyArray<{ discount?: number | string | null }> | null;
+  /**
+   * On-device local calendar date (YYYY-MM-DD) fixed at issuance, when the
+   * row carries one (`invoices.local_issue_date`, nullable — D-9 no backfill).
+   * Used only by daily bucketing (Batch 5a).
+   */
+  localIssueDate?: string | null;
+  /**
+   * Row creation instant (`invoices.created_at`, non-nullable): the fallback
+   * bucket source for legacy rows without `localIssueDate`.
+   */
+  created_at?: Date | string | null;
 }
 
 export interface SalesReportingTotals {
@@ -101,4 +119,105 @@ export function computeSalesReportingTotals(
     totalTaxNio,
     totalDiscountsNio,
   };
+}
+
+/**
+ * Managua local calendar day (YYYY-MM-DD) an invoice row belongs to for daily
+ * trend bucketing (Dashboard V2 Batch 5a):
+ *
+ * - `localIssueDate` when present and a valid calendar date: the on-device
+ *   issue day fixed at issuance (authoritative even when sync happened later);
+ * - otherwise the legacy fallback: the `created_at` instant rendered in
+ *   America/Managua (`formatLocalDateKey`). Legacy rows have no
+ *   `local_issue_date` (migration 1809400000000 is additive, D-9 no backfill),
+ *   so this keeps pre-migration invoices on the chart.
+ *
+ * Returns null only when neither source is usable (unreachable in production:
+ * `created_at` is non-nullable).
+ */
+export function resolveInvoiceLocalDayBucket(
+  row: SalesReportingInvoiceRow,
+): string | null {
+  if (row.localIssueDate && isValidLocalDateKey(row.localIssueDate)) {
+    return row.localIssueDate;
+  }
+  if (row.created_at != null) {
+    const instant = new Date(row.created_at);
+    if (!Number.isNaN(instant.getTime())) {
+      return formatLocalDateKey(instant);
+    }
+  }
+  return null;
+}
+
+export interface DailySalesSeriesPoint {
+  /** Managua local calendar day (YYYY-MM-DD). */
+  date: string;
+  netSalesNio: number;
+  completedTicketCount: number;
+  /** netSalesNio / completedTicketCount; null on a zero-ticket day (PRD §7.5). */
+  averageTicketNetNio: number | null;
+}
+
+/**
+ * Daily Sales Trend buckets (PRD §14) under the §7.2 cross-widget invariant:
+ * the same completed-sale predicate and the same per-row Net Sales expression
+ * as `computeSalesReportingTotals`, never grossSales.
+ *
+ * Every calendar day of [localStartDate, localEndDate] is emitted in order;
+ * zero-sales days carry netSalesNio 0, count 0 and a null average so the
+ * chart keeps a continuous x-axis.
+ *
+ * A row whose resolved bucket falls outside the requested range (possible
+ * only when its on-device `localIssueDate` disagrees with the `created_at`
+ * day the query range filter used) is clamped to the nearest range boundary
+ * instead of being dropped, so the parity invariant
+ * `Σ days.netSalesNio === computeSalesReportingTotals(rows).netSalesNio`
+ * holds unconditionally over the queried row set.
+ */
+export function computeDailySalesSeries(
+  localStartDate: string,
+  localEndDate: string,
+  rows: readonly SalesReportingInvoiceRow[],
+): DailySalesSeriesPoint[] {
+  const start = parseLocalDateKey(localStartDate);
+  const end = parseLocalDateKey(localEndDate);
+
+  const netByDay = new Map<string, number>();
+  const countByDay = new Map<string, number>();
+
+  for (const row of rows) {
+    if (!isCompletedSaleRow(row)) {
+      continue;
+    }
+    const rawBucket = resolveInvoiceLocalDayBucket(row);
+    if (rawBucket == null) {
+      continue;
+    }
+    const bucket =
+      rawBucket < start ? start : rawBucket > end ? end : rawBucket;
+    netByDay.set(
+      bucket,
+      round2((netByDay.get(bucket) ?? 0) + salesRowNetSales(row)),
+    );
+    countByDay.set(bucket, (countByDay.get(bucket) ?? 0) + 1);
+  }
+
+  const days: DailySalesSeriesPoint[] = [];
+  let cursor = start;
+  while (cursor <= end) {
+    const netSalesNio = netByDay.get(cursor) ?? 0;
+    const completedTicketCount = countByDay.get(cursor) ?? 0;
+    days.push({
+      date: cursor,
+      netSalesNio,
+      completedTicketCount,
+      averageTicketNetNio:
+        completedTicketCount > 0
+          ? round2(netSalesNio / completedTicketCount)
+          : null,
+    });
+    cursor = addLocalDays(cursor, 1);
+  }
+  return days;
 }

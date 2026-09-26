@@ -135,6 +135,17 @@ export function createReportingPeriod(
   };
 }
 
+/**
+ * Inclusive day count between two validated local date keys:
+ * `localDateKeySpanDays('2026-06-01', '2026-06-01') === 1`. Computed over the
+ * date keys themselves (both fixed-offset UTC-06:00), so it cannot drift.
+ */
+export function localDateKeySpanDays(startKey: string, endKey: string): number {
+  const start = new Date(`${parseLocalDateKey(startKey)}T00:00:00Z`).getTime();
+  const end = new Date(`${parseLocalDateKey(endKey)}T00:00:00Z`).getTime();
+  return Math.round((end - start) / 86_400_000) + 1;
+}
+
 /** Every local calendar day key of the period, in order. */
 export function eachLocalDate(period: ReportingPeriod): string[] {
   const days: string[] = [];
