@@ -231,4 +231,51 @@ describe('ChangeLogService', () => {
       expect(h.pooled.create).not.toHaveBeenCalled();
     });
   });
+
+  describe('AG-07 severity classification at ingestion', () => {
+    it.each([
+      ['ONBOARDING_ACTIVATION_CHECK_FAILED', 'CRITICAL'],
+      ['ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE', 'CRITICAL'],
+      ['ONBOARDING_ACTIVATION_FINALIZED', 'WARNING'],
+      ['ONBOARDING_ACTIVATION_FOLLOW_UP_OPENED', 'WARNING'],
+      ['DEACTIVATE', 'WARNING'],
+      ['ONBOARDING_ACTIVATION_ATTEMPT_STARTED', 'INFO'],
+      ['ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED', 'INFO'],
+      ['CREATE', 'INFO'],
+      ['UPDATE', 'INFO'],
+      ['SOME_FUTURE_ACTION', 'INFO'],
+    ])(
+      'persists severity %s for action %s on new events',
+      async (action, severity) => {
+        const h = makeHarness();
+
+        await h.service.log({ ...baseParams({ userId: 'user-uuid' }), action });
+
+        expect(h.boundRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({ action, severity }),
+        );
+      },
+    );
+
+    it('classifies severity identically when riding a supplied manager (same ingestion path)', async () => {
+      const h = makeHarness();
+      const suppliedRepo = {
+        create: jest.fn((data: unknown) => data as ChangeLog),
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+      const manager = { getRepository: jest.fn(() => suppliedRepo) };
+
+      await h.service.log(
+        {
+          ...baseParams({ userId: 'user-uuid' }),
+          action: 'ONBOARDING_ACTIVATION_CHECK_FAILED',
+        },
+        manager as unknown as never,
+      );
+
+      expect(suppliedRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ severity: 'CRITICAL' }),
+      );
+    });
+  });
 });
