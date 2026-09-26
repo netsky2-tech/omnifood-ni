@@ -17,6 +17,7 @@ import {
   ResolvedReportingBounds,
 } from '../../../core/reporting/reporting-period';
 import {
+  allocateInvoiceLineNetSales,
   computeDailySalesSeries,
   computeSalesReportingTotals,
 } from '../../../core/reporting/sales-reporting-semantics';
@@ -314,13 +315,94 @@ export class SalesReportsService {
     };
   }
 
+  /**
+   * Sales by Hour (PRD §14 FR-HOURLY-01/02/03, Dashboard V2 Batch 5c-backend).
+   *
+   * Two modes:
+   *
+   * - Single day (legacy): optional `date`, defaulting to today. Response
+   *   shape unchanged except the additive `meta: { dayCount: 1 }` and the
+   *   additive per-bucket `netSalesNio`.
+   * - Range (FR-HOURLY-01): `startDate`/`endDate` (both required together,
+   *   mutually exclusive with `date`), 2–60 days inclusive — the same
+   *   ReportingPeriod validation and BadRequest-before-read discipline as
+   *   the daily series. Buckets aggregate the WHOLE range per hour-of-day
+   *   so clients can show an averaged distribution; `meta.dayCount` carries
+   *   the number of aggregated days.
+   *
+   * FR-HOURLY-03 reconciliation: each bucket gains `netSalesNio`
+   * (Σ invoice.subtotal, post-discount, pre-tax, credit notes net in as
+   * persisted) over EXACTLY the same invoice set and predicate as the KPI
+   * route (tenant + `isCanceled = false` + inclusive created_at bounds), so
+   * `Σ buckets.netSalesNio === getDashboard(...).netSalesNio` over the same
+   * window. The legacy post-tax `totalSales` fields stay byte-identical
+   * (hour-of-day is still the legacy UTC hour of `created_at`).
+   */
   async getHourlySales(
     tenantId: string,
     query?: HourlySalesQueryDto,
   ): Promise<HourlySalesReportDto> {
-    const { dateStr, start, end } = this.parseDayRange(query?.date);
+    const requestedDate = query?.date?.trim();
+    const requestedStart = query?.startDate?.trim();
+    const requestedEnd = query?.endDate?.trim();
+    const hasRange = Boolean(
+      (requestedStart && requestedStart.length > 0) ||
+      (requestedEnd && requestedEnd.length > 0),
+    );
 
-    // Issue #581 WU1: bound invoice read (see getDashboard).
+    let start: Date;
+    let end: Date;
+    let dateKey: string;
+    let dayCount: number;
+
+    if (hasRange) {
+      if (requestedDate) {
+        throw new BadRequestException(
+          'Provide either a single date or a startDate/endDate range, not both.',
+        );
+      }
+      if (!requestedStart || !requestedEnd) {
+        throw new BadRequestException(
+          'startDate and endDate are both required for the hourly-sales range',
+        );
+      }
+
+      const bounds = this.resolvePeriodBounds(requestedStart, requestedEnd);
+      const rangeStart = bounds.startInclusiveUtc;
+      const rangeEnd = bounds.endInclusiveUtc;
+      const { localStartDate, localEndDate } = bounds;
+      if (!rangeStart || !rangeEnd || !localStartDate || !localEndDate) {
+        // Unreachable: both inputs were validated calendar date keys.
+        throw new Error(
+          `Unresolvable hourly-sales bounds for '${requestedStart}'..'${requestedEnd}'`,
+        );
+      }
+
+      dayCount = localDateKeySpanDays(localStartDate, localEndDate);
+      if (
+        dayCount < DAILY_SERIES_MIN_DAYS ||
+        dayCount > DAILY_SERIES_MAX_DAYS
+      ) {
+        throw new BadRequestException(
+          `Hourly sales supports a ${DAILY_SERIES_MIN_DAYS}-${DAILY_SERIES_MAX_DAYS} day range; got ${dayCount} day(s).` +
+            ' Use the date parameter for a single day.',
+        );
+      }
+
+      start = rangeStart;
+      end = rangeEnd;
+      dateKey = localStartDate;
+    } else {
+      const parsed = this.parseDayRange(query?.date);
+      start = parsed.start;
+      end = parsed.end;
+      dateKey = parsed.dateStr;
+      dayCount = 1;
+    }
+
+    // Issue #581 WU1: bound invoice read (see getDashboard). Same predicate
+    // and bounds shape as the KPI route over the same window (FR-HOURLY-03
+    // parity): tenant + isCanceled = false + inclusive created_at bounds.
     const invoices = await runInTenantTransaction(
       this.dataSource,
       tenantId,
@@ -341,6 +423,7 @@ export class SalesReportsService {
         hour,
         invoiceCount: 0,
         totalSales: 0,
+        netSalesNio: 0,
       }),
     );
 
@@ -352,9 +435,13 @@ export class SalesReportsService {
       const hour = invDate.getUTCHours();
       if (hour >= 0 && hour < 24) {
         const amount = Number(inv.total ?? 0);
+        const netAmount = Number(inv.subtotal ?? 0);
         hourlyBuckets[hour].invoiceCount += 1;
         hourlyBuckets[hour].totalSales = round2(
           hourlyBuckets[hour].totalSales + amount,
+        );
+        hourlyBuckets[hour].netSalesNio = round2(
+          hourlyBuckets[hour].netSalesNio + netAmount,
         );
         totalSales = round2(totalSales + amount);
         totalInvoices += 1;
@@ -362,9 +449,10 @@ export class SalesReportsService {
     }
 
     return {
-      date: dateStr,
+      date: dateKey,
       totalSales: round2(totalSales),
       totalInvoices,
+      meta: { dayCount },
       generatedAt: new Date().toISOString(),
       hourly: hourlyBuckets,
     };
@@ -409,29 +497,41 @@ export class SalesReportsService {
         productName: string;
         totalQuantity: number;
         totalRevenue: number;
+        netRevenueNio: number;
       }
     >();
 
     for (const inv of invoices) {
       if (inv.items && inv.items.length > 0) {
-        for (const item of inv.items) {
+        // FR-PRODUCT-01: per-line Net Sales (post-discount, pre-tax) with
+        // any per-invoice rounding residue allocated so that
+        // Σ products.netRevenueNio reconciles exactly with the KPI
+        // netSalesNio over the same invoice set (see
+        // allocateInvoiceLineNetSales for the largest-remainder policy).
+        const lineNets = allocateInvoiceLineNetSales(inv);
+        inv.items.forEach((item, lineIndex) => {
           const key = item.productId || item.productName || 'unknown';
           const existing = productAggregates.get(key);
           const qty = Number(item.quantity ?? 0);
           const revenue = Number(item.total ?? 0);
+          const netRevenue = lineNets[lineIndex] ?? 0;
 
           if (existing) {
             existing.totalQuantity = round4(existing.totalQuantity + qty);
             existing.totalRevenue = round2(existing.totalRevenue + revenue);
+            existing.netRevenueNio = round2(
+              existing.netRevenueNio + netRevenue,
+            );
           } else {
             productAggregates.set(key, {
               productId: item.productId,
               productName: item.productName || 'Producto sin nombre',
               totalQuantity: round4(qty),
               totalRevenue: round2(revenue),
+              netRevenueNio: round2(netRevenue),
             });
           }
-        }
+        });
       }
     }
 

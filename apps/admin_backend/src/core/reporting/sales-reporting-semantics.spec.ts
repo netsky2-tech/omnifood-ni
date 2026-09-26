@@ -1,4 +1,5 @@
 import {
+  allocateInvoiceLineNetSales,
   computeDailySalesSeries,
   computeSalesReportingTotals,
   isCompletedSaleRow,
@@ -319,6 +320,140 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
       expect(days[0].netSalesNio).toBe(400);
       expect(days[1].netSalesNio).toBe(250.5);
       expect(days[2].netSalesNio).toBe(-300);
+    });
+  });
+
+  /**
+   * Line-level decomposition (FR-PRODUCT-01 / Batch 5c-backend):
+   *
+   * A persisted invoice line carries `total` (tax-INCLUSIVE) and
+   * `taxAmount`, so its Net Sales (post-discount, pre-tax) contribution is
+   * `total - taxAmount`. The invoices service derives the persisted invoice
+   * `subtotal` exactly this way (subtotal = Σ line totals - Σ line
+   * taxAmount, invoices.service.ts credit-note path), so per invoice:
+   *
+   *   Σ allocateInvoiceLineNetSales(row) === salesRowNetSales(row)
+   *
+   * must hold EXACTLY. When the persisted line cents and the persisted
+   * invoice subtotal disagree by a rounding residue (both are scale-2
+   * decimals written from scale-4 arithmetic), the residue is allocated
+   * deterministically by largest remainder (weighted by absolute raw line
+   * net, ties broken by descending weight then line order) so the identity
+   * always holds.
+   */
+  describe('allocateInvoiceLineNetSales (Batch 5c line decomposition)', () => {
+    it('decomposes a clean single-line invoice exactly (total - taxAmount)', () => {
+      const nets = allocateInvoiceLineNetSales({
+        subtotal: 1000,
+        items: [{ total: 1150, taxAmount: 150 }],
+      });
+
+      expect(nets).toEqual([1000]);
+      expect(nets.reduce((a, b) => a + b, 0)).toBe(1000);
+    });
+
+    it('decomposes a clean multi-line invoice; Σ line nets == invoice.subtotal', () => {
+      const nets = allocateInvoiceLineNetSales({
+        subtotal: 3350,
+        items: [
+          { total: 1150, taxAmount: 150 },
+          { total: 2300, taxAmount: 300 },
+          { total: 402.5, taxAmount: 52.5 },
+        ],
+      });
+
+      expect(nets).toEqual([1000, 2000, 350]);
+      expect(nets.reduce((a, b) => a + b, 0)).toBe(3350);
+    });
+
+    it('nets credit-note lines as persisted (negative totals and tax)', () => {
+      // Credit-note lines persist total = -origin.total * ratio and
+      // taxAmount = -origin.taxAmount * ratio (invoices.service.ts); the
+      // invoice subtotal is round(total - totalTax).
+      const row: SalesReportingInvoiceRow = {
+        isCanceled: false,
+        subtotal: -1400,
+        items: [
+          { total: -1150, taxAmount: -150 },
+          { total: -460, taxAmount: -60 },
+        ],
+      };
+
+      const nets = allocateInvoiceLineNetSales(row);
+      expect(nets).toEqual([-1000, -400]);
+      expect(nets.reduce((a, b) => a + b, 0)).toBe(-1400);
+      expect(nets.reduce((a, b) => a + b, 0)).toBe(salesRowNetSales(row));
+    });
+
+    it('allocates a negative rounding residue by largest remainder (28.34+28.34 vs subtotal 56.67)', () => {
+      // Persisted line cents round UP both lines (33.34 - 5.00 = 28.34),
+      // while the persisted scale-4 subtotal rounds DOWN to 56.67: residue
+      // -0.01 must be absorbed so Σ line nets == subtotal exactly.
+      const nets = allocateInvoiceLineNetSales({
+        subtotal: 56.67,
+        items: [
+          { total: 33.34, taxAmount: 5 },
+          { total: 33.34, taxAmount: 5 },
+        ],
+      });
+
+      expect(nets).toEqual([28.33, 28.34]);
+      expect(nets.reduce((a, b) => a + b, 0)).toBe(56.67);
+    });
+
+    it('allocates a positive rounding residue on credit-note lines (−28.34−28.34 vs subtotal −56.67)', () => {
+      const nets = allocateInvoiceLineNetSales({
+        subtotal: -56.67,
+        items: [
+          { total: -33.34, taxAmount: -5 },
+          { total: -33.34, taxAmount: -5 },
+        ],
+      });
+
+      expect(nets).toEqual([-28.33, -28.34]);
+      expect(nets.reduce((a, b) => a + b, 0)).toBe(-56.67);
+    });
+
+    it('sends the whole residue to the first line when every raw net is zero', () => {
+      const nets = allocateInvoiceLineNetSales({
+        subtotal: 0.02,
+        items: [
+          { total: 0, taxAmount: 0 },
+          { total: 0, taxAmount: 0 },
+        ],
+      });
+
+      expect(nets).toEqual([0.02, 0]);
+    });
+
+    it('treats a row without items as an empty decomposition', () => {
+      expect(allocateInvoiceLineNetSales({ subtotal: 730, items: [] })).toEqual(
+        [],
+      );
+      expect(allocateInvoiceLineNetSales({ subtotal: 730 })).toEqual([]);
+    });
+
+    it('holds the decomposition identity over every deterministic residue case', () => {
+      // Sweep persisted-cent combinations so any future allocation change
+      // keeps Σ line nets === round2(subtotal) exactly, including credit
+      // notes (negative lines) and zero-net lines.
+      for (let subtotalCents = -300; subtotalCents <= 300; subtotalCents += 7) {
+        for (let aCents = -200; aCents <= 200; aCents += 13) {
+          for (let bCents = -150; bCents <= 150; bCents += 11) {
+            const row: SalesReportingInvoiceRow = {
+              isCanceled: false,
+              subtotal: subtotalCents / 100,
+              items: [
+                { total: aCents / 100, taxAmount: 0 },
+                { total: bCents / 100, taxAmount: 0 },
+              ],
+            };
+            const nets = allocateInvoiceLineNetSales(row);
+            const sum = nets.reduce((acc, n) => acc + n, 0);
+            expect(Math.round(sum * 100)).toBe(subtotalCents);
+          }
+        }
+      }
     });
   });
 });

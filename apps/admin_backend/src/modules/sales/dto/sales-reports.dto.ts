@@ -11,10 +11,25 @@ export class SalesDashboardQueryDto {
   endDate?: string;
 }
 
+/**
+ * Hourly Sales query. Legacy mode: an optional `date` (defaults to today).
+ * Range mode (Dashboard V2 Batch 5c-backend, FR-HOURLY-01): optional
+ * `startDate`/`endDate` (both required together, mutually exclusive with
+ * `date`); the service enforces the same 2–60 day inclusive window as the
+ * daily series and rejects a 1-day range (use `date` instead).
+ */
 export class HourlySalesQueryDto {
   @IsOptional()
   @IsString()
   date?: string;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
 }
 
 export class TopProductsQueryDto {
@@ -124,13 +139,36 @@ export interface SalesDashboardReportDto {
 export interface HourlySalesBucketDto {
   hour: number;
   invoiceCount: number;
+  /**
+   * @deprecated Legacy ambiguous field: post-discount AND post-tax (Σ
+   * `invoice.total` per bucket). Retained unchanged; V2 work must use
+   * `netSalesNio` (spec §7.2/FR-HOURLY-03).
+   */
   totalSales: number;
+  /**
+   * Net Sales per bucket: Σ `invoice.subtotal` (post-discount, pre-tax,
+   * credit notes net in as persisted) over the same invoice set — reconciles
+   * with the executive KPI (FR-HOURLY-03).
+   */
+  netSalesNio: number;
+}
+
+/** Range metadata for the hourly report (FR-HOURLY-01 averaged distribution). */
+export interface HourlySalesReportMetaDto {
+  /** Number of local calendar days aggregated (1 for a single-day query). */
+  dayCount: number;
 }
 
 export interface HourlySalesReportDto {
+  /**
+   * Normalized Managua calendar date of the query: the requested day in
+   * single-day mode; the range start in range mode.
+   */
   date: string;
   totalSales: number;
   totalInvoices: number;
+  /** Present since Batch 5c-backend; `{ dayCount: 1 }` in single-day mode. */
+  meta: HourlySalesReportMetaDto;
   generatedAt: string;
   hourly: HourlySalesBucketDto[];
 }
@@ -139,7 +177,20 @@ export interface TopProductItemDto {
   productId: string;
   productName: string;
   totalQuantity: number;
+  /**
+   * @deprecated Legacy ambiguous field: tax-INCLUSIVE revenue (Σ
+   * `invoice_items.total`). Retained unchanged; V2 work must use
+   * `netRevenueNio` (spec §7.2/FR-PRODUCT-01).
+   */
   totalRevenue: number;
+  /**
+   * Net Sales contribution: Σ line `(total − taxAmount)` per product,
+   * post-discount, pre-tax, credit notes net in as persisted, with any
+   * per-invoice rounding residue allocated by largest remainder so
+   * `Σ products.netRevenueNio` reconciles exactly with the KPI
+   * `netSalesNio` (FR-PRODUCT-01).
+   */
+  netRevenueNio: number;
 }
 
 export interface TopProductsReportDto {

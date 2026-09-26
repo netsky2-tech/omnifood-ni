@@ -36,7 +36,13 @@ export interface SalesReportingInvoiceRow {
   isCanceled: boolean;
   subtotal: number | string | null;
   totalTax?: number | string | null;
-  items?: ReadonlyArray<{ discount?: number | string | null }> | null;
+  items?: ReadonlyArray<{
+    discount?: number | string | null;
+    /** Tax-inclusive persisted line total (`invoice_items.total`). */
+    total?: number | string | null;
+    /** Persisted per-line tax (`invoice_items.tax_amount`). */
+    taxAmount?: number | string | null;
+  }> | null;
   /**
    * On-device local calendar date (YYYY-MM-DD) fixed at issuance, when the
    * row carries one (`invoices.local_issue_date`, nullable — D-9 no backfill).
@@ -84,6 +90,89 @@ export function salesRowDiscounts(row: SalesReportingInvoiceRow): number {
     }
   }
   return total;
+}
+
+/**
+ * Per-line Net Sales decomposition of one invoice row (FR-PRODUCT-01,
+ * Dashboard V2 Batch 5c-backend):
+ *
+ * A persisted invoice line carries `total` (tax-INCLUSIVE) and `taxAmount`,
+ * and the invoices service derives the persisted invoice `subtotal` exactly
+ * as `Σ line.total − Σ line.taxAmount` (see the credit-note path in
+ * invoices.service.ts), so the post-discount, pre-tax contribution of one
+ * line is `total − taxAmount`.
+ *
+ * Both the line cents and the invoice subtotal are persisted at scale 2
+ * from scale-4 arithmetic, so the raw line nets can disagree with the
+ * persisted subtotal by a small rounding residue. To keep the decomposition
+ * identity `Σ line nets === salesRowNetSales(row)` EXACT (and therefore the
+ * Top-Products Net Sales reconciled with the KPI Net Sales), the residue is
+ * allocated deterministically by LARGEST REMAINDER: each line's share of the
+ * residue is proportional to its absolute raw net, truncated toward zero,
+ * and the leftover cent units go to the lines with the largest fractional
+ * remainders (ties broken by descending absolute raw net, then line order).
+ * When every raw net is zero, the whole residue goes to the first line.
+ *
+ * Returns one adjusted 2-decimal net per line, in line order; a row without
+ * items decomposes to an empty array (nothing to allocate).
+ */
+export function allocateInvoiceLineNetSales(row: {
+  subtotal?: number | string | null;
+  items?: SalesReportingInvoiceRow['items'];
+}): number[] {
+  const items = row.items ?? [];
+  const rawCents = items.map((item) =>
+    Math.round((Number(item.total ?? 0) - Number(item.taxAmount ?? 0)) * 100),
+  );
+  const targetCents = Math.round(Number(row.subtotal ?? 0) * 100);
+  const rawSumCents = rawCents.reduce((sum, cents) => sum + cents, 0);
+  const residualCents = targetCents - rawSumCents;
+
+  if (residualCents === 0) {
+    return rawCents.map((cents) => cents / 100);
+  }
+
+  const allocation = new Array<number>(rawCents.length).fill(0);
+  const weights = rawCents.map((cents) => Math.abs(cents));
+  const weightSum = weights.reduce((sum, w) => sum + w, 0);
+
+  if (weightSum === 0) {
+    // All-zero lines: deterministic single-recipient policy (first line).
+    if (rawCents.length > 0) {
+      allocation[0] = residualCents;
+    }
+  } else {
+    const floatShares = weights.map((w) => (residualCents * w) / weightSum);
+    const remainders = floatShares.map((share, index) => ({
+      index,
+      fraction: Math.abs(share - Math.trunc(share)),
+      weight: weights[index],
+    }));
+    remainders.sort(
+      (a, b) =>
+        b.fraction - a.fraction || b.weight - a.weight || a.index - b.index,
+    );
+
+    let distributed = 0;
+    floatShares.forEach((share, index) => {
+      const base = Math.trunc(share);
+      allocation[index] = base;
+      distributed += base;
+    });
+
+    // Distribute the leftover cent units one at a time, largest remainder
+    // first, wrapping around until the residue is fully absorbed.
+    const sign = residualCents > 0 ? 1 : -1;
+    let unitsLeft = Math.abs(residualCents - distributed);
+    let cursor = 0;
+    while (unitsLeft > 0) {
+      allocation[remainders[cursor % remainders.length].index] += sign;
+      unitsLeft -= 1;
+      cursor += 1;
+    }
+  }
+
+  return rawCents.map((cents, index) => (cents + allocation[index]) / 100);
 }
 
 /** Aggregates the §7.2 KPI set over completed (non-void) invoice rows. */

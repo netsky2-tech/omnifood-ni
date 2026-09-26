@@ -1125,5 +1125,32 @@ describe('SalesReportsService', () => {
       });
       expect(pooledInvoiceRepo.find).not.toHaveBeenCalled();
     });
+
+    it('binds the getHourlySales range-mode invoice read through the tenant transaction; the pooled repository stays silent (#592)', async () => {
+      const boundInvoiceFind = jest.fn().mockResolvedValue([]);
+      const { service, pooledInvoiceRepo, setConfigQueries } =
+        await buildBoundService(boundInvoiceFind);
+
+      await service.getHourlySales(tenantId, {
+        startDate: '2026-08-25',
+        endDate: '2026-08-26',
+      });
+
+      expect(setConfigQueries).toEqual([
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+      ]);
+      // Identical query semantics to the dashboard KPI read over the same
+      // window: same tenant predicate, same isCanceled filter, same
+      // inclusive created_at bounds (FR-HOURLY-03 parity).
+      expect(boundInvoiceFind).toHaveBeenCalledWith({
+        where: {
+          tenant_id: tenantId,
+          isCanceled: false,
+          created_at: expect.anything(),
+        },
+        order: { created_at: 'ASC' },
+      });
+      expect(pooledInvoiceRepo.find).not.toHaveBeenCalled();
+    });
   });
 });
