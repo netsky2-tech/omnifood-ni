@@ -56,6 +56,16 @@ mixin _$Invoice {
   /// backend can evaluate voidability on its own calendar. Never
   /// recomputed from [createdAt].
   String? get localIssueDate => throw _privateConstructorUsedError;
+
+  /// Batch 7 Slice 2 (PRD §21 / Architecture Spec §33.4 / AD-10): the
+  /// voluntary tip snapshot captured at checkout. The tip is NOT part of
+  /// the taxable total (DGI INV-16.1); it is stored as issued and never
+  /// recomputed. Null = no tip was selected. Travels to the cloud via
+  /// [SalesMapper.toSyncJson] so the backend mirrors the fiscal document.
+  double? get tipAmountNio => throw _privateConstructorUsedError;
+  double? get tipAmountUsd => throw _privateConstructorUsedError;
+  double? get tipPercentage => throw _privateConstructorUsedError;
+  double? get tipEligibleBaseNio => throw _privateConstructorUsedError;
   int? get sourceSequence => throw _privateConstructorUsedError;
   String? get idempotencyKey => throw _privateConstructorUsedError;
   String? get payloadHash => throw _privateConstructorUsedError;
@@ -100,6 +110,10 @@ abstract class $InvoiceCopyWith<$Res> {
       String? terminalId,
       String? shiftId,
       String? localIssueDate,
+      double? tipAmountNio,
+      double? tipAmountUsd,
+      double? tipPercentage,
+      double? tipEligibleBaseNio,
       int? sourceSequence,
       String? idempotencyKey,
       String? payloadHash,
@@ -147,6 +161,10 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
     Object? terminalId = freezed,
     Object? shiftId = freezed,
     Object? localIssueDate = freezed,
+    Object? tipAmountNio = freezed,
+    Object? tipAmountUsd = freezed,
+    Object? tipPercentage = freezed,
+    Object? tipEligibleBaseNio = freezed,
     Object? sourceSequence = freezed,
     Object? idempotencyKey = freezed,
     Object? payloadHash = freezed,
@@ -250,6 +268,22 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
           ? _value.localIssueDate
           : localIssueDate // ignore: cast_nullable_to_non_nullable
               as String?,
+      tipAmountNio: freezed == tipAmountNio
+          ? _value.tipAmountNio
+          : tipAmountNio // ignore: cast_nullable_to_non_nullable
+              as double?,
+      tipAmountUsd: freezed == tipAmountUsd
+          ? _value.tipAmountUsd
+          : tipAmountUsd // ignore: cast_nullable_to_non_nullable
+              as double?,
+      tipPercentage: freezed == tipPercentage
+          ? _value.tipPercentage
+          : tipPercentage // ignore: cast_nullable_to_non_nullable
+              as double?,
+      tipEligibleBaseNio: freezed == tipEligibleBaseNio
+          ? _value.tipEligibleBaseNio
+          : tipEligibleBaseNio // ignore: cast_nullable_to_non_nullable
+              as double?,
       sourceSequence: freezed == sourceSequence
           ? _value.sourceSequence
           : sourceSequence // ignore: cast_nullable_to_non_nullable
@@ -321,6 +355,10 @@ abstract class _$$InvoiceImplCopyWith<$Res> implements $InvoiceCopyWith<$Res> {
       String? terminalId,
       String? shiftId,
       String? localIssueDate,
+      double? tipAmountNio,
+      double? tipAmountUsd,
+      double? tipPercentage,
+      double? tipEligibleBaseNio,
       int? sourceSequence,
       String? idempotencyKey,
       String? payloadHash,
@@ -366,6 +404,10 @@ class __$$InvoiceImplCopyWithImpl<$Res>
     Object? terminalId = freezed,
     Object? shiftId = freezed,
     Object? localIssueDate = freezed,
+    Object? tipAmountNio = freezed,
+    Object? tipAmountUsd = freezed,
+    Object? tipPercentage = freezed,
+    Object? tipEligibleBaseNio = freezed,
     Object? sourceSequence = freezed,
     Object? idempotencyKey = freezed,
     Object? payloadHash = freezed,
@@ -469,6 +511,22 @@ class __$$InvoiceImplCopyWithImpl<$Res>
           ? _value.localIssueDate
           : localIssueDate // ignore: cast_nullable_to_non_nullable
               as String?,
+      tipAmountNio: freezed == tipAmountNio
+          ? _value.tipAmountNio
+          : tipAmountNio // ignore: cast_nullable_to_non_nullable
+              as double?,
+      tipAmountUsd: freezed == tipAmountUsd
+          ? _value.tipAmountUsd
+          : tipAmountUsd // ignore: cast_nullable_to_non_nullable
+              as double?,
+      tipPercentage: freezed == tipPercentage
+          ? _value.tipPercentage
+          : tipPercentage // ignore: cast_nullable_to_non_nullable
+              as double?,
+      tipEligibleBaseNio: freezed == tipEligibleBaseNio
+          ? _value.tipEligibleBaseNio
+          : tipEligibleBaseNio // ignore: cast_nullable_to_non_nullable
+              as double?,
       sourceSequence: freezed == sourceSequence
           ? _value.sourceSequence
           : sourceSequence // ignore: cast_nullable_to_non_nullable
@@ -536,6 +594,10 @@ class _$InvoiceImpl implements _Invoice {
       this.terminalId,
       this.shiftId,
       this.localIssueDate,
+      this.tipAmountNio,
+      this.tipAmountUsd,
+      this.tipPercentage,
+      this.tipEligibleBaseNio,
       this.sourceSequence,
       this.idempotencyKey,
       this.payloadHash,
@@ -614,6 +676,20 @@ class _$InvoiceImpl implements _Invoice {
   /// recomputed from [createdAt].
   @override
   final String? localIssueDate;
+
+  /// Batch 7 Slice 2 (PRD §21 / Architecture Spec §33.4 / AD-10): the
+  /// voluntary tip snapshot captured at checkout. The tip is NOT part of
+  /// the taxable total (DGI INV-16.1); it is stored as issued and never
+  /// recomputed. Null = no tip was selected. Travels to the cloud via
+  /// [SalesMapper.toSyncJson] so the backend mirrors the fiscal document.
+  @override
+  final double? tipAmountNio;
+  @override
+  final double? tipAmountUsd;
+  @override
+  final double? tipPercentage;
+  @override
+  final double? tipEligibleBaseNio;
   @override
   final int? sourceSequence;
   @override
@@ -638,7 +714,7 @@ class _$InvoiceImpl implements _Invoice {
 
   @override
   String toString() {
-    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, shiftId: $shiftId, localIssueDate: $localIssueDate, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
+    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, shiftId: $shiftId, localIssueDate: $localIssueDate, tipAmountNio: $tipAmountNio, tipAmountUsd: $tipAmountUsd, tipPercentage: $tipPercentage, tipEligibleBaseNio: $tipEligibleBaseNio, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
   }
 
   @override
@@ -686,6 +762,14 @@ class _$InvoiceImpl implements _Invoice {
             (identical(other.shiftId, shiftId) || other.shiftId == shiftId) &&
             (identical(other.localIssueDate, localIssueDate) ||
                 other.localIssueDate == localIssueDate) &&
+            (identical(other.tipAmountNio, tipAmountNio) ||
+                other.tipAmountNio == tipAmountNio) &&
+            (identical(other.tipAmountUsd, tipAmountUsd) ||
+                other.tipAmountUsd == tipAmountUsd) &&
+            (identical(other.tipPercentage, tipPercentage) ||
+                other.tipPercentage == tipPercentage) &&
+            (identical(other.tipEligibleBaseNio, tipEligibleBaseNio) ||
+                other.tipEligibleBaseNio == tipEligibleBaseNio) &&
             (identical(other.sourceSequence, sourceSequence) ||
                 other.sourceSequence == sourceSequence) &&
             (identical(other.idempotencyKey, idempotencyKey) ||
@@ -733,6 +817,10 @@ class _$InvoiceImpl implements _Invoice {
         terminalId,
         shiftId,
         localIssueDate,
+        tipAmountNio,
+        tipAmountUsd,
+        tipPercentage,
+        tipEligibleBaseNio,
         sourceSequence,
         idempotencyKey,
         payloadHash,
@@ -783,6 +871,10 @@ abstract class _Invoice implements Invoice {
       final String? terminalId,
       final String? shiftId,
       final String? localIssueDate,
+      final double? tipAmountNio,
+      final double? tipAmountUsd,
+      final double? tipPercentage,
+      final double? tipEligibleBaseNio,
       final int? sourceSequence,
       final String? idempotencyKey,
       final String? payloadHash,
@@ -852,6 +944,20 @@ abstract class _Invoice implements Invoice {
   /// backend can evaluate voidability on its own calendar. Never
   /// recomputed from [createdAt].
   String? get localIssueDate;
+  @override
+
+  /// Batch 7 Slice 2 (PRD §21 / Architecture Spec §33.4 / AD-10): the
+  /// voluntary tip snapshot captured at checkout. The tip is NOT part of
+  /// the taxable total (DGI INV-16.1); it is stored as issued and never
+  /// recomputed. Null = no tip was selected. Travels to the cloud via
+  /// [SalesMapper.toSyncJson] so the backend mirrors the fiscal document.
+  double? get tipAmountNio;
+  @override
+  double? get tipAmountUsd;
+  @override
+  double? get tipPercentage;
+  @override
+  double? get tipEligibleBaseNio;
   @override
   int? get sourceSequence;
   @override

@@ -322,6 +322,10 @@ class SalesMapper {
       totalUsd: entity.totalUsd,
       shiftId: entity.shiftId,
       localIssueDate: entity.localIssueDate,
+      tipAmountNio: entity.tipAmountNio,
+      tipAmountUsd: entity.tipAmountUsd,
+      tipPercentage: entity.tipPercentage,
+      tipEligibleBaseNio: entity.tipEligibleBaseNio,
     );
   }
 
@@ -359,6 +363,10 @@ class SalesMapper {
       totalUsd: domain.totalUsd,
       shiftId: domain.shiftId,
       localIssueDate: domain.localIssueDate,
+      tipAmountNio: domain.tipAmountNio,
+      tipAmountUsd: domain.tipAmountUsd,
+      tipPercentage: domain.tipPercentage,
+      tipEligibleBaseNio: domain.tipEligibleBaseNio,
     );
   }
 
@@ -543,6 +551,14 @@ class SalesMapper {
       // relatedInvoiceId convention) — never fabricated.
       'shiftId': invoice.shiftId,
       'localIssueDate': invoice.localIssueDate,
+      // Batch 7 Slice 2 (PRD §21 / §33.4 / AD-10): the voluntary tip
+      // snapshot travels as issued so the backend mirrors the fiscal
+      // document. Null travels as null (the shiftId convention) — never
+      // fabricated or recomputed.
+      'tipAmountNio': invoice.tipAmountNio,
+      'tipAmountUsd': invoice.tipAmountUsd,
+      'tipPercentage': invoice.tipPercentage,
+      'tipEligibleBaseNio': invoice.tipEligibleBaseNio,
       if (invoice.originInvoiceId?.isNotEmpty ?? false)
         'originInvoiceId': invoice.originInvoiceId,
       if (invoice.refundReasonPolicy?.isNotEmpty ?? false)

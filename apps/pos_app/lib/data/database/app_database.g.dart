@@ -178,7 +178,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 56,
+      version: 57,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -260,7 +260,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, `shift_id` TEXT, `local_issue_date` TEXT, `fiscal_header_snapshot` TEXT, FOREIGN KEY (`shift_id`) REFERENCES `cashier_sessions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, `shift_id` TEXT, `local_issue_date` TEXT, `tip_amount_nio` REAL, `tip_amount_usd` REAL, `tip_percentage` REAL, `tip_eligible_base_nio` REAL, `fiscal_header_snapshot` TEXT, FOREIGN KEY (`shift_id`) REFERENCES `cashier_sessions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `inventory_snapshot_json` TEXT, `inventory_snapshot_version` TEXT, `origin_invoice_item_id` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -3160,6 +3160,10 @@ class _$InvoiceDao extends InvoiceDao {
                   'total_usd': item.totalUsd,
                   'shift_id': item.shiftId,
                   'local_issue_date': item.localIssueDate,
+                  'tip_amount_nio': item.tipAmountNio,
+                  'tip_amount_usd': item.tipAmountUsd,
+                  'tip_percentage': item.tipPercentage,
+                  'tip_eligible_base_nio': item.tipEligibleBaseNio,
                   'fiscal_header_snapshot': item.fiscalHeaderSnapshot
                 }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
@@ -3199,6 +3203,10 @@ class _$InvoiceDao extends InvoiceDao {
                   'total_usd': item.totalUsd,
                   'shift_id': item.shiftId,
                   'local_issue_date': item.localIssueDate,
+                  'tip_amount_nio': item.tipAmountNio,
+                  'tip_amount_usd': item.tipAmountUsd,
+                  'tip_percentage': item.tipPercentage,
+                  'tip_eligible_base_nio': item.tipEligibleBaseNio,
                   'fiscal_header_snapshot': item.fiscalHeaderSnapshot
                 });
 
@@ -3248,7 +3256,11 @@ class _$InvoiceDao extends InvoiceDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?),
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
         arguments: [id]);
   }
 
@@ -3289,7 +3301,11 @@ class _$InvoiceDao extends InvoiceDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?),
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
         arguments: [number]);
   }
 
@@ -3330,7 +3346,11 @@ class _$InvoiceDao extends InvoiceDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?));
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?));
   }
 
   @override
@@ -3370,7 +3390,11 @@ class _$InvoiceDao extends InvoiceDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?),
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
         arguments: [status]);
   }
 
@@ -3414,7 +3438,11 @@ class _$InvoiceDao extends InvoiceDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?),
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
         arguments: [startTime, endTime]);
   }
 
@@ -3455,7 +3483,11 @@ class _$InvoiceDao extends InvoiceDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?),
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
         arguments: [userId]);
   }
 
@@ -3503,7 +3535,11 @@ class _$InvoiceDao extends InvoiceDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?));
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?));
   }
 
   @override
@@ -3559,7 +3595,11 @@ class _$InvoiceDao extends InvoiceDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?),
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
         arguments: [key]);
   }
 
@@ -3915,6 +3955,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'total_usd': item.totalUsd,
                   'shift_id': item.shiftId,
                   'local_issue_date': item.localIssueDate,
+                  'tip_amount_nio': item.tipAmountNio,
+                  'tip_amount_usd': item.tipAmountUsd,
+                  'tip_percentage': item.tipPercentage,
+                  'tip_eligible_base_nio': item.tipEligibleBaseNio,
                   'fiscal_header_snapshot': item.fiscalHeaderSnapshot
                 }),
         _invoiceItemEntityInsertionAdapter = InsertionAdapter(
@@ -4143,6 +4187,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'total_usd': item.totalUsd,
                   'shift_id': item.shiftId,
                   'local_issue_date': item.localIssueDate,
+                  'tip_amount_nio': item.tipAmountNio,
+                  'tip_amount_usd': item.tipAmountUsd,
+                  'tip_percentage': item.tipPercentage,
+                  'tip_eligible_base_nio': item.tipEligibleBaseNio,
                   'fiscal_header_snapshot': item.fiscalHeaderSnapshot
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
@@ -4250,7 +4298,11 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?),
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
         arguments: [id]);
   }
 
@@ -4292,7 +4344,11 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             totalUsd: row['total_usd'] as double,
             shiftId: row['shift_id'] as String?,
             localIssueDate: row['local_issue_date'] as String?,
-            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?),
+            fiscalHeaderSnapshot: row['fiscal_header_snapshot'] as String?,
+            tipAmountNio: row['tip_amount_nio'] as double?,
+            tipAmountUsd: row['tip_amount_usd'] as double?,
+            tipPercentage: row['tip_percentage'] as double?,
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
         arguments: [relatedId]);
   }
 
