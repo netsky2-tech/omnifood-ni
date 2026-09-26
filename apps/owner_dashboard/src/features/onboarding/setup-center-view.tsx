@@ -715,8 +715,8 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     <Button
                       size="sm"
                       data-testid="start-activation-for-terminal-btn"
-                      onClick={() => handleStartActivationForClaimedDevice(code.deviceId)}
-                      disabled={startActivationAttempt.isPending || !hasActivationPermission}
+                      onClick={() => code.deviceId && handleStartActivationForClaimedDevice(code.deviceId)}
+                      disabled={startActivationAttempt.isPending || !hasActivationPermission || !code.deviceId}
                       className="self-start sm:self-auto flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
                     >
                       <Store className="h-4 w-4" />
