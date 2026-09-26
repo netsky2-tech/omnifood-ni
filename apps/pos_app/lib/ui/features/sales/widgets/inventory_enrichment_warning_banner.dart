@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../data/database/app_database.dart';
 import '../../../../domain/repositories/sales/sales_repository.dart';
+import '../../../../domain/services/inventory/authority_hydration_status.dart';
 
 /// Warning-only informational banner displayed when local sales have been
 /// completed with `APPLIED_INVENTORY_PENDING` outcome.
@@ -9,10 +11,29 @@ import '../../../../domain/repositories/sales/sales_repository.dart';
 /// CRITICAL INVARIANT (Q80 Section D4):
 /// Excluded from `SALE_READY`, activation, setup completion, and checkout
 /// blocking predicates. Never blocks cashier checkout, DGI invoicing, or offline operations.
+///
+/// #519 U5: when the pending count is visible AND this terminal has never
+/// completed a recipe-authority hydration (`notHydrated`), the banner says
+/// so plainly: the sales shown as pending are pending because this terminal
+/// never received its recipe authority, not because a recipe is genuinely
+/// unpublished. Row presence is the primary evidence, so a terminal whose
+/// authority tables are full stays silent even if its most recent pull was
+/// refused. The message is informational only and does not change what
+/// the pending count means, this banner's polling cadence, or any checkout
+/// predicate — the Q80 exclusion above still holds verbatim.
 class InventoryEnrichmentWarningBanner extends StatefulWidget {
   final int? initialPendingCount;
 
-  const InventoryEnrichmentWarningBanner({super.key, this.initialPendingCount});
+  /// Injectable classifier for tests. When null, the status is built from
+  /// the provided [AppDatabase]; any failure degrades to the plain
+  /// pending-count message and never crashes or blocks the screen.
+  final AuthorityHydrationStatus? hydrationStatus;
+
+  const InventoryEnrichmentWarningBanner({
+    super.key,
+    this.initialPendingCount,
+    this.hydrationStatus,
+  });
 
   @override
   State<InventoryEnrichmentWarningBanner> createState() =>
@@ -22,6 +43,7 @@ class InventoryEnrichmentWarningBanner extends StatefulWidget {
 class _InventoryEnrichmentWarningBannerState
     extends State<InventoryEnrichmentWarningBanner> {
   int _pendingCount = 0;
+  AuthorityHydrationState? _hydrationState;
   Timer? _refreshTimer;
 
   @override
@@ -49,13 +71,38 @@ class _InventoryEnrichmentWarningBannerState
     try {
       final repository = context.read<SalesRepository>();
       final count = await repository.getInventoryEnrichmentPendingCount();
-      if (mounted && count != _pendingCount) {
+      // #519 U5: same best-effort refresh path and cadence as the count.
+      final state = await _resolveHydrationState();
+      if (mounted && (count != _pendingCount || state != _hydrationState)) {
         setState(() {
           _pendingCount = count;
+          _hydrationState = state;
         });
       }
     } catch (_) {
       // Best-effort warning refresh; never crash or block UI
+    }
+  }
+
+  Future<AuthorityHydrationState?> _resolveHydrationState() async {
+    try {
+      final status = widget.hydrationStatus ??
+          AuthorityHydrationStatus(
+            readConfig: (key) async => (await context
+                  .read<AppDatabase>()
+                  .localConfigDao
+                  .getConfigByKey(key))
+              ?.value,
+            countAuthorityInsumos: (tenantId) => context
+                .read<AppDatabase>()
+                .authorityProjectionDao
+                .countInsumosByTenant(tenantId),
+          );
+      return await status.classify();
+    } catch (_) {
+      // Absence of a readable status means absence of the notHydrated
+      // message; the plain pending-count copy still renders.
+      return null;
     }
   }
 
@@ -64,6 +111,16 @@ class _InventoryEnrichmentWarningBannerState
     if (_pendingCount <= 0) {
       return const SizedBox.shrink();
     }
+
+    // #519 U5: notHydrated is its own state, never folded into "empty".
+    // hydrated and hydratedEmpty keep the existing pending-count message.
+    final isNotHydrated = _hydrationState == AuthorityHydrationState.notHydrated;
+    final message = isNotHydrated
+        ? '$_pendingCount ventas con inventario pendiente de enriquecer: '
+            'este terminal todavía no ha recibido su autoridad de recetas, '
+            'por lo que sus ventas no mueven inventario. Sincronice este '
+            'terminal para recibirla.'
+        : '$_pendingCount ventas con inventario pendiente de enriquecer (operación de venta normal activa)';
 
     return Container(
       key: const Key('inventory_enrichment_warning_banner'),
@@ -84,7 +141,7 @@ class _InventoryEnrichmentWarningBannerState
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '$_pendingCount ventas con inventario pendiente de enriquecer (operación de venta normal activa)',
+              message,
               style: TextStyle(
                 color: Colors.amber.shade900,
                 fontSize: 12,

@@ -15,6 +15,7 @@ import '../../domain/models/inventory/recipe_version_document.dart';
 import '../../domain/models/inventory/production_order_document.dart';
 import '../../domain/security/cloud_auth_unavailable_exception.dart';
 import '../../domain/security/device_sync_exceptions.dart';
+import '../../domain/services/inventory/authority_hydration_status.dart';
 import '../database/app_database.dart';
 import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
@@ -1826,6 +1827,11 @@ class SyncService {
         var authorityComponentsCount = 0;
         var authorityHydrationFailed = false;
         String? authorityHydrationFailureReason;
+        // #519 U4: the verdict written to local_configs. Null until this
+        // attempt reached a verdict; a legacy response without the
+        // `recipeVersions` key must never stamp the keys.
+        String? authorityHydrationVerdict;
+        String? authorityHydrationVerdictReason;
         final rawRecipeVersions = rawDeltas['recipeVersions'] as List<dynamic>?;
         if (rawRecipeVersions == null) {
           // Legacy backend response without the key: a no-op, not an error.
@@ -1839,6 +1845,8 @@ class SyncService {
             if (!adaptation.isSuccess) {
               authorityHydrationFailed = true;
               authorityHydrationFailureReason = adaptation.failureReason;
+              authorityHydrationVerdict = 'refused';
+              authorityHydrationVerdictReason = adaptation.failureReason;
               developer.log(
                 '[SYNC_PULL] authority_hydration_refused reason=${adaptation.failureReason}',
                 name: 'SyncService',
@@ -1849,6 +1857,7 @@ class SyncService {
               authorityInsumosCount = adaptation.insumoCount;
               authorityVersionsCount = adaptation.versionCount;
               authorityComponentsCount = adaptation.componentCount;
+              authorityHydrationVerdict = 'applied';
               developer.log(
                 '[SYNC_PULL] authority_hydration_applied '
                 'insumos=$authorityInsumosCount '
@@ -1864,12 +1873,51 @@ class SyncService {
             // fails the pull.
             authorityHydrationFailed = true;
             authorityHydrationFailureReason = 'authority_hydration_threw';
+            authorityHydrationVerdict = 'failed';
+            authorityHydrationVerdictReason = 'authority_hydration_threw';
             developer.log(
               '[SYNC_PULL] authority_hydration_failed '
               'reason=authority_hydration_threw',
               name: 'SyncService',
               error: e,
               stackTrace: stackTrace,
+            );
+          }
+
+          // 4c. Persist the hydration verdict (#519 U4): local_configs
+          // keys so the #519 U5 three-state guard can distinguish "never
+          // hydrated" from "genuinely empty". Per-attempt telemetry keys
+          // (last_at/result/reason) describe the pull; the applied_at key is
+          // stamped ONLY on an applied verdict and is never overwritten by
+          // a later refusal — it is the "ever succeeded" marker.
+          // Diagnostic only: this is a local health signal that never
+          // enters an invoice or a snapshot (snapshot reasonCode whitelist
+          // untouched).
+          await _database!.localConfigDao.saveConfig(
+            LocalConfigEntity(
+              key: AuthorityHydrationStatus.lastAtKey,
+              value: DateTime.now().toUtc().toIso8601String(),
+            ),
+          );
+          await _database!.localConfigDao.saveConfig(
+            LocalConfigEntity(
+              key: AuthorityHydrationStatus.resultKey,
+              value: authorityHydrationVerdict!,
+            ),
+          );
+          await _database!.localConfigDao.saveConfig(
+            LocalConfigEntity(
+              key: AuthorityHydrationStatus.reasonKey,
+              // Cleared/empty when applied.
+              value: authorityHydrationVerdictReason ?? '',
+            ),
+          );
+          if (authorityHydrationVerdict == AuthorityHydrationStatus.appliedVerdict) {
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityHydrationStatus.appliedAtKey,
+                value: DateTime.now().toUtc().toIso8601String(),
+              ),
             );
           }
         }

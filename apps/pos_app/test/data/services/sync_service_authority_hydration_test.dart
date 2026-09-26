@@ -13,6 +13,7 @@ import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
+import 'package:pos_app/domain/services/inventory/authority_hydration_status.dart';
 
 class MockAuditRepository extends Mock implements AuditRepository {
   @override
@@ -232,6 +233,111 @@ void main() {
     final rows = await database.database.rawQuery('SELECT COUNT(*) c FROM $table');
     return rows.first['c'] as int;
   }
+
+  Future<String?> configValue(String key) async =>
+      (await database.localConfigDao.getConfigByKey(key))?.value;
+
+  test(
+      'U4: a successful hydration stamps applied + timestamp + empty reason',
+      () async {
+    stubDeltas({
+      'products': [
+        {
+          'id': 'prod-pizza',
+          'name': 'Pizza',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'PREPARED',
+        }
+      ],
+      'recipeVersions': [
+        wireVersion(
+          insumos: [wireClosureInsumo(id: 'ins-1')],
+          components: [wireComponent()],
+        ),
+      ],
+    });
+
+    final result = await syncService.pullInboundDeltas();
+
+    expect(result, isNotNull);
+    expect(await configValue(AuthorityHydrationStatus.resultKey), 'applied');
+    final lastAt = await configValue(AuthorityHydrationStatus.lastAtKey);
+    expect(lastAt, isNotNull);
+    expect(lastAt, isNotEmpty);
+    expect(DateTime.tryParse(lastAt!), isNotNull);
+    expect(await configValue(AuthorityHydrationStatus.reasonKey), '');
+    // The applied-ever marker is stamped on success and never overwritten
+    // by a later refusal (#519 U5 row-primary semantics).
+    final appliedAt = await configValue(AuthorityHydrationStatus.appliedAtKey);
+    expect(appliedAt, isNotNull);
+    expect(DateTime.tryParse(appliedAt!), isNotNull);
+  });
+
+  test('U4: a refused payload stamps refused + the machine reason', () async {
+    stubDeltas({
+      'products': [
+        {
+          'id': 'prod-pizza',
+          'name': 'Pizza',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'PREPARED',
+        }
+      ],
+      'recipeVersions': [
+        wireVersion(
+          tenantId: 'tenant-alpha',
+          insumos: [wireClosureInsumo(tenantId: 'tenant-beta')],
+          components: [wireComponent()],
+        ),
+      ],
+    });
+
+    final result = await syncService.pullInboundDeltas();
+
+    expect(result, isNotNull);
+    expect(result!.authorityHydrationFailed, isTrue);
+    expect(await configValue(AuthorityHydrationStatus.resultKey), 'refused');
+    expect(
+      await configValue(AuthorityHydrationStatus.reasonKey),
+      result.authorityHydrationFailureReason,
+    );
+    expect(await configValue(AuthorityHydrationStatus.reasonKey), isNotEmpty);
+    final lastAt = await configValue(AuthorityHydrationStatus.lastAtKey);
+    expect(lastAt, isNotNull);
+    expect(DateTime.tryParse(lastAt!), isNotNull);
+    // A refusal must never stamp or overwrite the applied-ever marker.
+    expect(await configValue(AuthorityHydrationStatus.appliedAtKey), isNull);
+  });
+
+  test('U4: a legacy response without the recipeVersions key stamps nothing',
+      () async {
+    stubDeltas({
+      'products': [
+        {
+          'id': 'prod-pizza',
+          'name': 'Pizza',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'PREPARED',
+        }
+      ],
+      'insumos': [],
+    });
+
+    final result = await syncService.pullInboundDeltas();
+
+    expect(result, isNotNull);
+    expect(
+      await configValue(AuthorityHydrationStatus.lastAtKey),
+      isNull,
+      reason: 'a legacy pull must never claim a hydration verdict',
+    );
+    expect(await configValue(AuthorityHydrationStatus.resultKey), isNull);
+    expect(await configValue(AuthorityHydrationStatus.reasonKey), isNull);
+    expect(await configValue(AuthorityHydrationStatus.appliedAtKey), isNull);
+  });
 
   test(
       'recipeVersions delta is adapted and hydrated; outcome reported in the result',
