@@ -13,6 +13,41 @@ import {
   useCashierPerformance,
 } from "@/features/sales/use-sales-reports";
 
+// Dashboard V2 Batch 4 (#544): the legacy KPI grid was replaced by the
+// regime-aware strip. Page-level tests below keep their own concerns; the
+// strip's behavior matrix lives in dashboard-v2-strip.spec.tsx.
+vi.mock("@/features/dashboard/use-dashboard-kpis", () => ({
+  useDashboardKpis: vi.fn(() => ({
+    period: {
+      currentStart: "2026-08-31",
+      currentEnd: "2026-08-31",
+      previousStart: "2026-08-24",
+      previousEnd: "2026-08-24",
+    },
+    snapshot: {
+      netSalesNio: 48520.5,
+      completedTicketCount: 171,
+      averageTicketNetNio: 283.74,
+      totalTaxNio: 6341.25,
+      totalDiscountsNio: 1564.95,
+      margin: { amount: 29780.5, percent: 61.4 },
+      deltas: {
+        netSales: 12.4,
+        tickets: 8.2,
+        averageTicket: 3.8,
+        marginPp: 1.9,
+        totalTax: 9.1,
+      },
+    },
+    isSalesPending: false,
+    isSalesFailed: false,
+    fiscal: { regime: "CUOTA_FIJA" },
+    isFiscalFailed: false,
+    isFiscalPending: false,
+    isCogsFailed: false,
+  })),
+}));
+
 vi.mock("@/features/sales/use-sales-reports", () => ({
   useSalesDashboard: vi.fn(() => ({
     data: {
@@ -118,20 +153,25 @@ describe("W2 — DateRangePicker", () => {
 });
 
 describe("W2 — DashboardPage", () => {
-  it("renders heading and KPI cards", () => {
+  it("renders heading and the V2 executive KPI strip (Cuota Fija: no IVA card)", () => {
+    // #544 / FR-FISCAL-03: legacy "Impuestos (IVA)" card removed in favor of
+    // the regime-aware strip; "Ventas Brutas" remains via Resumen de Ventas.
     render(<DashboardPage />, { wrapper: TestWrapper });
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getAllByText("Ventas Brutas").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("Ticket Promedio").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("Impuestos (IVA)").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("Descuentos").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Ventas Netas")).toBeInTheDocument();
+    expect(screen.getByText("Ticket Promedio")).toBeInTheDocument();
+    expect(screen.queryByText("IVA generado")).not.toBeInTheDocument();
   });
 
-  it("renders payment methods", () => {
+  it("renders Resumen de Ventas without the legacy Métodos de Pago card", () => {
+    // Batch 5c: the legacy "Métodos de Pago" card was removed from the page —
+    // the PaymentMixChart in the performance band is the single payment
+    // surface (its own behavior matrix lives in dashboard-v2-charts.spec.tsx).
     render(<DashboardPage />, { wrapper: TestWrapper });
-    expect(screen.getByText("Métodos de Pago")).toBeInTheDocument();
-    expect(screen.getByText("Efectivo NIO")).toBeInTheDocument();
-    expect(screen.getByText("Tarjeta NIO")).toBeInTheDocument();
+    expect(screen.queryByText("Métodos de Pago")).not.toBeInTheDocument();
+    expect(screen.queryByText("Efectivo NIO")).not.toBeInTheDocument();
+    expect(screen.getByText("Resumen de Ventas")).toBeInTheDocument();
   });
 
   it("renders freshness badge", () => {

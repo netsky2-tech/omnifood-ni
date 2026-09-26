@@ -1,8 +1,34 @@
-import { useState } from "react";
-import { KpiCard } from "@/components/kpi-card";
+import { Suspense, lazy, useState } from "react";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
+import { useCanViewInventoryCost } from "@/features/auth/permissions";
+import { KpiStrip } from "./kpi-strip";
+import { useDashboardKpis } from "./use-dashboard-kpis";
+import { useSyncFreshness } from "./use-sync-freshness";
+import { TipsSummaryCard } from "./tips-summary";
+
+// Batch 5b: the performance band (charts + recharts) lives in its own lazy
+// chunk so the KPI strip never waits on chart code (PRD §25.2 bundle
+// discipline; ui_wireframe_reference.md §1 band placement).
+const PerformanceBand = lazy(() =>
+  import("./performance-band").then((m) => ({ default: m.PerformanceBand })),
+);
+
+function PerformanceBandSkeleton() {
+  return (
+    <div
+      data-testid="performance-band-skeleton"
+      className="grid grid-cols-1 gap-6 lg:grid-cols-3"
+      aria-hidden="true"
+    >
+      <div className="h-64 animate-pulse rounded-lg border border-border bg-muted/40 lg:col-span-3" />
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="h-56 animate-pulse rounded-lg border border-border bg-muted/40" />
+      ))}
+    </div>
+  );
+}
 
 import { formatLocalDate } from "@/lib/utils";
 
@@ -22,6 +48,21 @@ function todayRange(): DateRangeValue {
 export function DashboardPage() {
   const [range, setRange] = useState<DateRangeValue>(todayRange);
   const { data, isLoading, error } = useSalesDashboard(range.startDate, range.endDate);
+  // Batch 7 (PRD §21): the tips card reads the V2 report through the same
+  // hook/cache the KpiStrip uses — one shared dashboard-v2 query, no extra
+  // fetch. COGS reads keep the AG-06/AC-17 cost gate.
+  const canViewCost = useCanViewInventoryCost();
+  const { snapshot } = useDashboardKpis(
+    { start: range.startDate, end: range.endDate },
+    undefined,
+    { canViewCost },
+  );
+  // Dashboard V2 sync freshness (PRD §20, FR-SYNC-01..05): the badge shows
+  // the real watermark-derived state; generatedAt stays technical metadata.
+  const {
+    data: freshness,
+    isLoading: isFreshnessLoading,
+  } = useSyncFreshness();
 
   if (isLoading && !data) {
     return (
@@ -56,62 +97,41 @@ export function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          {data && <FreshnessBadge generatedAt={data.generatedAt} />}
+          {data && (
+            <FreshnessBadge
+              freshness={freshness ?? null}
+              generatedAt={data.generatedAt}
+              isLoading={isFreshnessLoading}
+            />
+          )}
           <DateRangePicker value={range} onChange={setRange} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Ventas Brutas"
-          value={formatCurrency(data?.grossSales ?? 0)}
-          subtitle={`${data?.invoiceCount ?? 0} facturas`}
-        />
-        <KpiCard
-          label="Ticket Promedio"
-          value={formatCurrency(data?.ticketAverage ?? 0)}
-        />
-        <KpiCard
-          label="Impuestos (IVA)"
-          value={formatCurrency(data?.totalTax ?? 0)}
-        />
-        <KpiCard
-          label="Descuentos"
-          value={formatCurrency(data?.totalDiscounts ?? 0)}
-        />
-      </div>
+      {/* Dashboard V2 Batch 4: regime-aware executive KPI strip (FR-KPI-01..05,
+          FR-FISCAL-01..04). Legacy grossSales is no longer rendered as the
+          "Ventas Brutas" hero here; it remains in "Resumen de Ventas" below
+          while existing consumers migrate (arch spec §7.3). */}
+      <KpiStrip
+        range={{ start: range.startDate, end: range.endDate }}
+      />
 
+      {/* Dashboard V2 Batch 5b: performance band — sales trend, hourly demand,
+          top products and payment mix (PRD §§14–17, §24 drill-down; lazy chunk). */}
+      <Suspense fallback={<PerformanceBandSkeleton />}>
+        <PerformanceBand range={{ start: range.startDate, end: range.endDate }} />
+      </Suspense>
+
+      {/* Dashboard V2 Batch 5c: the legacy "Métodos de Pago" card was removed
+          — the PaymentMixChart in the performance band above is now the single
+          payment-composition surface (same paymentMethodsBreakdown, net of
+          changeGiven, with original-currency USD slots and percent labels). */}
+      {/* Dashboard V2 Batch 7: "Flujos separados de ventas" bottom band
+          (wireframe §1 row 5) — tips live strictly outside the sales summary
+          (PRD §21.3) and the card is omitted when the tip data path has no
+          coverage (PRD §21.4). */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-card-foreground">
-            Métodos de Pago
-          </h2>
-          <div className="space-y-3">
-            {[
-              { label: "Efectivo NIO", value: data?.paymentMethodsBreakdown.cashNio ?? 0 },
-              { label: "Efectivo USD", value: data?.paymentMethodsBreakdown.cashUsd ?? 0 },
-              { label: "Tarjeta NIO", value: data?.paymentMethodsBreakdown.cardNio ?? 0 },
-              { label: "Tarjeta USD", value: data?.paymentMethodsBreakdown.cardUsd ?? 0 },
-              { label: "Otros", value: data?.paymentMethodsBreakdown.other ?? 0 },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{item.label}</span>
-                <span className="font-medium tabular-nums text-card-foreground">
-                  {formatCurrency(item.value)}
-                </span>
-              </div>
-            ))}
-            <div className="border-t border-border pt-3">
-              <div className="flex items-center justify-between text-sm font-semibold">
-                <span className="text-foreground">Total NIO</span>
-                <span className="tabular-nums text-foreground">
-                  {formatCurrency(data?.paymentMethodsBreakdown.totalNio ?? 0)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        <TipsSummaryCard summary={snapshot?.tipsSummary ?? null} />
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-card-foreground">
             Resumen de Ventas

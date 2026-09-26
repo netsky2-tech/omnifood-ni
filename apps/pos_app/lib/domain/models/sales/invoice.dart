@@ -47,6 +47,16 @@ class Invoice with _$Invoice {
     /// backend can evaluate voidability on its own calendar. Never
     /// recomputed from [createdAt].
     String? localIssueDate,
+
+    /// Batch 7 Slice 2 (PRD §21 / Architecture Spec §33.4 / AD-10): the
+    /// voluntary tip snapshot captured at checkout. The tip is NOT part of
+    /// the taxable total (DGI INV-16.1); it is stored as issued and never
+    /// recomputed. Null = no tip was selected. Travels to the cloud via
+    /// [SalesMapper.toSyncJson] so the backend mirrors the fiscal document.
+    double? tipAmountNio,
+    double? tipAmountUsd,
+    double? tipPercentage,
+    double? tipEligibleBaseNio,
     int? sourceSequence,
     String? idempotencyKey,
     String? payloadHash,

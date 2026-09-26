@@ -2283,6 +2283,10 @@ void main() {
       'shift_id': 'shift-preserve',
       'local_issue_date': '2026-09-23',
       'fiscal_header_snapshot': '{"businessName":"Café Original"}',
+      'tip_amount_nio': 15.5,
+      'tip_amount_usd': 0.42,
+      'tip_percentage': 10.0,
+      'tip_eligible_base_nio': 100.5,
     };
 
     late AppDatabase preservationDatabase;

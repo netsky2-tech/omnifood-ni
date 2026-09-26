@@ -67,7 +67,14 @@ describe('ChangeLogService', () => {
       pooled as unknown as never,
       dataSource as unknown as never,
     );
-    return { service, pooled, boundRepo, boundManager, dataSource, setConfigCalls };
+    return {
+      service,
+      pooled,
+      boundRepo,
+      boundManager,
+      dataSource,
+      setConfigCalls,
+    };
   };
 
   describe('tenant transaction binding', () => {
@@ -221,14 +228,61 @@ describe('ChangeLogService', () => {
     ])('rejects a %s before any SQL or transaction', async (_name, actor) => {
       const h = makeHarness();
 
-      await expect(
-        h.service.log(baseParams(actor)),
-      ).rejects.toThrowError(AuditActorRequiredError);
+      await expect(h.service.log(baseParams(actor))).rejects.toThrowError(
+        AuditActorRequiredError,
+      );
 
       expect(h.dataSource.transaction).not.toHaveBeenCalled();
       expect(h.boundRepo.create).not.toHaveBeenCalled();
       expect(h.boundRepo.save).not.toHaveBeenCalled();
       expect(h.pooled.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('AG-07 severity classification at ingestion', () => {
+    it.each([
+      ['ONBOARDING_ACTIVATION_CHECK_FAILED', 'CRITICAL'],
+      ['ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE', 'CRITICAL'],
+      ['ONBOARDING_ACTIVATION_FINALIZED', 'WARNING'],
+      ['ONBOARDING_ACTIVATION_FOLLOW_UP_OPENED', 'WARNING'],
+      ['DEACTIVATE', 'WARNING'],
+      ['ONBOARDING_ACTIVATION_ATTEMPT_STARTED', 'INFO'],
+      ['ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED', 'INFO'],
+      ['CREATE', 'INFO'],
+      ['UPDATE', 'INFO'],
+      ['SOME_FUTURE_ACTION', 'INFO'],
+    ])(
+      'persists severity %s for action %s on new events',
+      async (action, severity) => {
+        const h = makeHarness();
+
+        await h.service.log({ ...baseParams({ userId: 'user-uuid' }), action });
+
+        expect(h.boundRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({ action, severity }),
+        );
+      },
+    );
+
+    it('classifies severity identically when riding a supplied manager (same ingestion path)', async () => {
+      const h = makeHarness();
+      const suppliedRepo = {
+        create: jest.fn((data: unknown) => data as ChangeLog),
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+      const manager = { getRepository: jest.fn(() => suppliedRepo) };
+
+      await h.service.log(
+        {
+          ...baseParams({ userId: 'user-uuid' }),
+          action: 'ONBOARDING_ACTIVATION_CHECK_FAILED',
+        },
+        manager as unknown as never,
+      );
+
+      expect(suppliedRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ severity: 'CRITICAL' }),
+      );
     });
   });
 });

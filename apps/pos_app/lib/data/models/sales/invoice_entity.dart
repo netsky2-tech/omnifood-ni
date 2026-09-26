@@ -126,6 +126,21 @@ class InvoiceEntity {
   @ColumnInfo(name: 'local_issue_date')
   String? localIssueDate;
 
+  /// Batch 7 Slice 2 (PRD §21 / Architecture Spec §33.4 / AD-10): voluntary
+  /// tip snapshot captured at checkout. Nullable and permanent: historical
+  /// rows have no tip data and #526 AC-11 forbids backfilling fiscal facts.
+  /// The tip is NOT part of the taxable total (DGI INV-16.1); it is stored
+  /// as issued and never recomputed. All four are null when no tip was
+  /// selected.
+  @ColumnInfo(name: 'tip_amount_nio')
+  final double? tipAmountNio;
+  @ColumnInfo(name: 'tip_amount_usd')
+  final double? tipAmountUsd;
+  @ColumnInfo(name: 'tip_percentage')
+  final double? tipPercentage;
+  @ColumnInfo(name: 'tip_eligible_base_nio')
+  final double? tipEligibleBaseNio;
+
   /// D-13/#547: immutable fiscal header snapshot taken at issuance — JSON of
   /// exactly the header values the print path read from live config at
   /// checkout (businessName, ruc, address, phone,
@@ -184,5 +199,9 @@ class InvoiceEntity {
     this.shiftId,
     this.localIssueDate,
     this.fiscalHeaderSnapshot,
+    this.tipAmountNio,
+    this.tipAmountUsd,
+    this.tipPercentage,
+    this.tipEligibleBaseNio,
   });
 }

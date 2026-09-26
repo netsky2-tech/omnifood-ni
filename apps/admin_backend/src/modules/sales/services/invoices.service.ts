@@ -1649,6 +1649,10 @@ export class InvoicesService {
             compensationForKardexId,
             originInvoiceItemId:
               movementType === MovementType.SALE ? item.id : null,
+            // AG-02: anchor the movement to the sale's business timestamp so
+            // COGS attribution aligns with the sale's business date even for
+            // delayed offline syncs (spec AP-04 / AC-06 prerequisite).
+            timestamp: new Date(invoice.createdAt),
             user_id: invoice.userId,
           }),
         );
@@ -1730,6 +1734,14 @@ export class InvoicesService {
           sourceSequence: String(record.sourceSequence),
           reason: record.invoice?.id ?? record.idempotencyKey,
           sourceDocumentType: record.documentType,
+          // AG-02: when the sync record carries an invoice, anchor the
+          // movement to its business timestamp. Inventory-flow records
+          // without an invoice have no business timestamp available; they
+          // keep the ingestion-time fallback (CreateInventoryMovementDto
+          // deltas carry no timestamp field).
+          ...(record.invoice
+            ? { timestamp: new Date(record.invoice.createdAt) }
+            : {}),
           user_id: record.invoice?.userId,
         }),
       );
@@ -1962,6 +1974,8 @@ export class InvoicesService {
         sourceDocumentType: movementType,
         originInvoiceItemId:
           movementType === MovementType.SALE ? item.id : null,
+        // AG-02: business timestamp of the originating sale invoice.
+        timestamp: new Date(invoice.createdAt),
         user_id: invoice.userId,
       }),
     );
@@ -2461,6 +2475,8 @@ export class InvoicesService {
         originMovementId: originMovement.id,
         originInvoiceItemId: input.originInvoiceItemId,
         refundReasonPolicy: input.refundReasonPolicy,
+        // AG-02: anchor the restock to the credit note's business timestamp.
+        timestamp: new Date(invoice.createdAt),
         user_id: invoice.userId,
       }),
     );

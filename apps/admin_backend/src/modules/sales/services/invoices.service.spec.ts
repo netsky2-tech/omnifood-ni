@@ -1049,6 +1049,36 @@ describe('InvoicesService', () => {
       );
     });
 
+    it('stamps SALE movements with the invoice business timestamp, not ingestion time (AG-02)', async () => {
+      const businessCreatedAt = '2026-08-01T17:30:00.000Z';
+      receiptRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue(null);
+      txManager.createQueryBuilder().getOne.mockResolvedValue({
+        stock: 10,
+        averageCost: 2,
+        id: 'ins-1',
+        tenant_id: 'tenant-1',
+      });
+      txManager.findOne.mockResolvedValue({ id: '2001' });
+
+      await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'biz-ts-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          documentType: 'SALE',
+          invoice: { ...baseInvoice, createdAt: businessCreatedAt },
+        },
+      ]);
+
+      expect(movementRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MovementType.SALE,
+          timestamp: new Date(businessCreatedAt),
+        }),
+      );
+    });
+
     it('keeps historical SALE snapshots frozen when later ledger inserts use a different cost context', async () => {
       receiptRepo.findOne.mockResolvedValue(null);
       recipeService.findActiveVersion.mockResolvedValue(null);
@@ -1663,13 +1693,14 @@ describe('InvoicesService', () => {
           tenant_id: 'tenant-1',
         });
 
+      const fohBusinessCreatedAt = '2026-07-15T21:10:00.000Z';
       await service.syncBatch('tenant-1', [
         {
           idempotencyKey: 'bom-1',
           sourceDeviceId: 'd1',
           sourceSequence: 3,
           documentType: 'SALE',
-          invoice: baseInvoice,
+          invoice: { ...baseInvoice, createdAt: fohBusinessCreatedAt },
         },
       ]);
 
@@ -1684,10 +1715,18 @@ describe('InvoicesService', () => {
       );
       expect(bomExplosionService.explode).toHaveBeenCalled();
       expect(movementRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ insumoId: 'ins-1', quantity: -4 }),
+        expect.objectContaining({
+          insumoId: 'ins-1',
+          quantity: -4,
+          timestamp: new Date(fohBusinessCreatedAt),
+        }),
       );
       expect(movementRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ insumoId: 'ins-2', quantity: -1.5 }),
+        expect.objectContaining({
+          insumoId: 'ins-2',
+          quantity: -1.5,
+          timestamp: new Date(fohBusinessCreatedAt),
+        }),
       );
     });
 
@@ -2567,6 +2606,10 @@ describe('InvoicesService', () => {
           refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
           sourceDocumentType: 'CREDIT_NOTE',
           sourceDocumentId: 'credit-note-1',
+          // AG-02: the credit-note restock movement carries the credit note's
+          // business timestamp so restock COGS attribution aligns with its
+          // business date, not the cloud ingestion time.
+          timestamp: new Date(baseInvoice.createdAt),
         }),
       );
       expect(txManager.save).toHaveBeenCalledWith(
@@ -3741,6 +3784,81 @@ describe('InvoicesService', () => {
       const payload = invoiceRepo.upsert.mock.calls[0][0];
       expect(payload.shiftId).toBeUndefined();
       expect(payload.localIssueDate).toBeUndefined();
+    });
+  });
+
+  describe('tip columns (Batch 7 Slice 1, PRD §21 / AD-10)', () => {
+    const baseDto = {
+      id: 'inv-tip-1',
+      number: '004',
+      createdAt: new Date().toISOString(),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+      paymentStatus: 'PAID',
+      items: [],
+      payments: [],
+    };
+
+    it('persists tip fields accurately on the sync upsert payload', async () => {
+      const dto: SyncInvoiceDto = {
+        ...baseDto,
+        tipAmountNio: 50,
+        tipAmountUsd: 1.37,
+        tipPercentage: 10,
+        tipEligibleBaseNio: 500,
+      };
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'inv-tip-1',
+          tipAmountNio: 50,
+          tipAmountUsd: 1.37,
+          tipPercentage: 10,
+          tipEligibleBaseNio: 500,
+        }),
+        ['id'],
+      );
+    });
+
+    it('persists explicit nulls so legacy invoices stay null (AD-10, no backfill)', async () => {
+      // The POS emits JSON null for legacy invoices; @IsOptional() admits it
+      // and the DTO's `number` typing does not model null, hence the cast.
+      const dto = {
+        ...baseDto,
+        tipAmountNio: null,
+        tipAmountUsd: null,
+        tipPercentage: null,
+        tipEligibleBaseNio: null,
+      } as SyncInvoiceDto;
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipAmountNio: null,
+          tipAmountUsd: null,
+          tipPercentage: null,
+          tipEligibleBaseNio: null,
+        }),
+        ['id'],
+      );
+    });
+
+    it('leaves legacy payloads without tip fields untouched (no fabricated zero tips)', async () => {
+      const dto: SyncInvoiceDto = { ...baseDto };
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledTimes(1);
+      const payload = invoiceRepo.upsert.mock.calls[0][0];
+      expect(payload.tipAmountNio).toBeUndefined();
+      expect(payload.tipAmountUsd).toBeUndefined();
+      expect(payload.tipPercentage).toBeUndefined();
+      expect(payload.tipEligibleBaseNio).toBeUndefined();
     });
   });
 });
