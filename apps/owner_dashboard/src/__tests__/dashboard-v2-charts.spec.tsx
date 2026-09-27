@@ -749,3 +749,23 @@ describe("chart-domain — money formatting (review round 2, WU9)", () => {
     expect(formatUsd(-0.01)).toBe("-USD\u00A00.01");
   });
 });
+
+describe("Top Products share — denominator is named and never clamped (finding S1)", () => {
+  it("a share above 100% renders as computed, because clamping would fabricate a share", () => {
+    // Denominator is Net Sales net of refunds: product A C$1,000, product B
+    // C$800 minus a C$900 refund => period Net Sales C$900 => A is 111.1%.
+    // The honest rendering is the true quotient, not a capped 100%.
+    const { rows } = buildTopProductRows(
+      [
+        { productId: 'p1', productName: 'Café', totalQuantity: 100, netRevenueNio: 1000 },
+        { productId: 'p2', productName: 'Sándwich', totalQuantity: 40, netRevenueNio: -100 },
+      ],
+      undefined,
+      900,
+    );
+    expect(rows[0]?.sharePercent).toBeCloseTo(111.1, 1);
+    expect(rows[0]!.sharePercent!).toBeGreaterThan(100);
+  });
+
+
+});

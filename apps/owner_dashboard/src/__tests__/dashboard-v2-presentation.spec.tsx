@@ -224,6 +224,36 @@ describe("WU9 — money axes carry the C$ unit (owner finding 1)", () => {
     const texts = svgTexts(screen.getByTestId("top-products-card"));
     expect(texts.some((t) => t.startsWith("C$"))).toBe(true);
   });
+
+  it("the share note names its denominator and warns a share can exceed 100% (finding S1)", async () => {
+    // The denominator is Net Sales NET of refunds while each numerator is one
+    // product's own net revenue, so a heavily refunded sibling legitimately
+    // pushes another product above 100 %. The value is not clamped — clamping
+    // would assert a share the data does not support — so the card has to say
+    // which denominator it used.
+    vi.mocked(fetchTopProducts).mockResolvedValue({
+      startDate: RANGE.start,
+      endDate: RANGE.end,
+      generatedAt: "2026-09-23T21:54:00Z",
+      periodNetSalesNio: 900,
+      products: [
+        { productId: "p1", productName: "Cappuccino", totalQuantity: 100, netRevenueNio: 1000 },
+        { productId: "p2", productName: "Sándwich", totalQuantity: 40, netRevenueNio: -100 },
+      ],
+    } as never);
+
+    renderWithProviders(<PerformanceBand range={RANGE} today="2026-09-23" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Cappuccino")).toBeInTheDocument();
+    });
+    // The true quotient is shown, uncapped.
+    expect(screen.getByTestId("top-products-rows").textContent).toContain("111.1%");
+    const text = screen.getByTestId("top-products-note").textContent ?? "";
+    expect(text).toMatch(/Ventas Netas del período/);
+    expect(text).toMatch(/netas de\s*devoluciones/i);
+    expect(text).toMatch(/superar el 100\s*%/i);
+  });
 });
 
 describe("WU9 — period attribution (owner finding 3)", () => {
