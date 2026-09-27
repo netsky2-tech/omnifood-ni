@@ -24,12 +24,32 @@
  *   basis exactly.
  */
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { buildTopProductRows, formatNio } from "./chart-domain";
+import { buildTopProductRows, formatNio, type TopProductRow } from "./chart-domain";
 import { ChartCard, EmptyNote, WidgetError, WidgetSkeleton } from "./chart-card";
 import { useTopProductsReport } from "./use-dashboard-charts";
 
 function formatShare(percent: number | null): string {
   return percent === null ? "—" : `${percent.toFixed(1)}%`;
+}
+
+/**
+ * Per-cell explanation (review advisory R3-001). The card note already states
+ * the basis once for the whole widget; repeating it here would be decoration.
+ * What only this cell can say is its own arithmetic, so the tooltip shows the
+ * numerator, the exact denominator `sharePercent` used, and the quotient — a
+ * 111.1 % reading then explains itself with the numbers that produced it.
+ * When the denominator is absent nothing is divided, and the text says so
+ * rather than showing a bare em-dash.
+ */
+function shareTitle(row: TopProductRow): string {
+  if (row.sharePercent === null || row.periodNetSalesNio === null) {
+    return `Participación de ${row.name} no calculable: el período no tiene Ventas Netas de referencia`;
+  }
+  return (
+    `Participación de ${row.name}: ${formatNio(row.revenue)} de ` +
+    `${formatNio(row.periodNetSalesNio)} de Ventas Netas del período = ` +
+    `${formatShare(row.sharePercent)}`
+  );
 }
 
 export function TopProductsChart({ start, end }: { start: string; end: string }) {
@@ -72,7 +92,7 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
                 </span>
                 <span
                   className="w-14 whitespace-nowrap text-right text-xs font-medium tabular-nums text-muted-foreground"
-                  title={`Participación de ${row.name} sobre las Ventas Netas del período (netas de devoluciones)`}
+                  title={shareTitle(row)}
                 >
                   {formatShare(row.sharePercent)}
                 </span>

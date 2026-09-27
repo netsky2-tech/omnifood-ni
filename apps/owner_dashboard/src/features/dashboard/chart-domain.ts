@@ -177,6 +177,14 @@ export interface TopProductRow {
   revenue: number;
   /** Client-side share of the period's Net Sales (`periodNetSalesNio`); null when the period denominator is missing/zero/negative (fail closed). */
   sharePercent: number | null;
+  /**
+   * The exact denominator `sharePercent` was computed against, already passed
+   * through the same `isFinite && > 0` gate. Exposed so a per-cell explanation
+   * can show the arithmetic it actually used instead of restating the generic
+   * card note; null when the share is not computable, so nothing can render a
+   * division that did not happen.
+   */
+  periodNetSalesNio: number | null;
 }
 
 /**
@@ -224,6 +232,7 @@ export function buildTopProductRows(
       units: Number(p?.totalQuantity) || 0,
       revenue: revenueOf(p),
       sharePercent: hasDenominator ? percentOf(revenueOf(p), denominator) : null,
+      periodNetSalesNio: hasDenominator ? denominator : null,
     })),
   };
 }

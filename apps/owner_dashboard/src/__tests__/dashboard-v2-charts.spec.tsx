@@ -769,3 +769,32 @@ describe("Top Products share — denominator is named and never clamped (finding
 
 
 });
+
+describe("Top Products per-cell explanation (review advisory R3-001)", () => {
+  it("exposes the exact denominator the share was computed against", () => {
+    const { rows } = buildTopProductRows(
+      [
+        { productId: 'p1', productName: 'Café', totalQuantity: 10, netRevenueNio: 1000 },
+        { productId: 'p2', productName: 'Sándwich', totalQuantity: 5, netRevenueNio: -100 },
+      ],
+      undefined,
+      900,
+    );
+    // The cell must be able to show the arithmetic it actually used, so the
+    // builder hands over the same gated value the quotient consumed.
+    expect(rows[0]?.periodNetSalesNio).toBe(900);
+    expect(rows[0]?.sharePercent).toBeCloseTo(111.1, 1);
+  });
+
+  it("keeps the denominator null whenever the share is not computable", () => {
+    for (const denominator of [undefined, 0, -50, 'abc', null]) {
+      const { rows } = buildTopProductRows(
+        [{ productId: 'p1', productName: 'Café', totalQuantity: 10, netRevenueNio: 1000 }],
+        undefined,
+        denominator as never,
+      );
+      expect(rows[0]?.sharePercent).toBeNull();
+      expect(rows[0]?.periodNetSalesNio).toBeNull();
+    }
+  });
+});
