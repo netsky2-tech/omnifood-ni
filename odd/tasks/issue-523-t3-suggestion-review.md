@@ -131,3 +131,22 @@ assume them from another branch.
   cannot be edited; both observers share one cache entry. Local-only verification:
   `tsc -b --noEmit` OK, `oxlint src` no new findings, `vitest run` 78 files /
   1063 passed / 4 skipped, `npm run build` OK.
+- Verification round on `67ef0cd7` (4 fixes): (1) killed the duplicated cache
+  key — exported `suggestionsQueryKey(tenantId)` from `recipes-api.ts` (NOT from
+  `use-recipes.ts`: w7 fully mocks that module) and wired it into
+  `usePendingSuggestions`, the page-level `usePendingSuggestionCount`, and the
+  publish invalidation; key array byte-identical
+  (`['recipes', tenantId, 'suggestions']`). RED observed first: divergence-guard
+  tests failed with `suggestionsQueryKey is not a function` before the builder
+  existed; GREEN after wiring (w11 18/18). Guard: page badge + canonical hook
+  must resolve one shared cache entry and one fetch.
+- (2) deleted the tautological `expect(NOT_FOUND_404_MESSAGE).not.toBe(NETWORK_ERROR_MESSAGE)`
+  literal-vs-literal line from the item-7 404 test; the `role="alert"` text
+  assertions remain the real check.
+- (3) pinned the pending/disabled publish path: new test proves clicking with
+  the snapshot unresolved fires no `/publish` request, and a second test proves
+  that while one publish is held in flight the button is disabled and no second
+  publish request fires for any row.
+- (4) extended tenant-isolation coverage into the DOM: after a tenant-A →
+  tenant-B switch, the rendered list shows tenant B rows and never tenant A
+  product names (previously only cache keys/fetch counts were asserted).

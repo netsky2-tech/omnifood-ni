@@ -5,6 +5,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { RecipesPage } from '@/features/recipes/recipes-page';
 import { SuggestionReview } from '@/features/recipes/suggestion-review';
 import { usePendingSuggestions, useActiveRecipe } from '@/features/recipes/use-recipes';
+import { suggestionsQueryKey } from '@/features/recipes/recipes-api';
 import { setTokens, clearTokens } from '@/lib/api';
 import { useAuthStore } from '@/features/auth/auth-store';
 import { toast } from '@/hooks/use-toast';
@@ -34,6 +35,17 @@ const NETWORK_ERROR_MESSAGE =
 
 const TENANT_A = { id: 'tenant-A', name: 'Tenant A', slug: 'tenant-a', ruc: 'X', active: true };
 const TENANT_B = { id: 'tenant-B', name: 'Tenant B', slug: 'tenant-b', ruc: 'Y', active: true };
+
+const TENANT_B_SUGGESTIONS: RecipeSuggestionListItem[] = [
+  {
+    recipeVersionId: 'rv-b1',
+    productId: 'pb1',
+    productName: 'Vigorón (plantilla)',
+    versionNumber: 1,
+    componentCount: 1,
+    hasActivePublishedVersion: false,
+  },
+];
 
 const SUGGESTIONS: RecipeSuggestionListItem[] = [
   {
@@ -369,7 +381,6 @@ describe('#523 T3 — Suggestion review (w11)', () => {
     await user.click(await screen.findByRole('button', { name: 'Publicar receta' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(NOT_FOUND_404_MESSAGE);
-    expect(NOT_FOUND_404_MESSAGE).not.toBe(NETWORK_ERROR_MESSAGE);
   });
 
   it('item 7: publish network failure shows the connection message, distinguishable from 404', async () => {
@@ -425,5 +436,88 @@ describe('#523 T3 — Suggestion review (w11)', () => {
     await user.click(toggle());
     expect(snapshotCalls()).toHaveLength(1);
     expect(calls.filter((c) => c.includes('/recipes/rv-t2/snapshot'))).toHaveLength(0);
+  });
+
+  it('fix 1: the exported key builder produces the canonical suggestions key', () => {
+    expect(suggestionsQueryKey('tenant-A')).toEqual(['recipes', 'tenant-A', 'suggestions']);
+  });
+
+  it('fix 1: the page badge and the canonical hook share one suggestions query and one fetch', async () => {
+    state.suggestions = SUGGESTIONS;
+    const client = makeClient();
+    render(
+      <QueryClientProvider client={client}>
+        <RecipesPage />
+        <SuggestionReview />
+      </QueryClientProvider>,
+    );
+
+    // Both observers resolve: the tab badge and the review list.
+    const tab = await screen.findByRole('button', { name: /Sugerencias/ });
+    await waitFor(() => expect(within(tab).getByText('2')).toBeInTheDocument());
+    expect(await screen.findByText('Gallopinto (plantilla)')).toBeInTheDocument();
+
+    // One cache entry built by the shared builder serves both observers.
+    const suggestionsQueries = client
+      .getQueryCache()
+      .getAll()
+      .filter((q) => Array.isArray(q.queryKey) && q.queryKey[2] === 'suggestions');
+    expect(suggestionsQueries).toHaveLength(1);
+    expect(suggestionsQueries[0]!.queryKey).toEqual(suggestionsQueryKey('tenant-A'));
+    expect(calls.filter((c) => c.includes('/recipes/suggestions'))).toHaveLength(1);
+  });
+
+  it('fix 3: with the snapshot unresolved, clicking cannot fire a publish request', async () => {
+    state.suggestions = [SUGGESTIONS[0]!];
+    state.holdSnapshot = true;
+    renderReview();
+    await openDetail('Gallopinto (plantilla)');
+
+    const publish = await screen.findByRole('button', { name: 'Publicar receta' });
+    expect(publish).toBeDisabled();
+
+    const user = userEvent.setup();
+    await user.click(publish);
+    expect(calls.filter((c) => c.includes('/publish'))).toHaveLength(0);
+  });
+
+  it('fix 3: while one publish is in flight, no second publish request fires for any row', async () => {
+    state.suggestions = [SUGGESTIONS[0]!];
+    // Publish request is held in flight for the whole test.
+    state.publishImpl = () => new Promise<Response>(() => {});
+    renderReview();
+    await openDetail('Gallopinto (plantilla)');
+
+    const user = userEvent.setup();
+    const publish = await screen.findByRole('button', { name: 'Publicar receta' });
+    expect(publish).toBeEnabled();
+    await user.click(publish);
+    await waitFor(() => expect(calls.filter((c) => c.includes('/publish'))).toHaveLength(1));
+
+    // Mutation in flight: the publish action is disabled, and a second click
+    // on any row cannot produce another publish request.
+    expect(screen.getByRole('button', { name: 'Publicar receta' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Publicar receta' }));
+    expect(calls.filter((c) => c.includes('/publish'))).toHaveLength(1);
+  });
+
+  it('fix 4: after a tenant switch the DOM renders only the new tenant rows', async () => {
+    state.suggestions = SUGGESTIONS;
+    renderReview();
+
+    expect(await screen.findByText('Gallopinto (plantilla)')).toBeInTheDocument();
+    expect(screen.getByText('Nacatamal (plantilla)')).toBeInTheDocument();
+
+    state.suggestions = TENANT_B_SUGGESTIONS;
+    act(() => {
+      useAuthStore.setState({ tenant: TENANT_B as never });
+    });
+
+    // The tenant-scoped key changes, a fresh fetch resolves, and tenant A's
+    // product names never leak into tenant B's rendered list.
+    expect(await screen.findByText('Vigorón (plantilla)')).toBeInTheDocument();
+    expect(screen.queryByText('Gallopinto (plantilla)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nacatamal (plantilla)')).not.toBeInTheDocument();
+    expect(calls.filter((c) => c.includes('/recipes/suggestions')).length).toBeGreaterThanOrEqual(2);
   });
 });

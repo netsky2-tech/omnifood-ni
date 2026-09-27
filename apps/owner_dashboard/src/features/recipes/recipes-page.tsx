@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, ChefHat, Package, Edit } from 'lucide-react';
 import { useProducts } from '@/features/catalog/use-product';
 import { useActiveRecipe, useInsumos } from './use-recipes';
-import { fetchPendingSuggestions } from './recipes-api';
+import { fetchPendingSuggestions, suggestionsQueryKey } from './recipes-api';
 import { SuggestionReview } from './suggestion-review';
 import { useTenantId } from '@/lib/tenant';
 import { Button } from '@/components/ui/button';
@@ -34,13 +34,14 @@ const RECIPES_TABS: { id: RecipesTabId; label: string }[] = [
 /**
  * Page-level pending-suggestions count for the tab badge (mounted on both
  * tabs). Declared here instead of calling usePendingSuggestions() because the
- * w7 suite fully mocks the use-recipes hook module; this local observer shares
- * the exact same cache key, so both observers hit one cache entry.
+ * w7 suite fully mocks the use-recipes hook module; the key is built through
+ * the shared suggestionsQueryKey() builder from recipes-api, so this observer
+ * and the canonical hook always hit one cache entry.
  */
 function usePendingSuggestionCount() {
   const tenantId = useTenantId();
   return useQuery({
-    queryKey: ['recipes', tenantId, 'suggestions'],
+    queryKey: suggestionsQueryKey(tenantId),
     queryFn: ({ signal }) => fetchPendingSuggestions({ signal }),
     staleTime: 5 * 60 * 1000,
   });
