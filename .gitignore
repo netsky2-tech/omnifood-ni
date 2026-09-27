@@ -12,6 +12,12 @@
 # Local agent tools
 .atl/
 .agents/
+# Antigravity CLI per-machine cache. One entry was committed by accident in
+# 16df5f8e as a symlink whose target is a Windows absolute path
+# (C:/Users/...); a tracked symlink with an out-of-tree target makes the review
+# candidate view reject every candidate in this repository, regardless of size
+# or shape, so nothing here may be tracked.
+.antigravitycli/
 .codegraph/
 .pi/
 
