@@ -27,6 +27,7 @@ import '../models/local_config_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import 'authority_hydration_service.dart';
+import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity.dart';
 import 'network_connectivity_service.dart';
 
 const Map<String, String> syncRole = {
@@ -1833,6 +1834,31 @@ class SyncService {
         String? authorityHydrationVerdict;
         String? authorityHydrationVerdictReason;
         final rawRecipeVersions = rawDeltas['recipeVersions'] as List<dynamic>?;
+        // #613 Unit A: resolve the product type RECORDED in the terminal's
+        // own catalog for every product referenced by this page's recipe
+        // versions. Step 1 above has already persisted this pull's products
+        // delta, so the local table is fresh for products on this page and
+        // authoritative for products referenced from earlier pages. Only an
+        // explicitly recorded 'SIMPLE' classifies inert; an unknown product
+        // stays on the hydrate path (conservative, behaviour-preserving).
+        final productTypesByProductId = <String, String>{};
+        if (rawRecipeVersions != null) {
+          final referencedProductIds = <String>{
+            for (final raw in rawRecipeVersions)
+              if (raw is Map &&
+                  raw['productId'] is String &&
+                  (raw['productId'] as String).isNotEmpty)
+                raw['productId'] as String,
+          };
+          for (final productId in referencedProductIds) {
+            final product =
+                await _database!.productDao.findProductById(productId);
+            if (product != null &&
+                product.productType == AuthorityInertRecipe.inertProductType) {
+              productTypesByProductId[productId] = product.productType;
+            }
+          }
+        }
         if (rawRecipeVersions == null) {
           // Legacy backend response without the key: a no-op, not an error.
           developer.log(
@@ -1841,7 +1867,10 @@ class SyncService {
           );
         } else {
           try {
-            final adaptation = adaptAuthorityDelta(rawRecipeVersions);
+            final adaptation = adaptAuthorityDelta(
+              rawRecipeVersions,
+              productTypes: productTypesByProductId,
+            );
             if (!adaptation.isSuccess) {
               authorityHydrationFailed = true;
               authorityHydrationFailureReason = adaptation.failureReason;
@@ -1852,8 +1881,13 @@ class SyncService {
                 name: 'SyncService',
               );
             } else {
-              await AuthorityHydrationService(_database!.authorityProjectionDao)
-                  .hydrate(adaptation.payload!);
+              await AuthorityHydrationService(
+                _database!.authorityProjectionDao,
+                verdictDao: _database!.authorityIngestionVerdictDao,
+              ).hydrate(
+                adaptation.payload!,
+                inertRecipes: adaptation.inertRecipes,
+              );
               authorityInsumosCount = adaptation.insumoCount;
               authorityVersionsCount = adaptation.versionCount;
               authorityComponentsCount = adaptation.componentCount;
@@ -1932,6 +1966,41 @@ class SyncService {
             // broken pull.
             developer.log(
               '[SYNC_PULL] authority_hydration_verdict_not_persisted',
+              name: 'SyncService',
+              error: e,
+              stackTrace: stackTrace,
+            );
+          }
+
+          // #613 Unit A: aggregate inert-recipe telemetry (#613 decision 6).
+          // local_configs keys so pilot tooling can read the count without
+          // parsing UI: the number of distinct ingestion verdict rows on this
+          // device (across pulls), plus the verdict code they carry. Own
+          // best-effort guard, exactly like the hydration telemetry above:
+          // telemetry failing must never reach backwards and undo a pull
+          // whose hydration already succeeded.
+          try {
+            final verdictCount = await _database!
+                    .authorityIngestionVerdictDao.countVerdicts() ??
+                0;
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityIngestionVerdicts.inertCountKey,
+                value: '$verdictCount',
+              ),
+            );
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityIngestionVerdicts.inertReasonKey,
+                // Cleared/empty when there is nothing to report.
+                value: verdictCount > 0
+                    ? AuthorityIngestionVerdicts.inertSimpleProductCode
+                    : '',
+              ),
+            );
+          } catch (e, stackTrace) {
+            developer.log(
+              '[SYNC_PULL] authority_inert_verdict_telemetry_not_persisted',
               name: 'SyncService',
               error: e,
               stackTrace: stackTrace,

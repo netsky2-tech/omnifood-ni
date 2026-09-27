@@ -97,7 +97,9 @@ import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_item_entity.dart';
 import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
+import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity.dart';
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
+import 'package:pos_app/data/daos/inventory/authority_ingestion_verdict_dao.dart';
 import '../daos/human_authorization/ohac_delivery_dao.dart';
 
 import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
@@ -105,7 +107,7 @@ import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.d
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 57,
+  version: 58,
   entities: [
     UserEntity,
     SecurityProfileEntity,
@@ -115,6 +117,7 @@ part 'app_database.g.dart'; // generated code
     AuthorityInsumoEntity,
     AuthorityRecipeVersionEntity,
     AuthorityRecipeVersionComponentEntity,
+    AuthorityIngestionVerdictEntity,
     TopologySnapshotEntity,
     ShiftTopologyBindingEntity,
     EmergencyTopologyAuditEntity,
@@ -219,6 +222,7 @@ abstract class AppDatabase extends FloorDatabase {
   FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao;
   ActivationOutboxDao get activationOutboxDao;
   AuthorityProjectionDao get authorityProjectionDao;
+  AuthorityIngestionVerdictDao get authorityIngestionVerdictDao;
   FulfillmentTopologyDao get fulfillmentTopologyDao;
   FulfillmentPersistenceDao get fulfillmentPersistenceDao;
   OhacDeliveryDao get ohacDeliveryDao;

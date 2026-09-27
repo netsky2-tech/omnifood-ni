@@ -14,6 +14,7 @@ import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
 import 'package:pos_app/domain/services/inventory/authority_hydration_status.dart';
+import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity.dart';
 
 class MockAuditRepository extends Mock implements AuditRepository {
   @override
@@ -496,5 +497,221 @@ void main() {
     // claiming a verdict that was never persisted.
     expect(await configValue(AuthorityHydrationStatus.resultKey), isNull);
     expect(await configValue(AuthorityHydrationStatus.lastAtKey), isNull);
+  });
+
+  group('#613 inert recipe ingestion verdict', () {
+    Map<String, dynamic> simpleProductRow({String id = 'prod-simple'}) => {
+          'id': id,
+          'name': 'Producto simple',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'SIMPLE',
+        };
+
+    test(
+        'one inert + one good recipe in the same payload: the good one '
+        'hydrates, the inert one produces exactly one verdict and does NOT '
+        'hydrate', () async {
+      stubDeltas({
+        'products': [
+          {
+            'id': 'prod-pizza',
+            'name': 'Pizza',
+            'uom': 'UND',
+            'tenantId': 'tenant-alpha',
+            'productType': 'PREPARED',
+          },
+          simpleProductRow(),
+        ],
+        'recipeVersions': [
+          wireVersion(
+            id: 'rv-good',
+            productId: 'prod-pizza',
+            insumos: [wireClosureInsumo(id: 'ins-1')],
+            components: [wireComponent(id: 'comp-good', versionId: 'rv-good')],
+          ),
+          wireVersion(
+            id: 'rv-inert',
+            productId: 'prod-simple',
+            insumos: [
+              wireClosureInsumo(id: 'ins-2', tenantId: 'tenant-alpha'),
+            ],
+            components: [
+              wireComponent(
+                id: 'comp-inert',
+                versionId: 'rv-inert',
+                insumoId: 'ins-2',
+              ),
+            ],
+          ),
+        ],
+      });
+
+      final result = await syncService.pullInboundDeltas();
+
+      expect(result, isNotNull);
+      expect(result!.authorityHydrationFailed, isFalse);
+      expect(result.authorityHydrationFailureReason, isNull);
+      // Only the good recipe hydrates.
+      expect(result.authorityVersionsCount, 1);
+      expect(await countRows('authority_recipe_versions'), 1);
+      final goodRows = await database.database.rawQuery(
+        "SELECT * FROM authority_recipe_versions WHERE id = 'rv-good'",
+      );
+      expect(goodRows, hasLength(1));
+      final inertRows = await database.database.rawQuery(
+        "SELECT * FROM authority_recipe_versions WHERE id = 'rv-inert'",
+      );
+      expect(inertRows, isEmpty);
+      final inertComponents = await database.database.rawQuery(
+        "SELECT * FROM authority_recipe_version_components "
+        "WHERE version_id = 'rv-inert'",
+      );
+      expect(inertComponents, isEmpty);
+
+      // Exactly one verdict, keyed by the inert version id and code.
+      final verdicts = await database.database.rawQuery(
+        'SELECT * FROM authority_ingestion_verdicts',
+      );
+      expect(verdicts, hasLength(1));
+      expect(verdicts.single['recipe_version_id'], 'rv-inert');
+      expect(verdicts.single['code'], 'INERT_SIMPLE_PRODUCT');
+      expect(verdicts.single['product_id'], 'prod-simple');
+
+      // Aggregate telemetry for pilot tooling (count + reason).
+      expect(
+        await configValue(AuthorityIngestionVerdicts.inertCountKey),
+        '1',
+      );
+      expect(
+        await configValue(AuthorityIngestionVerdicts.inertReasonKey),
+        'INERT_SIMPLE_PRODUCT',
+      );
+      // The existing hydration telemetry is still stamped.
+      expect(await configValue(AuthorityHydrationStatus.resultKey), 'applied');
+      expect(await configValue(AuthorityHydrationStatus.lastAtKey), isNotNull);
+    });
+
+    test(
+        'a verdict insert thrown by the DAO degrades: pull still succeeds, '
+        'no rethrow, hydration telemetry stamped', () async {
+      // Failure injected at the persistence boundary: the verdict table is
+      // gone, so every verdict insert throws.
+      await database.database.execute(
+        'DROP TABLE authority_ingestion_verdicts',
+      );
+
+      stubDeltas({
+        'products': [
+          {
+            'id': 'prod-pizza',
+            'name': 'Pizza',
+            'uom': 'UND',
+            'tenantId': 'tenant-alpha',
+            'productType': 'PREPARED',
+          },
+          simpleProductRow(),
+        ],
+        'recipeVersions': [
+          wireVersion(
+            id: 'rv-good',
+            productId: 'prod-pizza',
+            insumos: [wireClosureInsumo(id: 'ins-1')],
+            components: [wireComponent(id: 'comp-good', versionId: 'rv-good')],
+          ),
+          wireVersion(
+            id: 'rv-inert',
+            productId: 'prod-simple',
+            insumos: [
+              wireClosureInsumo(id: 'ins-2', tenantId: 'tenant-alpha'),
+            ],
+            components: [
+              wireComponent(
+                id: 'comp-inert',
+                versionId: 'rv-inert',
+                insumoId: 'ins-2',
+              ),
+            ],
+          ),
+        ],
+      });
+
+      final result = await syncService.pullInboundDeltas();
+
+      // The pull succeeded and the hydration verdict is the applied one: a
+      // verdict write failure must not flip it to failed.
+      expect(result, isNotNull);
+      expect(result!.authorityHydrationFailed, isFalse);
+      expect(result.authorityVersionsCount, 1);
+      expect(await countRows('authority_recipe_versions'), 1);
+      expect(await configValue(AuthorityHydrationStatus.resultKey), 'applied');
+      final lastAt = await configValue(AuthorityHydrationStatus.lastAtKey);
+      expect(lastAt, isNotNull);
+      expect(DateTime.tryParse(lastAt!), isNotNull);
+    });
+
+    test(
+        're-pull of the same inert payload does not duplicate verdict rows '
+        '(insert-if-absent)', () async {
+      stubDeltas({
+        'products': [simpleProductRow()],
+        'recipeVersions': [
+          wireVersion(
+            id: 'rv-inert',
+            productId: 'prod-simple',
+            insumos: [
+              wireClosureInsumo(id: 'ins-2', tenantId: 'tenant-alpha'),
+            ],
+            components: [
+              wireComponent(
+                id: 'comp-inert',
+                versionId: 'rv-inert',
+                insumoId: 'ins-2',
+              ),
+            ],
+          ),
+        ],
+      });
+
+      await syncService.pullInboundDeltas();
+      expect(await countRows('authority_ingestion_verdicts'), 1);
+
+      // Same server page re-sent on the next cycle (the watermark only
+      // advances on a successful pull, and the stub ignores it).
+      await syncService.pullInboundDeltas();
+      expect(await countRows('authority_ingestion_verdicts'), 1);
+      expect(await countRows('authority_recipe_versions'), 0);
+      expect(
+        await configValue(AuthorityIngestionVerdicts.inertCountKey),
+        '1',
+      );
+    });
+
+    test(
+        'mixed-tenant payload is still refused wholesale even when a row '
+        'would be inert (structural refusal regression guard)', () async {
+      stubDeltas({
+        'products': [simpleProductRow()],
+        'recipeVersions': [
+          wireVersion(
+            id: 'rv-a',
+            productId: 'prod-simple',
+          ),
+          wireVersion(
+            id: 'rv-b',
+            tenantId: 'tenant-beta',
+            productId: 'prod-simple',
+          ),
+        ],
+      });
+
+      final result = await syncService.pullInboundDeltas();
+
+      expect(result, isNotNull);
+      expect(result!.authorityHydrationFailed, isTrue);
+      expect(result.authorityHydrationFailureReason, contains('tenant'));
+      expect(await countRows('authority_recipe_versions'), 0);
+      expect(await countRows('authority_ingestion_verdicts'), 0);
+    });
   });
 }

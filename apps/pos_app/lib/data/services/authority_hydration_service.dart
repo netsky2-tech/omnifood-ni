@@ -1,4 +1,8 @@
+import 'dart:developer' as developer;
+
+import 'package:pos_app/data/daos/inventory/authority_ingestion_verdict_dao.dart';
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
+import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity.dart';
 import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
 
 class AuthorityHydrationPayload {
@@ -136,12 +140,46 @@ class AuthorityHydrationPayload {
   }
 }
 
+/// One structurally valid recipe version whose product is recorded as
+/// `SIMPLE` (#613 Unit A). It is inert material for the POS: the version is
+/// NOT hydrated and gets a per-record ingestion verdict instead. This is a
+/// report, not a business rule: a SIMPLE product keeps not consuming from a
+/// recipe (#611 owns that decision).
+class AuthorityInertRecipe {
+  /// The recorded product type that makes a recipe version inert in the POS.
+  static const String inertProductType = 'SIMPLE';
+
+  final String recipeVersionId;
+  final String productId;
+  final String tenantId;
+
+  const AuthorityInertRecipe({
+    required this.recipeVersionId,
+    required this.productId,
+    required this.tenantId,
+  });
+}
+
 class AuthorityHydrationService {
   final AuthorityProjectionDao _dao;
+  final AuthorityIngestionVerdictDao? _verdictDao;
 
-  const AuthorityHydrationService(this._dao);
+  const AuthorityHydrationService(
+    this._dao, {
+    AuthorityIngestionVerdictDao? verdictDao,
+  }) : _verdictDao = verdictDao;
 
-  Future<void> hydrate(AuthorityHydrationPayload payload) async {
+  /// Applies the hydratable rows of the payload and records one
+  /// insert-if-absent ingestion verdict per inert recipe (#613 Unit A).
+  ///
+  /// Verdict writes are best-effort by contract: a verdict failure is
+  /// swallowed and logged here so it can never reach backwards through the
+  /// caller's catch and flip a successful hydration into a failed one. The
+  /// applied authority rows stand on their own.
+  Future<void> hydrate(
+    AuthorityHydrationPayload payload, {
+    List<AuthorityInertRecipe> inertRecipes = const [],
+  }) async {
     // 1. Insumos
     for (final insumo in payload.insumos) {
       final existing = await _dao.findInsumoById(insumo.tenantId, insumo.id);
@@ -169,6 +207,32 @@ class AuthorityHydrationService {
       final match = existingComps.where((c) => c.id == comp.id).toList();
       if (match.isEmpty) {
         await _dao.insertComponent(comp);
+      }
+    }
+
+    // 4. Ingestion verdicts for inert recipes (#613 Unit A). Append-only,
+    // insert-if-absent: a re-pull of the same inert version is a no-op.
+    for (final inert in inertRecipes) {
+      try {
+        await _verdictDao?.insertVerdictIfAbsent(
+          AuthorityIngestionVerdictEntity(
+            recipeVersionId: inert.recipeVersionId,
+            code: AuthorityIngestionVerdicts.inertSimpleProductCode,
+            productId: inert.productId,
+            tenantId: inert.tenantId,
+            createdAt: DateTime.now().toUtc().toIso8601String(),
+          ),
+        );
+      } catch (e, stackTrace) {
+        // Degrade, never propagate: the pull stands, the verdict is simply
+        // missing this cycle (telemetry/count reads handle absence).
+        developer.log(
+          '[HYDRATION] authority_ingestion_verdict_not_persisted '
+          'version=${inert.recipeVersionId}',
+          name: 'AuthorityHydrationService',
+          error: e,
+          stackTrace: stackTrace,
+        );
       }
     }
   }
