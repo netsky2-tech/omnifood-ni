@@ -18,11 +18,19 @@ type ResponseKey = 'AS candidates' | 'RETURNING' | 'relforcerowsecurity';
 const createQueryRunner = (
   responses: Partial<Record<ResponseKey, unknown>>,
   throwOn?: string,
+  throwOnNth?: { match: string; occurrence: number },
 ) => {
   const queries: string[] = [];
+  const nthSeen: { match?: string; count: number } = { count: 0 };
   const queryRunner = {
     query: jest.fn((sql: string): Promise<unknown> => {
       queries.push(sql);
+      if (throwOnNth !== undefined && sql.includes(throwOnNth.match)) {
+        nthSeen.count += 1;
+        if (nthSeen.count === throwOnNth.occurrence) {
+          return Promise.reject(new Error('BOOM: mock failure'));
+        }
+      }
       if (throwOn !== undefined && sql.includes(throwOn)) {
         return Promise.reject(new Error('BOOM: mock failure'));
       }
@@ -215,9 +223,8 @@ describe('BackfillTemplateProductTypes1809510000000', () => {
     // read, no UPDATE was issued, and the no-op is reported, not thrown.
     expect(productTypeUpdates(queries)).toHaveLength(0);
     expect(queries.some((sql) => sql.includes('UPDATE products'))).toBe(false);
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('0'));
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('no candidate'),
+      expect.stringContaining('nothing to do'),
     );
   });
 
@@ -295,6 +302,56 @@ describe('BackfillTemplateProductTypes1809510000000', () => {
         forceRestores(queries).filter((sql) => sql.includes(table)),
       ).toHaveLength(1);
     }
+  });
+
+  it('restores the already-lifted subset when the lift itself throws mid-way', async () => {
+    // A throw on the SECOND NO FORCE must still let the finally restore the
+    // first table's FORCE: the lift is inside the try, and the finally
+    // iterates exactly the tables lifted so far — never the constant list,
+    // which would re-FORCE tables the migration never touched.
+    const { queryRunner, queries } = createQueryRunner(
+      {
+        relforcerowsecurity: forcedRlsResponse(),
+        'AS candidates': countResponse(1),
+        RETURNING: returningTuple(1),
+      },
+      undefined,
+      { match: 'NO FORCE ROW LEVEL SECURITY', occurrence: 2 },
+    );
+
+    await expect(migration.up(queryRunner)).rejects.toThrow('BOOM');
+
+    // products was lifted (its NO FORCE ran) before the throw: it must be
+    // re-forced.
+    expect(
+      forceRestores(queries).filter((sql) => sql.includes('products')),
+    ).toHaveLength(1);
+    // recipe_versions and recipe_details were never lifted: re-forcing them
+    // would be wrong, so no restore may mention them.
+    expect(
+      forceRestores(queries).filter((sql) => sql.includes('recipe_versions')),
+    ).toHaveLength(0);
+    expect(
+      forceRestores(queries).filter((sql) => sql.includes('recipe_details')),
+    ).toHaveLength(0);
+  });
+
+  it('neither lifts nor restores a table whose FORCE flag is already off', async () => {
+    // The conditional-restore branch: a table legitimately without FORCE
+    // must not be silently forced on by a migration — that would tighten
+    // security in a way the operator never asked for.
+    const { queryRunner, queries } = createQueryRunner({
+      relforcerowsecurity: [{ forced: false }],
+      'AS candidates': countResponse(1),
+      RETURNING: returningTuple(1),
+    });
+
+    await migration.up(queryRunner);
+
+    expect(noForceStatements(queries)).toHaveLength(0);
+    expect(forceRestores(queries)).toHaveLength(0);
+    // The data work itself still ran.
+    expect(productTypeUpdates(queries)).toHaveLength(1);
   });
 
   it('brackets down() with NO FORCE / FORCE RLS before its UPDATE', async () => {

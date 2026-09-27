@@ -165,3 +165,30 @@ a blind reversal would silently re-orphan a recipe the operator made live.
   s5 left as found. migration:run AS the probe owner skipped: the role is
   NOLOGIN and enabling it requires a password-bearing role, which the parent
   forbade pending explicit choice.
+- Follow-up fix 4 (same surfaces): re-verification proved the bracket end-to-end
+  in the production RLS position (drove the committed up() as a NOBYPASSRLS table
+  owner: promoted 10, FORCE restored) and found five precision defects — findings
+  1–3 trace to the parent's own instructions being overstated or wrong, not to
+  writer drift: (1) the lift sat OUTSIDE the try, so a mid-lift throw skipped the
+  finally and left lifted tables un-forced (saved only by transaction rollback —
+  the header's "a throw can never leave a table deniable" claim was false as
+  written); fixed by moving the lift inside the try with a caller-owned
+  accumulator recording each table only after its NO FORCE ran, header sentence
+  corrected (finally restores the subset lifted so far; rollback is the
+  independent second net); (2) the header's "cannot lean on an ACCESS EXCLUSIVE
+  lock argument — the UPDATE takes ROW EXCLUSIVE" was measurably wrong: the
+  bracket's own ALTER TABLE takes ACCESS EXCLUSIVE on all three tables, so the
+  precedent's exposure argument transfers — sentence rewritten with the verifier
+  correction attributed; (3) the down() re-promotion bound was overstated:
+  re-promotion holds while the suggestion is SUGGESTED or CONFIRMED and items
+  remain, but a REJECTED suggestion (the #523 T3 discard path) is deliberately
+  never re-promoted — bound stated precisely; (4) the no-op test's
+  stringContaining('0') was vacuous (LOG_PREFIX contains 1809510000000) —
+  replaced with an assertion on the real no-op message; (5) two branches gained
+  coverage: mid-lift throw (restores exactly the already-lifted subset) and
+  forced = false (no lift, no silent re-FORCE of a table the operator left
+  un-forced). RED observed: the mid-lift-throw test failed against the old
+  structure (finally never ran); the forced = false test and the de-tautologised
+  assertion pass immediately (branch coverage/hardening, not behaviour change).
+  GREEN 18/18; `npx jest src/migrations` 536 passed / 7 skipped; eslint clean;
+  nest build clean; verify-schema-build.sh PASS both scenarios.

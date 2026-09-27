@@ -66,8 +66,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   promoted. No provenance ledger exists to exclude them (audit_logs is
  *   the business/DGI-adjacent trail, not a migration scratchpad), so the
  *   over-revert is accepted: it is transient, because a subsequent up()
- *   re-promotes anything down() wrongly downgraded, and the exposure is the
- *   window between revert and re-run.
+ *   re-promotes a wrongly downgraded row while its suggestion is SUGGESTED
+ *   or CONFIRMED and the recipe still carries items; if the suggestion is
+ *   REJECTED — the very discard path #523 T3 will build, named above —
+ *   up() deliberately leaves the row SIMPLE and no re-promotion happens.
  *
  * FORCE ROW LEVEL SECURITY bracket. products, recipe_versions and
  * recipe_details are all relforcerowsecurity = true, and the migration role
@@ -78,17 +80,20 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * up() would log a no-op on exactly the databases it exists to repair, and
  * down() would revert nothing. Both directions therefore issue
  * `ALTER TABLE ... NO FORCE ROW LEVEL SECURITY` on all three tables before
- * their data work and restore `FORCE` in a `finally`, so a throw can never
- * leave a table deniable. NO FORCE lifts the row predicate only for the
- * table owner (the migration role); non-owner app roles remain fully
- * tenant-scoped by their policies throughout. Unlike the precedent, this
- * migration cannot lean on an ACCESS EXCLUSIVE lock argument — its UPDATE
- * takes ROW EXCLUSIVE — so the window is stated on its own terms: for the
- * duration of this migration's own transaction the owner's reads and writes
- * on these three tables are not filtered by the (otherwise NULL-evaluating)
- * tenant predicate, and the bracket restores FORCE before the transaction
- * can commit. TypeORM runs each migration inside a transaction, so a throw
- * restores FORCE in-transaction and a crash rolls the transaction back.
+ * their data work and restore `FORCE` in a `finally`. The finally's
+ * guarantee is stated exactly: the lift runs INSIDE the try and records
+ * each table in the caller-owned list only after its NO FORCE has actually
+ * run, so a throw — mid-lift included — restores precisely the subset
+ * lifted so far and never re-forces a table the migration did not lift;
+ * transaction rollback is the independent second net that covers an
+ * aborted statement. The finally alone is not what guarantees
+ * non-deniability; the combination is. NO FORCE lifts the row predicate
+ * only for the table owner (the migration role); non-owner app roles remain
+ * fully tenant-scoped by their policies throughout. The bracket's own
+ * `ALTER TABLE ... NO FORCE` and restore statements take ACCESS EXCLUSIVE
+ * on the three tables, so this migration does hold ACCESS EXCLUSIVE for the
+ * window and the precedent's exposure argument transfers here: the lift is
+ * not an unlocked read-then-write race against concurrent writers.
  *
  * What the spec proves vs what real execution proves: the mock-QueryRunner
  * spec proves the emitted SQL, the guards, the reporting logic and the
@@ -177,14 +182,17 @@ export class BackfillTemplateProductTypes1809510000000 implements MigrationInter
   }
 
   /**
-   * Lifts FORCE RLS on every table that has it and returns the list lifted,
-   * so restoreForceRowLevelSecurity() re-forces exactly those tables. See
-   * the header: without this, the owner's criterion silently sees zero rows.
+   * Lifts FORCE RLS on every table that has it, recording each table in the
+   * caller-owned `lifted` array immediately after its NO FORCE has actually
+   * run. Because the array is mutated in place, a mid-lift throw leaves it
+   * naming precisely the tables currently un-forced — the finally restores
+   * that subset and never the constant table list. See the header: without
+   * this lift, the owner's criterion silently sees zero rows.
    */
   private async liftForceRowLevelSecurity(
     runner: QueryRunner,
-  ): Promise<string[]> {
-    const lifted: string[] = [];
+    lifted: string[],
+  ): Promise<void> {
     for (const table of RLS_TABLES) {
       if (await this.isForceRowLevelSecurity(runner, table)) {
         await runner.query(
@@ -193,7 +201,6 @@ export class BackfillTemplateProductTypes1809510000000 implements MigrationInter
         lifted.push(table);
       }
     }
-    return lifted;
   }
 
   private async restoreForceRowLevelSecurity(
@@ -208,8 +215,14 @@ export class BackfillTemplateProductTypes1809510000000 implements MigrationInter
   }
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const lifted = await this.liftForceRowLevelSecurity(queryRunner);
+    // The lift is INSIDE the try so a mid-lift throw reaches the finally,
+    // which restores exactly the already-lifted subset. Transaction rollback
+    // is the independent second net covering an aborted statement; the
+    // finally alone is not the whole guarantee (see header).
+    const lifted: string[] = [];
     try {
+      await this.liftForceRowLevelSecurity(queryRunner, lifted);
+
       const candidateRows = (await queryRunner.query(`
         SELECT count(*)::int AS candidates
           FROM products AS p
@@ -253,8 +266,10 @@ export class BackfillTemplateProductTypes1809510000000 implements MigrationInter
     // moves it off SUGGESTED, and such a row is no longer this migration's
     // to undo. The header documents the accepted over-revert of app-created
     // COMPOUND products and the SUGGESTED/CONFIRMED asymmetry.
-    const lifted = await this.liftForceRowLevelSecurity(queryRunner);
+    const lifted: string[] = [];
     try {
+      await this.liftForceRowLevelSecurity(queryRunner, lifted);
+
       const reverted = asReturnedRows(
         await queryRunner.query(`
         UPDATE products AS p
