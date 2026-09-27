@@ -42,7 +42,7 @@ describe("normalizeInventoryCoverage", () => {
     });
   });
 
-  it("coerces numeric-string counts from the Postgres numeric wire", () => {
+  it("accepts a numeric-string count as transport defensiveness (the DTO says number; the backend emits numbers)", () => {
     const coverage = normalizeInventoryCoverage({
       status: "UNAVAILABLE",
       costedSalesCount: "0",
@@ -81,7 +81,7 @@ describe("normalizeInventoryCoverage", () => {
     }
   });
 
-  it("still accepts numeric-string counts — Postgres numeric arrives as text", () => {
+  it("still accepts numeric-string counts, without claiming they come from a numeric column", () => {
     const coverage = normalizeInventoryCoverage({
       status: "PARTIAL",
       costedSalesCount: "12",

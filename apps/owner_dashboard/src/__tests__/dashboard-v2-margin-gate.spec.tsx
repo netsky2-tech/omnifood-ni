@@ -495,3 +495,36 @@ describe("Margen Bruto coverage gate — strip rendering", () => {
     expect(fetchCogs).not.toHaveBeenCalled();
   });
 });
+
+describe("Tile/card caveat parity (finding Q1-c)", () => {
+  it("the PARTIAL tile carries the same incompleteness caveat as the Rentabilidad card", async () => {
+    // D1's root cause was two surfaces with two honesty levels for ONE gate
+    // state: the tile said only "Sin costo: …" while the card explained that
+    // the amount shown is not the period's margin. The copy is now shared, so
+    // this asserts both halves of the parity on the tile side.
+    mockCogs(
+      18740,
+      {
+        status: "PARTIAL",
+        costedSalesCount: 120,
+        uncostedSalesCount: 30,
+        reasonCodes: ["NO_EXPLICIT_INSUMO_MAPPING"],
+      },
+      19422.09,
+      COMPLETE_PREVIOUS,
+    );
+
+    renderStrip();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("kpi-margin-note")).toBeInTheDocument();
+    });
+    const note = screen.getByTestId("kpi-margin-note").textContent ?? "";
+    expect(note).toContain("Costo de ventas incompleto");
+    expect(note).toContain("Mapea los insumos del producto");
+    // Pinned refutation: no direction may be claimed. A canceled invoice
+    // without its SALE_CANCEL reversal pushes this figure the opposite way
+    // from an uncosted sale, and that invariant is not proven here.
+    expect(note).not.toMatch(/mayor que el real|menor que el real|límite (superior|inferior)/);
+  });
+});

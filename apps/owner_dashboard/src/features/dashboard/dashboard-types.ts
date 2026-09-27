@@ -80,9 +80,12 @@ export function evaluateMarginGate(input: MarginGateInput): MarginGate {
   return {
     ratio: false,
     delta: false,
-    // PARTIAL: costed sales carry real cost basis, so netSales − salesCogsNio
-    // is a real (lower-bound) margin amount. UNAVAILABLE/unknown/absent:
-    // nothing is provable — hide the amount as well.
+    // PARTIAL: costed sales carry a real cost basis, so a margin AMOUNT exists
+    // for the costed part of the period and renders with a caveat
+    // (coverage-notes.ts). "Lower-bound"/"upper-bound" wording is intentionally
+    // avoided: the two reachable data shapes push the figure in opposite
+    // directions, so no bound is provable. UNAVAILABLE/unknown/absent: nothing
+    // is provable — hide the amount as well.
     amount: current?.status === "PARTIAL",
     gated: true,
     reasonCodes: current?.reasonCodes ?? [],

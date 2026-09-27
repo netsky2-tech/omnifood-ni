@@ -382,8 +382,13 @@ describe("RentabilidadCard — PARTIAL coverage honesty (finding D1)", () => {
     // A PARTIAL margin is real but incomplete: it must never read as a
     // finished measurement of the period.
     expect(
-      screen.getByText(/Costo de ventas parcial: las ventas sin costo/i),
+      screen.getByText(/Costo de ventas incompleto: parte del período no tiene costo registrado/i),
     ).toBeInTheDocument();
+    // Refuted claim, pinned: no direction may be asserted. A canceled invoice
+    // without its SALE_CANCEL reversal moves this figure the opposite way from
+    // an uncosted sale, and that reversal invariant is not proven.
+    const card = screen.getByTestId("rentabilidad-card").textContent ?? "";
+    expect(card).not.toMatch(/mayor que el real|menor que el real|límite (superior|inferior)/);
     expect(
       screen.getByText(/Mapea los insumos del producto/i),
     ).toBeInTheDocument();

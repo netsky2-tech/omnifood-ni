@@ -62,8 +62,12 @@ export interface InventoryCoverage {
  * `Number("")` are both `0`, so coercion would accept a malformed wire as
  * `COMPLETE 0/0` — an empty-but-authoritative-looking coverage that OPENS the
  * ratio gate. An absent or unparseable count means "we do not know how many",
- * which must close the gate. Numeric strings stay valid because Postgres
- * `numeric` reaches the client as text.
+ * which must close the gate. Numeric strings are tolerated purely as transport
+ * defensiveness for fields the DTO declares as `number`: these counts are
+ * in-memory `++` counters in the reports service, NOT `numeric` columns, so the
+ * backend emits JSON numbers and the string branch is expected to stay dead.
+ * It is kept because accepting one extra wire shape costs nothing — not
+ * because of any claim about how these values are produced.
  */
 function toKnownCount(value: unknown): number | null {
   if (typeof value === "number") {

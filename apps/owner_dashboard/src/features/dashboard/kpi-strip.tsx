@@ -15,7 +15,7 @@ import { useDashboardKpis } from "./use-dashboard-kpis";
 import type { MarginGate } from "./dashboard-types";
 import { useCanViewInventoryCost } from "@/features/auth/permissions";
 import type { ComparisonPeriod, LocalDateRange } from "./domain/comparison-period";
-import { marginGateNote } from "./coverage-notes";
+import { marginGateCaveatLines } from "./coverage-notes";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -293,9 +293,7 @@ export function KpiStrip({ range, today }: KpiStripProps) {
               marginGate.amount && snapshot.margin
                 ? formatCurrencyValue(snapshot.margin.amount)
                 : undefined,
-            note: marginGate.gated
-              ? marginGateNote(marginGate.reasonCodes)
-              : undefined,
+            note: marginGateCaveatLines(marginGate).join(" ") || undefined,
           },
         ]
       : []),

@@ -383,12 +383,22 @@ export class InventoryReportsService {
         // product's insumos or an explicit domain declaration exists.
         uncostedSalesCount++;
         // Finding D6: the reason code comes from the fact the sale pipeline
-        // recorded on the invoice, not from the outcome string alone. The same
-        // outcome is stamped for a sale with no line items at all
-        // (sale-inventory-outcome.service.ts:330, `reason: null`), where
-        // "map the product's insumos" is not a fix anyone can perform. The
-        // trust decision is unchanged — both are uncosted — only the
-        // remediation guidance differs.
+        // recorded on the invoice, not from the outcome string alone.
+        // A null/absent reason has TWO reachable origins, and they must not be
+        // conflated into a cause:
+        //   1. a sale with no line items at all — sale-inventory-outcome.service.ts:330
+        //      short-circuits it to this outcome with `reason: null`; there is no
+        //      product on the ticket whose insumos anyone could map; and
+        //   2. the terminal sync path, where `inventoryOutcome` is optional on the
+        //      DTO (sync-invoice.dto.ts:364) and the client may report the outcome
+        //      without ever reporting a reason.
+        // In both, "map the product's insumos" would be an invented cause, so the
+        // generic MISSING_COST_BASIS is used. Trade-off stated plainly: for shape
+        // 2 this label is LESS specific than the previous outcome-derived
+        // NO_EXPLICIT_INSUMO_MAPPING, which happened to be right for a real
+        // mapping gap. Less specific is the correct choice, because guessing the
+        // cause from an outcome string is what made the copy wrong for shape 1.
+        // The trust decision is unchanged either way — still uncosted.
         coverageReasons.add(
           recordedInventoryReasonCode(invoice) === 'NO_EXPLICIT_INSUMO_MAPPING'
             ? 'NO_EXPLICIT_INSUMO_MAPPING'

@@ -12,6 +12,7 @@
  * Owner-facing strings are Spanish; code comments stay English.
  */
 import type { InventoryCoverageReasonCode } from "@/features/inventory/inventory-types";
+import type { MarginGate } from "./dashboard-types";
 
 const MARGIN_NOTE_BY_REASON: Record<InventoryCoverageReasonCode, string> = {
   NO_EXPLICIT_INSUMO_MAPPING:
@@ -52,11 +53,47 @@ export function marginGateNote(reasonCodes: InventoryCoverageReasonCode[]): stri
  *
  * The margin AMOUNT is provable at PARTIAL only for the costed part of the
  * period: every uncosted sale still contributes its revenue to `netSalesNio`
- * while contributing nothing to `salesCogsNio`. Because an uncosted sale's
- * real cost is >= 0, omitting it can only INFLATE the margin — so the
- * displayed figure is an upper bound on the period's true margin, never a
- * lower one. Saying which direction the error runs is the whole point of the
- * caveat: an unqualified "C$29,780.50" reads as a completed measurement.
+ * while contributing nothing to `salesCogsNio`.
+ *
+ * Deliberately NO direction is claimed here. An earlier draft asserted the
+ * displayed margin was an upper bound on the real one. That is true for the
+ * PARTIAL shape alone (cost omitted ⇒ margin inflated), but it is NOT true of
+ * the number in general: a canceled invoice whose SALE movement has no
+ * matching SALE_CANCEL does the opposite — its revenue leaves `netSalesNio`
+ * (`isRevenueAffectingDocument` requires `!isCanceled`) while its cost stays
+ * in `salesCogsNio`, which sums every SALE movement in the window with no
+ * cancellation join. So the two reachable shapes push the figure in opposite
+ * directions, and which one applies depends on a reversal invariant this
+ * repository has not proven (see the follow-up risk note in
+ * odd/tasks/dashboard-v2-review-round-2.md). Claiming a direction would be a
+ * fabricated guarantee — exactly the defect class this batch exists to remove.
+ * What IS provable, and all the caveat claims, is that the figure is not the
+ * period's real margin.
  */
 export const PARTIAL_MARGIN_CAVEAT =
-  "Costo de ventas parcial: las ventas sin costo registrado cuentan su ingreso pero no su costo, así que el margen mostrado es mayor que el real.";
+  "Costo de ventas incompleto: parte del período no tiene costo registrado, así que este margen no es el margen real del período.";
+
+/**
+ * Every caveat line a gated margin must show, in render order — shared by the
+ * KPI tile and the Rentabilidad card.
+ *
+ * This function exists because finding D1 was a *divergence*, not a missing
+ * string: the tile warned about hidden cost while the card printed the same
+ * unproven margin without a word. Returning the ordered lines from one place
+ * removes the only degree of freedom that produced it — a surface can no
+ * longer choose its own honesty level for the same gate state.
+ *
+ * At PARTIAL the amount renders, so the incompleteness caveat comes first and
+ * the actionable reason note follows. At UNAVAILABLE (and unknown/absent
+ * coverage) the amount is hidden, so only the unavailability line is emitted.
+ */
+export function marginGateCaveatLines(marginGate: MarginGate): string[] {
+  if (!marginGate.gated) return [];
+  if (marginGate.amount) {
+    return [PARTIAL_MARGIN_CAVEAT, marginGateNote(marginGate.reasonCodes)];
+  }
+  // UNAVAILABLE / unknown / absent: the amount is hidden, but the actionable
+  // reason still belongs on the surface — hiding the figure without saying why
+  // would be the same half-explanation D1 was.
+  return ["Costo de ventas no disponible", marginGateNote(marginGate.reasonCodes)];
+}

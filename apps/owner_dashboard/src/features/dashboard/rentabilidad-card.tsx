@@ -28,7 +28,7 @@ import { fetchCogs } from "@/features/inventory/inventory-api";
 import { fetchDashboardReport } from "./dashboard-api";
 import type { GrossMargin } from "./kpi-deltas";
 import type { MarginGate } from "./dashboard-types";
-import { PARTIAL_MARGIN_CAVEAT, marginGateNote } from "./coverage-notes";
+import { marginGateCaveatLines } from "./coverage-notes";
 import type { LocalDateRange } from "./domain/comparison-period";
 
 function formatCurrency(amount: number): string {
@@ -141,21 +141,11 @@ export function RentabilidadCard({
             <p className="mt-1 text-xs text-muted-foreground">no reduce el margen mostrado</p>
           </div>
         )}
-        {marginGate.gated &&
-          (showAmounts ? (
-            // PARTIAL: the amounts are real but only for the costed part of
-            // the period. Uncosted sales add revenue without cost, so the
-            // margin shown is an UPPER bound on the true one — the caveat has
-            // to say that, because a bare "C$29,780.50" reads as complete.
-            <div className="border-t border-border pt-3">
-              <p className="text-xs text-muted-foreground">{PARTIAL_MARGIN_CAVEAT}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {marginGateNote(marginGate.reasonCodes)}
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">Costo de ventas no disponible</p>
-          ))}
+        {marginGateCaveatLines(marginGate).map((line) => (
+          <p key={line} className="mt-1 text-xs text-muted-foreground first:border-t first:border-border first:pt-3">
+            {line}
+          </p>
+        ))}
       </div>
     </div>
   );

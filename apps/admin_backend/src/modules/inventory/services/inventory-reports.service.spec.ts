@@ -445,7 +445,7 @@ describe('InventoryReportsService', () => {
       expect(invoiceQb.where.mock.calls[0][1]).toEqual({ tenantId: 'tenant-42' });
     });
 
-    it('labels an itemless APPLIED_NO_INVENTORY_IMPACT sale by its recorded reason, not by the outcome string (finding D6)', async () => {
+    it('labels an APPLIED_NO_INVENTORY_IMPACT sale with NO recorded reason as MISSING_COST_BASIS, not as a mapping gap (finding D6)', async () => {
       insumoRepo.find.mockResolvedValue([]);
       mockSaleInvoices([
         {
@@ -453,10 +453,13 @@ describe('InventoryReportsService', () => {
           type: 'regular',
           isCanceled: false,
           inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
-          // sale-inventory-outcome.service.ts:330 short-circuits a sale with no
-          // line items to this outcome with reason: null. That is NOT a mapping
-          // gap — there is no product on the ticket to map — so telling the
-          // tenant to "map the insumos of the product" is wrong guidance.
+          // Two reachable origins for an absent reason: the itemless
+          // short-circuit (sale-inventory-outcome.service.ts:330, reason: null)
+          // and a terminal sync that reports the optional inventoryOutcome
+          // without an inventoryOutcomeReason (sync-invoice.dto.ts:364). Note
+          // this read does NOT join invoice items, so the classifier cannot
+          // distinguish them — which is exactly why it must not invent a cause.
+          // Either way, "map the product's insumos" would be an invented reason.
           inventoryOutcomeReason: null,
         },
       ]);
@@ -477,7 +480,7 @@ describe('InventoryReportsService', () => {
       });
     });
 
-    it('emits NO_EXPLICIT_INSUMO_MAPPING only when the invoice recorded that reason (finding D6)', async () => {
+    it('keeps the recorded NO_EXPLICIT_INSUMO_MAPPING label (pin: passes with or without the D6 fix)', async () => {
       insumoRepo.find.mockResolvedValue([]);
       mockSaleInvoices([
         {
