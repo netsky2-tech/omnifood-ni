@@ -5,17 +5,43 @@
  *
  * Approved historical semantics (documented per the Batch 1 contract):
  *
- * - Completed sale: an invoice that is NOT canceled/void. This mirrors exactly
- *   what the current reporting queries filter on (`isCanceled = false`). The
- *   current schema has no separate "finalized" column; `paymentStatus` is a
- *   payment state, not a finalization signal, and is NOT part of the
- *   predicate.
- * - Net Sales: SUM(invoice.subtotal) over ALL rows matching the predicate,
- *   INCLUDING credit-note documents. No current reporting query filters by
- *   invoice `type`, so credit notes net into every total exactly as persisted
- *   (negative subtotal rows reduce the total; positive-subtotal credit-note
- *   rows add as persisted). This keeps Net Sales reconciled with grossSales,
- *   hourly and top-product revenue, which net credit notes in as well.
+ * - Reporting predicates: three deliberately distinct, explicitly named
+ *   predicates govern which rows enter which aggregate (WU10, owner-ratified).
+ *   Do NOT collapse them into one shared "isRelevantSale" helper: a single
+ *   predicate would create a false equivalence between revenue evidence,
+ *   customer tickets and cost evidence.
+ *
+ *   1. isRevenueAffectingDocument — any non-canceled document whose persisted
+ *      amounts must flow into Net Sales / tax / discount totals, INCLUDING
+ *      credit notes with their persisted (negative) sign, so Net Sales keeps
+ *      netting exactly as it always has.
+ *   2. isCompletedTicketDocument — a non-canceled document that is a real
+ *      customer ticket. Credit notes are refund documents, NOT tickets, and
+ *      never count toward completedTicketCount / averageTicketNetNio.
+ *   3. isCogsCoverageRelevantSale — a non-canceled regular sale whose direct
+ *      cost the inventory module must be able to prove. Credit notes are not
+ *      cost evidence. Defined here, pure and inventory-independent, so sales
+ *      reporting and inventory coverage share one definition.
+ *
+ *   The asymmetry is intentional contract: a credit note appears in EXACTLY
+ *   ONE of the three (revenue only), a canceled document in NONE, a regular
+ *   sale in ALL THREE.
+ *
+ *   NOTE on predicates 2 and 3: today they COINCIDE in extent (both exclude
+ *   canceled rows and credit notes) — that is current policy, not redundancy.
+ *   They answer different questions and are expected to diverge the moment a
+ *   ticket needs no cost evidence: a sale with an explicit
+ *   `costingMode = NONE` declaration, for example, is still a real customer
+ *   ticket (predicate 2 TRUE) but requires no provable direct cost
+ *   (predicate 3 FALSE). Deleting either predicate as "duplicate" would fuse
+ *   ticket counting with cost-coverage policy; keep them separate.
+ * - Net Sales: SUM(invoice.subtotal) over ALL revenue-affecting rows
+ *   (isRevenueAffectingDocument above), INCLUDING credit-note documents.
+ *   No current reporting query filters by invoice `type`, so credit notes
+ *   net into every total exactly as persisted (negative subtotal rows reduce
+ *   the total; positive-subtotal credit-note rows add as persisted). This
+ *   keeps Net Sales reconciled with grossSales, hourly and top-product
+ *   revenue, which net credit notes in as well.
  * - Pre-discount Sales: Net Sales + Total Discounts (PRD §7.3).
  * - Average Ticket: Net Sales / Completed Tickets, or null when the ticket
  *   count is zero (PRD §7.5 — "—", never C$0.00).
@@ -34,6 +60,17 @@ import {
 /** Structural view of a persisted invoice row (avoids coupling core to modules). */
 export interface SalesReportingInvoiceRow {
   isCanceled: boolean;
+  /**
+   * Persisted invoice discriminator (`invoices.type`): 'creditNote' for
+   * refund documents, 'regular' for sales (the entity default).
+   *
+   * OPTIONAL for backwards compatibility: rows without this field (existing
+   * callers and fixtures written before the field existed) are treated as
+   * regular sales. Silently dropping untyped legacy rows from revenue would
+   * be a worse regression than the ticket-count defect this field fixes
+   * (WU10 owner decision).
+   */
+  type?: string;
   subtotal: number | string | null;
   totalTax?: number | string | null;
   items?: ReadonlyArray<{
@@ -107,12 +144,56 @@ export interface SalesReportingTipsSummary {
 const round2 = (value: number): number =>
   Number((Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2));
 
+/** Discriminator value persisted for credit-note (refund) documents. */
+const CREDIT_NOTE_TYPE = 'creditNote';
+
+/** True when the row is a persisted credit-note (refund) document. */
+function isCreditNoteRow(row: SalesReportingInvoiceRow): boolean {
+  return row.type === CREDIT_NOTE_TYPE;
+}
+
 /**
- * Completed-sale predicate: finalized sale document that is not void/canceled.
- * Mirrors the current reporting queries (`isCanceled = false`) exactly.
+ * Revenue predicate (WU10 #1): any non-canceled document whose persisted
+ * amounts flow into Net Sales / tax / discount totals. Credit notes ARE
+ * revenue-affecting — their persisted negative subtotal must keep netting —
+ * but they are NOT tickets or cost evidence. See the module header for the
+ * deliberate asymmetry between the three predicates.
  */
-export function isCompletedSaleRow(row: SalesReportingInvoiceRow): boolean {
+export function isRevenueAffectingDocument(
+  row: SalesReportingInvoiceRow,
+): boolean {
   return !row.isCanceled;
+}
+
+/**
+ * Ticket predicate (WU10 #2): a non-canceled document that is a real
+ * customer ticket. Credit notes are refund documents, not tickets, so they
+ * never inflate completedTicketCount or the averageTicketNetNio denominator.
+ */
+export function isCompletedTicketDocument(
+  row: SalesReportingInvoiceRow,
+): boolean {
+  return !row.isCanceled && !isCreditNoteRow(row);
+}
+
+/**
+ * Cost-coverage predicate (WU10 #3): a non-canceled regular sale whose
+ * direct cost the inventory module must be able to prove. Defined here —
+ * pure and inventory-independent — so sales reporting and inventory
+ * coverage (consumed by the inventory coverage reporting) share one
+ * definition. Credit notes are not cost evidence; canceled documents are
+ * not sales.
+ *
+ * Today this coincides in extent with isCompletedTicketDocument (same
+ * exclusions), but they are NOT redundant: this predicate answers "whose
+ * cost must we be able to prove?" while the ticket predicate answers "who
+ * was served?". They diverge for a ticket that needs no cost evidence
+ * (e.g. an explicit costingMode = NONE sale: ticket TRUE, coverage FALSE).
+ */
+export function isCogsCoverageRelevantSale(
+  row: SalesReportingInvoiceRow,
+): boolean {
+  return !row.isCanceled && !isCreditNoteRow(row);
 }
 
 /** Historical persisted Net Sales contribution of one invoice row. */
@@ -214,7 +295,7 @@ export function allocateInvoiceLineNetSales(row: {
   return rawCents.map((cents, index) => (cents + allocation[index]) / 100);
 }
 
-/** Aggregates the §7.2 KPI set over completed (non-void) invoice rows. */
+/** Aggregates the §7.2 KPI set over the WU10 reporting predicates. */
 export function computeSalesReportingTotals(
   rows: readonly SalesReportingInvoiceRow[],
 ): SalesReportingTotals {
@@ -224,13 +305,17 @@ export function computeSalesReportingTotals(
   let completedTicketCount = 0;
 
   for (const row of rows) {
-    if (!isCompletedSaleRow(row)) {
+    if (!isRevenueAffectingDocument(row)) {
       continue;
     }
     netSalesNio = round2(netSalesNio + salesRowNetSales(row));
     totalTaxNio = round2(totalTaxNio + Number(row.totalTax ?? 0));
     totalDiscountsNio = round2(totalDiscountsNio + salesRowDiscounts(row));
-    completedTicketCount += 1;
+    // Deliberate split: the amount nets (revenue predicate) but the credit
+    // note never counts as a ticket (ticket predicate).
+    if (isCompletedTicketDocument(row)) {
+      completedTicketCount += 1;
+    }
   }
 
   const preDiscountSalesNio = round2(netSalesNio + totalDiscountsNio);
@@ -262,8 +347,8 @@ function isTipRecordedRow(row: SalesReportingInvoiceRow): boolean {
  * (Dashboard V2 Batch 7 Slice 3).
  *
  * Semantics:
- * - Only completed rows (isCompletedSaleRow) contribute; canceled tips are
- *   never reported.
+ * - Only completed ticket rows (isCompletedTicketDocument) contribute;
+ *   canceled documents and credit notes are never reported.
  * - A row participates in tip totals when its tip snapshot is recorded
  *   (tipAmountNio non-NULL). Legacy NULL rows are excluded from the sums but
  *   remain in tipCoverage.totalInvoicesCount, so PARTIAL coverage is visible
@@ -286,7 +371,7 @@ export function computeSalesReportingTipsSummary(
   let totalInvoicesCount = 0;
 
   for (const row of rows) {
-    if (!isCompletedSaleRow(row)) {
+    if (!isCompletedTicketDocument(row)) {
       continue;
     }
     totalInvoicesCount += 1;
@@ -369,8 +454,9 @@ export interface DailySalesSeriesPoint {
 
 /**
  * Daily Sales Trend buckets (PRD §14) under the §7.2 cross-widget invariant:
- * the same completed-sale predicate and the same per-row Net Sales expression
- * as `computeSalesReportingTotals`, never grossSales.
+ * the same reporting predicates and the same per-row Net Sales expression as
+ * `computeSalesReportingTotals`, never grossSales — amounts use the revenue
+ * predicate, ticket counts the ticket predicate.
  *
  * Every calendar day of [localStartDate, localEndDate] is emitted in order;
  * zero-sales days carry netSalesNio 0, count 0 and a null average so the
@@ -395,7 +481,7 @@ export function computeDailySalesSeries(
   const countByDay = new Map<string, number>();
 
   for (const row of rows) {
-    if (!isCompletedSaleRow(row)) {
+    if (!isRevenueAffectingDocument(row)) {
       continue;
     }
     const rawBucket = resolveInvoiceLocalDayBucket(row);
@@ -408,7 +494,9 @@ export function computeDailySalesSeries(
       bucket,
       round2((netByDay.get(bucket) ?? 0) + salesRowNetSales(row)),
     );
-    countByDay.set(bucket, (countByDay.get(bucket) ?? 0) + 1);
+    if (isCompletedTicketDocument(row)) {
+      countByDay.set(bucket, (countByDay.get(bucket) ?? 0) + 1);
+    }
   }
 
   const days: DailySalesSeriesPoint[] = [];

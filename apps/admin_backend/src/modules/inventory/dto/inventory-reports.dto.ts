@@ -39,12 +39,36 @@ export interface CogsReportItemDto {
   costPercentage: number;
 }
 
+export type InventoryCoverageStatus = 'COMPLETE' | 'PARTIAL' | 'UNAVAILABLE';
+
+export type InventoryCoverageReasonCode =
+  | 'MISSING_INVENTORY_IMPACT'
+  | 'NO_EXPLICIT_INSUMO_MAPPING'
+  | 'MISSING_COST_BASIS'
+  | 'ZERO_COST_BASIS'
+  | 'UNRESOLVED_SOURCE_DOCUMENT'
+  | 'INCOMPLETE_SYNC';
+
+/**
+ * Trust evidence for the COGS figure. NOT freshness and NOT derived from
+ * `salesCogsNio`: coverage answers "can we establish the authoritative cost
+ * for every relevant sale of the period". A tenant can be sync COMPLETE and
+ * still be coverage PARTIAL.
+ */
+export interface InventoryCoverageDto {
+  status: InventoryCoverageStatus;
+  costedSalesCount: number;
+  uncostedSalesCount: number;
+  reasonCodes?: InventoryCoverageReasonCode[];
+}
+
 export interface CogsReportDto {
   fromDate: string;
   toDate: string;
   totalCogsNio: number;
   salesCogsNio: number;
   shrinkageCogsNio: number;
+  inventoryCoverage: InventoryCoverageDto;
   generatedAt: string;
   items: CogsReportItemDto[];
 }

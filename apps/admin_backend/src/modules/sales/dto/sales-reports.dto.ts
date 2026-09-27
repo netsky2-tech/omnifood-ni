@@ -232,6 +232,16 @@ export interface TopProductsReportDto {
   startDate?: string;
   endDate?: string;
   generatedAt: string;
+  /**
+   * Authoritative share denominator (FR-PRODUCT-01): the period's Net Sales
+   * (post-discount, pre-tax) computed with the SAME shared semantics helper
+   * and over the SAME bounded invoice set the product aggregates were built
+   * from, so `periodNetSalesNio` reconciles exactly with the KPI
+   * `netSalesNio` and `Σ products.netRevenueNio <= periodNetSalesNio` even
+   * when the Top-N list is truncated. The deprecated tax-inclusive
+   * `TopProductItemDto.totalRevenue` must never be used as this denominator.
+   */
+  periodNetSalesNio: number;
   products: TopProductItemDto[];
 }
 
