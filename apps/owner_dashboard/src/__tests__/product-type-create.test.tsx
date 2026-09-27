@@ -135,9 +135,17 @@ describe("Product type creation question (issue #618)", () => {
   // Two-layer discipline from #617: the disabled button is the first boundary,
   // the handler-level refusal is the second (a disabled button only swallows
   // clicks; an implicit form submit still reaches handleSubmit). This test
-  // fails if either layer is removed.
+  // pins the disabled attribute and the handler refusal as a pair. The two
+  // handler-level guards (one in handleSubmit, one in runSubmit) are
+  // deliberately redundant defense-in-depth: removing the disabled attribute
+  // or either single handler guard still leaves the behavior intact, by
+  // design.
   it("with no answer chosen, Crear is disabled and the handler refuses to submit", async () => {
     const user = await openCreateDialog();
+
+    // Preserves the assertion from the case removed in #618: create mode
+    // shows no "Tipo de Producto" selector.
+    expect(screen.queryByLabelText("Tipo de Producto")).not.toBeInTheDocument();
 
     expect(screen.getByText("Crear")).toBeDisabled();
 
