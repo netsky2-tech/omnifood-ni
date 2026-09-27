@@ -5,6 +5,9 @@ import {
   fetchRecipeSnapshot,
   createRecipeVersion,
   fetchInsumos,
+  fetchPendingSuggestions,
+  publishRecipeVersion,
+  suggestionsQueryKey,
 } from './recipes-api';
 import type { CreateRecipeVersionInput } from './types';
 
@@ -48,5 +51,28 @@ export function useInsumos() {
     queryKey: ['recipes', tenantId, 'insumos'],
     queryFn: ({ signal }) => fetchInsumos({ signal }),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function usePendingSuggestions() {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: suggestionsQueryKey(tenantId),
+    queryFn: ({ signal }) => fetchPendingSuggestions({ signal }),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function usePublishRecipeVersion() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: ({ recipeVersionId }: { recipeVersionId: string; productId: string }) =>
+      publishRecipeVersion(recipeVersionId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: suggestionsQueryKey(tenantId) });
+      queryClient.invalidateQueries({ queryKey: ['recipes', tenantId, 'active', variables.productId] });
+    },
   });
 }
