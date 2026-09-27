@@ -29,7 +29,7 @@ band. Changed: eight points listed in §3.
 │   Netos · hoy vs martes anterior             │ ● 3 stock crítico            →  │
 │   ╭────╮                                     │ ● 2 vouchers pendientes      →  │
 │ ──╯    ╰──╮      ╭────                       │ ▲ 2 anulaciones · C$840      →  │
-│           ╰──────╯                           │ ✓ Secuencia fiscal sin gaps    │
+│           ╰──────╯                           │ (sin excepciones → sin panel)   │
 ├──────────────────────┬───────────────────────┴───┬─────────────────────────────┤
 │ Ventas por hora  Ver →│ Top productos        Ver →│ Mix de pagos          Ver → │
 │ ▂ ▃ ▅ █ █ ▆ ▄        │ Cappuccino  214u C$10,080 │ Efectivo  C$23,290 · 48%    │
@@ -65,7 +65,7 @@ slot with a non-destructive warning linking to Settings (FR-FISCAL-04).
 |---|---|---|
 | 1 | Context bar adds **"Régimen fiscal: Cuota Fija"** and the **comparison label** ("vs martes anterior") | PRD §10.1 (context = fiscal profile + comparison), FR-KPI-01 (comparison label), FR-FISCAL-03 |
 | 2 | Freshness badge keeps **two timestamps separated**: business completeness ("hasta 9:54") and sync heartbeat ("sync 9:52") | FR-SYNC-01/04: `generatedAt` must not masquerade as completeness; AC-08/AC-09A |
-| 3 | "Fiscal OK" renamed **"Secuencia fiscal sin gaps"** | Derivable fact (sequence-audit `hasGaps`), not a vague claim; AC-11 |
+| 3 | Attention panel is **exceptions-only** — the "Fiscal OK" healthy-sequence row is dropped: a healthy sequence renders no row, and the panel itself hides when no exception remains | §19 scopes the panel to actionable exceptions; AC-11 is conditional and requires the sequence row only when sequence-audit `hasGaps` is true |
 | 4 | Attention items carry **severity dots** (● critical / ▲ warning) and **drill-down arrows** | §19.1 severity model; §24 drill-down; §28 color-independent signaling |
 | 5 | **Discounts move out of the footer into "Flujos separados de ventas"** with the comparison delta, next to a clearly-labeled tips strip | FR-DISC-01 (amount + rate + delta); §21.3 visible separation of tips from sales; §21.4 no zero placeholders |
 | 6 | **Rentabilidad moves to the management band** (bottom), out of the performance grid | PRD §10 layering: Operational Profitability is Level 3 (management), not Level 2 (performance); also de-duplicates the margin KPI by framing it as the breakdown |
@@ -84,6 +84,8 @@ slot with a non-destructive warning linking to Settings (FR-FISCAL-04).
 | Freshness states (●) | Batch 3 freshness endpoint; until then the badge stays `generatedAt`-labeled |
 | Margin KPI + COGS block for MANAGER | Batch 6 AG-06 cost permission (AC-17) |
 | No-sales / partial-sync variants | FR-STATE-01..03 behaviors, not separate layouts |
+| RENTABILIDAD card (management band) | AG-06 cost permission (AC-17) — omitted entirely without the grant; margin percent only on COMPLETE inventory coverage (round 2 P0 #4) |
+| Descuentos comparison delta (↑) in FLUJOS SEPARADOS | No discount delta exists in the shipped `snapshot.deltas` contract — rendered only when the delta contract ships; never invented |
 
 ## 5. Rules the implementation must not break
 
@@ -92,4 +94,8 @@ slot with a non-destructive warning linking to Settings (FR-FISCAL-04).
 - Comparison labels are mandatory wherever a delta is shown (FR-KPI-01..04); `—` when the base is
   zero (§9.5).
 - Color is never the only signal (§25.3, §28); severity and trend direction need text/shape.
+- Amount axes carry the currency unit (C$) using the shared es-NI formatter
+  (`formatNio`); count/unit axes (hours, product units) stay unitless (review round 2, WU9).
+- The selected period is attributed by the date-range control trigger ("startDate — endDate");
+  no page-level "Periodo" footer (review round 2, WU9 — redundant restatement removed).
 - Drill-down is navigation only (§24).
