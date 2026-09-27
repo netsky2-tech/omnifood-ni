@@ -44,6 +44,9 @@ vi.mock("@/features/dashboard/use-dashboard-kpis", () => ({
     isFiscalFailed: false,
     isFiscalPending: false,
     isCogsFailed: false,
+    // Review round 2 P0 #4: the strip reads the margin coverage gate; this
+    // page-level mock uses the fully-open (COMPLETE coverage) gate.
+    marginGate: { ratio: true, delta: true, amount: true, gated: false, reasonCodes: [] },
   })),
 }));
 
@@ -85,23 +88,27 @@ describe("DashboardPage", () => {
 
   it("renders the V2 executive KPI strip (Cuota Fija: no IVA card)", () => {
     // #544 / FR-FISCAL-03: the legacy permanent "Impuestos (IVA)" card at C$0
-    // for cuota-fija tenants was replaced by the regime-aware strip. "Ventas
-    // Brutas" survives via the legacy "Resumen de Ventas" widget (arch spec
-    // §7.3 retains legacy fields for existing consumers).
+    // for cuota-fija tenants was replaced by the regime-aware strip.
+    // Review round 2 (WU5): the static "Resumen de Ventas" card was retired, so
+    // "Ventas Brutas" no longer appears on the dashboard at all — it lives on
+    // the Sales and Fiscal pages.
     render(<DashboardPage />, { wrapper: TestWrapper });
-    expect(screen.getAllByText("Ventas Brutas").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Ventas Brutas")).not.toBeInTheDocument();
     expect(screen.getByText("Ventas Netas")).toBeInTheDocument();
     expect(screen.getByText("Ticket Promedio")).toBeInTheDocument();
     expect(screen.queryByText("IVA generado")).not.toBeInTheDocument();
   });
 
-  it("renders Resumen de Ventas without the legacy Métodos de Pago card", () => {
+  it("renders the Flujos separados band without the legacy Resumen de Ventas card", () => {
     // Batch 5c: the legacy "Métodos de Pago" card was removed — the
     // PaymentMixChart in the performance band is the single payment surface.
+    // Review round 2 (WU5): "Resumen de Ventas" is retired too; its discounts
+    // line survives inside "Flujos separados de ventas".
     render(<DashboardPage />, { wrapper: TestWrapper });
     expect(screen.queryByText("Métodos de Pago")).not.toBeInTheDocument();
     expect(screen.queryByText("Efectivo NIO")).not.toBeInTheDocument();
-    expect(screen.getByText("Resumen de Ventas")).toBeInTheDocument();
+    expect(screen.queryByText("Resumen de Ventas")).not.toBeInTheDocument();
+    expect(screen.getByText("Flujos separados de ventas")).toBeInTheDocument();
   });
 
   it("renders freshness badge", () => {
@@ -177,6 +184,7 @@ describe("DashboardPage — empty state", () => {
   it("renders KPI cards with zero values", () => {
     render(<DashboardPage />, { wrapper: TestWrapper });
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getAllByText("Ventas Brutas").length).toBeGreaterThanOrEqual(1);
+    // WU5 retired the only surface that rendered "Ventas Brutas" here.
+    expect(screen.queryByText("Ventas Brutas")).not.toBeInTheDocument();
   });
 });

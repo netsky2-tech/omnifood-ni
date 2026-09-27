@@ -11,10 +11,12 @@
  * real fetchDashboardReport produces; wire-string coercion is pinned at unit
  * level on normalizeDashboardReport.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KpiStrip, type KpiStripProps } from "@/features/dashboard/kpi-strip";
+import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { useAuthStore } from "@/features/auth/auth-store";
 import {
   fetchDashboardReport,
@@ -34,6 +36,29 @@ vi.mock("@/features/dashboard/dashboard-api", async (importOriginal) => ({
 vi.mock("@/features/inventory/inventory-api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   fetchCogs: vi.fn(),
+}));
+
+// G2 page-level tests render the real DashboardPage; its non-strip data
+// sources are mocked at module level so the regime context label can be
+// asserted against the real useDashboardKpis/fiscal fetch path.
+vi.mock("@/features/sales/use-sales-reports", () => ({
+  useSalesDashboard: vi.fn(() => ({
+    data: {
+      grossSales: 15000,
+      netTaxableSales: 13000,
+      totalTax: 1956,
+      totalDiscounts: 500,
+      generatedAt: "2026-09-23T21:54:00Z",
+    },
+    isLoading: false,
+    error: null,
+  })),
+}));
+vi.mock("@/features/dashboard/use-sync-freshness", () => ({
+  useSyncFreshness: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock("@/features/dashboard/performance-band", () => ({
+  PerformanceBand: () => <div data-testid="performance-band-mock" />,
 }));
 
 const CURRENT_RANGE = { start: "2026-09-23", end: "2026-09-23" };
@@ -81,7 +106,22 @@ const ZERO_SALES = {
   invoiceCount: 0, ticketAverage: 0,
 };
 
-const cogsPayload = (salesCogsNio: number) => ({
+/**
+ * Margin ratio is gated on coverage (WU3 / P0 #4): the percent only renders
+ * when the period's inventoryCoverage is COMPLETE. A payload with no coverage
+ * would now legitimately show "—", so every fixture states its coverage
+ * explicitly instead of relying on the field being absent.
+ */
+const COMPLETE_COVERAGE = {
+  status: "COMPLETE" as const,
+  costedSalesCount: 12,
+  uncostedSalesCount: 0,
+};
+
+const cogsPayload = (
+  salesCogsNio: number,
+  coverage: Record<string, unknown> | null = COMPLETE_COVERAGE,
+) => ({
   fromDate: CURRENT_RANGE.start,
   toDate: CURRENT_RANGE.end,
   totalCogsNio: salesCogsNio,
@@ -89,6 +129,8 @@ const cogsPayload = (salesCogsNio: number) => ({
   shrinkageCogsNio: 0,
   generatedAt: "2026-09-23T21:54:00Z",
   items: [],
+  // null models an older wire that carries no coverage field at all.
+  ...(coverage ? { inventoryCoverage: coverage } : {}),
 });
 
 function mockCogsDefault() {
@@ -119,6 +161,24 @@ function renderStrip(props: Partial<KpiStripProps> = {}) {
     <QueryClientProvider client={client}>
       <div data-testid="sibling-widget">Métodos de Pago</div>
       <KpiStrip range={CURRENT_RANGE} today="2026-09-23" {...props} />
+    </QueryClientProvider>,
+  );
+}
+
+function renderPage() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      {/* Review round 2 (WU5): DashboardPage now renders the Rentabilidad
+          card's "Ver →" react-router Link for cost-granted users, so the page
+          needs the router context it always has in the app shell. Without it
+          Link throws while destructuring basename. MemoryRouter mirrors
+          production without asserting navigation. */}
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -231,6 +291,223 @@ describe("KpiStrip — unknown fiscal configuration (FR-FISCAL-04)", () => {
   });
 });
 
+describe("KpiStrip — reflowing card grid (G3, FR-KPI-05)", () => {
+  // The grid must be derived from the real tile count and never leave an empty
+  // column or an orphaned wrapped tile. A fixed 4-track grid is the specific
+  // regression being guarded: it holes at 3 tiles and orphans the 5th.
+  const expectReflowGrid = (grid: HTMLElement, count: 3 | 4 | 5) => {
+    // Every matrix is an explicit grid, and none of them is a bare fixed
+    // 4-column desktop grid — that is what stranded the 5th tile.
+    expect(grid.className).toContain("grid");
+    if (count === 5) {
+      // lg opens a 6-track field so the row can balance [2,2,2]+[3,3]; xl
+      // returns to the wireframe's single 5-across row.
+      expect(grid.className).toContain("lg:grid-cols-6");
+      expect(grid.className).toContain("xl:grid-cols-5");
+      expect(grid.className).not.toContain("lg:grid-cols-4");
+      return;
+    }
+    // 3 and 4 tiles divide their own track count exactly, so they need no
+    // spans — only that some breakpoint step lands on precisely `count`
+    // columns and never on a 4-track field that would hole at 3.
+    const trackCounts = [...grid.className.matchAll(/(?:^|\s)(?:sm|md|lg|xl):grid-cols-(\d+)/g)]
+      .map((m) => Number(m[1]));
+    expect(trackCounts).toContain(count);
+    if (count === 3) {
+      expect(grid.className).not.toContain("grid-cols-4");
+    }
+  };
+
+  /** Tiles in the 6-track lg layout must fill both rows exactly. */
+  const expectFiveTileSpans = (grid: HTMLElement) => {
+    const spans = within(grid)
+      .getAllByTestId("kpi-tile")
+      .map((tile) => tile.className);
+    expect(spans).toHaveLength(5);
+    // first three share a row (2+2+2 = 6), last two share the next (3+3 = 6)
+    expect(spans[0]).toContain("lg:col-span-2");
+    expect(spans[1]).toContain("lg:col-span-2");
+    expect(spans[2]).toContain("lg:col-span-2");
+    expect(spans[3]).toContain("lg:col-span-3");
+    expect(spans[4]).toContain("lg:col-span-3");
+    // xl must reset every tile to a single track or the 5-across row breaks
+    spans.forEach((s) => expect(s).toContain("xl:col-span-1"));
+    // 2+2+2 and 3+3 both sum to the 6 lg tracks: no hole, no orphan.
+    const lgTracks = (cls: string) => Number(cls.match(/lg:col-span-(\d)/)?.[1] ?? 0);
+    const tracks = spans.map(lgTracks);
+    expect(tracks.slice(0, 3).reduce((sum, n) => sum + n, 0)).toBe(6);
+    expect(tracks.slice(3).reduce((sum, n) => sum + n, 0)).toBe(6);
+  };
+
+  it("renders the 4-tile Cuota Fija matrix into the reflowing grid", async () => {
+    mockBothPeriods({}, {});
+
+    renderStrip();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("kpi-tile")).toHaveLength(4);
+    });
+    expectReflowGrid(screen.getByTestId("kpi-strip-grid"), 4);
+  });
+
+  it("renders the 3-tile cost-gated matrix (MANAGER, no cost grant) with no orphaned column", async () => {
+    mockBothPeriods({}, {});
+    // permissions.ts fails closed: a MANAGER without a permissions array has
+    // no cost grant, so the margin tile is omitted entirely (AC-17).
+    useAuthStore.setState({
+      user: {
+        id: "user-2",
+        email: "manager@test.ni",
+        name: "Manager",
+        role: "MANAGER",
+        tenantId: "tenant-1",
+        active: true,
+      },
+    });
+
+    renderStrip();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("kpi-tile")).toHaveLength(3);
+    });
+    expect(screen.queryByText("Margen Bruto")).not.toBeInTheDocument();
+    // 3 tiles must not sit in a 4-track grid — that is the hole G3 removes.
+    expectReflowGrid(screen.getByTestId("kpi-strip-grid"), 3);
+  });
+
+  it("renders the 5-tile Régimen General matrix balanced, with no orphaned tile", async () => {
+    mockBothPeriods({}, {});
+    vi.mocked(fetchFiscalSetup).mockResolvedValue({ regime: "REGIMEN_GENERAL" });
+
+    renderStrip();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("kpi-tile")).toHaveLength(5);
+    });
+    const grid = screen.getByTestId("kpi-strip-grid");
+    expectReflowGrid(grid, 5);
+    expectFiveTileSpans(grid);
+  });
+
+  it("keeps the skeleton on a reflowing grid that promises no unknown shape", () => {
+    vi.mocked(fetchDashboardReport).mockReturnValue(new Promise(() => {}) as never);
+
+    renderStrip();
+
+    const skeleton = screen.getByTestId("kpi-strip-skeleton");
+    expect(skeleton.className).toContain("grid");
+    expect(skeleton.className).toContain("lg:grid-cols-4");
+  });
+});
+
+describe("KpiStrip — fiscal pending hold (G4)", () => {
+  it("holds the skeleton while the regime is pending, then settles once to the 5-tile matrix", async () => {
+    // Both sales ranges and the fiscal setup are deferred so the test can
+    // prove the ordering: sales settle first, the strip must NOT flash the
+    // Cuota-Fija-shaped 4-tile matrix while the regime is still in flight.
+    const deferred = <T,>() => {
+      let resolve!: (value: T) => void;
+      const promise = new Promise<T>((res) => {
+        resolve = res;
+      });
+      return { promise, resolve };
+    };
+    const salesCurrent = deferred<Record<string, unknown>>();
+    const salesPrevious = deferred<Record<string, unknown>>();
+    vi.mocked(fetchDashboardReport).mockImplementation(((start: string) =>
+      start === CURRENT_RANGE.start ? salesCurrent.promise : salesPrevious.promise) as unknown as typeof fetchDashboardReport);
+    const fiscal = deferred<{ regime: "REGIMEN_GENERAL" }>();
+    vi.mocked(fetchFiscalSetup).mockImplementation((() => fiscal.promise) as typeof fetchFiscalSetup);
+
+    renderStrip();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("kpi-strip-skeleton")).toBeInTheDocument();
+    });
+
+    salesCurrent.resolve(salesPayload({}));
+    salesPrevious.resolve(salesPayload({}));
+    // Flush the sales query settlements across a macrotask so react-query
+    // state has fully propagated; the strip must still hold the skeleton
+    // instead of committing a wrong-shape matrix.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByTestId("kpi-strip-skeleton")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("kpi-tile")).toHaveLength(0);
+
+    fiscal.resolve({ regime: "REGIMEN_GENERAL" });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("kpi-tile")).toHaveLength(5);
+    });
+    expect(screen.queryByTestId("kpi-strip-skeleton")).not.toBeInTheDocument();
+  });
+
+  it("does not hang in the skeleton on fiscal failure: 4 tiles plus the warning", async () => {
+    mockBothPeriods({}, {});
+    vi.mocked(fetchFiscalSetup).mockRejectedValue(new Error("fiscal down"));
+
+    renderStrip();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("kpi-tile")).toHaveLength(4);
+    });
+    expect(screen.getByTestId("fiscal-warning")).toBeInTheDocument();
+    expect(screen.queryByTestId("kpi-strip-skeleton")).not.toBeInTheDocument();
+  });
+});
+
+describe("DashboardPage — fiscal regime context label (G2, FR-FISCAL-03)", () => {
+  // The page derives its range from the real clock (no `today` injection),
+  // so the page-level sales mock accepts any range; the label tests only
+  // exercise the fiscal profile path.
+  const mockSalesAnyRange = () => {
+    vi.mocked(fetchDashboardReport).mockResolvedValue(salesPayload({}) as never);
+  };
+
+  it("renders 'Régimen fiscal: Cuota Fija' sourced from the backend regime", async () => {
+    mockSalesAnyRange();
+
+    renderPage();
+
+    expect(await screen.findByText(/Régimen fiscal: Cuota Fija/)).toBeInTheDocument();
+  });
+
+  it("renders 'Régimen fiscal: Régimen General' for the general regime", async () => {
+    mockSalesAnyRange();
+    vi.mocked(fetchFiscalSetup).mockResolvedValue({ regime: "REGIMEN_GENERAL" });
+
+    renderPage();
+
+    expect(await screen.findByText(/Régimen fiscal: Régimen General/)).toBeInTheDocument();
+  });
+
+  it("shows no regime claim while the regime is still pending", async () => {
+    mockSalesAnyRange();
+    vi.mocked(fetchFiscalSetup).mockReturnValue(new Promise(() => {}) as never);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("kpi-strip-skeleton")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Régimen fiscal/)).not.toBeInTheDocument();
+  });
+
+  it("shows no regime claim when the regime fetch fails", async () => {
+    mockSalesAnyRange();
+    vi.mocked(fetchFiscalSetup).mockRejectedValue(new Error("fiscal down"));
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("fiscal-warning")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Régimen fiscal/)).not.toBeInTheDocument();
+  });
+});
+
 describe("KpiStrip — values and formatting", () => {
   it("renders null averageTicketNetNio as em-dash", async () => {
     mockBothPeriods({ averageTicketNetNio: null }, { averageTicketNetNio: null });
@@ -318,7 +595,10 @@ describe("KpiStrip — Batch 7 additive tips payload (PRD §21)", () => {
 describe("KpiStrip — states (PRD §23)", () => {
   it("renders real zeros and 'sin actividad' instead of skeleton on zero sales", async () => {
     mockBothPeriods(ZERO_SALES, ZERO_SALES);
-    vi.mocked(fetchCogs).mockResolvedValue(cogsPayload(0) as never);
+    // An empty period is COMPLETE with zero costable sales, not unknown.
+    vi.mocked(fetchCogs).mockResolvedValue(
+      cogsPayload(0, { status: "COMPLETE", costedSalesCount: 0, uncostedSalesCount: 0 }) as never,
+    );
 
     renderStrip();
 

@@ -6,6 +6,10 @@ import type {
   AlertsSummary,
   KardexFilters,
 } from "./types";
+import {
+  normalizeInventoryCoverage,
+  type InventoryCoverage,
+} from "./inventory-types";
 
 function toQueryParams(
   params: Record<string, string | number | undefined> | KardexFilters,
@@ -21,9 +25,31 @@ export function fetchValuation(opts?: ApiClientMethodOptions) {
   return opts ? api.get<ValuationReport>("/inventory/reports/valuation", opts) : api.get<ValuationReport>("/inventory/reports/valuation");
 }
 
-export function fetchCogs(from?: string, to?: string, opts?: ApiClientMethodOptions) {
+/**
+ * COGS read model with the WU2 `inventoryCoverage` trust evidence appended.
+ * The base CogsReport shape lives in ./types (shared with the inventory
+ * page); coverage is additive. Optional on the type so producers that do not
+ * know the field (older wires, test fixtures) stay assignable — the gate
+ * treats undefined exactly like null: fail closed.
+ */
+export interface CogsReportWithCoverage extends CogsReport {
+  inventoryCoverage?: InventoryCoverage | null;
+}
+
+export async function fetchCogs(
+  from?: string,
+  to?: string,
+  opts?: ApiClientMethodOptions,
+): Promise<CogsReportWithCoverage> {
   const url = `/inventory/reports/cogs${toQueryParams({ from, to })}`;
-  return opts ? api.get<CogsReport>(url, opts) : api.get<CogsReport>(url);
+  const raw = opts ? await api.get<unknown>(url, opts) : await api.get<unknown>(url);
+  const report = raw as CogsReport;
+  return {
+    ...report,
+    inventoryCoverage: normalizeInventoryCoverage(
+      (raw as Record<string, unknown> | null)?.inventoryCoverage ?? null,
+    ),
+  };
 }
 
 export function fetchKardex(filters: KardexFilters = {}, opts?: ApiClientMethodOptions) {

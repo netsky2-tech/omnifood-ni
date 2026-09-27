@@ -6,15 +6,17 @@
  * Consumes GET /sales/reports/top-products (Batch 5c-backend reconciled
  * contract):
  * - units: the endpoint's `totalQuantity` is a real units field — rendered.
- * - share %: the endpoint provides none; the share is computed client-side
- *   over the listed rows' revenue and labeled as a listed-share.
+ * - share %: computed client-side against the endpoint's authoritative
+ *   `periodNetSalesNio` (period Net Sales over the SAME invoice set the
+ *   aggregates come from), so a truncated Top-N cannot inflate shares; a
+ *   missing/zero denominator renders shares as an em-dash (fail closed).
  * - revenue: `netRevenueNio` is post-discount, pre-tax Net Sales, reconciled
  *   line-by-line with the executive KPI `netSalesNio` (FR-PRODUCT-01). The
  *   Batch 5b tax-inclusive disclaimer is gone: the card now matches the KPI
  *   basis exactly.
  */
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { buildTopProductRows, compactNio, formatNio } from "./chart-domain";
+import { buildTopProductRows, formatNio } from "./chart-domain";
 import { ChartCard, EmptyNote, WidgetError, WidgetSkeleton } from "./chart-card";
 import { useTopProductsReport } from "./use-dashboard-charts";
 
@@ -36,7 +38,13 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
       />
     );
   } else {
-    const { rows } = buildTopProductRows(query.data.products);
+    const { rows } = buildTopProductRows(
+      query.data.products,
+      undefined,
+      // Denominator co-located with the numerator: the backend computes it
+      // over the same invoice set and period as the product aggregates.
+      query.data.periodNetSalesNio,
+    );
     if (rows.length === 0) {
       body = <EmptyNote testId="top-products-empty">sin datos de productos en este periodo</EmptyNote>;
     } else {
@@ -63,7 +71,10 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
           <div role="img" aria-label="Ingresos por producto">
             <ResponsiveContainer width="100%" height={rows.length * 28 + 16}>
               <BarChart data={rows} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
-                <XAxis type="number" tickFormatter={compactNio} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                {/* WU9: the money axis uses the shared formatNio so its ticks
+                    carry the C$ unit (the product-name YAxis and the units
+                    count stay unitless). */}
+                <XAxis type="number" tickFormatter={formatNio} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                 <YAxis type="category" dataKey="name" width={0} tickLine={false} axisLine={false} />
                 <Tooltip
                   cursor={{ fill: "var(--color-muted, #f1f5f9)" }}
@@ -74,7 +85,7 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
             </ResponsiveContainer>
           </div>
           <p data-testid="top-products-note" className="mt-2 text-xs text-muted-foreground">
-            Participación calculada sobre los productos listados. Base: Ventas Netas (post-descuento, pre-IVA).
+            Participación sobre las Ventas Netas del período (post-descuento, pre-IVA).
           </p>
         </>
       );

@@ -23,6 +23,8 @@ import {
   buildPaymentMixRows,
   buildTopProductRows,
   buildTrendRows,
+  formatNio,
+  formatUsd,
   isZeroSeries,
 } from "@/features/dashboard/chart-domain";
 import {
@@ -268,16 +270,44 @@ describe("chart-domain — top-products adapter (pure)", () => {
     { productId: "p3", productName: "Croissant", totalQuantity: 98, netRevenueNio: 4320 },
   ];
 
-  it("computes share percent of the listed revenue sum and keeps backend order", () => {
-    const { rows } = buildTopProductRows(products);
+  it("computes share percent over the period's Net Sales denominator and keeps backend order", () => {
+    // Period Net Sales (44920) is larger than the listed rows' sum (22460):
+    // shares are shares OF THE PERIOD, not of the listed Top-N rows.
+    const { rows } = buildTopProductRows(products, 5, 44920);
 
     expect(rows[0]).toMatchObject({ name: "Cappuccino", units: 214, revenue: 10080 });
-    expect(rows[0]?.sharePercent).toBeCloseTo((10080 / 22460) * 100, 1);
+    expect(rows[0]?.sharePercent).toBeCloseTo((10080 / 44920) * 100, 1);
+    expect(rows[1]?.sharePercent).toBeCloseTo((8060 / 44920) * 100, 1);
     expect(rows[2]?.name).toBe("Croissant");
+    expect(rows[2]?.sharePercent).toBeCloseTo((4320 / 44920) * 100, 1);
+    // Per-row rounding to 1 decimal keeps the sum at (or just under) the
+    // true period share of the listed rows — never inflated toward 100%.
+    const shareSum = rows.reduce((sum, r) => sum + (r.sharePercent ?? 0), 0);
+    expect(shareSum).toBeLessThanOrEqual(100);
+    expect(shareSum).toBeLessThan((22460 / 44920) * 100 + 0.15);
+  });
+
+  it("yields ~50% — not 100% — for a partial Top-N whose listed rows sum to half the period", () => {
+    const partial = products.slice(0, 2); // listed net: 10080 + 8060 = 18140
+    const { rows } = buildTopProductRows(partial, 2, 36280);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.sharePercent).toBeCloseTo((10080 / 36280) * 100, 1);
+    expect(rows[1]?.sharePercent).toBeCloseTo((8060 / 36280) * 100, 1);
+    for (const row of rows) {
+      expect(row.sharePercent).not.toBe(100);
+    }
+  });
+
+  it("fails closed to a null share when the period denominator is missing, 0, negative or non-finite", () => {
+    for (const denominator of [undefined, 0, -44920, Number.NaN, "not-a-number"]) {
+      const { rows } = buildTopProductRows(products, 5, denominator as never);
+      expect(rows.every((r) => r.sharePercent === null)).toBe(true);
+    }
   });
 
   it("limits rows to the compact-card budget and preserves a null share on a zero base", () => {
-    const { rows } = buildTopProductRows(products, 2);
+    const { rows } = buildTopProductRows(products, 2, 44920);
     expect(rows).toHaveLength(2);
 
     const zeroBase = buildTopProductRows([
@@ -500,6 +530,7 @@ describe("TopProducts — states (PRD §16/§23)", () => {
       startDate: RANGE.start,
       endDate: RANGE.end,
       generatedAt: "2026-09-23T21:54:00Z",
+      periodNetSalesNio: 18140,
       products: [
         { productId: "p1", productName: "Cappuccino", totalQuantity: 214, netRevenueNio: 10080, totalRevenue: 12000 },
         { productId: "p2", productName: "Latte", totalQuantity: 186, netRevenueNio: 8060, totalRevenue: 9500 },
@@ -517,11 +548,58 @@ describe("TopProducts — states (PRD §16/§23)", () => {
     expect(screen.getAllByText(/\d+(?:\.\d+)?%/).length).toBeGreaterThanOrEqual(2);
   });
 
-  it("drops the tax-inclusive disclaimer and states the Net Sales basis on the card", async () => {
+  it("renders shares as an em-dash when the period denominator is 0 (empty period fail-closed)", async () => {
     vi.mocked(fetchTopProducts).mockResolvedValue({
       startDate: RANGE.start,
       endDate: RANGE.end,
       generatedAt: "2026-09-23T21:54:00Z",
+      periodNetSalesNio: 0,
+      products: [
+        { productId: "p1", productName: "Cappuccino", totalQuantity: 214, netRevenueNio: 0 },
+      ],
+    } as never);
+
+    renderWithProviders(<PerformanceBand range={RANGE} today="2026-09-23" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Cappuccino")).toBeInTheDocument();
+    });
+    const rows = screen.getByTestId("top-products-rows");
+    expect(rows.textContent).toContain("—");
+    expect(rows.textContent).not.toMatch(/\d+(?:\.\d+)?%/);
+  });
+
+  it("proves truncation: 2 of 5 products listed never claim 100% of the business", async () => {
+    vi.mocked(fetchTopProducts).mockResolvedValue({
+      startDate: RANGE.start,
+      endDate: RANGE.end,
+      generatedAt: "2026-09-23T21:54:00Z",
+      // Listed rows sum to 18140 = half the period Net Sales: every share
+      // must sit near 50% in aggregate, never 100%.
+      periodNetSalesNio: 36280,
+      products: [
+        { productId: "p1", productName: "Cappuccino", totalQuantity: 214, netRevenueNio: 10080 },
+        { productId: "p2", productName: "Latte", totalQuantity: 186, netRevenueNio: 8060 },
+      ],
+    } as never);
+
+    renderWithProviders(<PerformanceBand range={RANGE} today="2026-09-23" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("top-products-rows")).toBeInTheDocument();
+    });
+    const rows = screen.getByTestId("top-products-rows").textContent ?? "";
+    expect(rows).toContain("27.8%");
+    expect(rows).toContain("22.2%");
+    expect(rows).not.toContain("100");
+  });
+
+  it("drops the tax-inclusive disclaimer and states the period Net Sales basis on the card", async () => {
+    vi.mocked(fetchTopProducts).mockResolvedValue({
+      startDate: RANGE.start,
+      endDate: RANGE.end,
+      generatedAt: "2026-09-23T21:54:00Z",
+      periodNetSalesNio: 10080,
       products: [
         { productId: "p1", productName: "Cappuccino", totalQuantity: 214, netRevenueNio: 10080 },
       ],
@@ -534,7 +612,8 @@ describe("TopProducts — states (PRD §16/§23)", () => {
     });
     const note = screen.getByTestId("top-products-note").textContent ?? "";
     expect(note.toLowerCase()).not.toContain("no equivale");
-    expect(note).toContain("Ventas Netas");
+    expect(note).toContain("Ventas Netas del período");
+    expect(note).not.toContain("productos listados");
   });
 
   it("renders an explicit empty state and isolates endpoint failures", async () => {
@@ -643,5 +722,30 @@ describe("PerformanceBand — lazy loading (page integration)", () => {
     await waitFor(() => {
       expect(screen.getByText("Top productos")).toBeInTheDocument();
     });
+  });
+});
+
+describe("chart-domain — money formatting (review round 2, WU9)", () => {
+  it("prints córdobas with the shared es-NI C$ prefix used across the dashboard", () => {
+    expect(formatNio(48520.5)).toBe("C$48,520.50");
+    expect(formatNio(10080)).toBe("C$10,080.00");
+  });
+
+  it("never renders a signed zero: 0, -0 and a round-to-zero negative are unsigned", () => {
+    expect(formatNio(0)).toBe("C$0.00");
+    expect(formatNio(-0)).toBe("C$0.00");
+    expect(formatNio(-0.001)).toBe("C$0.00");
+  });
+
+  it("keeps the sign of a genuinely small negative — real money is not flattened", () => {
+    expect(formatNio(-0.01)).toBe("-C$0.01");
+  });
+
+  it("applies the same signed-zero rule to original-currency USD amounts", () => {
+    // es-NI separates the USD code from the amount with a no-break space.
+    expect(formatUsd(0)).toBe("USD\u00A00.00");
+    expect(formatUsd(-0)).toBe("USD\u00A00.00");
+    expect(formatUsd(-0.001)).toBe("USD\u00A00.00");
+    expect(formatUsd(-0.01)).toBe("-USD\u00A00.01");
   });
 });

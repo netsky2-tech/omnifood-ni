@@ -38,6 +38,12 @@ export interface TopProductItem {
   productId: string;
   productName: string;
   totalQuantity: number;
+  /**
+   * Optional V2 field (older backends omit it): post-discount, pre-tax Net
+   * Sales contribution per product (FR-PRODUCT-01). The legacy tax-inclusive
+   * `totalRevenue` is never displayed.
+   */
+  netRevenueNio?: number;
   totalRevenue: number;
 }
 
@@ -45,6 +51,13 @@ export interface TopProductsReport {
   startDate?: string;
   endDate?: string;
   generatedAt: string;
+  /**
+   * Optional V2 field (older backends omit it): the period's Net Sales
+   * (post-discount, pre-tax) over the same invoice set the products
+   * aggregate from — the authoritative share denominator. Absent/zero
+   * means shares fail closed to an em-dash on the dashboard.
+   */
+  periodNetSalesNio?: number;
   products: TopProductItem[];
 }
 

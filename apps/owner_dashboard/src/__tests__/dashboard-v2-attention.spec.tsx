@@ -199,6 +199,10 @@ const cogsPayload = () => ({
   shrinkageCogsNio: 0,
   generatedAt: GENERATED_AT,
   items: [],
+  // WU3's margin gate reads coverage, not the COGS amount: without an
+  // explicit COMPLETE the ratio legitimately renders "—", which is the correct
+  // behaviour but not what these AC-17 margin-figure tests are about.
+  inventoryCoverage: { status: "COMPLETE", costedSalesCount: 12, uncostedSalesCount: 0 },
 });
 
 function mockSalesPipeline() {
@@ -284,8 +288,14 @@ describe("AttentionBand — all five signals (PRD §19.2/§19.3)", () => {
     expect(screen.getByTestId("attention-item-sequence").textContent).toContain("●");
     expect(screen.getByTestId("attention-item-audit").textContent).toContain("●");
 
-    // Healthy banner must never coexist with critical/warning rows.
-    expect(screen.queryByTestId("attention-healthy")).not.toBeInTheDocument();
+    // Temporal scope chips: stock and vouchers are current-state signals
+    // (outstanding snapshots, not date-filtered); voids, the sequence gap
+    // check, and the audit summary are scoped to the selected page range.
+    expect(screen.getByTestId("attention-scope-stock").textContent).toBe("Actual");
+    expect(screen.getByTestId("attention-scope-vouchers").textContent).toBe("Actual");
+    expect(screen.getByTestId("attention-scope-voids").textContent).toBe("Período");
+    expect(screen.getByTestId("attention-scope-sequence").textContent).toBe("Período");
+    expect(screen.getByTestId("attention-scope-audit").textContent).toBe("Período");
   });
 
   it("renders signal details (counts and amounts)", async () => {
@@ -321,10 +331,44 @@ describe("AttentionBand — all five signals (PRD §19.2/§19.3)", () => {
   });
 });
 
-describe("AttentionBand — severity rendering (PRD §19.1)", () => {
-  it("renders Info severity with the ✓ glyph", async () => {
+describe("AttentionBand — exceptions-only scope (PRD §19, AC-11)", () => {
+  it("renders no row for a healthy fiscal sequence (AC-11 is conditional on hasGaps = true)", async () => {
+    // One unrelated exception keeps the panel mounted so the absence of the
+    // sequence row is observed against a settled, rendered panel.
+    vi.mocked(fetchAlerts).mockResolvedValue(
+      alertsPayload({ criticalCount: 1, totalAlertsCount: 1 }),
+    );
+
+    renderBand();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("attention-item-stock")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("attention-item-sequence")).not.toBeInTheDocument();
+  });
+
+  it("renders no row for an info-only audit summary (info-only is not actionable)", async () => {
+    vi.mocked(fetchAlerts).mockResolvedValue(
+      alertsPayload({ criticalCount: 1, totalAlertsCount: 1 }),
+    );
     vi.mocked(fetchAuditSummary).mockResolvedValue(
-      auditPayload({ infoCount: 4 }),
+      auditPayload({ infoCount: 11 }),
+    );
+
+    renderBand();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("attention-item-stock")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("attention-item-audit")).not.toBeInTheDocument();
+  });
+
+  it("renders no row when the audit has only warning-free info events (critical/warning still surface)", async () => {
+    vi.mocked(fetchAlerts).mockResolvedValue(
+      alertsPayload({ criticalCount: 1, totalAlertsCount: 1 }),
+    );
+    vi.mocked(fetchAuditSummary).mockResolvedValue(
+      auditPayload({ warningCount: 1, infoCount: 11 }),
     );
 
     renderBand();
@@ -334,45 +378,27 @@ describe("AttentionBand — severity rendering (PRD §19.1)", () => {
     });
     expect(screen.getByTestId("attention-item-audit")).toHaveAttribute(
       "data-severity",
-      "info",
-    );
-    expect(screen.getByTestId("attention-item-audit").textContent).toContain("✓");
-    expect(screen.getByTestId("attention-item-audit").textContent).toContain("4");
-  });
-
-  it("renders a healthy fiscal sequence as Info ('sin gaps')", async () => {
-    renderBand();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("attention-item-sequence")).toBeInTheDocument();
-    });
-    expect(screen.getByTestId("attention-item-sequence")).toHaveAttribute(
-      "data-severity",
-      "info",
-    );
-    expect(screen.getByTestId("attention-item-sequence").textContent).toContain(
-      "Secuencia fiscal sin gaps",
+      "warning",
     );
   });
 });
 
-describe("AttentionBand — healthy state (PRD §19)", () => {
-  it("shows 'Todo en orden' when no critical or warning alerts exist", async () => {
+describe("AttentionBand — zero exceptions hides the panel (PRD §19)", () => {
+  it("renders nothing when every ready signal is healthy (no 'todo bien' card)", async () => {
     renderBand();
 
     await waitFor(() => {
-      expect(screen.getByTestId("attention-healthy")).toBeInTheDocument();
+      expect(screen.queryByTestId("attention-band")).not.toBeInTheDocument();
     });
-    expect(screen.getByTestId("attention-healthy").textContent).toContain(
-      "Todo en orden",
-    );
     expect(screen.queryByTestId("attention-item-stock")).not.toBeInTheDocument();
     expect(screen.queryByTestId("attention-item-vouchers")).not.toBeInTheDocument();
     expect(screen.queryByTestId("attention-item-voids")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("attention-item-sequence")).not.toBeInTheDocument();
     expect(screen.queryByTestId("attention-item-audit")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("attention-healthy")).not.toBeInTheDocument();
   });
 
-  it("hides the healthy banner while any signal is still loading", async () => {
+  it("keeps the panel (loading skeleton) while any signal is still pending", async () => {
     vi.mocked(fetchAuditSummary).mockReturnValue(new Promise(() => {}));
 
     renderBand();
@@ -380,7 +406,7 @@ describe("AttentionBand — healthy state (PRD §19)", () => {
     await waitFor(() => {
       expect(screen.getByTestId("attention-loading")).toBeInTheDocument();
     });
-    expect(screen.queryByTestId("attention-healthy")).not.toBeInTheDocument();
+    expect(screen.getByTestId("attention-band")).toBeInTheDocument();
   });
 });
 
@@ -449,7 +475,7 @@ describe("AttentionBand — partial failure isolation (FR-STATE-04/05)", () => {
     expect(screen.getByTestId("attention-band")).toBeInTheDocument();
   });
 
-  it("suppresses the healthy banner when a signal failed (cannot assert order)", async () => {
+  it("still renders the panel (error rows, not a blank) when every ready signal is healthy but one failed", async () => {
     vi.mocked(fetchVoidedInvoices).mockRejectedValue(new Error("voids down"));
 
     renderBand();
@@ -457,6 +483,9 @@ describe("AttentionBand — partial failure isolation (FR-STATE-04/05)", () => {
     await waitFor(() => {
       expect(screen.getByTestId("attention-error-voids")).toBeInTheDocument();
     });
+    // All ready signals are healthy (no items), but the panel must NOT blank:
+    // a failed signal can never be presented as "healthy" (FR-STATE-04/05).
+    expect(screen.getByTestId("attention-band")).toBeInTheDocument();
     expect(screen.queryByTestId("attention-healthy")).not.toBeInTheDocument();
   });
 });
@@ -529,7 +558,7 @@ describe("KpiStrip — AG-06 cost permission gating (AC-17)", () => {
     expect(screen.getByText("Margen Bruto")).toBeInTheDocument();
   });
 
-  it("keeps a consistent 4-column layout without the margin tile", async () => {
+  it("reflows the grid when the margin tile is gated out", async () => {
     setAuthUser("MANAGER");
     mockSalesPipeline();
 
@@ -541,10 +570,10 @@ describe("KpiStrip — AG-06 cost permission gating (AC-17)", () => {
     expect(screen.getByText("Ventas Netas")).toBeInTheDocument();
     expect(screen.getByText("Tickets")).toBeInTheDocument();
     expect(screen.getByText("Ticket Promedio")).toBeInTheDocument();
-    // The grid container keeps its column template (no layout breakage).
-    const tiles = screen.getAllByTestId("kpi-tile");
-    const firstTile = tiles.find(() => true);
-    expect(firstTile).toBeDefined();
-    expect(firstTile?.parentElement?.className).toContain("lg:grid-cols-4");
+    // The container reflows to the actual tile count instead of keeping a
+    // fixed 4-track grid, which used to strand an empty column here (G3).
+    const grid = screen.getByTestId("kpi-strip-grid");
+    expect(grid.className).toContain("sm:grid-cols-3");
+    expect(grid.className).not.toContain("lg:grid-cols-4");
   });
 });

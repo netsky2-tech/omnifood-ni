@@ -14,6 +14,7 @@ import { formatLocalDate } from "@/lib/utils";
 import { resolveComparisonPeriod, type ComparisonPeriod, type LocalDateRange } from "./domain/comparison-period";
 import { fetchDashboardReport, fetchFiscalSetup, type FiscalProfile } from "./dashboard-api";
 import { buildKpiSnapshot, type KpiSnapshot } from "./kpi-deltas";
+import { evaluateMarginGate, type MarginGate } from "./dashboard-types";
 
 export interface DashboardKpis {
   period: ComparisonPeriod;
@@ -28,6 +29,13 @@ export interface DashboardKpis {
   isFiscalFailed: boolean;
   isFiscalPending: boolean;
   isCogsFailed: boolean;
+  /**
+   * Review round 2 P0 #4: trust gate for the Margen Bruto tile. The ratio
+   * (percent + pp delta) renders only on COMPLETE inventory coverage; the
+   * amount stays on PARTIAL and hides on UNAVAILABLE/unknown (see
+   * dashboard-types.ts for the full contract).
+   */
+  marginGate: MarginGate;
 }
 
 function useSalesRangeQuery(tenantId: string, start: string, end: string, enabled: boolean) {
@@ -111,6 +119,15 @@ export function useDashboardKpis(
     cogsPreviousNio !== null && Number.isFinite(cogsPreviousNio) ? cogsPreviousNio : null,
   );
 
+  // Review round 2 P0 #4: coverage is trust evidence, never inferred from
+  // the COGS amount — a COGS read model that loaded without a usable
+  // coverage payload closes the gate (fail closed).
+  const marginGate = evaluateMarginGate({
+    isCogsLoaded: cogsCurrentQuery.isSuccess && cogsCurrentQuery.data !== undefined,
+    current: cogsCurrentQuery.data?.inventoryCoverage ?? null,
+    previous: cogsPreviousQuery.data?.inventoryCoverage ?? null,
+  });
+
   return {
     period,
     snapshot,
@@ -120,5 +137,6 @@ export function useDashboardKpis(
     isFiscalFailed: fiscalQuery.isError || (fiscalQuery.isSuccess && fiscalQuery.data === null),
     isFiscalPending: fiscalQuery.isPending,
     isCogsFailed: cogsCurrentQuery.isError || cogsPreviousQuery.isError,
+    marginGate,
   };
 }

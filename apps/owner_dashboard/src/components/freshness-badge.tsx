@@ -9,6 +9,11 @@ export interface FreshnessBadgeProps {
   /** Report generation time — technical metadata only (PRD FR-SYNC-04). */
   generatedAt?: string;
   isLoading?: boolean;
+  /**
+   * Injectable clock used to prove "current local day" claims. Defaults to
+   * `new Date()`; tests pin the Managua day boundary deterministically.
+   */
+  now?: Date;
 }
 
 /**
@@ -22,17 +27,42 @@ const STATE_DOT: Record<SyncFreshnessState, string> = {
   UNKNOWN: "bg-slate-400",
 };
 
-function formatTime(isoString: string): string {
-  try {
-    const d = new Date(isoString);
-    return d.toLocaleTimeString("es-NI", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "America/Managua",
-    });
-  } catch {
-    return isoString;
+const TIME_ZONE = "America/Managua";
+
+/** Calendar-day key (YYYY-MM-DD) in the same zone the clock time uses. */
+const DAY_KEY_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function formatClockTime(isoString: string): string {
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return isoString;
+  return d.toLocaleTimeString("es-NI", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: TIME_ZONE,
+  });
+}
+
+/**
+ * Watermark formatter: compact clock time only when the instant is provably
+ * on the viewer's current Managua calendar day (injected clock); full
+ * date + time otherwise. A time-only claim across days reads as same-day —
+ * on a completeness widget that is a false sense of freshness.
+ */
+function formatWatermark(isoString: string, now: Date): string {
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return isoString;
+  const dayKey = DAY_KEY_FORMAT.format(d);
+  if (dayKey === DAY_KEY_FORMAT.format(now)) {
+    return formatClockTime(isoString);
   }
+  const day = d.toLocaleString("es-NI", { day: "numeric", timeZone: TIME_ZONE });
+  const month = d.toLocaleString("es-NI", { month: "short", timeZone: TIME_ZONE });
+  return `${day} ${month}, ${formatClockTime(isoString)}`;
 }
 
 /** Newest confirmed receipt watermark across terminals (the sync heartbeat). */
@@ -46,23 +76,23 @@ function latestReceiptAt(freshness: SyncFreshnessResponse): string | null {
   return latest;
 }
 
-function freshnessText(freshness: SyncFreshnessResponse): string {
+function freshnessText(freshness: SyncFreshnessResponse, now: Date): string {
   switch (freshness.state) {
     case "COMPLETE": {
       // A quiet store with no watermark times stays COMPLETE with no time
       // claims (AC-09A: lack of business activity is not staleness).
       const complete = freshness.lastCompleteAt
-        ? `Datos completos hasta ${formatTime(freshness.lastCompleteAt)}`
+        ? `Datos completos hasta ${formatWatermark(freshness.lastCompleteAt, now)}`
         : "Datos completos";
       const heartbeat = latestReceiptAt(freshness);
       return heartbeat
-        ? `${complete} · sync ${formatTime(heartbeat)}`
+        ? `${complete} · sync ${formatWatermark(heartbeat, now)}`
         : complete;
     }
     case "STALE": {
       const base = `Sincronización demorada (>${freshness.thresholdMinutes} min)`;
       return freshness.lastCompleteAt
-        ? `${base} · hasta ${formatTime(freshness.lastCompleteAt)}`
+        ? `${base} · hasta ${formatWatermark(freshness.lastCompleteAt, now)}`
         : base;
     }
     case "PARTIAL": {
@@ -106,26 +136,30 @@ export function FreshnessBadge({
   freshness,
   generatedAt,
   isLoading,
+  now: injectedNow,
 }: FreshnessBadgeProps) {
+  const now = injectedNow ?? new Date();
+
   if (!freshness) {
     // Legacy fallback (FR-SYNC-04): generatedAt as technical metadata only —
     // never labeled as a synchronization-freshness conclusion. While the
     // freshness query is in flight (isLoading) the dot is neutral, but the
     // text stays the legacy generatedAt caption so older consumers never see
-    // a fabricated completeness claim.
-    const time = generatedAt ? formatTime(generatedAt) : "—";
+    // a fabricated completeness claim. No hardcoded zone abbreviation: the
+    // timestamp itself carries the date when it is not the current day.
+    const time = generatedAt ? formatWatermark(generatedAt, now) : "—";
     return (
       <Badge
         dot={isLoading ? "bg-slate-400" : "bg-secondary"}
         state={"FALLBACK"}
       >
-        Actualizado {time} (CST)
+        Actualizado {time}
       </Badge>
     );
   }
 
   const caption = generatedAt
-    ? `Reporte generado: ${formatTime(generatedAt)}`
+    ? `Reporte generado: ${formatWatermark(generatedAt, now)}`
     : null;
 
   return (
@@ -135,7 +169,7 @@ export function FreshnessBadge({
         state={freshness.state}
         title={caption ?? undefined}
       >
-        {freshnessText(freshness)}
+        {freshnessText(freshness, now)}
       </Badge>
       {caption && (
         <span className="text-xs text-muted-foreground">{caption}</span>

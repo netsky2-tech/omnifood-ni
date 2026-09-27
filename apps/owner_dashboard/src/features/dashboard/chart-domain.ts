@@ -27,13 +27,6 @@ export interface TrendRow {
   previous: number | null;
 }
 
-/** Compact NIO axis formatter (e.g. 48520 -> "49k"). */
-export function compactNio(value: number): string {
-  if (!Number.isFinite(value)) return "";
-  if (Math.abs(value) >= 1000) return `${Math.round(value / 1000)}k`;
-  return String(Math.round(value));
-}
-
 /** es-NI short date label from a YYYY-MM-DD local date (UTC calendar math). */
 export function trendBucketLabel(date: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
@@ -48,13 +41,29 @@ export function percentOf(part: number, total: number): number | null {
   return Math.round((part / total) * 1000) / 10;
 }
 
-/** es-NI córdobas formatter shared by the performance-band widgets. */
+/**
+ * Money that rounds to zero at display precision (2 decimals) is rounding
+ * noise, not a real negative: 0, -0 and -0.001 must render as C$0.00, never
+ * "-C$0.00". A genuinely small negative (-0.01) is real money and keeps its
+ * sign. Normalized here — in the shared formatter — so no call site can
+ * reintroduce a signed zero (review round 2, WU9).
+ */
+function unsignedZeroAtDisplayPrecision(amount: number): number {
+  if (!Number.isFinite(amount) || Math.round(amount * 100) / 100 !== 0) return amount;
+  return 0;
+}
+
+/**
+ * es-NI córdobas formatter shared by the performance-band widgets AND the
+ * money-axis ticks (WU9: axes carry the C$ unit with this same formatter —
+ * one definition of how money is printed, no compact duplicate).
+ */
 export function formatNio(amount: number): string {
   return new Intl.NumberFormat("es-NI", {
     style: "currency",
     currency: "NIO",
     minimumFractionDigits: 2,
-  }).format(amount);
+  }).format(unsignedZeroAtDisplayPrecision(amount));
 }
 
 /** es-NI US-dollar formatter (original-currency payment slots, FR-PAY-03). */
@@ -63,7 +72,7 @@ export function formatUsd(amount: number): string {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,
-  }).format(amount);
+  }).format(unsignedZeroAtDisplayPrecision(amount));
 }
 
 /**
@@ -166,7 +175,7 @@ export interface TopProductRow {
   units: number;
   /** Backend `netRevenueNio`: post-discount, pre-tax Net Sales contribution (FR-PRODUCT-01). */
   revenue: number;
-  /** Client-side share of the listed rows' revenue; null on a zero base. */
+  /** Client-side share of the period's Net Sales (`periodNetSalesNio`); null when the period denominator is missing/zero/negative (fail closed). */
   sharePercent: number | null;
 }
 
@@ -186,27 +195,35 @@ export interface TopProductWireItem {
 }
 
 /**
- * Maps GET /sales/reports/top-products (Batch 5c-backend reconciled contract).
- * Revenue is `netRevenueNio`: post-discount, pre-tax Net Sales per product,
- * reconciled line-by-line with the KPI `netSalesNio` (FR-PRODUCT-01). The
- * endpoint provides units and revenue but no share field: share is computed
- * here over the listed rows' revenue sum and labeled as such.
+ * Maps GET /sales/reports/top-products (Batch 5c-backend reconciled contract,
+ * WU6 share fix). Revenue is `netRevenueNio`: post-discount, pre-tax Net
+ * Sales per product, reconciled line-by-line with the KPI `netSalesNio`
+ * (FR-PRODUCT-01). Share is computed against the backend's authoritative
+ * `periodNetSalesNio` — the period's Net Sales over the SAME invoice set the
+ * aggregates were built from — so a truncated Top-N never inflates shares to
+ * a fabricated 100%. Fail closed: when the denominator is missing, zero,
+ * negative or non-finite (e.g. an older backend that omits the field), the
+ * share is null (rendered as an em-dash); it never falls back to the listed
+ * rows' sum, because a silently wrong denominator is worse than an absent
+ * share.
  */
 export function buildTopProductRows(
   products: TopProductWireItem[] | null | undefined,
   limit = 5,
+  periodNetSalesNio?: unknown,
 ): { rows: TopProductRow[] } {
   const wire = Array.isArray(products) ? products : [];
   const listed = wire.slice(0, Math.max(0, limit));
   const revenueOf = (p: TopProductWireItem | undefined) =>
     Number.isFinite(Number(p?.netRevenueNio)) ? Number(p?.netRevenueNio) : 0;
-  const listedRevenue = listed.reduce((sum, p) => sum + revenueOf(p), 0);
+  const denominator = Number(periodNetSalesNio);
+  const hasDenominator = Number.isFinite(denominator) && denominator > 0;
   return {
     rows: listed.map((p) => ({
       name: typeof p?.productName === "string" && p.productName !== "" ? p.productName : "Producto sin nombre",
       units: Number(p?.totalQuantity) || 0,
       revenue: revenueOf(p),
-      sharePercent: percentOf(revenueOf(p), listedRevenue),
+      sharePercent: hasDenominator ? percentOf(revenueOf(p), denominator) : null,
     })),
   };
 }

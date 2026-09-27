@@ -254,8 +254,140 @@ describe("FreshnessBadge — technical metadata and fallback (FR-SYNC-04)", () =
   it("falls back to the em-dash placeholder when generatedAt is absent too", () => {
     render(<FreshnessBadge />);
     expect(screen.getByTestId("freshness-badge").textContent).toContain(
-      "Actualizado — (CST)",
+      "Actualizado —",
     );
+    // The hardcoded 'CST' abbreviation is gone from the trust widget.
+    expect(screen.getByTestId("freshness-badge").textContent).not.toContain(
+      "CST",
+    );
+  });
+});
+
+describe("FreshnessBadge — watermark date visibility (P0 review round 2)", () => {
+  // Managua (UTC-6, no DST): 2026-09-23T04:52:00Z → 22 sep, 10:52 p. m. local.
+  // The owner's screenshot case: a watermark from the previous local day
+  // rendered time-only next to a same-day generation time.
+  const PREVIOUS_DAY_WATERMARK = "2026-09-23T04:52:00Z";
+  const PREVIOUS_DAY_GENERATED_AT = "2026-09-23T23:22:00Z"; // 23 sep, 05:22 p. m.
+  const INJECTED_NOW = new Date("2026-09-23T23:24:00Z"); // 23 sep, 05:24 p. m.
+
+  it("renders the full date form for a previous-local-day watermark in the STALE branch (owner screenshot case)", () => {
+    render(
+      <FreshnessBadge
+        freshness={freshnessFixture({
+          state: "STALE",
+          lastCompleteAt: PREVIOUS_DAY_WATERMARK,
+        })}
+        generatedAt={PREVIOUS_DAY_GENERATED_AT}
+        now={INJECTED_NOW}
+      />,
+    );
+
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge).toHaveAttribute("data-freshness-state", "STALE");
+    // Full form: day + month + time — never a bare clock time.
+    expect(badge.textContent).toContain("hasta 22 sept, 10:52 p. m.");
+    // No time-only claim could be misread as same-day.
+    expect(badge.textContent).not.toContain("hasta 10:52");
+  });
+
+  it("renders the compact time-only form only for a watermark on the current local day", () => {
+    // 21:52Z = 15:52 Managua on the injected now's local day.
+    render(
+      <FreshnessBadge
+        freshness={freshnessFixture({ lastCompleteAt: "2026-09-23T21:52:00Z" })}
+        now={INJECTED_NOW}
+      />,
+    );
+
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain("Datos completos hasta 03:52 p. m.");
+    // Compact form only: no day/month token after 'hasta'.
+    expect(badge.textContent).not.toMatch(/hasta \d{1,2} \w+/);
+  });
+
+  it("keeps the date on BOTH timestamps when the COMPLETE heartbeat crosses midnight", () => {
+    // 05:58Z 09-22 → 21 sept, 11:58 p. m.; 06:01Z 09-22 → 22 sept, 12:01 a. m.;
+    // injected now 12:00Z 09-23 (06:00 a. m. 23 sept) → both watermarks are
+    // previous local days, so both must carry the full date form.
+    render(
+      <FreshnessBadge
+        freshness={freshnessFixture({
+          lastCompleteAt: "2026-09-22T05:58:00Z",
+          perTerminal: [
+            {
+              terminalId: "term-1",
+              label: "Caja 1",
+              state: "COMPLETE",
+              acceptedThroughSequence: 41,
+              lastReceiptAt: "2026-09-22T06:01:00Z",
+            },
+          ],
+        })}
+        now={new Date("2026-09-23T12:00:00Z")}
+      />,
+    );
+
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain(
+      "Datos completos hasta 21 sept, 11:58 p. m. · sync 22 sept, 12:01 a. m.",
+    );
+  });
+
+  it("day-boundary behaviour is deterministic under an injected clock", () => {
+    // Same watermark instant: compact before Managua midnight, full after.
+    const props = {
+      freshness: freshnessFixture({
+        lastCompleteAt: "2026-09-23T04:52:00Z", // 22 sept 10:52 p. m. local
+      }),
+    };
+
+    const before = render(
+      <FreshnessBadge {...props} now={new Date("2026-09-23T04:55:00Z")} />,
+    );
+    // Injected now is 22 sept 10:55 p. m. local → same local day → compact.
+    expect(
+      before.getByTestId("freshness-badge").textContent,
+    ).toContain("Datos completos hasta 10:52 p. m.");
+    before.unmount();
+
+    const nextDay = render(
+      <FreshnessBadge {...props} now={new Date("2026-09-24T00:05:00Z")} />,
+    );
+    expect(
+      nextDay.getByTestId("freshness-badge").textContent,
+    ).toContain("Datos completos hasta 22 sept, 10:52 p. m.");
+    nextDay.unmount();
+  });
+
+  it("never renders a time-only string that could be misread as same-day (legacy fallback)", () => {
+    // The legacy generatedAt fallback gets the same treatment: a previous-day
+    // generatedAt renders the full date form, and the hardcoded 'CST'
+    // abbreviation is gone from the trust widget.
+    render(
+      <FreshnessBadge
+        generatedAt={PREVIOUS_DAY_GENERATED_AT}
+        now={new Date("2026-09-25T23:00:00Z")}
+      />,
+    );
+
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain("Actualizado 23 sept, 05:22 p. m.");
+    expect(badge.textContent).not.toContain("CST");
+  });
+
+  it("formats the generatedAt caption with the same date discipline", () => {
+    render(
+      <FreshnessBadge
+        freshness={freshnessFixture({ lastCompleteAt: PREVIOUS_DAY_WATERMARK })}
+        generatedAt={PREVIOUS_DAY_GENERATED_AT}
+        now={INJECTED_NOW}
+      />,
+    );
+
+    // generatedAt is 23 sept local (same local day as the injected now) →
+    // compact is provable; the previous-day watermark carries its date.
+    expect(screen.getByText(/Reporte generado: 05:22 p\. m\./)).toBeInTheDocument();
   });
 });
 
