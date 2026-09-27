@@ -230,6 +230,14 @@ Nota de proceso: el brief de WU9 decía "reutiliza el mismo formatter del resto 
 
 La rama `fix/dashboard-v2-review-round-2` no parte de `origin/main`: trae dos commits ajenos al batch (`9a924c4a` y `5eb8069c`, auditoría de claims nhilos OD-02 + brief web) que no están en `origin/main`. Para que el PR contenga **solo** el trabajo de revisión round 2, el batch se comitea aquí y se **cherry-pickia** a una rama nueva basada en `origin/main`; los commits nhilos quedan intactos en esta rama, sin rebase destructivo ni trabajo huérfano.
 
+## Corrección al reporte de WU11: la prevalencia SÍ estaba medida, en #611
+
+WU11 reportó que no podía cuantificar cuán comunes son los productos SIMPLE sin mapear y lo dejó como evidencia circunstancial (default de `product_type` + clasificación de plantillas). **Se equivocó de sitio, no de dirección: el repo no lo medía, pero un issue abierto sí.** #611 —"Publicada y decorativa: 10 productos SIMPLE con recetas PUBLISHED/activas y cero mapeo de insumos venden sin consumir stock"— trae consulta SQL medida sobre la base de datos de desarrollo: **10 productos** en exactamente la forma que WU11 describía, ya en `PUBLISHED`/`is_active`.
+
+Consecuencia directa sobre este batch: esos 10 productos son precisamente la población que el flip pasa de `COMPLETE` (costo cero "autoritativo") a `PARTIAL`/`UNAVAILABLE`, así que el cambio es visible en desarrollo desde el primer render. **No es un riesgo teórico ni una franja rara: está medido.** Y #518 ("resale products deduct no stock — product↔insumo mapping has no create path") explica por qué la población existe y no se puede reparar desde la UI hoy: no hay camino de creación del mapeo.
+
+Esto no revertiza ninguna decisión: la consecuencia la firmó el owner, y el copy "Sin costo" con motivo accionable era ya la superficie principal de WU3. Sí sube la urgencia de #518: sin un camino para crear el mapeo, la nota del dashboard dice "mapea insumos" y hoy no hay dónde hacerlo.
+
 ## Out of scope
 
 - Delivery (push/PR) stays the owner's call per unit.
