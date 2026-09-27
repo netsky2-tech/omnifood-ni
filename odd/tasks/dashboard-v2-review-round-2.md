@@ -204,6 +204,43 @@ Sospechas no confirmadas, registradas sin tocar código:
 
 Lección de proceso que hay que registrar sin adornos: **el orden correcto es congelar → revisar → receipt → entregar.** Este batch invirtió los dos últimos pasos porque tomé "commit + PR ahora" como autorización para entregar sin receipt. Pi no acuña autoridad de entrega (commit/push/PR siguen política del repo con o sin RDD), así que el PR no es inválido; pero reportarlo como revisado sí lo habría sido.
 
+## Por qué este lote no tiene receipt de revisión (diagnóstico cerrado)
+
+`gentle_review` `START` falló 5 veces con `candidate-view-invalid`, siempre
+`lineage_created: false` / `mutation_performed: false` / `reset_eligible: false`.
+**La causa es nuestra, no del proveedor**, y la midió el owner: pedimos receipt
+sobre el candidato equivocado. La vista de revisión es el rango
+`origin/main..HEAD` completo — **40 archivos, 5.074 altas + 350 bajas = 5.424
+líneas de diff** — contra un presupuesto duro de **400** (≈13,6×). Los dos
+commits que lo inflan son `33dbe877` (3.245 líneas) y `821e4c9f` (1.587).
+
+El contrato ya lo decía y lo violé: *el candidato nativo es un commit de unidad
+de trabajo o una tajada del PR, nunca el feature branch acumulado*. Evidencia de
+que la variable es el tamaño y no el estado de la máquina: los commits de
+remediación entran en presupuesto (212 / 175 / 114 / 29 / 14 / 8 líneas) y aun
+así `START` fallaba idéntico, porque lo que se congelaba seguía siendo el rango
+entero.
+
+Mantenimiento autorizado y **revertido**: se pusieron en cuarentena reversible
+(`mv` + manifiesto de restauración) los dos locks de 0 bytes
+`.git/gentle-ai/REVIEW-MAINTENANCE.lock` y
+`.git/gentle-ai/review-transactions/v2/LOCK`, sin sostén de proceso según
+`lsof`/`fuser`, y se reintentó `START` sobre la misma identidad. Rechaza
+idéntica → hipótesis refutada; **ambos locks quedaron restaurados a su estado
+original** (mismo tamaño y mtime) y la cuarentena se desmontó. La transición
+huérfana `review-0c1f870b50bf6e28/` (que sí contiene `review-state.json`) no se
+tocó deliberadamente: una variable a la vez, y `inspect` reporta `lineages: 0`.
+Detalle útil: `candidate-views/` está vacío, o sea la vista se valida y se
+rechaza **antes** de persistirse.
+
+**Disposición del owner (decidida, no pendiente):** sin issue al proveedor —el
+código de error señalaba nuestra granularidad, no un defecto ajeno— y **PR #621
+entregado sin receipt**, sustituido por dos rondas de validación independiente de
+solo lectura (6 defectos en la primera, 8 hallazgos sobre mi propia remediación
+en la segunda). Para el próximo lote, la corrección es de hábito y no de
+herramienta: **congelar y revisar por unidad de trabajo**, midiendo antes
+`git diff --shortstat base..HEAD` contra el presupuesto de 400.
+
 ## Riesgo de seguimiento registrado (no corregido en este batch)
 
 El netting de COGS de una factura cancelada depende de que el POS emita un documento `SALE_CANCEL` **separado**; `isCanceled = true` por sí solo no revierte el movimiento de kardex. Si algún camino de cancelación marca la factura sin producir el reverso, `salesCogsNio` queda sobrestado para ese período. No se demostró que exista tal camino; queda como candidato a issue con evidencia de `sale-inventory-outcome.service.ts:336` y `invoices.service.ts:1574`.
