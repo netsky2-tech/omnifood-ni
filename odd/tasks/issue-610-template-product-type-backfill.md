@@ -142,3 +142,26 @@ a blind reversal would silently re-orphan a recipe the operator made live.
   `migration:run` logged `promoted 10 product(s)`, final state 23 SIMPLE /
   10 COMPOUND, single updated_at; `migration:revert` logged `reverted 10
   product(s)`, scratch left at 33 SIMPLE / 0 COMPOUND with the ledger row removed.
+- Follow-up fix 3 (same surfaces, amends shipped commit d68a9318): independent
+  verifier + parent experiment found the migration was a silent no-op in the
+  production position — products, recipe_versions and recipe_details are all
+  relrowsecurity AND relforcerowsecurity = true, the migration role is their
+  table OWNER, no app.tenant_id is bound during migrations, so under FORCE the
+  criterion sees ZERO rows (the earlier real-clone run proved nothing here: it
+  connected as a bypassing superuser, so "promoted 10" was an artifact of a
+  bypassing role). Fix per 1809180000000 precedent: NO FORCE / restore-FORCE
+  bracket (finally-guarded) around all data work in BOTH up() and down(), over
+  all three tables; header corrected (clone run = SQL execution + predicate
+  proof, not production-role proof; REJECTED filter relabelled as forward-defence
+  for the #523 T3 discard path — no discard endpoint exists today; down()
+  over-revert of app-created COMPOUND rows documented, asserted, and bounded as
+  transient; up/down SUGGESTED-CONFIRMED asymmetry named; unknown
+  suggestion_state values risk named). RED observed (4 bracket tests failing:
+  no NO FORCE emitted), then GREEN 16/16. Production-position experiment on
+  omnifood_610_s5 (probe owner NOSUPERUSER NOBYPASSRLS NOLOGIN owns the three
+  tables): criterion count under FORCE as postgres = 10 (bypass artifact path);
+  as probe owner under FORCE = 0 (the d68a9318 production path: silent no-op);
+  as probe owner after NO FORCE = 10 (the fixed bracket path); FORCE restored,
+  s5 left as found. migration:run AS the probe owner skipped: the role is
+  NOLOGIN and enabling it requires a password-bearing role, which the parent
+  forbade pending explicit choice.
