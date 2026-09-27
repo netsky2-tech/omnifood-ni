@@ -63,6 +63,16 @@ export interface RecipeSnapshot {
   components: RecipeDetail[];
 }
 
+export interface RecipeSuggestionListItem {
+  recipeVersionId: string;
+  productId: string;
+  productName: string;
+  versionNumber: number;
+  componentCount: number;
+  /** True when an active PUBLISHED version already exists for the product. */
+  hasActivePublishedVersion: boolean;
+}
+
 export interface Insumo {
   id: string;
   tenant_id: string;
