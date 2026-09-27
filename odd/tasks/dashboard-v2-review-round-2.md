@@ -204,6 +204,37 @@ Sospechas no confirmadas, registradas sin tocar código:
 
 Lección de proceso que hay que registrar sin adornos: **el orden correcto es congelar → revisar → receipt → entregar.** Este batch invirtió los dos últimos pasos porque tomé "commit + PR ahora" como autorización para entregar sin receipt. Pi no acuña autoridad de entrega (commit/push/PR siguen política del repo con o sin RDD), así que el PR no es inválido; pero reportarlo como revisado sí lo habría sido.
 
+## CORRECCIÓN (2026-09-27): el diagnóstico de abajo estaba MAL
+
+Sección corregida por los hechos, no reescrita: se deja la conclusión original a la vista
+porque su error es parte del registro.
+
+**La granularidad del candidato nunca fue la causa de `candidate-view-invalid`.** La causa
+real era un symlink trackeado, `.antigravitycli/c0c8208c-….json`, cuyo destino es una ruta
+absoluta de Windows (`C:/Users/Octavio Morales/.gemini/config/projects/….json`), introducido
+en `16df5f8e` el 2026-05-26. El validador del facade rechaza destinos que casen
+`/^[A-Za-z]:\//`, y como la vista congelada recorre **todos** los entries del árbol y no sólo
+los paths del scope, **ese único archivo volvía irreviewable cualquier candidato de este
+repositorio**, sin importar tamaño, identidad ni forma del pedido.
+
+La prueba que lo cierra: con el symlink removido del índice, un candidato de **7 líneas**
+creó lineage y **cerró aprobado** — el primer receipt que obtiene este repo
+(lineage `review-ae34fb25af1b10a4`, tier `medium`, lens `review-reliability`, acknowledgement
+`burn_evidence: gentle-ai.review-acknowledged/v1`). Fix en #629 / PR #630.
+
+Lo que sí queda en pie de la sección original: la regla de congelar y revisar por unidad de
+trabajo, que es correcta por carga de revisión humana. Lo que no: creer que su violación era
+el bloqueo. Un síntoma que no variaba ante ninguna variable que sí debía importar tenía que
+empujar a buscar en lo que no variaba — el árbol compartido — y no a reforzar la hipótesis.
+
+Y el detalle que hizo todo esto lento y silencioso: `extensions/gentle-ai.ts:6299-6300`
+reemplaza el mensaje específico del error por el genérico `candidate view rejected before
+native START`, y `lib/review-candidate-view.ts` tiene 118 lanzamientos de
+`CandidateViewError` sin `reason` ni `diagnostics`. El sistema tiró el diagnóstico en la
+entrada.
+
+---
+
 ## Por qué este lote no tiene receipt de revisión (diagnóstico cerrado)
 
 `gentle_review` `START` falló 5 veces con `candidate-view-invalid`, siempre
