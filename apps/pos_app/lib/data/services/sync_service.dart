@@ -27,6 +27,7 @@ import '../models/local_config_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import 'authority_hydration_service.dart';
+import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity.dart';
 import 'network_connectivity_service.dart';
 
 const Map<String, String> syncRole = {
@@ -37,6 +38,27 @@ const Map<String, String> syncRole = {
 typedef SyncRole = String;
 
 enum CloudSyncStatus { idle, syncing, offline, error, success }
+
+/// #613 Unit B — informational read model for the inert-recipe ingestion
+/// verdicts, rendered by the cloud sync badge's detail dialog.
+///
+/// [verdictCount] is the append-only verdict row count on this device (the
+/// DAO's `countVerdicts()`, never recomputed from projections or the UI);
+/// [productNames] are the display names of the affected products so the
+/// operator can act in Catálogo. Verdicts are facts about ingestion, not
+/// errors: this model never flips `CloudSyncStatus` and never blocks a sale.
+class AuthorityInertRecipeReport {
+  final int verdictCount;
+
+  /// Display-ready, deduplicated and ordered; falls back to the raw product
+  /// id when the product is unknown to the terminal's own catalog.
+  final List<String> productNames;
+
+  const AuthorityInertRecipeReport({
+    required this.verdictCount,
+    required this.productNames,
+  });
+}
 
 /// A per-record sales result that was NOT accepted by the backend
 /// (anything other than ACCEPTED/APPLIED/DUPLICATE/SUCCESS).
@@ -279,6 +301,51 @@ class SyncService {
     } catch (_) {}
 
     return count;
+  }
+
+  /// #613 Unit B — best-effort read of the inert-recipe ingestion verdicts
+  /// for the sync detail dialog. Informational only: null means "nothing to
+  /// report OR the read failed" — the dialog renders exactly as before in
+  /// both cases, never a new error state and never a blocked sale. The
+  /// count comes from the verdict DAO (Unit A); product names are joined
+  /// from the terminal's own catalog so the operator can act in Catálogo.
+  /// Existing hydration telemetry and catch blocks are untouched: this is a
+  /// read-only, additive accessor.
+  Future<AuthorityInertRecipeReport?> getInertRecipeVerdictReport() async {
+    try {
+      final database = _database;
+      if (database == null) return null;
+      final count =
+          await database.authorityIngestionVerdictDao.countVerdicts() ?? 0;
+      if (count <= 0) return null;
+      final rows = await database.database.rawQuery(
+        'SELECT v.product_id AS product_id, p.name AS product_name '
+        'FROM authority_ingestion_verdicts v '
+        'LEFT JOIN products p ON p.id = v.product_id '
+        'ORDER BY p.name',
+      );
+      final names = <String>{};
+      for (final row in rows) {
+        final name = row['product_name'];
+        if (name is String && name.trim().isNotEmpty) {
+          names.add(name.trim());
+          continue;
+        }
+        final productId = row['product_id'];
+        if (productId is String && productId.trim().isNotEmpty) {
+          names.add(productId.trim());
+        }
+      }
+      return AuthorityInertRecipeReport(
+        verdictCount: count,
+        productNames: names.toList(growable: false),
+      );
+    } catch (_) {
+      // Report the absence, never the failure: the verdict table is
+      // diagnostic material and its unreadability must not surface as a
+      // sync error (#613 decision 5).
+      return null;
+    }
   }
 
   Future<SyncRunOutcome> triggerManualSync() async {
@@ -1833,6 +1900,31 @@ class SyncService {
         String? authorityHydrationVerdict;
         String? authorityHydrationVerdictReason;
         final rawRecipeVersions = rawDeltas['recipeVersions'] as List<dynamic>?;
+        // #613 Unit A: resolve the product type RECORDED in the terminal's
+        // own catalog for every product referenced by this page's recipe
+        // versions. Step 1 above has already persisted this pull's products
+        // delta, so the local table is fresh for products on this page and
+        // authoritative for products referenced from earlier pages. Only an
+        // explicitly recorded 'SIMPLE' classifies inert; an unknown product
+        // stays on the hydrate path (conservative, behaviour-preserving).
+        final productTypesByProductId = <String, String>{};
+        if (rawRecipeVersions != null) {
+          final referencedProductIds = <String>{
+            for (final raw in rawRecipeVersions)
+              if (raw is Map &&
+                  raw['productId'] is String &&
+                  (raw['productId'] as String).isNotEmpty)
+                raw['productId'] as String,
+          };
+          for (final productId in referencedProductIds) {
+            final product =
+                await _database!.productDao.findProductById(productId);
+            if (product != null &&
+                product.productType == AuthorityInertRecipe.inertProductType) {
+              productTypesByProductId[productId] = product.productType;
+            }
+          }
+        }
         if (rawRecipeVersions == null) {
           // Legacy backend response without the key: a no-op, not an error.
           developer.log(
@@ -1841,7 +1933,10 @@ class SyncService {
           );
         } else {
           try {
-            final adaptation = adaptAuthorityDelta(rawRecipeVersions);
+            final adaptation = adaptAuthorityDelta(
+              rawRecipeVersions,
+              productTypes: productTypesByProductId,
+            );
             if (!adaptation.isSuccess) {
               authorityHydrationFailed = true;
               authorityHydrationFailureReason = adaptation.failureReason;
@@ -1852,8 +1947,13 @@ class SyncService {
                 name: 'SyncService',
               );
             } else {
-              await AuthorityHydrationService(_database!.authorityProjectionDao)
-                  .hydrate(adaptation.payload!);
+              await AuthorityHydrationService(
+                _database!.authorityProjectionDao,
+                verdictDao: _database!.authorityIngestionVerdictDao,
+              ).hydrate(
+                adaptation.payload!,
+                inertRecipes: adaptation.inertRecipes,
+              );
               authorityInsumosCount = adaptation.insumoCount;
               authorityVersionsCount = adaptation.versionCount;
               authorityComponentsCount = adaptation.componentCount;
@@ -1932,6 +2032,41 @@ class SyncService {
             // broken pull.
             developer.log(
               '[SYNC_PULL] authority_hydration_verdict_not_persisted',
+              name: 'SyncService',
+              error: e,
+              stackTrace: stackTrace,
+            );
+          }
+
+          // #613 Unit A: aggregate inert-recipe telemetry (#613 decision 6).
+          // local_configs keys so pilot tooling can read the count without
+          // parsing UI: the number of distinct ingestion verdict rows on this
+          // device (across pulls), plus the verdict code they carry. Own
+          // best-effort guard, exactly like the hydration telemetry above:
+          // telemetry failing must never reach backwards and undo a pull
+          // whose hydration already succeeded.
+          try {
+            final verdictCount = await _database!
+                    .authorityIngestionVerdictDao.countVerdicts() ??
+                0;
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityIngestionVerdicts.inertCountKey,
+                value: '$verdictCount',
+              ),
+            );
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityIngestionVerdicts.inertReasonKey,
+                // Cleared/empty when there is nothing to report.
+                value: verdictCount > 0
+                    ? AuthorityIngestionVerdicts.inertSimpleProductCode
+                    : '',
+              ),
+            );
+          } catch (e, stackTrace) {
+            developer.log(
+              '[SYNC_PULL] authority_inert_verdict_telemetry_not_persisted',
               name: 'SyncService',
               error: e,
               stackTrace: stackTrace,

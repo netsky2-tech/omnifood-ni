@@ -16,20 +16,32 @@ class AuthorityDeltaAdaptation {
   /// Machine-readable reason when the payload is refused.
   final String? failureReason;
 
+  /// Structurally valid recipes whose product is recorded `SIMPLE` (#613
+  /// Unit A): inert material, excluded from the payload and reported here
+  /// for per-record verdicts. Always empty on failure.
+  final List<AuthorityInertRecipe> inertRecipes;
+
   const AuthorityDeltaAdaptation._(
     this.payload,
     this.tenantId,
     this.failureReason,
+    this.inertRecipes,
   );
 
   const AuthorityDeltaAdaptation.success(this.payload, this.tenantId)
-      : failureReason = null;
+      : failureReason = null,
+        inertRecipes = const [];
 
   const AuthorityDeltaAdaptation.failure(this.failureReason)
       : payload = null,
-        tenantId = null;
+        tenantId = null,
+        inertRecipes = const [];
 
   bool get isSuccess => payload != null;
+
+  /// Version ids of the inert recipes, in wire order. Empty on failure.
+  List<String> get inertRecipeVersionIds =>
+      inertRecipes.map((r) => r.recipeVersionId).toList(growable: false);
 
   /// Empty input (no key or empty list) is an empty success: nothing to
   /// hydrate, not an error.
@@ -39,6 +51,7 @@ class AuthorityDeltaAdaptation {
               insumos: [], recipeVersions: [], components: []),
           null,
           null,
+          const [],
         );
   int get insumoCount => payload?.insumos.length ?? 0;
   int get versionCount => payload?.recipeVersions.length ?? 0;
@@ -70,7 +83,21 @@ class AuthorityDeltaAdaptation {
 /// tenant refuses the whole payload; no default tenant is ever assumed.
 ///
 /// Any malformed row refuses the ENTIRE payload, never part of a version.
-AuthorityDeltaAdaptation adaptAuthorityDelta(List<dynamic>? rawVersions) {
+///
+/// #613 Unit A: [productTypes] carries the product type RECORDED in the
+/// terminal's own catalog for the product ids referenced by the delta. A
+/// row that passes every structural check but whose product type is
+/// [AuthorityInertRecipe.inertProductType] is inert material: it is excluded
+/// from the payload (with its components and its exclusively-referenced
+/// closure insumos) and returned as a per-record [AuthorityDeltaAdaptation.inertRecipes]
+/// entry instead of refusing the payload. Structural validation of inert
+/// rows still runs in full: a mixed tenant or malformed component inside a
+/// row that would be inert still refuses the WHOLE payload. Without
+/// product-type evidence nothing is classified inert (backward compatible).
+AuthorityDeltaAdaptation adaptAuthorityDelta(
+  List<dynamic>? rawVersions, {
+  Map<String, String> productTypes = const {},
+}) {
   if (rawVersions == null || rawVersions.isEmpty) {
     return const AuthorityDeltaAdaptation.empty();
   }
@@ -79,6 +106,9 @@ AuthorityDeltaAdaptation adaptAuthorityDelta(List<dynamic>? rawVersions) {
   final flatInsumos = <String, Map<String, dynamic>>{};
   final flatVersions = <Map<String, dynamic>>[];
   final flatComponents = <Map<String, dynamic>>[];
+  // #613 Unit A: closure + component insumo ids contributed by each row, so
+  // inert subtraction can remove exactly what the inert rows brought.
+  final insumoIdsByVersion = <String, Set<String>>{};
 
   for (var v = 0; v < rawVersions.length; v++) {
     final raw = rawVersions[v];
@@ -118,6 +148,10 @@ AuthorityDeltaAdaptation adaptAuthorityDelta(List<dynamic>? rawVersions) {
     // contradictory facts for the same id are a wire defect and refuse
     // the payload rather than picking a winner.
     final rawClosure = version['insumos'] as List<dynamic>? ?? const [];
+    final rowInsumoIds = insumoIdsByVersion.putIfAbsent(
+      versionId,
+      () => <String>{},
+    );
     for (final rawInsumo in rawClosure) {
       if (rawInsumo is! Map) {
         return AuthorityDeltaAdaptation.failure(
@@ -158,6 +192,7 @@ AuthorityDeltaAdaptation adaptAuthorityDelta(List<dynamic>? rawVersions) {
           'uom': uom,
         },
       );
+      rowInsumoIds.add(insumoId);
     }
 
     // Components: lift from the version into the flat root list. Order is
@@ -210,6 +245,9 @@ AuthorityDeltaAdaptation adaptAuthorityDelta(List<dynamic>? rawVersions) {
         }
       ));
     }
+    rowInsumoIds.addAll(
+      orderedComponents.map((e) => e.$2['insumoId'] as String),
+    );
     orderedComponents.sort((a, b) {
       final byOrdinal =
           (a.$2['ordinal'] as int).compareTo(b.$2['ordinal'] as int);
@@ -234,6 +272,46 @@ AuthorityDeltaAdaptation adaptAuthorityDelta(List<dynamic>? rawVersions) {
   }
 
   try {
+    // #613 Unit A: subtract inert recipes AFTER full structural validation,
+    // so per-record classification can never weaken the fail-closed
+    // structural refusals above.
+    final inert = <AuthorityInertRecipe>[];
+    final inertIds = <String>{};
+    if (productTypes.isNotEmpty) {
+      for (final version in flatVersions) {
+        final productId = version['productId'] as String;
+        if (productTypes[productId] ==
+            AuthorityInertRecipe.inertProductType) {
+          final versionId = version['recipeVersionId'] as String;
+          inertIds.add(versionId);
+          inert.add(AuthorityInertRecipe(
+            recipeVersionId: versionId,
+            productId: productId,
+            tenantId: tenant!,
+          ));
+        }
+      }
+      if (inertIds.isNotEmpty) {
+        flatVersions.removeWhere((v) => inertIds.contains(v['recipeVersionId']));
+        flatComponents
+            .removeWhere((c) => inertIds.contains(c['recipeVersionId']));
+        // Remove exactly the closure insumos the inert rows contributed that
+        // no kept component references: inert material is excluded, while
+        // insumos contributed by good rows (referenced or closure-only)
+        // stay.
+        final inertInsumoIds = <String>{
+          for (final id in inertIds) ...insumoIdsByVersion[id] ?? const <String>{},
+        };
+        final keptInsumoIds =
+            flatComponents.map((c) => c['insumoId'] as String).toSet();
+        flatInsumos.removeWhere(
+          (insumoId, _) =>
+              inertInsumoIds.contains(insumoId) &&
+              !keptInsumoIds.contains(insumoId),
+        );
+      }
+    }
+
     final payload = AuthorityHydrationPayload.fromJson(
       {
         'insumos': flatInsumos.values.toList(growable: false),
@@ -242,7 +320,7 @@ AuthorityDeltaAdaptation adaptAuthorityDelta(List<dynamic>? rawVersions) {
       },
       expectedTenantId: tenant!,
     );
-    return AuthorityDeltaAdaptation.success(payload, tenant);
+    return AuthorityDeltaAdaptation._(payload, tenant, null, inert);
   } on FormatException catch (e) {
     // Defense in depth: the hydrator's own validation refused a row.
     // Nothing was hydrated; report rather than throw.

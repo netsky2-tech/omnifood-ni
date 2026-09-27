@@ -105,10 +105,42 @@ Future<void> _createAuthorityImmutabilityTriggers(
   ''');
 }
 
+/// #613 Unit A — the ingestion-verdict table is append-only by the same
+/// schema-level policy as the authority projections: rows are written
+/// insert-if-absent and never edited or removed. Guarded by a sqlite_master
+/// check (the topology pattern) because the callback also runs on databases
+/// where the table does not exist yet.
+Future<void> _createAuthorityIngestionVerdictImmutabilityTriggers(
+  sqflite.DatabaseExecutor database,
+) async {
+  final tableExists = await database.rawQuery(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+    "AND name = 'authority_ingestion_verdicts'",
+  );
+  if (tableExists.isEmpty) return;
+
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_ingestion_verdicts_block_update
+    BEFORE UPDATE ON authority_ingestion_verdicts
+    BEGIN
+      SELECT RAISE(ABORT, 'Ingestion verdicts are append-only');
+    END;
+  ''');
+
+  await database.execute('''
+    CREATE TRIGGER IF NOT EXISTS authority_ingestion_verdicts_block_delete
+    BEFORE DELETE ON authority_ingestion_verdicts
+    BEGIN
+      SELECT RAISE(ABORT, 'Ingestion verdicts cannot be deleted');
+    END;
+  ''');
+}
+
 final inventoryMovementAppendOnlyCallback = Callback(
   onCreate: (database, _) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
     await _createAuthorityImmutabilityTriggers(database);
+    await _createAuthorityIngestionVerdictImmutabilityTriggers(database);
     await _createTopologyPersistenceTriggers(database);
     await _createTopologyPersistenceTriggers(database);
     await _ensureHumanAuthorizationLocalIndexesAndTriggers(database);
@@ -116,6 +148,7 @@ final inventoryMovementAppendOnlyCallback = Callback(
   onOpen: (database) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
     await _createAuthorityImmutabilityTriggers(database);
+    await _createAuthorityIngestionVerdictImmutabilityTriggers(database);
     await _ensureHumanAuthorizationLocalIndexesAndTriggers(database);
   },
 );
@@ -2527,6 +2560,27 @@ final migration56_57 = Migration(56, 57, (database) async {
   await addTipColumn('tip_eligible_base_nio');
 });
 
+final migration57_58 = Migration(57, 58, (database) async {
+  // #613 Unit A: append-only per-record ingestion verdicts for inert
+  // recipes. Deliberately a separate table, not a column on
+  // authority_recipe_versions: those projections are immutable by
+  // BEFORE UPDATE/DELETE triggers and that immutability is deliberate.
+  // Insert-if-absent keyed by (recipe_version_id, code): a re-pull of the
+  // same inert version must never duplicate a verdict row. Safe to re-run.
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS authority_ingestion_verdicts (
+      recipe_version_id TEXT NOT NULL,
+      code TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      tenant_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (recipe_version_id, code)
+    )
+  ''');
+
+  await _createAuthorityIngestionVerdictImmutabilityTriggers(database);
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2575,6 +2629,7 @@ final allMigrations = [
   migration54_55,
   migration55_56,
   migration56_57,
+  migration57_58,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

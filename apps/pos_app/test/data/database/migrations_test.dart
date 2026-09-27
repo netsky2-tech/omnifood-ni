@@ -216,10 +216,18 @@ void main() {
     await databaseFactory.deleteDatabase(legacyPath);
   });
 
-  test('migration56_57 is registered in allMigrations at the end of the chain',
+  test(
+      'allMigrations keeps the chain ordered: migration57_58 is the newest '
+      'link at the end and migration56_57 is retained immediately before it',
       () {
-    expect(allMigrations.last.startVersion, 56);
-    expect(allMigrations.last.endVersion, 57);
-    expect(allMigrations.last, same(migration56_57));
+    // The newest link is registered at the end of the chain.
+    expect(allMigrations.last.startVersion, 57);
+    expect(allMigrations.last.endVersion, 58);
+    expect(allMigrations.last, same(migration57_58));
+    // The previous newest link is still registered, in position, with its
+    // versions unchanged.
+    expect(allMigrations[allMigrations.length - 2], same(migration56_57));
+    expect(migration56_57.startVersion, 56);
+    expect(migration56_57.endVersion, 57);
   });
 }

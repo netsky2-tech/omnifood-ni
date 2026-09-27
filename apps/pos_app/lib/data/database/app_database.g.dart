@@ -166,6 +166,8 @@ class _$AppDatabase extends AppDatabase {
 
   AuthorityProjectionDao? _authorityProjectionDaoInstance;
 
+  AuthorityIngestionVerdictDao? _authorityIngestionVerdictDaoInstance;
+
   FulfillmentTopologyDao? _fulfillmentTopologyDaoInstance;
 
   FulfillmentPersistenceDao? _fulfillmentPersistenceDaoInstance;
@@ -178,7 +180,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 57,
+      version: 58,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -209,6 +211,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `authority_recipe_versions` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `version_number` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, `publication_state` TEXT NOT NULL, `effective_from` TEXT NOT NULL, `effective_until` TEXT, `yield_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `published_at` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `authority_recipe_version_components` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, `insumo_id` TEXT NOT NULL, `gross_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `ingredient_type` TEXT NOT NULL, `component_name` TEXT NOT NULL, `component_uom` TEXT, `reference_version_id` TEXT, FOREIGN KEY (`tenant_id`, `version_id`) REFERENCES `authority_recipe_versions` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY (`tenant_id`, `insumo_id`) REFERENCES `authority_insumos` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE RESTRICT, PRIMARY KEY (`tenant_id`, `id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `authority_ingestion_verdicts` (`recipe_version_id` TEXT NOT NULL, `code` TEXT NOT NULL, `product_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `created_at` TEXT NOT NULL, PRIMARY KEY (`recipe_version_id`, `code`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `topology_snapshots` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `revision` INTEGER NOT NULL, `hash` TEXT NOT NULL, `payload` TEXT NOT NULL, `received_at` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -662,6 +666,12 @@ class _$AppDatabase extends AppDatabase {
   AuthorityProjectionDao get authorityProjectionDao {
     return _authorityProjectionDaoInstance ??=
         _$AuthorityProjectionDao(database, changeListener);
+  }
+
+  @override
+  AuthorityIngestionVerdictDao get authorityIngestionVerdictDao {
+    return _authorityIngestionVerdictDaoInstance ??=
+        _$AuthorityIngestionVerdictDao(database, changeListener);
   }
 
   @override
@@ -7333,6 +7343,46 @@ class _$AuthorityProjectionDao extends AuthorityProjectionDao {
       List<AuthorityRecipeVersionComponentEntity> components) async {
     await _authorityRecipeVersionComponentEntityInsertionAdapter.insertList(
         components, OnConflictStrategy.abort);
+  }
+}
+
+class _$AuthorityIngestionVerdictDao extends AuthorityIngestionVerdictDao {
+  _$AuthorityIngestionVerdictDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _authorityIngestionVerdictEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'authority_ingestion_verdicts',
+            (AuthorityIngestionVerdictEntity item) => <String, Object?>{
+                  'recipe_version_id': item.recipeVersionId,
+                  'code': item.code,
+                  'product_id': item.productId,
+                  'tenant_id': item.tenantId,
+                  'created_at': item.createdAt
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<AuthorityIngestionVerdictEntity>
+      _authorityIngestionVerdictEntityInsertionAdapter;
+
+  @override
+  Future<int?> countVerdicts() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM authority_ingestion_verdicts',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> insertVerdictIfAbsent(
+      AuthorityIngestionVerdictEntity verdict) async {
+    await _authorityIngestionVerdictEntityInsertionAdapter.insert(
+        verdict, OnConflictStrategy.ignore);
   }
 }
 

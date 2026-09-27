@@ -14,7 +14,10 @@ void main() {
 
   setUp(() async {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
-    service = AuthorityHydrationService(database.authorityProjectionDao);
+    service = AuthorityHydrationService(
+      database.authorityProjectionDao,
+      verdictDao: database.authorityIngestionVerdictDao,
+    );
   });
 
   tearDown(() async {
@@ -190,5 +193,109 @@ void main() {
     // Verify row counts unchanged
     final componentsRepeat = await dao.findComponentsByVersion('tenant-alpha', 'rv-1');
     expect(componentsRepeat.length, 1);
+  });
+
+  group('#613 ingestion verdicts', () {
+    final inertRecipes = [
+      const AuthorityInertRecipe(
+        recipeVersionId: 'rv-inert',
+        productId: 'prod-simple',
+        tenantId: 'tenant-alpha',
+      ),
+    ];
+
+    test(
+        'writes exactly one insert-if-absent verdict row per inert recipe '
+        'and does not duplicate on replay', () async {
+      final payload = AuthorityHydrationPayload.fromJson({
+        'insumos': [
+          {
+            'tenantId': 'tenant-alpha',
+            'id': 'ins-1',
+            'name': 'Cheese',
+            'uom': 'KG',
+          }
+        ],
+        'recipeVersions': [
+          {
+            'tenantId': 'tenant-alpha',
+            'recipeVersionId': 'rv-1',
+            'productId': 'prod-pizza',
+            'versionNumber': 1,
+            'isActive': true,
+            'publicationState': 'PUBLISHED',
+            'effectiveFrom': '2026-09-01T00:00:00Z',
+            'yieldQuantity': 1.0,
+            'technicalShrinkPct': 0.0,
+          }
+        ],
+        'components': [],
+      }, expectedTenantId: 'tenant-alpha');
+
+      await service.hydrate(payload, inertRecipes: inertRecipes);
+
+      final dao = database.authorityIngestionVerdictDao;
+      expect(await dao.countVerdicts(), 1);
+      final rows = await database.database
+          .rawQuery('SELECT * FROM authority_ingestion_verdicts');
+      expect(rows.single['recipe_version_id'], 'rv-inert');
+      expect(rows.single['code'], 'INERT_SIMPLE_PRODUCT');
+      expect(rows.single['product_id'], 'prod-simple');
+      expect(rows.single['tenant_id'], 'tenant-alpha');
+      expect(rows.single['created_at'], isNotNull);
+
+      // Replay: a re-pull of the same inert recipe must not add a row.
+      await service.hydrate(payload, inertRecipes: inertRecipes);
+      expect(await dao.countVerdicts(), 1);
+    });
+
+    test(
+        'a verdict write failure degrades: hydrate still completes and the '
+        'authority rows already applied stand', () async {
+      // Failure injected the way production hits it: the local write itself
+      // refuses (table missing). The verdict must never propagate.
+      await database.database.execute(
+        'DROP TABLE authority_ingestion_verdicts',
+      );
+
+      final payload = AuthorityHydrationPayload.fromJson({
+        'insumos': [
+          {
+            'tenantId': 'tenant-alpha',
+            'id': 'ins-1',
+            'name': 'Cheese',
+            'uom': 'KG',
+          }
+        ],
+        'recipeVersions': [
+          {
+            'tenantId': 'tenant-alpha',
+            'recipeVersionId': 'rv-1',
+            'productId': 'prod-pizza',
+            'versionNumber': 1,
+            'isActive': true,
+            'publicationState': 'PUBLISHED',
+            'effectiveFrom': '2026-09-01T00:00:00Z',
+            'yieldQuantity': 1.0,
+            'technicalShrinkPct': 0.0,
+          }
+        ],
+        'components': [],
+      }, expectedTenantId: 'tenant-alpha');
+
+      await expectLater(
+        service.hydrate(payload, inertRecipes: inertRecipes),
+        completes,
+      );
+
+      // The hydration outcome is unaffected by the verdict failure.
+      final versions = await database.authorityProjectionDao
+          .findActivePublishedVersions(
+        'tenant-alpha',
+        'prod-pizza',
+        '2026-09-15T00:00:00Z',
+      );
+      expect(versions, hasLength(1));
+    });
   });
 }

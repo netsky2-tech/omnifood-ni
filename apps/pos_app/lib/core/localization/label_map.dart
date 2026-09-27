@@ -315,6 +315,21 @@ const Map<String, String> kSyncErrorLabels = <String, String>{
   'Fulfillment': 'Preparación de pedidos',
 };
 
+/// Inert-recipe ingestion verdict surfacing (#613 Unit B).
+///
+/// Source: `lib/data/services/sync_service.dart`
+/// (`getInertRecipeVerdictReport`) — informational line in the cloud sync
+/// badge's detail dialog (owner decision 5: informational, never alarm).
+/// Rendered through [localize]; `{count}` is a display placeholder the badge
+/// substitutes, it is not a backend code.
+const Map<String, String> kAuthorityInertRecipeLabels = <String, String>{
+  'AUTHORITY_INERT_RECIPES_LINE_ONE': '1 receta inerte en este dispositivo',
+  'AUTHORITY_INERT_RECIPES_LINE_MANY':
+      '{count} recetas inertes en este dispositivo',
+  'AUTHORITY_INERT_RECIPES_PRODUCTS_HINT':
+      'Estas recetas no se aplicaron porque su producto está registrado como de tipo simple. Revise el tipo de producto en Catálogo.',
+};
+
 /// Backend finalize verdict statuses (`backendFinalizeResult.status`).
 ///
 /// Source: `lib/data/ports/activation_sync_port.dart` — the verdict statuses
@@ -343,6 +358,7 @@ const Map<String, Map<String, String>> kAllLabelMaps = <String,
   'kVoidReasonLabels': kVoidReasonLabels,
   'kReprintReasonLabels': kReprintReasonLabels,
   'kSyncErrorLabels': kSyncErrorLabels,
+  'kAuthorityInertRecipeLabels': kAuthorityInertRecipeLabels,
   'kActivationBackendVerdictLabels': kActivationBackendVerdictLabels,
 };
 

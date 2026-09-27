@@ -4,6 +4,7 @@ import 'package:mockito/mockito.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
+import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/repositories/sales/sales_repository_impl.dart';
@@ -152,6 +153,8 @@ void main() {
     AppDatabase database, {
     required String invoiceId,
     required double quantity,
+    String productId = 'prod-pizza',
+    String productName = 'Pizza',
   }) async {
     // The checkout binds to the SAME `tenant_id` config the classifier reads;
     // read it back instead of hardcoding it so a broken binding fails here.
@@ -172,8 +175,8 @@ void main() {
       InvoiceItem(
         id: 'item-1',
         invoiceId: invoiceId,
-        productId: 'prod-pizza',
-        productName: 'Pizza',
+        productId: productId,
+        productName: productName,
         quantity: quantity,
         unitPrice: 100.0,
         originalTaxRate: 15.0,
@@ -422,6 +425,179 @@ void main() {
     // main case was weakened to match), this file is worthless — the pair is
     // the pin, not either half alone.
     expect(await kardexRows(database, 'inv-pending-1'), isEmpty);
+  });
+
+  test(
+      '#613: an inert recipe for a SIMPLE product is verdicted, never '
+      'hydrated, and the sale path yields the exact same '
+      'APPLIED_NO_INVENTORY_IMPACT / zero-kardex outcome as before', () async {
+    final database = await buildProductionStyleDatabase();
+    await bindTenant(database, 'tenant-alpha');
+
+    final dio = _MockDio();
+    stubDeltas(dio, {
+      'products': [
+        {
+          'id': 'prod-simple-1',
+          'name': 'Gaseosa',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'SIMPLE',
+          'sellPrice': 100.0,
+          'isActive': true,
+        }
+      ],
+      'insumos': [],
+      'recipeVersions': [
+        _wireVersion(
+          id: 'rv-inert',
+          productId: 'prod-simple-1',
+          insumos: [_wireClosureInsumo()],
+          components: [
+            _wireComponent(id: 'comp-inert', versionId: 'rv-inert'),
+          ],
+        ),
+      ],
+    });
+
+    final syncService = buildSyncService(database, dio);
+    final result = await syncService.pullInboundDeltas();
+
+    // The inert recipe did NOT hydrate: consumption behaviour is untouched.
+    expect(result, isNotNull);
+    expect(result!.authorityHydrationFailed, isFalse);
+    expect(result.authorityVersionsCount, 0);
+    final inertVersions = await database.database.rawQuery(
+      "SELECT * FROM authority_recipe_versions WHERE id = 'rv-inert'",
+    );
+    expect(inertVersions, isEmpty);
+
+    // The verdict reports the inertness instead.
+    final verdicts = await database.database.rawQuery(
+      'SELECT * FROM authority_ingestion_verdicts',
+    );
+    expect(verdicts, hasLength(1));
+    expect(verdicts.single['recipe_version_id'], 'rv-inert');
+    expect(verdicts.single['code'], 'INERT_SIMPLE_PRODUCT');
+
+    // Same checkout as always, correct side of decision 4: a product the
+    // operator typed SIMPLE keeps not consuming from a recipe. The verdict
+    // reports; it never overrides the business rule.
+    final prep = await runCheckout(
+      database,
+      invoiceId: 'inv-inert-1',
+      quantity: 2.0,
+      productId: 'prod-simple-1',
+      productName: 'Gaseosa',
+    );
+    expect(prep.invoice.inventoryPolicyVersion, 'SALE_TIME_V1');
+    expect(prep.invoice.inventoryOutcome, 'APPLIED_NO_INVENTORY_IMPACT');
+    final snapshot = prep.items.single.inventorySnapshot;
+    expect(snapshot?.disposition, SaleInventoryDisposition.noImpact);
+
+    final repository = buildSalesRepository(database, '001-001-01-00000001');
+    await repository.saveSale(
+      invoice: prep.invoice,
+      items: prep.items,
+      payments: [
+        Payment(
+          id: 'pay-1',
+          invoiceId: 'inv-inert-1',
+          amount: 115.0,
+          method: PaymentMethod.cash,
+        ),
+      ],
+    );
+
+    // Zero kardex: identical to the pre-verdict behavior.
+    expect(await kardexRows(database, 'inv-inert-1'), isEmpty);
+  });
+
+  test(
+      '#613: authority_ingestion_verdicts is created through allMigrations on '
+      'a real Floor database, append-only with insert-if-absent', () async {
+    // The integration suite's production-parity pattern: in-memory Floor
+    // builder with the real migrations and the append-only callback.
+    final database = await buildProductionStyleDatabase();
+
+    // The table exists on the real Floor schema (created from the entity
+    // DDL, with the same migration registered in allMigrations for the
+    // upgrade path).
+    final tables = await database.database.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' "
+      "AND name = 'authority_ingestion_verdicts'",
+    );
+    expect(tables, isNotEmpty);
+    // migration57_58 is registered in allMigrations.
+    expect(
+      allMigrations.any(
+        (m) => m.startVersion == 57 && m.endVersion == 58,
+      ),
+      isTrue,
+    );
+
+    // The upgrade path itself (raw sqflite, same guarded pattern as the
+    // authority_projection_schema_test): a v57 database gains the table and
+    // its immutability triggers through migration57_58, and re-running the
+    // migration is idempotent.
+    final db = await openDatabase(
+      inMemoryDatabasePath,
+      version: 57,
+      onCreate: (db, version) async {},
+    );
+    addTearDown(db.close);
+    await migration57_58.migrate(db);
+    await migration57_58.migrate(db);
+
+    final upgradedTables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table' "
+      "AND name = 'authority_ingestion_verdicts'",
+    );
+    expect(upgradedTables, isNotEmpty);
+    final upgradedTriggers = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'trigger' "
+      "AND name LIKE 'authority_ingestion_verdicts%'",
+    );
+    expect(
+      upgradedTriggers.map((t) => t['name']),
+      containsAll([
+        'authority_ingestion_verdicts_block_update',
+        'authority_ingestion_verdicts_block_delete',
+      ]),
+    );
+
+    // Insert-if-absent semantics at the SQL boundary, keyed by
+    // (recipe_version_id, code).
+    final verdictRow = {
+      'recipe_version_id': 'rv-inert',
+      'code': 'INERT_SIMPLE_PRODUCT',
+      'product_id': 'prod-simple-1',
+      'tenant_id': 'tenant-alpha',
+      'created_at': '2026-09-27T12:00:00Z',
+    };
+    await db.insert('authority_ingestion_verdicts', verdictRow);
+    await db.insert(
+      'authority_ingestion_verdicts',
+      verdictRow,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    expect(
+      (await db.rawQuery('SELECT COUNT(*) c FROM authority_ingestion_verdicts'))
+          .first['c'],
+      1,
+    );
+
+    // Append-only is enforced by the schema, not by convention.
+    await expectLater(
+      db.execute(
+        "UPDATE authority_ingestion_verdicts SET code = 'OTHER'",
+      ),
+      throwsA(anything),
+    );
+    await expectLater(
+      db.execute('DELETE FROM authority_ingestion_verdicts'),
+      throwsA(anything),
+    );
   });
 }
 
