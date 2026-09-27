@@ -7,6 +7,14 @@
  * contract):
  * - units: the endpoint's `totalQuantity` is a real units field — rendered.
  * - share %: computed client-side against the endpoint's authoritative
+ *   denominator and DELIBERATELY NOT CLAMPED to 100. Because the denominator is
+ *   Net Sales net of refunds while each numerator is one product's own net
+ *   revenue, a heavily refunded sibling can legitimately push another product
+ *   above 100 % (A C$1,000 against A C$1,000 + B C$800 − C$900 refund = 111.1 %).
+ *   Clamping would assert a share the data does not support — the same
+ *   fabrication this batch removes elsewhere — so the number stays true and the
+ *   note says which denominator it uses and why it can exceed 100 % (finding
+ *   S1, owner decision).
  *   `periodNetSalesNio` (period Net Sales over the SAME invoice set the
  *   aggregates come from), so a truncated Top-N cannot inflate shares; a
  *   missing/zero denominator renders shares as an em-dash (fail closed).
@@ -62,7 +70,10 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
                 <span className="w-24 whitespace-nowrap text-right text-sm font-medium tabular-nums text-card-foreground">
                   {formatNio(row.revenue)}
                 </span>
-                <span className="w-14 whitespace-nowrap text-right text-xs font-medium tabular-nums text-muted-foreground">
+                <span
+                  className="w-14 whitespace-nowrap text-right text-xs font-medium tabular-nums text-muted-foreground"
+                  title={`Participación de ${row.name} sobre las Ventas Netas del período (netas de devoluciones)`}
+                >
                   {formatShare(row.sharePercent)}
                 </span>
               </li>
@@ -85,7 +96,9 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
             </ResponsiveContainer>
           </div>
           <p data-testid="top-products-note" className="mt-2 text-xs text-muted-foreground">
-            Participación sobre las Ventas Netas del período (post-descuento, pre-IVA).
+            Participación sobre las Ventas Netas del período (post-descuento, pre-IVA, netas de
+            devoluciones). Un producto puede superar el 100&nbsp;% cuando las devoluciones de otros
+            reducen ese total.
           </p>
         </>
       );
