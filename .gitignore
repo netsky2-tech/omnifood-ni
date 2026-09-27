@@ -12,12 +12,24 @@
 # Local agent tools
 .atl/
 .agents/
+# Antigravity CLI per-machine cache. One entry was committed by accident in
+# 16df5f8e as a symlink whose target is a Windows absolute path
+# (C:/Users/...); a tracked symlink with an out-of-tree target makes the review
+# candidate view reject every candidate in this repository, regardless of size
+# or shape, so nothing here may be tracked.
+.antigravitycli/
 .codegraph/
 .pi/
 
 # App specific ignores are handled within apps/
 # Node.js
-**/node_modules/
+# No trailing slash on purpose: `node_modules/` matches only directories, and a
+# *symlinked* node_modules (a common dev trick to share one install across
+# worktrees) slips past it and can be `git add`-ed without -f. That is exactly
+# how apps/admin_backend/node_modules got tracked in 47aff9b2: a symlink whose
+# target is an absolute machine path, which the review candidate view rejects
+# for every candidate in the repository.
+**/node_modules
 **/dist/
 # Keep finalized customer proposals as explicit repository deliverables.
 !/dist/
