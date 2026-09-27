@@ -1,9 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, ChefHat, Package, Edit } from 'lucide-react';
 import { useProducts } from '@/features/catalog/use-product';
 import { useActiveRecipe, useInsumos } from './use-recipes';
+import { fetchPendingSuggestions } from './recipes-api';
+import { SuggestionReview } from './suggestion-review';
+import { useTenantId } from '@/lib/tenant';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +24,29 @@ import { RecipeForm } from './RecipeForm';
 import { formatNumber } from '@/lib/utils';
 import { getApiErrorMessage } from '@/lib/api-error';
 
-export function RecipesPage() {
+type RecipesTabId = 'recetas' | 'sugerencias';
+
+const RECIPES_TABS: { id: RecipesTabId; label: string }[] = [
+  { id: 'recetas', label: 'Recetas' },
+  { id: 'sugerencias', label: 'Sugerencias' },
+];
+
+/**
+ * Page-level pending-suggestions count for the tab badge (mounted on both
+ * tabs). Declared here instead of calling usePendingSuggestions() because the
+ * w7 suite fully mocks the use-recipes hook module; this local observer shares
+ * the exact same cache key, so both observers hit one cache entry.
+ */
+function usePendingSuggestionCount() {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ['recipes', tenantId, 'suggestions'],
+    queryFn: ({ signal }) => fetchPendingSuggestions({ signal }),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+function RecipesOverview() {
   const { data: products, isLoading: productsLoading, error: productsError, refetch: refetchProducts } = useProducts('COMPOUND');
   const { data: insumos } = useInsumos();
   const [searchQuery, setSearchQuery] = useState('');
@@ -69,13 +95,6 @@ export function RecipesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Recetas y BOM</h1>
-          <p className="text-sm text-muted-foreground">Gestione recetas de productos compuestos (ingredientes, rendimientos, versiones)</p>
-        </div>
-      </div>
-
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1 max-w-md">
           <label htmlFor="recipe-search" className="sr-only">Buscar productos compuestos</label>
@@ -203,6 +222,50 @@ export function RecipesPage() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+export function RecipesPage() {
+  const [activeTab, setActiveTab] = useState<RecipesTabId>('recetas');
+  const { data: suggestions } = usePendingSuggestionCount();
+  const pendingCount = suggestions?.length ?? 0;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Recetas y BOM</h1>
+          <p className="text-sm text-muted-foreground">Gestione recetas de productos compuestos (ingredientes, rendimientos, versiones)</p>
+        </div>
+      </div>
+
+      <div className="border-b border-border">
+        <nav
+          className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0"
+          aria-label="Secciones de recetas"
+        >
+          {RECIPES_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                activeTab === tab.id
+                  ? 'border-primary text-primary font-semibold'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {tab.label}
+              {tab.id === 'sugerencias' && pendingCount > 0 && (
+                <Badge variant="secondary" className="ml-2">{pendingCount}</Badge>
+              )}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {activeTab === 'sugerencias' ? <SuggestionReview /> : <RecipesOverview />}
     </div>
   );
 }

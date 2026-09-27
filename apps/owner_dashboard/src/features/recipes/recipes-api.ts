@@ -1,6 +1,7 @@
 import { api, type ApiClientMethodOptions } from '@/lib/api';
 import type {
   RecipeSnapshot,
+  RecipeSuggestionListItem,
   CreateRecipeVersionInput,
   Insumo,
 } from './types';
@@ -23,4 +24,12 @@ export function createRecipeVersion(
 
 export function fetchInsumos(opts?: ApiClientMethodOptions) {
   return api.get<Insumo[]>('/insumos', opts);
+}
+
+export function fetchPendingSuggestions(opts?: ApiClientMethodOptions) {
+  return api.get<RecipeSuggestionListItem[]>('/recipes/suggestions', opts);
+}
+
+export function publishRecipeVersion(recipeVersionId: string, opts?: ApiClientMethodOptions) {
+  return api.post<RecipeSnapshot>(`/recipes/${recipeVersionId}/publish`, undefined, opts);
 }
