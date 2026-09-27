@@ -4,6 +4,52 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
 
+// Sync-freshness wiring (PRD §20): the page now consumes the real
+// useSyncFreshness hook; mock it so these page-level tests never hit the API
+// client. The badge's own state matrix lives in dashboard-v2-freshness.spec.tsx.
+vi.mock("@/features/dashboard/use-sync-freshness", () => ({
+  useSyncFreshness: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+
+// Dashboard V2 Batch 4 (#544): the legacy KPI grid was replaced by the
+// regime-aware strip. The mock below keeps these page-level tests focused on
+// their own concerns (Resumen de Ventas, loading/error states); the strip's
+// own behavior matrix lives in dashboard-v2-strip.spec.tsx.
+vi.mock("@/features/dashboard/use-dashboard-kpis", () => ({
+  useDashboardKpis: vi.fn(() => ({
+    period: {
+      currentStart: "2026-08-31",
+      currentEnd: "2026-08-31",
+      previousStart: "2026-08-24",
+      previousEnd: "2026-08-24",
+    },
+    snapshot: {
+      netSalesNio: 48520.5,
+      completedTicketCount: 171,
+      averageTicketNetNio: 283.74,
+      totalTaxNio: 6341.25,
+      totalDiscountsNio: 1564.95,
+      margin: { amount: 29780.5, percent: 61.4 },
+      deltas: {
+        netSales: 12.4,
+        tickets: 8.2,
+        averageTicket: 3.8,
+        marginPp: 1.9,
+        totalTax: 9.1,
+      },
+    },
+    isSalesPending: false,
+    isSalesFailed: false,
+    fiscal: { regime: "CUOTA_FIJA" },
+    isFiscalFailed: false,
+    isFiscalPending: false,
+    isCogsFailed: false,
+    // Review round 2 P0 #4: the strip reads the margin coverage gate; this
+    // page-level mock uses the fully-open (COMPLETE coverage) gate.
+    marginGate: { ratio: true, delta: true, amount: true, gated: false, reasonCodes: [] },
+  })),
+}));
+
 vi.mock("@/features/sales/use-sales-reports", () => ({
   useSalesDashboard: vi.fn(() => ({
     data: {
@@ -40,19 +86,29 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
 
-  it("renders KPI cards", () => {
+  it("renders the V2 executive KPI strip (Cuota Fija: no IVA card)", () => {
+    // #544 / FR-FISCAL-03: the legacy permanent "Impuestos (IVA)" card at C$0
+    // for cuota-fija tenants was replaced by the regime-aware strip.
+    // Review round 2 (WU5): the static "Resumen de Ventas" card was retired, so
+    // "Ventas Brutas" no longer appears on the dashboard at all — it lives on
+    // the Sales and Fiscal pages.
     render(<DashboardPage />, { wrapper: TestWrapper });
-    expect(screen.getAllByText("Ventas Brutas").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("Ticket Promedio").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("Impuestos (IVA)").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("Descuentos").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Ventas Brutas")).not.toBeInTheDocument();
+    expect(screen.getByText("Ventas Netas")).toBeInTheDocument();
+    expect(screen.getByText("Ticket Promedio")).toBeInTheDocument();
+    expect(screen.queryByText("IVA generado")).not.toBeInTheDocument();
   });
 
-  it("renders payment methods", () => {
+  it("renders the Flujos separados band without the legacy Resumen de Ventas card", () => {
+    // Batch 5c: the legacy "Métodos de Pago" card was removed — the
+    // PaymentMixChart in the performance band is the single payment surface.
+    // Review round 2 (WU5): "Resumen de Ventas" is retired too; its discounts
+    // line survives inside "Flujos separados de ventas".
     render(<DashboardPage />, { wrapper: TestWrapper });
-    expect(screen.getByText("Métodos de Pago")).toBeInTheDocument();
-    expect(screen.getByText("Efectivo NIO")).toBeInTheDocument();
-    expect(screen.getByText("Tarjeta NIO")).toBeInTheDocument();
+    expect(screen.queryByText("Métodos de Pago")).not.toBeInTheDocument();
+    expect(screen.queryByText("Efectivo NIO")).not.toBeInTheDocument();
+    expect(screen.queryByText("Resumen de Ventas")).not.toBeInTheDocument();
+    expect(screen.getByText("Flujos separados de ventas")).toBeInTheDocument();
   });
 
   it("renders freshness badge", () => {
@@ -128,6 +184,7 @@ describe("DashboardPage — empty state", () => {
   it("renders KPI cards with zero values", () => {
     render(<DashboardPage />, { wrapper: TestWrapper });
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getAllByText("Ventas Brutas").length).toBeGreaterThanOrEqual(1);
+    // WU5 retired the only surface that rendered "Ventas Brutas" here.
+    expect(screen.queryByText("Ventas Brutas")).not.toBeInTheDocument();
   });
 });

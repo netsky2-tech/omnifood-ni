@@ -377,4 +377,23 @@ export class SyncInvoiceDto {
   // #551: local calendar date (ISO YYYY-MM-DD) fixed at issuance on-device.
   // Null travels as null for legacy invoices (D-9: no backfill).
   localIssueDate?: string | null;
+
+  // Batch 7 Slice 1: POS-captured tips (PRD §21, Architecture Spec §25.2 /
+  // §33.4, AD-10). All optional; absence (or null) means "unknown / legacy
+  // pre-remediation" — the backend never fabricates a zero tip.
+  @IsNumber()
+  @IsOptional()
+  tipAmountNio?: number;
+
+  @IsNumber()
+  @IsOptional()
+  tipAmountUsd?: number;
+
+  @IsNumber()
+  @IsOptional()
+  tipPercentage?: number;
+
+  @IsNumber()
+  @IsOptional()
+  tipEligibleBaseNio?: number;
 }

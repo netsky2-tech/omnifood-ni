@@ -1,27 +1,89 @@
-import { useState } from "react";
-import { KpiCard } from "@/components/kpi-card";
+import { Suspense, lazy, useState } from "react";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
+import { useCanViewInventoryCost } from "@/features/auth/permissions";
+import { KpiStrip } from "./kpi-strip";
+import { useDashboardKpis } from "./use-dashboard-kpis";
+import { useSyncFreshness } from "./use-sync-freshness";
+import { TipsSummaryCard } from "./tips-summary";
+import { RentabilidadCard, useDashboardV2Report } from "./rentabilidad-card";
+
+// Batch 5b: the performance band (charts + recharts) lives in its own lazy
+// chunk so the KPI strip never waits on chart code (PRD §25.2 bundle
+// discipline; ui_wireframe_reference.md §1 band placement).
+const PerformanceBand = lazy(() =>
+  import("./performance-band").then((m) => ({ default: m.PerformanceBand })),
+);
+
+function PerformanceBandSkeleton() {
+  return (
+    <div
+      data-testid="performance-band-skeleton"
+      className="grid grid-cols-1 gap-6 lg:grid-cols-3"
+      aria-hidden="true"
+    >
+      <div className="h-64 animate-pulse rounded-lg border border-border bg-muted/40 lg:col-span-3" />
+      {Array.from({ length: 3 }).map((_, i) => (
+        <div key={i} className="h-56 animate-pulse rounded-lg border border-border bg-muted/40" />
+      ))}
+    </div>
+  );
+}
 
 import { formatLocalDate } from "@/lib/utils";
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("es-NI", {
-    style: "currency",
-    currency: "NIO",
-    minimumFractionDigits: 2,
-  }).format(amount);
-}
+// G2 (FR-FISCAL-03): quiet regime context for the dashboard header. Labels
+// are keyed strictly by the backend FiscalRegime enum values (FR-FISCAL-01);
+// an unknown regime produces no label at all.
+const FISCAL_REGIME_LABELS: Record<string, string> = {
+  CUOTA_FIJA: "Cuota Fija",
+  REGIMEN_GENERAL: "Régimen General",
+};
 
 function todayRange(): DateRangeValue {
   const iso = formatLocalDate(new Date());
   return { startDate: iso, endDate: iso };
 }
 
+// Review round 2 (WU5): the management band reflows between the two-card
+// grid (OWNER with the cost grant) and a single column (grant omitted).
+// Complete literal class strings on purpose — Tailwind only emits utilities
+// whose names appear verbatim in source.
+const MANAGEMENT_BAND_TWO_CARDS = "grid grid-cols-1 gap-6 lg:grid-cols-2";
+const MANAGEMENT_BAND_ONE_CARD = "grid grid-cols-1 gap-6";
+
 export function DashboardPage() {
   const [range, setRange] = useState<DateRangeValue>(todayRange);
   const { data, isLoading, error } = useSalesDashboard(range.startDate, range.endDate);
+  // Batch 7 (PRD §21): the tips card reads the V2 report through the same
+  // hook/cache the KpiStrip uses — one shared dashboard-v2 query, no extra
+  // fetch. COGS reads keep the AG-06/AC-17 cost gate.
+  const canViewCost = useCanViewInventoryCost();
+  const { snapshot, fiscal, isFiscalPending, isFiscalFailed, marginGate } = useDashboardKpis(
+    { start: range.startDate, end: range.endDate },
+    undefined,
+    { canViewCost },
+  );
+  // WU5 (FR-DISC-02): the Flujos card needs the period's approved
+  // pre-discount sales as the honest discount-rate denominator. Same query
+  // key as the strip's V2 report read, so react-query dedupes it — no extra
+  // fetch.
+  const v2Report = useDashboardV2Report(range.startDate, range.endDate);
+  // G2 (FR-FISCAL-03/04): the label exists only once the backend regime is
+  // confirmed. While pending, or when the fetch failed / the profile is
+  // unknown, no regime claim is rendered — an absent label is honest, a
+  // guessed one would contradict FR-FISCAL-04.
+  const regimeLabel =
+    !isFiscalPending && !isFiscalFailed && fiscal
+      ? FISCAL_REGIME_LABELS[fiscal.regime]
+      : undefined;
+  // Dashboard V2 sync freshness (PRD §20, FR-SYNC-01..05): the badge shows
+  // the real watermark-derived state; generatedAt stays technical metadata.
+  const {
+    data: freshness,
+    isLoading: isFreshnessLoading,
+  } = useSyncFreshness();
 
   if (isLoading && !data) {
     return (
@@ -53,105 +115,74 @@ export function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
             Métricas clave de facturación y resumen de operaciones
+            {regimeLabel && (
+              <span data-testid="fiscal-regime-context">
+                {" · "}
+                Régimen fiscal: {regimeLabel}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          {data && <FreshnessBadge generatedAt={data.generatedAt} />}
+          {data && (
+            <FreshnessBadge
+              freshness={freshness ?? null}
+              generatedAt={data.generatedAt}
+              isLoading={isFreshnessLoading}
+            />
+          )}
           <DateRangePicker value={range} onChange={setRange} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Ventas Brutas"
-          value={formatCurrency(data?.grossSales ?? 0)}
-          subtitle={`${data?.invoiceCount ?? 0} facturas`}
-        />
-        <KpiCard
-          label="Ticket Promedio"
-          value={formatCurrency(data?.ticketAverage ?? 0)}
-        />
-        <KpiCard
-          label="Impuestos (IVA)"
-          value={formatCurrency(data?.totalTax ?? 0)}
-        />
-        <KpiCard
-          label="Descuentos"
-          value={formatCurrency(data?.totalDiscounts ?? 0)}
+      {/* Dashboard V2 Batch 4: regime-aware executive KPI strip (FR-KPI-01..05,
+          FR-FISCAL-01..04). The legacy "Ventas Brutas" hero and the static
+          "Resumen de Ventas" card were retired in review round 2 (owner P2:
+          fully redundant); legacy grossSales fields remain on the wire only
+          for migration (arch spec §7.3). */}
+      <KpiStrip
+        range={{ start: range.startDate, end: range.endDate }}
+      />
+
+      {/* Dashboard V2 Batch 5b: performance band — sales trend, hourly demand,
+          top products and payment mix (PRD §§14–17, §24 drill-down; lazy chunk). */}
+      <Suspense fallback={<PerformanceBandSkeleton />}>
+        <PerformanceBand range={{ start: range.startDate, end: range.endDate }} />
+      </Suspense>
+
+      {/* Dashboard V2 Batch 5c: the legacy "Métodos de Pago" card was removed
+          — the PaymentMixChart in the performance band above is now the single
+          payment-composition surface (same paymentMethodsBreakdown, net of
+          changeGiven, with original-currency USD slots and percent labels). */}
+      {/* Review round 2 (WU5): management band per the wireframe §1 bottom
+          rows — RENTABILIDAD (Margen Bruto breakdown, AC-17-gated; omitted
+          entirely without the cost grant so the band reflows without a hole)
+          next to the FLUJOS SEPARADOS DE VENTAS card (Descuentos on the
+          FR-DISC-02 pre-discount base + tips outside the sales total). */}
+      <div
+        data-testid="management-band"
+        className={canViewCost ? MANAGEMENT_BAND_TWO_CARDS : MANAGEMENT_BAND_ONE_CARD}
+      >
+        {canViewCost && (
+          <RentabilidadCard
+            canViewCost={canViewCost}
+            range={{ start: range.startDate, end: range.endDate }}
+            netSalesNio={snapshot?.netSalesNio ?? null}
+            margin={snapshot?.margin ?? null}
+            marginGate={marginGate}
+          />
+        )}
+        <TipsSummaryCard
+          summary={snapshot?.tipsSummary ?? null}
+          totalDiscountsNio={snapshot?.totalDiscountsNio ?? null}
+          preDiscountSalesNio={v2Report.data?.preDiscountSalesNio ?? null}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-card-foreground">
-            Métodos de Pago
-          </h2>
-          <div className="space-y-3">
-            {[
-              { label: "Efectivo NIO", value: data?.paymentMethodsBreakdown.cashNio ?? 0 },
-              { label: "Efectivo USD", value: data?.paymentMethodsBreakdown.cashUsd ?? 0 },
-              { label: "Tarjeta NIO", value: data?.paymentMethodsBreakdown.cardNio ?? 0 },
-              { label: "Tarjeta USD", value: data?.paymentMethodsBreakdown.cardUsd ?? 0 },
-              { label: "Otros", value: data?.paymentMethodsBreakdown.other ?? 0 },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{item.label}</span>
-                <span className="font-medium tabular-nums text-card-foreground">
-                  {formatCurrency(item.value)}
-                </span>
-              </div>
-            ))}
-            <div className="border-t border-border pt-3">
-              <div className="flex items-center justify-between text-sm font-semibold">
-                <span className="text-foreground">Total NIO</span>
-                <span className="tabular-nums text-foreground">
-                  {formatCurrency(data?.paymentMethodsBreakdown.totalNio ?? 0)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-card-foreground">
-            Resumen de Ventas
-          </h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Ventas Netas Gravables</span>
-              <span className="font-medium tabular-nums text-card-foreground">
-                {formatCurrency(data?.netTaxableSales ?? 0)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Impuestos</span>
-              <span className="font-medium tabular-nums text-card-foreground">
-                {formatCurrency(data?.totalTax ?? 0)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Descuentos</span>
-              <span className="font-medium tabular-nums text-destructive">
-                -{formatCurrency(data?.totalDiscounts ?? 0)}
-              </span>
-            </div>
-            <div className="border-t border-border pt-3">
-              <div className="flex items-center justify-between text-sm font-semibold">
-                <span className="text-foreground">Ventas Brutas</span>
-                <span className="tabular-nums text-foreground">
-                  {formatCurrency(data?.grossSales ?? 0)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {data?.startDate && data?.endDate && (
-        <p className="text-xs text-muted-foreground">
-          Periodo: {data.startDate} — {data.endDate}
-        </p>
-      )}
+      {/* Review round 2 (WU9): the old "Periodo:" footer was removed — it
+          restated the range the user controls in the date picker above, and
+          that picker trigger always renders "startDate — endDate" on screen,
+          so the visible period stays attributed without the duplicate. */}
     </div>
   );
 }

@@ -27,10 +27,13 @@ export function useLogin() {
         user: raw.user,
         tenant: raw.tenant,
       };
-      setTokens({
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-      });
+      setTokens(
+        {
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+        },
+        cleanTenantSlug || response.tenant.slug,
+      );
       login(response.user, response.tenant);
       resolveFromLogin(response.tenant);
       return response;

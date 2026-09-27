@@ -1,7 +1,9 @@
 import { getApiBaseUrl } from "./api-base-url";
+import { resolveTenantSlug } from "./auth";
 
 const STORAGE_KEY_ACCESS = "oc_access_token";
 const STORAGE_KEY_REFRESH = "oc_refresh_token";
+const STORAGE_KEY_TENANT_SLUG = "oc_tenant_slug";
 
 export interface TokenPair {
   accessToken: string;
@@ -94,7 +96,7 @@ export function notifyAuthExpired(): void {
   }
 }
 
-export function setTokens(tokens: TokenPair): void {
+export function setTokens(tokens: TokenPair, tenantSlug?: string | null): void {
   if (
     !tokens ||
     !isNonBlankString(tokens.accessToken) ||
@@ -109,6 +111,9 @@ export function setTokens(tokens: TokenPair): void {
   refreshToken = cleanRefresh;
   sessionStorage.setItem(STORAGE_KEY_ACCESS, cleanAccess);
   sessionStorage.setItem(STORAGE_KEY_REFRESH, cleanRefresh);
+  if (isNonBlankString(tenantSlug)) {
+    sessionStorage.setItem(STORAGE_KEY_TENANT_SLUG, tenantSlug.trim());
+  }
   // Reset only upon successfully establishing a verified valid session
   authExpiredNotified = false;
 }
@@ -119,6 +124,7 @@ export function clearTokens(): void {
   refreshPromise = null;
   sessionStorage.removeItem(STORAGE_KEY_ACCESS);
   sessionStorage.removeItem(STORAGE_KEY_REFRESH);
+  sessionStorage.removeItem(STORAGE_KEY_TENANT_SLUG);
 }
 
 export function getAccessToken(): string | null {
@@ -158,9 +164,24 @@ export async function refreshAccessToken(): Promise<string> {
     parseSubjectFromJwt(currentRefresh) ||
     "";
 
-  const payload = userId
-    ? { userId, refreshToken: currentRefresh.trim() }
-    : { refreshToken: currentRefresh.trim() };
+  // Derive tenantSlug: from sessionStorage or directly from window.location.hostname
+  const hostSlug =
+    typeof window !== "undefined" && window.location?.hostname
+      ? resolveTenantSlug(window.location.hostname)
+      : null;
+  const storedSlug =
+    typeof sessionStorage !== "undefined"
+      ? sessionStorage.getItem(STORAGE_KEY_TENANT_SLUG)
+      : null;
+  const tenantSlug = hostSlug || (isNonBlankString(storedSlug) ? storedSlug.trim() : "");
+
+  const payload: Record<string, string> = {
+    refreshToken: currentRefresh.trim(),
+    tenantSlug,
+  };
+  if (userId) {
+    payload.userId = userId;
+  }
 
   const response = await fetch(`${getApiBaseUrl()}/identity/refresh`, {
     method: "POST",

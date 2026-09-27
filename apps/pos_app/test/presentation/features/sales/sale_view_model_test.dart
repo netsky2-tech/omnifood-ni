@@ -28,6 +28,7 @@ import 'package:pos_app/data/daos/sales/tax_config_dao.dart';
 import 'package:pos_app/data/models/sales/tax_config_entity.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/services/sales/invoice_fiscal_calculator.dart';
+import 'package:pos_app/domain/services/sales/tip_engine.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
@@ -951,6 +952,105 @@ void main() {
           );
           await vm.loadCompanyTaxRegime();
           expect(vm.companyTaxRegime, isNull);
+        },
+      );
+    });
+
+    group('Checkout tip snapshot persistence (PRD §21 / §33.4 / AD-10)', () {
+      Invoice Function() captureSavedInvoice() {
+        Invoice? savedInvoice;
+        when(
+          mockSalesRepo.saveSale(
+            invoice: anyNamed('invoice'),
+            items: anyNamed('items'),
+            payments: anyNamed('payments'),
+          ),
+        ).thenAnswer((inv) async {
+          savedInvoice = inv.namedArguments[#invoice] as Invoice;
+        });
+        return () {
+          final captured = savedInvoice;
+          if (captured == null) {
+            fail('saveSale was never called — checkout did not persist');
+          }
+          return captured;
+        };
+      }
+
+      test(
+        'finalizeSale snapshots the voluntary tip onto the invoice when a tip is set',
+        () async {
+          const product = Product(
+            id: 'p-tip',
+            name: 'Cena Completa',
+            uom: 'UND',
+            stock: 10,
+            averageCost: 40,
+            sellPrice: 100.0,
+            taxRate: 0.15,
+          );
+          viewModel.addToCart(product);
+          viewModel.setTip(tipType: TipType.suggestedTenPercent);
+          expect(viewModel.tipAmount, equals(10.0));
+
+          when(mockAuthRepo.getCurrentUser()).thenAnswer(
+            (_) async => const User(
+              id: 'u-1',
+              name: 'Cashier',
+              role: UserRole.cashier,
+              isActive: true,
+            ),
+          );
+
+          final getSavedInvoice = captureSavedInvoice();
+          await viewModel.finalizeSale([PaymentMethod.cash]);
+          final savedInvoice = getSavedInvoice();
+
+          // The tip snapshot must travel with the fiscal document as issued
+          // (AD-10): NIO amount, USD conversion, effective percentage and
+          // the eligible base — never recomputed after the fact.
+          expect(savedInvoice.tipAmountNio, equals(10.0));
+          expect(savedInvoice.tipAmountUsd, closeTo(10.0 / 36.50, 0.01));
+          expect(savedInvoice.tipPercentage, equals(10.0));
+          expect(savedInvoice.tipEligibleBaseNio, equals(100.0));
+          // DGI invariant INV-16.1: the tip is NOT part of the taxable total.
+          expect(savedInvoice.total, equals(100.0));
+        },
+      );
+
+      test(
+        'finalizeSale leaves the tip snapshot null when no tip is selected',
+        () async {
+          const product = Product(
+            id: 'p-notip',
+            name: 'Soda',
+            uom: 'UND',
+            stock: 10,
+            averageCost: 20,
+            sellPrice: 50.0,
+            taxRate: 0.15,
+          );
+          viewModel.addToCart(product);
+          viewModel.setTip(tipType: TipType.none);
+          expect(viewModel.tipAmount, equals(0.0));
+
+          when(mockAuthRepo.getCurrentUser()).thenAnswer(
+            (_) async => const User(
+              id: 'u-1',
+              name: 'Cashier',
+              role: UserRole.cashier,
+              isActive: true,
+            ),
+          );
+
+          final getSavedInvoice = captureSavedInvoice();
+          await viewModel.finalizeSale([PaymentMethod.cash]);
+          final savedInvoice = getSavedInvoice();
+
+          expect(savedInvoice.tipAmountNio, isNull);
+          expect(savedInvoice.tipAmountUsd, isNull);
+          expect(savedInvoice.tipPercentage, isNull);
+          expect(savedInvoice.tipEligibleBaseNio, isNull);
         },
       );
     });

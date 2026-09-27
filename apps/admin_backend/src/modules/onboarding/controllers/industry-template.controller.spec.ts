@@ -200,6 +200,9 @@ describe('IndustryTemplateController (Unit)', () => {
         productsCreated: 1,
         productsSkipped: 0,
         recipesCreated: 1,
+        recipesPendingReviewMessage:
+          '1 receta creada como sugerencia pendiente de revisión',
+        recipesSkipped: [],
       };
       service.applyTemplate.mockResolvedValueOnce(mockApplyResult);
 

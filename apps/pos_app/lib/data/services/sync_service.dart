@@ -15,6 +15,7 @@ import '../../domain/models/inventory/recipe_version_document.dart';
 import '../../domain/models/inventory/production_order_document.dart';
 import '../../domain/security/cloud_auth_unavailable_exception.dart';
 import '../../domain/security/device_sync_exceptions.dart';
+import '../../domain/services/inventory/authority_hydration_status.dart';
 import '../database/app_database.dart';
 import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
@@ -24,6 +25,8 @@ import '../models/user_entity.dart';
 import '../models/security_profile_entity.dart';
 import '../models/local_config_entity.dart';
 import 'fiscal_inbox_handler.dart';
+import 'authority_delta_adapter.dart';
+import 'authority_hydration_service.dart';
 import 'network_connectivity_service.dart';
 
 const Map<String, String> syncRole = {
@@ -71,6 +74,19 @@ class InboundSyncResult {
   final int alertsCount;
   final int? appliedFiscalRevision;
   final String? appliedFiscalFingerprint;
+
+  /// Authority projection rows delivered for hydration from the
+  /// `recipeVersions` delta (#519 U3). Insert-if-absent: these are rows
+  /// delivered, not rows newly written.
+  final int authorityInsumosCount;
+  final int authorityVersionsCount;
+  final int authorityComponentsCount;
+
+  /// True when the authority hydration was refused or threw. Hydration
+  /// trouble NEVER fails the pull nor blocks a sale (Q80); the outcome is
+  /// surfaced here for the caller instead.
+  final bool authorityHydrationFailed;
+  final String? authorityHydrationFailureReason;
   final String timestamp;
 
   const InboundSyncResult({
@@ -82,6 +98,11 @@ class InboundSyncResult {
     this.alertsCount = 0,
     this.appliedFiscalRevision,
     this.appliedFiscalFingerprint,
+    this.authorityInsumosCount = 0,
+    this.authorityVersionsCount = 0,
+    this.authorityComponentsCount = 0,
+    this.authorityHydrationFailed = false,
+    this.authorityHydrationFailureReason,
     required this.timestamp,
   });
 }
@@ -1793,6 +1814,131 @@ class SyncService {
           await _database!.recipeDao.insertRecipes(recipeEntities);
         }
 
+        // 4b. Recipe version authority hydration (#519 U3). Runs after the
+        // products (1) and insumos (3) handlers: the hydrator's projection
+        // is insert-if-absent, so ordering only matters for consumers, not
+        // for correctness of the writes themselves. The nested delta is
+        // adapted into the flat AuthorityHydrationPayload the hydrator
+        // expects. Standing invariant: hydration trouble must never fail
+        // the pull nor block a sale (Q80) — catch, log with a reason, and
+        // surface the outcome in InboundSyncResult.
+        var authorityInsumosCount = 0;
+        var authorityVersionsCount = 0;
+        var authorityComponentsCount = 0;
+        var authorityHydrationFailed = false;
+        String? authorityHydrationFailureReason;
+        // #519 U4: the verdict written to local_configs. Null until this
+        // attempt reached a verdict; a legacy response without the
+        // `recipeVersions` key must never stamp the keys.
+        String? authorityHydrationVerdict;
+        String? authorityHydrationVerdictReason;
+        final rawRecipeVersions = rawDeltas['recipeVersions'] as List<dynamic>?;
+        if (rawRecipeVersions == null) {
+          // Legacy backend response without the key: a no-op, not an error.
+          developer.log(
+            '[SYNC_PULL] authority_hydration_skipped reason=no_recipe_versions_key',
+            name: 'SyncService',
+          );
+        } else {
+          try {
+            final adaptation = adaptAuthorityDelta(rawRecipeVersions);
+            if (!adaptation.isSuccess) {
+              authorityHydrationFailed = true;
+              authorityHydrationFailureReason = adaptation.failureReason;
+              authorityHydrationVerdict = 'refused';
+              authorityHydrationVerdictReason = adaptation.failureReason;
+              developer.log(
+                '[SYNC_PULL] authority_hydration_refused reason=${adaptation.failureReason}',
+                name: 'SyncService',
+              );
+            } else {
+              await AuthorityHydrationService(_database!.authorityProjectionDao)
+                  .hydrate(adaptation.payload!);
+              authorityInsumosCount = adaptation.insumoCount;
+              authorityVersionsCount = adaptation.versionCount;
+              authorityComponentsCount = adaptation.componentCount;
+              authorityHydrationVerdict = 'applied';
+              developer.log(
+                '[SYNC_PULL] authority_hydration_applied '
+                'insumos=$authorityInsumosCount '
+                'versions=$authorityVersionsCount '
+                'components=$authorityComponentsCount '
+                'tenant=${adaptation.tenantId}',
+                name: 'SyncService',
+              );
+            }
+          } catch (e, stackTrace) {
+            // The adapter reports refusals as values; reaching here means
+            // the hydration itself threw (e.g. a DAO error). Still never
+            // fails the pull.
+            authorityHydrationFailed = true;
+            authorityHydrationFailureReason = 'authority_hydration_threw';
+            authorityHydrationVerdict = 'failed';
+            authorityHydrationVerdictReason = 'authority_hydration_threw';
+            developer.log(
+              '[SYNC_PULL] authority_hydration_failed '
+              'reason=authority_hydration_threw',
+              name: 'SyncService',
+              error: e,
+              stackTrace: stackTrace,
+            );
+          }
+
+          // 4c. Persist the hydration verdict (#519 U4): local_configs
+          // keys so the #519 U5 three-state guard can distinguish "never
+          // hydrated" from "genuinely empty". Per-attempt telemetry keys
+          // (last_at/result/reason) describe the pull; the applied_at key is
+          // stamped ONLY on an applied verdict and is never overwritten by
+          // a later refusal — it is the "ever succeeded" marker.
+          // Diagnostic only: this is a local health signal that never
+          // enters an invoice or a snapshot (snapshot reasonCode whitelist
+          // untouched). And it is best-effort in the strict sense: the write
+          // gets its own guard, because telemetry failing must never reach
+          // backwards and undo a pull whose hydration already succeeded.
+          try {
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityHydrationStatus.lastAtKey,
+                value: DateTime.now().toUtc().toIso8601String(),
+              ),
+            );
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityHydrationStatus.resultKey,
+                value: authorityHydrationVerdict!,
+              ),
+            );
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: AuthorityHydrationStatus.reasonKey,
+                // Cleared/empty when applied.
+                value: authorityHydrationVerdictReason ?? '',
+              ),
+            );
+            if (authorityHydrationVerdict ==
+                AuthorityHydrationStatus.appliedVerdict) {
+              await _database!.localConfigDao.saveConfig(
+                LocalConfigEntity(
+                  key: AuthorityHydrationStatus.appliedAtKey,
+                  value: DateTime.now().toUtc().toIso8601String(),
+                ),
+              );
+            }
+          } catch (e, stackTrace) {
+            // The verdict could not be persisted. Report the absence, never
+            // the failure: the hydration outcome above stands on its own, and
+            // the classifier reads row presence as primary evidence precisely
+            // so a missing telemetry row degrades to "unknown", not to a
+            // broken pull.
+            developer.log(
+              '[SYNC_PULL] authority_hydration_verdict_not_persisted',
+              name: 'SyncService',
+              error: e,
+              stackTrace: stackTrace,
+            );
+          }
+        }
+
         // 5. Users & Security Profiles
         final rawUsers = rawDeltas['users'] as List<dynamic>? ?? const [];
         final userEntities = <UserEntity>[];
@@ -1986,6 +2132,11 @@ class SyncService {
           alertsCount: alertsCount,
           appliedFiscalRevision: appliedFiscalRevision,
           appliedFiscalFingerprint: appliedFiscalFingerprint,
+          authorityInsumosCount: authorityInsumosCount,
+          authorityVersionsCount: authorityVersionsCount,
+          authorityComponentsCount: authorityComponentsCount,
+          authorityHydrationFailed: authorityHydrationFailed,
+          authorityHydrationFailureReason: authorityHydrationFailureReason,
           timestamp:
               data['serverTime']?.toString() ??
               DateTime.now().toIso8601String(),

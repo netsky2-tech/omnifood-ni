@@ -86,6 +86,14 @@ describe('InventoryReportsController', () => {
       totalCogsNio: 1500,
       salesCogsNio: 1300,
       shrinkageCogsNio: 200,
+      // Coherent with the fixture's real COGS: a fully costed period with
+      // actual sales, so the fixture exercises the contract field instead
+      // of degenerating to the empty-period COMPLETE/0/0 shape.
+      inventoryCoverage: {
+        status: 'COMPLETE' as const,
+        costedSalesCount: 24,
+        uncostedSalesCount: 0,
+      },
       generatedAt: '2026-08-24T10:00:00Z',
       items: [],
     };

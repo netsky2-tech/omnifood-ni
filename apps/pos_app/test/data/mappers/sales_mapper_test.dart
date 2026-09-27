@@ -266,4 +266,87 @@ void main() {
       expect(jsonEncode(json), isNot(contains('fiscalHeaderSnapshot')));
     });
   });
+
+  group('SalesMapper — voluntary tip persistence (PRD §21 / §33.4 / AD-10)', () {
+    final baseInvoice = Invoice(
+      id: 'inv-tip',
+      number: '001-001-01-00000002',
+      createdAt: DateTime(2026, 6, 23),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 0,
+      total: 100,
+    );
+
+    /// A tip snapshot as captured at checkout: 10% of a 100 NIO eligible
+    /// base, with the USD conversion at the commercial rate.
+    Invoice tippedInvoice() => baseInvoice.copyWith(
+          tipAmountNio: 10.0,
+          tipAmountUsd: 0.27,
+          tipPercentage: 10.0,
+          tipEligibleBaseNio: 100.0,
+        );
+
+    test('toInvoiceEntity maps the tip snapshot from domain to entity', () {
+      final entity = SalesMapper.toInvoiceEntity(tippedInvoice());
+
+      expect(entity.tipAmountNio, 10.0);
+      expect(entity.tipAmountUsd, 0.27);
+      expect(entity.tipPercentage, 10.0);
+      expect(entity.tipEligibleBaseNio, 100.0);
+    });
+
+    test('toInvoiceEntity leaves the tip columns null when there is no tip', () {
+      final entity = SalesMapper.toInvoiceEntity(baseInvoice);
+
+      expect(entity.tipAmountNio, isNull);
+      expect(entity.tipAmountUsd, isNull);
+      expect(entity.tipPercentage, isNull);
+      expect(entity.tipEligibleBaseNio, isNull);
+    });
+
+    test('toInvoiceDomain maps the tip snapshot from entity to domain', () {
+      final entity = SalesMapper.toInvoiceEntity(tippedInvoice());
+
+      final domain = SalesMapper.toInvoiceDomain(entity);
+
+      expect(domain.tipAmountNio, 10.0);
+      expect(domain.tipAmountUsd, 0.27);
+      expect(domain.tipPercentage, 10.0);
+      expect(domain.tipEligibleBaseNio, 100.0);
+    });
+
+    test('toSyncJson includes the tip fields with real values', () {
+      final json = SalesMapper.toSyncJson(tippedInvoice(), const [], const []);
+
+      expect(json['tipAmountNio'], 10.0);
+      expect(json['tipAmountUsd'], 0.27);
+      expect(json['tipPercentage'], 10.0);
+      expect(json['tipEligibleBaseNio'], 100.0);
+    });
+
+    test('toSyncJson emits the tip fields as null when no tip was given', () {
+      // A tipless invoice persists null, never a fabricated value; the
+      // payload mirrors that honestly (shiftId/localIssueDate convention).
+      final json = SalesMapper.toSyncJson(baseInvoice, const [], const []);
+
+      expect(json['tipAmountNio'], isNull);
+      expect(json['tipAmountUsd'], isNull);
+      expect(json['tipPercentage'], isNull);
+      expect(json['tipEligibleBaseNio'], isNull);
+    });
+
+    test('tip snapshot round-trips entity → domain → sync JSON unchanged', () {
+      final restored = SalesMapper.toInvoiceDomain(
+        SalesMapper.toInvoiceEntity(tippedInvoice()),
+      );
+
+      final json = SalesMapper.toSyncJson(restored, const [], const []);
+
+      expect(json['tipAmountNio'], 10.0);
+      expect(json['tipAmountUsd'], 0.27);
+      expect(json['tipPercentage'], 10.0);
+      expect(json['tipEligibleBaseNio'], 100.0);
+    });
+  });
 }

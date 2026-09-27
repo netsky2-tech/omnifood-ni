@@ -65,3 +65,74 @@ describe('SyncInvoiceDto fiscal projection fields (#551 U3)', () => {
     expect(errors).toEqual([]);
   });
 });
+
+describe('SyncInvoiceDto tip fields (Batch 7 Slice 1, PRD §21 / AD-10)', () => {
+  const basePayload = {
+    id: 'inv-1',
+    number: '001',
+    createdAt: new Date().toISOString(),
+    userId: 'user-1',
+    subtotal: 100,
+    totalTax: 15,
+    total: 115,
+    paymentStatus: 'PAID',
+    items: [],
+    payments: [],
+  };
+
+  const validate = (payload: Record<string, unknown>) => {
+    const dto = plainToInstance(SyncInvoiceDto, payload);
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidUnknownValues: false,
+    });
+    return { dto, errors };
+  };
+
+  it('accepts all four tip fields and keeps them after whitelist stripping', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      tipAmountNio: 50,
+      tipAmountUsd: 1.37,
+      tipPercentage: 10,
+      tipEligibleBaseNio: 500,
+    });
+
+    expect(errors).toEqual([]);
+    expect(dto.tipAmountNio).toBe(50);
+    expect(dto.tipAmountUsd).toBe(1.37);
+    expect(dto.tipPercentage).toBe(10);
+    expect(dto.tipEligibleBaseNio).toBe(500);
+  });
+
+  it('accepts explicit nulls: the POS emits null for legacy invoices (AD-10, no backfill)', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      tipAmountNio: null,
+      tipAmountUsd: null,
+      tipPercentage: null,
+      tipEligibleBaseNio: null,
+    });
+
+    expect(errors).toEqual([]);
+    expect(dto.tipAmountNio).toBeNull();
+    expect(dto.tipAmountUsd).toBeNull();
+    expect(dto.tipPercentage).toBeNull();
+    expect(dto.tipEligibleBaseNio).toBeNull();
+  });
+
+  it('rejects a non-numeric tipAmountNio', () => {
+    const { errors } = validate({
+      ...basePayload,
+      tipAmountNio: '50 cordobas',
+    });
+
+    expect(errors.map((error) => error.property)).toContain('tipAmountNio');
+  });
+
+  it('leaves all tip fields optional so legacy payloads still validate', () => {
+    const { errors } = validate(basePayload);
+
+    expect(errors).toEqual([]);
+  });
+});

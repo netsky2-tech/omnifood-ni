@@ -1200,6 +1200,12 @@ class SaleViewModel extends ChangeNotifier {
         : _customerName;
 
     final calc = currentFiscalCalculation;
+    // Batch 7 Slice 2 (PRD §21 / §33.4 / AD-10): the tip snapshot is fixed
+    // at checkout — NIO amount, USD conversion, effective percentage and
+    // the eligible base — and never recomputed afterwards. A tip of 0 (or
+    // no tip selected) persists as null, never as a fabricated snapshot.
+    final tip = tipCalculation;
+    final hasTip = tip.tipAmountNio > 0;
     final items = <InvoiceItem>[];
     for (var i = 0; i < _cart.length; i++) {
       final cartItem = _cart[i];
@@ -1238,6 +1244,10 @@ class SaleViewModel extends ChangeNotifier {
       commercialRate: calc.commercialRate,
       totalUsd: calc.totalUsd,
       terminalId: _terminalId,
+      tipAmountNio: hasTip ? tip.tipAmountNio : null,
+      tipAmountUsd: hasTip ? tip.tipAmountUsd : null,
+      tipPercentage: hasTip ? tip.effectivePercentage : null,
+      tipEligibleBaseNio: hasTip ? tip.subtotalNio : null,
     );
 
     final payments = customPayments != null && customPayments.isNotEmpty

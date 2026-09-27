@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, BadRequestException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
@@ -16,6 +16,7 @@ import { FiscalReportsService } from '../services/fiscal-reports.service';
 import { SalesExportService } from '../services/sales-export.service';
 import {
   CashierPerformanceReportDto,
+  DailySeriesReportDto,
   HourlySalesReportDto,
   SalesDashboardReportDto,
   TopProductsReportDto,
@@ -59,6 +60,7 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
   let app: INestApplication;
   let mockSalesReportsService: {
     getDashboard: jest.Mock;
+    getDashboardDailySeries: jest.Mock;
     getHourlySales: jest.Mock;
     getTopProducts: jest.Mock;
     getCashierPerformance: jest.Mock;
@@ -92,6 +94,22 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
         },
         generatedAt: '2026-08-26T18:00:00.000Z',
       }),
+      getDashboardDailySeries: jest.fn().mockResolvedValue({
+        days: [
+          {
+            date: '2026-08-26',
+            netSalesNio: 5000,
+            completedTicketCount: 10,
+            averageTicketNetNio: 500,
+          },
+        ],
+        reportingPeriod: {
+          timezone: 'America/Managua',
+          localStartDate: '2026-08-26',
+          localEndDate: '2026-08-27',
+        },
+        generatedAt: '2026-08-26T18:00:00.000Z',
+      } satisfies DailySeriesReportDto),
       getHourlySales: jest.fn().mockResolvedValue({
         date: '2026-08-26',
         totalSales: 5000,
@@ -362,6 +380,51 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
       .get('/sales/reports/dashboard')
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
       .expect(403);
+  });
+
+  it('allows MANAGER on dashboard/daily-series endpoint and returns the series', async () => {
+    const jwtService = app.get(JwtService);
+    const response = await request(getHttpServer())
+      .get(
+        '/sales/reports/dashboard/daily-series?startDate=2026-08-01&endDate=2026-08-02',
+      )
+      .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .expect(200);
+
+    const body = response.body as DailySeriesReportDto;
+    expect(body.days[0].date).toBe('2026-08-26');
+    expect(body.reportingPeriod.timezone).toBe('America/Managua');
+    expect(
+      mockSalesReportsService.getDashboardDailySeries,
+    ).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.objectContaining({
+        startDate: '2026-08-01',
+        endDate: '2026-08-02',
+      }) as unknown,
+    );
+  });
+
+  it('returns 403 for CASHIER on dashboard/daily-series endpoint', async () => {
+    const jwtService = app.get(JwtService);
+    await request(getHttpServer())
+      .get('/sales/reports/dashboard/daily-series')
+      .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
+      .expect(403);
+  });
+
+  it('passes a BadRequestException from the daily-series service through as 400', async () => {
+    const jwtService = app.get(JwtService);
+    mockSalesReportsService.getDashboardDailySeries.mockRejectedValueOnce(
+      new BadRequestException(
+        'Daily series supports a 2-60 day range; got 1 day(s).',
+      ),
+    );
+
+    await request(getHttpServer())
+      .get('/sales/reports/dashboard/daily-series?startDate=2026-08-26')
+      .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .expect(400);
   });
 
   it('allows MANAGER on dashboard endpoint and returns report', async () => {

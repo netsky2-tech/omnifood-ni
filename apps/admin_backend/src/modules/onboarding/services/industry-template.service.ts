@@ -12,7 +12,7 @@ import { TemplateInsumo } from '../entities/template-insumo.entity';
 import { TemplateProduct } from '../entities/template-product.entity';
 import { TemplateRecipeItem } from '../entities/template-recipe-item.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
-import { Product } from '../../inventory/entities/product.entity';
+import { Product, ProductType } from '../../inventory/entities/product.entity';
 import {
   RecipeOrigin,
   RecipePublicationState,
@@ -39,6 +39,7 @@ import {
 import {
   ApplyTemplateDto,
   ApplyTemplateResult,
+  SkippedTemplateRecipe,
   TemplateSummaryResponse,
 } from '../dto/apply-template.dto';
 
@@ -181,7 +182,18 @@ export class IndustryTemplateService {
             );
           }
           if (previous?.status === TemplateApplicationStatus.APPLIED) {
-            return previous.summary_json as ApplyTemplateResult;
+            // #523 T5/T7: idempotent replay returns the stored summary, but
+            // normalized: a summary stored by a pre-#523 backend carries no
+            // pending-review signal and no skip report, and the response
+            // contract is closed — the keys must exist on this path too.
+            const stored = (previous.summary_json ?? {}) as ApplyTemplateResult;
+            return {
+              ...stored,
+              recipesPendingReviewMessage: this.pendingReviewMessage(
+                stored.recipesCreated ?? 0,
+              ),
+              recipesSkipped: stored.recipesSkipped ?? [],
+            };
           }
           if (options?.sessionId) {
             const session = await manager.findOne(OnboardingSession, {
@@ -254,6 +266,7 @@ export class IndustryTemplateService {
           let productsCreated = 0;
           let productsSkipped = 0;
           let recipesCreated = 0;
+          const recipesSkipped: SkippedTemplateRecipe[] = [];
 
           const insumoMap = new Map<string, Insumo>();
           for (const insumo of await manager.find(Insumo, {
@@ -362,6 +375,12 @@ export class IndustryTemplateService {
                   stock: 0,
                   is_perishable: source.is_perishable,
                   is_active: true,
+                  // #523 T1: template products now carry a real type. A
+                  // SIMPLE product is structurally incapable of consuming
+                  // insumos, so a recipe-bearing row must resolve to the
+                  // recipe branch type or the created dish would never move
+                  // stock even after its suggestion is published.
+                  product_type: this.resolveTemplateProductType(source),
                 }),
               );
               productMap.set(key, product);
@@ -378,8 +397,19 @@ export class IndustryTemplateService {
             const existingVersion = await manager.findOne(RecipeVersion, {
               where: { tenant_id: trimmedTenant, product_id: product.id },
             });
-            // An existing tenant recipe is authoritative and must not be replaced.
-            if (existingVersion) continue;
+            // An existing tenant recipe is authoritative and must not be
+            // replaced (#523 Cause 4 guard — behaviour unchanged). #523 T7:
+            // it just stopped being silent — a re-apply reports what it
+            // skipped and why, including the real state of the existing
+            // version (draft still awaiting review vs already published).
+            if (existingVersion) {
+              recipesSkipped.push({
+                productName: product.name,
+                reason: 'VERSION_ALREADY_EXISTS',
+                existingState: existingVersion.publication_state,
+              });
+              continue;
+            }
 
             const version = await manager.save(
               RecipeVersion,
@@ -442,6 +472,9 @@ export class IndustryTemplateService {
             productsCreated,
             productsSkipped,
             recipesCreated,
+            recipesPendingReviewMessage:
+              this.pendingReviewMessage(recipesCreated),
+            recipesSkipped,
           };
           application.status = TemplateApplicationStatus.APPLIED;
           application.applied_at = new Date();
@@ -466,12 +499,57 @@ export class IndustryTemplateService {
     }
   }
 
+  /**
+   * #523 T5 — operator-facing copy in neutral Spanish (usted). Pure UI
+   * signal: never persisted into invoices/snapshots and never a reasonCode.
+   */
+  private pendingReviewMessage(createdCount: number): string {
+    return createdCount === 1
+      ? '1 receta creada como sugerencia pendiente de revisión'
+      : `${createdCount} recetas creadas como sugerencias pendientes de revisión`;
+  }
+
   private isUniqueViolation(error: unknown): boolean {
     return (
       typeof error === 'object' &&
       error !== null &&
       (error as { code?: string }).code === '23505'
     );
+  }
+
+  /**
+   * #523 T1: resolve the product type a template row must produce.
+   *
+   * - A row WITHOUT recipe items stays `SIMPLE` — an undeclared type is
+   *   honestly the entity default there: nothing to consume, nothing to
+   *   prepare.
+   * - A row WITH recipe items resolves to the recipe branch. The explicit
+   *   choice is `COMPOUND`, not a new enum member and not `PREPARED`:
+   *   `sale-inventory-outcome.service.ts` treats `PREPARED || COMPOUND`
+   *   identically as the recipe branch, the POS maps both to
+   *   `isPrepared: true` (sync_service.dart), and COMPOUND is the value the
+   *   dashboard's Recipes page already lists (recipes-page.tsx). COMPOUND
+   *   therefore fixes both the inert-recipe defect (Cause 1) and the empty
+   *   Recipes page (Cause 5) with one value.
+   * - An undeclared type on a recipe row is resolved from the row's own
+   *   shape (→ COMPOUND) so pre-backfill rows never crash. But an EXPLICIT
+   *   `SIMPLE` declaration contradicted by recipe items is template data
+   *   corruption: it is surfaced here instead of being silently downgraded
+   *   (post-backfill no seeded row can reach this throw — the migration
+   *   upgrades exactly those rows to COMPOUND).
+   */
+  private resolveTemplateProductType(source: TemplateProduct): ProductType {
+    if (!source.recipeItems?.length) {
+      return source.product_type ?? ProductType.SIMPLE;
+    }
+
+    if (source.product_type === ProductType.SIMPLE) {
+      throw new BadRequestException(
+        `Template integrity error: product '${source.name}' declares ${source.recipeItems.length} recipe item(s) but declares product_type SIMPLE`,
+      );
+    }
+
+    return source.product_type ?? ProductType.COMPOUND;
   }
 
   private sourceFingerprint(template: IndustryTemplate): string {

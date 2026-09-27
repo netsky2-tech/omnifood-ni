@@ -13,7 +13,7 @@ import {
   Insumo,
   NEGATIVE_STOCK_POLICY,
 } from '../../inventory/entities/insumo.entity';
-import { Product } from '../../inventory/entities/product.entity';
+import { Product, ProductType } from '../../inventory/entities/product.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
@@ -24,6 +24,7 @@ import {
   RecipeSuggestionState,
 } from '../../inventory/entities/recipe-version.entity';
 import { TemplateApplication } from '../entities/template-application.entity';
+import { ApplyTemplateResult } from '../dto/apply-template.dto';
 
 describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let service: IndustryTemplateService;
@@ -95,6 +96,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
           uom: 'UN',
           suggested_price: 95.0,
           is_perishable: false,
+          product_type: ProductType.COMPOUND,
           created_at: new Date(),
           updated_at: new Date(),
           recipeItems: [
@@ -624,6 +626,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
             uom: 'UN',
             suggested_price: 35.0,
             is_perishable: false,
+            product_type: ProductType.SIMPLE,
             created_at: new Date(),
             updated_at: new Date(),
             recipeItems: [],
@@ -659,6 +662,292 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         productsCreated: 1,
         productsSkipped: 0,
         recipesCreated: 0,
+      });
+    });
+
+    describe('#523 T1 — template products carry a real product type', () => {
+      it('creates a recipe-bearing template product as COMPOUND', async () => {
+        templateRepo.findOne.mockResolvedValueOnce(mockTemplates[0]);
+        mockManager.find.mockResolvedValue([]);
+
+        await service.applyTemplate(tenantId, 'CAFETERIA');
+
+        // COMPOUND (not a new enum member): the cloud recipe branch admits
+        // PREPARED || COMPOUND identically, the POS maps both to
+        // isPrepared: true, and COMPOUND is the value the dashboard Recipes
+        // page already lists — so the created product is explodable AND
+        // visible in Recipes without inventing a type.
+        expect(mockManager.save).toHaveBeenCalledWith(
+          Product,
+          expect.objectContaining({
+            name: 'Capuchino 8oz',
+            product_type: ProductType.COMPOUND,
+          }),
+        );
+      });
+
+      it('keeps a template row without recipe items SIMPLE (triangulation: retail)', async () => {
+        const retailTemplate = mockTemplates[2];
+        retailTemplate.templateProducts = [
+          {
+            id: 'tp-coca',
+            template_id: 'RETAIL_MINIMARKET',
+            template: null,
+            name: 'Gaseosa Coca Cola 500ml',
+            category: 'Bebidas',
+            uom: 'UN',
+            suggested_price: 35.0,
+            is_perishable: false,
+            product_type: ProductType.SIMPLE,
+            created_at: new Date(),
+            updated_at: new Date(),
+            recipeItems: [],
+          },
+        ];
+        templateRepo.findOne.mockResolvedValueOnce(retailTemplate);
+        mockManager.find.mockResolvedValue([]);
+
+        await service.applyTemplate(tenantId, 'RETAIL_MINIMARKET');
+
+        expect(mockManager.save).toHaveBeenCalledWith(
+          Product,
+          expect.objectContaining({
+            name: 'Gaseosa Coca Cola 500ml',
+            product_type: ProductType.SIMPLE,
+          }),
+        );
+      });
+
+      it('resolves an undeclared type from the row shape (recipe items → COMPOUND) so pre-backfill rows do not crash', async () => {
+        const undeclaredTemplate: IndustryTemplate = {
+          ...mockTemplates[0],
+          templateProducts: [
+            {
+              ...mockTemplates[0].templateProducts[0],
+              product_type: undefined,
+            },
+          ],
+        };
+        templateRepo.findOne.mockResolvedValueOnce(undeclaredTemplate);
+        mockManager.find.mockResolvedValue([]);
+
+        await service.applyTemplate(tenantId, 'CAFETERIA');
+
+        expect(mockManager.save).toHaveBeenCalledWith(
+          Product,
+          expect.objectContaining({ product_type: ProductType.COMPOUND }),
+        );
+      });
+
+      it('surfaces a data error instead of downgrading when a recipe-bearing row declares SIMPLE', async () => {
+        const contradictoryTemplate: IndustryTemplate = {
+          ...mockTemplates[0],
+          templateProducts: [
+            {
+              ...mockTemplates[0].templateProducts[0],
+              product_type: ProductType.SIMPLE,
+            },
+          ],
+        };
+        templateRepo.findOne.mockResolvedValueOnce(contradictoryTemplate);
+        mockManager.find.mockResolvedValue([]);
+
+        // A SIMPLE product is structurally incapable of consuming insumos
+        // (POS planner: simple → noImpact), so recipe items next to an
+        // explicit SIMPLE declaration is template data corruption; the
+        // service must surface it, never silently downgrade the row.
+        await expect(
+          service.applyTemplate(tenantId, 'CAFETERIA'),
+        ).rejects.toThrow(
+          /declares \d+ recipe item\(s\) but declares product_type SIMPLE/,
+        );
+      });
+    });
+
+    // #523 T5/T7 — the apply result must say the created recipes are PENDING
+    // SUGGESTIONS requiring review (not a bare count), and a re-apply must
+    // report what it skipped and why instead of being a silent no-op. The
+    // skip guard itself keeps its exact behaviour.
+    describe('#523 T5/T7 — honest apply result', () => {
+      const existingInsumo: Insumo = {
+        id: 'existing-ins-1',
+        tenant_id: tenantId,
+        tenant: null,
+        warehouse_id: 'wh-1',
+        name: 'Granos de Café Especial',
+        purchaseUom: 'KG',
+        consumptionUom: 'G',
+        conversionFactor: 1000,
+        stock: 5000,
+        existenciaActual: 5000,
+        averageCost: 0.5,
+        parLevel: 10000,
+        minStock: 2000,
+        maxStock: 20000,
+        is_perishable: false,
+        negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
+        is_active: true,
+        conversions: [],
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+
+      const buildSkippedApply = async (
+        publicationState: RecipePublicationState,
+      ): Promise<ApplyTemplateResult> => {
+        templateRepo.findOne.mockResolvedValueOnce(mockTemplates[0]);
+        const existingProduct: Product = {
+          id: 'existing-prod-1',
+          tenant_id: tenantId,
+          tenant: null,
+          warehouse_id: 'wh-1',
+          name: 'Capuchino 8oz',
+          uom: 'UN',
+          product_type: 'SIMPLE' as never,
+          category_code: null,
+          sellPrice: 95.0,
+          averageCost: 15.0,
+          stock: 0,
+          is_perishable: false,
+          is_active: true,
+          tax_rate: 0.15,
+          is_tax_exempt: false,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+        const existingVersion: RecipeVersion = {
+          id: 'existing-rv-1',
+          tenant_id: tenantId,
+          tenant: null,
+          product_id: existingProduct.id,
+          product: null,
+          version_number: 1,
+          is_active: publicationState === RecipePublicationState.PUBLISHED,
+          fecha_inicio_vigencia: new Date(),
+          fecha_fin_vigencia: null,
+          pos_document_id: null,
+          product_name: 'Capuchino 8oz',
+          yield_quantity: 1,
+          technical_shrink_pct: 0,
+          version_note: null,
+          published_at: null,
+          pos_created_at: null,
+          origin: RecipeOrigin.INDUSTRY_TEMPLATE,
+          publication_state: publicationState,
+          suggestion_state: RecipeSuggestionState.SUGGESTED,
+          created_at: new Date(),
+        };
+        mockManager.findOne.mockImplementation((entityClass: unknown) => {
+          if (entityClass === RecipeVersion)
+            return Promise.resolve(existingVersion);
+          return Promise.resolve(null);
+        });
+        mockManager.find.mockImplementation((entityClass: unknown) => {
+          if (entityClass === Insumo) return Promise.resolve([existingInsumo]);
+          if (entityClass === Product)
+            return Promise.resolve([existingProduct]);
+          return Promise.resolve([] as unknown as never[]);
+        });
+
+        return service.applyTemplate(tenantId, 'CAFETERIA');
+      };
+
+      it('says the single created recipe is a pending suggestion requiring review (T5)', async () => {
+        templateRepo.findOne.mockResolvedValueOnce(mockTemplates[0]);
+        mockManager.find.mockResolvedValue([]);
+
+        const result = await service.applyTemplate(tenantId, 'CAFETERIA');
+
+        expect(result.recipesCreated).toBe(1);
+        expect(result.recipesPendingReviewMessage).toBe(
+          '1 receta creada como sugerencia pendiente de revisión',
+        );
+      });
+
+      it('keeps the pending-review signal for an apply that creates zero recipes (T5 triangulation)', async () => {
+        templateRepo.findOne.mockResolvedValueOnce(mockTemplates[2]);
+        mockManager.find.mockResolvedValue([]);
+
+        const result = await service.applyTemplate(
+          tenantId,
+          'RETAIL_MINIMARKET',
+        );
+
+        expect(result.recipesCreated).toBe(0);
+        expect(result.recipesPendingReviewMessage).toBe(
+          '0 recetas creadas como sugerencias pendientes de revisión',
+        );
+      });
+
+      it('reports each skipped recipe with product name and existing PUBLISHED state (T7)', async () => {
+        const result = await buildSkippedApply(
+          RecipePublicationState.PUBLISHED,
+        );
+
+        expect(result.recipesCreated).toBe(0);
+        expect(result.recipesSkipped).toEqual([
+          {
+            productName: 'Capuchino 8oz',
+            reason: 'VERSION_ALREADY_EXISTS',
+            existingState: RecipePublicationState.PUBLISHED,
+          },
+        ]);
+      });
+
+      it('reports the existing DRAFT state on the re-apply path (T7 triangulation)', async () => {
+        const result = await buildSkippedApply(RecipePublicationState.DRAFT);
+
+        expect(result.recipesSkipped).toEqual([
+          {
+            productName: 'Capuchino 8oz',
+            reason: 'VERSION_ALREADY_EXISTS',
+            existingState: RecipePublicationState.DRAFT,
+          },
+        ]);
+      });
+
+      it('normalizes legacy stored summaries on idempotent replay so the payload stays closed (T5/T7)', async () => {
+        templateRepo.findOne.mockResolvedValue(mockTemplates[0]);
+        mockManager.find.mockResolvedValue([]);
+        let stored: TemplateApplication | null = null;
+        mockManager.save.mockImplementation(
+          (entityClass: unknown, item: unknown) => {
+            if (entityClass === TemplateApplication) {
+              stored = {
+                ...(item as TemplateApplication),
+                id: 'app-1',
+              };
+              return Promise.resolve(stored);
+            }
+            return Promise.resolve(item);
+          },
+        );
+        mockManager.findOne.mockImplementation((entityClass: unknown) => {
+          if (entityClass === TemplateApplication)
+            return Promise.resolve(stored);
+          return Promise.resolve(null);
+        });
+
+        await service.applyTemplate(tenantId, 'CAFETERIA', {
+          idempotencyKey: 'replay-key',
+        });
+
+        // Simulate a summary stored by a pre-#523 backend: no new keys.
+        if (stored) {
+          delete (stored.summary_json as Record<string, unknown>)
+            .recipesPendingReviewMessage;
+          delete (stored.summary_json as Record<string, unknown>)
+            .recipesSkipped;
+        }
+
+        const replay = await service.applyTemplate(tenantId, 'CAFETERIA', {
+          idempotencyKey: 'replay-key',
+        });
+
+        expect(replay.recipesPendingReviewMessage).toBe(
+          '1 receta creada como sugerencia pendiente de revisión',
+        );
+        expect(replay.recipesSkipped).toEqual([]);
       });
     });
   });

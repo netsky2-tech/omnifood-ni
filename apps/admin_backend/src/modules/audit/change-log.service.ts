@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
+import { classifyAuditSeverity } from './audit-risk-classifier';
 import { ChangeLog } from './entities/change-log.entity';
 
 /**
@@ -65,6 +66,10 @@ export class ChangeLogService {
         target_type: params.targetType,
         target_id: params.targetId,
         changes: params.changes ?? null,
+        // AG-07 / spec v0.3 §16.2: severity is classified at ingestion by
+        // the single AuditRiskClassifier and persisted (indexable
+        // aggregation). Historical rows keep NULL -> INFO at read time.
+        severity: classifyAuditSeverity(params.action),
       });
 
     if (manager) {
@@ -76,10 +81,14 @@ export class ChangeLogService {
       return;
     }
 
-    await runInTenantTransaction(this.dataSource, params.tenantId, async (bound) => {
-      const repo = bound.getRepository(ChangeLog);
-      await repo.save(buildEntry(repo));
-    });
+    await runInTenantTransaction(
+      this.dataSource,
+      params.tenantId,
+      async (bound) => {
+        const repo = bound.getRepository(ChangeLog);
+        await repo.save(buildEntry(repo));
+      },
+    );
   }
 
   async findByTarget(

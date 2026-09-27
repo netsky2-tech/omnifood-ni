@@ -59,3 +59,22 @@ export class RecipeVersionSnapshotResponseDto {
 
   components: RecipeDetailResponseDto[];
 }
+
+/**
+ * #523 T4 — one row of the pending-suggestion list: a recipe version created
+ * by an industry template that is still DRAFT and needs human review.
+ */
+export class RecipeSuggestionListItemDto {
+  recipeVersionId: string;
+
+  productId: string;
+
+  productName: string;
+
+  versionNumber: number;
+
+  componentCount: number;
+
+  /** True when an active PUBLISHED version already exists for the product. */
+  hasActivePublishedVersion: boolean;
+}

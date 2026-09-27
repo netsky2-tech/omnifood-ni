@@ -8,6 +8,7 @@ import {
   Index,
 } from 'typeorm';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { AUDIT_SEVERITY_COLUMN_LENGTH } from '../audit-risk-classifier';
 
 @Entity('change_log')
 @Index('IDX_change_log_tenant_target', [
@@ -58,6 +59,19 @@ export class ChangeLog {
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   user_email: string | null;
+
+  /**
+   * AG-07 / architecture spec v0.3 §16.2: persisted severity classified at
+   * ingestion by the single AuditRiskClassifier (audit-risk-classifier.ts).
+   * Nullable: rows written before this column existed keep NULL and surface
+   * as INFO through resolveAuditSeverity — history is never backfilled.
+   */
+  @Column({
+    type: 'varchar',
+    length: AUDIT_SEVERITY_COLUMN_LENGTH,
+    nullable: true,
+  })
+  severity: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;

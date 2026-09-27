@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -8,6 +8,20 @@ import {
   MoreThanOrEqual,
   Repository,
 } from 'typeorm';
+import {
+  currentLocalDateKey,
+  localDateKeySpanDays,
+  parseLocalDateKey,
+  ReportingPeriodValidationError,
+  resolveReportingBounds,
+  ResolvedReportingBounds,
+} from '../../../core/reporting/reporting-period';
+import {
+  allocateInvoiceLineNetSales,
+  computeDailySalesSeries,
+  computeSalesReportingTipsSummary,
+  computeSalesReportingTotals,
+} from '../../../core/reporting/sales-reporting-semantics';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -17,6 +31,8 @@ import {
   CashierPerformanceItemDto,
   CashierPerformanceQueryDto,
   CashierPerformanceReportDto,
+  DailySeriesQueryDto,
+  DailySeriesReportDto,
   HourlySalesBucketDto,
   HourlySalesQueryDto,
   HourlySalesReportDto,
@@ -27,6 +43,10 @@ import {
   TopProductsQueryDto,
   TopProductsReportDto,
 } from '../dto/sales-reports.dto';
+
+/** PRD §14 FR-CHART-02: daily buckets for 2–60 day inclusive ranges. */
+const DAILY_SERIES_MIN_DAYS = 2;
+const DAILY_SERIES_MAX_DAYS = 60;
 
 const round2 = (value: number): number =>
   Number((Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2));
@@ -56,10 +76,9 @@ export class SalesReportsService {
     tenantId: string,
     query?: SalesDashboardQueryDto,
   ): Promise<SalesDashboardReportDto> {
-    const { start, end } = this.parseDateBounds(
-      query?.startDate,
-      query?.endDate,
-    );
+    const bounds = this.resolvePeriodBounds(query?.startDate, query?.endDate);
+    const start = bounds.startInclusiveUtc;
+    const end = bounds.endInclusiveUtc;
     const whereClause: FindOptionsWhere<Invoice> = {
       tenant_id: tenantId,
       isCanceled: false,
@@ -123,13 +142,33 @@ export class SalesReportsService {
                 ? round2(amount * exchangeRate)
                 : amount;
 
-          totalPaymentsNio = round2(totalPaymentsNio + amountNio);
+          // AG-08 reporting net: tendered amounts include over-tender change,
+          // which must not count as collected money. `changeGiven` defaults to
+          // 0 in the schema; legacy rows without the value are treated as
+          // zero (reported as an approximation until decomposed).
+          const changeRaw = Number(p.changeGiven ?? 0);
+          const changeCurrency = (p.changeCurrency ?? 'NIO')
+            .trim()
+            .toUpperCase();
+          const changeNio =
+            changeRaw > 0
+              ? changeCurrency === 'USD'
+                ? round2(changeRaw * exchangeRate)
+                : changeRaw
+              : 0;
+          const effectiveNio = round2(amountNio - changeNio);
+          const effectiveUsd =
+            changeRaw > 0 && changeCurrency === 'USD'
+              ? round2(amount - changeRaw)
+              : amount;
+
+          totalPaymentsNio = round2(totalPaymentsNio + effectiveNio);
 
           if (method === 'CASH' || method === 'EFECTIVO') {
             if (currency === 'USD') {
-              cashUsd = round2(cashUsd + amount);
+              cashUsd = round2(cashUsd + effectiveUsd);
             } else {
-              cashNio = round2(cashNio + amountNio);
+              cashNio = round2(cashNio + effectiveNio);
             }
           } else if (
             method === 'CARD' ||
@@ -138,12 +177,12 @@ export class SalesReportsService {
             method === 'BANPRO'
           ) {
             if (currency === 'USD') {
-              cardUsd = round2(cardUsd + amount);
+              cardUsd = round2(cardUsd + effectiveUsd);
             } else {
-              cardNio = round2(cardNio + amountNio);
+              cardNio = round2(cardNio + effectiveNio);
             }
           } else {
-            otherPaymentsNio = round2(otherPaymentsNio + amountNio);
+            otherPaymentsNio = round2(otherPaymentsNio + effectiveNio);
           }
         }
       }
@@ -152,6 +191,18 @@ export class SalesReportsService {
     const invoiceCount = invoices.length;
     const ticketAverage =
       invoiceCount > 0 ? round2(grossSales / invoiceCount) : 0;
+
+    // V2 explicit semantics (spec §7.1/§7.2): same completed rows the legacy
+    // fields aggregate over (isCanceled = false, credit notes net in as
+    // persisted), expressed through the shared semantics helper.
+    const salesTotals = computeSalesReportingTotals(invoices);
+
+    // Batch 7 Slice 3 (PRD §21): voluntary-tip aggregation over the SAME
+    // completed-row set. Tips stay strictly separate from Net Sales and every
+    // other sales total (PRD §21.3); tipCoverage lets clients distinguish
+    // legacy NULL rows from genuine zero-tip sales (AD-10) instead of
+    // interpreting missing data as "tips disabled" (PRD §21.4).
+    const tipsSummary = computeSalesReportingTipsSummary(invoices);
 
     const paymentMethodsBreakdown: PaymentMethodsBreakdownDto = {
       cashNio: round2(cashNio),
@@ -163,26 +214,216 @@ export class SalesReportsService {
     };
 
     return {
+      // Legacy fields — retained unchanged (spec §7.2/§7.3).
       grossSales: round2(grossSales),
       netTaxableSales: round2(netTaxableSales),
       totalTax: round2(totalTax),
       totalDiscounts: round2(totalDiscounts),
       invoiceCount,
       ticketAverage,
+
+      // V2 additive semantics fields (spec §7.2).
+      netSalesNio: salesTotals.netSalesNio,
+      preDiscountSalesNio: salesTotals.preDiscountSalesNio,
+      completedTicketCount: salesTotals.completedTicketCount,
+      averageTicketNetNio: salesTotals.averageTicketNetNio,
+      totalTaxNio: salesTotals.totalTaxNio,
+      totalDiscountsNio: salesTotals.totalDiscountsNio,
+
+      // Batch 7 (PRD §21): additive tip summary — never folded into any
+      // sales total above.
+      tipsSummary: {
+        totalTipsNio: tipsSummary.totalTipsNio,
+        tippedTicketCount: tipsSummary.tippedTicketCount,
+        averageTipNio: tipsSummary.averageTipNio,
+        tipRate: tipsSummary.tipRate,
+        tipCoverage: {
+          recordedInvoicesCount: tipsSummary.tipCoverage.recordedInvoicesCount,
+          totalInvoicesCount: tipsSummary.tipCoverage.totalInvoicesCount,
+        },
+      },
+
       paymentMethodsBreakdown,
+      reportingPeriod: {
+        timezone: 'America/Managua',
+        localStartDate: bounds.localStartDate ?? null,
+        localEndDate: bounds.localEndDate ?? null,
+      },
       startDate: query?.startDate,
       endDate: query?.endDate,
       generatedAt: new Date().toISOString(),
     };
   }
 
+  /**
+   * Daily Sales Trend (Dashboard V2 Batch 5a, PRD §14).
+   *
+   * §7.2 cross-widget invariant: the invoice set is selected with EXACTLY the
+   * same query as getDashboard (same tenant predicate, same completed-sale
+   * filter `isCanceled = false`, same inclusive `created_at` bounds), so
+   * `Σ days.netSalesNio === getDashboard(tenantId, query).netSalesNio` over
+   * any period. Rows are bucketed by their Managua local day
+   * (resolveInvoiceLocalDayBucket: localIssueDate, legacy fallback created_at
+   * → Managua); buckets outside the range are clamped to the nearest boundary
+   * so the parity invariant holds unconditionally.
+   *
+   * Range window: 2–60 days inclusive (FR-CHART-02). A single day must use
+   * the existing hourly route; longer ranges are a later roadmap batch.
+   */
+  async getDashboardDailySeries(
+    tenantId: string,
+    query?: DailySeriesQueryDto,
+  ): Promise<DailySeriesReportDto> {
+    const startDateStr = query?.startDate?.trim();
+    const endDateStr = query?.endDate?.trim();
+    if (!startDateStr || !endDateStr) {
+      throw new BadRequestException(
+        'startDate and endDate are both required for the daily series',
+      );
+    }
+
+    const bounds = this.resolvePeriodBounds(startDateStr, endDateStr);
+    // Both inputs were date keys, so both bounds and their local keys exist.
+    const start = bounds.startInclusiveUtc;
+    const end = bounds.endInclusiveUtc;
+    const { localStartDate, localEndDate } = bounds;
+    if (!start || !end || !localStartDate || !localEndDate) {
+      // Unreachable: both inputs were validated calendar date keys, so
+      // resolveReportingBounds always resolves both bounds (see parseDayRange).
+      throw new Error(
+        `Unresolvable daily-series bounds for '${startDateStr}'..'${endDateStr}'`,
+      );
+    }
+
+    const dayCount = localDateKeySpanDays(localStartDate, localEndDate);
+    if (dayCount < DAILY_SERIES_MIN_DAYS || dayCount > DAILY_SERIES_MAX_DAYS) {
+      throw new BadRequestException(
+        `Daily series supports a ${DAILY_SERIES_MIN_DAYS}-${DAILY_SERIES_MAX_DAYS} day range; got ${dayCount} day(s).` +
+          ' Use the hourly-sales route for a single day.',
+      );
+    }
+
+    // Issue #581 WU1 / #592: bound invoice read, identical semantics to the
+    // dashboard KPI read (same where-clause, different ordering need).
+    const invoices = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(Invoice).find({
+          where: {
+            tenant_id: tenantId,
+            isCanceled: false,
+            created_at: Between(start, end),
+          },
+          order: { created_at: 'ASC' },
+        }),
+    );
+
+    const days = computeDailySalesSeries(
+      localStartDate,
+      localEndDate,
+      invoices,
+    );
+
+    return {
+      days,
+      reportingPeriod: {
+        timezone: 'America/Managua',
+        localStartDate,
+        localEndDate,
+      },
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Sales by Hour (PRD §14 FR-HOURLY-01/02/03, Dashboard V2 Batch 5c-backend).
+   *
+   * Two modes:
+   *
+   * - Single day (legacy): optional `date`, defaulting to today. Response
+   *   shape unchanged except the additive `meta: { dayCount: 1 }` and the
+   *   additive per-bucket `netSalesNio`.
+   * - Range (FR-HOURLY-01): `startDate`/`endDate` (both required together,
+   *   mutually exclusive with `date`), 2–60 days inclusive — the same
+   *   ReportingPeriod validation and BadRequest-before-read discipline as
+   *   the daily series. Buckets aggregate the WHOLE range per hour-of-day
+   *   so clients can show an averaged distribution; `meta.dayCount` carries
+   *   the number of aggregated days.
+   *
+   * FR-HOURLY-03 reconciliation: each bucket gains `netSalesNio`
+   * (Σ invoice.subtotal, post-discount, pre-tax, credit notes net in as
+   * persisted) over EXACTLY the same invoice set and predicate as the KPI
+   * route (tenant + `isCanceled = false` + inclusive created_at bounds), so
+   * `Σ buckets.netSalesNio === getDashboard(...).netSalesNio` over the same
+   * window. The legacy post-tax `totalSales` fields stay byte-identical
+   * (hour-of-day is still the legacy UTC hour of `created_at`).
+   */
   async getHourlySales(
     tenantId: string,
     query?: HourlySalesQueryDto,
   ): Promise<HourlySalesReportDto> {
-    const { dateStr, start, end } = this.parseDayRange(query?.date);
+    const requestedDate = query?.date?.trim();
+    const requestedStart = query?.startDate?.trim();
+    const requestedEnd = query?.endDate?.trim();
+    const hasRange = Boolean(
+      (requestedStart && requestedStart.length > 0) ||
+      (requestedEnd && requestedEnd.length > 0),
+    );
 
-    // Issue #581 WU1: bound invoice read (see getDashboard).
+    let start: Date;
+    let end: Date;
+    let dateKey: string;
+    let dayCount: number;
+
+    if (hasRange) {
+      if (requestedDate) {
+        throw new BadRequestException(
+          'Provide either a single date or a startDate/endDate range, not both.',
+        );
+      }
+      if (!requestedStart || !requestedEnd) {
+        throw new BadRequestException(
+          'startDate and endDate are both required for the hourly-sales range',
+        );
+      }
+
+      const bounds = this.resolvePeriodBounds(requestedStart, requestedEnd);
+      const rangeStart = bounds.startInclusiveUtc;
+      const rangeEnd = bounds.endInclusiveUtc;
+      const { localStartDate, localEndDate } = bounds;
+      if (!rangeStart || !rangeEnd || !localStartDate || !localEndDate) {
+        // Unreachable: both inputs were validated calendar date keys.
+        throw new Error(
+          `Unresolvable hourly-sales bounds for '${requestedStart}'..'${requestedEnd}'`,
+        );
+      }
+
+      dayCount = localDateKeySpanDays(localStartDate, localEndDate);
+      if (
+        dayCount < DAILY_SERIES_MIN_DAYS ||
+        dayCount > DAILY_SERIES_MAX_DAYS
+      ) {
+        throw new BadRequestException(
+          `Hourly sales supports a ${DAILY_SERIES_MIN_DAYS}-${DAILY_SERIES_MAX_DAYS} day range; got ${dayCount} day(s).` +
+            ' Use the date parameter for a single day.',
+        );
+      }
+
+      start = rangeStart;
+      end = rangeEnd;
+      dateKey = localStartDate;
+    } else {
+      const parsed = this.parseDayRange(query?.date);
+      start = parsed.start;
+      end = parsed.end;
+      dateKey = parsed.dateStr;
+      dayCount = 1;
+    }
+
+    // Issue #581 WU1: bound invoice read (see getDashboard). Same predicate
+    // and bounds shape as the KPI route over the same window (FR-HOURLY-03
+    // parity): tenant + isCanceled = false + inclusive created_at bounds.
     const invoices = await runInTenantTransaction(
       this.dataSource,
       tenantId,
@@ -203,6 +444,7 @@ export class SalesReportsService {
         hour,
         invoiceCount: 0,
         totalSales: 0,
+        netSalesNio: 0,
       }),
     );
 
@@ -214,9 +456,13 @@ export class SalesReportsService {
       const hour = invDate.getUTCHours();
       if (hour >= 0 && hour < 24) {
         const amount = Number(inv.total ?? 0);
+        const netAmount = Number(inv.subtotal ?? 0);
         hourlyBuckets[hour].invoiceCount += 1;
         hourlyBuckets[hour].totalSales = round2(
           hourlyBuckets[hour].totalSales + amount,
+        );
+        hourlyBuckets[hour].netSalesNio = round2(
+          hourlyBuckets[hour].netSalesNio + netAmount,
         );
         totalSales = round2(totalSales + amount);
         totalInvoices += 1;
@@ -224,9 +470,10 @@ export class SalesReportsService {
     }
 
     return {
-      date: dateStr,
+      date: dateKey,
       totalSales: round2(totalSales),
       totalInvoices,
+      meta: { dayCount },
       generatedAt: new Date().toISOString(),
       hourly: hourlyBuckets,
     };
@@ -236,10 +483,8 @@ export class SalesReportsService {
     tenantId: string,
     query?: TopProductsQueryDto,
   ): Promise<TopProductsReportDto> {
-    const { start, end } = this.parseDateBounds(
-      query?.startDate,
-      query?.endDate,
-    );
+    const { startInclusiveUtc: start, endInclusiveUtc: end } =
+      this.resolvePeriodBounds(query?.startDate, query?.endDate);
     const limit = query?.limit != null && query.limit > 0 ? query.limit : 10;
 
     const whereClause: FindOptionsWhere<Invoice> = {
@@ -273,29 +518,41 @@ export class SalesReportsService {
         productName: string;
         totalQuantity: number;
         totalRevenue: number;
+        netRevenueNio: number;
       }
     >();
 
     for (const inv of invoices) {
       if (inv.items && inv.items.length > 0) {
-        for (const item of inv.items) {
+        // FR-PRODUCT-01: per-line Net Sales (post-discount, pre-tax) with
+        // any per-invoice rounding residue allocated so that
+        // Σ products.netRevenueNio reconciles exactly with the KPI
+        // netSalesNio over the same invoice set (see
+        // allocateInvoiceLineNetSales for the largest-remainder policy).
+        const lineNets = allocateInvoiceLineNetSales(inv);
+        inv.items.forEach((item, lineIndex) => {
           const key = item.productId || item.productName || 'unknown';
           const existing = productAggregates.get(key);
           const qty = Number(item.quantity ?? 0);
           const revenue = Number(item.total ?? 0);
+          const netRevenue = lineNets[lineIndex] ?? 0;
 
           if (existing) {
             existing.totalQuantity = round4(existing.totalQuantity + qty);
             existing.totalRevenue = round2(existing.totalRevenue + revenue);
+            existing.netRevenueNio = round2(
+              existing.netRevenueNio + netRevenue,
+            );
           } else {
             productAggregates.set(key, {
               productId: item.productId,
               productName: item.productName || 'Producto sin nombre',
               totalQuantity: round4(qty),
               totalRevenue: round2(revenue),
+              netRevenueNio: round2(netRevenue),
             });
           }
-        }
+        });
       }
     }
 
@@ -310,10 +567,19 @@ export class SalesReportsService {
       })
       .slice(0, limit);
 
+    // FR-PRODUCT-01 authoritative share denominator: the period's Net Sales
+    // over the SAME bounded invoice set read above, computed with the same
+    // shared semantics helper the dashboard KPI uses — never the deprecated
+    // tax-inclusive `totalRevenue` (Σ item.total) and never a second read.
+    // Because the read filters `isCanceled = false`, every row is a completed
+    // sale, so this equals `getDashboard(query).netSalesNio` over the window.
+    const periodNetSalesNio = computeSalesReportingTotals(invoices).netSalesNio;
+
     return {
       startDate: query?.startDate,
       endDate: query?.endDate,
       generatedAt: new Date().toISOString(),
+      periodNetSalesNio,
       products: sortedProducts,
     };
   }
@@ -322,10 +588,8 @@ export class SalesReportsService {
     tenantId: string,
     query?: CashierPerformanceQueryDto,
   ): Promise<CashierPerformanceReportDto> {
-    const { start, end } = this.parseDateBounds(
-      query?.startDate,
-      query?.endDate,
-    );
+    const { startInclusiveUtc: start, endInclusiveUtc: end } =
+      this.resolvePeriodBounds(query?.startDate, query?.endDate);
     const whereClause: FindOptionsWhere<Invoice> = {
       tenant_id: tenantId,
       isCanceled: false,
@@ -415,30 +679,28 @@ export class SalesReportsService {
     };
   }
 
-  private parseDateBounds(
+  /**
+   * Date parsing is consolidated behind the shared ReportingPeriod resolver
+   * (spec §6.1/§6.2). NOTE: InventoryReportsService still parses its own
+   * dates and migrates to this resolver in a later roadmap batch (Batch 1
+   * keeps the diff small by design).
+   *
+   * Legacy one-sided/unbounded inputs are preserved: absent or unparseable
+   * bounds resolve as unbounded. Inverted or invalid calendar dates are now
+   * rejected with 400 instead of silently returning empty/invalid results.
+   */
+  private resolvePeriodBounds(
     startDateStr?: string,
     endDateStr?: string,
-  ): { start?: Date; end?: Date } {
-    let start: Date | undefined;
-    let end: Date | undefined;
-
-    if (startDateStr) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) {
-        start = new Date(`${startDateStr}T00:00:00.000-06:00`);
-      } else {
-        start = new Date(startDateStr);
+  ): ResolvedReportingBounds {
+    try {
+      return resolveReportingBounds(startDateStr, endDateStr);
+    } catch (error) {
+      if (error instanceof ReportingPeriodValidationError) {
+        throw new BadRequestException(error.message);
       }
+      throw error;
     }
-
-    if (endDateStr) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(endDateStr)) {
-        end = new Date(`${endDateStr}T23:59:59.999-06:00`);
-      } else {
-        end = new Date(endDateStr);
-      }
-    }
-
-    return { start, end };
   }
 
   private parseDayRange(dateStr?: string): {
@@ -446,19 +708,33 @@ export class SalesReportsService {
     start: Date;
     end: Date;
   } {
-    let target = dateStr;
-    if (!target) {
-      target = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Managua',
-      }).format(new Date());
+    const requested = dateStr?.trim();
+    let dateKey: string;
+    if (!requested) {
+      dateKey = currentLocalDateKey();
+    } else {
+      // Legacy tolerance: embedded timestamps were truncated at the 'T'.
+      const candidate = requested.split('T')[0];
+      try {
+        dateKey = parseLocalDateKey(candidate);
+      } catch (error) {
+        if (error instanceof ReportingPeriodValidationError) {
+          throw new BadRequestException(error.message);
+        }
+        throw error;
+      }
     }
 
-    const cleanDate = target.split('T')[0];
-    const start = new Date(`${cleanDate}T00:00:00.000-06:00`);
-    const end = new Date(`${cleanDate}T23:59:59.999-06:00`);
+    const bounds = this.resolvePeriodBounds(dateKey, dateKey);
+    const start = bounds.startInclusiveUtc;
+    const end = bounds.endInclusiveUtc;
+    if (!start || !end) {
+      // Unreachable: a validated date key always resolves both bounds.
+      throw new Error(`Unresolvable day range for '${dateKey}'`);
+    }
 
     return {
-      dateStr: cleanDate,
+      dateStr: dateKey,
       start,
       end,
     };

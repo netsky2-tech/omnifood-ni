@@ -2496,6 +2496,37 @@ final migration54_55 = Migration(54, 55, (database) async {
   }
 });
 
+/// Batch 7 Slice 2 (PRD §21 / Architecture Spec §33.4 / AD-10): voluntary
+/// tip snapshot columns on `invoices`. Nullable and permanent: historical
+/// rows have no tip data and no backfill is permitted (#526 AC-11 — fiscal
+/// facts are never fabricated). The tip is NOT part of the taxable total
+/// (DGI INV-16.1); it is stored as issued and never recomputed.
+///
+/// Same guarded pattern as migration54_55 (SQLite has no ADD COLUMN IF NOT
+/// EXISTS), so the migration is safe to re-run; and the same sqlite_master
+/// guard (the fiscal table can legitimately be absent on synthetic legacy
+/// upgrade paths), so a v56 database without `invoices` completes with
+/// nothing to do — fresh installs create the columns from the
+/// Floor-generated DDL.
+final migration56_57 = Migration(56, 57, (database) async {
+  final invoicesTables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'invoices'",
+  );
+  if (invoicesTables.isEmpty) return;
+  final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+  final names = columns.map((column) => column['name'] as String).toSet();
+  Future<void> addTipColumn(String name) async {
+    if (!names.contains(name)) {
+      await database.execute('ALTER TABLE invoices ADD COLUMN $name REAL');
+    }
+  }
+
+  await addTipColumn('tip_amount_nio');
+  await addTipColumn('tip_amount_usd');
+  await addTipColumn('tip_percentage');
+  await addTipColumn('tip_eligible_base_nio');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2543,6 +2574,7 @@ final allMigrations = [
   migration53_54,
   migration54_55,
   migration55_56,
+  migration56_57,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

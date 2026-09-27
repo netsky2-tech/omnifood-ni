@@ -8,25 +8,41 @@ import {
   DataSource,
   EntityManager,
   FindOptionsWhere,
+  In,
   QueryFailedError,
   Repository,
 } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
 import {
+  RecipeOrigin,
   RecipePublicationState,
   RecipeSuggestionState,
   RecipeVersion,
 } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 import { Insumo } from './entities/insumo.entity';
-import { Product } from './entities/product.entity';
+import { Product, ProductType } from './entities/product.entity';
 import { UomConversion } from './entities/uom-conversion.entity';
 import { SyncRecipeVersionDocumentDto } from './dto/sync-recipe-version-document.dto';
+import { RecipeSuggestionListItemDto } from './dto/recipe-version-response.dto';
 import { UomConversionCalculator } from './uom-conversion-calculator';
 
 const SCALE_4 = 4;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 const round4 = (value: number): number => Number(value.toFixed(SCALE_4));
+
+// Issue #611: only product types the consumption side actually reads may
+// carry a recipe. The cloud recipe branch in SaleInventoryOutcomeService
+// admits exactly PREPARED | COMPOUND (SIMPLE yields noImpact without an
+// explicit insumo mapping), so this set is derived from the same ProductType
+// enum to keep the write-side guard and the read-side branch in agreement.
+// Single source of truth for the predicate remains the ProductType enum; if
+// the outcome service ever widens its branch, this constant must move with
+// it (ideally into a shared helper next to the entity).
+const RECIPE_ALLOWED_PRODUCT_TYPES: readonly ProductType[] = [
+  ProductType.COMPOUND,
+  ProductType.PREPARED,
+];
 
 export interface RecipeComponentInput {
   insumoId: string;
@@ -105,6 +121,14 @@ export class RecipeService {
       async (manager) => {
         const recipeVersionRepo = manager.getRepository(RecipeVersion);
         const recipeDetailRepo = manager.getRepository(RecipeDetail);
+
+        // Issue #611: type guard rides the same tenant-bound transaction as
+        // the write below — no unbound read, no check/write divergence window.
+        await this.assertProductTypeSupportsRecipe(
+          manager,
+          input.tenantId,
+          input.productId,
+        );
 
         const activeVersion = await recipeVersionRepo.findOne({
           where: {
@@ -213,6 +237,15 @@ export class RecipeService {
           return draft;
         }
 
+        // Issue #611: the draft is about to become the live recipe, so the
+        // product type is validated inside this same tenant-bound
+        // transaction, before the prior active version is deactivated.
+        await this.assertProductTypeSupportsRecipe(
+          manager,
+          tenantId,
+          draft.product_id,
+        );
+
         // Deactivate prior active version for this product
         const priorActive = await recipeVersionRepo.findOne({
           where: {
@@ -238,6 +271,78 @@ export class RecipeService {
         return recipeVersionRepo.save(draft);
       },
     );
+  }
+
+  async listPendingTemplateSuggestions(
+    tenantId: string,
+  ): Promise<RecipeSuggestionListItemDto[]> {
+    // #523 T4: the review step's read side. Template suggestions are recipe
+    // versions with origin INDUSTRY_TEMPLATE still in DRAFT state; without
+    // this list there is no way to obtain a recipeVersionId, so the publish
+    // route is unreachable from a UI. Every read rides the tenant-bound
+    // transaction and carries the tenant_id predicate (defense in depth
+    // under FORCE RLS), so another tenant's rows can never leak.
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      this.loadPendingSuggestions(manager, tenantId),
+    );
+  }
+
+  private async loadPendingSuggestions(
+    manager: EntityManager,
+    tenantId: string,
+  ): Promise<RecipeSuggestionListItemDto[]> {
+    const recipeVersionRepo = manager.getRepository(RecipeVersion);
+    const recipeDetailRepo = manager.getRepository(RecipeDetail);
+
+    const drafts = await recipeVersionRepo.find({
+      where: {
+        tenant_id: tenantId,
+        origin: RecipeOrigin.INDUSTRY_TEMPLATE,
+        publication_state: RecipePublicationState.DRAFT,
+      },
+      order: { created_at: 'DESC' },
+    });
+
+    if (drafts.length === 0) {
+      return [];
+    }
+
+    const draftIds = drafts.map((draft) => draft.id);
+    const draftProductIds = [...new Set(drafts.map((d) => d.product_id))];
+
+    const details = await recipeDetailRepo.find({
+      where: { tenant_id: tenantId, recipe_version_id: In(draftIds) },
+    });
+    const componentCounts = new Map<string, number>();
+    for (const detail of details) {
+      componentCounts.set(
+        detail.recipe_version_id,
+        (componentCounts.get(detail.recipe_version_id) ?? 0) + 1,
+      );
+    }
+
+    const activePublished = await recipeVersionRepo.find({
+      where: {
+        tenant_id: tenantId,
+        product_id: In(draftProductIds),
+        is_active: true,
+        publication_state: RecipePublicationState.PUBLISHED,
+      },
+    });
+    const productsWithActivePublished = new Set(
+      activePublished.map((version) => version.product_id),
+    );
+
+    return drafts.map((draft) => ({
+      recipeVersionId: draft.id,
+      productId: draft.product_id,
+      productName: draft.product_name ?? '',
+      versionNumber: draft.version_number,
+      componentCount: componentCounts.get(draft.id) ?? 0,
+      hasActivePublishedVersion: productsWithActivePublished.has(
+        draft.product_id,
+      ),
+    }));
   }
 
   async getSnapshot(
@@ -587,6 +692,42 @@ export class RecipeService {
       return null;
     }
     return parsed;
+  }
+
+  /**
+   * Issue #611: a recipe version must never become live on a product no
+   * consumption branch reads. Both consumption branches key off
+   * `product.product_type`; only PREPARED | COMPOUND reach the recipe branch
+   * in SaleInventoryOutcomeService. Must be called inside the caller's
+   * tenant-bound transaction so the check and the write see the same data.
+   *
+   * A missing product row preserves the pre-existing behaviour (the callers
+   * never treated absence as an error here); only an existing row with a
+   * non-recipe type is rejected.
+   *
+   * The message is operator-facing UI text (neutral Spanish, usted): it names
+   * the product and points to the catalog fix. It must never be machine-read
+   * (no reasonCode, invoice field, or snapshot payload).
+   */
+  private async assertProductTypeSupportsRecipe(
+    manager: EntityManager,
+    tenantId: string,
+    productId: string,
+  ): Promise<void> {
+    const product = await manager.getRepository(Product).findOne({
+      where: { id: productId, tenant_id: tenantId },
+      select: { id: true, name: true, product_type: true },
+    });
+
+    if (!product) {
+      return;
+    }
+
+    if (!RECIPE_ALLOWED_PRODUCT_TYPES.includes(product.product_type)) {
+      throw new BadRequestException(
+        `El producto "${product.name}" es de tipo ${product.product_type} y no admite recetas: una receta requiere un producto de tipo Compuesto o Preparado. Corrija el tipo del producto en Catálogo → tipo de producto.`,
+      );
+    }
   }
 
   private async assertProductExistsForTenant(

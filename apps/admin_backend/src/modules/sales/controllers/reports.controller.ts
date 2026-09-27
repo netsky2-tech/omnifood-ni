@@ -20,6 +20,8 @@ import { SalesExportService } from '../services/sales-export.service';
 import {
   CashierPerformanceQueryDto,
   CashierPerformanceReportDto,
+  DailySeriesQueryDto,
+  DailySeriesReportDto,
   HourlySalesQueryDto,
   HourlySalesReportDto,
   SalesDashboardQueryDto,
@@ -59,6 +61,15 @@ export class ReportsController {
     @Query() query: SalesDashboardQueryDto,
   ): Promise<SalesDashboardReportDto> {
     return this.salesReportsService.getDashboard(tenantId, query);
+  }
+
+  @Get('dashboard/daily-series')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getDashboardDailySeries(
+    @GetTenantId() tenantId: string,
+    @Query() query: DailySeriesQueryDto,
+  ): Promise<DailySeriesReportDto> {
+    return this.salesReportsService.getDashboardDailySeries(tenantId, query);
   }
 
   @Get('hourly-sales')

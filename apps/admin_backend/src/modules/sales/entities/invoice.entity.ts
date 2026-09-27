@@ -142,6 +142,46 @@ export class Invoice {
   @Column({ name: 'local_issue_date', type: 'date', nullable: true })
   localIssueDate?: string | null;
 
+  // Batch 7 Slice 1: POS-captured tips (PRD §21, AD-10). Nullable with no
+  // default: NULL means "unknown / legacy pre-remediation" — historical
+  // invoices are never backfilled to 0 (DGI: fiscal rows are never
+  // rewritten).
+  @Column({
+    name: 'tip_amount_nio',
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
+  tipAmountNio?: number | null;
+
+  @Column({
+    name: 'tip_amount_usd',
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
+  tipAmountUsd?: number | null;
+
+  @Column({
+    name: 'tip_percentage',
+    type: 'numeric',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+  })
+  tipPercentage?: number | null;
+
+  @Column({
+    name: 'tip_eligible_base_nio',
+    type: 'numeric',
+    precision: 12,
+    scale: 2,
+    nullable: true,
+  })
+  tipEligibleBaseNio?: number | null;
+
   @UpdateDateColumn({ type: 'timestamptz' })
   updated_at: Date;
 }
