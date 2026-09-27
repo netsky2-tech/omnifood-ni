@@ -9,6 +9,7 @@ import {
 import {
   PRODUCT_TYPES,
   type ProductType,
+  type StoredProductType,
   type Product,
   type CreateProductInput,
 } from "./product-types";
@@ -34,6 +35,28 @@ import { EmptyState } from "@/components/ui/empty-state";
 type TabId = ProductType;
 
 const TABS: { id: TabId; label: string }[] = PRODUCT_TYPES;
+
+/** Reuses PRODUCT_TYPES labels; only the legacy stored value needs its own honest label. */
+function storedTypeLabel(type: StoredProductType): string {
+  return (
+    PRODUCT_TYPES.find((t) => t.id === type)?.label ?? "Preparado (tipo heredado)"
+  );
+}
+
+/**
+ * Types whose recipe consumes ingredients and moves stock on sale, mirroring
+ * the backend consumption effect set in
+ * `apps/admin_backend/src/modules/inventory/sale-inventory-outcome.service.ts`.
+ * Editing a product OUT of this set orphans its recipe (it stops consuming
+ * ingredients and stops moving stock), so it requires explicit confirmation —
+ * regardless of which non-recipe type is selected as the destination.
+ */
+const RECIPE_BEARING_TYPES = ["COMPOUND", "PREPARED"] as const;
+type RecipeBearingType = (typeof RECIPE_BEARING_TYPES)[number];
+
+function isRecipeBearingType(type: StoredProductType): type is RecipeBearingType {
+  return (RECIPE_BEARING_TYPES as readonly string[]).includes(type);
+}
 
 function ProductTable({
   productType,
@@ -230,6 +253,11 @@ function ProductDialog({
   const [isPerishable, setIsPerishable] = useState(
     product?.is_perishable ?? false,
   );
+  const [editType, setEditType] = useState<StoredProductType>(
+    product?.product_type ?? productType,
+  );
+  const [awaitingTypeChangeConfirm, setAwaitingTypeChangeConfirm] =
+    useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -239,7 +267,8 @@ function ProductDialog({
       uom !== (product?.uom ?? "") ||
       categoryCode !== (product?.category_code ?? "") ||
       sellPrice !== (product ? toFiniteNumber(product.sellPrice) : 0) ||
-      isPerishable !== (product?.is_perishable ?? false)
+      isPerishable !== (product?.is_perishable ?? false) ||
+      editType !== (product?.product_type ?? productType)
     : name.trim() !== "" ||
       uom.trim() !== "" ||
       categoryCode.trim() !== "" ||
@@ -259,8 +288,16 @@ function ProductDialog({
 
   const isSubmittingRef = useRef(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Leaving the recipe-bearing set orphans the recipe: it stops consuming
+  // ingredients and stops moving stock. Require explicit confirmation before
+  // that reaches the backend, for ANY destination outside the set.
+  const isDestructiveTypeChange =
+    isEdit &&
+    !!product &&
+    isRecipeBearingType(product.product_type) &&
+    !isRecipeBearingType(editType);
+
+  const runSubmit = async () => {
     if (isPending || isSubmittingRef.current) return;
     isSubmittingRef.current = true;
     setError(null);
@@ -272,6 +309,7 @@ function ProductDialog({
           input: {
             name: name.trim(),
             uom: uom.trim(),
+            product_type: editType,
             category_code: categoryCode || undefined,
             sellPrice,
             is_perishable: isPerishable,
@@ -312,6 +350,26 @@ function ProductDialog({
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isPending || isSubmittingRef.current) return;
+    if (isDestructiveTypeChange && !awaitingTypeChangeConfirm) {
+      setAwaitingTypeChangeConfirm(true);
+      return;
+    }
+    // While awaiting confirmation the primary submit path is inert: a second
+    // click on "Guardar" or an Enter keypress must never apply the destructive
+    // change. Only the explicit "Confirmar y guardar" action may submit it.
+    if (isDestructiveTypeChange) return;
+    await runSubmit();
+  };
+
+  const confirmTypeChangeAndSubmit = async () => {
+    if (isPending || isSubmittingRef.current) return;
+    setAwaitingTypeChangeConfirm(false);
+    await runSubmit();
+  };
+
   return (
     <Dialog
       open={open}
@@ -331,7 +389,7 @@ function ProductDialog({
           <DialogTitle>{isEdit ? "Editar Producto" : "Nuevo Producto"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Actualice los precios, UOM o categoría del producto."
+              ? "Actualice el tipo, los precios, la UOM o la categoría del producto."
               : "Defina los detalles del producto para ventas o compras."}
           </DialogDescription>
         </DialogHeader>
@@ -399,6 +457,36 @@ function ProductDialog({
             </div>
           </div>
 
+          {isEdit && (
+            <div>
+              <label
+                htmlFor="product_type_edit"
+                className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
+                Tipo de Producto
+              </label>
+              <select
+                id="product_type_edit"
+                value={editType}
+                onChange={(e) => {
+                  setEditType(e.target.value as StoredProductType);
+                  setAwaitingTypeChangeConfirm(false);
+                }}
+                disabled={isPending}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
+              >
+                {PRODUCT_TYPES.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+                {editType === "PREPARED" && (
+                  <option value="PREPARED">Preparado (tipo heredado)</option>
+                )}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Precio de Venta (C$)
@@ -431,6 +519,38 @@ function ProductDialog({
             </label>
           </div>
 
+          {isEdit && awaitingTypeChangeConfirm && isDestructiveTypeChange && product && (
+            <div className="rounded-md border border-destructive/20 bg-destructive-50 p-3 space-y-2">
+              <p className="text-xs font-medium text-destructive">
+                Está cambiando el tipo de "{name.trim()}" de{" "}
+                {storedTypeLabel(product.product_type)} a{" "}
+                {storedTypeLabel(editType)}. Al guardar, la receta de este
+                producto dejará de consumir ingredientes y el producto dejará
+                de mover inventario automáticamente.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={confirmTypeChangeAndSubmit}
+                  disabled={isPending}
+                >
+                  Confirmar y guardar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAwaitingTypeChangeConfirm(false)}
+                  disabled={isPending}
+                >
+                  Volver
+                </Button>
+              </div>
+            </div>
+          )}
+
           <DialogFooter className="pt-3">
             <Button
               type="button"
@@ -443,7 +563,9 @@ function ProductDialog({
             <Button
               type="submit"
               loading={isPending}
-              disabled={isPending}
+              disabled={
+                isPending || (isDestructiveTypeChange && awaitingTypeChangeConfirm)
+              }
             >
               {isEdit ? "Guardar" : "Crear"}
             </Button>
