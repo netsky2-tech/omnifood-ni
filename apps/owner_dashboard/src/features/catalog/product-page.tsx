@@ -8,6 +8,7 @@ import {
 } from "./use-product";
 import {
   PRODUCT_TYPES,
+  CREATE_TYPE_ANSWERS,
   type ProductType,
   type StoredProductType,
   type Product,
@@ -226,11 +227,15 @@ function ProductDialog({
   product,
   open,
   onClose,
+  onCreated,
 }: {
   productType: ProductType;
   product?: Product;
   open: boolean;
   onClose: () => void;
+  /** Issue #618 (C2): called with the created type so the page can switch
+   * to the tab that shows the new product. Display state only. */
+  onCreated?: (type: ProductType) => void;
 }) {
   const isEdit = !!product;
   const createMutation = useCreateProduct();
@@ -256,6 +261,12 @@ function ProductDialog({
   const [editType, setEditType] = useState<StoredProductType>(
     product?.product_type ?? productType,
   );
+  // Issue #618: creation must ask whether the item is prepared with
+  // ingredients instead of inheriting the active tab's type. No default:
+  // `null` means unanswered, which blocks submit until answered.
+  const [createTypeAnswer, setCreateTypeAnswer] = useState<ProductType | null>(
+    null,
+  );
   const [awaitingTypeChangeConfirm, setAwaitingTypeChangeConfirm] =
     useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -273,7 +284,8 @@ function ProductDialog({
       uom.trim() !== "" ||
       categoryCode.trim() !== "" ||
       sellPrice !== 0 ||
-      isPerishable !== false;
+      isPerishable !== false ||
+      createTypeAnswer !== null;
 
   const handleAttemptClose = () => {
     if (isPending) return;
@@ -321,15 +333,20 @@ function ProductDialog({
           description: `"${name.trim()}" se actualizó exitosamente.`,
         });
       } else {
+        // Handler-level refusal (issue #618): the disabled button is not the
+        // boundary — creation without an answer must be impossible from any
+        // submit path. The type comes from the answer, never from the tab.
+        if (!createTypeAnswer) return;
         const input: CreateProductInput = {
           name: name.trim(),
           uom: uom.trim(),
-          product_type: productType,
+          product_type: createTypeAnswer,
           category_code: categoryCode || undefined,
           sellPrice,
           is_perishable: isPerishable,
         };
         await createMutation.mutateAsync(input);
+        onCreated?.(createTypeAnswer);
         toast({
           variant: "success",
           title: "Producto creado",
@@ -353,6 +370,10 @@ function ProductDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isPending || isSubmittingRef.current) return;
+    // Issue #618: refuse creation while the question is unanswered, on any
+    // submit path (click is already blocked by the disabled button; this is
+    // the second layer, matching #617's discipline).
+    if (!isEdit && !createTypeAnswer) return;
     if (isDestructiveTypeChange && !awaitingTypeChangeConfirm) {
       setAwaitingTypeChangeConfirm(true);
       return;
@@ -401,6 +422,34 @@ function ProductDialog({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+          {!isEdit && (
+            <fieldset className="space-y-2" disabled={isPending}>
+              <legend className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                ¿Este ítem se prepara con ingredientes?
+              </legend>
+              {CREATE_TYPE_ANSWERS.map((opt) => (
+                <div key={opt.id} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    id={`create_type_${opt.id}`}
+                    name="create_type_question"
+                    value={opt.id}
+                    checked={createTypeAnswer === opt.id}
+                    onChange={() => setCreateTypeAnswer(opt.id)}
+                    disabled={isPending}
+                    className="h-4 w-4 border-border text-primary focus:ring-primary cursor-pointer disabled:opacity-50"
+                  />
+                  <label
+                    htmlFor={`create_type_${opt.id}`}
+                    className="text-xs sm:text-sm text-foreground cursor-pointer"
+                  >
+                    {opt.answer}
+                  </label>
+                </div>
+              ))}
+            </fieldset>
+          )}
+
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Nombre *
@@ -564,7 +613,9 @@ function ProductDialog({
               type="submit"
               loading={isPending}
               disabled={
-                isPending || (isDestructiveTypeChange && awaitingTypeChangeConfirm)
+                isPending ||
+                (!isEdit && createTypeAnswer === null) ||
+                (isDestructiveTypeChange && awaitingTypeChangeConfirm)
               }
             >
               {isEdit ? "Guardar" : "Crear"}
@@ -742,6 +793,10 @@ export function ProductPage() {
           product={editingProduct}
           open={dialogOpen}
           onClose={handleCloseDialog}
+          // Issue #618 (C2): the list is filtered by exact product_type per
+          // tab, so after creating, land on the tab that shows the new
+          // product. Display state only — no extra request.
+          onCreated={setActiveTab}
         />
       )}
 

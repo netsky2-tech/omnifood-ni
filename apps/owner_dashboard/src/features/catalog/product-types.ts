@@ -14,6 +14,21 @@ export const PRODUCT_TYPES: { id: ProductType; label: string }[] = [
   { id: "VARIANT_PARENT", label: "Padre de Variantes" },
 ];
 
+/**
+ * Creation-time question (issue #618): maps an operator answer, phrased in
+ * business language, to the product type to create. No default: creation is
+ * blocked until the operator answers. `PREPARED` is intentionally absent —
+ * it is a legacy stored value only, never a destination (#615/#617).
+ */
+export const CREATE_TYPE_ANSWERS: { id: ProductType; answer: string }[] = [
+  { id: "COMPOUND", answer: "Sí, se prepara con ingredientes" },
+  { id: "SIMPLE", answer: "No, se compra y se revende tal cual" },
+  {
+    id: "VARIANT_PARENT",
+    answer: "Es un grupo de versiones del mismo ítem (por ejemplo por tamaño)",
+  },
+];
+
 export interface Product {
   id: string;
   tenant_id: string;

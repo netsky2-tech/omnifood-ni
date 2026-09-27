@@ -162,27 +162,10 @@ describe("Product type edit (issue #615)", () => {
     });
   });
 
-  it("create mode still takes the type from the active tab and shows no selector", async () => {
-    const user = userEvent.setup();
-    renderProductsPage();
-
-    await user.click(screen.getByText("+ Nuevo Producto"));
-    await screen.findByText("Nuevo Producto");
-
-    expect(screen.queryByLabelText("Tipo de Producto")).not.toBeInTheDocument();
-
-    await user.type(screen.getByPlaceholderText("Ej: Taza de Capuccino"), "Producto Nuevo");
-    const selects = screen.getAllByRole("combobox");
-    await user.selectOptions(selects[0]!, "un");
-    await user.click(screen.getByText("Crear"));
-
-    await waitFor(() => {
-      expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1);
-    });
-    const payload = mocks.createMutateAsync.mock.calls[0]![0];
-    expect(payload.product_type).toBe("SIMPLE");
-  });
-
+  // The former case "create mode still takes the type from the active tab and
+  // shows no selector" was removed in #618: it pinned #615's now-superseded
+  // clause that create inherits the active tab's type. Its coverage (with the
+  // tab-irrelevance assertion) lives in product-type-create.test.tsx.
   it("changing COMPOUND to SIMPLE requires explicit confirmation before submitting", async () => {
     vi.mocked(useProducts).mockReturnValue({
       data: [makeProduct()],
