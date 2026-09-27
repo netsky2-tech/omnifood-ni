@@ -15,7 +15,6 @@
  * non-finite counts degrade to null (the downstream margin gate closes); an
  * unknown reason code is filtered out instead of ever reaching the UI.
  */
-import { toFiniteNumber } from "@/lib/numeric";
 
 export type InventoryCoverageStatus = "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
 
@@ -56,18 +55,38 @@ export interface InventoryCoverage {
 
 /**
  * Fail-closed normalization of the wire `InventoryCoverageDto`. Returns null
- * when the payload cannot be trusted (unknown/absent status, non-finite
- * counts) so consumers never treat garbage as COMPLETE.
+ * when the payload cannot be trusted (unknown/absent status, non-numeric or
+ * non-finite counts) so consumers never treat garbage as COMPLETE.
+ *
+ * The counts are validated explicitly rather than coerced: `Number(null)` and
+ * `Number("")` are both `0`, so coercion would accept a malformed wire as
+ * `COMPLETE 0/0` — an empty-but-authoritative-looking coverage that OPENS the
+ * ratio gate. An absent or unparseable count means "we do not know how many",
+ * which must close the gate. Numeric strings stay valid because Postgres
+ * `numeric` reaches the client as text.
  */
+function toKnownCount(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && Number.isInteger(value) && value >= 0 ? value : null;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 0
+      ? parsed
+      : null;
+  }
+  return null;
+}
+
 export function normalizeInventoryCoverage(raw: unknown): InventoryCoverage | null {
   if (typeof raw !== "object" || raw === null) return null;
   const r = raw as Record<string, unknown>;
   if (!INVENTORY_COVERAGE_STATUSES.includes(r.status as InventoryCoverageStatus)) {
     return null;
   }
-  const costed = toFiniteNumber(r.costedSalesCount, Number.NaN);
-  const uncosted = toFiniteNumber(r.uncostedSalesCount, Number.NaN);
-  if (!Number.isFinite(costed) || !Number.isFinite(uncosted)) return null;
+  const costed = toKnownCount(r.costedSalesCount);
+  const uncosted = toKnownCount(r.uncostedSalesCount);
+  if (costed === null || uncosted === null) return null;
   const reasonCodes = Array.isArray(r.reasonCodes)
     ? r.reasonCodes.filter((code): code is InventoryCoverageReasonCode =>
         INVENTORY_COVERAGE_REASON_CODES.includes(code as InventoryCoverageReasonCode),
@@ -75,8 +94,8 @@ export function normalizeInventoryCoverage(raw: unknown): InventoryCoverage | nu
     : [];
   return {
     status: r.status as InventoryCoverageStatus,
-    costedSalesCount: Math.trunc(costed),
-    uncostedSalesCount: Math.trunc(uncosted),
+    costedSalesCount: costed,
+    uncostedSalesCount: uncosted,
     reasonCodes,
   };
 }

@@ -15,7 +15,7 @@ import { useDashboardKpis } from "./use-dashboard-kpis";
 import type { MarginGate } from "./dashboard-types";
 import { useCanViewInventoryCost } from "@/features/auth/permissions";
 import type { ComparisonPeriod, LocalDateRange } from "./domain/comparison-period";
-import type { InventoryCoverageReasonCode } from "@/features/inventory/inventory-types";
+import { marginGateNote } from "./coverage-notes";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -122,42 +122,6 @@ function SkeletonStrip() {
         <div key={i} className="h-28 animate-pulse rounded-lg border border-border bg-muted/40" />
       ))}
     </div>
-  );
-}
-
-/**
- * "Sin costo" note copy (review round 2 P0 #4), keyed to the backend
- * coverage reason codes and resolved in backend emission order (first known
- * code wins — MISSING_INVENTORY_IMPACT and NO_EXPLICIT_INSUMO_MAPPING lead
- * the list server-side). Quiet and actionable: it points at insumo mapping,
- * terminal priming, or purchase-cost recording when that is the real fix.
- * A raw reason-code string is never rendered; unknown/empty codes degrade to
- * the generic copy.
- */
-const MARGIN_NOTE_BY_REASON: Record<InventoryCoverageReasonCode, string> = {
-  NO_EXPLICIT_INSUMO_MAPPING:
-    "Sin costo: hay productos sin insumos mapeados. Mapea los insumos del producto para incluir su costo.",
-  MISSING_INVENTORY_IMPACT:
-    "Sin costo: el impacto de inventario de algunas ventas está pendiente. Sincroniza el terminal para completarlo.",
-  MISSING_COST_BASIS:
-    "Sin costo: algunas ventas no tienen costo registrado en inventario.",
-  // WU12: the movement chain is intact — the insumo simply has no purchase
-  // cost yet (averageCost defaults to 0). The fix is recording purchases.
-  ZERO_COST_BASIS:
-    "Sin costo: algunos insumos todavía no tienen costo de compra registrado. Registra el costo de compra de esos insumos para calcular el margen.",
-  UNRESOLVED_SOURCE_DOCUMENT:
-    "Sin costo: no se pudo resolver el documento de origen de algunas ventas.",
-  INCOMPLETE_SYNC:
-    "Sin costo: faltan datos de inventario por sincronizar.",
-};
-
-function marginGateNote(reasonCodes: InventoryCoverageReasonCode[]): string {
-  const known = reasonCodes.find((code) =>
-    Object.prototype.hasOwnProperty.call(MARGIN_NOTE_BY_REASON, code),
-  );
-  return (
-    (known && MARGIN_NOTE_BY_REASON[known]) ||
-    "Sin costo: no hay datos de costo suficientes para este periodo."
   );
 }
 

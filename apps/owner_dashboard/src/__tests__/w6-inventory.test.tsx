@@ -70,6 +70,28 @@ describe("normalizeInventoryCoverage", () => {
     expect(normalizeInventoryCoverage({ status: "COMPLETE" })).toBeNull();
   });
 
+  it("rejects explicit null/empty-string counts instead of coercing them to 0 (finding D2)", () => {
+    // Number(null) and Number("") are both 0, so a coercion-based guard turns
+    // a malformed wire into "COMPLETE 0/0" — an authoritative-looking empty
+    // coverage that OPENS the ratio gate. Fail closed means refusing it.
+    for (const bad of [null, "", " ", NaN, Infinity, true, {}, []]) {
+      const value = Number.isNaN(bad) ? NaN : bad;
+      expect(normalizeInventoryCoverage({ status: "COMPLETE", costedSalesCount: value, uncostedSalesCount: 0 }), String(value)).toBeNull();
+      expect(normalizeInventoryCoverage({ status: "COMPLETE", costedSalesCount: 1, uncostedSalesCount: value }), String(value)).toBeNull();
+    }
+  });
+
+  it("still accepts numeric-string counts — Postgres numeric arrives as text", () => {
+    const coverage = normalizeInventoryCoverage({
+      status: "PARTIAL",
+      costedSalesCount: "12",
+      uncostedSalesCount: "3",
+    });
+    expect(coverage).not.toBeNull();
+    expect(coverage?.costedSalesCount).toBe(12);
+    expect(coverage?.uncostedSalesCount).toBe(3);
+  });
+
   it("filters unknown reason codes instead of rendering them", () => {
     const coverage = normalizeInventoryCoverage({
       status: "PARTIAL",

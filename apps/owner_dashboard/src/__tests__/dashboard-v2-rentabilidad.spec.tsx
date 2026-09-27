@@ -355,3 +355,39 @@ describe("Flujos separados de ventas (wireframe §1:41–47)", () => {
     expect(screen.getByText(/No incluidas en ventas/)).toBeInTheDocument();
   });
 });
+
+describe("RentabilidadCard — PARTIAL coverage honesty (finding D1)", () => {
+  const PARTIAL_GATE: MarginGate = {
+    ratio: false,
+    delta: false,
+    amount: true,
+    gated: true,
+    reasonCodes: ["NO_EXPLICIT_INSUMO_MAPPING"],
+  };
+
+  it("PARTIAL keeps the amounts but states the margin is not the whole period", async () => {
+    mockKpis({ marginGate: PARTIAL_GATE });
+    mockCogs();
+    renderCard(
+      <RentabilidadCard
+        canViewCost
+        range={{ start: "2026-08-31", end: "2026-08-31" }}
+        netSalesNio={48520.5}
+        margin={SNAPSHOT.margin}
+        marginGate={PARTIAL_GATE}
+      />,
+    );
+
+    expect(await screen.findByText("C$18,740.00")).toBeInTheDocument();
+    // A PARTIAL margin is real but incomplete: it must never read as a
+    // finished measurement of the period.
+    expect(
+      screen.getByText(/Costo de ventas parcial: las ventas sin costo/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Mapea los insumos del producto/i),
+    ).toBeInTheDocument();
+    // The unavailable-only copy must not appear when amounts do render.
+    expect(screen.queryByText("Costo de ventas no disponible")).not.toBeInTheDocument();
+  });
+});
