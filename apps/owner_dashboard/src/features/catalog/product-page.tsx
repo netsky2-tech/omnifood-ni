@@ -357,6 +357,10 @@ function ProductDialog({
       setAwaitingTypeChangeConfirm(true);
       return;
     }
+    // While awaiting confirmation the primary submit path is inert: a second
+    // click on "Guardar" or an Enter keypress must never apply the destructive
+    // change. Only the explicit "Confirmar y guardar" action may submit it.
+    if (isDestructiveTypeChange) return;
     await runSubmit();
   };
 
@@ -559,7 +563,9 @@ function ProductDialog({
             <Button
               type="submit"
               loading={isPending}
-              disabled={isPending}
+              disabled={
+                isPending || (isDestructiveTypeChange && awaitingTypeChangeConfirm)
+              }
             >
               {isEdit ? "Guardar" : "Crear"}
             </Button>

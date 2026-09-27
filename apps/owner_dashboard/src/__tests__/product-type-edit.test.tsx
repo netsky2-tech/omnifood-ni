@@ -207,6 +207,81 @@ describe("Product type edit (issue #615)", () => {
     expect(payload.input.product_type).toBe("SIMPLE");
   });
 
+  // A confirmation gate that a second click on the primary button can bypass
+  // is not a gate: while awaiting confirmation the primary submit path must be
+  // inert, and only "Confirmar y guardar" may apply the destructive change.
+  it("does not apply the destructive change when Guardar is clicked a second time while awaiting confirmation", async () => {
+    vi.mocked(useProducts).mockReturnValue({
+      data: [makeProduct()],
+      isLoading: false,
+      error: null,
+    } as any);
+    const user = await openEditDialog("Plato del Día");
+
+    await user.selectOptions(screen.getByLabelText("Tipo de Producto"), "SIMPLE");
+
+    // First click: only shows the warning, no submit.
+    await user.click(screen.getByText("Guardar"));
+    expect(mocks.updateMutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByText(/dejará de consumir ingredientes/)).toBeInTheDocument();
+
+    // Second click on the primary button must NOT bypass the confirmation.
+    await user.click(screen.getByText("Guardar"));
+    expect(mocks.updateMutateAsync).not.toHaveBeenCalled();
+
+    await user.click(screen.getByText("Confirmar y guardar"));
+    await waitFor(() => {
+      expect(mocks.updateMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    const payload = mocks.updateMutateAsync.mock.calls[0]![0];
+    expect(payload.input.product_type).toBe("SIMPLE");
+  });
+
+  // Pins the handler-level refusal, not the button's disabled attribute: an
+  // Enter/stray form submit reaches handleSubmit even when Guardar is disabled
+  // (a disabled button only swallows clicks), so the
+  // `if (isDestructiveTypeChange) return;` guard is the last line of defense
+  // on this path. This test fails if that line is removed.
+  it("does not apply the destructive change when the form is submitted from the keyboard path while awaiting confirmation", async () => {
+    vi.mocked(useProducts).mockReturnValue({
+      data: [makeProduct()],
+      isLoading: false,
+      error: null,
+    } as any);
+    const user = await openEditDialog("Plato del Día");
+
+    await user.selectOptions(screen.getByLabelText("Tipo de Producto"), "SIMPLE");
+
+    // First submit: only shows the warning, no update.
+    await user.click(screen.getByText("Guardar"));
+    expect(mocks.updateMutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByText(/dejará de consumir ingredientes/)).toBeInTheDocument();
+
+    // Keyboard path, not a click on Guardar: Enter in a focused text input
+    // implicitly submits the form in a real browser regardless of the (now
+    // disabled) default button. jsdom does not implement implicit submission
+    // from keyboard events, so the Enter press alone is a no-op here; drive the
+    // form's native submit exactly as the browser would have via requestSubmit(),
+    // which fires the submit event -> React onSubmit -> handleSubmit without
+    // any click on the disabled button.
+    const nameInput = screen.getByPlaceholderText("Ej: Taza de Capuccino");
+    nameInput.focus();
+    await user.keyboard("{Enter}");
+    const form = nameInput.closest("form");
+    expect(form).not.toBeNull();
+    form!.requestSubmit();
+
+    expect(mocks.updateMutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByText(/dejará de consumir ingredientes/)).toBeInTheDocument();
+
+    await user.click(screen.getByText("Confirmar y guardar"));
+    await waitFor(() => {
+      expect(mocks.updateMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    const payload = mocks.updateMutateAsync.mock.calls[0]![0];
+    expect(payload.input.product_type).toBe("SIMPLE");
+  });
+
   it("changing COMPOUND to VARIANT_PARENT also requires confirmation before submitting", async () => {
     vi.mocked(useProducts).mockReturnValue({
       data: [makeProduct()],
@@ -234,7 +309,10 @@ describe("Product type edit (issue #615)", () => {
     expect(payload.input.product_type).toBe("VARIANT_PARENT");
   });
 
-  it("a stored PREPARED product renders honestly and saves with its type unchanged", async () => {
+  // Component-level round-trip only: a stored PREPARED row is not reachable
+  // in production (TABS has no PREPARED entry and the backend filters per tab
+  // by exact type), so its edit dialog can never open — tracked separately.
+  it("round-trips a stored PREPARED value through the dialog without coercion (component-level, not proven reachable in production)", async () => {
     vi.mocked(useProducts).mockReturnValue({
       data: [makeProduct({ product_type: "PREPARED" })],
       isLoading: false,
