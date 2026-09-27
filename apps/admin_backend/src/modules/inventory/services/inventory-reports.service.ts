@@ -66,6 +66,24 @@ const COVERAGE_REASON_CODE_ORDER: InventoryCoverageReasonCode[] = [
 //   so qty = 0 is never 'costed' and contributes no 'zero' signal either.
 type SaleCostEvidence = 'costed' | 'zero' | 'missing';
 
+/**
+ * Read the reason code the sale-inventory pipeline stored on the invoice.
+ * The column is a nullable jsonb (`Invoice.inventoryOutcomeReason`) that has
+ * been written as `{ code, lines }`; a bare string is tolerated because the
+ * entity type allows it. Returns null when nothing was recorded — absence of
+ * a recorded reason is NOT evidence of a mapping gap.
+ */
+const recordedInventoryReasonCode = (invoice: Invoice): string | null => {
+  const raw = invoice.inventoryOutcomeReason;
+  if (!raw) return null;
+  if (typeof raw === 'string') return raw.trim() || null;
+  if (typeof raw === 'object') {
+    const code = (raw as Record<string, unknown>).code;
+    return typeof code === 'string' && code.trim() !== '' ? code.trim() : null;
+  }
+  return null;
+};
+
 const classifySaleCostEvidence = (
   movements: InventoryMovement[],
 ): SaleCostEvidence => {
@@ -364,7 +382,18 @@ export class InventoryReportsService {
         // uncosted under its own reason code until someone maps the
         // product's insumos or an explicit domain declaration exists.
         uncostedSalesCount++;
-        coverageReasons.add('NO_EXPLICIT_INSUMO_MAPPING');
+        // Finding D6: the reason code comes from the fact the sale pipeline
+        // recorded on the invoice, not from the outcome string alone. The same
+        // outcome is stamped for a sale with no line items at all
+        // (sale-inventory-outcome.service.ts:330, `reason: null`), where
+        // "map the product's insumos" is not a fix anyone can perform. The
+        // trust decision is unchanged — both are uncosted — only the
+        // remediation guidance differs.
+        coverageReasons.add(
+          recordedInventoryReasonCode(invoice) === 'NO_EXPLICIT_INSUMO_MAPPING'
+            ? 'NO_EXPLICIT_INSUMO_MAPPING'
+            : 'MISSING_COST_BASIS',
+        );
       } else if (outcome === 'APPLIED_INVENTORY_PENDING') {
         // MISSING_PUBLISHED_RECIPE: inventory impact could not be computed
         // at sale time, so no authoritative cost exists for this sale.

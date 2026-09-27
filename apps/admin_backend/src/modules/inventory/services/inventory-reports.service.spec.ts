@@ -417,6 +417,89 @@ describe('InventoryReportsService', () => {
       });
     });
 
+    it('pins the coverage invoice read to tenant, window and non-canceled rows (finding D3)', async () => {
+      // Without this assertion a future edit that drops `inv.tenant_id` from
+      // the coverage read would keep every existing test green: the mock
+      // returns rows regardless of the WHERE clause. This is the only guard
+      // that the read stays inside the tenant scope.
+      insumoRepo.find.mockResolvedValue([]);
+      const emptyMovements: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(emptyMovements);
+      mockSaleInvoices([]);
+
+      await service.getCogsReport('tenant-42', '2026-08-01', '2026-08-31');
+
+      const invoiceQb = (invoiceRepo.createQueryBuilder as jest.Mock).mock.results[0]
+        .value as any;
+      const predicates = [
+        ...invoiceQb.where.mock.calls.map((c: any[]) => String(c[0])),
+        ...invoiceQb.andWhere.mock.calls.map((c: any[]) => String(c[0])),
+      ].join(' AND ');
+      expect(predicates).toContain('inv.tenant_id = :tenantId');
+      expect(predicates).toContain('inv.created_at BETWEEN :from AND :to');
+      expect(predicates).toContain('inv.is_canceled = FALSE');
+      expect(invoiceQb.where.mock.calls[0][1]).toEqual({ tenantId: 'tenant-42' });
+    });
+
+    it('labels an itemless APPLIED_NO_INVENTORY_IMPACT sale by its recorded reason, not by the outcome string (finding D6)', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-itemless',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
+          // sale-inventory-outcome.service.ts:330 short-circuits a sale with no
+          // line items to this outcome with reason: null. That is NOT a mapping
+          // gap — there is no product on the ticket to map — so telling the
+          // tenant to "map the insumos of the product" is wrong guidance.
+          inventoryOutcomeReason: null,
+        },
+      ]);
+      const emptyMovements: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(emptyMovements);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'UNAVAILABLE',
+        costedSalesCount: 0,
+        uncostedSalesCount: 1,
+        reasonCodes: ['MISSING_COST_BASIS'],
+      });
+    });
+
+    it('emits NO_EXPLICIT_INSUMO_MAPPING only when the invoice recorded that reason (finding D6)', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-mapping-gap',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
+          inventoryOutcomeReason: { code: 'NO_EXPLICIT_INSUMO_MAPPING', lines: ['line-1'] },
+        },
+      ]);
+      const emptyMovements: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(emptyMovements);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage?.reasonCodes).toEqual(['NO_EXPLICIT_INSUMO_MAPPING']);
+    });
+
     it('reports PARTIAL inventoryCoverage mixing costed APPLIED sales and unmapped APPLIED_NO_INVENTORY_IMPACT sales without moving the money fields (WU11)', async () => {
       insumoRepo.find.mockResolvedValue([
         {
