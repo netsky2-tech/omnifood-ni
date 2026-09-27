@@ -7,6 +7,7 @@ import { KpiStrip } from "./kpi-strip";
 import { useDashboardKpis } from "./use-dashboard-kpis";
 import { useSyncFreshness } from "./use-sync-freshness";
 import { TipsSummaryCard } from "./tips-summary";
+import { RentabilidadCard, useDashboardV2Report } from "./rentabilidad-card";
 
 // Batch 5b: the performance band (charts + recharts) lives in its own lazy
 // chunk so the KPI strip never waits on chart code (PRD §25.2 bundle
@@ -32,18 +33,25 @@ function PerformanceBandSkeleton() {
 
 import { formatLocalDate } from "@/lib/utils";
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("es-NI", {
-    style: "currency",
-    currency: "NIO",
-    minimumFractionDigits: 2,
-  }).format(amount);
-}
+// G2 (FR-FISCAL-03): quiet regime context for the dashboard header. Labels
+// are keyed strictly by the backend FiscalRegime enum values (FR-FISCAL-01);
+// an unknown regime produces no label at all.
+const FISCAL_REGIME_LABELS: Record<string, string> = {
+  CUOTA_FIJA: "Cuota Fija",
+  REGIMEN_GENERAL: "Régimen General",
+};
 
 function todayRange(): DateRangeValue {
   const iso = formatLocalDate(new Date());
   return { startDate: iso, endDate: iso };
 }
+
+// Review round 2 (WU5): the management band reflows between the two-card
+// grid (OWNER with the cost grant) and a single column (grant omitted).
+// Complete literal class strings on purpose — Tailwind only emits utilities
+// whose names appear verbatim in source.
+const MANAGEMENT_BAND_TWO_CARDS = "grid grid-cols-1 gap-6 lg:grid-cols-2";
+const MANAGEMENT_BAND_ONE_CARD = "grid grid-cols-1 gap-6";
 
 export function DashboardPage() {
   const [range, setRange] = useState<DateRangeValue>(todayRange);
@@ -52,11 +60,24 @@ export function DashboardPage() {
   // hook/cache the KpiStrip uses — one shared dashboard-v2 query, no extra
   // fetch. COGS reads keep the AG-06/AC-17 cost gate.
   const canViewCost = useCanViewInventoryCost();
-  const { snapshot } = useDashboardKpis(
+  const { snapshot, fiscal, isFiscalPending, isFiscalFailed, marginGate } = useDashboardKpis(
     { start: range.startDate, end: range.endDate },
     undefined,
     { canViewCost },
   );
+  // WU5 (FR-DISC-02): the Flujos card needs the period's approved
+  // pre-discount sales as the honest discount-rate denominator. Same query
+  // key as the strip's V2 report read, so react-query dedupes it — no extra
+  // fetch.
+  const v2Report = useDashboardV2Report(range.startDate, range.endDate);
+  // G2 (FR-FISCAL-03/04): the label exists only once the backend regime is
+  // confirmed. While pending, or when the fetch failed / the profile is
+  // unknown, no regime claim is rendered — an absent label is honest, a
+  // guessed one would contradict FR-FISCAL-04.
+  const regimeLabel =
+    !isFiscalPending && !isFiscalFailed && fiscal
+      ? FISCAL_REGIME_LABELS[fiscal.regime]
+      : undefined;
   // Dashboard V2 sync freshness (PRD §20, FR-SYNC-01..05): the badge shows
   // the real watermark-derived state; generatedAt stays technical metadata.
   const {
@@ -94,6 +115,12 @@ export function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
             Métricas clave de facturación y resumen de operaciones
+            {regimeLabel && (
+              <span data-testid="fiscal-regime-context">
+                {" · "}
+                Régimen fiscal: {regimeLabel}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
@@ -109,9 +136,10 @@ export function DashboardPage() {
       </div>
 
       {/* Dashboard V2 Batch 4: regime-aware executive KPI strip (FR-KPI-01..05,
-          FR-FISCAL-01..04). Legacy grossSales is no longer rendered as the
-          "Ventas Brutas" hero here; it remains in "Resumen de Ventas" below
-          while existing consumers migrate (arch spec §7.3). */}
+          FR-FISCAL-01..04). The legacy "Ventas Brutas" hero and the static
+          "Resumen de Ventas" card were retired in review round 2 (owner P2:
+          fully redundant); legacy grossSales fields remain on the wire only
+          for migration (arch spec §7.3). */}
       <KpiStrip
         range={{ start: range.startDate, end: range.endDate }}
       />
@@ -126,52 +154,35 @@ export function DashboardPage() {
           — the PaymentMixChart in the performance band above is now the single
           payment-composition surface (same paymentMethodsBreakdown, net of
           changeGiven, with original-currency USD slots and percent labels). */}
-      {/* Dashboard V2 Batch 7: "Flujos separados de ventas" bottom band
-          (wireframe §1 row 5) — tips live strictly outside the sales summary
-          (PRD §21.3) and the card is omitted when the tip data path has no
-          coverage (PRD §21.4). */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <TipsSummaryCard summary={snapshot?.tipsSummary ?? null} />
-        <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-card-foreground">
-            Resumen de Ventas
-          </h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Ventas Netas Gravables</span>
-              <span className="font-medium tabular-nums text-card-foreground">
-                {formatCurrency(data?.netTaxableSales ?? 0)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Impuestos</span>
-              <span className="font-medium tabular-nums text-card-foreground">
-                {formatCurrency(data?.totalTax ?? 0)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Descuentos</span>
-              <span className="font-medium tabular-nums text-destructive">
-                -{formatCurrency(data?.totalDiscounts ?? 0)}
-              </span>
-            </div>
-            <div className="border-t border-border pt-3">
-              <div className="flex items-center justify-between text-sm font-semibold">
-                <span className="text-foreground">Ventas Brutas</span>
-                <span className="tabular-nums text-foreground">
-                  {formatCurrency(data?.grossSales ?? 0)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Review round 2 (WU5): management band per the wireframe §1 bottom
+          rows — RENTABILIDAD (Margen Bruto breakdown, AC-17-gated; omitted
+          entirely without the cost grant so the band reflows without a hole)
+          next to the FLUJOS SEPARADOS DE VENTAS card (Descuentos on the
+          FR-DISC-02 pre-discount base + tips outside the sales total). */}
+      <div
+        data-testid="management-band"
+        className={canViewCost ? MANAGEMENT_BAND_TWO_CARDS : MANAGEMENT_BAND_ONE_CARD}
+      >
+        {canViewCost && (
+          <RentabilidadCard
+            canViewCost={canViewCost}
+            range={{ start: range.startDate, end: range.endDate }}
+            netSalesNio={snapshot?.netSalesNio ?? null}
+            margin={snapshot?.margin ?? null}
+            marginGate={marginGate}
+          />
+        )}
+        <TipsSummaryCard
+          summary={snapshot?.tipsSummary ?? null}
+          totalDiscountsNio={snapshot?.totalDiscountsNio ?? null}
+          preDiscountSalesNio={v2Report.data?.preDiscountSalesNio ?? null}
+        />
       </div>
 
-      {data?.startDate && data?.endDate && (
-        <p className="text-xs text-muted-foreground">
-          Periodo: {data.startDate} — {data.endDate}
-        </p>
-      )}
+      {/* Review round 2 (WU9): the old "Periodo:" footer was removed — it
+          restated the range the user controls in the date picker above, and
+          that picker trigger always renders "startDate — endDate" on screen,
+          so the visible period stays attributed without the duplicate. */}
     </div>
   );
 }

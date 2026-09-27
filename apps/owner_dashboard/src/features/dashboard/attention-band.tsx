@@ -5,15 +5,23 @@
  *
  * Isolation contract (FR-STATE-04/05): every signal owns its query state; a
  * failing signal degrades to a per-signal notice while the rest of the
- * section (and the page) keeps working. The healthy banner ("✓ Todo en
- * orden") only renders when every signal settled successfully and none is
- * critical or warning — a failed signal can never be asserted as healthy.
+ * section (and the page) keeps working. The panel is exceptions-only
+ * (PRD §19): it renders only actionable exception rows and hides entirely
+ * when every ready signal is healthy — there is no "todo bien" card. A
+ * failed signal is never presented as healthy: while any signal has errored,
+ * the panel stays mounted with its error rows, even with zero exceptions.
+ *
+ * Each row carries a quiet temporal-scope chip (`Actual` for current-state
+ * signals, `Período` for signals scoped to the selected page range) so the
+ * owner can tell the two time scopes apart. The chip is textual and muted —
+ * never color-only (PRD §28) — and must not compete with the severity glyph.
  */
 import { Link } from "react-router-dom";
 import {
   compareAttentionItems,
   useAttentionSignals,
   type AttentionItem,
+  type AttentionScope,
   type AttentionSeverity,
 } from "./use-attention-signals";
 import type { LocalDateRange } from "./domain/comparison-period";
@@ -28,6 +36,11 @@ const SEVERITY_TEXT: Record<AttentionSeverity, string> = {
   critical: "text-destructive",
   warning: "text-amber-600 dark:text-amber-400",
   info: "text-muted-foreground",
+};
+
+const SCOPE_LABELS: Record<AttentionScope, string> = {
+  current: "Actual",
+  period: "Período",
 };
 
 function AttentionRow({ item }: { item: AttentionItem }) {
@@ -51,13 +64,22 @@ function AttentionRow({ item }: { item: AttentionItem }) {
           <span className="block text-xs text-muted-foreground">{item.detail}</span>
         </span>
       </span>
-      <Link
-        to={item.href}
-        data-testid={`attention-link-${item.key}`}
-        className="mt-0.5 shrink-0 text-xs font-semibold text-primary underline-offset-2 hover:underline"
-      >
-        Ver →
-      </Link>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <span
+          data-testid={`attention-scope-${item.key}`}
+          title="Alcance temporal de la señal"
+          className="rounded border border-border px-1 py-px text-[10px] uppercase tracking-wide text-muted-foreground"
+        >
+          {SCOPE_LABELS[item.scope]}
+        </span>
+        <Link
+          to={item.href}
+          data-testid={`attention-link-${item.key}`}
+          className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+        >
+          Ver →
+        </Link>
+      </span>
     </li>
   );
 }
@@ -75,9 +97,14 @@ export function AttentionBand({ range }: AttentionBandProps) {
   const items = signals
     .flatMap((s) => (s.item ? [s.item] : []))
     .sort(compareAttentionItems);
-  const hasCriticalOrWarning = items.some(
-    (i) => i.severity === "critical" || i.severity === "warning",
-  );
+
+  // Zero exceptions and nothing failed → no panel at all. While a signal is
+  // still pending the panel stays (loading skeleton); while any signal has
+  // errored the panel stays with its error rows — a failed signal must never
+  // be presented as healthy (FR-STATE-04/05).
+  if (!isPending && items.length === 0 && !hasErrors) {
+    return null;
+  }
 
   return (
     <section
@@ -122,15 +149,6 @@ export function AttentionBand({ range }: AttentionBandProps) {
               </p>
             ))}
         </div>
-      )}
-
-      {!isPending && !hasErrors && !hasCriticalOrWarning && (
-        <p
-          data-testid="attention-healthy"
-          className="mt-3 text-sm font-medium text-secondary"
-        >
-          <span aria-hidden="true">✓</span> Todo en orden
-        </p>
       )}
     </section>
   );

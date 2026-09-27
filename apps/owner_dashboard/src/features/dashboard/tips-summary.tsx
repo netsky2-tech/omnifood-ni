@@ -1,20 +1,33 @@
 /**
- * Voluntary-tip summary card (Dashboard V2 Batch 7, PRD §21).
+ * "Flujos separados de ventas" card — Dashboard V2 management band.
  *
- * Authority:
+ * Review round 2 (WU5, owner decision): the former tips-only card became the
+ * flows card the wireframe §1 bottom row already drew (change #5 in §3).
+ * Descuentos moved here from the retired "Resumen de Ventas" card and is
+ * ALWAYS visible; the tips block renders only when the tip data path has
+ * coverage.
+ *
+ * Authorities:
+ * - PRD §13 FR-DISC-02: the discount rate's denominator is the approved
+ *   Pre-discount Sales (preDiscountSalesNio), NOT net sales — discounts come
+ *   off the pre-discount base, so the rate must be read against it. With no
+ *   usable base the rate degrades to an em-dash, never a fabricated percent.
  * - PRD §21.2 KPI set: Total Tips, Tipped Ticket Participation, Average Tip,
  *   Tip Rate (denominators fixed at sale time — never recomputed).
- * - PRD §21.3: tips are never merged into any sales figure; this card is the
- *   tips-only surface in the "Flujos separados de ventas" band
- *   (ui_wireframe_reference.md §1 row 5).
+ * - PRD §21.3: tips are never merged into any sales figure — the card states
+ *   it, not just implies it.
  * - PRD §21.4 (inapplicable profile): when the tip data path has no coverage
- *   in the period (legacy NULL rows / empty period / summary unavailable),
- *   the card is omitted entirely — zero placeholders are never rendered.
+ *   in the period, only the TIPS block is omitted (zero placeholders are
+ *   never rendered); the Descuentos row keeps the card alive.
  *
- * The applicability gate is data-driven (isTipsSummaryApplicable); the
- * backend tipCoverage metadata decides, so a genuine all-declined period
- * (full coverage, zero tips) still renders with real zeros while legacy
- * NULL-only periods render nothing.
+ * The export name and `tips-summary-card` test id are conserved on purpose:
+ * dashboard-v2-tips.spec.tsx and dashboard-v2-acceptance.spec.tsx (another
+ * writer's surfaces) pin them.
+ *
+ * NOTE (reported to the parent): snapshot.deltas has no discounts delta in
+ * the shipped contract, so the wireframe's `↑0.4pp` comparison is NOT
+ * rendered — a delta would be invented data. It appears when the delta
+ * contract ships.
  */
 import { isTipsSummaryApplicable, tipParticipationPercent } from "./kpi-deltas";
 import type { TipsSummaryWire } from "./dashboard-api";
@@ -34,50 +47,86 @@ function formatPercent(value: number | null): string {
 export interface TipsSummaryCardProps {
   /** Current-period tips summary from the V2 dashboard report. */
   summary: TipsSummaryWire | null;
+  /** FR-DISC-02 denominator: the period's approved pre-discount sales. */
+  preDiscountSalesNio?: number | null;
+  /** Period discounts (V2 explicit semantics, post-credit-note net). */
+  totalDiscountsNio?: number | null;
 }
 
-export function TipsSummaryCard({ summary }: TipsSummaryCardProps) {
-  // PRD §21.4: no zero-value placeholders for inapplicable/no-coverage data.
-  if (!isTipsSummaryApplicable(summary)) {
-    return null;
-  }
+export function TipsSummaryCard({
+  summary,
+  preDiscountSalesNio = null,
+  totalDiscountsNio = null,
+}: TipsSummaryCardProps) {
+  const discounts =
+    totalDiscountsNio !== null && Number.isFinite(totalDiscountsNio)
+      ? formatCurrency(totalDiscountsNio)
+      : "—";
+  const discountRate =
+    totalDiscountsNio !== null &&
+    Number.isFinite(totalDiscountsNio) &&
+    preDiscountSalesNio !== null &&
+    Number.isFinite(preDiscountSalesNio) &&
+    preDiscountSalesNio > 0
+      ? `${((totalDiscountsNio / preDiscountSalesNio) * 100).toFixed(1)}% base`
+      : "—";
 
-  const participation = tipParticipationPercent(
-    summary.tippedTicketCount,
-    summary.tipCoverage.totalInvoicesCount,
-  );
+  // PRD §21.4: no zero-value placeholders for inapplicable/no-coverage tips.
+  const tips = isTipsSummaryApplicable(summary) ? summary : null;
+  const participation = tips
+    ? tipParticipationPercent(tips.tippedTicketCount, tips.tipCoverage.totalInvoicesCount)
+    : null;
 
   return (
     <div
       data-testid="tips-summary-card"
-      className="rounded-lg border border-border bg-card p-6 shadow-sm"
+      className="flex flex-col rounded-lg border border-border bg-card p-6 shadow-sm"
     >
-      <h2 className="mb-4 text-lg font-semibold text-card-foreground">Propinas</h2>
+      <h2 className="mb-4 text-lg font-semibold text-card-foreground">
+        Flujos separados de ventas
+      </h2>
       <div className="space-y-3">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Total Propinas</span>
+          <span className="text-muted-foreground">Descuentos</span>
           <span className="font-medium tabular-nums text-card-foreground">
-            {summary.totalTipsNio === null ? "—" : formatCurrency(summary.totalTipsNio)}
+            {discounts}
+            <span className="text-muted-foreground">
+              {" · "}
+              {discountRate}
+            </span>
           </span>
         </div>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Tasa de Propina</span>
-          <span className="font-medium tabular-nums text-card-foreground">
-            {formatPercent(summary.tipRate)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Ticket promedio de propina</span>
-          <span className="font-medium tabular-nums text-card-foreground">
-            {summary.averageTipNio === null ? "—" : formatCurrency(summary.averageTipNio)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Participación</span>
-          <span className="font-medium tabular-nums text-card-foreground">
-            {formatPercent(participation)}
-          </span>
-        </div>
+        {tips && (
+          <div className="space-y-3 border-t border-border pt-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Total Propinas</span>
+              <span className="font-medium tabular-nums text-card-foreground">
+                {tips.totalTipsNio === null ? "—" : formatCurrency(tips.totalTipsNio)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Tasa de Propina</span>
+              <span className="font-medium tabular-nums text-card-foreground">
+                {formatPercent(tips.tipRate)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Ticket promedio de propina</span>
+              <span className="font-medium tabular-nums text-card-foreground">
+                {tips.averageTipNio === null ? "—" : formatCurrency(tips.averageTipNio)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Participación</span>
+              <span className="font-medium tabular-nums text-card-foreground">
+                {formatPercent(participation)}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              * No incluidas en ventas (PRD §21.3: flujos separados).
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

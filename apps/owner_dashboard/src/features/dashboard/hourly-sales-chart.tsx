@@ -13,7 +13,7 @@
  * a meaningless flat chart.
  */
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { buildHourlyBars, compactNio, formatNio } from "./chart-domain";
+import { buildHourlyBars, formatNio } from "./chart-domain";
 import { ChartCard, EmptyNote, WidgetError, WidgetSkeleton } from "./chart-card";
 import { useHourlyReport } from "./use-dashboard-charts";
 
@@ -56,7 +56,10 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
                   tickLine={false}
                   axisLine={false}
                 />
-                <YAxis tickFormatter={compactNio} width={48} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                {/* WU9: money ticks use the shared formatNio (full
+                    "C$48,520.50" labels), so the axis grows 48 -> 88 instead
+                    of dropping the currency prefix. */}
+                <YAxis tickFormatter={formatNio} width={88} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                 <Tooltip
                   cursor={{ fill: "var(--color-muted, #f1f5f9)" }}
                   formatter={(value) => formatNio(Number(value))}

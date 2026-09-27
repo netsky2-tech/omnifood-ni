@@ -16,6 +16,31 @@ import {
 // Dashboard V2 Batch 4 (#544): the legacy KPI grid was replaced by the
 // regime-aware strip. Page-level tests below keep their own concerns; the
 // strip's behavior matrix lives in dashboard-v2-strip.spec.tsx.
+// WU5: the management band's FR-DISC-02 pre-discount base reads the V2
+// report through a shared query key — mock the fetch layer so these
+// page-level tests never hit the API client.
+vi.mock("@/features/dashboard/dashboard-api", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  fetchDashboardReport: vi.fn(() =>
+    Promise.resolve({
+      grossSales: 15000.5,
+      netTaxableSales: 13043.91,
+      totalTax: 1956.59,
+      totalDiscounts: 500,
+      invoiceCount: 42,
+      ticketAverage: 357.15,
+      netSalesNio: 13043.91,
+      preDiscountSalesNio: 13543.91,
+      completedTicketCount: 42,
+      averageTicketNetNio: 310.57,
+      totalTaxNio: 1956.59,
+      totalDiscountsNio: 500,
+      tipsSummary: null,
+      reportingPeriod: null,
+      generatedAt: "2026-08-31T15:30:00Z",
+    }),
+  ),
+}));
 vi.mock("@/features/dashboard/use-dashboard-kpis", () => ({
   useDashboardKpis: vi.fn(() => ({
     period: {
@@ -132,10 +157,41 @@ describe("W2 — KpiCard", () => {
 });
 
 describe("W2 — FreshnessBadge", () => {
-  it("renders time with CST", () => {
-    render(<FreshnessBadge generatedAt="2026-08-31T15:30:00Z" />);
+  // 2026-08-31T15:30:00Z is 09:30 in America/Managua (UTC-6, no DST).
+  it("renders the Managua clock time on the current local day", () => {
+    render(
+      <FreshnessBadge
+        generatedAt="2026-08-31T15:30:00Z"
+        now={new Date("2026-08-31T20:00:00Z")}
+      />,
+    );
     expect(screen.getByText(/Actualizado/)).toBeInTheDocument();
-    expect(screen.getByText(/CST/)).toBeInTheDocument();
+    expect(screen.getByText(/9:30/)).toBeInTheDocument();
+  });
+
+  it("adds the local date when the receipt is from an earlier local day", () => {
+    render(
+      <FreshnessBadge
+        generatedAt="2026-08-31T15:30:00Z"
+        now={new Date("2026-09-02T12:00:00Z")}
+      />,
+    );
+    const text = screen.getByTestId("freshness-badge").textContent ?? "";
+    expect(text).toContain("31");
+    expect(text).toMatch(/9:30/);
+  });
+
+  it("does not print a misleading timezone abbreviation", () => {
+    // "CST" named a different real zone and went stale the moment Managua
+    // crossed into its other-day form; the badge is pinned to
+    // America/Managua and carries a machine-readable UTC instant instead.
+    render(
+      <FreshnessBadge
+        generatedAt="2026-08-31T15:30:00Z"
+        now={new Date("2026-09-02T12:00:00Z")}
+      />,
+    );
+    expect(screen.getByTestId("freshness-badge").textContent).not.toMatch(/\b(CST|EST|CDT|EDT)\b/);
   });
 });
 
@@ -155,23 +211,30 @@ describe("W2 — DateRangePicker", () => {
 describe("W2 — DashboardPage", () => {
   it("renders heading and the V2 executive KPI strip (Cuota Fija: no IVA card)", () => {
     // #544 / FR-FISCAL-03: legacy "Impuestos (IVA)" card removed in favor of
-    // the regime-aware strip; "Ventas Brutas" remains via Resumen de Ventas.
+    // the regime-aware strip; the legacy "Ventas Brutas" surface (static
+    // "Resumen de Ventas" card) was retired in review round 2 (WU5).
     render(<DashboardPage />, { wrapper: TestWrapper });
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getAllByText("Ventas Brutas").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Ventas Brutas")).not.toBeInTheDocument();
     expect(screen.getByText("Ventas Netas")).toBeInTheDocument();
     expect(screen.getByText("Ticket Promedio")).toBeInTheDocument();
     expect(screen.queryByText("IVA generado")).not.toBeInTheDocument();
   });
 
-  it("renders Resumen de Ventas without the legacy Métodos de Pago card", () => {
-    // Batch 5c: the legacy "Métodos de Pago" card was removed from the page —
-    // the PaymentMixChart in the performance band is the single payment
-    // surface (its own behavior matrix lives in dashboard-v2-charts.spec.tsx).
+  it("renders the Flujos separados band without the legacy Resumen de Ventas card", () => {
+    // Review round 2 (WU5): the static "Resumen de Ventas" card was retired
+    // — its discounts line lives on in the "Flujos separados de ventas" card
+    // and its cost rows moved to the AC-17-gated Rentabilidad card (omitted
+    // here: this suite has no authenticated cost-granted user). The Batch 5c
+    // removal of the legacy "Métodos de Pago" card still holds.
     render(<DashboardPage />, { wrapper: TestWrapper });
     expect(screen.queryByText("Métodos de Pago")).not.toBeInTheDocument();
     expect(screen.queryByText("Efectivo NIO")).not.toBeInTheDocument();
-    expect(screen.getByText("Resumen de Ventas")).toBeInTheDocument();
+    expect(screen.queryByText("Resumen de Ventas")).not.toBeInTheDocument();
+    expect(screen.getByText("Flujos separados de ventas")).toBeInTheDocument();
+    expect(screen.getByText("Descuentos")).toBeInTheDocument();
+    // Single-column band reflow: no cost-granted user renders here.
+    expect(screen.getByTestId("management-band").className).not.toContain("lg:grid-cols-2");
   });
 
   it("renders freshness badge", () => {

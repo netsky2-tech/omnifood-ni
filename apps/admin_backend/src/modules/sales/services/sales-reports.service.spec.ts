@@ -517,6 +517,107 @@ describe('SalesReportsService', () => {
       expect(result.paymentMethodsBreakdown.totalNio).toBe(137);
     });
 
+    it('reports the owner literal over-tender fixture: C$200 sale paid with C$500 cash and C$300 change (AG-08)', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-overtender-owner',
+          tenant_id: tenantId,
+          number: '001-001-01-00000012',
+          subtotal: 200,
+          totalTax: 0,
+          total: 200,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T10:00:00.000Z'),
+          items: [],
+          payments: [
+            {
+              id: 'pay-overtender-owner',
+              invoiceId: 'inv-overtender-owner',
+              method: 'CASH',
+              amount: 500,
+              currency: 'NIO',
+              exchangeRate: 1.0,
+              amountNio: 500,
+              changeGiven: 300,
+              changeCurrency: 'NIO',
+              createdAt: new Date(),
+              invoice: {} as Invoice,
+            },
+          ],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getDashboard(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+      });
+
+      // Owner acceptance scenario verbatim: a C$200 sale tendered with C$500
+      // cash and C$300 handed back as change collects exactly C$200. The
+      // negative assertions make a future refactor that drops the
+      // changeGiven netting fail loudly instead of silently doubling the
+      // reported takings.
+      expect(result.paymentMethodsBreakdown.cashNio).toBe(200);
+      expect(result.paymentMethodsBreakdown.totalNio).toBe(200);
+      expect(result.paymentMethodsBreakdown.cashNio).not.toBe(500);
+      expect(result.paymentMethodsBreakdown.totalNio).not.toBe(500);
+    });
+
+    it('nets over-tendered USD cash in its own currency slot without leaking the tendered amount (AG-08)', async () => {
+      // USD analogue of the owner scenario: C$500-equivalent tendered in USD
+      // (20 × 25) with a C$300-equivalent change returned in USD (12 × 25).
+      // cashUsd is derived from effectiveUsd (amount − change in the payment
+      // currency) while totalNio nets the NIO equivalent
+      // (amountNio − changeNio); pin both so neither slot can regress to the
+      // tendered figure.
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-overtender-usd',
+          tenant_id: tenantId,
+          number: '001-001-01-00000013',
+          subtotal: 200,
+          totalTax: 0,
+          total: 200,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T10:00:00.000Z'),
+          items: [],
+          payments: [
+            {
+              id: 'pay-overtender-usd',
+              invoiceId: 'inv-overtender-usd',
+              method: 'CASH',
+              amount: 20,
+              currency: 'USD',
+              exchangeRate: 25,
+              amountNio: 500,
+              changeGiven: 12,
+              changeCurrency: 'USD',
+              createdAt: new Date(),
+              invoice: {} as Invoice,
+            },
+          ],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getDashboard(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+      });
+
+      // Original-currency netting: 20 USD tendered − 12 USD change = 8 USD.
+      expect(result.paymentMethodsBreakdown.cashUsd).toBe(8);
+      expect(result.paymentMethodsBreakdown.cashUsd).not.toBe(20);
+      // A USD payment never enters the NIO cash slot.
+      expect(result.paymentMethodsBreakdown.cashNio).toBe(0);
+      // NIO-equivalent netting: 500 − (12 × 25) = 200.
+      expect(result.paymentMethodsBreakdown.totalNio).toBe(200);
+      expect(result.paymentMethodsBreakdown.totalNio).not.toBe(500);
+    });
+
     it('treats missing changeGiven on legacy payment rows as zero', async () => {
       const mockInvoices: Partial<Invoice>[] = [
         {
@@ -940,6 +1041,278 @@ describe('SalesReportsService', () => {
       expect(result.products[1].productId).toBe('prod-2');
       expect(result.products[1].totalQuantity).toBe(2);
       expect(result.products[1].totalRevenue).toBe(300);
+    });
+
+    it('reconciles periodNetSalesNio with getDashboard().netSalesNio over the same invoice set (FR-PRODUCT-01)', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-1',
+          tenant_id: tenantId,
+          isCanceled: false,
+          subtotal: 900.01,
+          totalTax: 100,
+          total: 1000.01,
+          items: [
+            {
+              id: 'it-1',
+              productId: 'prod-1',
+              productName: 'Café Americano',
+              quantity: 2,
+              total: 600,
+              taxAmount: 100,
+              discount: 100,
+            } as InvoiceItem,
+            {
+              id: 'it-2',
+              productId: 'prod-2',
+              productName: 'Croissant',
+              quantity: 1,
+              total: 400,
+              taxAmount: 0,
+              discount: 0,
+            } as InvoiceItem,
+          ],
+        },
+        {
+          id: 'inv-2',
+          tenant_id: tenantId,
+          isCanceled: false,
+          subtotal: 500,
+          totalTax: 75,
+          total: 575,
+          items: [
+            {
+              id: 'it-3',
+              productId: 'prod-3',
+              productName: 'Panini Jamón Serrano',
+              quantity: 1,
+              total: 500,
+              taxAmount: 75,
+              discount: 0,
+            } as InvoiceItem,
+          ],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const period = { startDate: '2026-09-01', endDate: '2026-09-30' };
+      const topProducts = await service.getTopProducts(tenantId, {
+        ...period,
+        limit: 10,
+      });
+      const dashboard = await service.getDashboard(tenantId, period);
+
+      // The denominator must be the period's Net Sales over the SAME invoice
+      // set the aggregates were built from — exactly what the KPI reports.
+      expect(topProducts.periodNetSalesNio).toBe(dashboard.netSalesNio);
+
+      // Truncation-safe invariant: shares over the period denominator can
+      // never exceed 100%, and without Top-N truncation here the listed rows
+      // reconcile with the period total (largest-remainder allocation).
+      const listedNet = topProducts.products.reduce(
+        (sum, p) => sum + p.netRevenueNio,
+        0,
+      );
+      expect(listedNet).toBeLessThanOrEqual(topProducts.periodNetSalesNio);
+      expect(listedNet).toBeCloseTo(topProducts.periodNetSalesNio, 2);
+    });
+
+    it('computes netRevenueNio post-discount pre-tax and never derives the denominator from tax-inclusive totalRevenue', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-1',
+          tenant_id: tenantId,
+          isCanceled: false,
+          // Post-discount, pre-tax persisted subtotal; the +0.01 vs the raw
+          // line nets (600-100 + 400-0 = 900) is the per-invoice rounding
+          // residue the largest-remainder allocation must absorb.
+          subtotal: 900.01,
+          totalTax: 100,
+          total: 1000,
+          items: [
+            {
+              id: 'it-1',
+              productId: 'prod-1',
+              productName: 'Café Americano',
+              quantity: 1,
+              total: 600,
+              taxAmount: 100,
+              discount: 100,
+            } as InvoiceItem,
+            {
+              id: 'it-2',
+              productId: 'prod-2',
+              productName: 'Croissant',
+              quantity: 1,
+              total: 400,
+              taxAmount: 0,
+              discount: 0,
+            } as InvoiceItem,
+          ],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getTopProducts(tenantId, { limit: 10 });
+
+      // Denominator is the period Net Sales (post-discount, pre-tax), NOT
+      // the sum of the tax-inclusive item totals (C$1,000).
+      expect(result.periodNetSalesNio).toBe(900.01);
+      const taxInclusiveSum = result.products.reduce(
+        (sum, p) => sum + p.totalRevenue,
+        0,
+      );
+      expect(taxInclusiveSum).toBe(1000);
+      expect(result.periodNetSalesNio).not.toBe(taxInclusiveSum);
+
+      // Per-line nets are post-discount, pre-tax; the residue lands on the
+      // largest-remainder line so Σ lines reconciles with the subtotal.
+      expect(result.products[0].netRevenueNio).toBeCloseTo(500.01, 2);
+      expect(result.products[1].netRevenueNio).toBeCloseTo(400, 2);
+    });
+
+    it('proves the query moved off item.total: discount + non-zero tax make per-product net and tax-inclusive totals differ by construction (FR-PRODUCT-01)', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-mix',
+          tenant_id: tenantId,
+          isCanceled: false,
+          // Persisted decomposition: subtotal = Σ(line.total − line.taxAmount)
+          // = (510 − 60) + (410 − 60) = 800; both discounts and tax are
+          // non-zero, so every tax-inclusive line total differs from its
+          // post-discount, pre-tax net by construction.
+          subtotal: 800,
+          totalTax: 120,
+          total: 920,
+          items: [
+            {
+              id: 'it-1',
+              productId: 'prod-1',
+              productName: 'Café Americano',
+              quantity: 2,
+              // Tax-inclusive line total: net 450 + tax 60.
+              total: 510,
+              taxAmount: 60,
+              discount: 50,
+            } as InvoiceItem,
+            {
+              id: 'it-2',
+              productId: 'prod-2',
+              productName: 'Croissant',
+              quantity: 1,
+              // Tax-inclusive line total: net 350 + tax 60.
+              total: 410,
+              taxAmount: 60,
+              discount: 0,
+            } as InvoiceItem,
+          ],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const period = { startDate: '2026-09-01', endDate: '2026-09-30' };
+      const result = await service.getTopProducts(tenantId, {
+        ...period,
+        limit: 10,
+      });
+      const dashboard = await service.getDashboard(tenantId, period);
+
+      // Load-bearing: per-product netRevenueNio is post-discount, pre-tax
+      // Net Sales (item.total − item.taxAmount), NOT the deprecated
+      // tax-inclusive item.total the legacy totalRevenue still aggregates.
+      const americano = result.products.find((p) => p.productId === 'prod-1');
+      const croissant = result.products.find((p) => p.productId === 'prod-2');
+      expect(americano).toBeDefined();
+      expect(croissant).toBeDefined();
+      expect(americano!.netRevenueNio).toBe(450);
+      expect(americano!.totalRevenue).toBe(510);
+      expect(americano!.netRevenueNio).not.toBe(americano!.totalRevenue);
+      expect(croissant!.netRevenueNio).toBe(350);
+      expect(croissant!.totalRevenue).toBe(410);
+      expect(croissant!.netRevenueNio).not.toBe(croissant!.totalRevenue);
+
+      // Untruncated period: the listed rows reconcile EXACTLY with the
+      // period Net Sales denominator (largest-remainder allocation), and
+      // that denominator is the shared-semantics Net Sales, not Σ item.total.
+      const listedNet = result.products.reduce(
+        (sum, p) => sum + p.netRevenueNio,
+        0,
+      );
+      expect(result.periodNetSalesNio).toBe(800);
+      expect(listedNet).toBe(result.periodNetSalesNio);
+      expect(result.periodNetSalesNio).not.toBe(920);
+
+      // Same fixture and window: identical shared semantics helper as the
+      // dashboard KPI route.
+      expect(result.periodNetSalesNio).toBe(dashboard.netSalesNio);
+    });
+
+    it('truncated period: Σ listed netRevenueNio stays strictly below the period Net Sales denominator (FR-PRODUCT-01)', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-mix',
+          tenant_id: tenantId,
+          isCanceled: false,
+          subtotal: 800,
+          totalTax: 120,
+          total: 920,
+          items: [
+            {
+              id: 'it-1',
+              productId: 'prod-1',
+              productName: 'Café Americano',
+              quantity: 2,
+              total: 510,
+              taxAmount: 60,
+              discount: 50,
+            } as InvoiceItem,
+            {
+              id: 'it-2',
+              productId: 'prod-2',
+              productName: 'Croissant',
+              quantity: 1,
+              total: 410,
+              taxAmount: 60,
+              discount: 0,
+            } as InvoiceItem,
+          ],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getTopProducts(tenantId, {
+        startDate: '2026-09-01',
+        endDate: '2026-09-30',
+        limit: 1,
+      });
+
+      // Only the highest-quantity product survives the Top-N cut.
+      expect(result.products).toHaveLength(1);
+      expect(result.products[0].productId).toBe('prod-1');
+
+      // The denominator is the PERIOD total (800), not the listed sum (450):
+      // the truncated aggregate must stay bounded by the full-period Net Sales.
+      const listedNet = result.products.reduce(
+        (sum, p) => sum + p.netRevenueNio,
+        0,
+      );
+      expect(listedNet).toBe(450);
+      expect(result.periodNetSalesNio).toBe(800);
+      expect(listedNet).toBeLessThanOrEqual(result.periodNetSalesNio);
+      expect(listedNet).toBeLessThan(result.periodNetSalesNio);
+    });
+
+    it('returns a zero denominator on an empty period so the frontend can fail closed', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([]);
+
+      const result = await service.getTopProducts(tenantId, {});
+
+      expect(result.products).toEqual([]);
+      expect(result.periodNetSalesNio).toBe(0);
     });
   });
 

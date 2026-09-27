@@ -567,10 +567,19 @@ export class SalesReportsService {
       })
       .slice(0, limit);
 
+    // FR-PRODUCT-01 authoritative share denominator: the period's Net Sales
+    // over the SAME bounded invoice set read above, computed with the same
+    // shared semantics helper the dashboard KPI uses — never the deprecated
+    // tax-inclusive `totalRevenue` (Σ item.total) and never a second read.
+    // Because the read filters `isCanceled = false`, every row is a completed
+    // sale, so this equals `getDashboard(query).netSalesNio` over the window.
+    const periodNetSalesNio = computeSalesReportingTotals(invoices).netSalesNio;
+
     return {
       startDate: query?.startDate,
       endDate: query?.endDate,
       generatedAt: new Date().toISOString(),
+      periodNetSalesNio,
       products: sortedProducts,
     };
   }

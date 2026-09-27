@@ -3,7 +3,9 @@ import {
   computeDailySalesSeries,
   computeSalesReportingTipsSummary,
   computeSalesReportingTotals,
-  isCompletedSaleRow,
+  isCogsCoverageRelevantSale,
+  isCompletedTicketDocument,
+  isRevenueAffectingDocument,
   resolveInvoiceLocalDayBucket,
   SalesReportingInvoiceRow,
   salesRowDiscounts,
@@ -47,14 +49,62 @@ const KNOWN_FIXTURE: SalesReportingInvoiceRow[] = [
 ];
 
 describe('SalesReportingSemantics (spec §7.1)', () => {
-  describe('isCompletedSaleRow', () => {
-    it('mirrors the current report queries: not canceled is completed', () => {
-      expect(isCompletedSaleRow({ isCanceled: false, subtotal: 100 })).toBe(
-        true,
-      );
-      expect(isCompletedSaleRow({ isCanceled: true, subtotal: 100 })).toBe(
-        false,
-      );
+  describe('reporting predicates (WU10 — deliberate asymmetry contract)', () => {
+    const regularSale: SalesReportingInvoiceRow = {
+      isCanceled: false,
+      subtotal: 100,
+      type: 'regular',
+    };
+    const creditNote: SalesReportingInvoiceRow = {
+      isCanceled: false,
+      subtotal: -100,
+      type: 'creditNote',
+    };
+    const canceledSale: SalesReportingInvoiceRow = {
+      isCanceled: true,
+      subtotal: 100,
+      type: 'regular',
+    };
+    const canceledCreditNote: SalesReportingInvoiceRow = {
+      isCanceled: true,
+      subtotal: -100,
+      type: 'creditNote',
+    };
+
+    it('places a regular sale in all three predicates', () => {
+      expect(isRevenueAffectingDocument(regularSale)).toBe(true);
+      expect(isCompletedTicketDocument(regularSale)).toBe(true);
+      expect(isCogsCoverageRelevantSale(regularSale)).toBe(true);
+    });
+
+    it('places a credit note in exactly one predicate: revenue-affecting only', () => {
+      // DELIBERATE asymmetry pinned by the owner (WU10): a refund document
+      // nets revenue as persisted, but it is NOT a customer ticket and NOT
+      // cost evidence. Do NOT "fix" this into one shared predicate.
+      expect(isRevenueAffectingDocument(creditNote)).toBe(true);
+      expect(isCompletedTicketDocument(creditNote)).toBe(false);
+      expect(isCogsCoverageRelevantSale(creditNote)).toBe(false);
+    });
+
+    it('places a canceled document in none of the three predicates', () => {
+      for (const row of [canceledSale, canceledCreditNote]) {
+        expect(isRevenueAffectingDocument(row)).toBe(false);
+        expect(isCompletedTicketDocument(row)).toBe(false);
+        expect(isCogsCoverageRelevantSale(row)).toBe(false);
+      }
+    });
+
+    it('treats a row with no type as a regular sale (backwards compatibility)', () => {
+      // Existing callers and fixtures do not pass `type`; silently dropping
+      // legacy untyped rows from revenue would be a worse regression than
+      // the ticket-count defect this compatibility choice avoids.
+      const legacyRow: SalesReportingInvoiceRow = {
+        isCanceled: false,
+        subtotal: 100,
+      };
+      expect(isRevenueAffectingDocument(legacyRow)).toBe(true);
+      expect(isCompletedTicketDocument(legacyRow)).toBe(true);
+      expect(isCogsCoverageRelevantSale(legacyRow)).toBe(true);
     });
   });
 
@@ -139,18 +189,55 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
       expect(totals.averageTicketNetNio).not.toBe(0);
     });
 
-    it('nets credit notes into sales totals as persisted (documented historical semantics)', () => {
+    it('nets credit-note amounts into sales totals but NOT into the ticket count', () => {
       // A credit note is persisted with a negative subtotal (see
-      // invoices.service.db.spec.ts fixtures): it nets into Net Sales.
+      // invoices.service.db.spec.ts fixtures). The amount still nets into
+      // Net Sales because Net Sales reconciles with grossSales, hourly and
+      // top-product revenue, which net credit notes in as persisted — but a
+      // refund document is NOT a customer ticket, so it must not inflate
+      // completedTicketCount or deflate averageTicketNetNio (WU10 ratified
+      // semantics, owner decision).
       const rows: SalesReportingInvoiceRow[] = [
         { isCanceled: false, subtotal: 2000, totalTax: 300, items: [] },
-        { isCanceled: false, subtotal: -500, totalTax: -75, items: [] },
+        {
+          isCanceled: false,
+          subtotal: -500,
+          totalTax: -75,
+          items: [],
+          type: 'creditNote',
+        },
       ];
 
       const totals = computeSalesReportingTotals(rows);
       expect(totals.netSalesNio).toBe(1500);
+      expect(totals.completedTicketCount).toBe(1);
+      // averageTicketNetNio = netSalesNio / completedTicketCount (PRD §7.5):
+      // 1500 / 1 = 1500. The single remaining ticket sold for 2000, but the
+      // average is computed over the netted period revenue, not over the
+      // surviving ticket's own subtotal.
+      expect(totals.averageTicketNetNio).toBe(1500);
+    });
+
+    it('measures the owner fixture: 2 sales of C$100 + 1 credit note of -C$50', () => {
+      // Ratified WU10 expectation: revenue nets to 150, tickets stay 2 and
+      // the average stays 75 — the credit note never inflates the ticket
+      // denominator.
+      const rows: SalesReportingInvoiceRow[] = [
+        { isCanceled: false, subtotal: 100, totalTax: 0, items: [] },
+        { isCanceled: false, subtotal: 100, totalTax: 0, items: [] },
+        {
+          isCanceled: false,
+          subtotal: -50,
+          totalTax: 0,
+          items: [],
+          type: 'creditNote',
+        },
+      ];
+
+      const totals = computeSalesReportingTotals(rows);
+      expect(totals.netSalesNio).toBe(150);
       expect(totals.completedTicketCount).toBe(2);
-      expect(totals.averageTicketNetNio).toBe(750);
+      expect(totals.averageTicketNetNio).toBe(75);
     });
 
     it('returns zero totals for an empty invoice set', () => {
@@ -409,6 +496,41 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
       expect(days[0]).toEqual({
         date: '2026-06-10',
         netSalesNio: 0,
+        completedTicketCount: 0,
+        averageTicketNetNio: null,
+      });
+    });
+
+    it('uses the same predicates as the KPI totals on a period WITH a credit note (§7.2 parity, WU10)', () => {
+      // Amounts parity: Σ days.netSalesNio === totals.netSalesNio still holds
+      // because both sides use the revenue predicate. The credit note nets
+      // into its day's Net Sales (−50) but never counts as a ticket, so the
+      // day carrying it keeps count 0 and a null average (PRD §7.5).
+      const rows: SalesReportingInvoiceRow[] = [
+        { isCanceled: false, subtotal: 100, localIssueDate: '2026-06-10' },
+        { isCanceled: false, subtotal: 100, localIssueDate: '2026-06-10' },
+        {
+          isCanceled: false,
+          subtotal: -50,
+          localIssueDate: '2026-06-11',
+          type: 'creditNote',
+        },
+      ];
+
+      const days = computeDailySalesSeries('2026-06-10', '2026-06-11', rows);
+      const seriesNet = days.reduce((sum, d) => sum + d.netSalesNio, 0);
+
+      expect(seriesNet).toBe(computeSalesReportingTotals(rows).netSalesNio);
+      expect(seriesNet).toBe(150);
+      expect(days[0]).toEqual({
+        date: '2026-06-10',
+        netSalesNio: 200,
+        completedTicketCount: 2,
+        averageTicketNetNio: 100,
+      });
+      expect(days[1]).toEqual({
+        date: '2026-06-11',
+        netSalesNio: -50,
         completedTicketCount: 0,
         averageTicketNetNio: null,
       });

@@ -14,7 +14,7 @@
  *   line (FR-CHART-04).
  */
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { buildTrendRows, compactNio, formatNio, isZeroSeries } from "./chart-domain";
+import { buildTrendRows, formatNio, isZeroSeries } from "./chart-domain";
 import { ChartCard, EmptyNote, WidgetError, WidgetSkeleton } from "./chart-card";
 import { useDailySeries } from "./use-dashboard-charts";
 
@@ -103,7 +103,10 @@ export function SalesTrendChart({
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={24} tickLine={false} axisLine={false} />
-            <YAxis tickFormatter={compactNio} width={48} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+            {/* WU9: money ticks use the shared formatNio (full "C$48,520.50"
+                labels), so the axis grows 48 -> 88 instead of dropping the
+                currency prefix. */}
+            <YAxis tickFormatter={formatNio} width={88} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
             <Tooltip
               formatter={(value) => formatNio(Number(value))}
               labelFormatter={(label) => String(label)}

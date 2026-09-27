@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource, Repository } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { InventoryReportsService } from './inventory-reports.service';
+import { Invoice } from '../../sales/entities/invoice.entity';
 import { Insumo } from '../entities/insumo.entity';
 import {
   InventoryMovement,
@@ -12,6 +13,7 @@ describe('InventoryReportsService', () => {
   let service: InventoryReportsService;
   let insumoRepo: jest.Mocked<Repository<Insumo>>;
   let movementRepo: jest.Mocked<Repository<InventoryMovement>>;
+  let invoiceRepo: { createQueryBuilder: jest.Mock };
   // Issue #512: the service must resolve its repositories from the
   // tenant-bound transaction manager, so the DataSource mock hands back a
   // manager exposing exactly those manager-scoped repositories.
@@ -29,11 +31,16 @@ describe('InventoryReportsService', () => {
       createQueryBuilder: jest.fn(),
     } as unknown as jest.Mocked<Repository<InventoryMovement>>;
 
+    invoiceRepo = {
+      createQueryBuilder: jest.fn(),
+    };
+
     txManager = {
       query: jest.fn().mockResolvedValue(undefined),
       getRepository: jest.fn().mockImplementation((entity: unknown) => {
         if (entity === Insumo) return insumoRepo;
         if (entity === InventoryMovement) return movementRepo;
+        if (entity === Invoice) return invoiceRepo;
         return null;
       }),
     };
@@ -176,6 +183,17 @@ describe('InventoryReportsService', () => {
   });
 
   describe('getCogsReport', () => {
+    // Mocks the tenant-scoped invoice query used for inventoryCoverage
+    // evidence (relevant sales of the period).
+    const mockSaleInvoices = (invoices: Partial<Invoice>[]) => {
+      const invoiceQb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(invoices as Invoice[]),
+      };
+      invoiceRepo.createQueryBuilder.mockReturnValue(invoiceQb);
+    };
+
     it('aggregates sales and shrinkage COGS and deducts cancellations/returns', async () => {
       const mockInsumos: Partial<Insumo>[] = [
         {
@@ -224,6 +242,7 @@ describe('InventoryReportsService', () => {
         getMany: jest.fn().mockResolvedValue(mockMovements),
       };
       movementRepo.createQueryBuilder.mockReturnValue(qb);
+      mockSaleInvoices([]);
 
       const report = await service.getCogsReport(
         'tenant-1',
@@ -262,6 +281,760 @@ describe('InventoryReportsService', () => {
         totalQuantity: 1,
         totalCostNio: 30,
         costPercentage: 16.6667,
+      });
+    });
+
+    it('reports COMPLETE inventoryCoverage when every sale in the period is APPLIED', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+        {
+          id: 'inv-2',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+      ]);
+
+      const mockMovements: Partial<InventoryMovement>[] = [
+        {
+          insumoId: 'ins-coffee',
+          type: MovementType.SALE,
+          quantity: -2,
+          unitCostNio: 100,
+          totalCostNio: 200,
+          sourceDocumentId: 'invoice:inv-1',
+        },
+        {
+          insumoId: 'ins-milk',
+          type: MovementType.SALE,
+          quantity: -1,
+          unitCostNio: 30,
+          totalCostNio: 30,
+          sourceDocumentId: 'invoice:inv-2',
+        },
+      ];
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockMovements),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'COMPLETE',
+        costedSalesCount: 2,
+        uncostedSalesCount: 0,
+      });
+      // reasonCodes must be omitted entirely when there is nothing to flag.
+      expect('reasonCodes' in report.inventoryCoverage).toBe(false);
+    });
+
+    it('reports PARTIAL inventoryCoverage with MISSING_INVENTORY_IMPACT when a sale is APPLIED_INVENTORY_PENDING', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+        {
+          id: 'inv-2',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_INVENTORY_PENDING',
+          inventoryOutcomeReason: { code: 'MISSING_PUBLISHED_RECIPE' },
+        },
+      ]);
+
+      const mockMovements: Partial<InventoryMovement>[] = [
+        {
+          insumoId: 'ins-coffee',
+          type: MovementType.SALE,
+          quantity: -2,
+          unitCostNio: 100,
+          totalCostNio: 200,
+          sourceDocumentId: 'invoice:inv-1',
+        },
+      ];
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockMovements),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'PARTIAL',
+        costedSalesCount: 1,
+        uncostedSalesCount: 1,
+        reasonCodes: ['MISSING_INVENTORY_IMPACT'],
+      });
+    });
+
+    it('reports UNAVAILABLE inventoryCoverage with NO_EXPLICIT_INSUMO_MAPPING when all sales are APPLIED_NO_INVENTORY_IMPACT (WU11 policy flip)', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
+          inventoryOutcomeReason: { code: 'NO_EXPLICIT_INSUMO_MAPPING' },
+        },
+      ]);
+
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      // WU11 owner decision: absence of an insumo mapping is NOT evidence
+      // of zero cost, so the sale is uncosted under its own reason code.
+      // This deliberately flips the previous "authoritative zero" policy
+      // (the old spec asserted COMPLETE here); salesCogsNio stays
+      // independent of coverage at 0 — never forced to null or 0.
+      expect(report.salesCogsNio).toBe(0);
+      expect(report.inventoryCoverage).toEqual({
+        status: 'UNAVAILABLE',
+        costedSalesCount: 0,
+        uncostedSalesCount: 1,
+        reasonCodes: ['NO_EXPLICIT_INSUMO_MAPPING'],
+      });
+    });
+
+    it('pins the coverage invoice read to tenant, window and non-canceled rows (finding D3)', async () => {
+      // Without this assertion a future edit that drops `inv.tenant_id` from
+      // the coverage read would keep every existing test green: the mock
+      // returns rows regardless of the WHERE clause. This is the only guard
+      // that the read stays inside the tenant scope.
+      insumoRepo.find.mockResolvedValue([]);
+      const emptyMovements: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(emptyMovements);
+      mockSaleInvoices([]);
+
+      await service.getCogsReport('tenant-42', '2026-08-01', '2026-08-31');
+
+      const invoiceQb = (invoiceRepo.createQueryBuilder as jest.Mock).mock.results[0]
+        .value as any;
+      const predicates = [
+        ...invoiceQb.where.mock.calls.map((c: any[]) => String(c[0])),
+        ...invoiceQb.andWhere.mock.calls.map((c: any[]) => String(c[0])),
+      ].join(' AND ');
+      expect(predicates).toContain('inv.tenant_id = :tenantId');
+      expect(predicates).toContain('inv.created_at BETWEEN :from AND :to');
+      expect(predicates).toContain('inv.is_canceled = FALSE');
+      expect(invoiceQb.where.mock.calls[0][1]).toEqual({ tenantId: 'tenant-42' });
+    });
+
+    it('labels an APPLIED_NO_INVENTORY_IMPACT sale with NO recorded reason as MISSING_COST_BASIS, not as a mapping gap (finding D6)', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-itemless',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
+          // Two reachable origins for an absent reason: the itemless
+          // short-circuit (sale-inventory-outcome.service.ts:330, reason: null)
+          // and a terminal sync that reports the optional inventoryOutcome
+          // without an inventoryOutcomeReason (sync-invoice.dto.ts:364). Note
+          // this read does NOT join invoice items, so the classifier cannot
+          // distinguish them — which is exactly why it must not invent a cause.
+          // Either way, "map the product's insumos" would be an invented reason.
+          inventoryOutcomeReason: null,
+        },
+      ]);
+      const emptyMovements: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(emptyMovements);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'UNAVAILABLE',
+        costedSalesCount: 0,
+        uncostedSalesCount: 1,
+        reasonCodes: ['MISSING_COST_BASIS'],
+      });
+    });
+
+    it('keeps the recorded NO_EXPLICIT_INSUMO_MAPPING label (pin: passes with or without the D6 fix)', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-mapping-gap',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
+          inventoryOutcomeReason: { code: 'NO_EXPLICIT_INSUMO_MAPPING', lines: ['line-1'] },
+        },
+      ]);
+      const emptyMovements: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(emptyMovements);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage?.reasonCodes).toEqual(['NO_EXPLICIT_INSUMO_MAPPING']);
+    });
+
+    it('reports PARTIAL inventoryCoverage mixing costed APPLIED sales and unmapped APPLIED_NO_INVENTORY_IMPACT sales without moving the money fields (WU11)', async () => {
+      insumoRepo.find.mockResolvedValue([
+        {
+          id: 'ins-coffee',
+          name: 'Café Grano',
+          consumptionUom: 'kg',
+        } as Insumo,
+      ]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+        {
+          id: 'inv-2',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
+          inventoryOutcomeReason: { code: 'NO_EXPLICIT_INSUMO_MAPPING' },
+        },
+      ]);
+
+      const mockMovements: Partial<InventoryMovement>[] = [
+        {
+          insumoId: 'ins-coffee',
+          type: MovementType.SALE,
+          quantity: -2,
+          unitCostNio: 100,
+          totalCostNio: 200,
+          sourceDocumentId: 'invoice:inv-1',
+        },
+      ];
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockMovements),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      // Regression: coverage is trust evidence only — the money fields
+      // keep their movement-derived values regardless of the flip.
+      expect(report.salesCogsNio).toBe(200);
+      expect(report.shrinkageCogsNio).toBe(0);
+      expect(report.totalCogsNio).toBe(200);
+      expect(report.inventoryCoverage).toEqual({
+        status: 'PARTIAL',
+        costedSalesCount: 1,
+        uncostedSalesCount: 1,
+        reasonCodes: ['NO_EXPLICIT_INSUMO_MAPPING'],
+      });
+    });
+
+    it('excludes credit notes and canceled documents from coverage counts via the shared isCogsCoverageRelevantSale predicate (WU11)', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+        // A credit note with the WORST possible outcome fact: if it were
+        // wrongly counted it would add UNRESOLVED_SOURCE_DOCUMENT and break
+        // COMPLETE. It must not affect either count.
+        {
+          id: 'inv-cn',
+          type: 'creditNote',
+          isCanceled: false,
+          inventoryOutcome: null,
+        },
+        // A canceled regular sale must equally stay out of the counts.
+        {
+          id: 'inv-void',
+          type: 'regular',
+          isCanceled: true,
+          inventoryOutcome: null,
+        },
+      ]);
+
+      const mockMovements: Partial<InventoryMovement>[] = [
+        {
+          insumoId: 'ins-coffee',
+          type: MovementType.SALE,
+          quantity: -2,
+          unitCostNio: 100,
+          totalCostNio: 200,
+          sourceDocumentId: 'invoice:inv-1',
+        },
+      ];
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockMovements),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'COMPLETE',
+        costedSalesCount: 1,
+        uncostedSalesCount: 0,
+      });
+      expect('reasonCodes' in report.inventoryCoverage).toBe(false);
+    });
+
+    it('emits deduplicated reasonCodes in the stable COVERAGE_REASON_CODE_ORDER (WU11)', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+        {
+          id: 'inv-2',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_INVENTORY_PENDING',
+          inventoryOutcomeReason: { code: 'MISSING_PUBLISHED_RECIPE' },
+        },
+        // Two unmapped sales: the reason code must be deduplicated.
+        {
+          id: 'inv-3',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
+          inventoryOutcomeReason: { code: 'NO_EXPLICIT_INSUMO_MAPPING' },
+        },
+        {
+          id: 'inv-4',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
+          inventoryOutcomeReason: { code: 'NO_EXPLICIT_INSUMO_MAPPING' },
+        },
+        {
+          id: 'inv-5',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: null,
+        },
+      ]);
+
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      // inv-1 is APPLIED with no costed movement (MISSING_COST_BASIS);
+      // inv-3 and inv-4 deduplicate into one NO_EXPLICIT_INSUMO_MAPPING.
+      // No sale of the period is costable, so the status is UNAVAILABLE
+      // (PARTIAL requires a mix of costed and uncosted sales).
+      expect(report.inventoryCoverage.status).toBe('UNAVAILABLE');
+      expect(report.inventoryCoverage.costedSalesCount).toBe(0);
+      expect(report.inventoryCoverage.uncostedSalesCount).toBe(5);
+      expect(report.inventoryCoverage.reasonCodes).toEqual([
+        'MISSING_INVENTORY_IMPACT',
+        'NO_EXPLICIT_INSUMO_MAPPING',
+        'MISSING_COST_BASIS',
+        'UNRESOLVED_SOURCE_DOCUMENT',
+      ]);
+    });
+
+    it('reports PARTIAL inventoryCoverage with UNRESOLVED_SOURCE_DOCUMENT for legacy sales without an outcome fact', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+        {
+          id: 'inv-2',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: null,
+        },
+      ]);
+
+      const mockMovements: Partial<InventoryMovement>[] = [
+        {
+          insumoId: 'ins-coffee',
+          type: MovementType.SALE,
+          quantity: -2,
+          unitCostNio: 100,
+          totalCostNio: 200,
+          sourceDocumentId: 'invoice:inv-1',
+        },
+      ];
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockMovements),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'PARTIAL',
+        costedSalesCount: 1,
+        uncostedSalesCount: 1,
+        reasonCodes: ['UNRESOLVED_SOURCE_DOCUMENT'],
+      });
+    });
+
+    it('reports PARTIAL inventoryCoverage with MISSING_COST_BASIS when an APPLIED sale has no movement cost', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+        {
+          id: 'inv-2',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+      ]);
+
+      const mockMovements: Partial<InventoryMovement>[] = [
+        {
+          insumoId: 'ins-coffee',
+          type: MovementType.SALE,
+          quantity: -2,
+          unitCostNio: 100,
+          totalCostNio: 200,
+          sourceDocumentId: 'invoice:inv-1',
+        },
+        {
+          // Movement exists but carries no usable cost basis.
+          insumoId: 'ins-milk',
+          type: MovementType.SALE,
+          quantity: -1,
+          unitCostNio: null as unknown as number,
+          totalCostNio: null as unknown as number,
+          sourceDocumentId: 'invoice:inv-2',
+        },
+      ];
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockMovements),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'PARTIAL',
+        costedSalesCount: 1,
+        uncostedSalesCount: 1,
+        reasonCodes: ['MISSING_COST_BASIS'],
+      });
+    });
+
+    // WU12: totalCostNio = 0 is NOT an authoritative cost basis.
+    // invoices.service.ts stamps totalCostNio = |qty| x unitCostNio, and
+    // Insumo.averageCost is a decimal column defaulting to 0, so a mapped
+    // insumo with no recorded purchase produces totalCostNio = 0. Coverage
+    // must treat that as uncosted under its own reason code (the operational
+    // fix is recording purchase costs, not re-mapping the recipe), while the
+    // money fields keep aggregating the zero cost exactly as before: this
+    // change is about trust, not arithmetic.
+    it('reports UNAVAILABLE inventoryCoverage with ZERO_COST_BASIS when the only SALE movement of an APPLIED sale records totalCostNio = 0 (WU12)', async () => {
+      insumoRepo.find.mockResolvedValue([
+        {
+          id: 'ins-coffee',
+          name: 'Café Grano',
+          consumptionUom: 'kg',
+        } as Insumo,
+      ]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+      ]);
+
+      const mockMovements: Partial<InventoryMovement>[] = [
+        {
+          insumoId: 'ins-coffee',
+          type: MovementType.SALE,
+          quantity: -2,
+          unitCostNio: 0,
+          // Mapped insumo with no purchase yet: averageCost defaults to 0,
+          // so the movement stamp is a real 0, not a null.
+          totalCostNio: 0,
+          sourceDocumentId: 'invoice:inv-1',
+        },
+      ];
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockMovements),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      // Trust: the sale is uncosted under ZERO_COST_BASIS (a zero-quantity
+      // movement could not evidence a cost either; this one has qty = 2, so
+      // the zero is a real recorded zero-cost basis).
+      expect(report.inventoryCoverage).toEqual({
+        status: 'UNAVAILABLE',
+        costedSalesCount: 0,
+        uncostedSalesCount: 1,
+        reasonCodes: ['ZERO_COST_BASIS'],
+      });
+      // Money regression (byte-identical before/after WU12): a zero-cost
+      // insumo genuinely contributes 0 cost, so aggregation is untouched.
+      expect(report.salesCogsNio).toBe(0);
+      expect(report.totalCogsNio).toBe(0);
+      expect(report.shrinkageCogsNio).toBe(0);
+      expect(report.items).toEqual([
+        {
+          insumoId: 'ins-coffee',
+          insumoName: 'Café Grano',
+          consumptionUom: 'kg',
+          salesQuantity: 2,
+          salesCostNio: 0,
+          shrinkageQuantity: 0,
+          shrinkageCostNio: 0,
+          totalQuantity: 2,
+          totalCostNio: 0,
+          costPercentage: 0,
+        },
+      ]);
+    });
+
+    it('reports PARTIAL inventoryCoverage with ZERO_COST_BASIS when the period mixes a real-cost sale and a zero-cost sale, without moving the money fields (WU12)', async () => {
+      insumoRepo.find.mockResolvedValue([
+        {
+          id: 'ins-coffee',
+          name: 'Café Grano',
+          consumptionUom: 'kg',
+        } as Insumo,
+        {
+          id: 'ins-milk',
+          name: 'Leche',
+          consumptionUom: 'lt',
+        } as Insumo,
+      ]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+        {
+          id: 'inv-2',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+      ]);
+
+      const mockMovements: Partial<InventoryMovement>[] = [
+        {
+          insumoId: 'ins-coffee',
+          type: MovementType.SALE,
+          quantity: -2,
+          unitCostNio: 100,
+          totalCostNio: 200,
+          sourceDocumentId: 'invoice:inv-1',
+        },
+        {
+          // Zero-cost basis: mapped insumo, no purchase recorded yet.
+          insumoId: 'ins-milk',
+          type: MovementType.SALE,
+          quantity: -1,
+          unitCostNio: 0,
+          totalCostNio: 0,
+          sourceDocumentId: 'invoice:inv-2',
+        },
+      ];
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockMovements),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'PARTIAL',
+        costedSalesCount: 1,
+        uncostedSalesCount: 1,
+        reasonCodes: ['ZERO_COST_BASIS'],
+      });
+      // Money regression (byte-identical before/after WU12): the zero-cost
+      // sale contributes exactly 0 to salesCogsNio/totalCogsNio and its item
+      // row aggregates exactly as under the old trust policy.
+      expect(report.salesCogsNio).toBe(200);
+      expect(report.totalCogsNio).toBe(200);
+      expect(report.shrinkageCogsNio).toBe(0);
+      expect(report.items).toEqual([
+        {
+          insumoId: 'ins-coffee',
+          insumoName: 'Café Grano',
+          consumptionUom: 'kg',
+          salesQuantity: 2,
+          salesCostNio: 200,
+          shrinkageQuantity: 0,
+          shrinkageCostNio: 0,
+          totalQuantity: 2,
+          totalCostNio: 200,
+          costPercentage: 100,
+        },
+        {
+          insumoId: 'ins-milk',
+          insumoName: 'Leche',
+          consumptionUom: 'lt',
+          salesQuantity: 1,
+          salesCostNio: 0,
+          shrinkageQuantity: 0,
+          shrinkageCostNio: 0,
+          totalQuantity: 1,
+          totalCostNio: 0,
+          costPercentage: 0,
+        },
+      ]);
+    });
+
+    it('reports ZERO_COST_BASIS (not MISSING_COST_BASIS) when totalCostNio is absent but unitCostNio records a present zero (WU12)', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: 'APPLIED',
+        },
+      ]);
+
+      const mockMovements: Partial<InventoryMovement>[] = [
+        {
+          insumoId: 'ins-coffee',
+          type: MovementType.SALE,
+          quantity: -2,
+          unitCostNio: 0,
+          totalCostNio: null as unknown as number,
+          sourceDocumentId: 'invoice:inv-1',
+        },
+      ];
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue(mockMovements),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      // Present-but-zero cost is operationally different from no recorded
+      // cost at all: the fix is recording a purchase cost, not auditing the
+      // movement chain, so it earns its own reason code.
+      expect(report.inventoryCoverage).toEqual({
+        status: 'UNAVAILABLE',
+        costedSalesCount: 0,
+        uncostedSalesCount: 1,
+        reasonCodes: ['ZERO_COST_BASIS'],
+      });
+      // Money regression: qty x unitCostNio(0) = 0, unchanged by WU12.
+      expect(report.salesCogsNio).toBe(0);
+      expect(report.totalCogsNio).toBe(0);
+    });
+
+    it('reports COMPLETE inventoryCoverage with zero counts for an empty period', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([]);
+
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'COMPLETE',
+        costedSalesCount: 0,
+        uncostedSalesCount: 0,
+      });
+      expect('reasonCodes' in report.inventoryCoverage).toBe(false);
+    });
+
+    it('reports UNAVAILABLE inventoryCoverage when sales exist but none can be costed', async () => {
+      insumoRepo.find.mockResolvedValue([]);
+      mockSaleInvoices([
+        {
+          id: 'inv-1',
+          type: 'regular',
+          isCanceled: false,
+          inventoryOutcome: null,
+        },
+      ]);
+
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      };
+      movementRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const report = await service.getCogsReport('tenant-1');
+
+      expect(report.inventoryCoverage).toEqual({
+        status: 'UNAVAILABLE',
+        costedSalesCount: 0,
+        uncostedSalesCount: 1,
+        reasonCodes: ['UNRESOLVED_SOURCE_DOCUMENT'],
       });
     });
   });

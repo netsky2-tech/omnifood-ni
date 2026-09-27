@@ -20,7 +20,7 @@
  * test/sales/dashboard-v2-acceptance.db.e2e-spec.ts (AC-08/AC-09A describes).
  */
 import type { ComponentProps, ReactElement } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +41,7 @@ import {
   type DashboardV2Report,
 } from "@/features/dashboard/dashboard-api";
 import { fetchAlerts, fetchCogs } from "@/features/inventory/inventory-api";
+import type { InventoryCoverage } from "@/features/inventory/inventory-types";
 import {
   fetchSequenceAudit,
   fetchVoidedInvoices,
@@ -154,16 +155,30 @@ const ZERO_SALES_DAY = {
   generatedAt: GENERATED_AT,
 };
 
+/**
+ * COGS fixture. Review round 2 P0 #4: the read model now carries
+ * `inventoryCoverage` (WU2/WU11) and the margin ratio is gated on it, so the
+ * default is COMPLETE coverage over the fixture's costed sales; individual
+ * scenarios override it per case.
+ */
 const cogsFixture = (
   salesCogsNio: number,
   shrinkageCogsNio = 0,
   from = DAY,
+  coverage: InventoryCoverage | Record<string, unknown> | null = {
+    status: "COMPLETE",
+    costedSalesCount: salesCogsNio > 0 ? 171 : 0,
+    uncostedSalesCount: 0,
+    reasonCodes: [],
+  },
 ) => ({
   fromDate: from,
   toDate: from,
   totalCogsNio: salesCogsNio + shrinkageCogsNio,
   salesCogsNio,
   shrinkageCogsNio,
+  // Key omitted entirely = the backend sent no coverage (gate closes).
+  ...(coverage !== null ? { inventoryCoverage: coverage } : {}),
   generatedAt: GENERATED_AT,
   items: [],
 });
@@ -463,7 +478,7 @@ describe("AC-01 — normal Régimen General sales day (Gate A/B)", () => {
     expect(tileByLabel("IVA generado")?.textContent).toContain("C$6,341.25");
   });
 
-  it("renders every PRD §29 widget: trend, hourly, top products, payment mix, healthy attention", async () => {
+  it("renders every PRD §29 widget and hides Attention when there are no exceptions", async () => {
     mockDashboardReport({});
 
     renderWithProviders(<PerformanceBand range={WEEK} today={DAY} />);
@@ -474,12 +489,15 @@ describe("AC-01 — normal Régimen General sales day (Gate A/B)", () => {
     expect(screen.getByTestId("hourly-card")).toBeInTheDocument();
     expect(screen.getByTestId("top-products-card")).toBeInTheDocument();
     expect(screen.getByTestId("payment-mix-card")).toBeInTheDocument();
-    // Freshness-independent operational state is complete: no failing
-    // signal, no degraded attention row (AC-01 "complete freshness state"
-    // is asserted at the derivation level in the backend acceptance proof).
+    // PRD §19 scopes the panel to actionable exceptions and AC-11 only
+    // requires the sequence row when `hasGaps = true`. With every signal
+    // settled healthy there is nothing actionable, so the panel renders
+    // nothing at all — no "todo bien" card competing for the owner's
+    // attention (review round 2, WU4).
     await waitFor(() => {
-      expect(screen.getByTestId("attention-healthy")).toBeInTheDocument();
+      expect(screen.queryByTestId("attention-band")).not.toBeInTheDocument();
     });
+    expect(screen.queryByTestId("attention-healthy")).not.toBeInTheDocument();
     expect(screen.getByTestId("top-products-rows").textContent).toContain(
       "Cafe Latte",
     );
@@ -910,12 +928,16 @@ describe("AC-10..AC-13 — attention signals (Gate E surfaces)", () => {
     );
   });
 
-  it("shows 'Todo en orden' only when every signal settled without critical/warning findings", async () => {
+  it("hides the whole panel once every signal settled without critical/warning findings", async () => {
     renderWithProviders(<AttentionBand range={{ start: DAY, end: DAY }} />);
 
+    // Exceptions-only contract (PRD §19): a fully healthy signal set is not
+    // an exception, so the section is absent rather than announcing "Todo en
+    // orden". The reclaimed space goes to the sibling chart cells.
     await waitFor(() => {
-      expect(screen.getByTestId("attention-healthy")).toBeInTheDocument();
+      expect(screen.queryByTestId("attention-band")).not.toBeInTheDocument();
     });
+    expect(screen.queryByTestId("attention-healthy")).not.toBeInTheDocument();
     expect(screen.queryByTestId("attention-item-stock")).not.toBeInTheDocument();
     expect(screen.queryByTestId("attention-item-vouchers")).not.toBeInTheDocument();
     expect(screen.queryByTestId("attention-item-voids")).not.toBeInTheDocument();
@@ -936,6 +958,13 @@ describe("AC-14 — tips after remediation (separate flow, reconciled KPIs)", ()
     await waitFor(() => {
       expect(screen.getByTestId("tips-summary-card")).toBeInTheDocument();
     });
+    // The card is no longer a liveness probe: WU5 made it always-render (the
+    // Descuentos row survives a null tip summary), so its presence proves
+    // nothing about the data. Wait on the report actually settling instead of
+    // racing the async queries.
+    await waitFor(() => {
+      expect(screen.queryByTestId("kpi-strip-skeleton")).not.toBeInTheDocument();
+    });
     // Tip KPI set reconciles to the fixture (PRD §21.2; sale-time base).
     expect(screen.getByText("Total Propinas")).toBeInTheDocument();
     expect(screen.getByText("C$130.00")).toBeInTheDocument();
@@ -949,26 +978,40 @@ describe("AC-14 — tips after remediation (separate flow, reconciled KPIs)", ()
 });
 
 describe("AC-15 — tip-inapplicable tenant (omit, never zero placeholders)", () => {
-  it("omits the tips card cleanly when the period has no tip coverage", async () => {
+  it("keeps the flows card for discounts while hiding tips when the period has no tip coverage", async () => {
     mockDashboardReport({ tipsSummary: null });
 
     renderWithProviders(<DashboardPage />);
 
+    // PRD §21.4 still forbids zero-value tip placeholders, but the card itself
+    // no longer disappears: it carries the always-visible Descuentos row now.
+    // Assert the settled page so this cannot pass by racing an empty loading
+    // state where the tips block is legitimately absent.
     await waitFor(() => {
-      expect(screen.getByText("Resumen de Ventas")).toBeInTheDocument();
+      expect(screen.queryByTestId("kpi-strip-skeleton")).not.toBeInTheDocument();
     });
-    expect(screen.queryByTestId("tips-summary-card")).not.toBeInTheDocument();
+    expect(screen.getByTestId("tips-summary-card")).toBeInTheDocument();
+    expect(screen.getByTestId("management-band")).toBeInTheDocument();
     expect(screen.queryByText("Total Propinas")).not.toBeInTheDocument();
-    expect(screen.queryByText("C$0.00")).not.toBeInTheDocument();
+    // PRD §21.4 forbids zero-value TIP placeholders. The flows card is allowed
+    // to show real discount money — pin that the tips block is absent while the
+    // Descuentos row is present, instead of asserting a specific amount that
+    // belongs to the shared sales fixture rather than to this acceptance case.
+    const flowsCard = screen.getByTestId("tips-summary-card");
+    expect(within(flowsCard).getByText("Descuentos")).toBeInTheDocument();
+    expect(within(flowsCard).queryByText(/Propinas|Promedio por Propina/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Resumen de Ventas")).not.toBeInTheDocument();
   });
 
   it("treats legacy NULL-only coverage as inapplicable at the gate level", () => {
     expect(TIPS_APPLICABLE.tipCoverage.recordedInvoicesCount).toBeGreaterThan(0);
     // The gate itself (isTipsSummaryApplicable) is pinned at unit level in
     // dashboard-v2-tips.spec.tsx; here we pin the page-level consequence:
-    // a null summary renders nothing through the same code path.
+    // a null summary hides the TIPS BLOCK, while the flows card stays alive
+    // for Descuentos (WU5).
     render(<TipsSummaryCard summary={null} />);
-    expect(screen.queryByTestId("tips-summary-card")).not.toBeInTheDocument();
+    expect(screen.getByTestId("tips-summary-card")).toBeInTheDocument();
+    expect(screen.queryByText("Total Propinas")).not.toBeInTheDocument();
   });
 });
 
@@ -979,6 +1022,14 @@ describe("AC-15 — tip-inapplicable tenant (omit, never zero placeholders)", ()
 describe("AC-16 — widget API failure isolation (Gate F posture)", () => {
   it("Top Products failure degrades locally while the core dashboard stays usable", async () => {
     mockDashboardReport({});
+    // The Attention panel is exceptions-only (PRD §19), so a fully healthy
+    // signal set legitimately renders nothing and cannot serve as a liveness
+    // probe. One real exception makes the panel render, which proves the
+    // stronger property: a data-bearing Attention panel survives a sibling
+    // widget's API failure.
+    vi.mocked(fetchSequenceAudit).mockResolvedValue(
+      sequenceFixture({ hasGaps: true, missingSequences: [4], actualCount: 9 }) as never,
+    );
     vi.mocked(fetchTopProducts).mockRejectedValue(
       new Error("top products endpoint down"),
     );
@@ -993,6 +1044,7 @@ describe("AC-16 — widget API failure isolation (Gate F posture)", () => {
     expect(screen.getByTestId("hourly-card")).toBeInTheDocument();
     expect(screen.getByTestId("payment-mix-card")).toBeInTheDocument();
     expect(screen.getByTestId("attention-band")).toBeInTheDocument();
+    expect(screen.getByTestId("attention-item-sequence")).toBeInTheDocument();
     // No full-page crash banner replaced the content.
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
@@ -1017,10 +1069,13 @@ describe("AC-17 — permission-limited Manager (Gate F)", () => {
     expect(screen.getByText("Ventas Netas")).toBeInTheDocument();
     expect(screen.getByText("Tickets")).toBeInTheDocument();
     expect(screen.getByText("Ticket Promedio")).toBeInTheDocument();
-    // No sensitive numeric surface: no margin tile, no figures leaked.
+    // No sensitive numeric surface: no margin tile, no figures leaked, and
+    // no "Sin costo" note either — the tile is omitted, not degraded.
     expect(screen.queryByText("Margen Bruto")).not.toBeInTheDocument();
     expect(screen.queryByText("61.4%")).not.toBeInTheDocument();
     expect(screen.queryByText("C$18,740.00")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kpi-margin-note")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Sin costo/)).not.toBeInTheDocument();
     expect(fetchCogs).not.toHaveBeenCalled();
   });
 

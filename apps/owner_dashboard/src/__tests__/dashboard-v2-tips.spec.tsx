@@ -160,6 +160,12 @@ describe("TipsSummaryCard (PRD §21.2/§21.4)", () => {
   it("renders em-dashes for null rate/average instead of fabricated zeros", () => {
     render(
       <TipsSummaryCard
+        // WU5 made this card the flows card: the Descuentos row is always
+        // present and renders its own two em-dashes when its inputs are
+        // absent. Supplying real discount values keeps this count measuring
+        // the two TIP nulls the test is actually about.
+        preDiscountSalesNio={5000}
+        totalDiscountsNio={100}
         summary={{
           ...TIPS_SUMMARY,
           averageTipNio: null,
@@ -186,14 +192,19 @@ describe("TipsSummaryCard (PRD §21.2/§21.4)", () => {
     expect(screen.getAllByText("0.0%")).toHaveLength(2);
   });
 
-  it("omits the card entirely when the summary is null (PRD §21.4)", () => {
-    const { container } = render(<TipsSummaryCard summary={null} />);
-    expect(container).toBeEmptyDOMElement();
+  it("omits the tips block when the summary is null, keeping the flows card alive (PRD §21.4)", () => {
+    // PRD §21.4 still forbids zero-value tip placeholders, but WU5 moved
+    // Descuentos into this card, so a null tip summary hides the tips block,
+    // not the card.
+    render(<TipsSummaryCard summary={null} />);
+    expect(screen.getByTestId("tips-summary-card")).toBeInTheDocument();
+    expect(screen.queryByText("Total Propinas")).not.toBeInTheDocument();
   });
 
-  it("omits the card when the period has zero recorded tips (legacy NULL rows)", () => {
-    const { container } = render(<TipsSummaryCard summary={LEGACY_NULL_SUMMARY} />);
-    expect(container).toBeEmptyDOMElement();
+  it("omits the tips block for a zero-recorded-tip period (legacy NULL rows)", () => {
+    render(<TipsSummaryCard summary={LEGACY_NULL_SUMMARY} />);
+    expect(screen.getByTestId("tips-summary-card")).toBeInTheDocument();
+    expect(screen.queryByText("Total Propinas")).not.toBeInTheDocument();
   });
 });
 
@@ -270,17 +281,21 @@ describe("DashboardPage — tips summary band (Batch 7)", () => {
 
     expect(screen.getByTestId("tips-summary-card")).toBeInTheDocument();
     expect(screen.getByText("C$130.00")).toBeInTheDocument();
-    // Tips stay outside the sales summary band (PRD §21.3).
-    expect(screen.getByText("Resumen de Ventas")).toBeInTheDocument();
+    // Tips stay outside the sales summary band (PRD §21.3), and review round 2
+    // (WU5) retired the static "Resumen de Ventas" card entirely.
+    expect(screen.queryByText("Resumen de Ventas")).not.toBeInTheDocument();
+    expect(screen.getByText("Flujos separados de ventas")).toBeInTheDocument();
   });
 
-  it("omits the tips card when tips are inapplicable and keeps the page intact (PRD §21.4)", () => {
+  it("keeps the flows card for discounts while hiding tips when inapplicable (PRD §21.4)", () => {
     mockPage(null);
     renderPage();
 
-    expect(screen.queryByTestId("tips-summary-card")).not.toBeInTheDocument();
+    // The card no longer disappears with tips: Descuentos keeps it rendered.
+    expect(screen.getByTestId("tips-summary-card")).toBeInTheDocument();
+    expect(screen.queryByText("Total Propinas")).not.toBeInTheDocument();
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getByText("Resumen de Ventas")).toBeInTheDocument();
+    expect(screen.queryByText("Resumen de Ventas")).not.toBeInTheDocument();
   });
 });
 

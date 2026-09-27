@@ -11,6 +11,12 @@
  * (awareness). Deep-links only — attention is navigation, never mutation
  * (PRD §24/§16).
  *
+ * Exceptions-only panel (PRD §19): "Atención Requerida" surfaces actionable
+ * exceptions, never healthy states. A healthy fiscal sequence emits no row
+ * (AC-11 is conditional on `hasGaps = true`), and an info-only audit summary
+ * emits no row. A signal also carries a temporal scope (current-state vs
+ * selected-period) rendered as a quiet chip on its row.
+ *
  * Drill-down destinations resolve to the module routes that exist today
  * (PRD §24): stock → Inventory; pending reconciliation → Sales; voids and
  * sequence anomalies → Fiscal (voided invoices / sequence audit); audit →
@@ -32,12 +38,20 @@ export type AttentionSeverity = "critical" | "warning" | "info";
 
 export type AttentionKey = "stock" | "vouchers" | "voids" | "sequence" | "audit";
 
+/**
+ * Temporal scope of a signal's data, rendered as a quiet chip so the owner
+ * can tell current state from the selected date range at a glance (§28:
+ * the chip is textual, never color-only).
+ */
+export type AttentionScope = "current" | "period";
+
 export interface AttentionItem {
   key: AttentionKey;
   label: string;
   severity: AttentionSeverity;
   detail: string;
   href: string;
+  scope: AttentionScope;
 }
 
 export interface AttentionSignal {
@@ -64,6 +78,24 @@ const SIGNAL_HREFS: Record<AttentionKey, string> = {
   audit: "/audit",
 };
 
+/**
+ * Single auditable lookup: which signals describe current state (not
+ * date-filtered) vs the selected page period (fetched with
+ * `range.start`/`range.end`).
+ *
+ * - `stock`: inventory alerts snapshot — no date range.
+ * - `vouchers`: card-reconciliation summary is explicitly an
+ *   outstanding-state snapshot (see `fetchCardReconciliationSummary`).
+ * - `voids`, `sequence`, `audit`: date-scoped to the page range.
+ */
+const SIGNAL_SCOPES: Record<AttentionKey, AttentionScope> = {
+  stock: "current",
+  vouchers: "current",
+  voids: "period",
+  sequence: "period",
+  audit: "period",
+};
+
 export function formatAttentionCurrency(amount: number): string {
   return new Intl.NumberFormat("es-NI", {
     style: "currency",
@@ -83,6 +115,7 @@ function item(
     severity,
     detail,
     href: SIGNAL_HREFS[key],
+    scope: SIGNAL_SCOPES[key],
   };
 }
 
@@ -196,8 +229,11 @@ export function useAttentionSignals(range: LocalDateRange): AttentionSignal[] {
       : null,
   );
 
-  // AC-11: hasGaps/duplicates → Critical; a healthy sequence stays visible
-  // as an Info row ("✓ Secuencia fiscal sin gaps", per the wireframe §1).
+  // AC-11 is conditional on `hasGaps = true`: it requires the sequence row
+  // only when the sequence-audit reports gaps (or duplicates). §19 scopes
+  // "Atención Requerida" to actionable exceptions, so a healthy sequence is
+  // deliberately silent — no healthy Info row — and the panel itself hides
+  // when no exception remains.
   const sequence = toSignal("sequence", sequenceQuery, sequenceQuery.data, (d) => {
     if (d.hasGaps || d.duplicateSequences.length > 0) {
       return item(
@@ -206,18 +242,18 @@ export function useAttentionSignals(range: LocalDateRange): AttentionSignal[] {
         `Gaps en secuencia fiscal · ${d.missingSequences.length} faltante(s), ${d.duplicateSequences.length} duplicado(s)`,
       );
     }
-    return item("sequence", "info", "Secuencia fiscal sin gaps");
+    return null;
   });
 
+  // Exceptions-only panel (§19): info-only audit activity is awareness, not
+  // an actionable exception — no row unless there is a critical or warning
+  // event.
   const audit = toSignal("audit", auditQuery, auditQuery.data, (d) => {
     if (d.criticalCount > 0) {
       return item("audit", "critical", `${d.criticalCount} evento(s) crítico(s)`);
     }
     if (d.warningCount > 0) {
       return item("audit", "warning", `${d.warningCount} evento(s) de advertencia`);
-    }
-    if (d.infoCount > 0) {
-      return item("audit", "info", `${d.infoCount} evento(s) informativos`);
     }
     return null;
   });
