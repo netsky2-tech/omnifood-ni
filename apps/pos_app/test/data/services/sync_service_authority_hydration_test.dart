@@ -15,6 +15,7 @@ import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
 import 'package:pos_app/domain/services/inventory/authority_hydration_status.dart';
 import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity.dart';
+import 'package:pos_app/data/models/inventory/product_entity.dart';
 
 class MockAuditRepository extends Mock implements AuditRepository {
   @override
@@ -712,6 +713,91 @@ void main() {
       expect(result.authorityHydrationFailureReason, contains('tenant'));
       expect(await countRows('authority_recipe_versions'), 0);
       expect(await countRows('authority_ingestion_verdicts'), 0);
+    });
+  });
+
+  group('#613 Unit B — getInertRecipeVerdictReport (surfacing read model)', () {
+    Future<void> insertProduct(String id, String name) {
+      return database.productDao.insertProducts([
+        ProductEntity(
+          id: id,
+          name: name,
+          uom: 'UND',
+          stock: 0,
+          averageCost: 0,
+          sellPrice: 0,
+          productType: 'SIMPLE',
+        ),
+      ]);
+    }
+
+    Future<void> insertVerdict(String versionId, String productId) {
+      return database.authorityIngestionVerdictDao.insertVerdictIfAbsent(
+        AuthorityIngestionVerdictEntity(
+          recipeVersionId: versionId,
+          code: AuthorityIngestionVerdicts.inertSimpleProductCode,
+          productId: productId,
+          tenantId: 'tenant-alpha',
+          createdAt: '2026-09-27T00:00:00Z',
+        ),
+      );
+    }
+
+    test('returns the DAO verdict count and the affected product names',
+        () async {
+      await insertProduct('prod-pizza', 'Pizza');
+      await insertProduct('prod-jugo', 'Jugo Natural');
+      await insertVerdict('rv-1', 'prod-pizza');
+      await insertVerdict('rv-2', 'prod-jugo');
+
+      final report = await syncService.getInertRecipeVerdictReport();
+
+      expect(report, isNotNull);
+      expect(report!.verdictCount, 2);
+      // Names ordered for display; both products resolved through the join.
+      expect(report.productNames, ['Jugo Natural', 'Pizza']);
+    });
+
+    test(
+        'falls back to the product id when the product is unknown locally',
+        () async {
+      await insertVerdict('rv-1', 'prod-ghost');
+
+      final report = await syncService.getInertRecipeVerdictReport();
+
+      expect(report, isNotNull);
+      expect(report!.verdictCount, 1);
+      expect(report.productNames, ['prod-ghost']);
+    });
+
+    test('deduplicates repeated verdicts for the same product', () async {
+      await insertProduct('prod-pizza', 'Pizza');
+      await insertVerdict('rv-1', 'prod-pizza');
+      await insertVerdict('rv-2', 'prod-pizza');
+
+      final report = await syncService.getInertRecipeVerdictReport();
+
+      expect(report, isNotNull);
+      expect(report!.verdictCount, 2);
+      expect(report.productNames, ['Pizza']);
+    });
+
+    test('returns null when there are no verdicts (render nothing)',
+        () async {
+      final report = await syncService.getInertRecipeVerdictReport();
+
+      expect(report, isNull);
+    });
+
+    test(
+        'returns null instead of throwing when the verdict read fails '
+        '(dialog renders exactly as before)', () async {
+      await insertVerdict('rv-1', 'prod-pizza');
+      await database.close();
+
+      final report = await syncService.getInertRecipeVerdictReport();
+
+      expect(report, isNull);
     });
   });
 }

@@ -296,6 +296,24 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
                   ),
                 ),
               ],
+              // #613 Unit B — informational inert-recipe verdict line.
+              // Best-effort read: null (nothing to report, or the verdict
+              // read failed) renders nothing and leaves the dialog exactly
+              // as before. This never changes the badge colour or status
+              // and never blocks the sale path (owner decision 5).
+              FutureBuilder<AuthorityInertRecipeReport?>(
+                future: syncService?.getInertRecipeVerdictReport() ??
+                    Future<AuthorityInertRecipeReport?>.value(null),
+                builder: (context, snapshot) {
+                  final report = snapshot.data;
+                  if (snapshot.hasError ||
+                      report == null ||
+                      report.verdictCount <= 0) {
+                    return const SizedBox.shrink();
+                  }
+                  return _InertRecipesDetailSection(report: report);
+                },
+              ),
             ],
           ),
           actions: [
@@ -336,6 +354,117 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
           value,
           style: const TextStyle(fontSize: 13),
         ),
+      ],
+    );
+  }
+}
+
+/// #613 Unit B — collapsed informational line ("N recetas inertes en este
+/// dispositivo") that expands, on tap, to the affected product names so the
+/// operator can act in Catálogo. Purely informational: amber like the
+/// pending state, never the error red, and rendered through [localize] from
+/// [kAuthorityInertRecipeLabels] (no inline copy).
+class _InertRecipesDetailSection extends StatefulWidget {
+  final AuthorityInertRecipeReport report;
+
+  const _InertRecipesDetailSection({required this.report});
+
+  @override
+  State<_InertRecipesDetailSection> createState() =>
+      _InertRecipesDetailSectionState();
+}
+
+class _InertRecipesDetailSectionState
+    extends State<_InertRecipesDetailSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = widget.report.verdictCount;
+    final line = count == 1
+        ? localize(
+            'AUTHORITY_INERT_RECIPES_LINE_ONE',
+            kAuthorityInertRecipeLabels,
+          )
+        : localize(
+            'AUTHORITY_INERT_RECIPES_LINE_MANY',
+            kAuthorityInertRecipeLabels,
+          ).replaceFirst('{count}', '$count');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        InkWell(
+          key: const Key('authority_inert_recipes_line'),
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline,
+                    color: Colors.amber.shade800, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    line,
+                    style: TextStyle(
+                      color: Colors.amber.shade800,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _expanded
+                      ? Icons.expand_less
+                      : Icons.expand_more,
+                  color: Colors.amber.shade800,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded) ...[
+          const SizedBox(height: 4),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final name in widget.report.productNames)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 1),
+                    child: Text(
+                      name,
+                      style: TextStyle(
+                        color: Colors.amber.shade900,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                Text(
+                  localize(
+                    'AUTHORITY_INERT_RECIPES_PRODUCTS_HINT',
+                    kAuthorityInertRecipeLabels,
+                  ),
+                  style: TextStyle(
+                    color: Colors.amber.shade900,
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

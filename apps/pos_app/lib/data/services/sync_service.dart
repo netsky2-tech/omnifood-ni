@@ -39,6 +39,27 @@ typedef SyncRole = String;
 
 enum CloudSyncStatus { idle, syncing, offline, error, success }
 
+/// #613 Unit B — informational read model for the inert-recipe ingestion
+/// verdicts, rendered by the cloud sync badge's detail dialog.
+///
+/// [verdictCount] is the append-only verdict row count on this device (the
+/// DAO's `countVerdicts()`, never recomputed from projections or the UI);
+/// [productNames] are the display names of the affected products so the
+/// operator can act in Catálogo. Verdicts are facts about ingestion, not
+/// errors: this model never flips `CloudSyncStatus` and never blocks a sale.
+class AuthorityInertRecipeReport {
+  final int verdictCount;
+
+  /// Display-ready, deduplicated and ordered; falls back to the raw product
+  /// id when the product is unknown to the terminal's own catalog.
+  final List<String> productNames;
+
+  const AuthorityInertRecipeReport({
+    required this.verdictCount,
+    required this.productNames,
+  });
+}
+
 /// A per-record sales result that was NOT accepted by the backend
 /// (anything other than ACCEPTED/APPLIED/DUPLICATE/SUCCESS).
 ///
@@ -280,6 +301,51 @@ class SyncService {
     } catch (_) {}
 
     return count;
+  }
+
+  /// #613 Unit B — best-effort read of the inert-recipe ingestion verdicts
+  /// for the sync detail dialog. Informational only: null means "nothing to
+  /// report OR the read failed" — the dialog renders exactly as before in
+  /// both cases, never a new error state and never a blocked sale. The
+  /// count comes from the verdict DAO (Unit A); product names are joined
+  /// from the terminal's own catalog so the operator can act in Catálogo.
+  /// Existing hydration telemetry and catch blocks are untouched: this is a
+  /// read-only, additive accessor.
+  Future<AuthorityInertRecipeReport?> getInertRecipeVerdictReport() async {
+    try {
+      final database = _database;
+      if (database == null) return null;
+      final count =
+          await database.authorityIngestionVerdictDao.countVerdicts() ?? 0;
+      if (count <= 0) return null;
+      final rows = await database.database.rawQuery(
+        'SELECT v.product_id AS product_id, p.name AS product_name '
+        'FROM authority_ingestion_verdicts v '
+        'LEFT JOIN products p ON p.id = v.product_id '
+        'ORDER BY p.name',
+      );
+      final names = <String>{};
+      for (final row in rows) {
+        final name = row['product_name'];
+        if (name is String && name.trim().isNotEmpty) {
+          names.add(name.trim());
+          continue;
+        }
+        final productId = row['product_id'];
+        if (productId is String && productId.trim().isNotEmpty) {
+          names.add(productId.trim());
+        }
+      }
+      return AuthorityInertRecipeReport(
+        verdictCount: count,
+        productNames: names.toList(growable: false),
+      );
+    } catch (_) {
+      // Report the absence, never the failure: the verdict table is
+      // diagnostic material and its unreadability must not surface as a
+      // sync error (#613 decision 5).
+      return null;
+    }
   }
 
   Future<SyncRunOutcome> triggerManualSync() async {

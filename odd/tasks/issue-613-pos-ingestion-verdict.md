@@ -111,3 +111,21 @@ Existing relevant suites: `test/data/services/authority_delta_adapter_test.dart`
 - Contract written from a read-only integration map of `apps/pos_app`; the issue's
   "the push breaks" premise was falsified and replaced by the payload-refusal and
   silent-inertness findings above. Owner chose badge+detail surfacing (decision 5).
+- Unit A landed as `89201f3d`: per-record verdict classification in the adapter,
+  `authority_ingestion_verdicts` entity + DAO + migration, verdict writes during
+  hydration, `local_configs` aggregate telemetry keys.
+- Unit B landed (uncommitted, this worktree): additive
+  `SyncService.getInertRecipeVerdictReport()` (DAO count + product-name join,
+  throw-to-null degradation), informational expandable line in the sync detail
+  dialog rendered through `localize` with the new `kAuthorityInertRecipeLabels`
+  family in `label_map.dart`. Badge colour/status untouched; zero verdicts and a
+  failed verdict read both render the dialog exactly as before. Read-path finding:
+  Unit A's DAO exposes only `countVerdicts()`, so the product-name join lives in
+  the allowed `sync_service.dart` surface (raw read-only SQL join over the
+  append-only verdict table and `products`); no DAO, adapter, hydration, or
+  migration file was touched. Widget tests drive the dialog through a
+  hand-written `SyncService` stand-in because sqflite's real async I/O deadlocks
+  inside flutter_test's fake-async zone; the real-DAO read model (count, name
+  join, id fallback, dedup, throw-to-null) is pinned in
+  `sync_service_authority_hydration_test.dart` against an in-memory Floor
+database.
