@@ -17,7 +17,8 @@
  *      netting exactly as it always has.
  *   2. isCompletedTicketDocument — a non-canceled document that is a real
  *      customer ticket. Credit notes are refund documents, NOT tickets, and
- *      never count toward completedTicketCount / averageTicketNetNio.
+ *      never count toward completedTicketCount nor contribute to the
+ *      average-ticket numerator (issue #624).
  *   3. isCogsCoverageRelevantSale — a non-canceled regular sale whose direct
  *      cost the inventory module must be able to prove. Credit notes are not
  *      cost evidence. Defined here, pure and inventory-independent, so sales
@@ -43,8 +44,13 @@
  *   keeps Net Sales reconciled with grossSales, hourly and top-product
  *   revenue, which net credit notes in as well.
  * - Pre-discount Sales: Net Sales + Total Discounts (PRD §7.3).
- * - Average Ticket: Net Sales / Completed Tickets, or null when the ticket
- *   count is zero (PRD §7.5 — "—", never C$0.00).
+ * - Average Ticket: completedTicketsNetNio / Completed Tickets, or null when
+ *   the ticket count is zero (PRD §7.5 — "—", never C$0.00). The numerator is
+ *   the Net Sales of EXACTLY the documents counted as completed tickets
+ *   (issue #624): numerator and denominator are over the same document set,
+ *   so refund netting can never make the average negative. `netSalesNio`
+ *   keeps its own refund-netting semantics and is NOT the average-ticket
+ *   numerator.
  *
  * All values come from historical persisted invoice data — never from current
  * catalog or tax rules (spec §7.1).
@@ -110,6 +116,13 @@ export interface SalesReportingTotals {
   netSalesNio: number;
   preDiscountSalesNio: number;
   completedTicketCount: number;
+  /**
+   * Σ subtotals over exactly the rows counted as completed tickets
+   * (isCompletedTicketDocument): the numerator basis of averageTicketNetNio
+   * (issue #624). Refund netting stays out of here — it belongs to
+   * netSalesNio only.
+   */
+  completedTicketsNetNio: number;
   averageTicketNetNio: number | null;
   totalTaxNio: number;
   totalDiscountsNio: number;
@@ -143,6 +156,21 @@ export interface SalesReportingTipsSummary {
 
 const round2 = (value: number): number =>
   Number((Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2));
+
+/**
+ * Shared average-ticket rule (issue #624): the numerator is the net of the
+ * documents counted as completed tickets — the same document set as the
+ * denominator. Rounded to 2 decimals; null when the ticket count is zero
+ * (PRD §7.5: "—", never C$0.00).
+ */
+function averageTicketFrom(
+  ticketsNetNio: number,
+  completedTicketCount: number,
+): number | null {
+  return completedTicketCount > 0
+    ? round2(ticketsNetNio / completedTicketCount)
+    : null;
+}
 
 /** Discriminator value persisted for credit-note (refund) documents. */
 const CREDIT_NOTE_TYPE = 'creditNote';
@@ -303,6 +331,7 @@ export function computeSalesReportingTotals(
   let totalTaxNio = 0;
   let totalDiscountsNio = 0;
   let completedTicketCount = 0;
+  let completedTicketsNetNio = 0;
 
   for (const row of rows) {
     if (!isRevenueAffectingDocument(row)) {
@@ -312,22 +341,28 @@ export function computeSalesReportingTotals(
     totalTaxNio = round2(totalTaxNio + Number(row.totalTax ?? 0));
     totalDiscountsNio = round2(totalDiscountsNio + salesRowDiscounts(row));
     // Deliberate split: the amount nets (revenue predicate) but the credit
-    // note never counts as a ticket (ticket predicate).
+    // note never counts as a ticket (ticket predicate) — and since issue
+    // #624 it stays out of the average-ticket numerator as well, so that
+    // numerator and denominator cover the same document set.
     if (isCompletedTicketDocument(row)) {
       completedTicketCount += 1;
+      completedTicketsNetNio = round2(
+        completedTicketsNetNio + salesRowNetSales(row),
+      );
     }
   }
 
   const preDiscountSalesNio = round2(netSalesNio + totalDiscountsNio);
-  const averageTicketNetNio =
-    completedTicketCount > 0
-      ? round2(netSalesNio / completedTicketCount)
-      : null;
+  const averageTicketNetNio = averageTicketFrom(
+    completedTicketsNetNio,
+    completedTicketCount,
+  );
 
   return {
     netSalesNio,
     preDiscountSalesNio,
     completedTicketCount,
+    completedTicketsNetNio,
     averageTicketNetNio,
     totalTaxNio,
     totalDiscountsNio,
@@ -448,7 +483,7 @@ export interface DailySalesSeriesPoint {
   date: string;
   netSalesNio: number;
   completedTicketCount: number;
-  /** netSalesNio / completedTicketCount; null on a zero-ticket day (PRD §7.5). */
+  /** Ticket-scoped net / completedTicketCount of the day; null on a zero-ticket day (PRD §7.5, issue #624). */
   averageTicketNetNio: number | null;
 }
 
@@ -456,7 +491,9 @@ export interface DailySalesSeriesPoint {
  * Daily Sales Trend buckets (PRD §14) under the §7.2 cross-widget invariant:
  * the same reporting predicates and the same per-row Net Sales expression as
  * `computeSalesReportingTotals`, never grossSales — amounts use the revenue
- * predicate, ticket counts the ticket predicate.
+ * predicate, ticket counts the ticket predicate, and since issue #624 the
+ * per-day average-ticket numerator is the per-day ticket-scoped net, the
+ * same basis as the KPI tile.
  *
  * Every calendar day of [localStartDate, localEndDate] is emitted in order;
  * zero-sales days carry netSalesNio 0, count 0 and a null average so the
@@ -478,6 +515,7 @@ export function computeDailySalesSeries(
   const end = parseLocalDateKey(localEndDate);
 
   const netByDay = new Map<string, number>();
+  const ticketsNetByDay = new Map<string, number>();
   const countByDay = new Map<string, number>();
 
   for (const row of rows) {
@@ -496,6 +534,12 @@ export function computeDailySalesSeries(
     );
     if (isCompletedTicketDocument(row)) {
       countByDay.set(bucket, (countByDay.get(bucket) ?? 0) + 1);
+      // Ticket-scoped net for the day's average ticket (issue #624): the
+      // same numerator basis as computeSalesReportingTotals.
+      ticketsNetByDay.set(
+        bucket,
+        round2((ticketsNetByDay.get(bucket) ?? 0) + salesRowNetSales(row)),
+      );
     }
   }
 
@@ -508,10 +552,10 @@ export function computeDailySalesSeries(
       date: cursor,
       netSalesNio,
       completedTicketCount,
-      averageTicketNetNio:
-        completedTicketCount > 0
-          ? round2(netSalesNio / completedTicketCount)
-          : null,
+      averageTicketNetNio: averageTicketFrom(
+        ticketsNetByDay.get(cursor) ?? 0,
+        completedTicketCount,
+      ),
     });
     cursor = addLocalDays(cursor, 1);
   }

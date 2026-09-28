@@ -154,6 +154,7 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
         netSalesNio: 3730,
         preDiscountSalesNio: 3880,
         completedTicketCount: 3,
+        completedTicketsNetNio: 3730,
         averageTicketNetNio: 1243.33,
         totalTaxNio: 559.5,
         totalDiscountsNio: 150,
@@ -189,14 +190,14 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
       expect(totals.averageTicketNetNio).not.toBe(0);
     });
 
-    it('nets credit-note amounts into sales totals but NOT into the ticket count', () => {
+    it('computes the average ticket over the ticket-scoped net, not the refund-netted revenue (issue #624)', () => {
       // A credit note is persisted with a negative subtotal (see
       // invoices.service.db.spec.ts fixtures). The amount still nets into
       // Net Sales because Net Sales reconciles with grossSales, hourly and
       // top-product revenue, which net credit notes in as persisted — but a
-      // refund document is NOT a customer ticket, so it must not inflate
-      // completedTicketCount or deflate averageTicketNetNio (WU10 ratified
-      // semantics, owner decision).
+      // refund document is NOT a customer ticket, so since issue #624 the
+      // average-ticket numerator excludes it too: numerator and denominator
+      // are over the SAME document set (isCompletedTicketDocument).
       const rows: SalesReportingInvoiceRow[] = [
         { isCanceled: false, subtotal: 2000, totalTax: 300, items: [] },
         {
@@ -210,18 +211,19 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
 
       const totals = computeSalesReportingTotals(rows);
       expect(totals.netSalesNio).toBe(1500);
+      expect(totals.completedTicketsNetNio).toBe(2000);
       expect(totals.completedTicketCount).toBe(1);
-      // averageTicketNetNio = netSalesNio / completedTicketCount (PRD §7.5):
-      // 1500 / 1 = 1500. The single remaining ticket sold for 2000, but the
-      // average is computed over the netted period revenue, not over the
-      // surviving ticket's own subtotal.
-      expect(totals.averageTicketNetNio).toBe(1500);
+      // averageTicketNetNio = completedTicketsNetNio / completedTicketCount
+      // (issue #624): 2000 / 1 = 2000. The refund never enters the average
+      // numerator, only the headline Net Sales figure.
+      expect(totals.averageTicketNetNio).toBe(2000);
     });
 
     it('measures the owner fixture: 2 sales of C$100 + 1 credit note of -C$50', () => {
-      // Ratified WU10 expectation: revenue nets to 150, tickets stay 2 and
-      // the average stays 75 — the credit note never inflates the ticket
-      // denominator.
+      // Issue #624 expectation: revenue still nets to 150 and tickets stay 2,
+      // but the average-ticket numerator is the ticket-scoped net (200), so
+      // the average is 100. Numerator and denominator cover the same
+      // document set; the credit note only deflates the headline Net Sales.
       const rows: SalesReportingInvoiceRow[] = [
         { isCanceled: false, subtotal: 100, totalTax: 0, items: [] },
         { isCanceled: false, subtotal: 100, totalTax: 0, items: [] },
@@ -236,8 +238,32 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
 
       const totals = computeSalesReportingTotals(rows);
       expect(totals.netSalesNio).toBe(150);
+      expect(totals.completedTicketsNetNio).toBe(200);
       expect(totals.completedTicketCount).toBe(2);
-      expect(totals.averageTicketNetNio).toBe(75);
+      expect(totals.averageTicketNetNio).toBe(100);
+    });
+
+    it('issue #624 worked example: C$100 sale + C$150 credit note on one ticket averages C$100, not -C$50', () => {
+      const rows: SalesReportingInvoiceRow[] = [
+        { isCanceled: false, subtotal: 100, totalTax: 0, items: [] },
+        {
+          isCanceled: false,
+          subtotal: -150,
+          totalTax: 0,
+          items: [],
+          type: 'creditNote',
+        },
+      ];
+
+      const totals = computeSalesReportingTotals(rows);
+      expect(totals.netSalesNio).toBe(-50);
+      expect(totals.completedTicketsNetNio).toBe(100);
+      expect(totals.completedTicketCount).toBe(1);
+      // The numerator is the ticket-scoped net (100), never the
+      // refund-netted revenue (-50): a negative average ticket caused by
+      // refund netting is structurally impossible (issue #624).
+      expect(totals.averageTicketNetNio).toBe(100);
+      expect(totals.averageTicketNetNio).toBeGreaterThan(0);
     });
 
     it('returns zero totals for an empty invoice set', () => {
@@ -245,6 +271,7 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
         netSalesNio: 0,
         preDiscountSalesNio: 0,
         completedTicketCount: 0,
+        completedTicketsNetNio: 0,
         averageTicketNetNio: null,
         totalTaxNio: 0,
         totalDiscountsNio: 0,
@@ -534,6 +561,60 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
         completedTicketCount: 0,
         averageTicketNetNio: null,
       });
+    });
+
+    it('computes per-day and period average tickets on the same ticket-scoped basis (issue #624)', () => {
+      // Day 1 nets a C$150 credit note against a C$100 sale; day 2 has a
+      // clean C$300 sale. Under the OLD rule the day-1 average would have
+      // been -50 (refund-netted net / 1) while the period average would have
+      // been 125 ((100 - 150 + 300) / 2): numerator and denominator over
+      // different document sets at both sites. Under the corrected rule both
+      // sites use the ticket-scoped net: day 1 -> 100, day 2 -> 300,
+      // period -> 200.
+      const rows: SalesReportingInvoiceRow[] = [
+        { isCanceled: false, subtotal: 100, localIssueDate: '2026-06-10' },
+        {
+          isCanceled: false,
+          subtotal: -150,
+          localIssueDate: '2026-06-10',
+          type: 'creditNote',
+        },
+        { isCanceled: false, subtotal: 300, localIssueDate: '2026-06-11' },
+      ];
+
+      const days = computeDailySalesSeries('2026-06-10', '2026-06-11', rows);
+      const totals = computeSalesReportingTotals(rows);
+
+      // The §7.2 parity invariant is about netSalesNio and still holds.
+      expect(
+        days.reduce((sum, d) => sum + d.netSalesNio, 0),
+      ).toBe(totals.netSalesNio);
+      expect(totals.netSalesNio).toBe(250);
+      expect(totals.completedTicketsNetNio).toBe(400);
+      expect(totals.completedTicketCount).toBe(2);
+      expect(totals.averageTicketNetNio).toBe(200);
+
+      expect(days[0]).toEqual({
+        date: '2026-06-10',
+        netSalesNio: -50,
+        completedTicketCount: 1,
+        averageTicketNetNio: 100,
+      });
+      expect(days[1]).toEqual({
+        date: '2026-06-11',
+        netSalesNio: 300,
+        completedTicketCount: 1,
+        averageTicketNetNio: 300,
+      });
+
+      // Same basis across sites: the days' ticket-scoped nets (average ×
+      // count, exact on these clean fixtures) sum to the period's
+      // ticket-scoped net.
+      const daysTicketNet = days.reduce(
+        (sum, d) => sum + (d.averageTicketNetNio ?? 0) * d.completedTicketCount,
+        0,
+      );
+      expect(daysTicketNet).toBe(totals.completedTicketsNetNio);
     });
 
     it('keeps the §7.2 parity invariant even when a bucket falls outside the range', () => {
