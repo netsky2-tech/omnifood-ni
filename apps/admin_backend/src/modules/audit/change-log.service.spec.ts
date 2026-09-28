@@ -6,6 +6,23 @@ import {
 } from './change-log.service';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 
+/** Minimal chainable QueryBuilder mock recording the built predicate shape. */
+const makeQueryBuilder = (rows: ChangeLog[]) => {
+  const qb: Record<string, unknown> = {};
+  for (const method of [
+    'where',
+    'andWhere',
+    'orderBy',
+    'addOrderBy',
+    'take',
+  ]) {
+    qb[method] = jest.fn(() => qb);
+  }
+  const getMany = jest.fn().mockResolvedValue(rows);
+  qb.getMany = getMany;
+  return { qb, getMany };
+};
+
 /**
  * Issue #512 T3 slice 7: change_log is tenant-RLS protected, so every
  * ChangeLogService access must run on a tenant-bound transaction manager.
@@ -26,7 +43,12 @@ describe('ChangeLogService', () => {
   interface Harness {
     service: ChangeLogService;
     pooled: { create: jest.Mock; save: jest.Mock; find: jest.Mock };
-    boundRepo: { create: jest.Mock; save: jest.Mock; find: jest.Mock };
+    boundRepo: {
+      create: jest.Mock;
+      save: jest.Mock;
+      find: jest.Mock;
+      createQueryBuilder: jest.Mock;
+    };
     boundManager: { query: jest.Mock; getRepository: jest.Mock };
     dataSource: { transaction: jest.Mock };
     setConfigCalls: Array<[string, string[]]>;
@@ -46,6 +68,7 @@ describe('ChangeLogService', () => {
       create: jest.fn((data: unknown) => data as ChangeLog),
       save: jest.fn().mockResolvedValue(undefined),
       find: jest.fn().mockResolvedValue([]),
+      createQueryBuilder: jest.fn(),
     };
 
     const setConfigCalls: Array<[string, string[]]> = [];
@@ -283,6 +306,86 @@ describe('ChangeLogService', () => {
       expect(suppliedRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ severity: 'CRITICAL' }),
       );
+    });
+  });
+
+  describe('findEvents (slice 6b — GET /operations/audit/events)', () => {
+    it('binds a filtered read through a tenant transaction when no manager is supplied', async () => {
+      const h = makeHarness();
+      const { qb, getMany } = makeQueryBuilder([]);
+      h.boundRepo.createQueryBuilder = jest.fn(() => qb);
+
+      await h.service.findEvents('tenant-1', {
+        startInclusiveUtc: new Date('2026-08-01T06:00:00.000Z'),
+        endExclusiveUtc: new Date('2026-09-01T06:00:00.000Z'),
+        severity: 'CRITICAL',
+        limit: 50,
+      });
+
+      expect(h.dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(h.setConfigCalls).toEqual([
+        [TENANT_CONTEXT_SET_CONFIG_SQL, ['tenant-1']],
+      ]);
+      expect(h.pooled.find).not.toHaveBeenCalled();
+      expect(h.boundRepo.find).not.toHaveBeenCalled();
+      expect(h.boundRepo.createQueryBuilder).toHaveBeenCalledWith('c');
+      expect(getMany).toHaveBeenCalledTimes(1);
+      expect(qb.where).toHaveBeenCalledWith('c.tenant_id = :tenantId', {
+        tenantId: 'tenant-1',
+      });
+      expect(qb.andWhere).toHaveBeenCalledWith('c.created_at >= :startInclusiveUtc', {
+        startInclusiveUtc: new Date('2026-08-01T06:00:00.000Z'),
+      });
+      expect(qb.andWhere).toHaveBeenCalledWith('c.created_at < :endExclusiveUtc', {
+        endExclusiveUtc: new Date('2026-09-01T06:00:00.000Z'),
+      });
+      expect(qb.andWhere).toHaveBeenCalledWith('c.severity = :severity', {
+        severity: 'CRITICAL',
+      });
+      expect(qb.orderBy).toHaveBeenCalledWith('c.created_at', 'DESC');
+      expect(qb.addOrderBy).toHaveBeenCalledWith('c.id', 'DESC');
+      expect(qb.take).toHaveBeenCalledWith(50);
+    });
+
+    it('includes historical NULL-severity rows when filtering by INFO (backfill-free rule)', async () => {
+      const h = makeHarness();
+      const { qb } = makeQueryBuilder([]);
+      h.boundRepo.createQueryBuilder = jest.fn(() => qb);
+
+      await h.service.findEvents('tenant-1', { severity: 'INFO', limit: 10 });
+
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        '(c.severity = :severity OR c.severity IS NULL)',
+        { severity: 'INFO' },
+      );
+      expect(qb.take).toHaveBeenCalledWith(10);
+    });
+
+    it('applies no severity predicate when the filter is absent', async () => {
+      const h = makeHarness();
+      const { qb } = makeQueryBuilder([]);
+      h.boundRepo.createQueryBuilder = jest.fn(() => qb);
+
+      await h.service.findEvents('tenant-1', { limit: 25 });
+
+      expect(qb.andWhere).not.toHaveBeenCalled();
+    });
+
+    it('rides a supplied manager without opening another transaction', async () => {
+      const h = makeHarness();
+      const { qb, getMany } = makeQueryBuilder([]);
+      const suppliedRepo = { createQueryBuilder: jest.fn(() => qb) };
+      const manager = { getRepository: jest.fn(() => suppliedRepo) };
+
+      await h.service.findEvents(
+        'tenant-1',
+        { limit: 5 },
+        manager as unknown as never,
+      );
+
+      expect(h.dataSource.transaction).not.toHaveBeenCalled();
+      expect(suppliedRepo.createQueryBuilder).toHaveBeenCalledWith('c');
+      expect(getMany).toHaveBeenCalledTimes(1);
     });
   });
 });

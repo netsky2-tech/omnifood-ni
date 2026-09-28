@@ -76,6 +76,61 @@ export const cashShiftStatusLabels: Record<string, string> = {
 };
 
 /**
+ * Audit event severity labels (slice 6b). Keys are the exact values of the
+ * single backend AuditRiskClassifier taxonomy (audit-risk-classifier.ts):
+ * CRITICAL / WARNING / INFO. Canonical vocabulary (NHILOS §26/§27): one term
+ * per severity, agreeing with the "evento ..." copy used by the dashboard
+ * attention band. Unknown values pass through untouched via `localize`.
+ */
+export const auditSeverityLabels: Record<string, string> = {
+  CRITICAL: "Crítico",
+  WARNING: "Advertencia",
+  INFO: "Informativo",
+};
+
+/**
+ * Audit action labels (slice 6b). Keys are the exact `change_log.action`
+ * values written by the backend ingestion call sites (verified against
+ * audit-risk-classifier.ts and its spec). A new backend code passes through
+ * untouched via `localize` so it never crashes the UI.
+ */
+export const auditActionLabels: Record<string, string> = {
+  ONBOARDING_ACTIVATION_CHECK_FAILED: "Fallo de control en activación de terminal",
+  ONBOARDING_ACTIVATION_SUPPORT_OVERRIDE: "Anulación de control en activación de terminal",
+  ONBOARDING_ACTIVATION_FINALIZED: "Activación de terminal finalizada",
+  ONBOARDING_ACTIVATION_FOLLOW_UP_OPENED: "Seguimiento de activación abierto",
+  ONBOARDING_ACTIVATION_FOLLOW_UP_CLOSED: "Seguimiento de activación cerrado",
+  ONBOARDING_ACTIVATION_ATTEMPT_STARTED: "Intento de activación iniciado",
+  CREATE: "Creación",
+  UPDATE: "Modificación",
+  DEACTIVATE: "Desactivación",
+};
+
+/**
+ * Audited entity type labels (slice 6b). Keys are the exact
+ * `change_log.target_type` values written by the backend ingestion call
+ * sites (activation, catalog and product services).
+ */
+export const auditTargetTypeLabels: Record<string, string> = {
+  ActivationAttempt: "Activación de terminal",
+  ActivationCheckResult: "Control de activación",
+  ActivationFollowUp: "Seguimiento de activación",
+  catalog_value: "Valor de catálogo",
+  product: "Producto",
+};
+
+/**
+ * Logical (non-human) audit actor labels (slice 6b). Keys are the actor_ref
+ * values documented by ChangeLogService; a terminal id or any other ref
+ * passes through untouched via `localize`.
+ */
+export const auditActorRefLabels: Record<string, string> = {
+  SYSTEM: "Sistema",
+  SYSTEM_RECONCILER: "Conciliación automática",
+  SYSTEM_FINALIZER: "Cierre automático",
+};
+
+/**
  * Documented machine failure codes of POST /onboarding/activation/attempts,
  * verified against apps/admin_backend/src/modules/onboarding/services/
  * activation.service.ts. When one of these codes appears in the backend
