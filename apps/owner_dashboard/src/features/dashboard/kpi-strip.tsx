@@ -14,39 +14,9 @@
 import { useDashboardKpis } from "./use-dashboard-kpis";
 import type { MarginGate } from "./dashboard-types";
 import { useCanViewInventoryCost } from "@/features/auth/permissions";
-import type { ComparisonPeriod, LocalDateRange } from "./domain/comparison-period";
+import type { LocalDateRange } from "./domain/comparison-period";
+import { formatHumanComparisonLabel } from "./domain/comparison-language";
 import { marginGateCaveatLines } from "./coverage-notes";
-
-const MS_PER_DAY = 86_400_000;
-
-function toUtcMs(localDate: string): number {
-  const parts = localDate.split("-").map(Number);
-  const [y = 0, m = 1, d = 1] = parts;
-  return Date.UTC(y, m - 1, d);
-}
-
-function weekdayName(localDate: string): string {
-  return new Intl.DateTimeFormat("es-NI", { weekday: "long", timeZone: "UTC" }).format(
-    new Date(toUtcMs(localDate)),
-  );
-}
-
-/**
- * Comparison label derived from the resolver output: "vs ayer" when the
- * previous single day immediately precedes the current single day,
- * "vs <weekday> anterior" for the single-day same-weekday rule (PRD §9.3),
- * and a neutral label for any other shape. Internal to the strip: labels are
- * a rendering concern and the strip spec derives them independently.
- */
-function comparisonLabel(period: ComparisonPeriod): string {
-  const singleDay = period.currentStart === period.currentEnd;
-  const prevSingle = period.previousStart === period.previousEnd;
-  if (!singleDay || !prevSingle) return "vs periodo anterior";
-  const gapDays = (toUtcMs(period.currentStart) - toUtcMs(period.previousEnd)) / MS_PER_DAY;
-  if (gapDays === 1) return "vs ayer";
-  if (gapDays === 7) return `vs ${weekdayName(period.previousStart)} anterior`;
-  return "vs periodo anterior";
-}
 
 function formatSigned(value: number, unit: string, decimals = 1): string {
   const magnitude = Math.abs(value).toFixed(decimals);
@@ -94,12 +64,15 @@ function Tile({ label, value, delta, deltaUnit = "%", deltaLabel, subtitle, span
   return (
     <div
       data-testid="kpi-tile"
-      className={`rounded-lg border border-border bg-card p-5 shadow-sm ${spanClass ?? ""}`}
+      // min-w-0: grid items default to min-width:auto, which lets a wide
+      // tabular value (§21 200% text scaling) push the track wider than the
+      // viewport instead of clipping inside the card.
+      className={`min-w-0 rounded-lg border border-border bg-card p-5 shadow-sm ${spanClass ?? ""}`}
     >
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <p className="mt-2 text-3xl font-bold tabular-nums text-card-foreground">{value}</p>
+      <p className="mt-2 truncate text-3xl font-bold tabular-nums text-card-foreground">{value}</p>
       {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
       {note !== undefined ? (
         <p className="mt-2 text-sm text-muted-foreground" data-testid="kpi-margin-note">
@@ -205,7 +178,7 @@ export function KpiStrip({ range, today }: KpiStripProps) {
   // permission chain ships — only OWNER passes without an explicit grant.
   const canViewCost = useCanViewInventoryCost();
   const kpis = useDashboardKpis(range, today, { canViewCost });
-  const label = comparisonLabel(kpis.period);
+  const label = formatHumanComparisonLabel(kpis.period);
 
   // G4: while the sales ranges are loading the shape is undetermined, and
   // when sales data is present but the fiscal regime query is still in flight
@@ -221,7 +194,9 @@ export function KpiStrip({ range, today }: KpiStripProps) {
     return (
       <div
         data-testid="kpi-strip-error"
-        className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
+        // NHILOS §21 readable contrast: text-destructive on the 10 % tint is
+        // 4.13:1 (AA failure for this text-xs copy); red-700 is 5.54:1.
+        className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-red-700"
       >
         No se pudieron cargar los indicadores de ventas. El resto del dashboard sigue disponible.
       </div>

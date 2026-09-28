@@ -88,7 +88,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs sm:text-sm font-medium text-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer transition-colors shadow-xs"
+        className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs sm:text-sm font-medium text-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 cursor-pointer transition-colors shadow-xs"
         aria-expanded={open}
         aria-label="Seleccionar rango de fechas"
       >
@@ -116,7 +116,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                     onChange(preset.getRange());
                     setOpen(false);
                   }}
-                  className="w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  className="w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-foreground hover:bg-muted transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/20"
                 >
                   {preset.label}
                 </button>

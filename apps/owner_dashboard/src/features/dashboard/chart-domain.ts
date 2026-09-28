@@ -170,6 +170,7 @@ export function buildHourlyBars(
 }
 
 export interface TopProductRow {
+  productId?: string;
   name: string;
   /** Backend line-item quantity (`totalQuantity`) — a real units field. */
   units: number;
@@ -227,13 +228,19 @@ export function buildTopProductRows(
   const denominator = Number(periodNetSalesNio);
   const hasDenominator = Number.isFinite(denominator) && denominator > 0;
   return {
-    rows: listed.map((p) => ({
-      name: typeof p?.productName === "string" && p.productName !== "" ? p.productName : "Producto sin nombre",
-      units: Number(p?.totalQuantity) || 0,
-      revenue: revenueOf(p),
-      sharePercent: hasDenominator ? percentOf(revenueOf(p), denominator) : null,
-      periodNetSalesNio: hasDenominator ? denominator : null,
-    })),
+    rows: listed.map((p) => {
+      const row: TopProductRow = {
+        name: typeof p?.productName === "string" && p.productName !== "" ? p.productName : "Producto sin nombre",
+        units: Number(p?.totalQuantity) || 0,
+        revenue: revenueOf(p),
+        sharePercent: hasDenominator ? percentOf(revenueOf(p), denominator) : null,
+        periodNetSalesNio: hasDenominator ? denominator : null,
+      };
+      if (typeof p?.productId === "string" && p.productId !== "") {
+        row.productId = p.productId;
+      }
+      return row;
+    }),
   };
 }
 

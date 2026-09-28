@@ -13,12 +13,77 @@
  * a meaningless flat chart.
  */
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Rectangle } from "recharts";
+import type { BarShapeProps } from "recharts";
+import type { ComponentProps } from "react";
+import { useNavigate } from "react-router-dom";
 import { buildHourlyBars, formatNio } from "./chart-domain";
 import { ChartCard, EmptyNote, WidgetError, WidgetSkeleton } from "./chart-card";
 import { useHourlyReport } from "./use-dashboard-charts";
+import { buildDashboardDrilldownUrl } from "./domain/navigation-context";
+
+/** Props the Bar shape renderer actually forwards; everything else is strip-geometry data. */
+const BAR_SHAPE_NON_DOM_KEYS = [
+  "payload",
+  "value",
+  "background",
+  "tooltipPosition",
+  "parentViewBox",
+  "stackedBarStart",
+  "originalDataIndex",
+  "isActive",
+  "index",
+  "dataKey",
+  "animationElapsedTime",
+  "isAnimating",
+  "isEntrance",
+] as const;
 
 export function HourlySalesChart({ start, end }: { start: string; end: string }) {
   const query = useHourlyReport(start, end);
+  const navigate = useNavigate();
+
+  /** §15/§28.F.6: an hour bar drills down to that hour on the hourly tab. */
+  const hourDrilldownUrl = (hour: number) =>
+    buildDashboardDrilldownUrl(
+      "/sales",
+      {
+        source: "dashboard",
+        sourceWidget: "hourly-sales",
+        startDate: start,
+        endDate: end,
+      },
+      { tab: "hourly", hour },
+    );
+
+  const openHour = (hour: number) => navigate(hourDrilldownUrl(hour));
+
+  /** §28.F.6: every clickable bar carries its own accessible label. */
+  const clickableBarShape = (props: BarShapeProps) => {
+    const rest = {} as Record<string, unknown>;
+    for (const [key, value] of Object.entries(props)) {
+      if (!(BAR_SHAPE_NON_DOM_KEYS as readonly string[]).includes(key)) {
+        rest[key] = value;
+      }
+    }
+    const hour = Number((props as { payload?: { hour?: unknown } }).payload?.hour);
+    return (
+      <Rectangle
+        {...(rest as ComponentProps<typeof Rectangle>)}
+        role="button"
+        tabIndex={0}
+        data-testid={`hourly-bar-${hour}`}
+        aria-label={`Ver ventas de las ${String(hour).padStart(2, "0")}:00`}
+        className="cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            openHour(hour);
+          }
+        }}
+      />
+    );
+  };
 
   let body;
   if (query.isPending) {
@@ -46,7 +111,7 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
             {rangeCaption} · Horario con actividad: {String(firstActiveHour).padStart(2, "0")}:00 –{" "}
             {String(lastActiveHour).padStart(2, "0")}:00
           </p>
-          <div role="img" aria-label="Ventas por hora del día">
+          <div role="group" aria-label="Ventas por hora del día">
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={bars} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <XAxis
@@ -65,7 +130,21 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
                   formatter={(value) => formatNio(Number(value))}
                   labelFormatter={(label) => String(label)}
                 />
-                <Bar dataKey="sales" fill="var(--color-primary, #013a57)" radius={[2, 2, 0, 0]} />
+                {/* §15/§28.F.6: Bar-level onClick is the recharts-native click
+                    route (payload carries the hour); the custom shape only adds
+                    the accessible semantics and keyboard handler. */}
+                <Bar
+                  dataKey="sales"
+                  fill="var(--color-primary, #013a57)"
+                  radius={[2, 2, 0, 0]}
+                  shape={clickableBarShape}
+                  onClick={(data) => {
+                    const hour = Number((data as { payload?: { hour?: unknown } }).payload?.hour);
+                    if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
+                      openHour(hour);
+                    }
+                  }}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -74,8 +153,24 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
     }
   }
 
+  const drilldownUrl = buildDashboardDrilldownUrl(
+    "/sales",
+    {
+      source: "dashboard",
+      sourceWidget: "hourly-sales",
+      startDate: start,
+      endDate: end,
+    },
+    { tab: "hourly" },
+  );
+
   return (
-    <ChartCard title="Ventas por hora" testId="hourly-card">
+    <ChartCard
+      title="Ventas por hora"
+      testId="hourly-card"
+      to={drilldownUrl}
+      linkAriaLabel="Ver ventas por hora en detalle"
+    >
       {body}
     </ChartCard>
   );

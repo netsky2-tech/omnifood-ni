@@ -18,6 +18,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { formatLocalDate } from "@/lib/utils";
 import { resolveComparisonPeriod, type LocalDateRange } from "./domain/comparison-period";
 import { AttentionBand } from "./attention-band";
+import { useAttentionSignals } from "./use-attention-signals";
 import { SalesTrendChart } from "./sales-trend-chart";
 import { HourlySalesChart } from "./hourly-sales-chart";
 import { TopProductsChart } from "./top-products-chart";
@@ -58,14 +59,24 @@ export interface PerformanceBandProps {
 
 export function PerformanceBand({ range, today }: PerformanceBandProps) {
   const period = resolveComparisonPeriod(range, today ?? formatLocalDate(new Date()));
+  const attentionSignals = useAttentionSignals({
+    start: period.currentStart,
+    end: period.currentEnd,
+  });
+
+  const isAttentionPending = attentionSignals.some((s) => s.status === "pending");
+  const hasAttentionErrors = attentionSignals.some((s) => s.status === "error");
+  const hasAttentionItems = attentionSignals.some((s) => s.item !== null);
+  const showAttention = isAttentionPending || hasAttentionErrors || hasAttentionItems;
 
   return (
     <section aria-label="Rendimiento del negocio" className="space-y-6">
-      {/* Batch 6b: trend (2/3) + Atención Requerida (1/3) per the wireframe
-          §1 2:1 row. The band's own signal isolation keeps one failed signal
-          from affecting the trend cell (FR-STATE-04/05). */}
+      {/* Batch 6b / Experience Standard §8.3 & UX-01: trend (2/3) + Atención Requerida (1/3)
+          when exceptions exist. When healthy and no exceptions, the panel hides and
+          SalesTrendChart reflows cleanly to fill all 3 columns (lg:col-span-3)
+          without leaving dead grid space. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className={showAttention ? "lg:col-span-2" : "lg:col-span-3"}>
           <ChartCellBoundary>
             <SalesTrendChart
               currentStart={period.currentStart}
@@ -75,9 +86,14 @@ export function PerformanceBand({ range, today }: PerformanceBandProps) {
             />
           </ChartCellBoundary>
         </div>
-        <ChartCellBoundary>
-          <AttentionBand range={{ start: period.currentStart, end: period.currentEnd }} />
-        </ChartCellBoundary>
+        {showAttention && (
+          <ChartCellBoundary>
+            <AttentionBand
+              range={{ start: period.currentStart, end: period.currentEnd }}
+              signals={attentionSignals}
+            />
+          </ChartCellBoundary>
+        )}
       </div>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <ChartCellBoundary>

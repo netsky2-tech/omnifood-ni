@@ -497,7 +497,7 @@ export function BulkImportWizard() {
         <Card className="border-emerald-500/30 bg-emerald-500/5" data-testid="import-committed-card">
           <CardHeader>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-500/20 text-emerald-600 rounded-full">
+              <div className="p-2 bg-emerald-500/20 text-emerald-700 rounded-full">
                 <CheckCircle2 className="h-6 w-6" />
               </div>
               <div>

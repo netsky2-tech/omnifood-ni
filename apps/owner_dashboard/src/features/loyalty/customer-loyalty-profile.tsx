@@ -143,11 +143,11 @@ function TransactionRow({
       <td className="py-2 px-3 text-sm">
         <div className="flex items-center gap-1.5">
           {isPositive ? (
-            <ArrowUpRight className="h-3.5 w-3.5 text-green-600" />
+            <ArrowUpRight className="h-3.5 w-3.5 text-green-700" />
           ) : (
             <ArrowDownRight className="h-3.5 w-3.5 text-red-600" />
           )}
-          <span className={isPositive ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+          <span className={isPositive ? 'text-green-700 font-medium' : 'text-red-600 font-medium'}>
             {isPositive ? '+' : ''}{tx.points}
           </span>
         </div>

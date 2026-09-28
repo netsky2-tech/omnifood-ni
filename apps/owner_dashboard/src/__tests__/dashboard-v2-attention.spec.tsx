@@ -433,25 +433,48 @@ describe("AttentionBand — drill-down destinations (PRD §24)", () => {
     await waitFor(() => {
       expect(screen.getByTestId("attention-link-stock")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("attention-link-stock")).toHaveAttribute(
-      "href",
-      "/inventory",
+    expect(
+      screen.getByTestId("attention-link-stock").getAttribute("href"),
+    ).toContain("/inventory?source=dashboard&sourceWidget=attention");
+    expect(
+      screen.getByTestId("attention-link-stock").getAttribute("href"),
+    ).toContain("tab=alerts");
+    expect(screen.getByTestId("attention-link-stock")).toHaveTextContent(
+      "Ver productos →",
     );
-    expect(screen.getByTestId("attention-link-vouchers")).toHaveAttribute(
-      "href",
-      "/sales",
+
+    expect(
+      screen.getByTestId("attention-link-vouchers").getAttribute("href"),
+    ).toContain("/sales?source=dashboard&sourceWidget=attention");
+    expect(screen.getByTestId("attention-link-vouchers")).toHaveTextContent(
+      "Revisar vouchers →",
     );
-    expect(screen.getByTestId("attention-link-voids")).toHaveAttribute(
-      "href",
-      "/fiscal",
+
+    expect(
+      screen.getByTestId("attention-link-voids").getAttribute("href"),
+    ).toContain("/fiscal?source=dashboard&sourceWidget=attention");
+    expect(
+      screen.getByTestId("attention-link-voids").getAttribute("href"),
+    ).toContain("tab=voided");
+    expect(screen.getByTestId("attention-link-voids")).toHaveTextContent(
+      "Ver anulaciones →",
     );
-    expect(screen.getByTestId("attention-link-sequence")).toHaveAttribute(
-      "href",
-      "/fiscal",
+
+    expect(
+      screen.getByTestId("attention-link-sequence").getAttribute("href"),
+    ).toContain("/fiscal?source=dashboard&sourceWidget=attention");
+    expect(
+      screen.getByTestId("attention-link-sequence").getAttribute("href"),
+    ).toContain("tab=sequence");
+    expect(screen.getByTestId("attention-link-sequence")).toHaveTextContent(
+      "Revisar secuencia →",
     );
-    expect(screen.getByTestId("attention-link-audit")).toHaveAttribute(
-      "href",
-      "/audit",
+
+    expect(
+      screen.getByTestId("attention-link-audit").getAttribute("href"),
+    ).toContain("/audit?source=dashboard&sourceWidget=attention");
+    expect(screen.getByTestId("attention-link-audit")).toHaveTextContent(
+      "Ver auditoría →",
     );
   });
 });

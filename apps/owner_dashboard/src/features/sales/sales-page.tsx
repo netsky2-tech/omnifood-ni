@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
 import { StatCard } from "@/components/ui/stat-card";
 import { LoadingState } from "@/components/ui/loading-state";
@@ -35,11 +36,27 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-function SummaryTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
+function SummaryTab({
+  startDate,
+  endDate,
+  highlightPaymentMethod,
+}: {
+  startDate?: string;
+  endDate?: string;
+  highlightPaymentMethod?: string;
+}) {
   const { data, isLoading } = useSalesDashboard(startDate, endDate);
 
   if (isLoading) return <LoadingState message="Cargando resumen de ventas..." />;
   if (!data) return <EmptyState message="Sin datos de resumen" />;
+
+  const paymentItems = [
+    { key: "CASH_NIO", label: "Efectivo NIO", val: data.paymentMethodsBreakdown.cashNio },
+    { key: "CASH_USD", label: "Efectivo USD", val: data.paymentMethodsBreakdown.cashUsd },
+    { key: "CARD_NIO", label: "Tarjeta NIO", val: data.paymentMethodsBreakdown.cardNio },
+    { key: "CARD_USD", label: "Tarjeta USD", val: data.paymentMethodsBreakdown.cardUsd },
+    { key: "OTHER", label: "Otros", val: data.paymentMethodsBreakdown.other },
+  ];
 
   return (
     <div className="space-y-6">
@@ -53,18 +70,26 @@ function SummaryTab({ startDate, endDate }: { startDate?: string; endDate?: stri
           Desglose por Método de Pago
         </h3>
         <div className="space-y-2.5">
-          {[
-            { label: "Efectivo NIO", val: data.paymentMethodsBreakdown.cashNio },
-            { label: "Efectivo USD", val: data.paymentMethodsBreakdown.cashUsd },
-            { label: "Tarjeta NIO", val: data.paymentMethodsBreakdown.cardNio },
-            { label: "Tarjeta USD", val: data.paymentMethodsBreakdown.cardUsd },
-            { label: "Otros", val: data.paymentMethodsBreakdown.other },
-          ].map((item) => (
-            <div key={item.label} className="flex justify-between text-sm py-1 border-b border-border/50 last:border-0">
-              <span className="text-muted-foreground">{item.label}</span>
-              <span className="tabular-nums font-medium text-foreground">{formatCurrency(item.val)}</span>
-            </div>
-          ))}
+          {paymentItems.map((item) => {
+            const isHighlighted =
+              highlightPaymentMethod &&
+              (item.key.toLowerCase().includes(highlightPaymentMethod.toLowerCase()) ||
+                item.label.toLowerCase().includes(highlightPaymentMethod.toLowerCase()));
+            return (
+              <div
+                key={item.label}
+                className={`flex justify-between text-sm py-1.5 px-2 rounded-md border-b border-border/50 last:border-0 transition-colors ${
+                  isHighlighted ? "bg-primary/10 border-primary font-medium" : ""
+                }`}
+              >
+                <span className={isHighlighted ? "text-primary font-semibold" : "text-muted-foreground"}>
+                  {item.label}
+                  {isHighlighted && <span className="ml-2 text-xs font-normal text-primary">● Seleccionado</span>}
+                </span>
+                <span className="tabular-nums font-medium text-foreground">{formatCurrency(item.val)}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -125,44 +150,82 @@ function HourlyTab({ date }: { date?: string }) {
   );
 }
 
-function ProductsTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
+function ProductsTab({
+  startDate,
+  endDate,
+  initialProductFilter,
+}: {
+  startDate?: string;
+  endDate?: string;
+  initialProductFilter?: string;
+}) {
+  const [productFilter, setProductFilter] = useState<string | undefined>(initialProductFilter);
   const { data, isLoading } = useTopProducts(startDate, endDate);
 
   if (isLoading) return <LoadingState message="Cargando productos más vendidos..." />;
   if (!data || data.products.length === 0)
     return <EmptyState message="Sin datos de productos" />;
 
+  const displayedProducts = productFilter
+    ? data.products.filter(
+        (p) =>
+          p.productId.toLowerCase() === productFilter.toLowerCase() ||
+          p.productName.toLowerCase().includes(productFilter.toLowerCase()),
+      )
+    : data.products;
+
   return (
-    <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
-      <div className="overflow-x-auto w-full">
-        <table className="w-full text-sm min-w-[420px]">
-          <thead>
-            <tr className="border-b border-border bg-muted/60">
-              <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
-                Producto
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
-                Unidades
-              </th>
-              <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
-                Ingresos
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.products.map((p, i) => (
-              <tr key={p.productId} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
-                <td className="px-4 py-3 font-medium text-foreground">
-                  <span className="mr-2 text-muted-foreground text-xs">{i + 1}.</span>
-                  {p.productName}
-                </td>
-                <td className="px-4 py-3 text-right tabular-nums text-foreground">{p.totalQuantity}</td>
-                <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">{formatCurrency(p.totalRevenue)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="space-y-4">
+      {productFilter && (
+        <div className="flex items-center justify-between rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
+          <span>
+            Mostrando producto: <strong className="font-semibold">{productFilter}</strong> ({displayedProducts.length})
+          </span>
+          <button
+            type="button"
+            onClick={() => setProductFilter(undefined)}
+            className="rounded font-medium text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
+          >
+            Mostrar todos ({data.products.length})
+          </button>
+        </div>
+      )}
+
+      {displayedProducts.length === 0 ? (
+        <EmptyState message={`No se encontró el producto ${productFilter}`} />
+      ) : (
+        <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-sm min-w-[420px]">
+              <thead>
+                <tr className="border-b border-border bg-muted/60">
+                  <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                    Producto
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                    Unidades
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                    Ingresos
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedProducts.map((p, i) => (
+                  <tr key={p.productId} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                    <td className="px-4 py-3 font-medium text-foreground">
+                      <span className="mr-2 text-muted-foreground text-xs">{i + 1}.</span>
+                      {p.productName}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-foreground">{p.totalQuantity}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">{formatCurrency(p.totalRevenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -221,11 +284,38 @@ export function SalesPage() {
       ? [{ id: "credit-notes" as TabId, label: "Notas de Crédito" }]
       : []),
   ];
-  const [activeTab, setActiveTab] = useState<TabId>("summary");
+
+  const [searchParams, setSearchParams] = useSafeSearchParams();
+  const tabParam = searchParams.get("tab") as TabId | null;
+  const initialTab: TabId =
+    tabParam && TABS.some((t) => t.id === tabParam) ? tabParam : "summary";
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+
+  const startParam = searchParams.get("startDate");
+  const endParam = searchParams.get("endDate");
   const [range, setRange] = useState<DateRangeValue>(() => {
     const iso = formatLocalDate(new Date());
-    return { startDate: iso, endDate: iso };
+    return {
+      startDate: startParam || iso,
+      endDate: endParam || iso,
+    };
   });
+
+  const productFilter =
+    searchParams.get("product") || searchParams.get("productId") || undefined;
+  const paymentMethodFilter = searchParams.get("paymentMethod") || undefined;
+
+  const handleTabChange = (tabId: TabId) => {
+    setActiveTab(tabId);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", tabId);
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -247,8 +337,8 @@ export function SalesPage() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
+              onClick={() => handleTabChange(tab.id)}
+              className={`rounded border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 ${
                 activeTab === tab.id
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -262,11 +352,19 @@ export function SalesPage() {
 
       <div>
         {activeTab === "summary" && (
-          <SummaryTab startDate={range.startDate} endDate={range.endDate} />
+          <SummaryTab
+            startDate={range.startDate}
+            endDate={range.endDate}
+            highlightPaymentMethod={paymentMethodFilter}
+          />
         )}
         {activeTab === "hourly" && <HourlyTab date={range.startDate} />}
         {activeTab === "products" && (
-          <ProductsTab startDate={range.startDate} endDate={range.endDate} />
+          <ProductsTab
+            startDate={range.startDate}
+            endDate={range.endDate}
+            initialProductFilter={productFilter}
+          />
         )}
         {activeTab === "cashiers" && (
           <CashiersTab startDate={range.startDate} endDate={range.endDate} />

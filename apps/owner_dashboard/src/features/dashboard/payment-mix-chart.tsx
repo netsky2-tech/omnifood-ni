@@ -10,9 +10,11 @@
  * consolidation. Every row carries text amount + percent labels — color is
  * never the only signal (§25.3).
  */
+import { Link } from "react-router-dom";
 import { buildPaymentMixRows, formatNio, formatUsd } from "./chart-domain";
 import { ChartCard, EmptyNote, WidgetError, WidgetSkeleton } from "./chart-card";
 import { usePaymentMixReport } from "./use-dashboard-charts";
+import { buildDashboardDrilldownUrl } from "./domain/navigation-context";
 
 function formatRowAmount(currency: "NIO" | "USD", amount: number): string {
   return currency === "USD" ? formatUsd(amount) : formatNio(amount);
@@ -43,28 +45,47 @@ export function PaymentMixChart({ start, end }: { start: string; end: string }) 
             Montos netos de cambio entregado, en moneda original; consolidación en córdobas (C$).
           </p>
           <ul className="space-y-2" data-testid="payment-mix-rows">
-            {rows.map((row) => (
-              <li key={row.key} className="text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-card-foreground">{row.label}</span>
-                  <span className="whitespace-nowrap text-right text-sm font-medium tabular-nums text-card-foreground">
-                    {formatRowAmount(row.currency, row.amount)}
-                    {row.percent !== null && (
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        {row.percent.toFixed(1)}%
-                      </span>
-                    )}
-                  </span>
-                </div>
-                {row.currency === "NIO" && maxAmount > 0 && (
-                  <div
-                    aria-hidden="true"
-                    className="mt-1 h-1.5 rounded-full bg-primary-50 dark:bg-muted"
-                    style={{ width: `${(row.amount / maxAmount) * 100}%` }}
-                  />
-                )}
-              </li>
-            ))}
+            {rows.map((row) => {
+              const paymentDrilldownUrl = buildDashboardDrilldownUrl(
+                "/sales",
+                {
+                  source: "dashboard",
+                  sourceWidget: "payment-mix",
+                  startDate: start,
+                  endDate: end,
+                  entityType: "payment",
+                },
+                { tab: "summary", paymentMethod: row.key },
+              );
+              return (
+                <li key={row.key} className="text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <Link
+                      to={paymentDrilldownUrl}
+                      className="rounded text-card-foreground hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
+                      title={`Ver pagos con ${row.label}`}
+                    >
+                      {row.label}
+                    </Link>
+                    <span className="whitespace-nowrap text-right text-sm font-medium tabular-nums text-card-foreground">
+                      {formatRowAmount(row.currency, row.amount)}
+                      {row.percent !== null && (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          {row.percent.toFixed(1)}%
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {row.currency === "NIO" && maxAmount > 0 && (
+                    <div
+                      aria-hidden="true"
+                      className="mt-1 h-1.5 rounded-full bg-primary-50 dark:bg-muted"
+                      style={{ width: `${(row.amount / maxAmount) * 100}%` }}
+                    />
+                  )}
+                </li>
+              );
+            })}
           </ul>
           <div className="mt-3 border-t border-border pt-2 text-sm font-semibold">
             <div className="flex items-center justify-between">
@@ -77,8 +98,24 @@ export function PaymentMixChart({ start, end }: { start: string; end: string }) 
     }
   }
 
+  const mainDrilldownUrl = buildDashboardDrilldownUrl(
+    "/sales",
+    {
+      source: "dashboard",
+      sourceWidget: "payment-mix",
+      startDate: start,
+      endDate: end,
+    },
+    { tab: "summary" },
+  );
+
   return (
-    <ChartCard title="Mix de pagos" testId="payment-mix-card">
+    <ChartCard
+      title="Mix de pagos"
+      testId="payment-mix-card"
+      to={mainDrilldownUrl}
+      linkAriaLabel="Ver resumen de métodos de pago"
+    >
       {body}
     </ChartCard>
   );

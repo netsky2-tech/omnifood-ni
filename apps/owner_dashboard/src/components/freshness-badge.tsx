@@ -100,11 +100,11 @@ function freshnessText(freshness: SyncFreshnessResponse, now: Date): string {
         (t) => t.state !== "COMPLETE",
       ).length;
       return incomplete === 1
-        ? "Sincronización parcial (1 terminal incompleto)"
-        : `Sincronización parcial (${incomplete} terminales incompletos)`;
+        ? "Información parcial (1 terminal con datos pendientes)"
+        : `Información parcial (${incomplete} terminales con datos pendientes)`;
     }
     case "UNKNOWN":
-      return "Estado de sincronización desconocido";
+      return "No se puede verificar la completitud de los datos";
   }
 }
 
@@ -124,7 +124,10 @@ function Badge({
       data-testid="freshness-badge"
       data-freshness-state={state}
       title={title}
-      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+      // NHILOS §21 readable contrast: text-muted-foreground on bg-muted is
+      // 4.34:1 — fails AA for this text-xs caption; slate-600 on the same
+      // surface is 6.92:1.
+      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-slate-600"
     >
       <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
       {children}

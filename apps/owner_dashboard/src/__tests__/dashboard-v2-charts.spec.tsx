@@ -28,21 +28,40 @@ import {
   isZeroSeries,
 } from "@/features/dashboard/chart-domain";
 import {
+  fetchAuditSummary,
+  fetchCardReconciliationSummary,
   fetchDailySeries,
   fetchHourlyReport,
   normalizeHourlyReport,
 } from "@/features/dashboard/dashboard-api";
 import {
+  fetchSequenceAudit,
+  fetchVoidedInvoices,
+} from "@/features/fiscal/fiscal-api";
+import {
   fetchSalesDashboard,
   fetchTopProducts,
 } from "@/features/sales/sales-api";
 
-vi.mock("@/lib/tenant", () => ({ useTenantId: () => "tenant-1" }));
+vi.mock("@/features/fiscal/fiscal-api", () => ({
+  fetchSequenceAudit: vi.fn(),
+  fetchVoidedInvoices: vi.fn(),
+}));
+
+vi.mock("@/features/inventory/use-inventory-reports", () => ({
+  useAlerts: vi.fn(() => ({
+    data: { criticalCount: 0, warningCount: 0, negativeCount: 0, totalAlertsCount: 0, alerts: [] },
+    isPending: false,
+    isError: false,
+  })),
+}));
 
 vi.mock("@/features/dashboard/dashboard-api", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   fetchDailySeries: vi.fn(),
   fetchHourlyReport: vi.fn(),
+  fetchCardReconciliationSummary: vi.fn(),
+  fetchAuditSummary: vi.fn(),
 }));
 
 vi.mock("@/features/sales/sales-api", async (importOriginal) => ({
@@ -697,7 +716,7 @@ describe("PerformanceBand — composition and drill-down (PRD §24)", () => {
       expect(screen.getAllByRole("link", { name: /ver/i }).length).toBeGreaterThanOrEqual(4);
     });
     for (const link of screen.getAllByRole("link", { name: /ver/i })) {
-      expect(link.getAttribute("href")).toBe("/sales");
+      expect(link.getAttribute("href")).toContain("/sales?source=dashboard");
     }
   });
 });
@@ -798,3 +817,75 @@ describe("Top Products per-cell explanation (review advisory R3-001)", () => {
     }
   });
 });
+
+describe("PerformanceBand layout reflow (Experience Standard §8.3 & UX-01)", () => {
+  it("expands SalesTrendChart to 3 columns (lg:col-span-3) when Attention Required has no exceptions", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.mocked(fetchDailySeries).mockResolvedValue({
+      current: [
+        { date: "2026-09-25", netSalesNio: 1000 },
+        { date: "2026-09-26", netSalesNio: 1200 },
+      ],
+      previous: [
+        { date: "2026-09-18", netSalesNio: 800 },
+        { date: "2026-09-19", netSalesNio: 900 },
+      ],
+    } as never);
+    vi.mocked(fetchHourlyReport).mockResolvedValue({
+      hourly: [{ hour: 10, totalSales: 500, invoiceCount: 5 }],
+      mode: "single_day",
+      date: "2026-09-26",
+    } as never);
+    vi.mocked(fetchTopProducts).mockResolvedValue({
+      products: [],
+      periodNetSalesNio: 1000,
+    } as never);
+    vi.mocked(fetchSalesDashboard).mockResolvedValue({
+      paymentMethodsBreakdown: { totalNio: 1000, cashNio: 1000, cashUsd: 0, cardNio: 0, cardUsd: 0, other: 0 },
+      grossSales: 1000,
+      invoiceCount: 5,
+      ticketAverage: 200,
+      generatedAt: "2026-09-26T12:00:00Z",
+    } as never);
+
+    vi.mocked(fetchCardReconciliationSummary).mockResolvedValue({
+      pendingCount: 0,
+      pendingAmountNio: 0,
+    } as never);
+    vi.mocked(fetchVoidedInvoices).mockResolvedValue({
+      totalVoidedCount: 0,
+      totalVoidedAmount: 0,
+      invoices: [],
+      generatedAt: "2026-09-26T12:00:00Z",
+    } as never);
+    vi.mocked(fetchSequenceAudit).mockResolvedValue({
+      hasGaps: false,
+      missingSequences: [],
+      duplicateSequences: [],
+      series: [],
+      generatedAt: "2026-09-26T12:00:00Z",
+    } as never);
+    vi.mocked(fetchAuditSummary).mockResolvedValue({
+      criticalCount: 0,
+      warningCount: 0,
+    } as never);
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <PerformanceBand range={{ start: "2026-09-25", end: "2026-09-26" }} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("trend-card")).toBeInTheDocument();
+      expect(screen.queryByTestId("attention-band")).not.toBeInTheDocument();
+    });
+
+    // Parent wrapper has lg:col-span-3 reflow
+    const trendWrapper = screen.getByTestId("trend-card").closest(".lg\\:col-span-3");
+    expect(trendWrapper).toBeInTheDocument();
+  });
+});
+

@@ -23,6 +23,7 @@ import {
   type AttentionItem,
   type AttentionScope,
   type AttentionSeverity,
+  type AttentionSignal,
 } from "./use-attention-signals";
 import type { LocalDateRange } from "./domain/comparison-period";
 
@@ -34,7 +35,9 @@ const SEVERITY_GLYPH: Record<AttentionSeverity, string> = {
 
 const SEVERITY_TEXT: Record<AttentionSeverity, string> = {
   critical: "text-destructive",
-  warning: "text-amber-600 dark:text-amber-400",
+  // NHILOS §21 readable contrast: amber-600 is 3.19:1 on the card surface —
+  // fails AA for small text; amber-700 is 5.02:1 and stays semantic.
+  warning: "text-amber-700 dark:text-amber-300",
   info: "text-muted-foreground",
 };
 
@@ -75,9 +78,10 @@ function AttentionRow({ item }: { item: AttentionItem }) {
         <Link
           to={item.href}
           data-testid={`attention-link-${item.key}`}
-          className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
+          aria-label={`${item.actionLabel} de ${item.label}`}
+          className="rounded text-xs font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 whitespace-nowrap"
         >
-          Ver →
+          {item.actionLabel} →
         </Link>
       </span>
     </li>
@@ -87,10 +91,13 @@ function AttentionRow({ item }: { item: AttentionItem }) {
 export interface AttentionBandProps {
   /** Inclusive local calendar-day range (YYYY-MM-DD) selected on the page. */
   range: LocalDateRange;
+  /** Optional pre-resolved attention signals for layout coordination. */
+  signals?: AttentionSignal[];
 }
 
-export function AttentionBand({ range }: AttentionBandProps) {
-  const signals = useAttentionSignals(range);
+export function AttentionBand({ range, signals: providedSignals }: AttentionBandProps) {
+  const queriedSignals = useAttentionSignals(range);
+  const signals = providedSignals ?? queriedSignals;
 
   const isPending = signals.some((s) => s.status === "pending");
   const hasErrors = signals.some((s) => s.status === "error");
