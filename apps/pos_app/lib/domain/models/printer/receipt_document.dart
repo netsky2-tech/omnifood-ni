@@ -201,6 +201,12 @@ class ReceiptDocument {
   final String? customerRuc;
   final String? originInvoiceId;
 
+  /// REQ-8 (slice 8a): the origin invoice's HUMAN fiscal number for DGI
+  /// credit notes, resolved by the view model at print time. Null or blank
+  /// → no origin line is rendered. The raw [originInvoiceId] (an internal
+  /// UUID) must never reach the paper.
+  final String? originDocumentReference;
+
   final List<ReceiptLine> lines;
 
   final double grossSubtotal;
@@ -257,6 +263,7 @@ class ReceiptDocument {
     this.customerName,
     this.customerRuc,
     this.originInvoiceId,
+    this.originDocumentReference,
     required this.lines,
     double? grossSubtotal,
     required this.subtotal,
@@ -283,6 +290,11 @@ class ReceiptDocument {
   bool get isCuotaFija => taxRegime.isCuotaFija;
   bool get isGlobalTaxExempt => isTaxExempt || globalTaxOverride;
 
+  /// REQ-8 (slice 8a): [_resolveDocTitle] maps InvoiceType.creditNote to this
+  /// exact title, so the formatter can gate the origin-reference block on the
+  /// document type without carrying the whole enum.
+  bool get isCreditNote => documentTitle == 'NOTA DE CREDITO';
+
   /// Replaces only printer transport artwork; all fiscal presentation remains intact.
   ReceiptDocument withLogoRasterBytes(List<int>? logoBytes) => ReceiptDocument(
         businessName: businessName,
@@ -299,6 +311,7 @@ class ReceiptDocument {
         customerName: customerName,
         customerRuc: customerRuc,
         originInvoiceId: originInvoiceId,
+        originDocumentReference: originDocumentReference,
         lines: lines,
         grossSubtotal: grossSubtotal,
         subtotal: subtotal,
@@ -345,6 +358,7 @@ class ReceiptDocument {
     String? fiscalAuthorizationNumber,
     bool isReprint = false,
     DateTime? reprintAt,
+    String? originDocumentReference,
   }) {
     final receiptLines = items
         .map((item) => ReceiptLine.fromInvoiceItem(item, taxRegime: taxRegime))
@@ -420,6 +434,12 @@ class ReceiptDocument {
           ? customerRuc.trim()
           : null,
       originInvoiceId: invoice.originInvoiceId,
+      // REQ-8 (slice 8a): same honesty rule as the other header facts — a
+      // blank-looking reference can never reach the paper.
+      originDocumentReference:
+          (originDocumentReference != null && originDocumentReference.trim().isNotEmpty)
+              ? originDocumentReference.trim()
+              : null,
       lines: receiptLines,
       grossSubtotal: computedGross > 0 ? computedGross : (effectiveSubtotal + computedDiscount),
       subtotal: effectiveSubtotal,

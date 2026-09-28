@@ -128,6 +128,12 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as bool);
 
   @override
+  bool get lastCreditNotePrintSucceeded => (super.noSuchMethod(
+        Invocation.getter(#lastCreditNotePrintSucceeded),
+        returnValue: false,
+      ) as bool);
+
+  @override
   _i9.TenantOperationMode get operationMode => (super.noSuchMethod(
         Invocation.getter(#operationMode),
         returnValue: _i9.TenantOperationMode.foodparkQsr,
@@ -277,6 +283,12 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
   @override
   bool get canReprint => (super.noSuchMethod(
         Invocation.getter(#canReprint),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  bool get canIssueCreditNote => (super.noSuchMethod(
+        Invocation.getter(#canIssueCreditNote),
         returnValue: false,
       ) as bool);
 
@@ -946,7 +958,7 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as _i16.Future<bool>);
 
   @override
-  _i16.Future<bool> processReturn(
+  _i16.Future<String?> processReturn(
     String? invoiceNumber,
     String? reason, {
     _i19.RefundReasonPolicy? refundReasonPolicy =
@@ -965,8 +977,8 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
             #lines: lines,
           },
         ),
-        returnValue: _i16.Future<bool>.value(false),
-      ) as _i16.Future<bool>);
+        returnValue: _i16.Future<String?>.value(),
+      ) as _i16.Future<String?>);
 
   @override
   _i16.Future<bool> voidInvoice(

@@ -212,7 +212,7 @@ class _NoopSalesRepository implements SalesRepository {
       Future.value();
 
   @override
-  Future<void> createCreditNote({
+  Future<String> createCreditNote({
     required String originalInvoiceId,
     required String reason,
     required String authorizedByUserId,
@@ -221,7 +221,7 @@ class _NoopSalesRepository implements SalesRepository {
     List<CreditNoteRefundLine>? lines,
     String? terminalId,
   }) =>
-      Future.value();
+      Future.value('credit-note-id');
 
   @override
   Future<List<Invoice>> getInvoicesBySessionId(String sessionId) async =>

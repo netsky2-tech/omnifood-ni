@@ -1318,7 +1318,7 @@ void main() {
       when(mockLocalConfigDao.getConfigByKey('tax_regime')).thenAnswer(
           (_) async => LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
 
-      await repository.createCreditNote(
+      final creditNoteId = await repository.createCreditNote(
         originalInvoiceId: original.id,
         reason: 'ERROR_DE_CAPTURA',
         authorizedByUserId: issuingUser,
@@ -1352,6 +1352,9 @@ void main() {
           jsonDecode(note.fiscalHeaderSnapshot!) as Map<String, dynamic>;
       expect(snapshot['businessName'], 'Café Al Momento');
       expect(snapshot['taxRegime'], 'REGIMEN_GENERAL');
+      // H5/H8: the committed note's id is returned so the caller can load
+      // and print the persisted document.
+      expect(creditNoteId, note.id);
     });
 
     test('a mismatched terminal yields a null shiftId honestly, no throw',
@@ -1412,7 +1415,7 @@ void main() {
         'TERM-OTHER',
       )).thenAnswer((_) async => null);
 
-      await repository.createCreditNote(
+      final creditNoteId = await repository.createCreditNote(
         originalInvoiceId: original.id,
         reason: 'ERROR_DE_CAPTURA',
         authorizedByUserId: 'manager-1',
@@ -1436,6 +1439,8 @@ void main() {
       expect(note.shiftId, isNull,
           reason: 'null = no open session known for this terminal — '
               'never a synthetic match');
+      // H5/H8: the returned id still identifies the committed note.
+      expect(creditNoteId, note.id);
     });
   });
 
@@ -1505,7 +1510,7 @@ void main() {
         ).thenAnswer((_) async {});
         when(mockNumberingService.incrementNumber()).thenAnswer((_) async {});
 
-        await repository.createCreditNote(
+        final creditNoteId = await repository.createCreditNote(
           originalInvoiceId: original.id,
           reason: 'Customer goodwill adjustment',
           authorizedByUserId: 'manager-1',
@@ -1547,6 +1552,8 @@ void main() {
         expect(creditLines.single.originInvoiceItemId, 'origin-line-1');
         expect(creditLines.single.total, -57.5);
         expect(movements, isEmpty);
+        // H5/H8: the returned id identifies the committed credit note.
+        expect(creditNoteId, creditNote.id);
         verifyNever(mockReverseInventoryUseCase.execute(any, any));
         verifyNever(
           mockAuditRepository.log(any, metadata: anyNamed('metadata')),

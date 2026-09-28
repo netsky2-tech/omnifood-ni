@@ -358,10 +358,24 @@ class InvoiceDetailsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (!invoice.isCanceled && invoice.type == InvoiceType.regular) ...[
-            // D-14/#553: the credit-note action (REALIZAR DEVOLUCIÓN) was
-            // REMOVED, not hidden — the Backoffice is the emitter for
-            // cross-day corrections until DSI-6 re-enables POS-side
-            // issuance. ANULAR is the only correction action in the POS.
+            // H5 (batch 8a): the credit-note action is RESTORED behind the
+            // role gate (owner/manager only — [SaleViewModel
+            // .canIssueCreditNote]); the view model keeps the same hard gate
+            // as defense-in-depth. Cross-day corrections are emitted in the
+            // POS again, but each note stays a local fiscal document pending
+            // upstream acceptance until DSI-6 lands.
+            if (context.watch<SaleViewModel>().canIssueCreditNote) ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const Key('credit_note_button'),
+                  icon: const Icon(Icons.assignment_return_outlined),
+                  label: const Text('EMITIR NOTA DE CRÉDITO'),
+                  onPressed: () => _showCreditNoteDialog(context),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             // D-15: the void action is permission-gated (SalesPermission),
             // never a role-label check. The dialog collects the mandatory
             // controlled reason (AC-6) before invoking the view model.
@@ -565,6 +579,113 @@ class InvoiceDetailsPanel extends StatelessWidget {
                       }
                     },
               child: const Text('ANULAR'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// H5: credit-note confirmation dialog (NHILOS §23.1): it states the
+  /// object (origin invoice number), the scope (all items — this flow
+  /// refunds every line), the consequence and the irreversibility of the
+  /// fiscal compensation, and the confirm button is the explicit verb
+  /// (§23.3). The reason is MANDATORY free text: it is persisted as the
+  /// note's audit justification, and only the operator knows the real-world
+  /// cause — a fabricated default would write a false fiscal reason.
+  /// Success copy is the honest split (§19.2/§31): issuance and print
+  /// outcome are reported separately; a print failure never retracts the
+  /// issuance (§30: what happened, what the user can still do).
+  void _showCreditNoteDialog(BuildContext context) {
+    final reasonController = TextEditingController();
+    var submitting = false;
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Emitir Nota de Crédito'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Factura afectada: ${invoice.number}'),
+              const SizedBox(height: 8),
+              const Text(
+                'Se devolverán todos los artículos de la factura.',
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'La compensación es permanente: la nota de crédito queda '
+                'registrada y no puede eliminarse (normativa DGI).',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                key: const Key('credit_note_reason_field'),
+                controller: reasonController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Motivo (obligatorio)',
+                  hintText: 'Describa el motivo de la devolución',
+                ),
+                onChanged: (_) => setDialogState(() {}),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: submitting ? null : () => Navigator.pop(dialogContext),
+              child: const Text('CANCELAR'),
+            ),
+            ElevatedButton(
+              key: const Key('confirm_credit_note_button'),
+              onPressed:
+                  reasonController.text.trim().isEmpty || submitting
+                      ? null
+                      : () async {
+                          setDialogState(() => submitting = true);
+                          final saleViewModel = context.read<SaleViewModel>();
+                          final messenger = ScaffoldMessenger.of(context);
+                          final creditNoteId = await saleViewModel.processReturn(
+                            invoice.number,
+                            reasonController.text.trim(),
+                          );
+                          if (!context.mounted) return;
+                          if (creditNoteId != null) {
+                            Navigator.pop(dialogContext);
+                            // Honesty rule: issuance and print outcome are
+                            // claimed separately, never conflated.
+                            final printed =
+                                saleViewModel.lastCreditNotePrintSucceeded;
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  printed
+                                      ? 'Nota de crédito emitida. Copia fiscal impresa.'
+                                      : 'Nota de crédito emitida. No se pudo '
+                                          'imprimir la copia fiscal; use '
+                                          'REIMPRIMIR para reintentarlo.',
+                                ),
+                              ),
+                            );
+                            await context
+                                .read<SalesHistoryViewModel>()
+                                .loadInvoices();
+                          } else {
+                            // Denial: the dialog stays open with the typed
+                            // reason preserved; the specific guard message
+                            // is surfaced.
+                            setDialogState(() => submitting = false);
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  saleViewModel.errorMessage ??
+                                      'No se pudo emitir la nota de crédito.',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+              child: const Text('Emitir nota de crédito'),
             ),
           ],
         ),
