@@ -61,7 +61,9 @@ export class LoyaltySyncIngestionService {
         failed += 1;
         const isConflict = error instanceof ConflictException;
         const message =
-          error instanceof Error ? error.message : String(error);
+          error instanceof Error
+            ? error.message
+            : (JSON.stringify(error) ?? 'unknown error');
         this.logger.warn(
           `[LOYALTY-SYNC] record key=${record.idempotencyKey} tenant=${tenantId} ` +
             `status=FAILED code=${isConflict ? 'IDEMPOTENCY_CONFLICT' : 'PERSISTENCE_ERROR'}: ${message}`,

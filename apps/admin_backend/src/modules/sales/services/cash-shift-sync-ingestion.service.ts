@@ -1,7 +1,10 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CashShiftSession, CashShiftStatus } from '../entities/cash-shift.entity';
+import {
+  CashShiftSession,
+  CashShiftStatus,
+} from '../entities/cash-shift.entity';
 import { CashMovement } from '../entities/cash-movement.entity';
 import type {
   CashMovementSyncItemDto,
@@ -115,9 +118,7 @@ export class CashShiftSyncIngestionService {
       );
       return;
     }
-    await this.shiftsRepository.insert(
-      this.toSessionValues(tenantId, record),
-    );
+    await this.shiftsRepository.insert(this.toSessionValues(tenantId, record));
   }
 
   private async insertMovementOnce(
@@ -164,8 +165,7 @@ export class CashShiftSyncIngestionService {
       tenant_id: tenantId,
       terminal_id: record.terminalId,
       cashier_id: record.cashierId,
-      cashier_name:
-        record.cashierName?.trim() || record.cashierId,
+      cashier_name: record.cashierName?.trim() || record.cashierId,
       opened_at: new Date(record.openedAt),
       closed_at: record.closedAt ? new Date(record.closedAt) : null,
       status:
@@ -196,7 +196,10 @@ export class CashShiftSyncIngestionService {
     const code = isTenantConflict
       ? 'TENANT_IDENTITY_CONFLICT'
       : 'PERSISTENCE_ERROR';
-    const message = error instanceof Error ? error.message : String(error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : (JSON.stringify(error) ?? 'unknown error');
     this.logger.warn(
       `[CASH-SHIFT-SYNC] ${kind} id=${id} tenant=${tenantId} ` +
         `status=FAILED code=${code}: ${message}`,

@@ -1,4 +1,3 @@
-import { ConflictException } from '@nestjs/common';
 import { CashShiftSyncIngestionService } from './cash-shift-sync-ingestion.service';
 import type {
   CashMovementSyncItemDto,
@@ -89,7 +88,9 @@ describe('CashShiftSyncIngestionService', () => {
       difference_nio: 200,
       z_report_sequence: 7,
     });
-    expect(sessionValues.opened_at).toEqual(new Date('2026-01-01T12:00:00.000Z'));
+    expect(sessionValues.opened_at).toEqual(
+      new Date('2026-01-01T12:00:00.000Z'),
+    );
     expect(movements.insert).toHaveBeenCalledTimes(1);
     expect(movements.insert.mock.calls[0][0]).toMatchObject({
       id: 'cmv-001',
