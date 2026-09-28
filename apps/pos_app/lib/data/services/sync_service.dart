@@ -25,6 +25,8 @@ import '../models/user_entity.dart';
 import '../models/security_profile_entity.dart';
 import '../models/local_config_entity.dart';
 import '../models/customer/customer_point_transaction_entity.dart';
+import '../models/sales/cashier_session_entity.dart';
+import '../models/sales/cash_movement_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import 'authority_hydration_service.dart';
@@ -446,6 +448,19 @@ class SyncService {
         domainErrors.add('Loyalty');
       }
 
+      // 1d. Push cash shift sessions and cash movements (Batch 5 slice 5c,
+      // finding H3): the offline shift lifecycle is the source of truth and
+      // must reach the cloud so the dashboard sees cash data. Fault-isolated
+      // like every other domain: a failure never aborts later domains.
+      final cashShiftSuccess = await _runDomain(
+        'cashshift',
+        _syncCashShifts,
+      );
+      if (!cashShiftSuccess) {
+        hasFailure = true;
+        domainErrors.add('CashShifts');
+      }
+
       // 2. Sync inventory outbox deltas
       var productionLinkedMovementIds = const <String>{};
       final purchaseSuccess = await _runDomain(
@@ -828,8 +843,7 @@ class SyncService {
       if (tx.terminalId != null) 'terminalId': tx.terminalId,
       if (tx.programVersion != null) 'programVersion': tx.programVersion,
       if (tx.rewardVersion != null) 'rewardVersion': tx.rewardVersion,
-      if (commercialSnapshot != null)
-        'commercialSnapshot': commercialSnapshot,
+      'commercialSnapshot': ?commercialSnapshot,
       'origin': tx.origin ?? 'POS',
       'occurredAt': DateTime.fromMillisecondsSinceEpoch(
         tx.occurredAt ?? tx.createdAt,
@@ -839,6 +853,176 @@ class SyncService {
   }
 
   Set<String> _failedLoyaltySyncKeys(dynamic responseData) {
+    if (responseData is! Map) return const <String>{};
+    final results = responseData['results'];
+    if (results is! List) return const <String>{};
+    return {
+      for (final item in results)
+        if (item is Map &&
+            item['status'] == 'FAILED' &&
+            item['idempotencyKey'] is String)
+          item['idempotencyKey'] as String,
+    };
+  }
+
+  /// Batch 5 slice 5c (finding H3): pushes pending cash shift sessions and
+  /// cash movements to the cloud in bounded batches. Rows stay 'pending' on
+  /// any failure and are retried on the next sync pass; rows the backend
+  /// reports as FAILED per-record also stay pending instead of being lost.
+  ///
+  /// Pending state reuses the existing `sync_status` columns — no schema
+  /// change. A still-OPEN session intentionally stays pending after an
+  /// accepted push: only closed sessions are marked 'synced', so the later
+  /// closure (counted totals, difference, Z report) is pushed as well. The
+  /// backend upserts sessions by id, so re-pushing an open session is an
+  /// idempotent no-op server-side.
+  Future<void> _syncCashShifts() async {
+    final database = _database;
+    if (database == null) return;
+    final sessionDao = database.cashierSessionDao;
+    final movementDao = database.cashMovementDao;
+    // No dedicated DAO query exists for pending sessions; the sessions table
+    // is small (one row per shift), so filtering the existing read avoids a
+    // Floor codegen change.
+    final pendingSessions = (await sessionDao.getAllSessions())
+        .where((session) => session.syncStatus == 'pending')
+        .toList(growable: false);
+    final pendingMovements =
+        await movementDao.getMovementsBySyncStatus('pending');
+    if (pendingSessions.isEmpty && pendingMovements.isEmpty) return;
+
+    final tenantConfig = await database.localConfigDao.getConfigByKey(
+      'tenant_id',
+    );
+    final tenantId = tenantConfig?.value ?? 'tenant-1';
+
+    final sessionBatch =
+        pendingSessions.take(_batchEnvelopeLimit).toList(growable: false);
+    final movementBatch =
+        pendingMovements.take(_batchEnvelopeLimit).toList(growable: false);
+
+    developer.log(
+      'Cash shift sync: posting ${sessionBatch.length} sessions and '
+      '${movementBatch.length} movements',
+      name: 'SyncService',
+    );
+    final response = await _dio.post(
+      '/sales/shifts/sync',
+      data: {
+        'sessions': sessionBatch
+            .map(_buildCashShiftSessionPayload)
+            .toList(growable: false),
+        'movements': movementBatch
+            .map(_buildCashMovementPayload)
+            .toList(growable: false),
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final failedKeys = _failedCashShiftSyncKeys(response.data);
+      for (final session in sessionBatch) {
+        if (failedKeys.contains(session.id)) continue;
+        if (session.isClosed) {
+          await sessionDao.updateSession(
+            _copySessionWithSyncStatus(session, 'synced'),
+          );
+        }
+      }
+      for (final movement in movementBatch) {
+        if (failedKeys.contains(movement.id)) continue;
+        await movementDao.updateSyncStatus(movement.id, 'synced');
+      }
+    }
+  }
+
+  /// Maps a local shift session row onto the cloud ingestion contract
+  /// (CashShiftSessionSyncItemDto). Terminal rows carry no cashier name, so
+  /// the backend falls back to the cashier id for its NOT NULL column.
+  Map<String, Object?> _buildCashShiftSessionPayload(
+    CashierSessionEntity session,
+  ) {
+    return {
+      'id': session.id,
+      'terminalId': session.terminalId,
+      'cashierId': session.userId,
+      'openedAt': DateTime.fromMillisecondsSinceEpoch(
+        session.openedAt,
+        isUtc: true,
+      ).toIso8601String(),
+      if (session.closedAt != null)
+        'closedAt': DateTime.fromMillisecondsSinceEpoch(
+          session.closedAt!,
+          isUtc: true,
+        ).toIso8601String(),
+      'status': session.isClosed ? 'CLOSED' : 'OPEN',
+      'initialFloatNio': session.openingBalanceNio,
+      'initialFloatUsd': session.openingBalanceUsd,
+      if (session.closingCountedNio != null)
+        'finalCountedNio': session.closingCountedNio,
+      if (session.closingCountedUsd != null)
+        'finalCountedUsd': session.closingCountedUsd,
+      'expectedCashNio': session.expectedNio,
+      'expectedCashUsd': session.expectedUsd,
+      if (session.differenceNio != null)
+        'differenceNio': session.differenceNio,
+      if (session.differenceUsd != null)
+        'differenceUsd': session.differenceUsd,
+      if (session.zReportSequence != null)
+        'zReportSequence': session.zReportSequence,
+      if (session.supervisorId != null) 'supervisorId': session.supervisorId,
+      if (session.notes != null) 'notes': session.notes,
+    };
+  }
+
+  /// Maps a local cash movement row onto the cloud ingestion contract
+  /// (CashMovementSyncItemDto).
+  Map<String, Object?> _buildCashMovementPayload(CashMovementEntity movement) {
+    return {
+      'id': movement.id,
+      'shiftId': movement.shiftId,
+      'terminalId': movement.terminalId,
+      'type': movement.type,
+      'amountNio': movement.amountNio,
+      'amountUsd': movement.amountUsd,
+      'reason': movement.reason,
+      if (movement.authorizedByUserId != null)
+        'authorizedByUserId': movement.authorizedByUserId,
+      'timestamp': DateTime.fromMillisecondsSinceEpoch(
+        movement.timestamp,
+        isUtc: true,
+      ).toIso8601String(),
+    };
+  }
+
+  /// Immutable entity copy that only flips `sync_status`.
+  CashierSessionEntity _copySessionWithSyncStatus(
+    CashierSessionEntity session,
+    String syncStatus,
+  ) {
+    return CashierSessionEntity(
+      id: session.id,
+      userId: session.userId,
+      terminalId: session.terminalId,
+      openedAt: session.openedAt,
+      tipoModelo: session.tipoModelo,
+      closedAt: session.closedAt,
+      openingBalanceNio: session.openingBalanceNio,
+      openingBalanceUsd: session.openingBalanceUsd,
+      closingCountedNio: session.closingCountedNio,
+      closingCountedUsd: session.closingCountedUsd,
+      expectedNio: session.expectedNio,
+      expectedUsd: session.expectedUsd,
+      differenceNio: session.differenceNio,
+      differenceUsd: session.differenceUsd,
+      zReportSequence: session.zReportSequence,
+      isClosed: session.isClosed,
+      supervisorId: session.supervisorId,
+      notes: session.notes,
+      syncStatus: syncStatus,
+    );
+  }
+
+  Set<String> _failedCashShiftSyncKeys(dynamic responseData) {
     if (responseData is! Map) return const <String>{};
     final results = responseData['results'];
     if (results is! List) return const <String>{};

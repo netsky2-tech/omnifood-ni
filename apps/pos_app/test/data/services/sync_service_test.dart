@@ -8,6 +8,8 @@ import 'package:pos_app/data/services/network_connectivity_service.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
+import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
@@ -3641,6 +3643,282 @@ void main() {
       expect(pending.map((tx) => tx.id), ['ptx-fail']);
       expect(outcome.status, isNot(SyncRunStatus.complete));
       expect(service.lastSyncError, contains('Loyalty'));
+    });
+  });
+
+  group('Slice 5c Cash Shifts Outbound (finding H3)', () {
+    CashierSessionEntity shiftSession(
+      String id, {
+      bool isClosed = false,
+      int? closedAt,
+      double? closingCountedNio,
+      double? differenceNio,
+      int? zReportSequence,
+      String terminalId = 'term-1',
+    }) {
+      return CashierSessionEntity(
+        id: id,
+        userId: 'user-1',
+        terminalId: terminalId,
+        openedAt: DateTime.parse('2026-01-01T12:00:00Z').millisecondsSinceEpoch,
+        closedAt: closedAt,
+        openingBalanceNio: 5000,
+        openingBalanceUsd: 0,
+        expectedNio: 5000,
+        expectedUsd: 0,
+        closingCountedNio: closingCountedNio,
+        differenceNio: differenceNio,
+        zReportSequence: zReportSequence,
+        isClosed: isClosed,
+        syncStatus: 'pending',
+      );
+    }
+
+    CashMovementEntity cashMovement(
+      String id, {
+      String shiftId = 'shift-1',
+    }) {
+      return CashMovementEntity(
+        id: id,
+        shiftId: shiftId,
+        terminalId: 'term-1',
+        type: 'CASH_IN',
+        amountNio: 1000,
+        reason: 'Fondo de cambio',
+        timestamp: DateTime.parse('2026-01-01T12:05:00Z').millisecondsSinceEpoch,
+        syncStatus: 'pending',
+      );
+    }
+
+    Future<AppDatabase> buildDbWithPendingCashData({
+      List<CashierSessionEntity> sessions = const [],
+      List<CashMovementEntity> movements = const [],
+    }) async {
+      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      for (final session in sessions) {
+        await database.cashierSessionDao.insertSession(session);
+      }
+      for (final movement in movements) {
+        await database.cashMovementDao.insertMovement(movement);
+      }
+      return database;
+    }
+
+    List<Map<String, dynamic>> cashShiftPostSessions() {
+      return capturedPosts
+          .where((post) => post.path == '/sales/shifts/sync')
+          .map(
+            (post) =>
+                (post.body as Map<String, dynamic>)['sessions'] as List<dynamic>,
+          )
+          .expand((records) => records.cast<Map<String, dynamic>>())
+          .toList(growable: false);
+    }
+
+    List<Map<String, dynamic>> cashShiftPostMovements() {
+      return capturedPosts
+          .where((post) => post.path == '/sales/shifts/sync')
+          .map(
+            (post) => (post.body as Map<String, dynamic>)['movements']
+                as List<dynamic>,
+          )
+          .expand((records) => records.cast<Map<String, dynamic>>())
+          .toList(growable: false);
+    }
+
+    test('outbound cash shift push is called during manual sync', () async {
+      final database = await buildDbWithPendingCashData(
+        sessions: [shiftSession('shift-1a')],
+        movements: [cashMovement('cmv-1a', shiftId: 'shift-1a')],
+      );
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      expect(
+        capturedPosts.any((post) => post.path == '/sales/shifts/sync'),
+        true,
+      );
+      // In-memory Floor databases are shared across builders in this suite,
+      // so every assertion is scoped to this test's own row ids.
+      final sessions = cashShiftPostSessions()
+          .where((s) => s['id'] == 'shift-1a')
+          .toList(growable: false);
+      expect(sessions, hasLength(1));
+      expect(sessions.single['terminalId'], 'term-1');
+      expect(sessions.single['cashierId'], 'user-1');
+      expect(sessions.single['status'], 'OPEN');
+      expect(sessions.single['initialFloatNio'], 5000);
+      expect(sessions.single['openedAt'], '2026-01-01T12:00:00.000Z');
+      final movements = cashShiftPostMovements()
+          .where((m) => m['id'] == 'cmv-1a')
+          .toList(growable: false);
+      expect(movements, hasLength(1));
+      expect(movements.single['shiftId'], 'shift-1a');
+      expect(movements.single['type'], 'CASH_IN');
+      expect(movements.single['amountNio'], 1000);
+      expect(movements.single['timestamp'], '2026-01-01T12:05:00.000Z');
+    });
+
+    test('successful push marks closed sessions and movements synced; open sessions stay pending', () async {
+      final database = await buildDbWithPendingCashData(
+        sessions: [
+          // Already closed on this terminal: safe to mark synced after push.
+          shiftSession(
+            'shift-2c',
+            isClosed: true,
+            closedAt: DateTime.parse('2026-01-01T20:00:00Z')
+                .millisecondsSinceEpoch,
+            closingCountedNio: 5200,
+            differenceNio: 200,
+            zReportSequence: 7,
+          ),
+          // Still open: its closure must be pushed on a later pass, so it
+          // intentionally stays pending after an accepted push.
+          shiftSession('shift-2o'),
+        ],
+        movements: [cashMovement('cmv-2a')],
+      );
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      final sessions = cashShiftPostSessions();
+      expect(
+        sessions.map((s) => s['id']),
+        containsAll(['shift-2c', 'shift-2o']),
+      );
+      final closedPayload =
+          sessions.firstWhere((s) => s['id'] == 'shift-2c');
+      expect(closedPayload['status'], 'CLOSED');
+      expect(closedPayload['closedAt'], '2026-01-01T20:00:00.000Z');
+      expect(closedPayload['finalCountedNio'], 5200);
+      expect(closedPayload['differenceNio'], 200);
+      expect(closedPayload['zReportSequence'], 7);
+
+      final closedRow =
+          await database.cashierSessionDao.getSessionById('shift-2c');
+      expect(closedRow!.syncStatus, 'synced');
+      final openRow =
+          await database.cashierSessionDao.getSessionById('shift-2o');
+      expect(openRow!.syncStatus, 'pending');
+      final pendingMovements = await database.cashMovementDao
+          .getMovementsBySyncStatus('pending');
+      expect(pendingMovements.map((m) => m.id), isNot(contains('cmv-2a')));
+      final syncedMovements = await database.cashMovementDao
+          .getMovementsBySyncStatus('synced');
+      expect(syncedMovements.map((m) => m.id), contains('cmv-2a'));
+    });
+
+    test('cash shift failure does not break other domains and keeps rows pending', () async {
+      final database = await buildDbWithPendingCashData(
+        sessions: [shiftSession('shift-3f')],
+        movements: [cashMovement('cmv-3f')],
+      );
+      final cashShiftFailureDio = Dio();
+      cashShiftFailureDio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.method.toUpperCase() == 'POST') {
+              capturedPosts.add(
+                CapturedPost(path: options.path, body: options.data),
+              );
+            }
+            if (options.path == '/sales/shifts/sync') {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  response: Response<dynamic>(
+                    requestOptions: options,
+                    statusCode: 500,
+                  ),
+                ),
+              );
+              return;
+            }
+            if (options.path == '/v1/sync/batch') {
+              final records =
+                  ((options.data as Map<String, dynamic>)['records']
+                          as List<dynamic>)
+                      .cast<Map<String, dynamic>>();
+              handler.resolve(
+                Response<dynamic>(
+                  data: {
+                    'status': 'OK',
+                    'received': records.length,
+                    'results': records
+                        .map(
+                          (record) => {...record, 'status': 'ACCEPTED'},
+                        )
+                        .toList(growable: false),
+                  },
+                  statusCode: 200,
+                  requestOptions: options,
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<dynamic>(
+                data: {'ok': true},
+                statusCode: 200,
+                requestOptions: options,
+              ),
+            );
+          },
+        ),
+      );
+      mockInventoryRepository.unsynced = [
+        InventoryMovement(
+          id: 'mov-after-cashshift',
+          insumoId: 'i-9',
+          type: MovementType.adjustment,
+          quantity: -1,
+          previousStock: 10,
+          newStock: 9,
+          timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+        ),
+      ];
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        cashShiftFailureDio,
+        database: database,
+      );
+
+      final outcome = await service.triggerManualSync();
+
+      // Fault isolation: a domain registered after cash shifts still ran.
+      expect(
+        capturedPosts.any((post) => post.path == '/v1/sync/batch'),
+        true,
+      );
+      expect(
+        mockInventoryRepository.syncedIds,
+        contains('mov-after-cashshift'),
+      );
+      // Offline-first: the failed cash shift rows stay pending for retry.
+      final pendingSession =
+          await database.cashierSessionDao.getSessionById('shift-3f');
+      expect(pendingSession!.syncStatus, 'pending');
+      final pendingMovements = await database.cashMovementDao
+          .getMovementsBySyncStatus('pending');
+      expect(pendingMovements.map((m) => m.id), contains('cmv-3f'));
+      expect(outcome.status, isNot(SyncRunStatus.complete));
+      expect(service.lastSyncError, contains('CashShifts'));
     });
   });
 }
