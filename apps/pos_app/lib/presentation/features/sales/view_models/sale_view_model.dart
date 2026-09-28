@@ -88,6 +88,11 @@ class SaleViewModel extends ChangeNotifier {
     PromotionsEngine? promotionsEngine,
     LoyaltyService? loyaltyService,
     String terminalId = '',
+
+    /// M11: customer identification service (QR/code/phone/search adapter
+    /// chain). Null disables identifyCustomer entirely, which is why the
+    /// production wiring in main.dart MUST inject it (manual entry included).
+    CustomerIdentificationService? identificationService,
   ]) : _tableOrderService = tableOrderService ?? TableOrderService(_database),
        _tenantConfigService =
            tenantConfigService ?? TenantConfigService(_database.localConfigDao),
@@ -102,7 +107,7 @@ class SaleViewModel extends ChangeNotifier {
        _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
        _loyaltyService = loyaltyService ?? const LoyaltyService(),
        _postPaidFeedbackService = const PostPaidFeedbackService(),
-       _identificationService = null,
+       _identificationService = identificationService,
        _rewardInteraction = null,
        _evaluationService = null,
        _terminalId = terminalId {

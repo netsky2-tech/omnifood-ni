@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../../core/utils/nicaragua_fiscal_validator.dart';
 import '../../../../domain/models/customer/customer.dart';
 import '../view_models/sale_view_model.dart';
@@ -6,16 +8,29 @@ import '../view_models/sale_view_model.dart';
 class CustomerSelectDialog extends StatefulWidget {
   final SaleViewModel viewModel;
 
+  /// Test seam for the camera layer: builds the scanner view that reports a
+  /// raw detected value via [CustomerScannerViewBuilder]'s callback.
+  /// Production default hosts the mobile_scanner camera preview.
+  final CustomerScannerViewBuilder? scannerBuilder;
+
   const CustomerSelectDialog({
     Key? key,
     required this.viewModel,
+    this.scannerBuilder,
   }) : super(key: key);
 
-  static Future<Customer?> show(BuildContext context, SaleViewModel viewModel) {
+  static Future<Customer?> show(
+    BuildContext context,
+    SaleViewModel viewModel, {
+    CustomerScannerViewBuilder? scannerBuilder,
+  }) {
     return showDialog<Customer?>(
       context: context,
       barrierDismissible: true,
-      builder: (_) => CustomerSelectDialog(viewModel: viewModel),
+      builder: (_) => CustomerSelectDialog(
+        viewModel: viewModel,
+        scannerBuilder: scannerBuilder,
+      ),
     );
   }
 
@@ -124,11 +139,55 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
     }
   }
 
+  /// Opens the customer QR scan overlay. On detection, the RAW scanned value
+  /// (with or without the `NHL1:` prefix) is handed to identifyCustomer —
+  /// the adapter chain in CustomerIdentificationService handles both
+  /// formats, so no parsing is re-implemented here.
   Future<void> _onQrScanRequested() async {
-    // QR scanning is handled by mobile_scanner behind CustomerIdentificationPort.
-    // The actual camera flow will be wired in a subsequent step.
-    // For now, this button triggers identifyCustomer with a QR prefix.
-    // TODO: Wire to mobile_scanner overlay when package is installed.
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black87,
+      builder: (_) => CustomerQrScanOverlay(
+        onCodeDetected: _handleScannedRawValue,
+        onClose: () => Navigator.of(context).pop(),
+        scannerBuilder: widget.scannerBuilder,
+      ),
+    );
+  }
+
+  Future<void> _handleScannedRawValue(String rawValue) async {
+    if (!mounted) return;
+    // Close the camera overlay first, then identify in the dialog context.
+    Navigator.of(context).pop();
+
+    setState(() {
+      _isLoading = true;
+      _identificationError = null;
+    });
+
+    try {
+      final customer = await widget.viewModel.identifyCustomer(rawValue);
+      if (!mounted) return;
+      if (customer != null) {
+        await widget.viewModel.selectCustomer(customer);
+        Navigator.of(context).pop(customer);
+      } else {
+        setState(() {
+          // Per NHILOS §30: state what happened and what the user can do.
+          _identificationError =
+              'Código no reconocido. Verifique el código o escanee nuevamente.';
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _identificationError = 'Error al identificar cliente';
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _validateTaxId(String value) {
@@ -531,6 +590,174 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                 ],
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Reports a raw scanned value (QR or barcode) once it has been detected.
+typedef CustomerScannerViewBuilder = Widget Function(
+  BuildContext context,
+  ValueChanged<String> onCodeDetected,
+  VoidCallback onManualEntryFallback,
+);
+
+/// Production scanner builder: hosts the mobile_scanner camera preview.
+///
+/// The controller auto-starts and requests camera permission; a denied
+/// permission surfaces through [MobileScanner.errorBuilder], which renders
+/// a friendly message plus a manual-entry fallback (never a dead end).
+Widget _defaultCustomerScannerBuilder(
+  BuildContext context,
+  ValueChanged<String> onCodeDetected,
+  VoidCallback onManualEntryFallback,
+) {
+  return MobileScanner(
+    onDetect: (capture) {
+      for (final barcode in capture.barcodes) {
+        final rawValue = barcode.rawValue;
+        if (rawValue != null && rawValue.isNotEmpty) {
+          // Report the FIRST readable code; the overlay de-duplicates
+          // repeated detections from the same frame burst.
+          onCodeDetected(rawValue);
+          return;
+        }
+      }
+    },
+    errorBuilder: (context, error) {
+      final permissionDenied =
+          error.errorCode == MobileScannerErrorCode.permissionDenied;
+      return _ScannerMessageView(
+        icon: permissionDenied ? Icons.no_photography_outlined : Icons.error_outline,
+        message: permissionDenied
+            ? 'No se puede acceder a la cámara. Escriba el código del cliente manualmente.'
+            : 'No se pudo iniciar la cámara. Intente de nuevo o escriba el código manualmente.',
+        actionLabel: 'Escribir código manualmente',
+        onAction: onManualEntryFallback,
+      );
+    },
+  );
+}
+
+/// Full-screen camera overlay for scanning customer QR/barcode codes.
+///
+/// Escape closes the overlay (NHILOS §46); the close control has an explicit
+/// accessible label. Detection is de-duplicated: the first readable code wins.
+class CustomerQrScanOverlay extends StatefulWidget {
+  /// Called once with the RAW scanned value (may include the `NHL1:` prefix).
+  final ValueChanged<String> onCodeDetected;
+
+  /// Closes the overlay without scanning.
+  final VoidCallback onClose;
+
+  /// Camera layer seam. Defaults to the production mobile_scanner host.
+  final CustomerScannerViewBuilder? scannerBuilder;
+
+  const CustomerQrScanOverlay({
+    Key? key,
+    required this.onCodeDetected,
+    required this.onClose,
+    this.scannerBuilder,
+  }) : super(key: key);
+
+  @override
+  State<CustomerQrScanOverlay> createState() => _CustomerQrScanOverlayState();
+}
+
+class _CustomerQrScanOverlayState extends State<CustomerQrScanOverlay> {
+  bool _codeHandled = false;
+
+  void _handleCodeDetected(String rawValue) {
+    if (_codeHandled || rawValue.isEmpty) return;
+    _codeHandled = true;
+    widget.onCodeDetected(rawValue);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scannerBuilder = widget.scannerBuilder ?? _defaultCustomerScannerBuilder;
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): widget.onClose,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            title: const Text('Escanear código del cliente'),
+            // Explicit accessible label for the icon-only close control (§46).
+            leading: IconButton(
+              key: const Key('qr_scan_close_button'),
+              icon: const Icon(Icons.close),
+              tooltip: 'Cerrar escáner',
+              onPressed: widget.onClose,
+            ),
+          ),
+          body: Column(
+            children: [
+              Expanded(
+                child: scannerBuilder(
+                  context,
+                  _handleCodeDetected,
+                  widget.onClose,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(
+                  'Apunte la cámara al código QR del cliente',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Camera error / permission-denied state with a manual-entry fallback.
+class _ScannerMessageView extends StatelessWidget {
+  final IconData icon;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  const _ScannerMessageView({
+    required this.icon,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white70, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.keyboard),
+              label: Text(actionLabel),
+            ),
           ],
         ),
       ),

@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>La cámara se utiliza para escanear el código QR del cliente y identificarlo en el punto de venta.</string>
 	<key>CFBundleDisplayName</key>
 	<string>NHILOS POS</string>
 	<key>CFBundleExecutable</key>

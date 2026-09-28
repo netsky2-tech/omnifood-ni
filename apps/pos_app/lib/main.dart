@@ -104,6 +104,8 @@ import 'ui/features/config/activation/activation_terminal_view.dart';
 import 'ui/features/auth/views/login_view.dart';
 import 'ui/features/auth/views/lock_screen_view.dart';
 import 'domain/services/sales/dgi_numbering_service.dart';
+import 'domain/services/sales/customer_identification_service.dart';
+import 'data/adapters/customer_identification_adapters.dart';
 import 'data/services/sales/dgi_numbering_service_impl.dart';
 import 'domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
@@ -509,6 +511,17 @@ void main() async {
             null,
             null,
             deviceId,
+            // M11: inject the full identification adapter chain (QR, code,
+            // phone, search). Without this, identifyCustomer returned null
+            // for EVERY input in production — including manual code entry.
+            CustomerIdentificationService(
+              [
+                QrIdentificationAdapter(database.customerDao),
+                CustomerCodeIdentificationAdapter(database.customerDao),
+                PhoneIdentificationAdapter(database.customerDao),
+                SearchIdentificationAdapter(database.customerDao),
+              ],
+            ),
           ),
         ),
         ChangeNotifierProvider(

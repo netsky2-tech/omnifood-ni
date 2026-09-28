@@ -201,6 +201,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
     String? fiscalAuthorizationNumber,
     bool? isReprint = false,
     DateTime? reprintAt,
+    String? originDocumentReference,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -223,6 +224,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
             #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
             #isReprint: isReprint,
             #reprintAt: reprintAt,
+            #originDocumentReference: originDocumentReference,
           },
         ),
         returnValue: _i5.Future<_i3.PrinterResult>.value(_FakePrinterResult_1(
@@ -247,6 +249,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
               #isReprint: isReprint,
               #reprintAt: reprintAt,
+              #originDocumentReference: originDocumentReference,
             },
           ),
         )),
@@ -273,6 +276,7 @@ class MockPrinterPort extends _i1.Mock implements _i3.PrinterPort {
               #fiscalAuthorizationNumber: fiscalAuthorizationNumber,
               #isReprint: isReprint,
               #reprintAt: reprintAt,
+              #originDocumentReference: originDocumentReference,
             },
           ),
         )),

@@ -16,7 +16,7 @@ class StubSaleViewModel extends ChangeNotifier implements SaleViewModel {
   String? get customerName => _customerName;
 
   /// Stub for identifyCustomer — allows tests to control the result
-  Customer? Function(String input)? onIdentify;
+  Future<Customer?> Function(String input)? onIdentify;
   String? lastIdentifiedInput;
 
   @override
@@ -58,12 +58,15 @@ class StubSaleViewModel extends ChangeNotifier implements SaleViewModel {
 
   @override
   Future<Customer?> identifyCustomer(String input) async {
+    identifyCallCount += 1;
     lastIdentifiedInput = input;
     if (onIdentify != null) {
-      return onIdentify!(input);
+      return await onIdentify!(input);
     }
     return null;
   }
+
+  int identifyCallCount = 0;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -77,16 +80,44 @@ void main() {
       viewModel = StubSaleViewModel();
     });
 
-    Widget buildTestableDialog() {
+    Widget buildTestableDialog({CustomerScannerViewBuilder? scannerBuilder}) {
       return MaterialApp(
         home: Builder(
           builder: (context) => Scaffold(
             body: ElevatedButton(
-              onPressed: () => CustomerSelectDialog.show(context, viewModel),
+              onPressed: () => CustomerSelectDialog.show(
+                context,
+                viewModel,
+                scannerBuilder: scannerBuilder,
+              ),
               child: const Text('Open'),
             ),
           ),
         ),
+      );
+    }
+
+    /// Fake camera layer: simulates a detected code without the platform
+    /// channel. Also exposes the manual-entry fallback used when the camera
+    /// cannot start (e.g. permission denied).
+    Widget fakeScannerBuilder(
+      BuildContext context,
+      ValueChanged<String> onCodeDetected,
+      VoidCallback onManualEntryFallback,
+    ) {
+      return Column(
+        children: [
+          ElevatedButton(
+            key: const Key('fake_scan_button'),
+            onPressed: () => onCodeDetected('NHL1:ABC123'),
+            child: const Text('Simulate Scan'),
+          ),
+          ElevatedButton(
+            key: const Key('fake_manual_entry_fallback'),
+            onPressed: onManualEntryFallback,
+            child: const Text('Simulate Camera Unavailable'),
+          ),
+        ],
       );
     }
 
@@ -142,6 +173,131 @@ void main() {
       expect(find.text('Nuevo'), findsOneWidget);
       // "Consumidor Final" button present
       expect(find.text('Consumidor Final (Sin Cliente Asignado)'), findsOneWidget);
+    });
+
+    testWidgets('QR scan opens overlay and RAW scan value reaches '
+        'identifyCustomer', (tester) async {
+      const customer = Customer(
+        id: 'c-1',
+        name: 'Carlos Test',
+        customerCode: 'ABC123',
+      );
+      viewModel.onIdentify = (_) async => customer;
+
+      await tester.pumpWidget(
+        buildTestableDialog(scannerBuilder: fakeScannerBuilder),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('qr_scan_button')));
+      await tester.pumpAndSettle();
+
+      // Camera overlay is shown.
+      expect(find.text('Escanear código del cliente'), findsOneWidget);
+
+      // Camera detects the raw payload.
+      await tester.tap(find.byKey(const Key('fake_scan_button')));
+      await tester.pumpAndSettle();
+
+      // The RAW value (with the NHL1: prefix) is passed through untouched:
+      // adapter chain owns the parsing.
+      expect(viewModel.lastIdentifiedInput, 'NHL1:ABC123');
+      expect(viewModel.selectedCustomer?.id, 'c-1');
+      // Dialog closed with the identified customer.
+      expect(find.text('Escanear código del cliente'), findsNothing);
+    });
+
+    testWidgets('unrecognized scan shows a visible error state (§30) and '
+        'keeps the dialog usable', (tester) async {
+      viewModel.onIdentify = (_) async => null;
+
+      await tester.pumpWidget(
+        buildTestableDialog(scannerBuilder: fakeScannerBuilder),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('qr_scan_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('fake_scan_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Código no reconocido'), findsOneWidget);
+      // Manual entry still available after a failed scan.
+      expect(find.byKey(const Key('customer_code_input')), findsOneWidget);
+    });
+
+    testWidgets('close control exits the scanner overlay and preserves '
+        'manual entry', (tester) async {
+      await tester.pumpWidget(
+        buildTestableDialog(scannerBuilder: fakeScannerBuilder),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('qr_scan_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Escanear código del cliente'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('qr_scan_close_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escanear código del cliente'), findsNothing);
+      expect(find.byKey(const Key('customer_code_input')), findsOneWidget);
+    });
+
+    testWidgets('camera-unavailable fallback exits to manual entry',
+        (tester) async {
+      await tester.pumpWidget(
+        buildTestableDialog(scannerBuilder: fakeScannerBuilder),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('qr_scan_button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('fake_manual_entry_fallback')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escanear código del cliente'), findsNothing);
+      expect(find.byKey(const Key('customer_code_input')), findsOneWidget);
+    });
+
+    testWidgets('repeated detections report the code only once',
+        (tester) async {
+      viewModel.onIdentify = (_) async => null;
+
+      Widget doubleFireScannerBuilder(
+        BuildContext context,
+        ValueChanged<String> onCodeDetected,
+        VoidCallback onManualEntryFallback,
+      ) {
+        return ElevatedButton(
+          key: const Key('fake_double_scan_button'),
+          onPressed: () {
+            onCodeDetected('NHL1:ABC123');
+            onCodeDetected('NHL1:ABC123');
+          },
+          child: const Text('Simulate Double Scan'),
+        );
+      }
+
+      await tester.pumpWidget(
+        buildTestableDialog(scannerBuilder: doubleFireScannerBuilder),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('qr_scan_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('fake_double_scan_button')));
+      await tester.pumpAndSettle();
+
+      expect(viewModel.identifyCallCount, 1);
     });
   });
 }

@@ -26,8 +26,15 @@ Remediate Batch 8 of the audit with FULL scope approved by the user: H5 (credit-
 - Do NOT touch concurrent-stream files: label_map.dart, auth_repository_impl.dart, activation_pre_offline_runner.dart, activation_session_view_model.dart.
 
 ## Status
-- [ ] 8a
-- [ ] 8b
+- [x] 8a — commit 6efd1697 "feat(pos): implement credit note returns with fiscal print path" (H5 + H8, incl. DSI-6 sync hold + fiscal-number origin reference)
+- [x] 8b — commit "feat(pos): wire customer QR/barcode scanner" (M11, incl. production identification wiring fix + stale 8a mock regen)
+
+## Follow-ups (non-blocking)
+1. DSI-6: outbound device batches hold CREDIT_NOTE records (whole-batch 403 otherwise); unblock pending DSI-6 authorization auditing spec.
+2. Numbering parity open: POS shares sales DGI cursor; backend admin credit notes use CREDIT_NOTE_SERIES — fiscal/product decision.
+3. Scan flow calls selectCustomer twice (identifyCustomer already selects) → loyalty re-eval runs twice; harmless but worth a cleanup.
+4. Escape keybinding + camera errorBuilder branch lack automated coverage; on-device physical scan validation pending.
+5. build_runner caution: --delete-conflicting-outputs with --build-filter in a dirty tree deleted 89 clean generated files once (restored byte-identical); audit `git status | awk '$1=="D"'` after any filtered regen.
 
 ## Commits
 - 8a: `feat(pos): implement credit note returns with fiscal print path`
