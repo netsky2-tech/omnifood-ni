@@ -1854,6 +1854,11 @@ class SyncService {
                 averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
                 isActive: map['isActive'] as bool? ?? true,
                 isPerishable: map['isPerishable'] as bool? ?? false,
+                // Issue #521 S1: stock alert thresholds from the backend
+                // delta; absent keys stay null (never 0).
+                parLevel: (map['parLevel'] as num?)?.toDouble(),
+                stockMin: (map['minStock'] as num?)?.toDouble(),
+                stockMax: (map['maxStock'] as num?)?.toDouble(),
               );
             })
             .toList(growable: false);

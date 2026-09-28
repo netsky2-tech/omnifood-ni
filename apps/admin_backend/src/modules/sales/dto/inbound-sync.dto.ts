@@ -101,6 +101,10 @@ export interface InboundSyncInsumoDto {
   isActive: boolean;
   isPerishable: boolean;
   negativeStockPolicy: string;
+  /** Stock alert thresholds (issue #521 S1); null when not configured. */
+  parLevel: number | null;
+  minStock: number | null;
+  maxStock: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

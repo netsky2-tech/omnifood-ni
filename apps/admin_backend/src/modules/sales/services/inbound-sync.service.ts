@@ -500,6 +500,11 @@ export class InboundSyncService {
       isActive: i.is_active,
       isPerishable: i.is_perishable,
       negativeStockPolicy: i.negativeStockPolicy,
+      // Issue #521 S1: stock alert thresholds ride the incremental insumos
+      // delta so the POS can fire low/high stock alerts.
+      parLevel: i.parLevel ?? null,
+      minStock: i.minStock ?? null,
+      maxStock: i.maxStock ?? null,
       tenantId: i.tenant_id,
       createdAt: i.created_at,
       updatedAt: i.updated_at,

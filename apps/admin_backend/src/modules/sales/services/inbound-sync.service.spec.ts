@@ -400,6 +400,71 @@ describe('InboundSyncService', () => {
     expect(exempt).not.toHaveProperty('isTaxExempt');
   });
 
+  it('includes par level and stock thresholds in the insumo delta (issue #521 S1)', async () => {
+    // Issue #521 S1: stock alert thresholds configured in the backoffice
+    // must reach the POS through the incremental `insumos` delta, including
+    // the null case (insumo without thresholds configured).
+    insumoQb.getMany.mockResolvedValue([
+      {
+        id: 'ins-521a',
+        tenant_id: 'tenant-abc',
+        name: 'Leche',
+        purchaseUom: 'L',
+        consumptionUom: 'ml',
+        conversionFactor: 1000,
+        stock: 12.5,
+        averageCost: 3.25,
+        is_active: true,
+        is_perishable: true,
+        negativeStockPolicy: 'BLOCK',
+        parLevel: 20,
+        minStock: 5,
+        maxStock: 40,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as Insumo,
+      {
+        id: 'ins-521b',
+        tenant_id: 'tenant-abc',
+        name: 'Café',
+        purchaseUom: 'KG',
+        consumptionUom: 'G',
+        conversionFactor: 1000,
+        stock: 1.5,
+        averageCost: 12.0,
+        is_active: true,
+        is_perishable: false,
+        negativeStockPolicy: 'WARN',
+        parLevel: null,
+        minStock: null,
+        maxStock: null,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as Insumo,
+    ]);
+
+    const response = await service.getInboundDeltas(
+      'tenant-abc',
+      { types: 'insumos' },
+      undefined,
+      buildDefaultBoundManager(),
+    );
+
+    expect(response.deltas.insumos).toHaveLength(2);
+    expect(response.deltas.insumos[0]).toMatchObject({
+      id: 'ins-521a',
+      parLevel: 20,
+      minStock: 5,
+      maxStock: 40,
+    });
+    expect(response.deltas.insumos[1]).toMatchObject({
+      id: 'ins-521b',
+      parLevel: null,
+      minStock: null,
+      maxStock: null,
+    });
+  });
+
   it('filters deltas by ISO timestamp since string', async () => {
     const sinceIso = '2026-08-20T00:00:00.000Z';
     await service.getInboundDeltas(
