@@ -196,7 +196,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
         <Alert variant="destructive" className="border-amber-500 bg-amber-50/20 text-amber-900">
           <AlertTriangle className="h-5 w-5 text-amber-600" />
           <AlertTitle className="font-bold text-amber-800">
-            Conflicto de concurrencia detectado (VERSION_CONFLICT)
+            Conflicto de concurrencia detectado. Intente nuevamente.
           </AlertTitle>
           <AlertDescription className="space-y-3 mt-2 text-sm text-amber-800/90">
             <p>
@@ -1033,14 +1033,14 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               <div>
                 <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
                   <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                  Métricas de Activación & Primera Venta Comercial (ONB1.9G)
+                  Métricas de Activación & Primera Venta Comercial
                 </CardTitle>
                 <CardDescription className="text-xs text-muted-foreground mt-0.5">
                   Observabilidad desacoplada entre el hito técnico de activación (TTFSS) y la primera venta comercial a cliente final.
                 </CardDescription>
               </div>
-              <Badge variant="outline" className="text-[11px] font-mono shrink-0">
-                ONB1.9G
+              <Badge variant="outline" className="text-[11px] shrink-0">
+                Activación
               </Badge>
             </div>
           </CardHeader>
@@ -1103,8 +1103,8 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-[11px] font-mono">
-                ONB1.9A–D
+              <Badge variant="outline" className="text-[11px]">
+                Configuración
               </Badge>
               {session.lifecycleState === OnboardingLifecycleState.ACTIVATED && (
                 <Badge variant="secondary" className="text-[11px] bg-emerald-50 text-emerald-800 border-emerald-300">
@@ -1260,7 +1260,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
               <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
-              Límites de Alcance Normativo (PRD Guardrails)
+              Límites de Alcance Normativo
             </CardTitle>
             <Badge variant="secondary" className="text-[10px] font-mono">
               V1 Scope

@@ -178,8 +178,8 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       expect(screen.getAllByText('Borrador').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Tipo: Sellos por producto')).toBeInTheDocument();
       expect(screen.getByText('Tipo: Puntos por compra')).toBeInTheDocument();
-      expect(screen.getByText('Versión config: 2')).toBeInTheDocument();
-      expect(screen.getByText('Versión config: 1')).toBeInTheDocument();
+      expect(screen.getByText('Versión: 2')).toBeInTheDocument();
+      expect(screen.getByText('Versión: 1')).toBeInTheDocument();
     });
 
     it('filters programs by search query', async () => {

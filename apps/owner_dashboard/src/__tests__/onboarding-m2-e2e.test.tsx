@@ -253,7 +253,7 @@ describe("ONB1.2 M2 E2E — State-based Setup Center Foundation & Concurrency", 
     await waitFor(() => {
       expect(screen.getByTestId("version-conflict-banner")).toBeInTheDocument();
     });
-    expect(screen.getByText(/Conflicto de concurrencia detectado \(VERSION_CONFLICT\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Conflicto de concurrencia detectado. Intente nuevamente./i)).toBeInTheDocument();
 
     // Tab 1 clicks reconcile
     const reconcileBtn = screen.getByTestId("reconcile-session-button");
