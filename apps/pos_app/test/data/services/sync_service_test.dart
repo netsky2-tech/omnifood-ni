@@ -7,6 +7,7 @@ import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/models/customer/customer_entity.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
@@ -3920,5 +3921,369 @@ void main() {
       expect(outcome.status, isNot(SyncRunStatus.complete));
       expect(service.lastSyncError, contains('CashShifts'));
     });
+  });
+
+  group('Slice 5d Loyalty, Promotions & Customers Inbound (findings M1-M3)', () {
+    test(
+      'pullInboundDeltas hydrates loyalty programs with rewards, promotions and customers',
+      () async {
+        final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-08-26T18:00:00.000Z',
+            'currentVersion': 1787745600000,
+            'deltas': {
+              'loyaltyPrograms': [
+                {
+                  'id': 'lp-101',
+                  'tenantId': 'tenant-1',
+                  'name': 'Café Loyal',
+                  'programType': 'SPEND_POINTS',
+                  'status': 'ACTIVE',
+                  'earningRule': {'pointsPerCurrency': 1},
+                  'eligibilityRule': {'minOrderAmount': 100},
+                  'configVersion': 3,
+                  'createdAt': '2026-08-01T00:00:00.000Z',
+                  'updatedAt': '2026-08-02T00:00:00.000Z',
+                  'rewards': [
+                    {
+                      'id': 'rw-101',
+                      'tenantId': 'tenant-1',
+                      'loyaltyProgramId': 'lp-101',
+                      'name': 'Café gratis',
+                      'rewardType': 'FREE_PRODUCT',
+                      'costUnits': 100,
+                      'benefitConfig': {'productId': 'prod-1'},
+                      'status': 'ACTIVE',
+                      'presentationOrder': 1,
+                      'configVersion': 2,
+                      'createdAt': '2026-08-01T00:00:00.000Z',
+                      'updatedAt': '2026-08-02T00:00:00.000Z',
+                    },
+                  ],
+                },
+              ],
+              'promotions': [
+                {
+                  'id': 'promo-101',
+                  'tenantId': 'tenant-1',
+                  'name': '2x1 Jueves',
+                  'type': 'buyXGetYFree',
+                  'targetProductId': 'prod-7',
+                  'buyQuantity': 2,
+                  'getQuantity': 1,
+                  'discountValue': 0.0,
+                  'minOrderAmount': 0.0,
+                  'daysOfWeek': ['4', '5'],
+                  'priority': 5,
+                  'isStackable': true,
+                  'isActive': true,
+                },
+              ],
+              'customers': [
+                {
+                  'id': 'cust-101',
+                  'tenantId': 'tenant-1',
+                  'name': 'María López',
+                  'taxId': 'XOT1234567',
+                  'phone': '5555101010',
+                  'email': 'maria@example.ni',
+                  'address': null,
+                  'pointsBalance': 42.5,
+                  'isActive': true,
+                  'createdAt': '2026-08-01T00:00:00.000Z',
+                  'updatedAt': '2026-08-02T00:00:00.000Z',
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+
+          // Loyalty program + embedded reward closure hydrated.
+          final savedProgram = await database.loyaltyProgramDao.getProgramById(
+            'lp-101',
+          );
+          expect(savedProgram, isNotNull);
+          expect(savedProgram!.name, 'Café Loyal');
+          expect(savedProgram.programType, 'SPEND_POINTS');
+          expect(savedProgram.configVersion, 3);
+          expect(
+            savedProgram.earningRuleJson,
+            contains('pointsPerCurrency'),
+          );
+          final savedRewards = await database.loyaltyRewardDao
+              .getRewardsByProgram('lp-101');
+          expect(savedRewards, hasLength(1));
+          expect(savedRewards.first.name, 'Café gratis');
+          expect(savedRewards.first.costUnits, 100);
+          expect(
+            savedRewards.first.benefitConfigJson,
+            contains('productId'),
+          );
+
+          // Promotion hydrated.
+          final savedPromotions = await database.promotionDao
+              .getAllPromotions();
+          expect(savedPromotions, hasLength(1));
+          expect(savedPromotions.first.name, '2x1 Jueves');
+          expect(savedPromotions.first.daysOfWeek, '4,5');
+          expect(savedPromotions.first.priority, 5);
+
+          // Customer hydrated.
+          final savedCustomer = await database.customerDao.getCustomerById(
+            'cust-101',
+          );
+          expect(savedCustomer, isNotNull);
+          expect(savedCustomer!.name, 'María López');
+          expect(savedCustomer.taxId, 'XOT1234567');
+          expect(savedCustomer.pointsBalance, 42.5);
+          // A cloud-delivered customer is a synced record: there is nothing
+          // local to push.
+          expect(savedCustomer.syncStatus, 'synced');
+
+          // Watermark stamped once at the end of the pull with the server's
+          // currentVersion.
+          final savedVersionConfig = await database.localConfigDao
+              .getConfigByKey('last_inbound_sync_version');
+          expect(savedVersionConfig, isNotNull);
+          expect(savedVersionConfig!.value, '1787745600000');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'skips malformed loyalty/promotion/customer rows without aborting the pull or the watermark',
+      () async {
+        final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-08-26T18:00:00.000Z',
+            'currentVersion': 1787745600001,
+            'deltas': {
+              'loyaltyPrograms': [
+                // Malformed program: missing id.
+                {
+                  'name': 'Sin identidad',
+                  'programType': 'SPEND_POINTS',
+                  'tenantId': 'tenant-1',
+                },
+                {
+                  'id': 'lp-102',
+                  'tenantId': 'tenant-1',
+                  'name': 'Sellos Pan',
+                  'programType': 'PRODUCT_STAMPS',
+                  'status': 'ACTIVE',
+                  'configVersion': 1,
+                  'rewards': [
+                    // Malformed reward inside an otherwise valid program.
+                    {'rewardType': 'FREE_PRODUCT'},
+                    {
+                      'id': 'rw-102',
+                      'tenantId': 'tenant-1',
+                      'loyaltyProgramId': 'lp-102',
+                      'name': 'Pan gratis',
+                      'rewardType': 'FREE_PRODUCT',
+                      'costUnits': 5,
+                      'status': 'ACTIVE',
+                    },
+                  ],
+                },
+              ],
+              'promotions': [
+                // Malformed promotion: missing name.
+                {'id': 'promo-broken', 'type': 'fixedDiscount'},
+                {
+                  'id': 'promo-102',
+                  'tenantId': 'tenant-1',
+                  'name': 'Descuento 10%',
+                  'type': 'percentageDiscount',
+                  'discountValue': 10.0,
+                  'isActive': true,
+                },
+              ],
+              'customers': [
+                // Malformed customer: missing name.
+                {'id': 'cust-broken'},
+                {
+                  'id': 'cust-102',
+                  'tenantId': 'tenant-1',
+                  'name': 'Pedro Pérez',
+                  'pointsBalance': 5.0,
+                  'isActive': true,
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          // The pull itself and the watermark survive malformed rows.
+          expect(result, isNotNull);
+          final savedVersionConfig = await database.localConfigDao
+              .getConfigByKey('last_inbound_sync_version');
+          expect(savedVersionConfig!.value, '1787745600001');
+
+          // Malformed program row never reached the local tables.
+          expect(await database.loyaltyProgramDao.getProgramById('lp-102'),
+              isNotNull);
+          final lp102Rewards = await database.loyaltyRewardDao
+              .getRewardsByProgram('lp-102');
+          expect(lp102Rewards, hasLength(1));
+          expect(lp102Rewards.first.id, 'rw-102');
+
+          final savedPromotions = await database.promotionDao
+              .getAllPromotions();
+          expect(savedPromotions.map((p) => p.id), ['promo-102']);
+
+          final brokenCustomer = await database.customerDao.getCustomerById(
+            'cust-broken',
+          );
+          expect(brokenCustomer, isNull);
+          final goodCustomer = await database.customerDao.getCustomerById(
+            'cust-102',
+          );
+          expect(goodCustomer, isNotNull);
+          expect(goodCustomer!.name, 'Pedro Pérez');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'merges cloud customers preserving POS-local fields and the local balance behind unsynced point transactions',
+      () async {
+        final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          // A locally created (express) customer, still unsynced, with a
+          // pending point transaction (slice 5b): the local balance is the
+          // truth until the ledger push lands.
+          await database.customerDao.saveCustomer(
+            CustomerEntity(
+              id: 'cust-local-pending',
+              name: 'Cliente Express Local',
+              pointsBalance: 50.0,
+              createdAt: 1787000000000,
+              updatedAt: 1787000000000,
+              syncStatus: 'pending',
+              customerCode: 'LOCAL-001',
+            ),
+          );
+          await database.customerPointTransactionDao.insertTransaction(
+            CustomerPointTransactionEntity(
+              id: 'tx-pending-1',
+              customerId: 'cust-local-pending',
+              type: 'earn',
+              points: 50.0,
+              balanceAfter: 50.0,
+              conversionRate: 1.0,
+              createdAt: 1787000001000,
+              syncStatus: 'pending',
+            ),
+          );
+
+          // A cloud-synced local customer with a locally generated code but
+          // no unsynced ledger: the cloud balance wins, the code survives.
+          await database.customerDao.saveCustomer(
+            CustomerEntity(
+              id: 'cust-synced',
+              name: 'Cliente Sincronizado',
+              pointsBalance: 10.0,
+              createdAt: 1787000000000,
+              updatedAt: 1787000000000,
+              syncStatus: 'synced',
+              customerCode: 'LOCAL-002',
+            ),
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-08-26T18:00:00.000Z',
+            'currentVersion': 1787745600002,
+            'deltas': {
+              'customers': [
+                {
+                  // Cloud carries a stale balance (999) because the terminal's
+                  // pending point transactions have not been ingested yet.
+                  'id': 'cust-local-pending',
+                  'tenantId': 'tenant-1',
+                  'name': 'Cliente Express Local',
+                  'phone': '5555999999',
+                  'pointsBalance': 999.0,
+                  'isActive': true,
+                },
+                {
+                  'id': 'cust-synced',
+                  'tenantId': 'tenant-1',
+                  'name': 'Cliente Sincronizado',
+                  'pointsBalance': 77.0,
+                  'isActive': true,
+                },
+              ],
+            },
+          };
+
+          await syncServiceWithDb.pullInboundDeltas();
+
+          // Unsynced ledger: LOCAL balance preserved, cloud 999 never applied.
+          final pendingCustomer = await database.customerDao.getCustomerById(
+            'cust-local-pending',
+          );
+          expect(pendingCustomer!.pointsBalance, 50.0);
+          // Locally generated code preserved (absent from the cloud contract).
+          expect(pendingCustomer.customerCode, 'LOCAL-001');
+          // The row is still unsynced upstream: stamping 'synced' would claim
+          // a push that never happened.
+          expect(pendingCustomer.syncStatus, 'pending');
+          // Cloud-authoritative synced attributes were merged.
+          expect(pendingCustomer.phone, '5555999999');
+
+          // No unsynced ledger: cloud balance wins, locally generated code
+          // still preserved.
+          final syncedCustomer = await database.customerDao.getCustomerById(
+            'cust-synced',
+          );
+          expect(syncedCustomer!.pointsBalance, 77.0);
+          expect(syncedCustomer.customerCode, 'LOCAL-002');
+          expect(syncedCustomer.syncStatus, 'synced');
+        } finally {
+          await database.close();
+        }
+      },
+    );
   });
 }

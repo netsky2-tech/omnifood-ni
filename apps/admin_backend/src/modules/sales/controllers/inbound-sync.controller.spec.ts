@@ -62,6 +62,9 @@ describe('InboundSyncController', () => {
       recipes: [],
       recipeVersions: [],
       users: [],
+      loyaltyPrograms: [],
+      promotions: [],
+      customers: [],
     },
   };
 

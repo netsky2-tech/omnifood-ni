@@ -34,9 +34,9 @@ Close audit Batch 5: H1 (unsynced-count observability), H2 (loyalty point transa
 
 ## Status
 - [x] 5a — commit 94266f00
-- [x] 5b — commit see below
-- [ ] 5c
-- [ ] 5d (M1-M3 only; M4 deferred — no backend kitchen entity exists, needs new table/module = feature work)
+- [x] 5b — commit 4e3d50e3
+- [x] 5c — commit 446d1a49
+- [x] 5d — commit 11e7f0e2 (M1-M3 only; M4 deferred — no backend kitchen entity exists, needs new table/module = feature work)
 
 ## Follow-ups (non-blocking, from 5b verification)
 1. Program-less POS loyalty rows land in ledger but contribute to no balance projection (projection PK requires loyalty_program_id). Legacy attribution needs a product decision.

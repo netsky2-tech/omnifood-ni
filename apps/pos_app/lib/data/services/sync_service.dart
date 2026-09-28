@@ -24,7 +24,11 @@ import '../models/inventory/recipe_entity.dart';
 import '../models/user_entity.dart';
 import '../models/security_profile_entity.dart';
 import '../models/local_config_entity.dart';
+import '../models/customer/customer_entity.dart';
 import '../models/customer/customer_point_transaction_entity.dart';
+import '../models/loyalty/loyalty_program_entity.dart';
+import '../models/loyalty/loyalty_reward_entity.dart';
+import '../models/sales/promotion_entity.dart';
 import '../models/sales/cashier_session_entity.dart';
 import '../models/sales/cash_movement_entity.dart';
 import 'fiscal_inbox_handler.dart';
@@ -1846,6 +1850,19 @@ class SyncService {
     }
   }
 
+  /// Parses a cloud timestamp into epoch millis for the Floor entities that
+  /// store integer timestamps. Accepts epoch-millis numbers and ISO-8601
+  /// strings; returns null for anything unparsable (callers fall back to the
+  /// local row's value or a safe default).
+  int? _tryParseEpochMillis(dynamic value) {
+    if (value is num) return value.toInt();
+    if (value is String && value.trim().isNotEmpty) {
+      final parsed = DateTime.tryParse(value.trim());
+      return parsed?.millisecondsSinceEpoch;
+    }
+    return null;
+  }
+
   Map<String, Object> _valuationFields(dynamic movement) {
     final unitCostNio = _tryReadField(movement, 'unitCostNio');
     final sourceDocumentType = _tryReadField(movement, 'sourceDocumentType');
@@ -2540,6 +2557,236 @@ class SyncService {
           if (inserted) {
             alertsCount++;
           }
+        }
+
+        // 5c. Loyalty programs & rewards (slice 5d, finding M1). Each
+        // program row carries its FULL reward closure from the backend; the
+        // DAOs upsert with conflict-replace, so re-delivery is idempotent.
+        // Malformed rows are skipped individually and never abort the pull.
+        final rawLoyaltyPrograms =
+            rawDeltas['loyaltyPrograms'] as List<dynamic>? ?? const [];
+        final programEntities = <LoyaltyProgramEntity>[];
+        final rewardEntities = <LoyaltyRewardEntity>[];
+        for (final row in rawLoyaltyPrograms) {
+          if (row is! Map) continue;
+          final map = Map<String, dynamic>.from(row);
+          final id = map['id']?.toString();
+          final name = map['name']?.toString();
+          final programType = map['programType']?.toString();
+          final tenantId = map['tenantId']?.toString();
+          // Strict identity parsing: a row without id, name, type or tenant
+          // is skipped, never defaulted.
+          if (id == null ||
+              id.isEmpty ||
+              name == null ||
+              name.isEmpty ||
+              programType == null ||
+              programType.isEmpty ||
+              tenantId == null ||
+              tenantId.isEmpty) {
+            developer.log(
+              '[SYNC_LOYALTY] skipped malformed cloud loyalty program row (id=$id)',
+              name: 'SyncService',
+            );
+            continue;
+          }
+          programEntities.add(
+            LoyaltyProgramEntity(
+              id: id,
+              tenantId: tenantId,
+              name: name,
+              programType: programType,
+              status: map['status']?.toString() ?? 'DRAFT',
+              startsAt: _tryParseEpochMillis(map['startsAt']),
+              endsAt: _tryParseEpochMillis(map['endsAt']),
+              earningRuleJson: jsonEncode(map['earningRule'] ?? const {}),
+              eligibilityRuleJson: jsonEncode(
+                map['eligibilityRule'] ?? const {},
+              ),
+              configVersion: (map['configVersion'] as num?)?.toInt() ?? 1,
+              createdAt: _tryParseEpochMillis(map['createdAt']) ?? 0,
+              updatedAt: _tryParseEpochMillis(map['updatedAt']) ?? 0,
+            ),
+          );
+          final rawRewards = map['rewards'] as List<dynamic>? ?? const [];
+          for (final rewardRow in rawRewards) {
+            if (rewardRow is! Map) continue;
+            final rewardMap = Map<String, dynamic>.from(rewardRow);
+            final rewardId = rewardMap['id']?.toString();
+            final rewardName = rewardMap['name']?.toString();
+            final rewardType = rewardMap['rewardType']?.toString();
+            if (rewardId == null ||
+                rewardId.isEmpty ||
+                rewardName == null ||
+                rewardName.isEmpty ||
+                rewardType == null ||
+                rewardType.isEmpty) {
+              developer.log(
+                '[SYNC_LOYALTY] skipped malformed cloud loyalty reward row (id=$rewardId)',
+                name: 'SyncService',
+              );
+              continue;
+            }
+            rewardEntities.add(
+              LoyaltyRewardEntity(
+                id: rewardId,
+                tenantId: rewardMap['tenantId']?.toString() ?? tenantId,
+                loyaltyProgramId:
+                    rewardMap['loyaltyProgramId']?.toString() ?? id,
+                name: rewardName,
+                rewardType: rewardType,
+                costUnits: (rewardMap['costUnits'] as num?)?.toInt() ?? 0,
+                benefitConfigJson: jsonEncode(
+                  rewardMap['benefitConfig'] ?? const {},
+                ),
+                status: rewardMap['status']?.toString() ?? 'INACTIVE',
+                startsAt: _tryParseEpochMillis(rewardMap['startsAt']),
+                endsAt: _tryParseEpochMillis(rewardMap['endsAt']),
+                presentationOrder:
+                    (rewardMap['presentationOrder'] as num?)?.toInt() ?? 0,
+                configVersion:
+                    (rewardMap['configVersion'] as num?)?.toInt() ?? 1,
+                createdAt: _tryParseEpochMillis(rewardMap['createdAt']) ?? 0,
+                updatedAt: _tryParseEpochMillis(rewardMap['updatedAt']) ?? 0,
+              ),
+            );
+          }
+        }
+        if (programEntities.isNotEmpty) {
+          await _database!.loyaltyProgramDao.savePrograms(programEntities);
+        }
+        if (rewardEntities.isNotEmpty) {
+          await _database!.loyaltyRewardDao.saveRewards(rewardEntities);
+        }
+
+        // 5d. Promotions (slice 5d, finding M2). The cloud record is
+        // authoritative for every promotion attribute; malformed rows are
+        // skipped individually.
+        final rawPromotions =
+            rawDeltas['promotions'] as List<dynamic>? ?? const [];
+        final promotionEntities = <PromotionEntity>[];
+        for (final row in rawPromotions) {
+          if (row is! Map) continue;
+          final map = Map<String, dynamic>.from(row);
+          final id = map['id']?.toString();
+          final name = map['name']?.toString();
+          final type = map['type']?.toString();
+          if (id == null ||
+              id.isEmpty ||
+              name == null ||
+              name.isEmpty ||
+              type == null ||
+              type.isEmpty) {
+            developer.log(
+              '[SYNC_PROMOTIONS] skipped malformed cloud promotion row (id=$id)',
+              name: 'SyncService',
+            );
+            continue;
+          }
+          final rawDaysOfWeek = map['daysOfWeek'] as List<dynamic>?;
+          promotionEntities.add(
+            PromotionEntity(
+              id: id,
+              name: name,
+              type: type,
+              targetProductId: map['targetProductId']?.toString(),
+              targetCategoryId: map['targetCategoryId']?.toString(),
+              buyQuantity: (map['buyQuantity'] as num?)?.toInt() ?? 0,
+              getQuantity: (map['getQuantity'] as num?)?.toInt() ?? 0,
+              discountValue:
+                  (map['discountValue'] as num?)?.toDouble() ?? 0.0,
+              minOrderAmount:
+                  (map['minOrderAmount'] as num?)?.toDouble() ?? 0.0,
+              daysOfWeek: rawDaysOfWeek
+                  ?.map((day) => day.toString())
+                  .join(','),
+              startTime: map['startTime']?.toString(),
+              endTime: map['endTime']?.toString(),
+              startDate: (map['startDate'] as num?)?.toInt(),
+              endDate: (map['endDate'] as num?)?.toInt(),
+              priority: (map['priority'] as num?)?.toInt() ?? 0,
+              isStackable: map['isStackable'] as bool? ?? true,
+              isActive: map['isActive'] as bool? ?? true,
+            ),
+          );
+        }
+        if (promotionEntities.isNotEmpty) {
+          await _database!.promotionDao.savePromotions(promotionEntities);
+        }
+
+        // 5e. Customers (slice 5d, finding M3) — per-row merge, following the
+        // products-handler local-only-field precedent.
+        final rawCustomers =
+            rawDeltas['customers'] as List<dynamic>? ?? const [];
+        final customerEntities = <CustomerEntity>[];
+        for (final row in rawCustomers) {
+          if (row is! Map) continue;
+          final map = Map<String, dynamic>.from(row);
+          final id = map['id']?.toString();
+          final name = map['name']?.toString();
+          if (id == null || id.isEmpty || name == null || name.isEmpty) {
+            developer.log(
+              '[SYNC_CUSTOMERS] skipped malformed cloud customer row (id=$id)',
+              name: 'SyncService',
+            );
+            continue;
+          }
+          final existing = await _database!.customerDao.getCustomerById(id);
+
+          // Merge decision (slice 5d): the cloud record is authoritative for
+          // the synced attributes (name, taxId, phone, email, address,
+          // isActive). POS-local fields absent from the cloud contract are
+          // preserved: `customerCode` (terminal-local code generation) and
+          // `syncStatus` while the local row is still unsynced
+          // ('pending'/'error') — stamping 'synced' would claim a push that
+          // never happened.
+          // `pointsBalance` is driven from both sides: when the customer has
+          // locally unsynced point transactions (slice 5b ledger), the local
+          // balance is the truth — the cloud has not ingested those rows yet
+          // and an incremental pull may even carry a stale cloud balance.
+          // Otherwise the cloud value wins.
+          var hasUnsyncedPointTransactions = false;
+          if (existing != null) {
+            final pointTransactions = await _database!
+                .customerPointTransactionDao
+                .getTransactionsByCustomer(id);
+            hasUnsyncedPointTransactions = pointTransactions.any(
+              (tx) => tx.syncStatus != 'synced',
+            );
+          }
+          final localSyncStatus = existing?.syncStatus;
+          final keepLocalSyncStatus =
+              localSyncStatus == 'pending' || localSyncStatus == 'error';
+          final resolvedPointsBalance =
+              existing != null && hasUnsyncedPointTransactions
+                  ? existing.pointsBalance
+                  : (map['pointsBalance'] as num?)?.toDouble() ??
+                      existing?.pointsBalance ??
+                      0.0;
+
+          customerEntities.add(
+            CustomerEntity(
+              id: id,
+              name: name,
+              taxId: map['taxId']?.toString(),
+              phone: map['phone']?.toString(),
+              email: map['email']?.toString(),
+              address: map['address']?.toString(),
+              pointsBalance: resolvedPointsBalance,
+              isActive: map['isActive'] as bool? ?? true,
+              createdAt: _tryParseEpochMillis(map['createdAt']) ??
+                  existing?.createdAt ??
+                  DateTime.now().millisecondsSinceEpoch,
+              updatedAt: _tryParseEpochMillis(map['updatedAt']) ??
+                  existing?.updatedAt ??
+                  DateTime.now().millisecondsSinceEpoch,
+              syncStatus: keepLocalSyncStatus ? localSyncStatus! : 'synced',
+              customerCode: existing?.customerCode,
+            ),
+          );
+        }
+        if (customerEntities.isNotEmpty) {
+          await _database!.customerDao.saveCustomers(customerEntities);
         }
 
         // 6. Fiscal Configuration projection
