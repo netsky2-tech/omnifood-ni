@@ -6,20 +6,32 @@ import '../../models/inventory/recipe.dart';
 import '../../models/inventory/recipe_version_document.dart';
 import '../../models/inventory/uom_conversion.dart';
 import '../../repositories/inventory/inventory_repository.dart';
+import '../../../data/mappers/inventory_mapper.dart';
 import '../alerts/alert_service.dart';
 import 'movement_engine.dart';
+import 'negative_stock_regularization_service.dart';
 import 'uom_conversion_calculator.dart';
 
 class MovementEngineImpl implements MovementEngine {
   final InventoryRepository repository;
   final AlertService alertService;
+
+  /// #601 (R2): optional negative-stock regularization service. When
+  /// provided, every replenishment purchase triggers retrocalculation of
+  /// pending provisional sale movements for that insumo. Null keeps the
+  /// engine usable without the kardex regularization graph (tests, tools).
+  final NegativeStockRegularizationService? regularizationService;
   final Set<String> _alertedInsumos = {};
   static const int _maxBomDepth = 5;
   // Slice 2.2: tolerance for the netQuantity == gross*(1-shrink/100) invariant,
   // expressed at the inventory 4dp scale.
   static const double _netQuantityTolerance = 0.0001;
 
-  MovementEngineImpl(this.repository, this.alertService);
+  MovementEngineImpl(
+    this.repository,
+    this.alertService, {
+    this.regularizationService,
+  });
 
   @override
   Future<void> recordSale(String productId, int quantity) async {
@@ -91,18 +103,34 @@ class MovementEngineImpl implements MovementEngine {
       _alertedInsumos.remove(insumoId);
     }
 
-    await repository.saveMovement(
-      InventoryMovement(
-        id: movementId ?? DateTime.now().millisecondsSinceEpoch.toString(),
-        insumoId: insumoId,
-        type: MovementType.purchase,
-        quantity: quantity,
-        previousStock: insumo.stock,
-        newStock: newStock,
-        timestamp: DateTime.now(),
-        reason: reason ?? 'Purchase',
-      ),
+    final movement = InventoryMovement(
+      id: movementId ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      insumoId: insumoId,
+      type: MovementType.purchase,
+      quantity: quantity,
+      previousStock: insumo.stock,
+      newStock: newStock,
+      timestamp: DateTime.now(),
+      reason: reason ?? 'Purchase',
+      // #601 (R2): the purchase trigger must carry its real unit cost so the
+      // regularization engine can retrocalculate provisional movements.
+      unitCostNio: cost,
     );
+    await repository.saveMovement(movement);
+
+    // #601 (R2): a replenishment purchase is the regularization trigger for
+    // pending provisional (negative-stock) sale movements of this insumo.
+    // Degrade gracefully: regularization must never fail the purchase itself.
+    if (regularizationService != null) {
+      try {
+        await regularizationService!.processPendingQueueForInsumo(
+          insumoId: insumoId,
+          triggerMovement: InventoryMapper.toMovementEntity(movement),
+        );
+      } catch (_) {
+        // Regularization failures are retried later; the purchase must persist.
+      }
+    }
   }
 
   @override

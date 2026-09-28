@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
+import 'package:pos_app/domain/services/inventory/kardex_recalculation_engine.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
+import 'package:pos_app/domain/services/inventory/negative_stock_regularization_service.dart';
 import 'package:pos_app/presentation/services/alert_service_impl.dart';
 import 'package:pos_app/presentation/widgets/inventory_alert_overlay.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
@@ -262,7 +264,19 @@ void main() async {
   );
   final alertService = AlertServiceImpl(inventoryRepository);
   await alertService.hydrateInbox();
-  final movementEngine = MovementEngineImpl(inventoryRepository, alertService);
+  // #601: the negative-stock regularization lifecycle is wired into the
+  // production graph. Sales over zero/negative stock are persisted with
+  // PROVISIONAL costing (10) and enqueued atomically (SalesTransactionDao);
+  // replenishment purchases trigger retrocalculation (MovementEngineImpl).
+  final regularizationService = NegativeStockRegularizationService(
+    database: database,
+    engine: const KardexRecalculationEngine(),
+  );
+  final movementEngine = MovementEngineImpl(
+    inventoryRepository,
+    alertService,
+    regularizationService: regularizationService,
+  );
 
   // Sales Module Initialization
   final numberingService = DgiNumberingServiceImpl(
@@ -400,7 +414,11 @@ void main() async {
               InsumoViewModel(inventoryRepository, alertService: alertService),
         ),
         ChangeNotifierProvider(
-          create: (_) => PurchaseViewModel(inventoryRepository, movementEngine),
+          create: (_) => PurchaseViewModel(
+            inventoryRepository,
+            movementEngine,
+            regularizationService,
+          ),
         ),
         ChangeNotifierProvider(
           create: (_) =>

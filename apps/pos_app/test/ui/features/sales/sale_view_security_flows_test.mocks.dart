@@ -1584,6 +1584,18 @@ class MockSyncService extends _i1.Mock implements _i10.SyncService {
       ) as _i19.Future<int>);
 
   @override
+  _i19.Future<_i10.AuthorityInertRecipeReport?> getInertRecipeVerdictReport() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getInertRecipeVerdictReport,
+          [],
+        ),
+        returnValue: _i19.Future<_i10.AuthorityInertRecipeReport?>.value(),
+        returnValueForMissingStub:
+            _i19.Future<_i10.AuthorityInertRecipeReport?>.value(),
+      ) as _i19.Future<_i10.AuthorityInertRecipeReport?>);
+
+  @override
   _i19.Future<_i10.SyncRunOutcome> triggerManualSync() => (super.noSuchMethod(
         Invocation.method(
           #triggerManualSync,

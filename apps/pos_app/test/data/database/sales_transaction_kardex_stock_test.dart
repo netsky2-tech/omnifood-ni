@@ -284,4 +284,63 @@ void main() {
       expect((await database.insumoDao.findInsumoById('ins-1'))!.stock, 7.0);
     });
   });
+
+  group('SalesTransactionDao negative-stock regularization (#601)', () {
+    test(
+        'sale with negative stock marks movement estadoCosteo = 10 and enqueues to kardex_recalculate_queue with PENDING',
+        () async {
+      // Zero stock: any sale is an oversell and must be provisional.
+      await database.insumoDao.insertInsumos([insumo(stock: 0.0)]);
+
+      await database.salesTransactionDao.executeSaleTransaction(
+        invoice('sale-neg'),
+        [],
+        [],
+        [],
+        [movement(id: 'mov-neg', quantity: -2, saleId: 'sale-neg')],
+        null,
+        false,
+      );
+
+      final rows = await database.salesTransactionDao
+          .getMovementsBySaleId('sale-neg');
+      expect(rows, hasLength(1));
+      expect(rows.single.estadoCosteo, 10);
+      // Provisional cost: falls back to the insumo average cost.
+      expect(rows.single.unitCostNio, 1.0);
+
+      final queue = await database.kardexRecalculateQueueDao
+          .findQueueByInsumoId('ins-1');
+      expect(queue, hasLength(1));
+      expect(queue.single.status, 'PENDING');
+      expect(queue.single.originMovementId, 'mov-neg');
+      expect(queue.single.triggerMovementId, '');
+      expect(queue.single.attempts, 0);
+    });
+
+    test(
+        'sale with positive stock keeps movement estadoCosteo = 30 and does not enqueue',
+        () async {
+      await database.insumoDao.insertInsumos([insumo(stock: 10.0)]);
+
+      await database.salesTransactionDao.executeSaleTransaction(
+        invoice('sale-ok'),
+        [],
+        [],
+        [],
+        [movement(id: 'mov-ok', quantity: -2, saleId: 'sale-ok')],
+        null,
+        false,
+      );
+
+      final rows = await database.salesTransactionDao
+          .getMovementsBySaleId('sale-ok');
+      expect(rows, hasLength(1));
+      expect(rows.single.estadoCosteo, 30);
+
+      final queue = await database.kardexRecalculateQueueDao
+          .findQueueByInsumoId('ins-1');
+      expect(queue, isEmpty);
+    });
+  });
 }

@@ -4063,6 +4063,21 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'sale_id': item.saleId,
                   'sale_correlation_id': item.saleCorrelationId
                 }),
+        _kardexRecalculateQueueEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'kardex_recalculate_queue',
+            (KardexRecalculateQueueEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'insumo_id': item.insumoId,
+                  'origin_movement_id': item.originMovementId,
+                  'trigger_movement_id': item.triggerMovementId,
+                  'status': item.status,
+                  'attempts': item.attempts,
+                  'claimed_at': item.claimedAt,
+                  'last_error': item.lastError,
+                  'created_at': item.createdAt,
+                  'updated_at': item.updatedAt
+                }),
         _auditLogEntityInsertionAdapter = InsertionAdapter(
             database,
             'audit_logs',
@@ -4245,6 +4260,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   final InsertionAdapter<PaymentEntity> _paymentEntityInsertionAdapter;
 
   final InsertionAdapter<MovementEntity> _movementEntityInsertionAdapter;
+
+  final InsertionAdapter<KardexRecalculateQueueEntity>
+      _kardexRecalculateQueueEntityInsertionAdapter;
 
   final InsertionAdapter<AuditLogEntity> _auditLogEntityInsertionAdapter;
 
@@ -4507,6 +4525,13 @@ class _$SalesTransactionDao extends SalesTransactionDao {
   Future<void> insertMovement(MovementEntity movement) async {
     await _movementEntityInsertionAdapter.insert(
         movement, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertKardexRecalculateQueueItem(
+      KardexRecalculateQueueEntity item) async {
+    await _kardexRecalculateQueueEntityInsertionAdapter.insert(
+        item, OnConflictStrategy.replace);
   }
 
   @override

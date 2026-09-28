@@ -1127,6 +1127,18 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i7.Future<void>);
 
   @override
+  _i7.Future<void> insertKardexRecalculateQueueItem(
+          _i26.KardexRecalculateQueueEntity? item) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #insertKardexRecalculateQueueItem,
+          [item],
+        ),
+        returnValue: _i7.Future<void>.value(),
+        returnValueForMissingStub: _i7.Future<void>.value(),
+      ) as _i7.Future<void>);
+
+  @override
   _i7.Future<void> insertAuditLog(_i37.AuditLogEntity? log) =>
       (super.noSuchMethod(
         Invocation.method(
