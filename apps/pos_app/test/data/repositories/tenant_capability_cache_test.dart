@@ -58,4 +58,20 @@ void main() {
     ]) { expect(await cache.refresh(tenantId: tenant, response: invalid), isFalse); }
     expect(cache.isV3Eligible(tenant), isFalse);
   });
+
+  test('keeps in-memory authority when persistence fails; clears only on invalid response (M9)', () async {
+    when(() => dao.saveConfig(any())).thenThrow(Exception('disk full'));
+
+    // Persistence fails, so the refresh is not fully persisted...
+    expect(await cache.refresh(tenantId: tenant, response: response()), isFalse);
+    // ...but the VALID server response still grants in-memory authority for
+    // this boot session (BOH features must not disappear).
+    expect(cache.hasFreshAuthority(tenant), isTrue);
+    expect(cache.isV3Eligible(tenant), isTrue);
+
+    // An invalid server response still clears in-memory state.
+    when(() => dao.saveConfig(any())).thenAnswer((_) async {});
+    expect(await cache.refresh(tenantId: tenant, response: {'tenant_id': 'other'}), isFalse);
+    expect(cache.hasFreshAuthority(tenant), isFalse);
+  });
 }

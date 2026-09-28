@@ -1,4 +1,7 @@
+import 'dart:developer' as developer;
+
 import '../../models/inventory/batch_deduction.dart';
+import '../../models/inventory/forensic_alert.dart';
 import '../../models/inventory/insumo.dart';
 import '../../models/inventory/inventory_movement.dart';
 import '../../models/fulfillment/fulfillment_contracts.dart';
@@ -127,8 +130,38 @@ class MovementEngineImpl implements MovementEngine {
           insumoId: insumoId,
           triggerMovement: InventoryMapper.toMovementEntity(movement),
         );
-      } catch (_) {
-        // Regularization failures are retried later; the purchase must persist.
+      } catch (e, st) {
+        // M5 (Batch 3): regularization must never fail the purchase — the
+        // purchase already persisted above and the pending queue is retried
+        // on the next replenishment trigger. But the failure must be
+        // observable: log it and surface a forensic alert to the operator.
+        developer.log(
+          'Post-purchase regularization failed for insumo $insumoId; '
+          'purchase persisted, queue retry deferred.',
+          name: 'MovementEngine',
+          level: 900, // WARNING
+          error: e,
+          stackTrace: st,
+        );
+        alertService.publishAlert(
+          ForensicAlert(
+            id: 'regularization-failed-$insumoId-${movement.id}',
+            alertType: 'INVENTORY_REGULARIZATION_FAILED',
+            severity: 'warning',
+            message:
+                'Regularización de stock negativo pendiente falló para '
+                '$insumoId; la compra se conservó y la cola se reintentará.',
+            createdAt: DateTime.now(),
+            sourceMovementId: movement.id,
+            sourceDocumentType: 'INSUMO_PURCHASE',
+            sourceDocumentId: insumoId,
+            metadata: <String, dynamic>{
+              'insumoId': insumoId,
+              'movementId': movement.id,
+              'error': e.toString(),
+            },
+          ),
+        );
       }
     }
   }

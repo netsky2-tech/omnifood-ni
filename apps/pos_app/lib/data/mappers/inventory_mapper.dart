@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
+
 import '../../domain/models/inventory/insumo.dart';
 import '../../domain/models/inventory/recipe.dart';
 import '../../domain/models/inventory/inventory_movement.dart';
@@ -106,6 +108,14 @@ class InventoryMapper {
         try {
           return IngredientType.values.byName(raw.trim().toLowerCase());
         } catch (_) {
+          // M6 (Batch 3): the fallback keeps corrupt data flowing offline,
+          // but the unexpected path must be observable.
+          developer.log(
+            'Unknown ingredient type "$raw"; falling back to '
+            'IngredientType.insumo.',
+            name: 'InventoryMapper',
+            level: 900, // WARNING
+          );
           return IngredientType.insumo;
         }
     }
@@ -143,6 +153,14 @@ class InventoryMapper {
         try {
           return MovementType.values.byName(raw.trim().toLowerCase());
         } catch (_) {
+          // M6 (Batch 3): the fallback keeps corrupt data flowing offline,
+          // but the unexpected path must be observable.
+          developer.log(
+            'Unknown movement type "$raw"; falling back to '
+            'MovementType.adjustment.',
+            name: 'InventoryMapper',
+            level: 900, // WARNING
+          );
           return MovementType.adjustment;
         }
     }
@@ -300,6 +318,13 @@ class InventoryMapper {
     try {
       return InventoryPolicy.values.byName(raw);
     } catch (_) {
+      // M6 (Batch 3): the fallback keeps unprovisioned/legacy rows working
+      // offline, but the unexpected path must be observable.
+      developer.log(
+        'Unknown inventory policy "$raw"; falling back to null.',
+        name: 'InventoryMapper',
+        level: 900, // WARNING
+      );
       return null;
     }
   }
