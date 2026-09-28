@@ -63,6 +63,19 @@ export const duplicateResolutionLabels: Record<string, string> = {
 };
 
 /**
+ * Cash-shift status labels (issue #587, moved from
+ * src/features/cash/labels.ts). Keys are the exact codes emitted by the
+ * backend (`CashShiftStatus`, apps/admin_backend/src/modules/sales/dto/
+ * cash-shift.dto.ts). Canonical vocabulary (NHILOS §26/§27): one term per
+ * lifecycle state — Abierto / Cerrado — with no synonyms; unknown codes pass
+ * through untouched via `localize` so a new backend code never crashes the UI.
+ */
+export const cashShiftStatusLabels: Record<string, string> = {
+  OPEN: "Abierto",
+  CLOSED: "Cerrado",
+};
+
+/**
  * Documented machine failure codes of POST /onboarding/activation/attempts,
  * verified against apps/admin_backend/src/modules/onboarding/services/
  * activation.service.ts. When one of these codes appears in the backend

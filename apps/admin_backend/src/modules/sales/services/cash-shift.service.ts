@@ -15,6 +15,11 @@ import {
   CashMovementType,
 } from '../entities/cash-movement.entity';
 
+export interface ListShiftsDto {
+  status?: CashShiftStatus;
+  limit?: number;
+}
+
 export interface OpenShiftDto {
   terminalId: string;
   cashierId: string;
@@ -81,6 +86,36 @@ export class CashShiftService {
         }
         return shift;
       },
+    );
+  }
+
+  /**
+   * Owner-dashboard oversight listing of cash-shift sessions. Read-only, but
+   * it still goes through the tenant-bound transaction like every other cash
+   * access (issue #512 slice 5): the cash tables are tenant-RLS protected and
+   * each `where` keeps the explicit `tenant_id` filter. Deterministic sort:
+   * most recent opening first, so the page answers "what happened lately"
+   * without client-side reordering.
+   */
+  async listShifts(
+    tenantId: string,
+    query: ListShiftsDto = {},
+  ): Promise<CashShiftSession[]> {
+    const limit = query.limit ?? 50;
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(CashShiftSession).find({
+          where: {
+            tenant_id: tenantId,
+            ...(query.status ? { status: query.status } : {}),
+          },
+          order: {
+            opened_at: 'DESC',
+          },
+          take: limit,
+        }),
     );
   }
 

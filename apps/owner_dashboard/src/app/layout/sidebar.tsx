@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   ShoppingCart,
+  Wallet,
   Package,
   FileText,
   Tag,
@@ -36,6 +37,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: LayoutDashboard, section: "Principal" },
   { label: "Ventas", path: "/sales", icon: ShoppingCart, section: "Principal" },
+  { label: "Sesiones de caja", path: "/cash", icon: Wallet, section: "Gestión" },
   { label: "Inventario", path: "/inventory", icon: Package, section: "Principal" },
   { label: "Fiscal", path: "/fiscal", icon: FileText, section: "Principal" },
   { label: "Catálogo", path: "/catalog", icon: Tag, section: "Gestión" },

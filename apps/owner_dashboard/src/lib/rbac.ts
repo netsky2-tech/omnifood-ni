@@ -19,6 +19,8 @@ export type AppAction =
  * Route access policy aligned with the authoritative NestJS backend guards:
  * - / (Dashboard): OWNER, MANAGER
  * - /sales: OWNER, MANAGER
+ * - /cash: OWNER, MANAGER (cash-session oversight, mirrors backend
+ *   CashShiftController list route roles)
  * - /inventory: OWNER, MANAGER, CASHIER (Kardex endpoint is open to CASHIER)
  * - /fiscal: OWNER, MANAGER
  * - /catalog: OWNER, MANAGER
@@ -33,6 +35,7 @@ export type AppAction =
 export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/": ["OWNER", "MANAGER"],
   "/sales": ["OWNER", "MANAGER"],
+  "/cash": ["OWNER", "MANAGER"],
   "/inventory": ["OWNER", "MANAGER"],
   "/fiscal": ["OWNER", "MANAGER"],
   "/catalog": ["OWNER", "MANAGER"],
