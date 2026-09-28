@@ -13,9 +13,9 @@ Every unit below maps to acceptance criteria (`AC-n`) in its issue body. An item
 
 ---
 
-## Delivery log — 2026-09-26
+## Delivery log — 2026-09-26 / 2026-09-27
 
-Executed and observed, not asserted. Every identity below is a merge commit or an open PR.
+Executed and observed, not asserted. Every identity below is a merge commit on `main`.
 
 | Work | Evidence | State |
 |---|---|---|
@@ -25,12 +25,27 @@ Executed and observed, not asserted. Every identity below is a merge commit or a
 | D-3 IVA regime (B2e) | PR #596 merged | done, see the fixture lesson in the B2e row |
 | Fixtures that assumed the old IVA default | PR #600 merged (11 `taxRate: 0.15`, no assertion touched) | done |
 | Blind-count cash model (#529) | PR #598 merged, issue closed: `expected = openingFloat + net cash of non-canceled invoices in shift + manual movements`; voids drop out through `is_canceled = 0` | done |
-| Authority hydration (B3a / #519) | #603 backend closure · #604 adapter+pull · #605 verdict+guard · #606 fence (closes #519) | open, awaiting CI + merge in that order |
+| Authority hydration (B3a / #519) | Stacked PRs #603 → #604 → #605 → #606 merged (`bbc75ec1`), #519 closed | done |
+| Template recipe suggestions backend (#523 T1, T2, T5, T7) | PR #609 merged (`4214731e`), issues #610 and #611 created | done |
+| Recipe authoring guard on SIMPLE products (#611) | PR #612 merged (`2c68f89a`) | done |
+| Dashboard lockfile desync fix (#614) | PR #616 merged (`975bab17`) — `npm ci` unblocked | done |
+| Catalog edit product_type control (#615) | PR #617 merged (`7af1521e`), #615 closed | done |
+| Create-time product_type question (#618) | PR #619 merged (`2cb6e3e0`), #618 closed | done |
+| Template product_type backfill (#610 Part A) | PR #622 merged (`dadd9d4b`), #610 closed | done |
+| Template suggestions review dashboard (#523 T3) | PR #623 merged (`a93e7eff`) | done (T3 complete; T4 optional remaining) |
+| POS inert recipe ingestion verdict (#613) | PR #635 merged (`61efffd0`), #613 closed | done |
+
+**Infrastructure discoveries and rules established during these deliveries:**
+- **FORCE ROW LEVEL SECURITY on data migrations**: `products`, `recipe_versions`, `recipe_details` carry `relforcerowsecurity = true`. The migration role is the non-superuser schema owner; with no `app.tenant_id` bound during migrations, `SELECT` sees 0 rows silently. Precedent: `1809180000000-ReconcileEnumColumns.ts:36-41`. Fix: `ALTER TABLE ... NO FORCE ROW LEVEL SECURITY` bracket in `try / finally` (`AccessExclusiveLock` held, lifts predicate only for owner). A migration run against a clone as `postgres` proves nothing because `postgres` bypasses RLS (`rolbypassrls=true`).
+- **TypeORM 0.3 + pg driver result shape**: `queryRunner.query()` for `UPDATE ... RETURNING` returns `[[rows], rowCount]`, so reading `.length` gave 2 for every database. Normalized via `asReturnedRows()` helper. Every migration reporting counts must run against a real database clone before PR.
+- **POS ingestion and silent kardex gap (#613)**: The push does not break on bad deltas (refusal is a value, catch does not rethrow). However, payload-level refusal wedged other products, and recipes for `SIMPLE` products were ingested silently with zero kardex movements at sale time (planner never reads `hasRecipe` for SIMPLE). Fixed via per-record verdict in append-only table `authority_ingestion_verdicts` (Floor migration 57→58) + informational line in `CloudSyncStatusBadge` detail dialog.
+- **Dashboard CI gap**: `apps/owner_dashboard` has zero CI coverage in GitHub Actions. All gates are local: `tsc -b --noEmit`, `oxlint src`, `vitest run`, `npm run build`.
 
 **Filed while working, deliberately kept out of those PRs:**
-- **#601** — `NegativeStockRegularizationService` has zero callers (sale and purchase hooks unwired). Invisible until now because #519 meant no sale ever produced a movement; it becomes observable the moment B3a ships.
-- ~~**#602** — a fresh install creates the `authority_%` tables **without** their immutability triggers~~ **retracted the same day and closed as not-a-gap.** My citation pointed at the wrong lines: `migrations.dart:108-122` shows the registered `onCreate` calling `_createAuthorityImmutabilityTriggers`, and a fresh DB built the way `main.dart` builds it reports all four triggers when read back from `sqlite_master`. The `grep → 0` on the generated DDL was a true observation that proved nothing — triggers never come from entity DDL. Kept as a note, not an issue: those four triggers have no test asserting them today. **Lesson for this plan's evidence rule: a `grep` on one file is not a runtime fact; build the state and read it back.**
+- **#601** — `NegativeStockRegularizationService` has zero callers (sale and purchase hooks unwired).
+- ~~**#602** — a fresh install creates the `authority_%` tables **without** their immutability triggers~~ **retracted and closed as not-a-gap.** Triggers are attached by `onCreate` / `onOpen` callbacks, not entity DDL.
 - **#524** stays the fence for `previousStock`/`newStock` persisting as 0 on the frozen path (B3b).
+- **#611** — SOHO pilot tenant repair (9 dishes to COMPOUND, beer to #518 mapping): operator task via the #617 catalog control, not a code defect.
 
 **Deferred by the owner, not by neglect:** Batch 6 operator manuals. **#534 (B0.2)** still needs the physical-device measurements and now decides only B3b/B3c, not B3a.
 
@@ -206,7 +221,7 @@ What that resolves at once: the D-10 single-operator case (no supervisor require
 | **B1a-3** | V3 ("ANULADO" print) | ~60-100 | Additive, no existing code touched. #533 F2 makes it a legal requirement, not polish. |
 | **B1a-4** | S2 same-day guard | ~40-60 | Blocked on the schema question from finding 4 — calendar-day now, or a migration to store shift membership. |
 
-| B1b | Template recipes: correct `product_type` + published state, apply-version, honest message | #523 D1,D2,D3 |
+| B1b | Template recipes: correct `product_type` + published state, apply-version, honest message | #523 D1,D2,D3 · #610 · #618 | **DONE 2026-09-27.** Delivered across #609 (backend suggestions T1/T2/T5/T7), #612 (guard), #617 (edit control), #619 (create question), #622 (backfill COMPOUND), #623 (dashboard T3 review UI), and #635 (#613 POS verdict). Only #523 T4 (list drafts) remains optional. |
 | B1c | Stop showing numbers we know are wrong: honest `stock` read, inventory screens annotated | #521 F1 · #531 G2.1 |
 | B1d | Print the **DGI authorization number** bottom-right on every ticket — **re-scoped by D-4: the field already exists and is client-editable, so this is "wire the orphan", not "add a field"** | #539 S1 · #540 · #531 G1.6 |
 
