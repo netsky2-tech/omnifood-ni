@@ -328,7 +328,31 @@ D-8 is a stop, not a deferral: automatic range renewal is the kind of feature an
 
 #520 D2, D5 · #527 M5 — deferred by B0.1 (single terminal). **Not closed, not waived**: #532 T4 blocks enrollment until they verify. D-2 reframes *why* they are deferred: the per-device series is not a legal requirement, so the deferral is cheaper than the first draft assumed; per-*sucursal* series still is.
 
----
+## Deferred product capabilities (SOHO FIRST, PRODUCTIZATION WITHOUT PREMATURE GENERALIZATION)
+
+Decision: do not implement capabilities with zero current consumers in SOHO. Reopen when real evidence of need exists.
+
+| ID | Capability | Status | Trigger to reopen | Classification |
+|---|---|---|---|---|
+| #521 S3 | Sale-side UOM conversion (sell in a different unit than stock) | DEFERRED | Real customer requires unit conversion (botella→copa, caja→unidad, etc.) | Future product capability, HIGH value, not a defect, not a risk |
+| #521 S4 | Payment methods as tenant data (entity + CRUD + sync) | DEFERRED | Second payment method or multi-method commercial requirement | Future product capability, MEDIUM-HIGH value, not a defect, not a risk |
+
+**Rules for the agent:** No dormant code, no speculative entities, no CRUD without a consumer, no migrations without a writer, no feature flags. Architecture must remain clean enough to extend later; premature generalization is explicitly forbidden.
+
+## Required security remediation: multi-tenant login via tenantSlug
+
+The login flow MUST resolve the tenant from the provisioning context, not from a manual user selection:
+
+```
+POS provisioned → POS knows tenantSlug → login includes tenantSlug
+→ backend resolves tenantSlug → tenantId → transaction context
+→ RLS protects users → password verification → JWT tenant_id = authority
+```
+
+- NO pre-auth RLS exception
+- NO global RLS bypass for email lookup
+- NO manual tenant selection by the end user
+- Tracking: #556
 
 ## Cross-cutting risks
 
