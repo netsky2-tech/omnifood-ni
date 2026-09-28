@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { formatLocalDate } from "@/lib/utils";
+import { formatLocalDate, formatDisplayDate } from "@/lib/utils";
 
 export interface DateRangeValue {
   startDate: string;
@@ -95,9 +95,9 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
         <svg className="h-4 w-4 text-muted-foreground shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
-        <span className="tabular-nums">{value.startDate}</span>
+        <span className="tabular-nums">{formatDisplayDate(value.startDate)}</span>
         <span className="text-muted-foreground">—</span>
-        <span className="tabular-nums">{value.endDate}</span>
+        <span className="tabular-nums">{formatDisplayDate(value.endDate)}</span>
       </button>
 
       {open && (

@@ -68,3 +68,14 @@ export function formatLocalDate(d: Date = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * Formats an ISO date string (YYYY-MM-DD) into DD/MM/YYYY for display.
+ * Internal state and API calls remain ISO; this is purely cosmetic.
+ * NHILOS POS standard: day/month/year (Nicaraguan format).
+ */
+export function formatDisplayDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-");
+  if (!y || !m || !d) return isoDate;
+  return `${d}/${m}/${y}`;
+}
+

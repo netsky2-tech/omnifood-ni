@@ -295,8 +295,8 @@ describe("WU9 — period attribution (owner finding 3)", () => {
     });
     expect(screen.queryByText(/^Periodo:/)).not.toBeInTheDocument();
     // The selected range remains attributed on screen: the picker trigger
-    // always renders "startDate — endDate".
+    // renders "DD/MM/YYYY — DD/MM/YYYY" (NHILOS POS standard: day/month/year).
     const trigger = screen.getByRole("button", { name: /seleccionar rango de fechas/i });
-    expect(trigger.textContent).toMatch(/\d{4}-\d{2}-\d{2}—\d{4}-\d{2}-\d{2}/);
+    expect(trigger.textContent).toMatch(/\d{2}\/\d{2}\/\d{4}—\d{2}\/\d{2}\/\d{4}/);
   });
 });

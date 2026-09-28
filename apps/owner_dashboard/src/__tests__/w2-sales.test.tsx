@@ -203,8 +203,8 @@ describe("W2 — DateRangePicker", () => {
         onChange={() => {}}
       />,
     );
-    expect(screen.getByText("2026-08-01")).toBeInTheDocument();
-    expect(screen.getByText("2026-08-31")).toBeInTheDocument();
+    expect(screen.getByText("01/08/2026")).toBeInTheDocument();
+    expect(screen.getByText("31/08/2026")).toBeInTheDocument();
   });
 });
 
