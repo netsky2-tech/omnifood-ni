@@ -76,6 +76,39 @@ class MovementEntity {
     this.saleId,
     this.saleCorrelationId,
   });
+
+  /// #524 (K1): returns a copy with the transaction-time balance transition.
+  /// The DAO layer inserts copies carrying real stock values while the
+  /// caller's input movements stay untouched for replay hashing.
+  MovementEntity copyWith({required double previousStock, required double newStock}) {
+    return MovementEntity(
+      id: id,
+      insumoId: insumoId,
+      type: type,
+      quantity: quantity,
+      previousStock: previousStock,
+      newStock: newStock,
+      timestamp: timestamp,
+      reason: reason,
+      userId: userId,
+      unitCostNio: unitCostNio,
+      sourceDocumentType: sourceDocumentType,
+      sourceDocumentId: sourceDocumentId,
+      originMovementId: originMovementId,
+      originInvoiceItemId: originInvoiceItemId,
+      // ignore: non_constant_identifier_names
+      batch_deductions: batch_deductions,
+      estadoCosteo: estadoCosteo,
+      intentosCount: intentosCount,
+      bloqueoMotivo: bloqueoMotivo,
+      autorizadoPorUsuarioId: autorizadoPorUsuarioId,
+      fechaAutorizacion: fechaAutorizacion,
+      deliveryOwner: deliveryOwner,
+      deliveryState: deliveryState,
+      saleId: saleId,
+      saleCorrelationId: saleCorrelationId,
+    );
+  }
 }
 
 class MovementDeliveryOwner {

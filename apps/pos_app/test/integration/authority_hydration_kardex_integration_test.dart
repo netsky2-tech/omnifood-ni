@@ -327,9 +327,11 @@ void main() {
     expect(movement.sourceDocumentType, 'SALE');
     expect(movement.sourceDocumentId, 'inv-kardex-1');
     expect(movement.deliveryState, MovementDeliveryState.localApplied);
-    // previousStock/newStock are deliberately NOT asserted to be non-zero:
-    // the frozen path hardcodes 0 there today — that fence belongs to
-    // issue #524, not this one.
+    // #524 (K1): the transaction-time balance transition is now persisted
+    // with the movement row itself, so the Kardex shows the real
+    // `10.0 → 9.6` chain instead of `0 → 0`.
+    expect(movement.previousStock, 10.0);
+    expect(movement.newStock, 9.6);
   });
 
   test(

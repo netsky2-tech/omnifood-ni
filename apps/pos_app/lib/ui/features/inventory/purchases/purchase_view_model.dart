@@ -417,14 +417,14 @@ class PurchaseViewModel with ChangeNotifier {
 }
 
 extension PurchaseX on Purchase {
-  InventoryMovement toMovement() {
+  InventoryMovement toMovement({double previousStock = 0.0}) {
     return InventoryMovement(
       id: id,
       insumoId: insumoId,
       type: MovementType.purchase,
       quantity: quantity,
-      previousStock: 0, // Should be fetched from repo
-      newStock: quantity, // Should be calculated
+      previousStock: previousStock,
+      newStock: previousStock + quantity,
       timestamp: timestamp,
       reason: 'Purchase invoice $invoiceNumber from $supplierId',
     );

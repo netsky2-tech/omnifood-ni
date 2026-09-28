@@ -304,8 +304,16 @@ abstract class SalesTransactionDao {
     }
     await insertPayments(payments);
 
-    // 3. Inventory Movements
-    for (final movement in movements) {
+    // 3. Inventory Movements — K2 (#524): deterministic (insumoId, id) order
+    // so multi-line sales over the same insumo chain
+    // previousStock[n] == newStock[n-1] inside this transaction.
+    final orderedMovements = [...movements]
+      ..sort((a, b) {
+        final insumoComp = a.insumoId.compareTo(b.insumoId);
+        if (insumoComp != 0) return insumoComp;
+        return a.id.compareTo(b.id);
+      });
+    for (final movement in orderedMovements) {
       final insumo = await getInsumoById(movement.insumoId);
       if (insumo == null) {
         throw StateError(
@@ -328,7 +336,12 @@ abstract class SalesTransactionDao {
             isActive: insumo.isActive,
           ),
         );
-        await insertMovement(movement);
+        // K1 (#524): persist the real transition, not the frozen zeros; the
+        // input `movements` stay untouched so the replay payload hash is
+        // identical between first execution and replay checks.
+        await insertMovement(
+          movement.copyWith(previousStock: insumo.stock, newStock: newStock),
+        );
       }
     }
 
@@ -379,8 +392,16 @@ abstract class SalesTransactionDao {
     CustomerPointTransactionEntity? loyaltyReversal,
     int? loyaltyReversalUpdatedAt,
   ) async {
-    // 1. Reversal movements + insumo stock updates.
-    for (final movement in movements) {
+    // 1. Reversal movements + insumo stock updates. K2 (#524): the same
+    // deterministic (insumoId, id) order as the sale path so a multi-line
+    // void chains previousStock[n] == newStock[n-1] inside this transaction.
+    final orderedMovements = [...movements]
+      ..sort((a, b) {
+        final insumoComp = a.insumoId.compareTo(b.insumoId);
+        if (insumoComp != 0) return insumoComp;
+        return a.id.compareTo(b.id);
+      });
+    for (final movement in orderedMovements) {
       final originMovementId =
           movement.originMovementId ??
           await getOriginalMovementId(canceledInvoice.id, movement.insumoId);
@@ -413,7 +434,12 @@ abstract class SalesTransactionDao {
             isActive: insumo.isActive,
           ),
         );
-        await insertMovement(movement);
+        // K1 (#524): persist the real reversal transition, not zeros. The
+        // inserted copy carries the fresh balance; the caller's movement
+        // objects only gain the resolved originMovementId, as before.
+        await insertMovement(
+          movement.copyWith(previousStock: insumo.stock, newStock: newStock),
+        );
       }
     }
 
