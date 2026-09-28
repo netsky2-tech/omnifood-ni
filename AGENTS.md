@@ -60,3 +60,12 @@ This document provides essential context and instructions for AI agents working 
 - **Platform Guidelines**: `GEMINI.md` (root and apps)
 
 When proposing code changes, always ask: **"How does this work if the WiFi goes down?"** and **"Does this violate DGI norms?"**
+
+## 🎨 Design & UX Standards (Mandatory)
+
+For **any UI/UX or design-related change** in this monorepo, apply the following standards **automatically**:
+
+- **Experience Standard**: `@docs/nhilos/nhilos_backoffice_experience_standard_v1.0.md`
+- **Module Audit Template**: `@docs/nhilos/nhilos_backoffice_module_audit_template_v2.1.md`
+
+These documents define the required design language, interaction rules, accessibility, and audit criteria for backoffice modules, dashboards, and any user-facing components in OmniFood NI. Agents must reference and adhere to them without needing explicit reminders.
