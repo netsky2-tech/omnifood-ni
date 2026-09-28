@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { FiscalSetupForm } from "./fiscal-setup-form";
 import { IndustryTemplatesList } from "./industry-templates-list";
 import { BulkImportWizard } from "./bulk-import-wizard";
 import { SetupCenterView } from "@/features/onboarding/setup-center-view";
+import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { Landmark, Sparkles, FileSpreadsheet, Settings, Store } from "lucide-react";
 
 export type SettingsTab = "setup" | "fiscal" | "templates" | "import";
@@ -11,8 +12,32 @@ interface SettingsPageProps {
   initialTab?: SettingsTab;
 }
 
+const VALID_TABS: SettingsTab[] = ["setup", "fiscal", "templates", "import"];
+
+function tabFromSearchParams(sp: URLSearchParams, fallback: SettingsTab): SettingsTab {
+  const tab = sp.get("tab") as SettingsTab | null;
+  if (tab && VALID_TABS.includes(tab)) return tab;
+  return fallback;
+}
+
 export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+  const [searchParams, setSearchParams] = useSafeSearchParams();
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => tabFromSearchParams(searchParams, initialTab));
+
+  const handleTabChange = useCallback(
+    (tab: SettingsTab) => {
+      setActiveTab(tab);
+      setSearchParams(
+        (prev) => {
+          const sp = new URLSearchParams(prev);
+          sp.set("tab", tab);
+          return sp;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   return (
     <div className="space-y-6">
@@ -33,8 +58,8 @@ export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
           role="tab"
           aria-selected={activeTab === "setup"}
           data-testid="tab-setup"
-          onClick={() => setActiveTab("setup")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 ${
+          onClick={() => handleTabChange("setup")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 rounded-t ${
             activeTab === "setup"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
@@ -48,8 +73,8 @@ export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
           role="tab"
           aria-selected={activeTab === "fiscal"}
           data-testid="tab-fiscal"
-          onClick={() => setActiveTab("fiscal")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 ${
+          onClick={() => handleTabChange("fiscal")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 rounded-t ${
             activeTab === "fiscal"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
@@ -63,8 +88,8 @@ export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
           role="tab"
           aria-selected={activeTab === "templates"}
           data-testid="tab-templates"
-          onClick={() => setActiveTab("templates")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 ${
+          onClick={() => handleTabChange("templates")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 rounded-t ${
             activeTab === "templates"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
@@ -78,8 +103,8 @@ export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
           role="tab"
           aria-selected={activeTab === "import"}
           data-testid="tab-import"
-          onClick={() => setActiveTab("import")}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 ${
+          onClick={() => handleTabChange("import")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px cursor-pointer whitespace-nowrap flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 rounded-t ${
             activeTab === "import"
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30"
@@ -94,7 +119,7 @@ export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
       <div className="mt-4">
         {activeTab === "setup" && (
           <div role="tabpanel" data-testid="tabpanel-setup">
-            <SetupCenterView onNavigateToTab={(tab) => setActiveTab(tab)} />
+            <SetupCenterView onNavigateToTab={(tab) => handleTabChange(tab)} />
           </div>
         )}
 
