@@ -13,6 +13,8 @@ export function ChartCard({
   testId,
   to = "/sales",
   showLink = true,
+  linkLabel = "Ver →",
+  linkAriaLabel,
   children,
 }: {
   title: string;
@@ -21,6 +23,8 @@ export function ChartCard({
   /** §24 drill-down destination (navigation only). */
   to?: string;
   showLink?: boolean;
+  linkLabel?: string;
+  linkAriaLabel?: string;
   children: ReactNode;
 }) {
   return (
@@ -30,9 +34,10 @@ export function ChartCard({
         {showLink && (
           <Link
             to={to}
-            className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            aria-label={linkAriaLabel ?? `${linkLabel} ${title}`}
+            className="rounded text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
           >
-            Ver →
+            {linkLabel}
           </Link>
         )}
       </header>
@@ -49,7 +54,10 @@ export function WidgetError({ testId, message }: { testId: string; message: stri
   return (
     <div
       data-testid={testId}
-      className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive"
+      // NHILOS §21 readable contrast: plain text-destructive on the 10 %
+      // destructive tint is 4.13:1 — fails AA for this text-xs copy; red-700
+      // on the same tint is 5.54:1 and stays semantic red.
+      className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-red-700"
       role="alert"
     >
       {message}

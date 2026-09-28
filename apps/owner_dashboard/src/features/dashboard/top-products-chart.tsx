@@ -23,10 +23,12 @@
  *   Batch 5b tax-inclusive disclaimer is gone: the card now matches the KPI
  *   basis exactly.
  */
+import { Link } from "react-router-dom";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { buildTopProductRows, formatNio, type TopProductRow } from "./chart-domain";
 import { ChartCard, EmptyNote, WidgetError, WidgetSkeleton } from "./chart-card";
 import { useTopProductsReport } from "./use-dashboard-charts";
+import { buildDashboardDrilldownUrl } from "./domain/navigation-context";
 
 function formatShare(percent: number | null): string {
   return percent === null ? "—" : `${percent.toFixed(1)}%`;
@@ -79,25 +81,43 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
       body = (
         <>
           <ul className="mb-3 space-y-1.5" data-testid="top-products-rows">
-            {rows.map((row) => (
-              <li key={row.name} className="flex items-center justify-between gap-2 text-sm">
-                <span className="min-w-0 flex-1 truncate text-card-foreground" title={row.name}>
-                  {row.name}
-                </span>
-                <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
-                  {row.units} u
-                </span>
-                <span className="w-24 whitespace-nowrap text-right text-sm font-medium tabular-nums text-card-foreground">
-                  {formatNio(row.revenue)}
-                </span>
-                <span
-                  className="w-14 whitespace-nowrap text-right text-xs font-medium tabular-nums text-muted-foreground"
-                  title={shareTitle(row)}
-                >
-                  {formatShare(row.sharePercent)}
-                </span>
-              </li>
-            ))}
+            {rows.map((row) => {
+              const productDrilldownUrl = buildDashboardDrilldownUrl(
+                "/sales",
+                {
+                  source: "dashboard",
+                  sourceWidget: "top-products",
+                  startDate: start,
+                  endDate: end,
+                  entityType: "product",
+                  entityId: row.productId,
+                },
+                { tab: "products", product: row.name },
+              );
+              return (
+                <li key={row.name} className="flex items-center justify-between gap-2 text-sm">
+                  <Link
+                    to={productDrilldownUrl}
+                    className="min-w-0 flex-1 truncate rounded text-card-foreground hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
+                    title={row.name}
+                  >
+                    {row.name}
+                  </Link>
+                  <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                    {row.units} u
+                  </span>
+                  <span className="w-24 whitespace-nowrap text-right text-sm font-medium tabular-nums text-card-foreground">
+                    {formatNio(row.revenue)}
+                  </span>
+                  <span
+                    className="w-14 whitespace-nowrap text-right text-xs font-medium tabular-nums text-muted-foreground"
+                    title={shareTitle(row)}
+                  >
+                    {formatShare(row.sharePercent)}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
           <div role="img" aria-label="Ingresos por producto">
             <ResponsiveContainer width="100%" height={rows.length * 28 + 16}>
@@ -125,8 +145,24 @@ export function TopProductsChart({ start, end }: { start: string; end: string })
     }
   }
 
+  const mainDrilldownUrl = buildDashboardDrilldownUrl(
+    "/sales",
+    {
+      source: "dashboard",
+      sourceWidget: "top-products",
+      startDate: start,
+      endDate: end,
+    },
+    { tab: "products" },
+  );
+
   return (
-    <ChartCard title="Top productos" testId="top-products-card">
+    <ChartCard
+      title="Top productos"
+      testId="top-products-card"
+      to={mainDrilldownUrl}
+      linkAriaLabel="Ver reporte completo de productos más vendidos"
+    >
       {body}
     </ChartCard>
   );
