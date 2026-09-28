@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { formatLocalDate } from "@/lib/utils";
 import { toFiniteNumber } from "@/lib/numeric";
 import { localize, alertSeverityLabels } from "@/lib/labels";
@@ -220,7 +221,7 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
         <button
           type="button"
           onClick={() => handleTypeFilter("")}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 ${
             !filters.type
               ? "bg-primary text-primary-foreground shadow-xs"
               : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -233,7 +234,7 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
             key={type}
             type="button"
             onClick={() => handleTypeFilter(type)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 ${
               filters.type === type
                 ? "bg-primary text-primary-foreground shadow-xs"
                 : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -307,11 +308,16 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
   );
 }
 
-function AlertsTab() {
+function AlertsTab({ initialSeverity }: { initialSeverity?: string }) {
+  const [selectedSeverity, setSelectedSeverity] = useState<string | undefined>(initialSeverity);
   const { data, isLoading } = useAlerts();
 
   if (isLoading) return <LoadingState message="Cargando alertas de inventario..." />;
   if (!data) return <EmptyState message="Sin datos de alertas" />;
+
+  const displayedAlerts = selectedSeverity
+    ? data.alerts.filter((a) => a.severity.toUpperCase() === selectedSeverity.toUpperCase())
+    : data.alerts;
 
   return (
     <div className="space-y-6">
@@ -322,8 +328,23 @@ function AlertsTab() {
         <StatCard label="Stock Negativo" value={String(data.negativeCount)} accent={data.negativeCount > 0} />
       </div>
 
-      {data.alerts.length === 0 ? (
-        <EmptyState message="No hay alertas activas en este momento" />
+      {selectedSeverity && (
+        <div className="flex items-center justify-between rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
+          <span>
+            Mostrando alertas con severidad: <strong className="font-semibold">{selectedSeverity}</strong> ({displayedAlerts.length})
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedSeverity(undefined)}
+            className="rounded font-medium text-primary hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
+          >
+            Mostrar todas ({data.alerts.length})
+          </button>
+        </div>
+      )}
+
+      {displayedAlerts.length === 0 ? (
+        <EmptyState message={selectedSeverity ? `No hay alertas con severidad ${selectedSeverity}` : "No hay alertas activas en este momento"} />
       ) : (
         <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
           <div className="overflow-x-auto w-full">
@@ -351,7 +372,7 @@ function AlertsTab() {
                 </tr>
               </thead>
               <tbody>
-                {data.alerts.map((alert) => (
+                {displayedAlerts.map((alert) => (
                   <tr key={alert.insumoId} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
                     <td className="px-4 py-3 font-medium text-foreground">{alert.insumoName}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
@@ -385,11 +406,38 @@ function AlertsTab() {
 }
 
 export function InventoryPage() {
-  const [activeTab, setActiveTab] = useState<TabId>("valuation");
+  const [searchParams, setSearchParams] = useSafeSearchParams();
+  const tabParam = searchParams.get("tab") as TabId | null;
+  const initialTab: TabId =
+    tabParam && ["valuation", "cogs", "kardex", "alerts"].includes(tabParam)
+      ? tabParam
+      : "valuation";
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+
+  const startParam = searchParams.get("startDate");
+  const endParam = searchParams.get("endDate");
   const [range, setRange] = useState<DateRangeValue>(() => {
     const iso = formatLocalDate(new Date());
-    return { startDate: iso, endDate: iso };
+    return {
+      startDate: startParam || iso,
+      endDate: endParam || iso,
+    };
   });
+
+  const severityFilter =
+    searchParams.get("status") || searchParams.get("severity") || undefined;
+
+  const handleTabChange = (tabId: TabId) => {
+    setActiveTab(tabId);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", tabId);
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -411,8 +459,8 @@ export function InventoryPage() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
+              onClick={() => handleTabChange(tab.id)}
+              className={`rounded border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 ${
                 activeTab === tab.id
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
@@ -432,7 +480,7 @@ export function InventoryPage() {
         {activeTab === "kardex" && (
           <KardexTab startDate={range.startDate} endDate={range.endDate} />
         )}
-        {activeTab === "alerts" && <AlertsTab />}
+        {activeTab === "alerts" && <AlertsTab initialSeverity={severityFilter} />}
       </div>
     </div>
   );

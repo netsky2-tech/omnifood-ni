@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { formatLocalDate } from "@/lib/utils";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
@@ -404,7 +405,7 @@ function ExportButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 disabled:pointer-events-none cursor-pointer transition-colors shadow-xs"
+      className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 disabled:pointer-events-none cursor-pointer transition-colors shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
     >
       {label}
     </button>
@@ -412,11 +413,33 @@ function ExportButton({
 }
 
 export function FiscalPage() {
-  const [activeTab, setActiveTab] = useState<TabId>("summary");
+  const [searchParams, setSearchParams] = useSafeSearchParams();
+  const tabParam = searchParams.get("tab") as TabId | null;
+  const initialTab: TabId =
+    tabParam && TABS.some((t) => t.id === tabParam) ? tabParam : "summary";
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+
+  const startParam = searchParams.get("startDate");
+  const endParam = searchParams.get("endDate");
   const [range, setRange] = useState<DateRangeValue>(() => {
     const iso = formatLocalDate(new Date());
-    return { startDate: iso, endDate: iso };
+    return {
+      startDate: startParam || iso,
+      endDate: endParam || iso,
+    };
   });
+
+  const handleTabChange = (tabId: TabId) => {
+    setActiveTab(tabId);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", tabId);
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -438,8 +461,8 @@ export function FiscalPage() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
+              onClick={() => handleTabChange(tab.id)}
+              className={`rounded border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 ${
                 activeTab === tab.id
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
