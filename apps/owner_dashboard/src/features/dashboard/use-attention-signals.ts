@@ -33,6 +33,7 @@ import {
   fetchCardReconciliationSummary,
 } from "./dashboard-api";
 import type { LocalDateRange } from "./domain/comparison-period";
+import { buildDashboardDrilldownUrl } from "./domain/navigation-context";
 
 export type AttentionSeverity = "critical" | "warning" | "info";
 
@@ -52,6 +53,7 @@ export interface AttentionItem {
   detail: string;
   href: string;
   scope: AttentionScope;
+  actionLabel: string;
 }
 
 export interface AttentionSignal {
@@ -68,14 +70,6 @@ const SIGNAL_LABELS: Record<AttentionKey, string> = {
   voids: "Anulaciones",
   sequence: "Secuencia fiscal",
   audit: "Auditoría / Seguridad",
-};
-
-const SIGNAL_HREFS: Record<AttentionKey, string> = {
-  stock: "/inventory",
-  vouchers: "/sales",
-  voids: "/fiscal",
-  sequence: "/fiscal",
-  audit: "/audit",
 };
 
 /**
@@ -96,6 +90,14 @@ const SIGNAL_SCOPES: Record<AttentionKey, AttentionScope> = {
   audit: "period",
 };
 
+const SIGNAL_ACTION_LABELS: Record<AttentionKey, string> = {
+  stock: "Ver productos",
+  vouchers: "Revisar vouchers",
+  voids: "Ver anulaciones",
+  sequence: "Revisar secuencia",
+  audit: "Ver auditoría",
+};
+
 export function formatAttentionCurrency(amount: number): string {
   return new Intl.NumberFormat("es-NI", {
     style: "currency",
@@ -108,14 +110,16 @@ function item(
   key: AttentionKey,
   severity: AttentionSeverity,
   detail: string,
+  href: string,
 ): AttentionItem {
   return {
     key,
     label: SIGNAL_LABELS[key],
     severity,
     detail,
-    href: SIGNAL_HREFS[key],
+    href,
     scope: SIGNAL_SCOPES[key],
+    actionLabel: SIGNAL_ACTION_LABELS[key],
   };
 }
 
@@ -139,18 +143,27 @@ function buildStockItem(
   data: { criticalCount: number; warningCount: number; negativeCount: number } | null,
 ): AttentionItem | null {
   if (!data) return null;
-  if (data.criticalCount > 0) {
-    return item(
-      "stock",
-      "critical",
-      `${data.criticalCount} producto(s) en nivel crítico`,
-    );
-  }
+  const isCritical = data.criticalCount > 0;
   const low = data.warningCount + data.negativeCount;
-  if (low > 0) {
-    return item("stock", "warning", `${low} producto(s) con stock bajo/negativo`);
-  }
-  return null;
+  if (!isCritical && low <= 0) return null;
+
+  const severity: AttentionSeverity = isCritical ? "critical" : "warning";
+  const detail = isCritical
+    ? `${data.criticalCount} producto(s) en nivel crítico`
+    : `${low} producto(s) con stock bajo/negativo`;
+
+  const href = buildDashboardDrilldownUrl(
+    "/inventory",
+    {
+      source: "dashboard",
+      sourceWidget: "attention",
+      severity: isCritical ? "CRITICAL" : "WARNING",
+      filters: { status: isCritical ? "CRITICAL" : "WARNING" },
+    },
+    { tab: "alerts" },
+  );
+
+  return item("stock", severity, detail, href);
 }
 
 export function useAttentionSignals(range: LocalDateRange): AttentionSignal[] {
@@ -215,6 +228,15 @@ export function useAttentionSignals(range: LocalDateRange): AttentionSignal[] {
             "vouchers",
             "warning",
             `${d.pendingCount} voucher(s) pendientes · ${formatAttentionCurrency(d.pendingAmountNio)}`,
+            buildDashboardDrilldownUrl(
+              "/sales",
+              {
+                source: "dashboard",
+                sourceWidget: "attention",
+                filters: { paymentMethod: "card" },
+              },
+              { tab: "summary" },
+            ),
           )
         : null,
   );
@@ -225,6 +247,16 @@ export function useAttentionSignals(range: LocalDateRange): AttentionSignal[] {
           "voids",
           "warning",
           `${d.totalVoidedCount} anulaciones · ${formatAttentionCurrency(d.totalVoidedAmount)}`,
+          buildDashboardDrilldownUrl(
+            "/fiscal",
+            {
+              source: "dashboard",
+              sourceWidget: "attention",
+              startDate: range.start,
+              endDate: range.end,
+            },
+            { tab: "voided" },
+          ),
         )
       : null,
   );
@@ -240,6 +272,17 @@ export function useAttentionSignals(range: LocalDateRange): AttentionSignal[] {
         "sequence",
         "critical",
         `Gaps en secuencia fiscal · ${d.missingSequences.length} faltante(s), ${d.duplicateSequences.length} duplicado(s)`,
+        buildDashboardDrilldownUrl(
+          "/fiscal",
+          {
+            source: "dashboard",
+            sourceWidget: "attention",
+            startDate: range.start,
+            endDate: range.end,
+            severity: "CRITICAL",
+          },
+          { tab: "sequence" },
+        ),
       );
     }
     return null;
@@ -250,10 +293,32 @@ export function useAttentionSignals(range: LocalDateRange): AttentionSignal[] {
   // event.
   const audit = toSignal("audit", auditQuery, auditQuery.data, (d) => {
     if (d.criticalCount > 0) {
-      return item("audit", "critical", `${d.criticalCount} evento(s) crítico(s)`);
+      return item(
+        "audit",
+        "critical",
+        `${d.criticalCount} evento(s) crítico(s)`,
+        buildDashboardDrilldownUrl("/audit", {
+          source: "dashboard",
+          sourceWidget: "attention",
+          startDate: range.start,
+          endDate: range.end,
+          severity: "CRITICAL",
+        }),
+      );
     }
     if (d.warningCount > 0) {
-      return item("audit", "warning", `${d.warningCount} evento(s) de advertencia`);
+      return item(
+        "audit",
+        "warning",
+        `${d.warningCount} evento(s) de advertencia`,
+        buildDashboardDrilldownUrl("/audit", {
+          source: "dashboard",
+          sourceWidget: "attention",
+          startDate: range.start,
+          endDate: range.end,
+          severity: "WARNING",
+        }),
+      );
     }
     return null;
   });
