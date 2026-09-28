@@ -176,7 +176,7 @@ describe("FreshnessBadge — PARTIAL (FR-SYNC-01)", () => {
     const badge = screen.getByTestId("freshness-badge");
     expect(badge).toHaveAttribute("data-freshness-state", "PARTIAL");
     expect(badge.textContent).toContain(
-      "Sincronización parcial (2 terminales incompletos)",
+      "Información parcial (2 terminales con datos pendientes)",
     );
   });
 
@@ -199,7 +199,7 @@ describe("FreshnessBadge — PARTIAL (FR-SYNC-01)", () => {
       />,
     );
     expect(screen.getByTestId("freshness-badge").textContent).toContain(
-      "Sincronización parcial (1 terminal incompleto)",
+      "Información parcial (1 terminal con datos pendientes)",
     );
   });
 });
@@ -220,7 +220,7 @@ describe("FreshnessBadge — UNKNOWN (AC-09)", () => {
     const badge = screen.getByTestId("freshness-badge");
     expect(badge).toHaveAttribute("data-freshness-state", "UNKNOWN");
     expect(badge.textContent).toContain(
-      "Estado de sincronización desconocido",
+      "No se puede verificar la completitud de los datos",
     );
     // FR-SYNC-04 / AC-09: generatedAt never masquerades as completeness.
     expect(badge.textContent).not.toContain("Actualizado");

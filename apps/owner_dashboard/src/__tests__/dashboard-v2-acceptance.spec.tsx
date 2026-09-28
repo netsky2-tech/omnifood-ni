@@ -765,7 +765,7 @@ describe("AC-08 / AC-09 / AC-09A — freshness badge (FR-SYNC-01..05)", () => {
     });
     const badge = screen.getByTestId("freshness-badge");
     expect(badge.textContent).toContain(
-      "Estado de sincronización desconocido",
+      "No se puede verificar la completitud de los datos",
     );
     // FR-SYNC-04 / AC-09: generatedAt remains separate technical metadata —
     // it appears only in its own labeled caption, never as a freshness claim.
@@ -829,10 +829,12 @@ describe("AC-10..AC-13 — attention signals (Gate E surfaces)", () => {
     expect(screen.getByTestId("attention-item-stock").textContent).toContain(
       "3 producto(s) en nivel crítico",
     );
-    expect(screen.getByTestId("attention-link-stock")).toHaveAttribute(
-      "href",
-      "/inventory",
-    );
+    expect(
+      screen.getByTestId("attention-link-stock").getAttribute("href"),
+    ).toContain("/inventory?source=dashboard");
+    expect(
+      screen.getByTestId("attention-link-stock").getAttribute("href"),
+    ).toContain("tab=alerts");
   });
 
   it("AC-11: fiscal sequence gaps render as critical and link to the Fiscal audit", async () => {
@@ -852,10 +854,12 @@ describe("AC-10..AC-13 — attention signals (Gate E surfaces)", () => {
     expect(screen.getByTestId("attention-item-sequence").textContent).toContain(
       "Gaps en secuencia fiscal",
     );
-    expect(screen.getByTestId("attention-link-sequence")).toHaveAttribute(
-      "href",
-      "/fiscal",
-    );
+    expect(
+      screen.getByTestId("attention-link-sequence").getAttribute("href"),
+    ).toContain("/fiscal?source=dashboard");
+    expect(
+      screen.getByTestId("attention-link-sequence").getAttribute("href"),
+    ).toContain("tab=sequence");
   });
 
   it("AC-12: voids render count/amount as a warning row, never merged into sales", async () => {
@@ -903,10 +907,12 @@ describe("AC-10..AC-13 — attention signals (Gate E surfaces)", () => {
     expect(screen.getByTestId("attention-item-vouchers").textContent).toContain(
       "C$840.50",
     );
-    expect(screen.getByTestId("attention-link-vouchers")).toHaveAttribute(
-      "href",
-      "/sales",
-    );
+    expect(
+      screen.getByTestId("attention-link-vouchers").getAttribute("href"),
+    ).toContain("/sales?source=dashboard");
+    expect(
+      screen.getByTestId("attention-link-vouchers").getAttribute("href"),
+    ).toContain("tab=summary");
   });
 
   it("AC-13 (audit summary): severity counts surface from the audit executive summary", async () => {
