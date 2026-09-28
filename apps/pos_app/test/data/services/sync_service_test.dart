@@ -2680,6 +2680,22 @@ void main() {
                   'averageCost': 0.45,
                   'isActive': true,
                   'isPerishable': false,
+                  // Issue #521 S1: stock alert thresholds must survive the
+                  // sync pull into the local entity.
+                  'parLevel': 6000.0,
+                  'minStock': 1000.0,
+                  'maxStock': 12000.0,
+                },
+                {
+                  // Null case: an insumo without configured thresholds.
+                  'id': 'ins-102',
+                  'name': 'Leche Entera',
+                  'purchaseUom': 'L',
+                  'consumptionUom': 'ml',
+                  'stock': 3.5,
+                  'averageCost': 1.2,
+                  'isActive': true,
+                  'isPerishable': true,
                 },
               ],
               'recipes': [
@@ -2713,7 +2729,7 @@ void main() {
           expect(result, isNotNull);
           expect(result!.productsCount, 1);
           expect(result.catalogValuesCount, 1);
-          expect(result.insumosCount, 1);
+          expect(result.insumosCount, 2);
           expect(result.recipesCount, 1);
           expect(result.usersCount, 1);
 
@@ -2739,6 +2755,18 @@ void main() {
           expect(savedInsumo, isNotNull);
           expect(savedInsumo!.name, 'Grano de Café Especial');
           expect(savedInsumo.consumptionUom, 'G');
+          // Issue #521 S1: thresholds carried through the delta payload.
+          expect(savedInsumo.parLevel, 6000.0);
+          expect(savedInsumo.stockMin, 1000.0);
+          expect(savedInsumo.stockMax, 12000.0);
+
+          // Issue #521 S1: absent keys ingest as null, never as 0.
+          final savedInsumoNoThresholds = await database.insumoDao
+              .findInsumoById('ins-102');
+          expect(savedInsumoNoThresholds, isNotNull);
+          expect(savedInsumoNoThresholds!.parLevel, isNull);
+          expect(savedInsumoNoThresholds.stockMin, isNull);
+          expect(savedInsumoNoThresholds.stockMax, isNull);
 
           final savedRecipes = await database.recipeDao.findRecipeByProductId(
             'prod-101',
