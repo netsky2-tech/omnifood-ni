@@ -720,8 +720,8 @@ export function LoyaltyPage() {
                 </div>
 
                 <div className="space-y-1 text-sm text-muted-foreground">
-                  <p>Tipo: {LOYALTY_PROGRAM_TYPES.find((t) => t.id === program.program_type)?.label ?? program.program_type}</p>
-                  <p>Versión config: {program.config_version}</p>
+                  <p>Tipo: {LOYALTY_PROGRAM_TYPES.find((t) => t.id === program.program_type)?.label ?? "Desconocido"}</p>
+                  <p>Versión: {program.config_version}</p>
                 </div>
 
                 <div className="flex gap-2 mt-3">

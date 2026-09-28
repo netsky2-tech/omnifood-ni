@@ -415,7 +415,7 @@ export function CatalogAcquisitionModal({
                     >
                       <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
                       <AlertTitle className="font-bold text-amber-900 text-xs">
-                        Conflicto de concurrencia detectado (VERSION_CONFLICT)
+                        Conflicto de concurrencia detectado. Intente nuevamente.
                       </AlertTitle>
                       <AlertDescription className="text-xs text-amber-800/90 mt-1">
                         La sesión de onboarding fue actualizada concurrentemente desde otra pestaña o dispositivo. Tus datos ingresados se mantienen intactos. Presioná nuevamente para guardar.
