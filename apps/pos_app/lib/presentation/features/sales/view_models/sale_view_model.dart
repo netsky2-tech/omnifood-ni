@@ -212,6 +212,18 @@ class SaleViewModel extends ChangeNotifier {
   PostPaidFeedback? _lastPostPaidFeedback;
   PostPaidFeedback? get lastPostPaidFeedback => _lastPostPaidFeedback;
 
+  /// Last structured loyalty failure (audit B1/B2/H9): redeem persistence,
+  /// earn persistence, or cart re-evaluation. Diagnostic-only surface —
+  /// loyalty failures NEVER block the local sale path (offline-first),
+  /// but they can no longer be silently swallowed.
+  String? _lastLoyaltyError;
+  String? get lastLoyaltyError => _lastLoyaltyError;
+
+  void _recordLoyaltyFailure(String operation, Object error) {
+    _lastLoyaltyError = 'loyalty $operation failed: $error';
+    debugPrint('[SaleViewModel] $_lastLoyaltyError (non-blocking)');
+  }
+
   // --- Loyalty wiring: evaluation + reward selection state ---
   LoyaltyEvaluation? _currentEvaluation;
   LoyaltyEvaluation? get currentEvaluation => _currentEvaluation;
@@ -347,8 +359,10 @@ class SaleViewModel extends ChangeNotifier {
         _rewardInteraction!.validateAfterCartChange(_currentEvaluation!);
         _selectedReward = _resolveSelectedReward();
       }
-    } catch (_) {
-      // Non-blocking: evaluation is best-effort
+    } catch (e) {
+      // H9: re-evaluation is best-effort for the cart flow, but the
+      // failure is now observable instead of silently swallowed.
+      _recordLoyaltyFailure('re-evaluate', e);
     }
   }
 
@@ -1334,7 +1348,11 @@ class SaleViewModel extends ChangeNotifier {
             _selectedCustomer = _selectedCustomer!.copyWith(
               pointsBalance: newBalance,
             );
-          } catch (_) {}
+          } catch (e) {
+            // B1: redeem persistence failed. The sale must still complete
+            // locally (offline-first), but the failure is now observable.
+            _recordLoyaltyFailure('redeem', e);
+          }
         }
 
         // 2. Process accumulation on the final net subtotal
@@ -1358,7 +1376,11 @@ class SaleViewModel extends ChangeNotifier {
             _selectedCustomer = _selectedCustomer!.copyWith(
               pointsBalance: earnTx.balanceAfter,
             );
-          } catch (_) {}
+          } catch (e) {
+            // B2: earn persistence failed. The sale must still complete
+            // locally (offline-first), but the failure is now observable.
+            _recordLoyaltyFailure('earn', e);
+          }
         }
 
         // 3. Compute PostPaidFeedback using real LoyaltyEvaluation (not hardcoded)
