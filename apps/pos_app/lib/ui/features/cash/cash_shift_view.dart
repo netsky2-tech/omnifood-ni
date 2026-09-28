@@ -175,9 +175,13 @@ class _CashShiftViewState extends State<CashShiftView> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          Text(
-                            'Terminal: ${shift.terminalId}',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          Flexible(
+                            child: Text(
+                              'Terminal: ${shift.terminalId}',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ),
                         ],
                       ),
