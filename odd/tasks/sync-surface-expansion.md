@@ -33,10 +33,17 @@ Close audit Batch 5: H1 (unsynced-count observability), H2 (loyalty point transa
 - Chain slices: do not start 5b before 5a is committed; recalibrate after each slice.
 
 ## Status
-- [ ] 5a
-- [ ] 5b
+- [x] 5a — commit 94266f00
+- [x] 5b — commit see below
 - [ ] 5c
-- [ ] 5d
+- [ ] 5d (M1-M3 only; M4 deferred — no backend kitchen entity exists, needs new table/module = feature work)
+
+## Follow-ups (non-blocking, from 5b verification)
+1. Program-less POS loyalty rows land in ledger but contribute to no balance projection (projection PK requires loyalty_program_id). Legacy attribution needs a product decision.
+2. POS `_failedLoyaltySyncKeys` fails open on a 2xx body without `results` — all rows would mark synced. Backend always returns results today; harden like inventory path.
+3. `loyalty-ledger.service.ts:38` declares `loyaltyProgramId: string` but callers pass undefined (strictNullChecks off) — change to optional for honest contract.
+4. Run `npm run test:db` (loyalty-ledger.service.db.spec.ts) before release stage.
+5. Dedupe asymmetry: replay omitting loyaltyProgramId skips program-mismatch conflict (pre-existing, now reachable via optional DTO field).
 
 ## Commits
 - 5a: `fix(sync): log unsynced-count domain failures instead of swallowing`

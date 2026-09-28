@@ -7,6 +7,7 @@ import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
@@ -3409,5 +3410,237 @@ void main() {
         );
       },
     );
+  });
+
+  group('Slice 5b Loyalty Point Transactions Outbound (finding H2)', () {
+    CustomerPointTransactionEntity pointTx(
+      String id, {
+      String? idempotencyKey,
+      String type = 'earn',
+      String? transactionType,
+      double points = 12,
+      int? units,
+      String? invoiceId,
+      String? ticketId,
+      String? loyaltyProgramId,
+      String terminalId = 'term-1',
+    }) {
+      return CustomerPointTransactionEntity(
+        id: id,
+        customerId: 'cust-1',
+        invoiceId: invoiceId,
+        type: type,
+        points: points,
+        balanceAfter: points,
+        conversionRate: 0.1,
+        reason: 'Acumulación por compra',
+        createdAt: DateTime.parse('2026-01-01T12:00:00Z').millisecondsSinceEpoch,
+        syncStatus: 'pending',
+        loyaltyProgramId: loyaltyProgramId,
+        ticketId: ticketId,
+        transactionType: transactionType,
+        units: units,
+        idempotencyKey: idempotencyKey,
+        terminalId: terminalId,
+        origin: 'POS',
+        occurredAt:
+            DateTime.parse('2026-01-01T12:00:00Z').millisecondsSinceEpoch,
+      );
+    }
+
+    Future<AppDatabase> buildDbWithPendingTx(
+      List<CustomerPointTransactionEntity> txs,
+    ) async {
+      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      for (final tx in txs) {
+        await database.customerPointTransactionDao.insertTransaction(tx);
+      }
+      return database;
+    }
+
+    List<Map<String, dynamic>> loyaltyPostBodies() {
+      return capturedPosts
+          .where((post) => post.path == '/loyalty/point-transactions/sync')
+          .map(
+            (post) =>
+                (post.body as Map<String, dynamic>)['transactions']
+                    as List<dynamic>,
+          )
+          .expand((records) => records.cast<Map<String, dynamic>>())
+          .toList(growable: false);
+    }
+
+    test('outbound loyalty push is called during manual sync', () async {
+      final database = await buildDbWithPendingTx([
+        pointTx(
+          'ptx-1',
+          idempotencyKey: 'loyalty:earn:tenant-1:ticket-001:legacy',
+          invoiceId: 'ticket-001',
+        ),
+      ]);
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      expect(
+        capturedPosts.any((post) => post.path == '/loyalty/point-transactions/sync'),
+        true,
+      );
+      final records = loyaltyPostBodies();
+      expect(records, hasLength(1));
+      expect(records.single['idempotencyKey'],
+          'loyalty:earn:tenant-1:ticket-001:legacy');
+      expect(records.single['customerId'], 'cust-1');
+      expect(records.single['transactionType'], 'earn');
+      expect(records.single['units'], 12);
+      expect(records.single['ticketId'], 'ticket-001');
+      expect(records.single['terminalId'], 'term-1');
+      expect(records.single['origin'], 'POS');
+      expect(records.single['occurredAt'], '2026-01-01T12:00:00.000Z');
+    });
+
+    test('successful push marks rows synced', () async {
+      final database = await buildDbWithPendingTx([
+        pointTx(
+          'ptx-1',
+          idempotencyKey: 'loyalty:earn:tenant-1:ticket-001:legacy',
+          invoiceId: 'ticket-001',
+        ),
+        pointTx(
+          'ptx-2',
+          type: 'redeem',
+          transactionType: 'redeem',
+          points: -5,
+          units: -5,
+        ),
+      ]);
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      // ptx-2 carries no idempotency key: the payload derives a stable
+      // one from the tenant and the immutable local row id.
+      final records = loyaltyPostBodies();
+      expect(records, hasLength(2));
+      expect(
+        records.map((r) => r['idempotencyKey']),
+        containsAll([
+          'loyalty:earn:tenant-1:ticket-001:legacy',
+          'loyalty:sync:tenant-1:ptx-2',
+        ]),
+      );
+
+      final synced = await database.customerPointTransactionDao
+          .getTransactionsBySyncStatus('synced');
+      final pending = await database.customerPointTransactionDao
+          .getTransactionsBySyncStatus('pending');
+      expect(synced.map((tx) => tx.id), containsAll(['ptx-1', 'ptx-2']));
+      expect(pending, isEmpty);
+    });
+
+    test('loyalty failure does not break other domains and keeps rows pending',
+        () async {
+      final database = await buildDbWithPendingTx([
+        pointTx('ptx-fail', idempotencyKey: 'loyalty:earn:tenant-1:k:fail'),
+      ]);
+      final loyaltyFailureDio = Dio();
+      loyaltyFailureDio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.method.toUpperCase() == 'POST') {
+              capturedPosts.add(
+                CapturedPost(path: options.path, body: options.data),
+              );
+            }
+            if (options.path == '/loyalty/point-transactions/sync') {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  response: Response<dynamic>(
+                    requestOptions: options,
+                    statusCode: 500,
+                  ),
+                ),
+              );
+              return;
+            }
+            if (options.path == '/v1/sync/batch') {
+              final records =
+                  ((options.data as Map<String, dynamic>)['records']
+                          as List<dynamic>)
+                      .cast<Map<String, dynamic>>();
+              handler.resolve(
+                Response<dynamic>(
+                  data: {
+                    'status': 'OK',
+                    'received': records.length,
+                    'results': records
+                        .map(
+                          (record) => {...record, 'status': 'ACCEPTED'},
+                        )
+                        .toList(growable: false),
+                  },
+                  statusCode: 200,
+                  requestOptions: options,
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<dynamic>(
+                data: {'ok': true},
+                statusCode: 200,
+                requestOptions: options,
+              ),
+            );
+          },
+        ),
+      );
+      mockInventoryRepository.unsynced = [
+        InventoryMovement(
+          id: 'mov-after-loyalty',
+          insumoId: 'i-9',
+          type: MovementType.adjustment,
+          quantity: -1,
+          previousStock: 10,
+          newStock: 9,
+          timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+        ),
+      ];
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        loyaltyFailureDio,
+        database: database,
+      );
+
+      final outcome = await service.triggerManualSync();
+
+      // Fault isolation: a domain registered after loyalty still ran.
+      expect(
+        capturedPosts.any((post) => post.path == '/v1/sync/batch'),
+        true,
+      );
+      expect(mockInventoryRepository.syncedIds, contains('mov-after-loyalty'));
+      // Offline-first: the failed loyalty rows stay pending for retry.
+      final pending = await database.customerPointTransactionDao
+          .getTransactionsBySyncStatus('pending');
+      expect(pending.map((tx) => tx.id), ['ptx-fail']);
+      expect(outcome.status, isNot(SyncRunStatus.complete));
+      expect(service.lastSyncError, contains('Loyalty'));
+    });
   });
 }

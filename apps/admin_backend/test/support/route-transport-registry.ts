@@ -437,6 +437,10 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   { controller: 'PromotionsController', transport: 'human' },
   { controller: 'CatalogController', transport: 'human' },
   { controller: 'LoyaltyController', transport: 'human' },
+  // Batch 5 slice 5b (finding H2): POS-pushed loyalty point transactions.
+  // Dedicated device surface (`LoyaltySyncController`) so the human loyalty
+  // controller keeps its human-only transport classification.
+  { controller: 'LoyaltySyncController', transport: 'device' },
   { controller: 'CustomersController', transport: 'human' },
   {
     controller: 'InventoryMovementController',

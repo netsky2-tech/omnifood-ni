@@ -24,6 +24,7 @@ import '../models/inventory/recipe_entity.dart';
 import '../models/user_entity.dart';
 import '../models/security_profile_entity.dart';
 import '../models/local_config_entity.dart';
+import '../models/customer/customer_point_transaction_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import 'authority_hydration_service.dart';
@@ -432,6 +433,19 @@ class SyncService {
         domainErrors.add('Fulfillment');
       }
 
+      // 1c. Push loyalty point transactions (Batch 5 slice 5b, finding H2):
+      // offline point mutations are the source of truth and must reach the
+      // cloud ledger so balances converge across terminals. Fault-isolated
+      // like every other domain: a failure never aborts later domains.
+      final loyaltySuccess = await _runDomain(
+        'loyalty',
+        _syncLoyaltyPointTransactions,
+      );
+      if (!loyaltySuccess) {
+        hasFailure = true;
+        domainErrors.add('Loyalty');
+      }
+
       // 2. Sync inventory outbox deltas
       var productionLinkedMovementIds = const <String>{};
       final purchaseSuccess = await _runDomain(
@@ -732,6 +746,109 @@ class SyncService {
       );
       rethrow;
     }
+  }
+
+  /// Batch 5 slice 5b (finding H2): pushes pending loyalty point
+  /// transactions to the cloud ledger in bounded batches. Rows stay
+  /// 'pending' on any failure and are retried on the next sync pass;
+  /// rows the backend reports as FAILED per-record (e.g. an idempotency
+  /// integrity conflict) also stay pending instead of being lost.
+  Future<void> _syncLoyaltyPointTransactions() async {
+    final database = _database;
+    if (database == null) return;
+    final dao = database.customerPointTransactionDao;
+    final pending = await dao.getTransactionsBySyncStatus('pending');
+    if (pending.isEmpty) return;
+
+    final batch = pending.take(_batchEnvelopeLimit).toList(growable: false);
+    final tenantConfig = await database.localConfigDao.getConfigByKey(
+      'tenant_id',
+    );
+    final tenantId = tenantConfig?.value ?? 'tenant-1';
+
+    developer.log(
+      'Loyalty sync: posting ${batch.length} point transactions',
+      name: 'SyncService',
+    );
+    final response = await _dio.post(
+      '/loyalty/point-transactions/sync',
+      data: {
+        'transactions': batch
+            .map((tx) => _buildLoyaltyPointTransactionPayload(tx, tenantId))
+            .toList(growable: false),
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final failedKeys = _failedLoyaltySyncKeys(response.data);
+      for (final tx in batch) {
+        final idempotencyKey =
+            tx.idempotencyKey ?? 'loyalty:sync:$tenantId:${tx.id}';
+        if (failedKeys.contains(idempotencyKey)) continue;
+        await dao.markSyncedById(tx.id);
+      }
+    }
+  }
+
+  /// Maps a local point-transaction row onto the cloud ingestion contract
+  /// (LoyaltyPointTransactionSyncItemDto). Legacy rows without program
+  /// attribution or units are sent with best-effort equivalents: units fall
+  /// back to the rounded points delta and a stable idempotency key is
+  /// derived from the immutable local row id so retries dedupe server-side.
+  Map<String, Object?> _buildLoyaltyPointTransactionPayload(
+    CustomerPointTransactionEntity tx,
+    String tenantId,
+  ) {
+    Object? commercialSnapshot;
+    if (tx.commercialSnapshot != null) {
+      try {
+        commercialSnapshot = jsonDecode(tx.commercialSnapshot!);
+      } catch (_) {
+        commercialSnapshot = null;
+      }
+    }
+
+    return {
+      'idempotencyKey':
+          tx.idempotencyKey ?? 'loyalty:sync:$tenantId:${tx.id}',
+      'customerId': tx.customerId,
+      if (tx.loyaltyProgramId != null) 'loyaltyProgramId': tx.loyaltyProgramId,
+      'transactionType': tx.transactionType ?? tx.type,
+      'units': tx.units ?? tx.points.round(),
+      if (tx.ticketId != null) 'ticketId': tx.ticketId,
+      if (tx.invoiceId != null && tx.ticketId == null)
+        'ticketId': tx.invoiceId,
+      if (tx.rewardId != null) 'rewardId': tx.rewardId,
+      if (tx.reason != null) 'reason': tx.reason,
+      if (tx.reversalOfTransactionId != null)
+        'reversalOfTransactionId': tx.reversalOfTransactionId,
+      if (tx.sourceEventId != null) 'sourceEventId': tx.sourceEventId,
+      if (tx.actorUserId != null) 'actorUserId': tx.actorUserId,
+      if (tx.branchId != null) 'branchId': tx.branchId,
+      if (tx.terminalId != null) 'terminalId': tx.terminalId,
+      if (tx.programVersion != null) 'programVersion': tx.programVersion,
+      if (tx.rewardVersion != null) 'rewardVersion': tx.rewardVersion,
+      if (commercialSnapshot != null)
+        'commercialSnapshot': commercialSnapshot,
+      'origin': tx.origin ?? 'POS',
+      'occurredAt': DateTime.fromMillisecondsSinceEpoch(
+        tx.occurredAt ?? tx.createdAt,
+        isUtc: true,
+      ).toIso8601String(),
+    };
+  }
+
+  Set<String> _failedLoyaltySyncKeys(dynamic responseData) {
+    if (responseData is! Map) return const <String>{};
+    final results = responseData['results'];
+    if (results is! List) return const <String>{};
+    return {
+      for (final item in results)
+        if (item is Map &&
+            item['status'] == 'FAILED' &&
+            item['idempotencyKey'] is String)
+          item['idempotencyKey'] as String,
+    };
   }
 
   Future<void> _syncFulfillmentEvents() async {
