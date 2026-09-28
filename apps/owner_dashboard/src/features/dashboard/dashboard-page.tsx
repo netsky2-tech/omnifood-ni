@@ -1,6 +1,7 @@
-import { Suspense, lazy, useState } from "react";
+import { Suspense, lazy, useState, useCallback } from "react";
 import { FreshnessBadge } from "@/components/freshness-badge";
 import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
+import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
 import { useCanViewInventoryCost } from "@/features/auth/permissions";
 import { KpiStrip } from "./kpi-strip";
@@ -53,8 +54,32 @@ function todayRange(): DateRangeValue {
 const MANAGEMENT_BAND_TWO_CARDS = "grid grid-cols-1 gap-6 lg:grid-cols-2";
 const MANAGEMENT_BAND_ONE_CARD = "grid grid-cols-1 gap-6";
 
+function rangeFromSearchParams(sp: URLSearchParams): DateRangeValue {
+  const startDate = sp.get("startDate");
+  const endDate = sp.get("endDate");
+  if (startDate && endDate) return { startDate, endDate };
+  return todayRange();
+}
+
 export function DashboardPage() {
-  const [range, setRange] = useState<DateRangeValue>(todayRange);
+  const [searchParams, setSearchParams] = useSafeSearchParams();
+  const [range, setRange] = useState<DateRangeValue>(() => rangeFromSearchParams(searchParams));
+
+  const handleRangeChange = useCallback(
+    (next: DateRangeValue) => {
+      setRange(next);
+      setSearchParams(
+        (prev) => {
+          const sp = new URLSearchParams(prev);
+          sp.set("startDate", next.startDate);
+          sp.set("endDate", next.endDate);
+          return sp;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   const { data, isLoading, error } = useSalesDashboard(range.startDate, range.endDate);
   // Batch 7 (PRD §21): the tips card reads the V2 report through the same
   // hook/cache the KpiStrip uses — one shared dashboard-v2 query, no extra
@@ -131,7 +156,7 @@ export function DashboardPage() {
               isLoading={isFreshnessLoading}
             />
           )}
-          <DateRangePicker value={range} onChange={setRange} />
+          <DateRangePicker value={range} onChange={handleRangeChange} />
         </div>
       </div>
 

@@ -125,10 +125,26 @@ export function Sidebar() {
                   ? location.pathname === "/"
                   : location.pathname.startsWith(item.path);
 
+              // B.7: When navigating back to Dashboard from a destination page
+              // that was reached via contextual navigation (source=dashboard),
+              // preserve the dashboard's date range in the link so the owner
+              // doesn't lose their selected period.
+              const isDashboard = item.path === "/";
+              const srcParams = isDashboard
+                ? new URLSearchParams(location.search)
+                : null;
+              const dashboardLink =
+                isDashboard &&
+                srcParams?.get("source") === "dashboard" &&
+                srcParams?.get("startDate") &&
+                srcParams?.get("endDate")
+                  ? `/?startDate=${srcParams.get("startDate")}&endDate=${srcParams.get("endDate")}`
+                  : item.path;
+
               return (
                 <Link
                   key={item.path}
-                  to={item.path}
+                  to={dashboardLink}
                   className={cn(
                     "group relative flex items-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
                     collapsed
