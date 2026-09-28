@@ -19,6 +19,9 @@ const CashPage = lazyWithRetry(() =>
 const AuditPage = lazyWithRetry(() =>
   import("@/features/audit/audit-page").then((m) => ({ default: m.AuditPage })),
 );
+const KardexPage = lazyWithRetry(() =>
+  import("@/features/kardex/kardex-page").then((m) => ({ default: m.KardexPage })),
+);
 const InventoryPage = lazyWithRetry(() =>
   import("@/features/inventory/inventory-page").then((m) => ({ default: m.InventoryPage })),
 );
@@ -107,6 +110,16 @@ export const router = createBrowserRouter([
           <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/audit"]}>
             <SuspenseWrapper>
               <AuditPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "kardex",
+        element: (
+          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/kardex"]}>
+            <SuspenseWrapper>
+              <KardexPage />
             </SuspenseWrapper>
           </ProtectedRoute>
         ),

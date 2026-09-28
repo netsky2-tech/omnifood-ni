@@ -7,6 +7,8 @@ import {
   duplicateResolutionLabels,
   backendActivationErrorLabels,
   cashShiftStatusLabels,
+  kardexQueueStatusLabels,
+  kardexMovementTypeLabels,
 } from "@/lib/labels";
 import { OnboardingLifecycleState } from "@/features/onboarding/types";
 import type { CashShiftStatus } from "@/features/cash/types";
@@ -32,6 +34,8 @@ const families: Record<string, Record<string, string>> = {
   duplicateResolutionLabels,
   backendActivationErrorLabels,
   cashShiftStatusLabels,
+  kardexQueueStatusLabels,
+  kardexMovementTypeLabels,
 };
 
 describe("label families — map hygiene", () => {
@@ -88,6 +92,31 @@ describe("label families — key sets verified against source enums", () => {
     const backendStatuses: CashShiftStatus[] = ["OPEN", "CLOSED"];
     expect(Object.keys(cashShiftStatusLabels).sort()).toEqual(
       [...backendStatuses].sort(),
+    );
+  });
+
+  it("kardexQueueStatusLabels matches the actionable KardexQueueStatus values exactly", () => {
+    // The pending route excludes COMPLETED (already-regularized rows), so
+    // the dashboard map covers exactly the actionable statuses.
+    expect(Object.keys(kardexQueueStatusLabels).sort()).toEqual(
+      ["PENDING", "PROCESSING", "BLOCKED", "FAILED"].sort(),
+    );
+  });
+
+  it("kardexMovementTypeLabels matches the backend MovementType enum exactly", () => {
+    expect(Object.keys(kardexMovementTypeLabels).sort()).toEqual(
+      [
+        "SALE",
+        "SALE_CANCEL",
+        "PURCHASE",
+        "ENTRADA_COMPRA",
+        "SHRINKAGE",
+        "PRODUCTION",
+        "CREDIT_NOTE_RESTOCK",
+        "ADJUSTMENT",
+        "REVERSAL",
+        "INITIAL_STOCK",
+      ].sort(),
     );
   });
 });

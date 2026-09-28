@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, Not } from 'typeorm';
 import { KardexRegularizationService } from './kardex-regularization.service';
 import {
   KardexRecalculateQueue,
@@ -8,6 +8,7 @@ import {
 } from '../entities/kardex-recalculate-queue.entity';
 import { KardexCorrection } from '../entities/kardex-correction.entity';
 import { InventoryMovement } from '../entities/inventory-movement.entity';
+import { Insumo } from '../entities/insumo.entity';
 import { GovernanceApprovalService } from './governance-approval.service';
 
 describe('KardexRegularizationService', () => {
@@ -15,6 +16,7 @@ describe('KardexRegularizationService', () => {
   let queueRepo: any;
   let correctionRepo: any;
   let movementRepo: any;
+  let insumoRepo: any;
   let dataSource: any;
 
   beforeEach(async () => {
@@ -33,8 +35,13 @@ describe('KardexRegularizationService', () => {
     };
 
     movementRepo = {
+      find: jest.fn(),
       findOne: jest.fn(),
       save: jest.fn((entity) => Promise.resolve(entity)),
+    };
+
+    insumoRepo = {
+      find: jest.fn(),
     };
 
     dataSource = {
@@ -45,6 +52,7 @@ describe('KardexRegularizationService', () => {
             if (entity === KardexRecalculateQueue) return queueRepo;
             if (entity === KardexCorrection) return correctionRepo;
             if (entity === InventoryMovement) return movementRepo;
+            if (entity === Insumo) return insumoRepo;
             return null;
           },
         };
@@ -69,6 +77,10 @@ describe('KardexRegularizationService', () => {
           useValue: movementRepo,
         },
         {
+          provide: getRepositoryToken(Insumo),
+          useValue: insumoRepo,
+        },
+        {
           provide: DataSource,
           useValue: dataSource,
         },
@@ -80,18 +92,107 @@ describe('KardexRegularizationService', () => {
     );
   });
 
-  it('retrieves pending queue items ordered by creation date', async () => {
-    const mockItems = [
-      { id: 'q-1', tenant_id: 'tenant-test', status: 'PENDING' },
-    ];
-    queueRepo.find.mockResolvedValue(mockItems);
+  // Slice 6c (finding H7): the pending route is the dashboard queue's read
+  // model, so it returns the actionable rows (COMPLETED excluded) enriched
+  // with the cost context the approval will apply — insumo name, quantity,
+  // and the exact prev/new/delta derivation approveRegularization records.
+  it('retrieves actionable queue items enriched with cost context, excluding COMPLETED rows', async () => {
+    const createdAt = new Date('2026-09-25T14:00:00.000Z');
+    queueRepo.find.mockResolvedValue([
+      {
+        id: 'q-1',
+        tenant_id: 'tenant-test',
+        insumoId: 'ins-1',
+        originMovementId: '101',
+        triggerMovementId: '102',
+        status: KardexQueueStatus.PENDING,
+        createdAt,
+      },
+    ]);
+    movementRepo.find.mockResolvedValue([
+      {
+        id: '101',
+        tenant_id: 'tenant-test',
+        insumoId: 'ins-1',
+        quantity: -20,
+        unitCostNio: 50,
+        type: 'SALE',
+      },
+      {
+        id: '102',
+        tenant_id: 'tenant-test',
+        insumoId: 'ins-1',
+        quantity: 50,
+        unitCostNio: 70,
+        type: 'ENTRADA_COMPRA',
+      },
+    ]);
+    insumoRepo.find.mockResolvedValue([
+      { id: 'ins-1', tenant_id: 'tenant-test', name: 'Leche entera' },
+    ]);
 
     const result = await service.getPendingQueue('tenant-test');
-    expect(result).toBe(mockItems);
+
     expect(queueRepo.find).toHaveBeenCalledWith({
-      where: { tenant_id: 'tenant-test' },
+      where: {
+        tenant_id: 'tenant-test',
+        status: Not(KardexQueueStatus.COMPLETED),
+      },
       order: { createdAt: 'ASC' },
     });
+    expect(result).toEqual([
+      {
+        queueId: 'q-1',
+        status: KardexQueueStatus.PENDING,
+        insumoId: 'ins-1',
+        insumoName: 'Leche entera',
+        previousUnitCostNio: 50,
+        recalculatedUnitCostNio: 70,
+        deltaUnitCostNio: 20,
+        totalDeltaCostNio: 400,
+        affectedQuantity: 20,
+        triggerMovementType: 'ENTRADA_COMPRA',
+        detectedAt: createdAt.toISOString(),
+      },
+    ]);
+  });
+
+  it('returns unknown (null) cost fields instead of zeros when the linked movements are missing', async () => {
+    queueRepo.find.mockResolvedValue([
+      {
+        id: 'q-dangling',
+        tenant_id: 'tenant-test',
+        insumoId: 'ins-x',
+        originMovementId: '999',
+        triggerMovementId: '998',
+        status: KardexQueueStatus.BLOCKED,
+        createdAt: new Date('2026-09-25T14:00:00.000Z'),
+      },
+    ]);
+    movementRepo.find.mockResolvedValue([]);
+    insumoRepo.find.mockResolvedValue([]);
+
+    const result = await service.getPendingQueue('tenant-test');
+
+    expect(result[0]).toMatchObject({
+      insumoName: null,
+      previousUnitCostNio: null,
+      recalculatedUnitCostNio: null,
+      deltaUnitCostNio: null,
+      totalDeltaCostNio: null,
+      affectedQuantity: null,
+      triggerMovementType: null,
+    });
+  });
+
+  it('skips enrichment queries entirely when the queue is empty', async () => {
+    queueRepo.find.mockResolvedValue([]);
+
+    const result = await service.getPendingQueue('tenant-test');
+
+    expect(result).toEqual([]);
+    expect(movementRepo.find).not.toHaveBeenCalled();
+    expect(insumoRepo.find).not.toHaveBeenCalled();
   });
 
   it('approves blocked regularization and records immutable correction with lineage', async () => {
@@ -344,10 +445,12 @@ describe('KardexRegularizationService', () => {
 
       await service.getPendingQueue('tenant-test');
 
-      expect(txQueueRepo.find).toHaveBeenCalledWith({
-        where: { tenant_id: 'tenant-test' },
-        order: { createdAt: 'ASC' },
-      });
+      expect(txQueueRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenant_id: 'tenant-test' }),
+          order: { createdAt: 'ASC' },
+        }),
+      );
       expect(queueRepo.find).not.toHaveBeenCalled();
     });
 

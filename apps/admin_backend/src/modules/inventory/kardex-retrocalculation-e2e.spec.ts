@@ -34,6 +34,9 @@ describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle'
   };
 
   const mockMovementRepo = {
+    // Slice 6c contract: getPendingQueue enriches the queue rows through the
+    // manager-scoped movement (and insumo) repositories via find().
+    find: jest.fn(),
     findOne: jest.fn(),
     save: jest.fn((entity) => Promise.resolve(entity)),
   };
@@ -232,14 +235,38 @@ describe('Batch 6b Backend E2E Integration: Complete Retrocalculation Lifecycle'
         id: 'queue-item-1',
         insumoId: 'ins-1',
         originMovementId: 'mov-origin-1',
+        triggerMovementId: 'mov-trigger-1',
         status: 'BLOCKED',
         totalDeltaCostNio: 2500.0,
+        createdAt: new Date('2026-09-25T10:00:00Z'),
       },
+    ]);
+
+    // Slice 6c: the pending read enriches through find(); provide the same
+    // linked movements the approval fixture below uses so the derived cost
+    // preview matches (prev 100 -> recalculated 125 x 100 units = 2500).
+    mockMovementRepo.find.mockResolvedValue([
+      { id: 'mov-origin-1', unitCostNio: 100.0, quantity: 100.0, type: 'SALE' },
+      { id: 'mov-trigger-1', unitCostNio: 125.0, type: 'PURCHASE' },
     ]);
 
     const pending = await controller.getPending('tenant-test-1');
     expect(pending.length).toBe(1);
-    expect(pending[0].id).toBe('queue-item-1');
+    expect(pending[0].queueId).toBe('queue-item-1');
+    expect(pending[0].detectedAt).toBe('2026-09-25T10:00:00.000Z');
+    // Enrichment derives the approval preview from the linked movements —
+    // still matching the fixture's declared totalDeltaCostNio.
+    expect(pending[0]).toEqual(
+      expect.objectContaining({
+        status: 'BLOCKED',
+        previousUnitCostNio: 100.0,
+        recalculatedUnitCostNio: 125.0,
+        deltaUnitCostNio: 25.0,
+        totalDeltaCostNio: 2500.0,
+        affectedQuantity: 100.0,
+        triggerMovementType: 'PURCHASE',
+      }),
+    );
 
     mockQueueRepo.findOne.mockResolvedValue({
       id: 'queue-item-1',
