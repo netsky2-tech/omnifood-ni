@@ -266,39 +266,70 @@ class SyncService {
     return Duration(seconds: seconds);
   }
 
+  /// Finding H1 (slice 5a): each per-domain outbox count query used to fail
+  /// silently, leaving operators unable to tell which domain undercounted
+  /// the sync badge. Fault isolation is preserved: a failure only removes
+  /// the affected domain from the total, never breaks the count and never
+  /// propagates.
+  void _logOutboxCountFailure(
+    String domain,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    developer.log(
+      '[OUTBOX_COUNT] warning: pending count query failed for domain '
+      "'$domain'; excluding it from the pending count",
+      name: 'SyncService',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+
   Future<int> getPendingOutboxCount() async {
     int count = 0;
     try {
       final sales = await _salesRepository.getUnsyncedAggregates();
       count += sales.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('sales', e, st);
+    }
 
     try {
       final purchases = await _inventoryRepository.getUnsyncedPurchases();
       count += purchases.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('purchases', e, st);
+    }
 
     try {
       final counts = await _inventoryRepository
           .getUnsyncedCountSessionDocuments();
       count += counts.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('count sessions', e, st);
+    }
 
     try {
       final recipes = await _inventoryRepository
           .getUnsyncedRecipeVersionDocuments();
       count += recipes.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('recipe versions', e, st);
+    }
 
     try {
       final orders = await _inventoryRepository.getUnsyncedProductionOrders();
       count += orders.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('production orders', e, st);
+    }
 
     try {
       final movements = await _inventoryRepository.getUnsyncedMovements();
       count += movements.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('movements', e, st);
+    }
 
     return count;
   }

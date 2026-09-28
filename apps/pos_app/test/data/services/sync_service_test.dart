@@ -194,8 +194,20 @@ class FakeInventoryRepository
   final List<String> retriedIds = [];
   final Set<String> movementIdsThatFailMarkSynced = <String>{};
 
+  // Slice 5a (finding H1): inject a failure into the per-domain outbox
+  // pending-count query to prove fault isolation and that the failure path
+  // is actually entered.
+  bool failUnsyncedMovementsQuery = false;
+  int unsyncedMovementsQueryCalls = 0;
+
   @override
-  Future<List<InventoryMovement>> getUnsyncedMovements() async => unsynced;
+  Future<List<InventoryMovement>> getUnsyncedMovements() async {
+    unsyncedMovementsQueryCalls += 1;
+    if (failUnsyncedMovementsQuery) {
+      throw StateError('injected outbox count query failure');
+    }
+    return unsynced;
+  }
 
   @override
   Future<void> markMovementAsSynced(String id) async {
@@ -3127,6 +3139,24 @@ void main() {
 
         final count = await syncService.getPendingOutboxCount();
         expect(count, 3);
+      },
+    );
+
+    test(
+      'getPendingOutboxCount isolates a failing domain query and still counts the rest',
+      () async {
+        mockSalesRepository.unsyncedAggregates = [
+          {'id': 'sale-1', 'documentType': 'INVOICE'},
+          {'id': 'sale-2', 'documentType': 'INVOICE'},
+        ];
+        mockInventoryRepository.failUnsyncedMovementsQuery = true;
+
+        final count = await syncService.getPendingOutboxCount();
+
+        // The movements query threw (failure path entered), so the total
+        // excludes that domain but still reflects every other domain.
+        expect(mockInventoryRepository.unsyncedMovementsQueryCalls, 1);
+        expect(count, 2);
       },
     );
 
