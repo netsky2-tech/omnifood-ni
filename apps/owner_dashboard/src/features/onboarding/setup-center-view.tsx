@@ -744,7 +744,8 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                   <span className="font-medium text-destructive">
                     {describeActivationAttemptFailure(startActivationAttempt.error)}
                   </span>
-                  {isApiError(startActivationAttempt.error) && (
+                  {isApiError(startActivationAttempt.error) &&
+                    !describeActivationAttemptFailure(startActivationAttempt.error) && (
                     <span
                       data-testid="activation-attempt-error-backend"
                       className="font-mono text-[10px] text-muted-foreground break-all"

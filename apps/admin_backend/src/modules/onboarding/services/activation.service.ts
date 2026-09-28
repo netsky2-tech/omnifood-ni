@@ -280,7 +280,13 @@ export class ActivationService {
           );
         }
 
-        if (session.lifecycleState !== OnboardingLifecycleState.SALE_READY) {
+        // SALE_READY = first activation after setup.
+        // ACTIVATED = already activated; a new terminal may be activated
+        // as long as setup stays complete (re-link / replacement terminal).
+        if (
+          session.lifecycleState !== OnboardingLifecycleState.SALE_READY &&
+          session.lifecycleState !== OnboardingLifecycleState.ACTIVATED
+        ) {
           throw new BadRequestException(
             `CANNOT_START_ACTIVATION_NOT_SALE_READY: Onboarding session is in '${session.lifecycleState}' state, but must be 'SALE_READY'`,
           );

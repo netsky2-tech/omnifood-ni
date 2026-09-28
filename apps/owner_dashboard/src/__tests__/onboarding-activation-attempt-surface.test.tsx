@@ -398,7 +398,7 @@ describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => 
       /no tiene permiso/i,
     ],
   ])(
-    "maps backend failure %s '%s' to its own business message while keeping the backend text",
+    "maps backend failure %s '%s' to its own business message and hides the raw backend text",
     async (status, backendMessage, expectedPattern) => {
       authUser(UserRole.OWNER);
       routeFetch({
@@ -414,10 +414,8 @@ describe("L1-04b — Activation Attempt Creation Surface (Setup Center)", () => 
 
       const errorBox = await screen.findByTestId("activation-attempt-error");
       expect(errorBox).toHaveTextContent(expectedPattern);
-      // Backend text stays available for support diagnostics.
-      expect(screen.getByTestId("activation-attempt-error-backend")).toHaveTextContent(
-        backendMessage,
-      );
+      // Raw backend text is hidden when a friendly message exists.
+      expect(screen.queryByTestId("activation-attempt-error-backend")).not.toBeInTheDocument();
     },
   );
 });
