@@ -18,6 +18,7 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     # Pinned deliberately. With NODE_ENV=production React resolves
     # react-dom/cjs/react-dom-test-utils.production.js, which does not export
