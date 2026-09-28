@@ -38,6 +38,10 @@ export function formatDate(date: Date | string | number): string {
 export function formatDateTime(date: Date | string | number): string {
   const d = typeof date === "string" || typeof date === "number" ? new Date(date) : date;
   return new Intl.DateTimeFormat("es-NI", {
+    // NHILOS §38: auditable date-times render in the PRODUCT timezone so the
+    // owner sees one canonical wall-clock regardless of where the browser or
+    // CI runner lives (tests run on UTC runners).
+    timeZone: "America/Managua",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
