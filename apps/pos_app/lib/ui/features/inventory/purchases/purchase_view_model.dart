@@ -7,6 +7,7 @@ import '../../../../domain/models/inventory/batch.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/models/inventory/inventory_movement.dart';
 import '../../../../domain/services/inventory/movement_engine.dart';
+import '../../../../domain/services/inventory/negative_stock_regularization_service.dart';
 import '../../../../domain/services/inventory/uom_conversion_calculator.dart';
 
 const purchaseCurrencies = ['NIO', 'USD'];
@@ -55,6 +56,12 @@ class PurchaseViewModel with ChangeNotifier {
   final InventoryRepository repository;
   final MovementEngine movementEngine;
 
+  /// #601 (R2): optional negative-stock regularization service. The
+  /// queue processing itself rides [MovementEngine.recordPurchase]; the
+  /// reference is kept for future UI-level queue introspection. Null keeps
+  /// the view model usable without the kardex regularization graph.
+  final NegativeStockRegularizationService? regularizationService;
+
   List<Insumo> _insumos = [];
   List<Insumo> get insumos => _insumos;
 
@@ -85,7 +92,11 @@ class PurchaseViewModel with ChangeNotifier {
   double _defaultBcnRate = 36.6241;
   double get defaultBcnRate => _defaultBcnRate;
 
-  PurchaseViewModel(this.repository, this.movementEngine);
+  PurchaseViewModel(
+    this.repository,
+    this.movementEngine, [
+    this.regularizationService,
+  ]);
 
   Future<void> loadInitialData({String? insumoId}) async {
     _isLoading = true;

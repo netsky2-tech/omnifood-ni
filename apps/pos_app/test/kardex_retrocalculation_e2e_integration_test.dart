@@ -11,8 +11,19 @@ import 'package:pos_app/domain/models/inventory/purchase.dart';
 import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/data/models/inventory/product_entity.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/repositories/sales/sales_repository_impl.dart';
+import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/services/inventory/kardex_recalculation_engine.dart';
+import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
 import 'package:pos_app/domain/services/inventory/negative_stock_regularization_service.dart';
+import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
+import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
+import 'package:pos_app/data/services/sales/dgi_numbering_service_impl.dart';
+import 'package:pos_app/presentation/services/alert_service_impl.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
@@ -22,6 +33,9 @@ import 'package:pos_app/ui/features/inventory/kardex/kardex_view_model.dart';
 import 'package:provider/provider.dart';
 
 class MockAuditRepository extends Mock implements AuditRepository {
+  @override
+  Future<void> log(String action, {String? metadata}) async {}
+
   @override
   Future<AuditSyncOutcome> syncLogs() => super.noSuchMethod(
         Invocation.method(#syncLogs, []),
@@ -338,5 +352,148 @@ void main() {
       expect(find.text('Estado Costeo'), findsOneWidget);
       expect(find.text('Regularizado'), findsWidgets);
     });
+  });
+
+  group('Issue #601: production wiring E2E (sale hook + replenishment purchase hook)', () {
+    test(
+      'negative sale through saveSale enqueues PENDING; recordPurchase auto-regularizes to COMPLETED with a lineage hash correction',
+      () async {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+        );
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01-'),
+        );
+
+        // Seed a zero-stock insumo and its DIRECT_STOCK product so the real
+        // sale flow (saveSale -> _persistSale) generates the movement.
+        await database.insumoDao.insertInsumos([
+          InsumoEntity(
+            id: 'ins-601',
+            name: 'Queso 601',
+            consumptionUom: 'KG',
+            stock: 0.0,
+            averageCost: 100.0,
+            isActive: true,
+          ),
+        ]);
+        await database.productDao.insertProducts([
+          ProductEntity(
+            id: 'prod-601',
+            name: 'Plato Queso 601',
+            uom: 'UND',
+            stock: 0,
+            averageCost: 100.0,
+            sellPrice: 500.0,
+            inventoryPolicy: 'directStock',
+            directStockInsumoId: 'ins-601',
+          ),
+        ]);
+
+        // Wire the PRODUCTION graph exactly like main.dart does: real
+        // MovementEngineImpl carrying the regularization service.
+        final alertService = AlertServiceImpl(repository);
+        final movementEngine = MovementEngineImpl(
+          repository,
+          alertService,
+          regularizationService: regularizationService,
+        );
+        final salesRepository = SalesRepositoryImpl(
+          database: database,
+          invoiceDao: database.invoiceDao,
+          itemDao: database.invoiceItemDao,
+          paymentDao: database.paymentDao,
+          transactionDao: database.salesTransactionDao,
+          numberingService: DgiNumberingServiceImpl(
+            database.localConfigDao,
+            database.invoiceDao,
+          ),
+          movementEngine: movementEngine,
+          auditRepository: auditRepo,
+          processInventoryUseCase:
+              ProcessSaleInventoryUseCase(movementEngine),
+          reverseInventoryUseCase:
+              ReverseSaleInventoryUseCase(movementEngine),
+          inventoryRepository: repository,
+        );
+
+        // 1. Overselling sale (stock 0, sell 2 KG) — must be provisional.
+        await salesRepository.saveSale(
+          invoice: Invoice(
+            id: 'sale-601',
+            number: '001-001-01-00000001',
+            createdAt: DateTime.now(),
+            userId: 'u1',
+            subtotal: 1000.0,
+            totalTax: 0.0,
+            total: 1000.0,
+          ),
+          items: [
+            InvoiceItem(
+              id: 'item-601',
+              invoiceId: 'sale-601',
+              productId: 'prod-601',
+              productName: 'Plato Queso 601',
+              quantity: 2,
+              unitPrice: 500.0,
+              originalTaxRate: 0.0,
+              appliedTaxRate: 0.0,
+              taxAmount: 0.0,
+              total: 1000.0,
+            ),
+          ],
+          payments: [
+            Payment(
+              id: 'pay-601',
+              invoiceId: 'sale-601',
+              method: PaymentMethod.cash,
+              amount: 1000.0,
+            ),
+          ],
+        );
+
+        // (1) Sale movement persisted with PROVISIONAL costing state.
+        final saleRows = await database.salesTransactionDao
+            .getMovementsBySaleId('sale-601');
+        expect(saleRows, hasLength(1));
+        expect(saleRows.single.estadoCosteo, 10);
+        expect(saleRows.single.unitCostNio, 100.0);
+
+        // (2) Queue holds a PENDING regularization item for the movement.
+        final pending = await database.kardexRecalculateQueueDao
+            .findQueueByInsumoId('ins-601');
+        expect(pending, hasLength(1));
+        expect(pending.single.status, 'PENDING');
+        expect(pending.single.originMovementId, saleRows.single.id);
+
+        // 2. Replenishment purchase through the wired engine. Delta is
+        // (110 - 100) * 2 KG = C$20 < C$1,500 threshold -> auto-approved.
+        await movementEngine.recordPurchase('ins-601', 150.0, 110.0);
+
+        // (3) Purchase movement carries the real unit cost.
+        final purchaseMovements = await database.movementDao
+            .findAllMovements()
+            .then((rows) => rows.where((m) => m.type == 'PURCHASE').toList());
+        expect(purchaseMovements, hasLength(1));
+        expect(purchaseMovements.single.unitCostNio, 110.0);
+
+        // (4) Immutable correction recorded with a deterministic lineage hash.
+        final corrections = await database.kardexCorrectionDao
+            .findCorrectionsByInsumoId('ins-601');
+        expect(corrections, hasLength(1));
+        expect(corrections.first.originMovementId, saleRows.single.id);
+        expect(corrections.first.triggerMovementId,
+            purchaseMovements.single.id);
+        expect(corrections.first.lineageHash, isNotEmpty);
+
+        // (5) Queue item transitioned to COMPLETED.
+        final completed = await database.kardexRecalculateQueueDao
+            .findQueueByInsumoId('ins-601');
+        expect(completed, hasLength(1));
+        expect(completed.single.status, 'COMPLETED');
+        expect(completed.single.triggerMovementId,
+            purchaseMovements.single.id);
+      },
+    );
   });
 }

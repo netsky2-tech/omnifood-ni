@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:floor/floor.dart';
+import 'package:uuid/uuid.dart';
 import '../../models/sales/invoice_entity.dart';
 import '../../models/sales/invoice_item_entity.dart';
 import '../../models/sales/payment_entity.dart';
 import '../../models/inventory/insumo_entity.dart';
 import '../../models/inventory/movement_entity.dart';
+import '../../models/inventory/kardex_recalculate_queue_entity.dart';
 import '../../models/sales/invoice_item_modifier_entity.dart';
 import '../../models/audit_log_entity.dart';
 import '../../models/customer/customer_point_transaction_entity.dart';
@@ -40,6 +42,13 @@ abstract class SalesTransactionDao {
   /// prior sale evidence after stock has changed.
   @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertMovement(MovementEntity movement);
+
+  /// #601 (R1): provisional-costing regularization queue rides the same
+  /// SQLite transaction as the sale, so checkout rollback also rolls the
+  /// queue entry back (Q80: checkout is never blocked by regularization).
+  @Insert(onConflict: OnConflictStrategy.replace)
+  Future<void> insertKardexRecalculateQueueItem(
+      KardexRecalculateQueueEntity item);
 
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertAuditLog(AuditLogEntity log);
@@ -320,28 +329,75 @@ abstract class SalesTransactionDao {
           'Required movement insumo not found: ${movement.insumoId}',
         );
       }
-      {
-        final newStock =
-            insumo.stock + movement.quantity; // quantity is negative for sales
-        await updateInsumo(
-          InsumoEntity(
-            id: insumo.id,
-            name: insumo.name,
-            consumptionUom: insumo.consumptionUom,
-            warehouseId: insumo.warehouseId,
-            isPerishable: insumo.isPerishable,
-            stock: newStock,
-            averageCost: insumo.averageCost,
-            parLevel: insumo.parLevel,
-            isActive: insumo.isActive,
-          ),
+      final newStock =
+          insumo.stock + movement.quantity; // quantity is negative for sales
+      await updateInsumo(
+        InsumoEntity(
+          id: insumo.id,
+          name: insumo.name,
+          consumptionUom: insumo.consumptionUom,
+          warehouseId: insumo.warehouseId,
+          isPerishable: insumo.isPerishable,
+          stock: newStock,
+          averageCost: insumo.averageCost,
+          parLevel: insumo.parLevel,
+          isActive: insumo.isActive,
+        ),
+      );
+      // #601 (R1): a sale occurring with zero or negative stock cannot carry
+      // a final weighted-average cost, so its movement is recorded with
+      // PROVISIONAL costing (10) and enqueued into kardex_recalculate_queue
+      // ATOMICALLY (same transaction). A replenishment purchase later
+      // recalculates it into an immutable kardex_corrections row.
+      final isProvisional = insumo.stock <= 0 || newStock < 0;
+      final estadoCosteo =
+          isProvisional ? 10 : movement.estadoCosteo;
+      // K1 (#524): persist the real transition, not the frozen zeros; the
+      // input `movements` stay untouched so the replay payload hash is
+      // identical between first execution and replay checks.
+      await insertMovement(
+        MovementEntity(
+          id: movement.id,
+          insumoId: movement.insumoId,
+          type: movement.type,
+          quantity: movement.quantity,
+          previousStock: insumo.stock,
+          newStock: newStock,
+          timestamp: movement.timestamp,
+          reason: movement.reason,
+          userId: movement.userId,
+          unitCostNio: isProvisional
+              ? (movement.unitCostNio ?? insumo.averageCost)
+              : movement.unitCostNio,
+          sourceDocumentType: movement.sourceDocumentType,
+          sourceDocumentId: movement.sourceDocumentId,
+          originMovementId: movement.originMovementId,
+          originInvoiceItemId: movement.originInvoiceItemId,
+          // ignore: non_constant_identifier_names
+          batch_deductions: movement.batch_deductions,
+          estadoCosteo: estadoCosteo,
+          intentosCount: movement.intentosCount,
+          bloqueoMotivo: movement.bloqueoMotivo,
+          autorizadoPorUsuarioId: movement.autorizadoPorUsuarioId,
+          fechaAutorizacion: movement.fechaAutorizacion,
+          deliveryOwner: movement.deliveryOwner,
+          deliveryState: movement.deliveryState,
+          saleId: movement.saleId,
+          saleCorrelationId: movement.saleCorrelationId,
+        ),
+      );
+      if (isProvisional) {
+        final queueItem = KardexRecalculateQueueEntity(
+          id: const Uuid().v4(),
+          insumoId: movement.insumoId,
+          originMovementId: movement.id,
+          triggerMovementId: '',
+          status: 'PENDING',
+          attempts: 0,
+          createdAt: movement.timestamp,
+          updatedAt: movement.timestamp,
         );
-        // K1 (#524): persist the real transition, not the frozen zeros; the
-        // input `movements` stay untouched so the replay payload hash is
-        // identical between first execution and replay checks.
-        await insertMovement(
-          movement.copyWith(previousStock: insumo.stock, newStock: newStock),
-        );
+        await insertKardexRecalculateQueueItem(queueItem);
       }
     }
 
