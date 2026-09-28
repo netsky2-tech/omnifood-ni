@@ -36,7 +36,19 @@ export function PaymentMixChart({ start, end }: { start: string; end: string }) 
   } else {
     const { rows, totalNio } = buildPaymentMixRows(query.data.paymentMethodsBreakdown);
     if (rows.length === 0 || totalNio <= 0) {
-      body = <EmptyNote testId="payment-mix-empty">sin actividad de pagos en este periodo</EmptyNote>;
+      // CLOSE-03: distinguish "no payment data" (breakdown is null — the backend
+      // returned no payment information at all) from "no payment activity"
+      // (breakdown exists but every slot is zero — the tenant has payments
+      // configured but none in this period).  The copy must name the real state
+      // so the owner knows whether to investigate configuration vs. period scope.
+      const hasPaymentData = query.data.paymentMethodsBreakdown != null;
+      body = (
+        <EmptyNote testId="payment-mix-empty">
+          {hasPaymentData
+            ? "sin actividad de pagos en este periodo"
+            : "sin datos de pagos registrados"}
+        </EmptyNote>
+      );
     } else {
       const maxAmount = Math.max(...rows.map((r) => (r.currency === "NIO" ? r.amount : 0)), 0);
       body = (
