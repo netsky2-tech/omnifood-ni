@@ -249,10 +249,40 @@ describe("WU9 — money axes carry the C$ unit (owner finding 1)", () => {
     });
     // The true quotient is shown, uncapped.
     expect(screen.getByTestId("top-products-rows").textContent).toContain("111.1%");
+    // R3-001: the cell's own title carries the arithmetic it used, which is
+    // something the widget-level note cannot say, and it deliberately does not
+    // restate the note's wording.
+    const shareCell = within(screen.getByTestId("top-products-rows")).getByText("111.1%");
+    const title = shareCell.getAttribute("title") ?? "";
+    expect(title).toContain("C$1,000.00");
+    expect(title).toContain("C$900.00");
+    expect(title).toContain("111.1%");
+    expect(title).toMatch(/Participaci[oó]n de Cappuccino/);
+    expect(title).not.toMatch(/netas de devoluciones/i);
     const text = screen.getByTestId("top-products-note").textContent ?? "";
     expect(text).toMatch(/Ventas Netas del período/);
     expect(text).toMatch(/netas de\s*devoluciones/i);
     expect(text).toMatch(/superar el 100\s*%/i);
+  });
+
+  it("says the share is not computable instead of dividing by an absent denominator", async () => {
+    vi.mocked(fetchTopProducts).mockResolvedValue({
+      startDate: RANGE.start,
+      endDate: RANGE.end,
+      generatedAt: "2026-09-23T21:54:00Z",
+      periodNetSalesNio: null,
+      products: [
+        { productId: "p1", productName: "Cappuccino", totalQuantity: 100, netRevenueNio: 1000 },
+      ],
+    } as never);
+
+    renderWithProviders(<PerformanceBand range={RANGE} today="2026-09-23" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Cappuccino")).toBeInTheDocument();
+    });
+    const shareCell = within(screen.getByTestId("top-products-rows")).getByText("—");
+    expect(shareCell.getAttribute("title")).toMatch(/no calculable/i);
   });
 });
 
