@@ -13,6 +13,44 @@ Every unit below maps to acceptance criteria (`AC-n`) in its issue body. An item
 
 ---
 
+## Delivery log — 2026-09-26 / 2026-09-27
+
+Executed and observed, not asserted. Every identity below is a merge commit on `main`.
+
+| Work | Evidence | State |
+|---|---|---|
+| D-21 fiscal authorization redesign (#554) | PR #588 merged, issue closed | done |
+| Fiscal facts reach the cloud (#551) | PR #591 merged, issue closed | done |
+| Session scoping (#552) | PR #593 merged, issue closed | done |
+| D-3 IVA regime (B2e) | PR #596 merged | done, see the fixture lesson in the B2e row |
+| Fixtures that assumed the old IVA default | PR #600 merged (11 `taxRate: 0.15`, no assertion touched) | done |
+| Blind-count cash model (#529) | PR #598 merged, issue closed: `expected = openingFloat + net cash of non-canceled invoices in shift + manual movements`; voids drop out through `is_canceled = 0` | done |
+| Authority hydration (B3a / #519) | Stacked PRs #603 → #604 → #605 → #606 merged (`bbc75ec1`), #519 closed | done |
+| Template recipe suggestions backend (#523 T1, T2, T5, T7) | PR #609 merged (`4214731e`), issues #610 and #611 created | done |
+| Recipe authoring guard on SIMPLE products (#611) | PR #612 merged (`2c68f89a`) | done |
+| Dashboard lockfile desync fix (#614) | PR #616 merged (`975bab17`) — `npm ci` unblocked | done |
+| Catalog edit product_type control (#615) | PR #617 merged (`7af1521e`), #615 closed | done |
+| Create-time product_type question (#618) | PR #619 merged (`2cb6e3e0`), #618 closed | done |
+| Template product_type backfill (#610 Part A) | PR #622 merged (`dadd9d4b`), #610 closed | done |
+| Template suggestions review dashboard (#523 T3) | PR #623 merged (`a93e7eff`) | done (T3 complete; T4 optional remaining) |
+| POS inert recipe ingestion verdict (#613) | PR #635 merged (`61efffd0`), #613 closed | done |
+
+**Infrastructure discoveries and rules established during these deliveries:**
+- **FORCE ROW LEVEL SECURITY on data migrations**: `products`, `recipe_versions`, `recipe_details` carry `relforcerowsecurity = true`. The migration role is the non-superuser schema owner; with no `app.tenant_id` bound during migrations, `SELECT` sees 0 rows silently. Precedent: `1809180000000-ReconcileEnumColumns.ts:36-41`. Fix: `ALTER TABLE ... NO FORCE ROW LEVEL SECURITY` bracket in `try / finally` (`AccessExclusiveLock` held, lifts predicate only for owner). A migration run against a clone as `postgres` proves nothing because `postgres` bypasses RLS (`rolbypassrls=true`).
+- **TypeORM 0.3 + pg driver result shape**: `queryRunner.query()` for `UPDATE ... RETURNING` returns `[[rows], rowCount]`, so reading `.length` gave 2 for every database. Normalized via `asReturnedRows()` helper. Every migration reporting counts must run against a real database clone before PR.
+- **POS ingestion and silent kardex gap (#613)**: The push does not break on bad deltas (refusal is a value, catch does not rethrow). However, payload-level refusal wedged other products, and recipes for `SIMPLE` products were ingested silently with zero kardex movements at sale time (planner never reads `hasRecipe` for SIMPLE). Fixed via per-record verdict in append-only table `authority_ingestion_verdicts` (Floor migration 57→58) + informational line in `CloudSyncStatusBadge` detail dialog.
+- **Dashboard CI gap**: `apps/owner_dashboard` has zero CI coverage in GitHub Actions. All gates are local: `tsc -b --noEmit`, `oxlint src`, `vitest run`, `npm run build`.
+
+**Filed while working, deliberately kept out of those PRs:**
+- **#601** — `NegativeStockRegularizationService` has zero callers (sale and purchase hooks unwired).
+- ~~**#602** — a fresh install creates the `authority_%` tables **without** their immutability triggers~~ **retracted and closed as not-a-gap.** Triggers are attached by `onCreate` / `onOpen` callbacks, not entity DDL.
+- **#524** stays the fence for `previousStock`/`newStock` persisting as 0 on the frozen path (B3b).
+- **#611** — SOHO pilot tenant repair (9 dishes to COMPOUND, beer to #518 mapping): operator task via the #617 catalog control, not a code defect.
+
+**Deferred by the owner, not by neglect:** Batch 6 operator manuals. **#534 (B0.2)** still needs the physical-device measurements and now decides only B3b/B3c, not B3a.
+
+---
+
 ## Owner directives — 2026-09-24 (binding; they re-shape this plan)
 
 Eight decisions issued in reply to the #535 questions. **These are the accountant's answers, relayed by the owner** — not owner-only engineering posture, which is what an earlier draft of this section claimed. That distinction matters for what stays open: they close every question of *interpretation*, so no batch is blocked on a legal reading anymore. Three questions of *fact* remain, and no amount of code reading answers them — the range DGI actually authorized for SOHO, the authorization letter's number and date, and the filing procedure for a dead terminal. D-8 names the first of those as a blocker on purpose.
@@ -183,7 +221,7 @@ What that resolves at once: the D-10 single-operator case (no supervisor require
 | **B1a-3** | V3 ("ANULADO" print) | ~60-100 | Additive, no existing code touched. #533 F2 makes it a legal requirement, not polish. |
 | **B1a-4** | S2 same-day guard | ~40-60 | Blocked on the schema question from finding 4 — calendar-day now, or a migration to store shift membership. |
 
-| B1b | Template recipes: correct `product_type` + published state, apply-version, honest message | #523 D1,D2,D3 |
+| B1b | Template recipes: correct `product_type` + published state, apply-version, honest message | #523 D1,D2,D3 · #610 · #618 | **DONE 2026-09-27.** Delivered across #609 (backend suggestions T1/T2/T5/T7), #612 (guard), #617 (edit control), #619 (create question), #622 (backfill COMPOUND), #623 (dashboard T3 review UI), and #635 (#613 POS verdict). Only #523 T4 (list drafts) remains optional. |
 | B1c | Stop showing numbers we know are wrong: honest `stock` read, inventory screens annotated | #521 F1 · #531 G2.1 |
 | B1d | Print the **DGI authorization number** bottom-right on every ticket — **re-scoped by D-4: the field already exists and is client-editable, so this is "wire the orphan", not "add a field"** | #539 S1 · #540 · #531 G1.6 |
 
@@ -205,7 +243,7 @@ What that resolves at once: the D-10 single-operator case (no supervisor require
 | B2c | **Same-day cancellation guard:** later-day reversal must route to a credit note, never an anulación; unblock the credit-note path the guard rejects | #539 S2 · #525 V6 · #522 | Q3, Q4c |
 | B2d | Contingency stop in place **before opening**: 1.8-compliant preprinted stop, different series, numbering **reported to the Administración de Rentas**; back-entry cross-reference | #539 S3 · #531 G5.4 | Q5 |
 | B2b | Incident procedure adopted by the client + operator-performable backup | #526 B4,B3 · #531 G5.1 | Q3 |
-| B2e | **New, from D-3.** Regime is the single source of IVA treatment: no `0.15` survives a regime check in storage, sync fallback, or reporting. The Reporte X/Z export must not print an IVA line for a Cuota Fija tenant | D-3 · #540 · #522 | B0.3 (Q3 settles the regime) |
+| B2e | **New, from D-3.** Regime is the single source of IVA treatment: no `0.15` survives a regime check in storage, sync fallback, or reporting. The Reporte X/Z export must not print an IVA line for a Cuota Fija tenant | D-3 · #540 · #522 | B0.3 (Q3 settles the regime) **DONE 2026-09-26, PR #596 merged.** The fail-closed default (missing regime → `0.0`) then broke 5 POS integration suites that relied on the old `0.15` default; fixed separately in PR #600 by making 11 fixtures state `taxRate: 0.15` explicitly. **Lesson: a fail-closed default is a behaviour change for every test that never pinned the behaviour it replaces.** |
 
 **Exit checks**
 - [ ] Boot twice: prefix/range/counter unchanged and monotonic (#526 AC-6)
@@ -227,7 +265,7 @@ What that resolves at once: the D-10 single-operator case (no supervisor require
 
 | ID | Unit | Issue | Depends |
 |---|---|---|---|
-| B3a | Hydrate authority projections at login/boot/prime; consume the `recipeVersions` delta the backend already sends | #519 (hydration) | B0.2 |
+| B3a | Hydrate authority projections at login/boot/prime; consume the `recipeVersions` delta the backend already sends | #519 (hydration) | B0.2 **DONE 2026-09-26, stacked PRs #603→#604→#605→#606.** Delivered on the inbound pull, which is the same trigger the plan asked for: `SyncService.start()` pulls at boot (`sync_service.dart:212`), every 5 min (`:221`), and after each sale. B0.2/#534 never ran, and it did not gate this unit — hydration is a measurement-independent code fact. It **does** still gate B3b/B3c. |
 | B3b | Movements carry real stock levels; persist path keeps the determinism contract | #524 · #519 (persistence) | B3a |
 | B3c | Backend ledger authority for the `APPLIED_INVENTORY_PENDING` class + idempotent compensation | #519 (authority) | B3b |
 | B3d | Resale mapping create path (the last mile) | #518 M1…M4 | B3c |
