@@ -1,12 +1,21 @@
 # NHILOS POS — Owner Dashboard V2 Product Requirements Document
 
 **Document:** `owner_dashboard_v2_prd.md`  
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** APPROVED / AUTHORITATIVE PRODUCT CONTRACT FOR OWNER DASHBOARD V2  
-**Date:** 2026-09-23  
+**Date:** 2026-09-27  
 **Scope:** Owner/Manager Backoffice Dashboard  
-**Authority:** `owner_dashboard_v2_gap_audit_v0.3.md`  
+**Authority:** `owner_dashboard_v2_gap_audit_v0.3.md`, Amendment #624 (Option A)  
 **Implementation:** This PRD is the authoritative product contract for Dashboard V2. It defines behavior, KPI semantics, conditional rendering, states, priorities and acceptance criteria. It does **not** define database tables, endpoint topology, persistence strategy, frontend component architecture or implementation batches.
+
+---
+
+## Document Revision History
+
+| Version | Date | Author / Authority | Summary of Changes |
+|---|---|---|---|
+| 1.0 | 2026-09-23 | Owner / Gap Audit v0.3 | Initial approved baseline product contract for Dashboard V2. |
+| 1.1 | 2026-09-27 | Owner / Issue #624 | **Contract Amendment (Option A):** Refined Average Ticket formula in §7.5 and §16. Average Ticket is defined over the Net Sales of documents counted as completed tickets (`completedTicketsNetNio / Completed Tickets`), ensuring numerator and denominator cover the identical document set. Resolves divergence where credit notes (refunds) netted into period Net Sales caused negative or distorted average ticket values against surviving tickets. |
 
 ---
 
@@ -286,10 +295,11 @@ When Pre-discount Sales is zero:
 
 **Average Ticket** is:
 
-`Net Sales / Completed Tickets`
+`Completed Tickets Net Sales / Completed Tickets` (formerly `Net Sales / Completed Tickets`)
 
 Rules:
 
+- **Document basis consistency (Amendment v1.1 / #624):** The numerator is the Net Sales sum strictly over documents qualifying as Completed Tickets (`isCompletedTicketDocument`). Refund documents (credit notes / notas de crédito) net into the executive headline Net Sales (§7.2), but do **not** enter the Average Ticket numerator because they are excluded from the ticket count denominator. This guarantees that refund netting cannot distort the economic size of customer transactions or produce negative average ticket readings.
 - tax excluded;
 - voluntary tips excluded;
 - split payment does not change denominator;
@@ -1603,7 +1613,7 @@ This PRD resolves the decision list from the verified Gap Audit as follows:
 
 1. **Primary sales KPI:** Net Sales, post-discount, pre-tax, excluding tips and voids.
 2. **Ticket Count:** finalized non-void business/fiscal tickets; split payments do not multiply count.
-3. **Average Ticket:** Net Sales / Completed Tickets.
+3. **Average Ticket:** Completed Tickets Net Sales / Completed Tickets (Amendment v1.1: numerator aligned with completed tickets count to eliminate refund divergence).
 4. **Default comparison:** same weekday previous week for a single day; equal preceding range otherwise.
 5. **Reporting timezone:** America/Managua / UTC-06:00.
 6. **Discount denominator:** Pre-discount Sales.
