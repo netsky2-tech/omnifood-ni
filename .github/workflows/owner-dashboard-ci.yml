@@ -1,0 +1,66 @@
+name: Owner Dashboard CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/owner_dashboard/**"
+      - ".github/workflows/owner-dashboard-ci.yml"
+  # No `branches:` filter here on purpose, for the reason documented in
+  # admin-backend-ci.yml: filtering by base branch silently skips chained pull
+  # requests whose base is a test/..., fix/... or docs/... branch. Whether the
+  # dashboard changed is answered by `paths:` below, not by the branch name.
+  pull_request:
+    paths:
+      - "apps/owner_dashboard/**"
+      - ".github/workflows/owner-dashboard-ci.yml"
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    # Pinned deliberately. With NODE_ENV=production React resolves
+    # react-dom/cjs/react-dom-test-utils.production.js, which does not export
+    # `act`, so every render-based spec dies with "React.act is not a function"
+    # -- 564 failures from one environment variable. GitHub Actions does not set
+    # NODE_ENV on its own and vitest defaults it to `test`, so this only bites
+    # when someone adds a global NODE_ENV: production the way most CI templates
+    # do; measured both ways (`CI=true` alone passes, adding
+    # `NODE_ENV=production` fails 564, setting `test` passes again).
+    env:
+      NODE_ENV: test
+
+    defaults:
+      run:
+        working-directory: apps/owner_dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: apps/owner_dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      # `tsc -b` is the only thing that checks the types of the test files
+      # themselves; `vite build` does not typecheck, so a type error that only
+      # a spec reaches would otherwise ship.
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Vitest rejects a leftover `.only` when CI=true, which GitHub Actions
+      # sets for every step: the run exits 1 with
+      # "[Vitest] Unexpected .only modifier". Without that environment the same
+      # file passes locally while skipping every other test, which is why this
+      # job is the guard and no separate script is needed. Verified with a
+      # probe spec: exit 1 under CI=true, exit 0 locally.
+      - name: Run unit tests
+        run: npm test
