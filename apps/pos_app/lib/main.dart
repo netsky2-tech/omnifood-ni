@@ -491,6 +491,26 @@ void main() async {
           create: (_) => AuditLogViewModel(auditRepository),
         ),
         ChangeNotifierProvider(create: (_) => SalesHistoryViewModel(database)),
+        // SaleViewModel MUST be defined before CashShiftViewModel because
+        // CashShiftViewModel's create callback reads SaleViewModel via ctx.read.
+        ChangeNotifierProvider(
+          create: (_) => SaleViewModel(
+            salesRepository,
+            inventoryRepository,
+            authRepository,
+            database,
+            TableOrderService(database),
+            true,
+            null,
+            null,
+            null,
+            null,
+            syncService,
+            null,
+            null,
+            deviceId,
+          ),
+        ),
         ChangeNotifierProvider(
           create: (ctx) {
             final saleVm = ctx.read<SaleViewModel>();
@@ -519,24 +539,6 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => KitchenDisplayViewModel(
             kitchenOrderService: KitchenOrderService(database),
-          ),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => SaleViewModel(
-            salesRepository,
-            inventoryRepository,
-            authRepository,
-            database,
-            TableOrderService(database),
-            true,
-            null,
-            null,
-            null,
-            null,
-            syncService,
-            null,
-            null,
-            deviceId,
           ),
         ),
         Provider<AppDatabase>.value(value: database),
