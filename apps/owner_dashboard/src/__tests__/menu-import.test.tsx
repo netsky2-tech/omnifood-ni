@@ -248,9 +248,9 @@ describe("MenuImportWizard", () => {
 
     expect(commitMenuImport).toHaveBeenCalledTimes(1);
     // Commit re-posts the same base64 payload (no server-side staging).
-    const committedPayload = vi.mocked(commitMenuImport).mock.calls[0][0];
+    const committedPayload = vi.mocked(commitMenuImport).mock.calls[0]?.[0];
     expect(typeof committedPayload).toBe("string");
-    expect(committedPayload.length).toBeGreaterThan(0);
+    expect(committedPayload?.length ?? 0).toBeGreaterThan(0);
 
     expect(screen.getByTestId("menu-import-committed-categories")).toHaveTextContent("2");
     expect(screen.getByTestId("menu-import-committed-products-create")).toHaveTextContent("2");
