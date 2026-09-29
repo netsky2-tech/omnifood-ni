@@ -51,6 +51,23 @@ Unknown `EMAIL_PROVIDER` values fail at bootstrap with an error that names the
 configured value and points at this extension point — no silent fallback to the
 console stub.
 
+## Alert recipients (low-stock listener)
+
+Recipient resolution is env-driven (re-audit gap #8 — previously hardcoded):
+
+| Env var | Default | Semantics |
+|---|---|---|
+| `NOTIFICATION_ALERT_EMAIL_RECIPIENTS` | `owner@omnifood.ni` | Comma-separated list; unset → legacy default; set to empty → channel disabled |
+| `NOTIFICATION_ALERT_SMS_RECIPIENTS` | `+50512345678` | Same semantics; SMS still gated on critical stock (< 50% PAR) |
+
+```dotenv
+NOTIFICATION_ALERT_EMAIL_RECIPIENTS=ops@comercio.ni,dueno@comercio.ni
+NOTIFICATION_ALERT_SMS_RECIPIENTS=+50577777777
+```
+
+Tenant/user-level recipient resolution (per-tenant owners) remains open for
+post go-live together with the vendor decision.
+
 ## References
 
 - Requirement source: `odd/tasks/notification-email-port-contract.md`
