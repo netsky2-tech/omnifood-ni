@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
@@ -454,7 +455,18 @@ class AuditRepositoryImpl implements AuditRepository {
         metadata,
         false,
       );
-    } catch (_) {}
+    } catch (e, st) {
+      // Re-audit (observability): the local forensic incident write failed;
+      // never propagate (fault isolation) but the swallow must be visible.
+      developer.log(
+        'Failed to write audit stream incident forensic alert '
+        '(remoteRef=${row.remoteRefUuid}, failureType=$failureType).',
+        name: 'AuditRepository',
+        level: 900, // WARNING
+        error: e,
+        stackTrace: st,
+      );
+    }
   }
 
   Future<void> _recordTerminalRejection(
@@ -486,7 +498,19 @@ class AuditRepositoryImpl implements AuditRepository {
         }),
         false,
       );
-    } catch (_) {}
+    } catch (e, st) {
+      // Re-audit (observability): the terminal-rejection incident write
+      // failed; never propagate (fault isolation) but the swallow must be
+      // visible.
+      developer.log(
+        'Failed to write audit backend terminal-rejection forensic alert '
+        '(remoteRef=${row.remoteRefUuid}, category=$category).',
+        name: 'AuditRepository',
+        level: 900, // WARNING
+        error: e,
+        stackTrace: st,
+      );
+    }
   }
 
   Map<String, dynamic> _payload(AuditLogEntity e) {

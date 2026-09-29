@@ -554,6 +554,7 @@ void main() {
     MovementType type = MovementType.adjustment,
     String deliveryOwner = 'GENERIC_INVENTORY',
     String deliveryState = 'LOCAL_APPLIED',
+    String? sourceDocumentType,
   }) {
     return InventoryMovement(
       id: id,
@@ -565,6 +566,7 @@ void main() {
       timestamp: timestamp ?? DateTime.parse('2026-01-01T10:00:00Z'),
       deliveryOwner: deliveryOwner,
       deliveryState: deliveryState,
+      sourceDocumentType: sourceDocumentType,
     );
   }
 
@@ -3055,6 +3057,41 @@ void main() {
 
         final count = await syncService.getPendingOutboxCount();
         expect(count, 3);
+      },
+    );
+
+    test(
+      'getPendingOutboxCount excludes DSI-6-held credit notes from the pending count',
+      () async {
+        mockSalesRepository.unsyncedAggregates = [
+          {'id': 'sale-1', 'documentType': 'INVOICE'},
+          {'id': 'cn-1', 'documentType': 'CREDIT_NOTE'},
+        ];
+
+        final count = await syncService.getPendingOutboxCount();
+
+        // DSI-6 holds credit notes out of outbound batches, so they are not
+        // actionable pending work: the badge must not count them.
+        expect(count, 1);
+      },
+    );
+
+    test(
+      'getPendingOutboxCount excludes DSI-6-held credit-note restock movements',
+      () async {
+        mockInventoryRepository.unsynced = [
+          movement('mov-1'),
+          movement(
+            'cn-restock',
+            sourceDocumentType: 'CREDIT_NOTE_RESTOCK',
+          ),
+        ];
+
+        final count = await syncService.getPendingOutboxCount();
+
+        // CN restock movements are deliberately held out of the outbound
+        // inventory batch (DSI-6): the badge must not count them.
+        expect(count, 1);
       },
     );
 

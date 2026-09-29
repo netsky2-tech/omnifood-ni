@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:uuid/uuid.dart';
 import '../../domain/models/sales/invoice.dart';
 import '../../domain/models/sales/invoice_item.dart';
@@ -158,7 +159,19 @@ class SalesMapper {
             modifiers = decoded
                 .map((m) => Modifier.fromJson(m as Map<String, dynamic>))
                 .toList();
-          } catch (_) {}
+          } catch (parseError, st) {
+            // Re-audit (observability): corrupt modifiers JSON falls back
+            // to no modifiers so the sale keeps flowing offline; the
+            // fallback must be observable.
+            developer.log(
+              'Failed to parse modifiers JSON for invoice item '
+              '(productId=${e.productId}); falling back to empty modifiers.',
+              name: 'SalesMapper',
+              level: 900, // WARNING
+              error: parseError,
+              stackTrace: st,
+            );
+          }
         }
         return CartItem(
           productId: e.productId,

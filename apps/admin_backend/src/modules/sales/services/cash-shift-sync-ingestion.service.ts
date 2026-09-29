@@ -13,6 +13,22 @@ import type {
 
 export type CashShiftSyncStatus = 'ACCEPTED' | 'FAILED';
 
+/**
+ * Per-record rejection for a session `status` outside the documented
+ * OPEN/CLOSED domain. The DTO keeps `status` a loose string on purpose:
+ * an unexpected value must fail THIS record in the ingestion service
+ * (per-record result isolation) instead of rejecting the whole batch with
+ * a 400.
+ */
+export class InvalidCashShiftStatusError extends Error {
+  constructor(readonly status: string) {
+    super(
+      `Unrecognized cash shift session status '${status}'; expected 'OPEN' or 'CLOSED'`,
+    );
+    this.name = 'InvalidCashShiftStatusError';
+  }
+}
+
 export interface CashShiftSyncResultItem {
   /** The immutable local POS row id (session id or movement id). */
   idempotencyKey: string;
@@ -168,10 +184,7 @@ export class CashShiftSyncIngestionService {
       cashier_name: record.cashierName?.trim() || record.cashierId,
       opened_at: new Date(record.openedAt),
       closed_at: record.closedAt ? new Date(record.closedAt) : null,
-      status:
-        record.status === 'CLOSED'
-          ? CashShiftStatus.CLOSED
-          : CashShiftStatus.OPEN,
+      status: this.toSessionStatus(record),
       initial_float_nio: record.initialFloatNio ?? 0,
       initial_float_usd: record.initialFloatUsd ?? 0,
       final_counted_nio: record.finalCountedNio ?? null,
@@ -186,6 +199,23 @@ export class CashShiftSyncIngestionService {
     };
   }
 
+  /**
+   * Maps the POS status onto the cloud enum. A terminal that omits the
+   * field keeps the historical OPEN default (legacy payloads never sent
+   * it); any other value outside {OPEN, CLOSED} is a per-record
+   * INVALID_STATUS failure, never a silent coercion.
+   */
+  private toSessionStatus(
+    record: CashShiftSessionSyncItemDto,
+  ): CashShiftStatus {
+    if (record.status === undefined || record.status === null) {
+      return CashShiftStatus.OPEN;
+    }
+    if (record.status === 'OPEN') return CashShiftStatus.OPEN;
+    if (record.status === 'CLOSED') return CashShiftStatus.CLOSED;
+    throw new InvalidCashShiftStatusError(record.status);
+  }
+
   private toFailure(
     tenantId: string,
     kind: 'session' | 'movement',
@@ -193,9 +223,12 @@ export class CashShiftSyncIngestionService {
     error: unknown,
   ): CashShiftSyncResultItem {
     const isTenantConflict = error instanceof ConflictException;
+    const isInvalidStatus = error instanceof InvalidCashShiftStatusError;
     const code = isTenantConflict
       ? 'TENANT_IDENTITY_CONFLICT'
-      : 'PERSISTENCE_ERROR';
+      : isInvalidStatus
+        ? 'INVALID_STATUS'
+        : 'PERSISTENCE_ERROR';
     const message =
       error instanceof Error
         ? error.message

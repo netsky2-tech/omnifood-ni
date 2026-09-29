@@ -151,6 +151,7 @@ class SaleView extends StatefulWidget {
 class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteAware {
   late final SaleViewModel _viewModel;
   bool _errorPresentationScheduled = false;
+  bool _loyaltyWarningPresentationScheduled = false;
   ModalRoute<void>? _modalRoute;
 
   @override
@@ -158,7 +159,9 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
     super.initState();
     _viewModel = context.read<SaleViewModel>();
     _viewModel.addListener(_presentError);
+    _viewModel.addListener(_presentLoyaltyWarning);
     _presentError();
+    _presentLoyaltyWarning();
     WidgetsBinding.instance.addObserver(this);
     _checkAuth();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -184,6 +187,7 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   void dispose() {
     appRouteObserver.unsubscribe(this);
     _viewModel.removeListener(_presentError);
+    _viewModel.removeListener(_presentLoyaltyWarning);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -221,6 +225,33 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
         _viewModel.clearError();
       }
       _errorPresentationScheduled = false;
+    });
+  }
+
+  /// POS-B (re-audit): after a successful sale completion, if a loyalty
+  /// operation failed along the way, show a NON-blocking warning. The sale
+  /// WAS registered — the copy says so honestly (NHILOS §19.2/§31:
+  /// specific, calm, no dead end) and never blocks or alters the sale flow.
+  void _presentLoyaltyWarning() {
+    if (!mounted ||
+        _loyaltyWarningPresentationScheduled ||
+        !_viewModel.hasPendingLoyaltyWarning) {
+      return;
+    }
+
+    _loyaltyWarningPresentationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loyaltyWarningPresentationScheduled = false;
+      if (!mounted) return;
+      _viewModel.consumePendingLoyaltyWarning();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'La venta se registró, pero los puntos de lealtad no se actualizaron.',
+          ),
+          duration: Duration(seconds: 4),
+        ),
+      );
     });
   }
 

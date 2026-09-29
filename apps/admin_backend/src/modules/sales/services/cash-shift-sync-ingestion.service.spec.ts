@@ -227,4 +227,43 @@ describe('CashShiftSyncIngestionService', () => {
       status: 'ACCEPTED',
     });
   });
+
+  it('fails an unrecognized session status per record and keeps the rest of the batch alive', async () => {
+    const shifts = repoStub();
+    const movements = repoStub();
+    const service = new CashShiftSyncIngestionService(
+      shifts as never,
+      movements as never,
+    );
+
+    const result = await service.ingestCashShiftBatch('tenant-1', {
+      sessions: [
+        posSession({ id: 'shift-bad', status: 'SUSPENDED' }),
+        posSession({ id: 'shift-good', status: 'CLOSED' }),
+      ],
+      movements: [posMovement()],
+    });
+
+    expect(result.received).toBe(3);
+    expect(result.processed).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.results[0]).toMatchObject({
+      idempotencyKey: 'shift-bad',
+      status: 'FAILED',
+      code: 'INVALID_STATUS',
+    });
+    // Valid OPEN/CLOSED records are unaffected by the bad neighbor.
+    expect(result.results[1]).toMatchObject({
+      idempotencyKey: 'shift-good',
+      status: 'ACCEPTED',
+    });
+    expect(result.results[2]).toMatchObject({
+      idempotencyKey: 'cmv-001',
+      status: 'ACCEPTED',
+    });
+    // The rejected record never touches the cloud table; only the valid
+    // session is inserted.
+    expect(shifts.insert).toHaveBeenCalledTimes(1);
+    expect(shifts.insert.mock.calls[0][0].id).toBe('shift-good');
+  });
 });

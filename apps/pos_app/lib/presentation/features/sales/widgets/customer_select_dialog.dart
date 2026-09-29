@@ -120,7 +120,9 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
       final customer = await widget.viewModel.identifyCustomer(code);
       if (mounted) {
         if (customer != null) {
-          await widget.viewModel.selectCustomer(customer);
+          // identifyCustomer already selects the customer internally
+          // (SaleViewModel.identifyCustomer -> selectCustomer); a second
+          // selectCustomer call here would re-run loyalty evaluation twice.
           Navigator.of(context).pop(customer);
         } else {
           setState(() {
@@ -170,7 +172,9 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
       final customer = await widget.viewModel.identifyCustomer(rawValue);
       if (!mounted) return;
       if (customer != null) {
-        await widget.viewModel.selectCustomer(customer);
+        // identifyCustomer already selects the customer internally
+        // (SaleViewModel.identifyCustomer -> selectCustomer); a second
+        // selectCustomer call here would re-run loyalty evaluation twice.
         Navigator.of(context).pop(customer);
       } else {
         setState(() {

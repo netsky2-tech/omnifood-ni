@@ -21,10 +21,13 @@ class StubSaleViewModel extends ChangeNotifier implements SaleViewModel {
 
   @override
   Future<void> selectCustomer(Customer? customer) async {
+    selectCustomerCallCount += 1;
     _selectedCustomer = customer;
     _customerName = customer?.name;
     notifyListeners();
   }
+
+  int selectCustomerCallCount = 0;
 
   @override
   void clearCustomer() {
@@ -61,7 +64,13 @@ class StubSaleViewModel extends ChangeNotifier implements SaleViewModel {
     identifyCallCount += 1;
     lastIdentifiedInput = input;
     if (onIdentify != null) {
-      return await onIdentify!(input);
+      final customer = await onIdentify!(input);
+      // Mirror the real SaleViewModel.identifyCustomer: selection happens
+      // INSIDE identification, so the dialog must not select a second time.
+      if (customer != null) {
+        await selectCustomer(customer);
+      }
+      return customer;
     }
     return null;
   }
@@ -161,6 +170,34 @@ void main() {
       expect(viewModel.lastIdentifiedInput, 'NHL1:DEF456');
     });
 
+    testWidgets('successful manual code path selects the customer exactly once',
+        (tester) async {
+      const customer = Customer(
+        id: 'c-2',
+        name: 'Manual Entry',
+        customerCode: 'DEF456',
+      );
+      viewModel.onIdentify = (_) async => customer;
+
+      await tester.pumpWidget(buildTestableDialog());
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('customer_code_input')),
+        'NHL1:DEF456',
+      );
+      await tester.tap(find.byKey(const Key('customer_code_submit')));
+      await tester.pumpAndSettle();
+
+      expect(viewModel.selectedCustomer?.id, 'c-2');
+      // identifyCustomer already selects internally: exactly one selection,
+      // no redundant second loyalty re-evaluation.
+      expect(viewModel.selectCustomerCallCount, 1);
+      // Dialog closed with the identified customer.
+      expect(find.byType(CustomerSelectDialog), findsNothing);
+    });
+
     testWidgets('showing dialog displays existing search and new customer UI',
         (tester) async {
       await tester.pumpWidget(buildTestableDialog());
@@ -204,6 +241,9 @@ void main() {
       // adapter chain owns the parsing.
       expect(viewModel.lastIdentifiedInput, 'NHL1:ABC123');
       expect(viewModel.selectedCustomer?.id, 'c-1');
+      // identifyCustomer already selects internally: the dialog must not
+      // trigger a second (redundant) loyalty re-evaluation via selectCustomer.
+      expect(viewModel.selectCustomerCallCount, 1);
       // Dialog closed with the identified customer.
       expect(find.text('Escanear código del cliente'), findsNothing);
     });
