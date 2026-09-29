@@ -9,7 +9,12 @@ import {
   cashShiftStatusLabels,
   kardexQueueStatusLabels,
   kardexMovementTypeLabels,
+  auditSeverityLabels,
+  auditActionLabels,
+  auditTargetTypeLabels,
+  auditActorRefLabels,
 } from "@/lib/labels";
+import * as labelsLib from "@/lib/labels";
 import { OnboardingLifecycleState } from "@/features/onboarding/types";
 import type { CashShiftStatus } from "@/features/cash/types";
 
@@ -36,7 +41,26 @@ const families: Record<string, Record<string, string>> = {
   cashShiftStatusLabels,
   kardexQueueStatusLabels,
   kardexMovementTypeLabels,
+  auditSeverityLabels,
+  auditActionLabels,
+  auditTargetTypeLabels,
+  auditActorRefLabels,
 };
+
+describe("label families — guard coverage", () => {
+  it("registers every exported *Labels family from @/lib/labels (reflection)", () => {
+    const exportedFamilies = Object.entries(labelsLib)
+      .filter(
+        ([name, value]) =>
+          name.endsWith("Labels") &&
+          typeof value === "object" &&
+          value !== null,
+      )
+      .map(([name]) => name)
+      .sort();
+    expect(Object.keys(families).sort()).toEqual(exportedFamilies);
+  });
+});
 
 describe("label families — map hygiene", () => {
   it.each(Object.keys(families))("%s has non-empty keys and non-Screaming values", (familyName) => {
