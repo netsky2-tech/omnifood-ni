@@ -5,6 +5,8 @@ import type {
   KardexReport,
   AlertsSummary,
   KardexFilters,
+  PurchaseDocumentItem,
+  PurchaseFilters,
 } from "./types";
 import {
   normalizeInventoryCoverage,
@@ -59,4 +61,15 @@ export function fetchKardex(filters: KardexFilters = {}, opts?: ApiClientMethodO
 
 export function fetchAlerts(opts?: ApiClientMethodOptions) {
   return opts ? api.get<AlertsSummary>("/inventory/reports/alerts", opts) : api.get<AlertsSummary>("/inventory/reports/alerts");
+}
+
+export function fetchPurchases(filters: PurchaseFilters = {}, opts?: ApiClientMethodOptions) {
+  const url = `/inventory/purchases${toQueryParams({
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    supplierId: filters.supplierId,
+    insumoId: filters.insumoId,
+    limit: filters.limit,
+  })}`;
+  return opts ? api.get<PurchaseDocumentItem[]>(url, opts) : api.get<PurchaseDocumentItem[]>(url);
 }

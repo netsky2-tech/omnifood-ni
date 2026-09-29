@@ -1014,4 +1014,102 @@ describe('InventoryPurchaseService', () => {
     // The pooled getRepository path must not be used for insumo reads.
     expect(dataSource.getRepository).not.toHaveBeenCalled();
   });
+  describe('listPurchases (owner dashboard history read)', () => {
+    const listQueryBuilder = {
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getMany: jest.fn(),
+    };
+
+    beforeEach(() => {
+      listQueryBuilder.getMany.mockResolvedValue([
+        { id: 'doc-1', tenant_id: 'tenant-A', invoice_date: '2026-01-05' },
+      ]);
+      // listPurchases builds its own query builder on the bound manager.
+      manager.createQueryBuilder.mockImplementation((entity: unknown) => {
+        if (entity === PurchaseDocument) return listQueryBuilder;
+        return queryBuilder;
+      });
+    });
+
+    it('runs the history read inside a tenant-bound transaction with the tenant predicate', async () => {
+      const result = await service.listPurchases({ tenantId: 'tenant-A' });
+
+      expect(result).toHaveLength(1);
+      expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+        'tenant-A',
+      ]);
+      // Tenant predicate is declared on the query builder before any filter.
+      expect(listQueryBuilder.where).toHaveBeenCalledWith(
+        'doc.tenant_id = :tenantId',
+        { tenantId: 'tenant-A' },
+      );
+      // Newest-first ordering for the office view.
+      expect(listQueryBuilder.orderBy).toHaveBeenCalledWith(
+        'doc.invoice_date',
+        'DESC',
+      );
+      // Default limit and joined denormalized relations for direct render.
+      expect(listQueryBuilder.take).toHaveBeenCalledWith(100);
+      expect(listQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'doc.insumo',
+        'insumo',
+      );
+      expect(listQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith(
+        'doc.supplier',
+        'supplier',
+      );
+      // The pooled repository path must never serve this read.
+      expect(dataSource.getRepository).not.toHaveBeenCalled();
+    });
+
+    it('applies date, supplier and insumo filters when supplied', async () => {
+      await service.listPurchases({
+        tenantId: 'tenant-A',
+        startDate: '2026-01-01',
+        endDate: '2026-01-31',
+        supplierId: 'sup-1',
+        insumoId: 'ins-1',
+        limit: 25,
+      });
+
+      expect(listQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'doc.invoice_date >= :startDate',
+        { startDate: '2026-01-01' },
+      );
+      expect(listQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'doc.invoice_date <= :endDate',
+        { endDate: '2026-01-31' },
+      );
+      expect(listQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'doc.supplier_id = :supplierId',
+        { supplierId: 'sup-1' },
+      );
+      expect(listQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'doc.insumo_id = :insumoId',
+        { insumoId: 'ins-1' },
+      );
+      expect(listQueryBuilder.take).toHaveBeenCalledWith(25);
+    });
+
+    it('clamps the requested limit to the documented 1..500 window', async () => {
+      await service.listPurchases({ tenantId: 'tenant-A', limit: 5000 });
+      expect(listQueryBuilder.take).toHaveBeenCalledWith(500);
+
+      await service.listPurchases({ tenantId: 'tenant-A', limit: 0 });
+      expect(listQueryBuilder.take).toHaveBeenCalledWith(1);
+    });
+
+    it('rejects a blank tenant id before borrowing a connection', async () => {
+      await expect(
+        service.listPurchases({ tenantId: '   ' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(transaction).not.toHaveBeenCalled();
+      expect(manager.query).not.toHaveBeenCalled();
+    });
+  });
 });

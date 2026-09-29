@@ -82,6 +82,54 @@ export class InventoryPurchaseService {
     private readonly fxRateResolver: FxRateResolver,
   ) {}
 
+  /**
+   * Owner-dashboard purchase history read (SOHO readiness). Returns the
+   * tenant's purchase documents, newest first, with insumo and supplier
+   * denormalized for direct rendering. Rides one tenant-bound transaction so
+   * FORCE RLS policies authorize the read via `app.tenant_id` (issue #512).
+   */
+  async listPurchases(input: {
+    tenantId: string;
+    startDate?: string;
+    endDate?: string;
+    supplierId?: string;
+    insumoId?: string;
+    limit?: number;
+  }): Promise<PurchaseDocument[]> {
+    const tenantId = this.requireTenantId(input.tenantId);
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
+
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) => {
+      const qb = manager
+        .createQueryBuilder(PurchaseDocument, 'doc')
+        .leftJoinAndSelect('doc.insumo', 'insumo')
+        .leftJoinAndSelect('doc.supplier', 'supplier')
+        .where('doc.tenant_id = :tenantId', { tenantId })
+        .orderBy('doc.invoice_date', 'DESC')
+        .addOrderBy('doc.entry_timestamp', 'DESC')
+        .take(limit);
+
+      if (input.startDate) {
+        qb.andWhere('doc.invoice_date >= :startDate', {
+          startDate: input.startDate,
+        });
+      }
+      if (input.endDate) {
+        qb.andWhere('doc.invoice_date <= :endDate', { endDate: input.endDate });
+      }
+      if (input.supplierId) {
+        qb.andWhere('doc.supplier_id = :supplierId', {
+          supplierId: input.supplierId,
+        });
+      }
+      if (input.insumoId) {
+        qb.andWhere('doc.insumo_id = :insumoId', { insumoId: input.insumoId });
+      }
+
+      return qb.getMany();
+    });
+  }
+
   async previewPurchase(input: {
     id: string;
     tenantId: string;

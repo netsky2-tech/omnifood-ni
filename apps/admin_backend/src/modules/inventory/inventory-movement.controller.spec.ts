@@ -31,6 +31,7 @@ import { RecipeService } from './recipe.service';
 import { CountSessionService } from './count-session.service';
 import { ProductionService } from './production.service';
 import { InventoryReportsService } from './services/inventory-reports.service';
+import { UserRole } from '../identity/entities/user.entity';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 import type { SyncMovementsDto } from './dto/create-inventory-movement.dto';
 import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
@@ -185,6 +186,57 @@ describe('InventoryMovementController device transport routes', () => {
       await expect(
         guard.canActivate(unauthenticatedContext({ headers: {} })),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('listPurchases (GET inventory/purchases — owner dashboard)', () => {
+    it('declares the human transport with an OWNER/MANAGER role gate', () => {
+      const handler = handlerOf('listPurchases');
+
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        AuthGuard,
+      );
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        RolesGuard,
+      );
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+        UserRole.OWNER,
+        UserRole.MANAGER,
+      ]);
+      // Human oversight read: never the device transport guard or a push scope.
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).not.toContain(
+        SyncTransportGuard,
+      );
+      expect(Reflect.getMetadata(SYNC_SCOPES_KEY, handler)).toBeUndefined();
+    });
+
+    it('delegates the history read to the purchase service with the bound tenant', async () => {
+      const listPurchases = jest.fn().mockResolvedValue([]);
+      (
+        controller as unknown as {
+          purchaseService: { listPurchases: unknown };
+        }
+      ).purchaseService = { listPurchases } as never;
+      const query = {
+        startDate: '2026-01-01',
+        endDate: '2026-01-31',
+        supplierId: 'sup-1',
+        limit: 50,
+      };
+
+      await controller.listPurchases(
+        query as never,
+        'tenant-A',
+      );
+
+      expect(listPurchases).toHaveBeenCalledWith({
+        tenantId: 'tenant-A',
+        startDate: '2026-01-01',
+        endDate: '2026-01-31',
+        supplierId: 'sup-1',
+        insumoId: undefined,
+        limit: 50,
+      });
     });
   });
 

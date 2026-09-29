@@ -15,13 +15,15 @@ import {
   useAlerts,
 } from "./use-inventory-reports";
 import { InsumosTab } from "./insumos-tab";
+import { PurchasesTab } from "./purchases-tab";
 import type { MovementType, AlertSeverity, KardexFilters } from "./types";
 
-type TabId = "valuation" | "insumos" | "cogs" | "kardex" | "alerts";
+type TabId = "valuation" | "insumos" | "purchases" | "cogs" | "kardex" | "alerts";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "valuation", label: "Valoración" },
   { id: "insumos", label: "Insumos" },
+  { id: "purchases", label: "Compras" },
   { id: "cogs", label: "COGS / Margen" },
   { id: "kardex", label: "Kardex" },
   { id: "alerts", label: "Alertas" },
@@ -411,7 +413,7 @@ export function InventoryPage() {
   const [searchParams, setSearchParams] = useSafeSearchParams();
   const tabParam = searchParams.get("tab") as TabId | null;
   const initialTab: TabId =
-    tabParam && ["valuation", "insumos", "cogs", "kardex", "alerts"].includes(tabParam)
+    tabParam && ["valuation", "insumos", "purchases", "cogs", "kardex", "alerts"].includes(tabParam)
       ? tabParam
       : "valuation";
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
@@ -477,6 +479,9 @@ export function InventoryPage() {
       <div>
         {activeTab === "valuation" && <ValuationTab />}
         {activeTab === "insumos" && <InsumosTab />}
+        {activeTab === "purchases" && (
+          <PurchasesTab startDate={range.startDate} endDate={range.endDate} />
+        )}
         {activeTab === "cogs" && (
           <CogsTab startDate={range.startDate} endDate={range.endDate} />
         )}
