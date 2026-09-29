@@ -77,8 +77,32 @@ export interface Insumo {
   id: string;
   tenant_id: string;
   name: string;
-  consumption_uom: string;
+  purchaseUom?: string;
+  consumptionUom?: string;
+  consumption_uom?: string;
+  conversionFactor?: number;
   stock: number;
   averageCost: number;
+  parLevel?: number | null;
+  minStock?: number | null;
+  is_perishable?: boolean;
+  negativeStockPolicy?: string;
   is_active: boolean;
+}
+
+export interface CreateInsumoInput {
+  name: string;
+  purchaseUom: string;
+  consumptionUom: string;
+  conversionFactor?: number;
+  parLevel?: number;
+  minStock?: number;
+  averageCost?: number;
+  is_perishable?: boolean;
+  negativeStockPolicy?: 'ALLOW_TEMPORARY' | 'RESTRICT';
+  warehouse_id?: string;
+}
+
+export interface UpdateInsumoInput extends Partial<CreateInsumoInput> {
+  is_active?: boolean;
 }

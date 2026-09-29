@@ -4,6 +4,8 @@ import type {
   RecipeSuggestionListItem,
   CreateRecipeVersionInput,
   Insumo,
+  CreateInsumoInput,
+  UpdateInsumoInput,
 } from './types';
 
 /**
@@ -15,6 +17,10 @@ import type {
  */
 export function suggestionsQueryKey(tenantId: string) {
   return ['recipes', tenantId, 'suggestions'] as const;
+}
+
+export function insumosQueryKey(tenantId: string) {
+  return ['recipes', tenantId, 'insumos'] as const;
 }
 
 export function fetchActiveRecipe(productId: string, opts?: ApiClientMethodOptions) {
@@ -35,6 +41,14 @@ export function createRecipeVersion(
 
 export function fetchInsumos(opts?: ApiClientMethodOptions) {
   return api.get<Insumo[]>('/insumos', opts);
+}
+
+export function createInsumo(input: CreateInsumoInput, opts?: ApiClientMethodOptions) {
+  return api.post<Insumo>('/insumos', input, opts);
+}
+
+export function updateInsumo(id: string, input: UpdateInsumoInput, opts?: ApiClientMethodOptions) {
+  return api.put<Insumo>(`/insumos/${id}`, input, opts);
 }
 
 export function fetchPendingSuggestions(opts?: ApiClientMethodOptions) {
