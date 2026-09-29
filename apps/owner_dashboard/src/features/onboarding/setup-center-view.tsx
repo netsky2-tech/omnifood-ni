@@ -19,6 +19,7 @@ import {
   type LinkingCodeResponse,
 } from "./types";
 import { isApiError } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 import { localize, backendActivationErrorLabels, lifecycleStateLabels } from "@/lib/labels";
 import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
 import { useHasPermission } from "@/features/users/use-has-permission";
@@ -1315,7 +1316,15 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     onClick={() => {
                       cancelActivationAttempt.mutate(
                         { attemptId: activeAttempt.id, reason: "CANCELLED_BY_OPERATOR" },
-                        { onSuccess: () => setCancelConfirmOpen(false) },
+                        {
+                          onSuccess: () => {
+                            setCancelConfirmOpen(false);
+                            toast({ title: "Intento cancelado", description: "Ya podes iniciar una nueva activacion." });
+                          },
+                          onError: () => {
+                            toast({ title: "Error al cancelar", description: "No se pudo cancelar el intento. Intente de nuevo.", variant: "destructive" });
+                          },
+                        },
                       );
                     }}
                     className="flex-1 text-xs h-7 bg-destructive text-white hover:bg-destructive/90"

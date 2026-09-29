@@ -290,7 +290,7 @@ describe("W9 E2E — Complete Fiscal Setup, Industry Templates & Bulk Import Lif
 
     render(
       <TestWrapper>
-        <SettingsPage />
+        <SettingsPage initialTab="fiscal" />
       </TestWrapper>,
     );
 
@@ -338,7 +338,7 @@ describe("W9 E2E — Complete Fiscal Setup, Industry Templates & Bulk Import Lif
 
     render(
       <TestWrapper>
-        <SettingsPage />
+        <SettingsPage initialTab="fiscal" />
       </TestWrapper>,
     );
 
@@ -374,7 +374,7 @@ describe("W9 E2E — Complete Fiscal Setup, Industry Templates & Bulk Import Lif
 
     render(
       <TestWrapper>
-        <SettingsPage />
+        <SettingsPage initialTab="fiscal" />
       </TestWrapper>,
     );
 

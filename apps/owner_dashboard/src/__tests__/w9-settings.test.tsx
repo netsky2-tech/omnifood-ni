@@ -391,6 +391,9 @@ Croissant Mantequilla,30.00,unidad,false,Panadería,CRO01,false`;
         </TestWrapper>,
       );
 
+      // Default tab is "setup" (first tab); navigate to Fiscal first
+      expect(screen.getByTestId("tabpanel-setup")).toBeInTheDocument();
+      await user.click(screen.getByTestId("tab-fiscal"));
       expect(screen.getByTestId("tabpanel-fiscal")).toBeInTheDocument();
 
       // Switch to Templates tab

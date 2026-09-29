@@ -20,7 +20,7 @@ function tabFromSearchParams(sp: URLSearchParams, fallback: SettingsTab): Settin
   return fallback;
 }
 
-export function SettingsPage({ initialTab = "fiscal" }: SettingsPageProps) {
+export function SettingsPage({ initialTab = "setup" }: SettingsPageProps) {
   const [searchParams, setSearchParams] = useSafeSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => tabFromSearchParams(searchParams, initialTab));
 
