@@ -283,9 +283,16 @@ export class ActivationService {
         // SALE_READY = first activation after setup.
         // ACTIVATED = already activated; a new terminal may be activated
         // as long as setup stays complete (re-link / replacement terminal).
+        // ACTIVATION_IN_PROGRESS is also acceptable when NO active attempt
+        // exists (recovered state: a cancelled/failed attempt left the
+        // session stuck before the lifecycle reset fix shipped).
+        const acceptableStates = [
+          OnboardingLifecycleState.SALE_READY,
+          OnboardingLifecycleState.ACTIVATED,
+        ];
         if (
-          session.lifecycleState !== OnboardingLifecycleState.SALE_READY &&
-          session.lifecycleState !== OnboardingLifecycleState.ACTIVATED
+          !acceptableStates.includes(session.lifecycleState) &&
+          session.lifecycleState !== OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
         ) {
           throw new BadRequestException(
             `CANNOT_START_ACTIVATION_NOT_SALE_READY: Onboarding session is in '${session.lifecycleState}' state, but must be 'SALE_READY'`,
