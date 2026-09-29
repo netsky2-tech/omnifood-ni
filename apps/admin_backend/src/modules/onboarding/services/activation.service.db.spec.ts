@@ -37,7 +37,7 @@ import { OnboardingCatalogService } from './onboarding-catalog.service';
 import { OnboardingSessionService } from './onboarding-session.service';
 import { OnboardingReadinessEvaluator } from './onboarding-readiness.evaluator';
 import { OnboardingStateReconciler } from './onboarding-state.reconciler';
-import { ConflictException, BadRequestException } from '@nestjs/common';
+import { ConflictException } from '@nestjs/common';
 import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 function getRequiredEnv(name: string): string {
