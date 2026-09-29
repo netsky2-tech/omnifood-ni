@@ -1,5 +1,9 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
+interface ColumnInfo {
+  data_type: string;
+}
+
 /**
  * Fixes the RLS claim predicate on device_linking_codes.
  *
@@ -22,25 +26,33 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * affected — it only runs in authenticated tenant context where
  * app.tenant_id is always bound.
  */
-export class FixDeviceLinkingClaimRlsPredicate1809520000000
-  implements MigrationInterface
-{
+export class FixDeviceLinkingClaimRlsPredicate1809520000000 implements MigrationInterface {
   name = 'FixDeviceLinkingClaimRlsPredicate1809520000000';
 
-  public async up(queryRunner: QueryRunner): Promise<void> {
-    // Resolve the current predicate form (uuid vs varchar) from the catalog.
-    const col = await queryRunner.query(
+  private async resolveBasePredicate(
+    queryRunner: QueryRunner,
+    withNullIf: boolean,
+  ): Promise<string> {
+    const rows = (await queryRunner.query(
       `SELECT data_type FROM information_schema.columns
        WHERE table_name = 'device_linking_codes' AND column_name = 'tenant_id'`,
-    );
-    const dataType: string = col?.[0]?.data_type ?? 'uuid';
-    const basePredicate =
-      dataType === 'uuid'
+    )) as ColumnInfo[];
+    const dataType: string = rows[0]?.data_type ?? 'uuid';
+
+    if (dataType === 'uuid') {
+      return withNullIf
         ? "tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid"
-        : "tenant_id::text = NULLIF(current_setting('app.tenant_id', true), '')";
+        : "tenant_id = current_setting('app.tenant_id', true)::uuid";
+    }
+    return withNullIf
+      ? "tenant_id::text = NULLIF(current_setting('app.tenant_id', true), '')"
+      : "tenant_id::text = current_setting('app.tenant_id', true)";
+  }
+
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    const basePredicate = await this.resolveBasePredicate(queryRunner, true);
     const claimPredicate = `(${basePredicate} OR current_setting('app.linking_claim', true) = 'on')`;
 
-    // Recreate SELECT policy with the fixed predicate.
     await queryRunner.query(
       `DROP POLICY IF EXISTS device_linking_codes_tenant_select ON device_linking_codes`,
     );
@@ -49,7 +61,6 @@ export class FixDeviceLinkingClaimRlsPredicate1809520000000
        FOR SELECT USING (${claimPredicate})`,
     );
 
-    // Recreate UPDATE policy with the fixed predicate.
     await queryRunner.query(
       `DROP POLICY IF EXISTS device_linking_codes_tenant_update ON device_linking_codes`,
     );
@@ -61,16 +72,7 @@ export class FixDeviceLinkingClaimRlsPredicate1809520000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    // Revert to the original predicate (without NULLIF).
-    const col = await queryRunner.query(
-      `SELECT data_type FROM information_schema.columns
-       WHERE table_name = 'device_linking_codes' AND column_name = 'tenant_id'`,
-    );
-    const dataType: string = col?.[0]?.data_type ?? 'uuid';
-    const basePredicate =
-      dataType === 'uuid'
-        ? "tenant_id = current_setting('app.tenant_id', true)::uuid"
-        : "tenant_id::text = current_setting('app.tenant_id', true)";
+    const basePredicate = await this.resolveBasePredicate(queryRunner, false);
     const claimPredicate = `(${basePredicate} OR current_setting('app.linking_claim', true) = 'on')`;
 
     await queryRunner.query(
