@@ -102,7 +102,7 @@ describe("InsumosTab", () => {
     vi.mocked(useInsumos).mockReturnValue({
       data: [],
       isLoading: false,
-    } as ReturnType<typeof useInsumos>);
+    } as unknown as ReturnType<typeof useInsumos>);
 
     render(<InsumosTab />, { wrapper: TestWrapper });
 
