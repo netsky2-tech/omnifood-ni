@@ -138,6 +138,23 @@ export class ActivationController {
     return this.activationService.getAttempt(tenantId, attemptId);
   }
 
+  @Post('attempts/:id/cancel')
+  @RequirePermissions(AppPermission.ONBOARDING_ACTIVATION_MANAGE)
+  async cancelAttempt(
+    @Req() req: RequestWithUser,
+    @Param('id') attemptId: string,
+    @Body() dto: { reason?: string },
+  ) {
+    const tenantId = this.getEffectiveTenantId(req);
+    const actorUserId = this.getActorUserId(req);
+    return this.activationService.cancelAttempt(
+      tenantId,
+      attemptId,
+      actorUserId,
+      dto.reason,
+    );
+  }
+
   @Post('attempts/:id/checks')
   async ingestCheck(
     @Req() req: RequestWithUser,
