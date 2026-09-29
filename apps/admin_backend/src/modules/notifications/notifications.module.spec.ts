@@ -63,9 +63,7 @@ describe('NotificationsModule (Unit)', () => {
       }).overrideProvider(ConfigService);
 
       await expect(
-        builder
-          .useValue(makeConfig({ EMAIL_PROVIDER: 'resend' }))
-          .compile(),
+        builder.useValue(makeConfig({ EMAIL_PROVIDER: 'resend' })).compile(),
       ).rejects.toThrow(
         /EMAIL_PROVIDER="resend".*integrations\/notifications\/adapters/s,
       );
