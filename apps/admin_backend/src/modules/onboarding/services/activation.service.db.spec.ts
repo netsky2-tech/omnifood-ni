@@ -304,7 +304,7 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
           { candidateTerminalId: 'term-pos-02' },
           'c0000000-0000-4000-8000-00000000c1a0',
         ),
-      ).rejects.toThrow(BadRequestException); // Because session is now ACTIVATION_IN_PROGRESS, not SALE_READY
+      ).rejects.toThrow(ConflictException); // Active attempt blocks even in ACTIVATION_IN_PROGRESS
 
       // Even if session state was temporarily simulated as SALE_READY, the active attempt guard catches it:
       updatedSession.lifecycleState = OnboardingLifecycleState.SALE_READY;
