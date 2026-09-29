@@ -12,6 +12,7 @@ import {
   Award,
   FlaskConical,
   Users,
+  History,
   Settings,
   QrCode,
   UserCircle,
@@ -47,6 +48,7 @@ const navItems: NavItem[] = [
   { label: "Recetas", path: "/recipes", icon: FlaskConical, section: "Gestión" },
   { label: "QR del menú", path: "/menu-qr", icon: QrCode, section: "Gestión" },
   { label: "Usuarios", path: "/users", icon: Users, section: "Administración", requiredRoles: ["OWNER"] },
+  { label: "Auditoría", path: "/audit", icon: History, section: "Administración" },
   { label: "Clientes", path: "/customers", icon: UserCircle, section: "Administración" },
   { label: "Configuración", path: "/settings", icon: Settings, section: "Administración" },
 ];

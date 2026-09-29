@@ -49,7 +49,8 @@ describe('AuditSummaryService', () => {
         { provide: DataSource, useValue: mockDataSource },
       ],
     };
-    // Minimal DI: the service only needs the bound DataSource.
+    // Minimal DI: the summary read only needs the bound DataSource (the
+    // slice 6b event list has its own AuditEventsService spec).
     service = new AuditSummaryService(mockDataSource as unknown as DataSource);
     void moduleRef;
   };

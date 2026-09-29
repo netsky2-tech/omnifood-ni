@@ -28,8 +28,8 @@ Add the three missing owner-dashboard pages from audit Batch 6: B6 (cash session
 - English identifiers/UI copy for new code unless the existing module convention is Spanish (check existing pages — much of the dashboard copy is Spanish; follow the module convention).
 
 ## Status
-- [x] 6a — commit see below (incl. backend GET /sales/shifts — no list route existed)
-- [ ] 6b
+- [x] 6a — commit 3458d658 (incl. backend GET /sales/shifts — no list route existed)
+- [x] 6b — commit see below (incl. backend GET /operations/audit/events — no events route existed)
 - [ ] 6c
 
 ## Commits

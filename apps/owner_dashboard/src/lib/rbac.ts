@@ -21,6 +21,8 @@ export type AppAction =
  * - /sales: OWNER, MANAGER
  * - /cash: OWNER, MANAGER (cash-session oversight, mirrors backend
  *   CashShiftController list route roles)
+ * - /audit: OWNER, MANAGER (audit event oversight, mirrors backend
+ *   AuditSummaryController route roles)
  * - /inventory: OWNER, MANAGER, CASHIER (Kardex endpoint is open to CASHIER)
  * - /fiscal: OWNER, MANAGER
  * - /catalog: OWNER, MANAGER
@@ -36,6 +38,7 @@ export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/": ["OWNER", "MANAGER"],
   "/sales": ["OWNER", "MANAGER"],
   "/cash": ["OWNER", "MANAGER"],
+  "/audit": ["OWNER", "MANAGER"],
   "/inventory": ["OWNER", "MANAGER"],
   "/fiscal": ["OWNER", "MANAGER"],
   "/catalog": ["OWNER", "MANAGER"],

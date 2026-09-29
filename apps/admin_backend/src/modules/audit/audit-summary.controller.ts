@@ -13,7 +13,10 @@ import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { UserRole } from '../identity/entities/user.entity';
 import { AuditSummaryService } from './audit-summary.service';
+import { AuditEventsService } from './audit-events.service';
 import { AuditExecutiveSummaryDto } from './audit-executive-summary.dto';
+import { AuditEventsResponseDto } from './audit-events.dto';
+import { AuditEventsQueryDto } from './audit-events-query.dto';
 
 /**
  * Owner Dashboard V2 — audit/security executive summary read
@@ -34,7 +37,12 @@ import { AuditExecutiveSummaryDto } from './audit-executive-summary.dto';
 @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
 @UseInterceptors(TenantInterceptor)
 export class AuditSummaryController {
-  constructor(private readonly auditSummaryService: AuditSummaryService) {}
+  constructor(
+    private readonly auditSummaryService: AuditSummaryService,
+    // Slice 6b: the event-list read model lives in its own service so the
+    // summary service's contract (and constructor) stays untouched.
+    private readonly auditEventsService: AuditEventsService,
+  ) {}
 
   @Get('summary')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
@@ -47,6 +55,27 @@ export class AuditSummaryController {
       tenantId,
       startDate,
       endDate,
+    );
+  }
+
+  /**
+   * Page-capped audit event list backing the dashboard audit page (slice
+   * 6b, finding H6). Same guard chain, roles and JWT-derived tenant as the
+   * summary route; query-param validation (severity taxonomy, page cap)
+   * lives in AuditEventsQueryDto.
+   */
+  @Get('events')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getEvents(
+    @GetTenantId() tenantId: string,
+    @Query() query: AuditEventsQueryDto,
+  ): Promise<AuditEventsResponseDto> {
+    return this.auditEventsService.getEvents(
+      tenantId,
+      query.startDate,
+      query.endDate,
+      query.severity,
+      query.limit,
     );
   }
 }
