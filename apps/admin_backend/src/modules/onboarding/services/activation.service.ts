@@ -837,6 +837,7 @@ export class ActivationService {
 
     return this.runTenantBound(trimmedTenant, async (manager) => {
       const aRepo = manager.getRepository(ActivationAttempt);
+      const sRepo = manager.getRepository(OnboardingSession);
       const attempt = await aRepo.findOne({
         where: { id: attemptId, tenantId: trimmedTenant },
       });
@@ -860,6 +861,22 @@ export class ActivationService {
       attempt.completedAt = new Date();
 
       await aRepo.save(attempt);
+
+      // Reset the session lifecycle so startActivation can accept a new
+      // attempt. ACTIVATION_IN_PROGRESS is a one-way transition set by
+      // startActivation; cancelling the attempt must release it.
+      const session = await sRepo.findOne({
+        where: { tenantId: trimmedTenant },
+      });
+      if (
+        session &&
+        session.lifecycleState === OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
+      ) {
+        session.lifecycleState = OnboardingLifecycleState.SALE_READY;
+        session.lastActivityAt = new Date();
+        session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
+        await sRepo.save(session);
+      }
 
       await this.changeLogService.log({
         tenantId: trimmedTenant,
