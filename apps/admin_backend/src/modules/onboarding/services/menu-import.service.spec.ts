@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { MenuImportService } from './menu-import.service';
