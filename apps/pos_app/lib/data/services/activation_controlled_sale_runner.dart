@@ -100,10 +100,18 @@ class ActivationControlledSaleRunner {
     final existingSeries =
         await _database.localConfigDao.getConfigByKey('dgi_prefix');
     if (existingSeries == null) {
+      // D-6: if the tenant already issued invoices in the cloud, seed the
+      // sequence after the cloud's highest sequence number so the verification
+      // sale never collides with an already-issued invoice.
+      final cloudHighestEntity = await _database.localConfigDao
+          .getConfigByKey('dgi_cloud_highest_sequence');
+      final cloudHighest =
+          int.tryParse(cloudHighestEntity?.value ?? '') ?? 0;
+      final start = cloudHighest > 0 ? cloudHighest + 1 : 1;
       await DgiNumberingServiceImpl(
         _database.localConfigDao,
         _database.invoiceDao,
-      ).initializeRange(prefix: '', start: 1);
+      ).initializeRange(prefix: '', start: start);
     }
 
     // 1. Fetch Attempt & Assert Pre-Condition: RUNNING or already LOCAL_ACTIVATION_EVIDENCE_COMPLETE

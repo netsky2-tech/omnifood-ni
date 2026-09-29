@@ -154,6 +154,21 @@ class ActivationPrimingService {
       fiscalOutcome = await handler.handleFiscalEnvelope(fiscalEnvelope);
     }
 
+    // 3b. D-6: record the highest sequence issued in cloud for this tenant.
+    //     When a terminal is reinstalled or replaced, the fiscal sequence must
+    //     advance beyond this value rather than restarting at 1.
+    if (payload.highestSequenceNumber > 0) {
+      await _database.localConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'dgi_cloud_highest_sequence',
+          value: payload.highestSequenceNumber.toString(),
+          description:
+              'Highest invoice sequence already issued in cloud for this tenant (D-6). '
+              'Used to seed fiscal sequence on reinstalled terminals.',
+        ),
+      );
+    }
+
     // 4. Record that priming happened — under the DISTINCT priming key. The
     //    inbound sync cursor `last_inbound_sync_version` is deliberately not
     //    touched: priming delivers a subset of delta types, and advancing

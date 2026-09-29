@@ -5,6 +5,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { Invoice } from '../../sales/entities/invoice.entity';
 import { InboundSyncService } from '../../sales/services/inbound-sync.service';
 import type { InboundSyncResponseDto } from '../../sales/dto/inbound-sync.dto';
 import type { FiscalConfigSnapshot } from '../dto/fiscal-config-version.dto';
@@ -60,6 +61,7 @@ export interface TerminalPrimingResponseDto {
   status: 'success';
   serverTime: string;
   currentVersion: number;
+  highestSequenceNumber?: number;
   deltas: TerminalPrimingDeltasDto;
   fiscalConfig?: FiscalConfigSnapshot | null;
 }
@@ -111,7 +113,26 @@ export class TerminalPrimingService {
           undefined,
           manager,
         );
-        return this.toPrimingResponse(envelope);
+
+        // D-6: query the highest invoice sequence already issued in cloud for
+        // this tenant. A reinstalled terminal or replacement device must seed
+        // its sequence after this value so the verification sale and subsequent
+        // sales never collide with already-issued folios.
+        const maxInvoiceRow: { maxSeq?: string | null } | undefined =
+          await manager
+            .getRepository(Invoice)
+            .createQueryBuilder('inv')
+            .select(
+              "MAX(CAST(NULLIF(regexp_replace(inv.number, '[^0-9]', '', 'g'), '') AS bigint))",
+              'maxSeq',
+            )
+            .where('inv.tenant_id = :tenantId', { tenantId: trimmedTenantId })
+            .getRawOne<{ maxSeq?: string | null }>();
+        const highestSequenceNumber = maxInvoiceRow?.maxSeq
+          ? Number(maxInvoiceRow.maxSeq)
+          : 0;
+
+        return this.toPrimingResponse(envelope, highestSequenceNumber);
       },
     );
   }
@@ -125,11 +146,13 @@ export class TerminalPrimingService {
    */
   private toPrimingResponse(
     envelope: InboundSyncResponseDto,
+    highestSequenceNumber = 0,
   ): TerminalPrimingResponseDto {
     return {
       status: envelope.status,
       serverTime: envelope.serverTime,
       currentVersion: envelope.currentVersion,
+      highestSequenceNumber,
       deltas: {
         products: envelope.deltas.products,
         catalogValues: envelope.deltas.catalogValues,

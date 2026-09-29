@@ -112,7 +112,7 @@ function buildEnvelope(overrides: {
 describe('L1-10a: TerminalPrimingService (Unit)', () => {
   let service: TerminalPrimingService;
   let inboundSyncService: { getInboundDeltas: jest.Mock };
-  let transactionManager: { query: jest.Mock };
+  let transactionManager: { query: jest.Mock; getRepository: jest.Mock };
   let dataSource: DataSource;
 
   beforeEach(() => {
@@ -125,8 +125,16 @@ describe('L1-10a: TerminalPrimingService (Unit)', () => {
         }),
       ),
     };
+    const qb = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ maxSeq: '0' }),
+    };
     transactionManager = {
       query: jest.fn().mockResolvedValue(undefined),
+      getRepository: jest.fn().mockReturnValue({
+        createQueryBuilder: jest.fn().mockReturnValue(qb),
+      }),
     };
     dataSource = {
       transaction: jest.fn(async (cb: (manager: unknown) => Promise<unknown>) =>

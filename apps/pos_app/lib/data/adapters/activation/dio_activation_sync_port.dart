@@ -129,7 +129,33 @@ class DioActivationSyncPort implements ActivationSyncPort {
       );
       // ignore: avoid_print
       print('[VerifSale] status=${response.statusCode} body=${response.data}');
-      return _isSuccess(response.statusCode);
+      if (!_isSuccess(response.statusCode)) return false;
+
+      // Backend syncBatch returns HTTP 201 even when individual records are
+      // REJECTED (e.g. unique constraint violation). Inspect the results array:
+      // if any record was rejected, the verification sale was NOT persisted.
+      final data = response.data;
+      if (data is Map) {
+        final results = data['results'] as List<dynamic>?;
+        if (results != null && results.isNotEmpty) {
+          final anyRejected = results.any((r) {
+            if (r is Map) {
+              final status = r['status'] as String?;
+              return status == 'REJECTED' ||
+                  status == 'IDEMPOTENCY_MISMATCH' ||
+                  status == 'BLOCKED_BY_PRIOR_FAILURE';
+            }
+            return false;
+          });
+          if (anyRejected) {
+            // ignore: avoid_print
+            print('[VerifSale] Record was REJECTED by backend syncBatch');
+            return false;
+          }
+        }
+      }
+
+      return true;
     } on DioException catch (e) {
       // ignore: avoid_print
       print('[VerifSale] DioException: status=${e.response?.statusCode} body=${e.response?.data}');

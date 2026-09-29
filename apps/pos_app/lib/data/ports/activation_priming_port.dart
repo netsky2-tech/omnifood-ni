@@ -40,6 +40,11 @@ class TerminalPrimingPayload {
   /// resolution in `SyncService`). Null when the tenant has no fiscal config.
   final Map<String, dynamic>? fiscalEnvelope;
 
+  /// D-6: highest invoice sequence already issued in cloud for this tenant.
+  /// 0 when the tenant has never issued an invoice. Reinstalled or replacement
+  /// terminals seed their fiscal sequence above this value to prevent collisions.
+  final int highestSequenceNumber;
+
   const TerminalPrimingPayload({
     required this.status,
     required this.serverTime,
@@ -47,6 +52,7 @@ class TerminalPrimingPayload {
     required this.products,
     required this.catalogValues,
     required this.fiscalEnvelope,
+    this.highestSequenceNumber = 0,
   });
 
   /// Strict parse: a malformed or partial payload is a named failure, never a
@@ -157,6 +163,10 @@ class TerminalPrimingPayload {
       fiscalEnvelope = Map<String, dynamic>.from(chosen);
     }
 
+    final rawHighestSeq = data['highestSequenceNumber'];
+    final highestSequenceNumber =
+        rawHighestSeq is num ? rawHighestSeq.toInt() : 0;
+
     return TerminalPrimingPayload(
       status: status,
       serverTime: serverTime,
@@ -164,6 +174,7 @@ class TerminalPrimingPayload {
       products: products,
       catalogValues: catalogValues,
       fiscalEnvelope: fiscalEnvelope,
+      highestSequenceNumber: highestSequenceNumber,
     );
   }
 }
