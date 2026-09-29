@@ -55,6 +55,8 @@ dependencies:
   image_picker: ^1.1.2
   # Customer QR/barcode scanning (M11): camera scanner for customer identification.
   mobile_scanner: ^7.4.2
+  # M10: native link-layer connectivity signals (fast path) for the POS.
+  connectivity_plus: ^6.1.5
 dependency_overrides:
   analyzer: 6.4.1
 

@@ -4,5 +4,9 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+	<!-- M10: required for the sandboxed app's outgoing HTTP health check
+	     (dio) and connectivity_plus NWPathMonitor usage. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 </dict>
 </plist>
