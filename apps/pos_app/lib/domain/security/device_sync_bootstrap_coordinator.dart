@@ -163,20 +163,21 @@ class DeviceSyncBootstrapCoordinator {
       }
 
       if (active.deviceId.trim() != canonicalDeviceId.trim()) {
-        _lastError = 'StateError';
-        throw StateError(
-          'Active credential device ID (${active.deviceId}) does not match canonical terminal ($canonicalDeviceId)',
+        // The terminal was re-linked with a new device ID (e.g., after
+        // app data reset). The old credential is stale — discard it and
+        // fall through to provision a fresh one for the current identity.
+        await _store.clearCredential();
+        // Fall through to step 4 (MISSING local material).
+      } else {
+        // ACTIVE local valid => no-op!
+        final result = DeviceSyncBootstrapResult(
+          status: DeviceSyncBootstrapStatus.noOpAlreadyActive,
+          record: active,
         );
+        _lastResult = result;
+        _lastError = null;
+        return result;
       }
-
-      // ACTIVE local valid => no-op!
-      final result = DeviceSyncBootstrapResult(
-        status: DeviceSyncBootstrapStatus.noOpAlreadyActive,
-        record: active,
-      );
-      _lastResult = result;
-      _lastError = null;
-      return result;
     }
 
     // 4. MISSING local material: provision -> stage/verify -> confirm -> commit
