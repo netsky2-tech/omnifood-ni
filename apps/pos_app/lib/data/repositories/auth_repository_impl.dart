@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:developer' as developer;
 import '../../domain/models/auth/terminal_linking.dart';
 import '../../domain/models/user.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -639,7 +640,19 @@ class AuthRepositoryImpl implements AuthRepository {
         try {
           _prefs ??= await SharedPreferences.getInstance();
           await _prefs?.setBool('legacy_token_revoked', true);
-        } catch (_) {}
+        } catch (e, st) {
+          // Re-audit (observability): the legacy_token_revoked flag is a
+          // security-hygiene marker; failing to persist it silently would
+          // hide a revoked-but-unmarked legacy token.
+          developer.log(
+            'Failed to persist legacy_token_revoked flag after secure '
+            'storage delete failure.',
+            name: 'AuthRepository',
+            level: 900, // WARNING
+            error: e,
+            stackTrace: st,
+          );
+        }
       }
     }
 

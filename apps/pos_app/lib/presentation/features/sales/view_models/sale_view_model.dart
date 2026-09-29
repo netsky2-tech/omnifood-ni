@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:pos_app/domain/usecases/inventory/checkout_inventory_preparation_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -230,6 +231,19 @@ class SaleViewModel extends ChangeNotifier {
   /// but they can no longer be silently swallowed.
   String? _lastLoyaltyError;
   String? get lastLoyaltyError => _lastLoyaltyError;
+
+  /// POS-B (re-audit): armed when a sale completes while [_lastLoyaltyError]
+  /// is set, so the view can surface a NON-blocking cashier warning. The
+  /// sale IS registered — this flag only exists so loyalty drift is never
+  /// invisible at the point of sale.
+  bool _pendingLoyaltyWarning = false;
+  bool get hasPendingLoyaltyWarning => _pendingLoyaltyWarning;
+
+  /// Consumes the armed post-sale loyalty warning exactly once (the view
+  /// calls this right before showing the warning SnackBar).
+  void consumePendingLoyaltyWarning() {
+    _pendingLoyaltyWarning = false;
+  }
 
   void _recordLoyaltyFailure(String operation, Object error) {
     _lastLoyaltyError = 'loyalty $operation failed: $error';
@@ -1110,7 +1124,19 @@ class SaleViewModel extends ChangeNotifier {
           final variant = product.variants.firstWhere((v) => v.id == variantId);
           unitPrice += variant.priceAdjustment;
           productName += ' (${variant.name})';
-        } catch (_) {}
+        } catch (e, st) {
+          // Re-audit (observability): unknown variant falls back to the
+          // base product price/name so the sale keeps flowing; the pricing
+          // drift must be observable.
+          developer.log(
+            'Variant $variantId not found on product ${product.id}; '
+            'falling back to base price/name.',
+            name: 'SaleViewModel',
+            level: 900, // WARNING
+            error: e,
+            stackTrace: st,
+          );
+        }
       }
 
       final itemTaxRate = product.effectiveTaxRate;
@@ -1338,6 +1364,18 @@ class SaleViewModel extends ChangeNotifier {
         });
       }
 
+      // Loyalty ops of THIS sale begin here: reset the diagnostic error
+      // BEFORE any redeem/earn attempt so lastLoyaltyError — and the
+      // post-sale warning armed from it — reflects ONLY this sale's
+      // failures. A historical loyalty failure must never re-arm the
+      // warning on a later successful sale, including sales with no
+      // loyalty activity. The reset sits AFTER saveSale, so a rejected
+      // sale never masks a prior error. Cart-phase re-evaluation errors
+      // (H9) remain readable via lastLoyaltyError but intentionally do
+      // not arm the post-sale warning: preview staleness, not unposted
+      // points.
+      _lastLoyaltyError = null;
+
       // Process Customer Loyalty (single write path via LoyaltyRewardInteractionService)
       if (_selectedCustomer != null) {
         final now = DateTime.now().millisecondsSinceEpoch;
@@ -1556,6 +1594,10 @@ class SaleViewModel extends ChangeNotifier {
       _customerName = null;
       _selectedCustomer = null;
       _errorMessage = null;
+      // POS-B: the sale completed locally; if any loyalty operation failed
+      // along the way, arm the non-blocking cashier warning. Arming before
+      // clearCart() so its notifyListeners() carries the state to the view.
+      _pendingLoyaltyWarning = _lastLoyaltyError != null;
       clearCart();
       _consumeOverride();
     } catch (e, stackTrace) {

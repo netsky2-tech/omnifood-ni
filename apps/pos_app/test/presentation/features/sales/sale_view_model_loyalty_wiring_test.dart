@@ -792,6 +792,64 @@ void main() {
             any, any, any, any),
       ).called(2);
     });
+
+    test(
+        'a loyalty failure on sale N does NOT carry into sale N+1 '
+        '(per-sale reset)', () async {
+      await arrangeRewardSale();
+
+      var txCalls = 0;
+      when(
+        mockPointTxDao.recordPointTransactionAndUpdateBalance(
+            any, any, any, any),
+      ).thenAnswer((_) async {
+        txCalls++;
+        // Sale N: the REDEEM write (first tx call) fails; every later
+        // tx call succeeds.
+        if (txCalls == 1) {
+          throw Exception('redeem write failed');
+        }
+      });
+
+      // Sale N: redeem persistence failure is observable.
+      await viewModel.processSale(
+        [PaymentMethod.cash],
+        customPayments: [
+          const Payment(
+            id: 'pay-1',
+            invoiceId: '',
+            method: PaymentMethod.cash,
+            amount: 138.0,
+          ),
+        ],
+      );
+      expect(viewModel.lastLoyaltyError, isNotNull);
+      expect(viewModel.lastLoyaltyError, contains('redeem'));
+
+      // Sale N+1: same view-model instance, healthy persistence, no loyalty
+      // failure — the historical failure must NOT leak into this sale's
+      // diagnostics (the post-sale warning must reflect only THIS sale).
+      await arrangeRewardSale();
+      await viewModel.processSale(
+        [PaymentMethod.cash],
+        customPayments: [
+          const Payment(
+            id: 'pay-2',
+            invoiceId: '',
+            method: PaymentMethod.cash,
+            amount: 138.0,
+          ),
+        ],
+      );
+
+      expect(viewModel.lastLoyaltyError, isNull);
+      // Both sales ran their full redeem+earn path (2 tx calls each):
+      // no loyalty route was degraded by the reset.
+      verify(
+        mockPointTxDao.recordPointTransactionAndUpdateBalance(
+            any, any, any, any),
+      ).called(4);
+    });
   });
 
   group('processSale builds real LoyaltyEvaluation', () {

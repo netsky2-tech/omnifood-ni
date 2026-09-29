@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 class RecipeVersionComponentDocument {
   const RecipeVersionComponentDocument({
@@ -186,7 +187,19 @@ class RecipeVersionDocument {
             )
             .toList(growable: false);
       }
-    } catch (_) {}
+    } catch (e, st) {
+      // Re-audit (observability): corrupt component payloads fall back to
+      // an empty list so the document still loads offline; the fallback
+      // must be observable.
+      developer.log(
+        'Failed to decode recipe version component payload; falling back '
+        'to an empty list.',
+        name: 'RecipeVersionDocument',
+        level: 900, // WARNING
+        error: e,
+        stackTrace: st,
+      );
+    }
     return const [];
   }
 }

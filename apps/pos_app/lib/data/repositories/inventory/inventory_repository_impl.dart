@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import '../../../domain/models/inventory/insumo.dart';
 import '../../../domain/models/inventory/inventory_movement.dart';
@@ -751,7 +752,19 @@ class InventoryRepositoryImpl
           return parsed;
         }
       }
-    } catch (_) {}
+    } catch (e, st) {
+      // Re-audit (observability): the cached BCN rate read failed and we
+      // fall back to the hardcoded official rate; the fallback must be
+      // observable so stale/wrong rates can be diagnosed.
+      developer.log(
+        'Failed to read cached BCN official exchange rate; falling back to '
+        'the hardcoded rate 36.6241.',
+        name: 'InventoryRepository',
+        level: 900, // WARNING
+        error: e,
+        stackTrace: st,
+      );
+    }
     return 36.6241;
   }
 

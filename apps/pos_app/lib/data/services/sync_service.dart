@@ -295,8 +295,16 @@ class SyncService {
   Future<int> getPendingOutboxCount() async {
     int count = 0;
     try {
+      // DSI-6 (openspec/changes/device-sync-credit-note-authorization):
+      // credit notes are deliberately HELD OUT of outbound device batches
+      // until DSI-6 re-enables their transport, so they are not actionable
+      // pending work. Counting them would keep the sync badge permanently
+      // above zero during the hold; exclude them here, mirroring the
+      // outbound filter in _syncSales (documentType != 'CREDIT_NOTE').
       final sales = await _salesRepository.getUnsyncedAggregates();
-      count += sales.length;
+      count += sales
+          .where((aggregate) => aggregate['documentType'] != 'CREDIT_NOTE')
+          .length;
     } catch (e, st) {
       _logOutboxCountFailure('sales', e, st);
     }
@@ -333,7 +341,12 @@ class SyncService {
 
     try {
       final movements = await _inventoryRepository.getUnsyncedMovements();
-      count += movements.length;
+      // DSI-6 hold: credit-note restock movements share the credit-note
+      // transport block (same exclusion predicate as the outbound inventory
+      // batch filter) and must not keep the badge above zero either.
+      count += movements
+          .where((movement) => !_isCreditNoteRestockMovement(movement))
+          .length;
     } catch (e, st) {
       _logOutboxCountFailure('movements', e, st);
     }

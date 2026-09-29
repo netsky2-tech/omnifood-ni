@@ -134,6 +134,12 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as bool);
 
   @override
+  bool get hasPendingLoyaltyWarning => (super.noSuchMethod(
+        Invocation.getter(#hasPendingLoyaltyWarning),
+        returnValue: false,
+      ) as bool);
+
+  @override
   _i9.TenantOperationMode get operationMode => (super.noSuchMethod(
         Invocation.getter(#operationMode),
         returnValue: _i9.TenantOperationMode.foodparkQsr,
@@ -409,6 +415,15 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
         Invocation.getter(#hasListeners),
         returnValue: false,
       ) as bool);
+
+  @override
+  void consumePendingLoyaltyWarning() => super.noSuchMethod(
+        Invocation.method(
+          #consumePendingLoyaltyWarning,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   _i16.Future<_i6.Customer?> identifyCustomer(String? input) =>

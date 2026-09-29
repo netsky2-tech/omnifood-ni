@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 class ProductionOrderDocument {
   ProductionOrderDocument({
@@ -179,7 +180,19 @@ class ProductionOrderDocument {
             .where((s) => s.isNotEmpty)
             .toList(growable: false);
       }
-    } catch (_) {}
+    } catch (e, st) {
+      // Re-audit (observability): corrupt movement references fall back to
+      // an empty list so the document still loads offline; the fallback
+      // must be observable.
+      developer.log(
+        'Failed to decode production order movement references; falling '
+        'back to an empty list.',
+        name: 'ProductionOrderDocument',
+        level: 900, // WARNING
+        error: e,
+        stackTrace: st,
+      );
+    }
     return const [];
   }
 
