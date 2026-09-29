@@ -56,6 +56,11 @@ function buildEnvelope(overrides: {
       insumos: [],
       recipes: [],
       recipeVersions: [],
+      // Slice 5d delta keys are required on InboundSyncDeltasDto; the
+      // priming scenario carries no loyalty/promotion/customer data.
+      loyaltyPrograms: [],
+      promotions: [],
+      customers: [],
       // The inbound envelope carries users with security profiles that
       // include PIN material. Priming must never forward them.
       users: [

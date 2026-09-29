@@ -11,6 +11,10 @@ import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { ForensicAlert } from '../../inventory/entities/forensic-alert.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
+import { LoyaltyProgram } from '../../loyalty/entities/loyalty-program.entity';
+import { RewardDefinition } from '../../loyalty/entities/reward-definition.entity';
+import { Promotion } from '../../promotions/entities/promotion.entity';
+import { Customer } from '../../customers/entities/customer.entity';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
 import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
 import { StaffPolicyEpochAcknowledgementService } from '../../identity/human-authorization/services/staff-policy-epoch-acknowledgement.service';
@@ -24,6 +28,7 @@ interface MockQueryBuilder<T> {
   addSelect: jest.Mock;
   getMany: jest.Mock<Promise<T[]>, []>;
   orderBy: jest.Mock;
+  addOrderBy: jest.Mock;
 }
 
 function createMockQueryBuilder<T>(items: T[] = []): MockQueryBuilder<T> {
@@ -34,6 +39,7 @@ function createMockQueryBuilder<T>(items: T[] = []): MockQueryBuilder<T> {
     addSelect: jest.fn().mockReturnThis(),
     getMany: jest.fn<Promise<T[]>, []>().mockResolvedValue(items),
     orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
   };
   return qb;
 }
@@ -64,6 +70,10 @@ describe('InboundSyncService', () => {
   let recipeDetailQb: MockQueryBuilder<RecipeDetail>;
   let mappingVersionQb: MockQueryBuilder<ProductInventoryMappingVersion>;
   let userQb: MockQueryBuilder<User>;
+  let loyaltyProgramQb: MockQueryBuilder<LoyaltyProgram>;
+  let loyaltyRewardQb: MockQueryBuilder<RewardDefinition>;
+  let promotionQb: MockQueryBuilder<Promotion>;
+  let customerQb: MockQueryBuilder<Customer>;
 
   let mockProductRepo: { createQueryBuilder: jest.Mock };
   let mockCatalogRepo: { createQueryBuilder: jest.Mock };
@@ -76,6 +86,10 @@ describe('InboundSyncService', () => {
     manager: { query: jest.Mock };
   };
   let mockUserRepo: { createQueryBuilder: jest.Mock };
+  let mockLoyaltyProgramRepo: { createQueryBuilder: jest.Mock };
+  let mockLoyaltyRewardRepo: { createQueryBuilder: jest.Mock };
+  let mockPromotionRepo: { createQueryBuilder: jest.Mock };
+  let mockCustomerRepo: { createQueryBuilder: jest.Mock };
 
   beforeEach(async () => {
     productQb = createMockQueryBuilder<Product>([]);
@@ -88,6 +102,10 @@ describe('InboundSyncService', () => {
       [],
     );
     userQb = createMockQueryBuilder<User>([]);
+    loyaltyProgramQb = createMockQueryBuilder<LoyaltyProgram>([]);
+    loyaltyRewardQb = createMockQueryBuilder<RewardDefinition>([]);
+    promotionQb = createMockQueryBuilder<Promotion>([]);
+    customerQb = createMockQueryBuilder<Customer>([]);
 
     mockProductRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(productQb),
@@ -113,6 +131,18 @@ describe('InboundSyncService', () => {
     };
     mockUserRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(userQb),
+    };
+    mockLoyaltyProgramRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(loyaltyProgramQb),
+    };
+    mockLoyaltyRewardRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(loyaltyRewardQb),
+    };
+    mockPromotionRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(promotionQb),
+    };
+    mockCustomerRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(customerQb),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -192,6 +222,10 @@ describe('InboundSyncService', () => {
         if (entity === ProductInventoryMappingVersion)
           return mockMappingVersionRepo;
         if (entity === User) return mockUserRepo;
+        if (entity === LoyaltyProgram) return mockLoyaltyProgramRepo;
+        if (entity === RewardDefinition) return mockLoyaltyRewardRepo;
+        if (entity === Promotion) return mockPromotionRepo;
+        if (entity === Customer) return mockCustomerRepo;
         if (entity === ForensicAlert)
           return {
             createQueryBuilder: jest
@@ -1430,6 +1464,198 @@ describe('InboundSyncService', () => {
 
       await expect(pullRecipeVersions()).rejects.toThrow(BadRequestException);
       await expect(pullRecipeVersions()).rejects.toThrow('ins-empty-uom');
+    });
+  });
+
+  describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () => {
+    it('includes the three new keys by default and reads them through the bound manager', async () => {
+      loyaltyProgramQb.getMany.mockResolvedValue([]);
+      loyaltyRewardQb.getMany.mockResolvedValue([]);
+      promotionQb.getMany.mockResolvedValue([]);
+      customerQb.getMany.mockResolvedValue([]);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        {},
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      // The production POS pull sends no types parameter: the default type
+      // set must include the new keys or the terminal would never receive
+      // loyalty programs, promotions or customers.
+      expect(response.deltas.loyaltyPrograms).toEqual([]);
+      expect(response.deltas.promotions).toEqual([]);
+      expect(response.deltas.customers).toEqual([]);
+      expect(mockLoyaltyProgramRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(mockLoyaltyRewardRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockPromotionRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(mockCustomerRepo.createQueryBuilder).toHaveBeenCalled();
+
+      // Tenant scoping: every read is tenant-predicated on top of the RLS
+      // binding.
+      expect(loyaltyProgramQb.where).toHaveBeenCalledWith(
+        'program.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+      expect(promotionQb.where).toHaveBeenCalledWith(
+        'promotion.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+      expect(customerQb.where).toHaveBeenCalledWith(
+        'customer.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+    });
+
+    it('projects loyalty programs with their embedded reward closure', async () => {
+      loyaltyProgramQb.getMany.mockResolvedValue([
+        {
+          id: 'lp-1',
+          tenant_id: 'tenant-abc',
+          name: 'Café Loyal',
+          program_type: 'SPEND_POINTS',
+          status: 'ACTIVE',
+          starts_at: new Date('2026-08-01T00:00:00Z'),
+          ends_at: null,
+          earning_rule: { pointsPerCurrency: 1 },
+          eligibility_rule: { minOrderAmount: 100 },
+          config_version: 3,
+          created_at: new Date('2026-08-01T00:00:00Z'),
+          updated_at: new Date('2026-08-02T00:00:00Z'),
+        } as unknown as LoyaltyProgram,
+      ]);
+      loyaltyRewardQb.getMany.mockResolvedValue([
+        {
+          id: 'rw-1',
+          tenant_id: 'tenant-abc',
+          loyalty_program_id: 'lp-1',
+          name: 'Café gratis',
+          description: null,
+          reward_type: 'FREE_PRODUCT',
+          cost_units: 100,
+          benefit_config: { productId: 'prod-1' },
+          status: 'ACTIVE',
+          starts_at: null,
+          ends_at: null,
+          presentation_order: 1,
+          config_version: 2,
+          created_at: new Date('2026-08-01T00:00:00Z'),
+          updated_at: new Date('2026-08-02T00:00:00Z'),
+        } as unknown as RewardDefinition,
+      ]);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'loyaltyprograms' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.loyaltyPrograms).toHaveLength(1);
+      expect(response.deltas.loyaltyPrograms[0]).toMatchObject({
+        id: 'lp-1',
+        tenantId: 'tenant-abc',
+        name: 'Café Loyal',
+        programType: 'SPEND_POINTS',
+        status: 'ACTIVE',
+        earningRule: { pointsPerCurrency: 1 },
+        eligibilityRule: { minOrderAmount: 100 },
+        configVersion: 3,
+      });
+      // The reward closure rides inside the program: the POS must be able to
+      // apply the program without a second lookup.
+      expect(response.deltas.loyaltyPrograms[0].rewards).toMatchObject([
+        {
+          id: 'rw-1',
+          loyaltyProgramId: 'lp-1',
+          rewardType: 'FREE_PRODUCT',
+          costUnits: 100,
+          benefitConfig: { productId: 'prod-1' },
+        },
+      ]);
+      // The reward read is tenant-predicated and scoped to the fetched
+      // programs.
+      expect(loyaltyRewardQb.where).toHaveBeenCalledWith(
+        'reward.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+      expect(loyaltyRewardQb.andWhere).toHaveBeenCalledWith(
+        'reward.loyalty_program_id IN (:...programIds)',
+        { programIds: ['lp-1'] },
+      );
+    });
+
+    it('matches a program incrementally when the program row or any of its rewards changed', async () => {
+      loyaltyProgramQb.getMany.mockResolvedValue([]);
+      loyaltyRewardQb.getMany.mockResolvedValue([]);
+      promotionQb.getMany.mockResolvedValue([]);
+      customerQb.getMany.mockResolvedValue([]);
+
+      await service.getInboundDeltas(
+        'tenant-abc',
+        { sinceVersion: '1787745600000' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(loyaltyProgramQb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('loyalty_rewards reward_cursor'),
+        { sinceDate: new Date(1787745600000) },
+      );
+      expect(promotionQb.andWhere).toHaveBeenCalledWith(
+        'promotion.updated_at > :sinceDate',
+        { sinceDate: new Date(1787745600000) },
+      );
+      expect(customerQb.andWhere).toHaveBeenCalledWith(
+        'customer.updated_at > :sinceDate',
+        { sinceDate: new Date(1787745600000) },
+      );
+      // No programs matched: the reward closure read is skipped entirely.
+      expect(mockLoyaltyRewardRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('answers empty arrays for the new keys when they are not requested', async () => {
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products,users' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.loyaltyPrograms).toEqual([]);
+      expect(response.deltas.promotions).toEqual([]);
+      expect(response.deltas.customers).toEqual([]);
+      expect(mockLoyaltyProgramRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockLoyaltyRewardRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockPromotionRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockCustomerRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('fails closed without a tenant-bound manager for each new protected read', async () => {
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'loyaltyprograms' }),
+      ).rejects.toThrow(
+        'Inbound loyalty program sync requires a tenant-bound transaction manager',
+      );
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'promotions' }),
+      ).rejects.toThrow(
+        'Inbound promotion sync requires a tenant-bound transaction manager',
+      );
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'customers' }),
+      ).rejects.toThrow(
+        'Inbound customer sync requires a tenant-bound transaction manager',
+      );
+
+      // Fail closed means fail before any SQL: the pooled reads never run.
+      expect(
+        mockLoyaltyProgramRepo.createQueryBuilder,
+      ).not.toHaveBeenCalled();
+      expect(mockLoyaltyRewardRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockPromotionRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockCustomerRepo.createQueryBuilder).not.toHaveBeenCalled();
     });
   });
 });

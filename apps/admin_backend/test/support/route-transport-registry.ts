@@ -421,6 +421,10 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   // same human session-JWT transport class as ReportsController.
   { controller: 'CardReconciliationSummaryController', transport: 'human' },
   { controller: 'CashShiftController', transport: 'human' },
+  // Batch 5 slice 5c (finding H3): POS-pushed cash shift sessions and cash
+  // movements. Dedicated device surface (`CashShiftSyncController`) so the
+  // human cash-shift controller keeps its human-only transport class.
+  { controller: 'CashShiftSyncController', transport: 'device' },
   {
     controller: 'InvoicesController',
     transport: 'device',
@@ -437,6 +441,10 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   { controller: 'PromotionsController', transport: 'human' },
   { controller: 'CatalogController', transport: 'human' },
   { controller: 'LoyaltyController', transport: 'human' },
+  // Batch 5 slice 5b (finding H2): POS-pushed loyalty point transactions.
+  // Dedicated device surface (`LoyaltySyncController`) so the human loyalty
+  // controller keeps its human-only transport classification.
+  { controller: 'LoyaltySyncController', transport: 'device' },
   { controller: 'CustomersController', transport: 'human' },
   {
     controller: 'InventoryMovementController',

@@ -24,6 +24,13 @@ import '../models/inventory/recipe_entity.dart';
 import '../models/user_entity.dart';
 import '../models/security_profile_entity.dart';
 import '../models/local_config_entity.dart';
+import '../models/customer/customer_entity.dart';
+import '../models/customer/customer_point_transaction_entity.dart';
+import '../models/loyalty/loyalty_program_entity.dart';
+import '../models/loyalty/loyalty_reward_entity.dart';
+import '../models/sales/promotion_entity.dart';
+import '../models/sales/cashier_session_entity.dart';
+import '../models/sales/cash_movement_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import 'authority_hydration_service.dart';
@@ -266,39 +273,70 @@ class SyncService {
     return Duration(seconds: seconds);
   }
 
+  /// Finding H1 (slice 5a): each per-domain outbox count query used to fail
+  /// silently, leaving operators unable to tell which domain undercounted
+  /// the sync badge. Fault isolation is preserved: a failure only removes
+  /// the affected domain from the total, never breaks the count and never
+  /// propagates.
+  void _logOutboxCountFailure(
+    String domain,
+    Object error,
+    StackTrace stackTrace,
+  ) {
+    developer.log(
+      '[OUTBOX_COUNT] warning: pending count query failed for domain '
+      "'$domain'; excluding it from the pending count",
+      name: 'SyncService',
+      error: error,
+      stackTrace: stackTrace,
+    );
+  }
+
   Future<int> getPendingOutboxCount() async {
     int count = 0;
     try {
       final sales = await _salesRepository.getUnsyncedAggregates();
       count += sales.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('sales', e, st);
+    }
 
     try {
       final purchases = await _inventoryRepository.getUnsyncedPurchases();
       count += purchases.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('purchases', e, st);
+    }
 
     try {
       final counts = await _inventoryRepository
           .getUnsyncedCountSessionDocuments();
       count += counts.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('count sessions', e, st);
+    }
 
     try {
       final recipes = await _inventoryRepository
           .getUnsyncedRecipeVersionDocuments();
       count += recipes.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('recipe versions', e, st);
+    }
 
     try {
       final orders = await _inventoryRepository.getUnsyncedProductionOrders();
       count += orders.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('production orders', e, st);
+    }
 
     try {
       final movements = await _inventoryRepository.getUnsyncedMovements();
       count += movements.length;
-    } catch (_) {}
+    } catch (e, st) {
+      _logOutboxCountFailure('movements', e, st);
+    }
 
     return count;
   }
@@ -399,6 +437,32 @@ class SyncService {
       if (!fulfillmentSuccess) {
         hasFailure = true;
         domainErrors.add('Fulfillment');
+      }
+
+      // 1c. Push loyalty point transactions (Batch 5 slice 5b, finding H2):
+      // offline point mutations are the source of truth and must reach the
+      // cloud ledger so balances converge across terminals. Fault-isolated
+      // like every other domain: a failure never aborts later domains.
+      final loyaltySuccess = await _runDomain(
+        'loyalty',
+        _syncLoyaltyPointTransactions,
+      );
+      if (!loyaltySuccess) {
+        hasFailure = true;
+        domainErrors.add('Loyalty');
+      }
+
+      // 1d. Push cash shift sessions and cash movements (Batch 5 slice 5c,
+      // finding H3): the offline shift lifecycle is the source of truth and
+      // must reach the cloud so the dashboard sees cash data. Fault-isolated
+      // like every other domain: a failure never aborts later domains.
+      final cashShiftSuccess = await _runDomain(
+        'cashshift',
+        _syncCashShifts,
+      );
+      if (!cashShiftSuccess) {
+        hasFailure = true;
+        domainErrors.add('CashShifts');
       }
 
       // 2. Sync inventory outbox deltas
@@ -701,6 +765,283 @@ class SyncService {
       );
       rethrow;
     }
+  }
+
+  /// Batch 5 slice 5b (finding H2): pushes pending loyalty point
+  /// transactions to the cloud ledger in bounded batches. Rows stay
+  /// 'pending' on any failure and are retried on the next sync pass;
+  /// rows the backend reports as FAILED per-record (e.g. an idempotency
+  /// integrity conflict) also stay pending instead of being lost.
+  Future<void> _syncLoyaltyPointTransactions() async {
+    final database = _database;
+    if (database == null) return;
+    final dao = database.customerPointTransactionDao;
+    final pending = await dao.getTransactionsBySyncStatus('pending');
+    if (pending.isEmpty) return;
+
+    final batch = pending.take(_batchEnvelopeLimit).toList(growable: false);
+    final tenantConfig = await database.localConfigDao.getConfigByKey(
+      'tenant_id',
+    );
+    final tenantId = tenantConfig?.value ?? 'tenant-1';
+
+    developer.log(
+      'Loyalty sync: posting ${batch.length} point transactions',
+      name: 'SyncService',
+    );
+    final response = await _dio.post(
+      '/loyalty/point-transactions/sync',
+      data: {
+        'transactions': batch
+            .map((tx) => _buildLoyaltyPointTransactionPayload(tx, tenantId))
+            .toList(growable: false),
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final failedKeys = _failedLoyaltySyncKeys(response.data);
+      for (final tx in batch) {
+        final idempotencyKey =
+            tx.idempotencyKey ?? 'loyalty:sync:$tenantId:${tx.id}';
+        if (failedKeys.contains(idempotencyKey)) continue;
+        await dao.markSyncedById(tx.id);
+      }
+    }
+  }
+
+  /// Maps a local point-transaction row onto the cloud ingestion contract
+  /// (LoyaltyPointTransactionSyncItemDto). Legacy rows without program
+  /// attribution or units are sent with best-effort equivalents: units fall
+  /// back to the rounded points delta and a stable idempotency key is
+  /// derived from the immutable local row id so retries dedupe server-side.
+  Map<String, Object?> _buildLoyaltyPointTransactionPayload(
+    CustomerPointTransactionEntity tx,
+    String tenantId,
+  ) {
+    Object? commercialSnapshot;
+    if (tx.commercialSnapshot != null) {
+      try {
+        commercialSnapshot = jsonDecode(tx.commercialSnapshot!);
+      } catch (_) {
+        commercialSnapshot = null;
+      }
+    }
+
+    return {
+      'idempotencyKey':
+          tx.idempotencyKey ?? 'loyalty:sync:$tenantId:${tx.id}',
+      'customerId': tx.customerId,
+      if (tx.loyaltyProgramId != null) 'loyaltyProgramId': tx.loyaltyProgramId,
+      'transactionType': tx.transactionType ?? tx.type,
+      'units': tx.units ?? tx.points.round(),
+      if (tx.ticketId != null) 'ticketId': tx.ticketId,
+      if (tx.invoiceId != null && tx.ticketId == null)
+        'ticketId': tx.invoiceId,
+      if (tx.rewardId != null) 'rewardId': tx.rewardId,
+      if (tx.reason != null) 'reason': tx.reason,
+      if (tx.reversalOfTransactionId != null)
+        'reversalOfTransactionId': tx.reversalOfTransactionId,
+      if (tx.sourceEventId != null) 'sourceEventId': tx.sourceEventId,
+      if (tx.actorUserId != null) 'actorUserId': tx.actorUserId,
+      if (tx.branchId != null) 'branchId': tx.branchId,
+      if (tx.terminalId != null) 'terminalId': tx.terminalId,
+      if (tx.programVersion != null) 'programVersion': tx.programVersion,
+      if (tx.rewardVersion != null) 'rewardVersion': tx.rewardVersion,
+      // Floor's pinned analyzer (6.4.1) cannot parse null-aware map elements
+      // (`?x`) during build_runner codegen, so keep the collection-if form
+      // and silence the newer lint that prefers `?`.
+      // ignore: use_null_aware_elements
+      if (commercialSnapshot != null)
+        'commercialSnapshot': commercialSnapshot,
+      'origin': tx.origin ?? 'POS',
+      'occurredAt': DateTime.fromMillisecondsSinceEpoch(
+        tx.occurredAt ?? tx.createdAt,
+        isUtc: true,
+      ).toIso8601String(),
+    };
+  }
+
+  Set<String> _failedLoyaltySyncKeys(dynamic responseData) {
+    if (responseData is! Map) return const <String>{};
+    final results = responseData['results'];
+    if (results is! List) return const <String>{};
+    return {
+      for (final item in results)
+        if (item is Map &&
+            item['status'] == 'FAILED' &&
+            item['idempotencyKey'] is String)
+          item['idempotencyKey'] as String,
+    };
+  }
+
+  /// Batch 5 slice 5c (finding H3): pushes pending cash shift sessions and
+  /// cash movements to the cloud in bounded batches. Rows stay 'pending' on
+  /// any failure and are retried on the next sync pass; rows the backend
+  /// reports as FAILED per-record also stay pending instead of being lost.
+  ///
+  /// Pending state reuses the existing `sync_status` columns — no schema
+  /// change. A still-OPEN session intentionally stays pending after an
+  /// accepted push: only closed sessions are marked 'synced', so the later
+  /// closure (counted totals, difference, Z report) is pushed as well. The
+  /// backend upserts sessions by id, so re-pushing an open session is an
+  /// idempotent no-op server-side.
+  Future<void> _syncCashShifts() async {
+    final database = _database;
+    if (database == null) return;
+    final sessionDao = database.cashierSessionDao;
+    final movementDao = database.cashMovementDao;
+    // No dedicated DAO query exists for pending sessions; the sessions table
+    // is small (one row per shift), so filtering the existing read avoids a
+    // Floor codegen change.
+    final pendingSessions = (await sessionDao.getAllSessions())
+        .where((session) => session.syncStatus == 'pending')
+        .toList(growable: false);
+    final pendingMovements =
+        await movementDao.getMovementsBySyncStatus('pending');
+    if (pendingSessions.isEmpty && pendingMovements.isEmpty) return;
+
+    final tenantConfig = await database.localConfigDao.getConfigByKey(
+      'tenant_id',
+    );
+    final tenantId = tenantConfig?.value ?? 'tenant-1';
+
+    final sessionBatch =
+        pendingSessions.take(_batchEnvelopeLimit).toList(growable: false);
+    final movementBatch =
+        pendingMovements.take(_batchEnvelopeLimit).toList(growable: false);
+
+    developer.log(
+      'Cash shift sync: posting ${sessionBatch.length} sessions and '
+      '${movementBatch.length} movements',
+      name: 'SyncService',
+    );
+    final response = await _dio.post(
+      '/sales/shifts/sync',
+      data: {
+        'sessions': sessionBatch
+            .map(_buildCashShiftSessionPayload)
+            .toList(growable: false),
+        'movements': movementBatch
+            .map(_buildCashMovementPayload)
+            .toList(growable: false),
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final failedKeys = _failedCashShiftSyncKeys(response.data);
+      for (final session in sessionBatch) {
+        if (failedKeys.contains(session.id)) continue;
+        if (session.isClosed) {
+          await sessionDao.updateSession(
+            _copySessionWithSyncStatus(session, 'synced'),
+          );
+        }
+      }
+      for (final movement in movementBatch) {
+        if (failedKeys.contains(movement.id)) continue;
+        await movementDao.updateSyncStatus(movement.id, 'synced');
+      }
+    }
+  }
+
+  /// Maps a local shift session row onto the cloud ingestion contract
+  /// (CashShiftSessionSyncItemDto). Terminal rows carry no cashier name, so
+  /// the backend falls back to the cashier id for its NOT NULL column.
+  Map<String, Object?> _buildCashShiftSessionPayload(
+    CashierSessionEntity session,
+  ) {
+    return {
+      'id': session.id,
+      'terminalId': session.terminalId,
+      'cashierId': session.userId,
+      'openedAt': DateTime.fromMillisecondsSinceEpoch(
+        session.openedAt,
+        isUtc: true,
+      ).toIso8601String(),
+      if (session.closedAt != null)
+        'closedAt': DateTime.fromMillisecondsSinceEpoch(
+          session.closedAt!,
+          isUtc: true,
+        ).toIso8601String(),
+      'status': session.isClosed ? 'CLOSED' : 'OPEN',
+      'initialFloatNio': session.openingBalanceNio,
+      'initialFloatUsd': session.openingBalanceUsd,
+      if (session.closingCountedNio != null)
+        'finalCountedNio': session.closingCountedNio,
+      if (session.closingCountedUsd != null)
+        'finalCountedUsd': session.closingCountedUsd,
+      'expectedCashNio': session.expectedNio,
+      'expectedCashUsd': session.expectedUsd,
+      if (session.differenceNio != null)
+        'differenceNio': session.differenceNio,
+      if (session.differenceUsd != null)
+        'differenceUsd': session.differenceUsd,
+      if (session.zReportSequence != null)
+        'zReportSequence': session.zReportSequence,
+      if (session.supervisorId != null) 'supervisorId': session.supervisorId,
+      if (session.notes != null) 'notes': session.notes,
+    };
+  }
+
+  /// Maps a local cash movement row onto the cloud ingestion contract
+  /// (CashMovementSyncItemDto).
+  Map<String, Object?> _buildCashMovementPayload(CashMovementEntity movement) {
+    return {
+      'id': movement.id,
+      'shiftId': movement.shiftId,
+      'terminalId': movement.terminalId,
+      'type': movement.type,
+      'amountNio': movement.amountNio,
+      'amountUsd': movement.amountUsd,
+      'reason': movement.reason,
+      if (movement.authorizedByUserId != null)
+        'authorizedByUserId': movement.authorizedByUserId,
+      'timestamp': DateTime.fromMillisecondsSinceEpoch(
+        movement.timestamp,
+        isUtc: true,
+      ).toIso8601String(),
+    };
+  }
+
+  /// Immutable entity copy that only flips `sync_status`.
+  CashierSessionEntity _copySessionWithSyncStatus(
+    CashierSessionEntity session,
+    String syncStatus,
+  ) {
+    return CashierSessionEntity(
+      id: session.id,
+      userId: session.userId,
+      terminalId: session.terminalId,
+      openedAt: session.openedAt,
+      tipoModelo: session.tipoModelo,
+      closedAt: session.closedAt,
+      openingBalanceNio: session.openingBalanceNio,
+      openingBalanceUsd: session.openingBalanceUsd,
+      closingCountedNio: session.closingCountedNio,
+      closingCountedUsd: session.closingCountedUsd,
+      expectedNio: session.expectedNio,
+      expectedUsd: session.expectedUsd,
+      differenceNio: session.differenceNio,
+      differenceUsd: session.differenceUsd,
+      zReportSequence: session.zReportSequence,
+      isClosed: session.isClosed,
+      supervisorId: session.supervisorId,
+      notes: session.notes,
+      syncStatus: syncStatus,
+    );
+  }
+
+  Set<String> _failedCashShiftSyncKeys(dynamic responseData) {
+    if (responseData is! Map) return const <String>{};
+    final results = responseData['results'];
+    if (results is! List) return const <String>{};
+    return {
+      for (final item in results)
+        if (item is Map &&
+            item['status'] == 'FAILED' &&
+            item['idempotencyKey'] is String)
+          item['idempotencyKey'] as String,
+    };
   }
 
   Future<void> _syncFulfillmentEvents() async {
@@ -1514,6 +1855,19 @@ class SyncService {
     }
   }
 
+  /// Parses a cloud timestamp into epoch millis for the Floor entities that
+  /// store integer timestamps. Accepts epoch-millis numbers and ISO-8601
+  /// strings; returns null for anything unparsable (callers fall back to the
+  /// local row's value or a safe default).
+  int? _tryParseEpochMillis(dynamic value) {
+    if (value is num) return value.toInt();
+    if (value is String && value.trim().isNotEmpty) {
+      final parsed = DateTime.tryParse(value.trim());
+      return parsed?.millisecondsSinceEpoch;
+    }
+    return null;
+  }
+
   Map<String, Object> _valuationFields(dynamic movement) {
     final unitCostNio = _tryReadField(movement, 'unitCostNio');
     final sourceDocumentType = _tryReadField(movement, 'sourceDocumentType');
@@ -2208,6 +2562,236 @@ class SyncService {
           if (inserted) {
             alertsCount++;
           }
+        }
+
+        // 5c. Loyalty programs & rewards (slice 5d, finding M1). Each
+        // program row carries its FULL reward closure from the backend; the
+        // DAOs upsert with conflict-replace, so re-delivery is idempotent.
+        // Malformed rows are skipped individually and never abort the pull.
+        final rawLoyaltyPrograms =
+            rawDeltas['loyaltyPrograms'] as List<dynamic>? ?? const [];
+        final programEntities = <LoyaltyProgramEntity>[];
+        final rewardEntities = <LoyaltyRewardEntity>[];
+        for (final row in rawLoyaltyPrograms) {
+          if (row is! Map) continue;
+          final map = Map<String, dynamic>.from(row);
+          final id = map['id']?.toString();
+          final name = map['name']?.toString();
+          final programType = map['programType']?.toString();
+          final tenantId = map['tenantId']?.toString();
+          // Strict identity parsing: a row without id, name, type or tenant
+          // is skipped, never defaulted.
+          if (id == null ||
+              id.isEmpty ||
+              name == null ||
+              name.isEmpty ||
+              programType == null ||
+              programType.isEmpty ||
+              tenantId == null ||
+              tenantId.isEmpty) {
+            developer.log(
+              '[SYNC_LOYALTY] skipped malformed cloud loyalty program row (id=$id)',
+              name: 'SyncService',
+            );
+            continue;
+          }
+          programEntities.add(
+            LoyaltyProgramEntity(
+              id: id,
+              tenantId: tenantId,
+              name: name,
+              programType: programType,
+              status: map['status']?.toString() ?? 'DRAFT',
+              startsAt: _tryParseEpochMillis(map['startsAt']),
+              endsAt: _tryParseEpochMillis(map['endsAt']),
+              earningRuleJson: jsonEncode(map['earningRule'] ?? const {}),
+              eligibilityRuleJson: jsonEncode(
+                map['eligibilityRule'] ?? const {},
+              ),
+              configVersion: (map['configVersion'] as num?)?.toInt() ?? 1,
+              createdAt: _tryParseEpochMillis(map['createdAt']) ?? 0,
+              updatedAt: _tryParseEpochMillis(map['updatedAt']) ?? 0,
+            ),
+          );
+          final rawRewards = map['rewards'] as List<dynamic>? ?? const [];
+          for (final rewardRow in rawRewards) {
+            if (rewardRow is! Map) continue;
+            final rewardMap = Map<String, dynamic>.from(rewardRow);
+            final rewardId = rewardMap['id']?.toString();
+            final rewardName = rewardMap['name']?.toString();
+            final rewardType = rewardMap['rewardType']?.toString();
+            if (rewardId == null ||
+                rewardId.isEmpty ||
+                rewardName == null ||
+                rewardName.isEmpty ||
+                rewardType == null ||
+                rewardType.isEmpty) {
+              developer.log(
+                '[SYNC_LOYALTY] skipped malformed cloud loyalty reward row (id=$rewardId)',
+                name: 'SyncService',
+              );
+              continue;
+            }
+            rewardEntities.add(
+              LoyaltyRewardEntity(
+                id: rewardId,
+                tenantId: rewardMap['tenantId']?.toString() ?? tenantId,
+                loyaltyProgramId:
+                    rewardMap['loyaltyProgramId']?.toString() ?? id,
+                name: rewardName,
+                rewardType: rewardType,
+                costUnits: (rewardMap['costUnits'] as num?)?.toInt() ?? 0,
+                benefitConfigJson: jsonEncode(
+                  rewardMap['benefitConfig'] ?? const {},
+                ),
+                status: rewardMap['status']?.toString() ?? 'INACTIVE',
+                startsAt: _tryParseEpochMillis(rewardMap['startsAt']),
+                endsAt: _tryParseEpochMillis(rewardMap['endsAt']),
+                presentationOrder:
+                    (rewardMap['presentationOrder'] as num?)?.toInt() ?? 0,
+                configVersion:
+                    (rewardMap['configVersion'] as num?)?.toInt() ?? 1,
+                createdAt: _tryParseEpochMillis(rewardMap['createdAt']) ?? 0,
+                updatedAt: _tryParseEpochMillis(rewardMap['updatedAt']) ?? 0,
+              ),
+            );
+          }
+        }
+        if (programEntities.isNotEmpty) {
+          await _database!.loyaltyProgramDao.savePrograms(programEntities);
+        }
+        if (rewardEntities.isNotEmpty) {
+          await _database!.loyaltyRewardDao.saveRewards(rewardEntities);
+        }
+
+        // 5d. Promotions (slice 5d, finding M2). The cloud record is
+        // authoritative for every promotion attribute; malformed rows are
+        // skipped individually.
+        final rawPromotions =
+            rawDeltas['promotions'] as List<dynamic>? ?? const [];
+        final promotionEntities = <PromotionEntity>[];
+        for (final row in rawPromotions) {
+          if (row is! Map) continue;
+          final map = Map<String, dynamic>.from(row);
+          final id = map['id']?.toString();
+          final name = map['name']?.toString();
+          final type = map['type']?.toString();
+          if (id == null ||
+              id.isEmpty ||
+              name == null ||
+              name.isEmpty ||
+              type == null ||
+              type.isEmpty) {
+            developer.log(
+              '[SYNC_PROMOTIONS] skipped malformed cloud promotion row (id=$id)',
+              name: 'SyncService',
+            );
+            continue;
+          }
+          final rawDaysOfWeek = map['daysOfWeek'] as List<dynamic>?;
+          promotionEntities.add(
+            PromotionEntity(
+              id: id,
+              name: name,
+              type: type,
+              targetProductId: map['targetProductId']?.toString(),
+              targetCategoryId: map['targetCategoryId']?.toString(),
+              buyQuantity: (map['buyQuantity'] as num?)?.toInt() ?? 0,
+              getQuantity: (map['getQuantity'] as num?)?.toInt() ?? 0,
+              discountValue:
+                  (map['discountValue'] as num?)?.toDouble() ?? 0.0,
+              minOrderAmount:
+                  (map['minOrderAmount'] as num?)?.toDouble() ?? 0.0,
+              daysOfWeek: rawDaysOfWeek
+                  ?.map((day) => day.toString())
+                  .join(','),
+              startTime: map['startTime']?.toString(),
+              endTime: map['endTime']?.toString(),
+              startDate: (map['startDate'] as num?)?.toInt(),
+              endDate: (map['endDate'] as num?)?.toInt(),
+              priority: (map['priority'] as num?)?.toInt() ?? 0,
+              isStackable: map['isStackable'] as bool? ?? true,
+              isActive: map['isActive'] as bool? ?? true,
+            ),
+          );
+        }
+        if (promotionEntities.isNotEmpty) {
+          await _database!.promotionDao.savePromotions(promotionEntities);
+        }
+
+        // 5e. Customers (slice 5d, finding M3) — per-row merge, following the
+        // products-handler local-only-field precedent.
+        final rawCustomers =
+            rawDeltas['customers'] as List<dynamic>? ?? const [];
+        final customerEntities = <CustomerEntity>[];
+        for (final row in rawCustomers) {
+          if (row is! Map) continue;
+          final map = Map<String, dynamic>.from(row);
+          final id = map['id']?.toString();
+          final name = map['name']?.toString();
+          if (id == null || id.isEmpty || name == null || name.isEmpty) {
+            developer.log(
+              '[SYNC_CUSTOMERS] skipped malformed cloud customer row (id=$id)',
+              name: 'SyncService',
+            );
+            continue;
+          }
+          final existing = await _database!.customerDao.getCustomerById(id);
+
+          // Merge decision (slice 5d): the cloud record is authoritative for
+          // the synced attributes (name, taxId, phone, email, address,
+          // isActive). POS-local fields absent from the cloud contract are
+          // preserved: `customerCode` (terminal-local code generation) and
+          // `syncStatus` while the local row is still unsynced
+          // ('pending'/'error') — stamping 'synced' would claim a push that
+          // never happened.
+          // `pointsBalance` is driven from both sides: when the customer has
+          // locally unsynced point transactions (slice 5b ledger), the local
+          // balance is the truth — the cloud has not ingested those rows yet
+          // and an incremental pull may even carry a stale cloud balance.
+          // Otherwise the cloud value wins.
+          var hasUnsyncedPointTransactions = false;
+          if (existing != null) {
+            final pointTransactions = await _database!
+                .customerPointTransactionDao
+                .getTransactionsByCustomer(id);
+            hasUnsyncedPointTransactions = pointTransactions.any(
+              (tx) => tx.syncStatus != 'synced',
+            );
+          }
+          final localSyncStatus = existing?.syncStatus;
+          final keepLocalSyncStatus =
+              localSyncStatus == 'pending' || localSyncStatus == 'error';
+          final resolvedPointsBalance =
+              existing != null && hasUnsyncedPointTransactions
+                  ? existing.pointsBalance
+                  : (map['pointsBalance'] as num?)?.toDouble() ??
+                      existing?.pointsBalance ??
+                      0.0;
+
+          customerEntities.add(
+            CustomerEntity(
+              id: id,
+              name: name,
+              taxId: map['taxId']?.toString(),
+              phone: map['phone']?.toString(),
+              email: map['email']?.toString(),
+              address: map['address']?.toString(),
+              pointsBalance: resolvedPointsBalance,
+              isActive: map['isActive'] as bool? ?? true,
+              createdAt: _tryParseEpochMillis(map['createdAt']) ??
+                  existing?.createdAt ??
+                  DateTime.now().millisecondsSinceEpoch,
+              updatedAt: _tryParseEpochMillis(map['updatedAt']) ??
+                  existing?.updatedAt ??
+                  DateTime.now().millisecondsSinceEpoch,
+              syncStatus: keepLocalSyncStatus ? localSyncStatus! : 'synced',
+              customerCode: existing?.customerCode,
+            ),
+          );
+        }
+        if (customerEntities.isNotEmpty) {
+          await _database!.customerDao.saveCustomers(customerEntities);
         }
 
         // 6. Fiscal Configuration projection

@@ -138,13 +138,21 @@ export class LoyaltyLedgerService {
 
         const savedTx = await txRepo.save(tx);
 
-        await this.updateProjection(
-          manager,
-          dto.tenantId,
-          dto.customerId,
-          dto.loyaltyProgramId,
-          savedTx.id,
-        );
+        // Batch 5 slice 5b (finding H2): legacy POS rows may arrive with no
+        // program attribution (LoyaltyEarningHandler writes
+        // loyalty_program_id = null). The projection is keyed by program
+        // (NOT NULL loyalty_program_id) and cannot hold a program-less
+        // balance, so a program-less ledger row records the movement
+        // without touching any projection.
+        if (dto.loyaltyProgramId) {
+          await this.updateProjection(
+            manager,
+            dto.tenantId,
+            dto.customerId,
+            dto.loyaltyProgramId,
+            savedTx.id,
+          );
+        }
 
         return savedTx;
       },

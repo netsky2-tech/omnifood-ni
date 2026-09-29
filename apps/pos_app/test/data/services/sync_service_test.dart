@@ -7,6 +7,10 @@ import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/models/customer/customer_entity.dart';
+import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
+import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
@@ -194,8 +198,20 @@ class FakeInventoryRepository
   final List<String> retriedIds = [];
   final Set<String> movementIdsThatFailMarkSynced = <String>{};
 
+  // Slice 5a (finding H1): inject a failure into the per-domain outbox
+  // pending-count query to prove fault isolation and that the failure path
+  // is actually entered.
+  bool failUnsyncedMovementsQuery = false;
+  int unsyncedMovementsQueryCalls = 0;
+
   @override
-  Future<List<InventoryMovement>> getUnsyncedMovements() async => unsynced;
+  Future<List<InventoryMovement>> getUnsyncedMovements() async {
+    unsyncedMovementsQueryCalls += 1;
+    if (failUnsyncedMovementsQuery) {
+      throw StateError('injected outbox count query failure');
+    }
+    return unsynced;
+  }
 
   @override
   Future<void> markMovementAsSynced(String id) async {
@@ -3131,6 +3147,24 @@ void main() {
     );
 
     test(
+      'getPendingOutboxCount isolates a failing domain query and still counts the rest',
+      () async {
+        mockSalesRepository.unsyncedAggregates = [
+          {'id': 'sale-1', 'documentType': 'INVOICE'},
+          {'id': 'sale-2', 'documentType': 'INVOICE'},
+        ];
+        mockInventoryRepository.failUnsyncedMovementsQuery = true;
+
+        final count = await syncService.getPendingOutboxCount();
+
+        // The movements query threw (failure path entered), so the total
+        // excludes that domain but still reflects every other domain.
+        expect(mockInventoryRepository.unsyncedMovementsQueryCalls, 1);
+        expect(count, 2);
+      },
+    );
+
+    test(
       'getNextBackoffDelay scales exponentially with consecutive failures',
       () async {
         expect(syncService.getNextBackoffDelay(), Duration.zero);
@@ -3377,6 +3411,878 @@ void main() {
               .acknowledgedCorrelationIds,
           ['corr-ack-1'],
         );
+      },
+    );
+  });
+
+  group('Slice 5b Loyalty Point Transactions Outbound (finding H2)', () {
+    CustomerPointTransactionEntity pointTx(
+      String id, {
+      String? idempotencyKey,
+      String type = 'earn',
+      String? transactionType,
+      double points = 12,
+      int? units,
+      String? invoiceId,
+      String? ticketId,
+      String? loyaltyProgramId,
+      String terminalId = 'term-1',
+    }) {
+      return CustomerPointTransactionEntity(
+        id: id,
+        customerId: 'cust-1',
+        invoiceId: invoiceId,
+        type: type,
+        points: points,
+        balanceAfter: points,
+        conversionRate: 0.1,
+        reason: 'Acumulación por compra',
+        createdAt: DateTime.parse('2026-01-01T12:00:00Z').millisecondsSinceEpoch,
+        syncStatus: 'pending',
+        loyaltyProgramId: loyaltyProgramId,
+        ticketId: ticketId,
+        transactionType: transactionType,
+        units: units,
+        idempotencyKey: idempotencyKey,
+        terminalId: terminalId,
+        origin: 'POS',
+        occurredAt:
+            DateTime.parse('2026-01-01T12:00:00Z').millisecondsSinceEpoch,
+      );
+    }
+
+    Future<AppDatabase> buildDbWithPendingTx(
+      List<CustomerPointTransactionEntity> txs,
+    ) async {
+      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      for (final tx in txs) {
+        await database.customerPointTransactionDao.insertTransaction(tx);
+      }
+      return database;
+    }
+
+    List<Map<String, dynamic>> loyaltyPostBodies() {
+      return capturedPosts
+          .where((post) => post.path == '/loyalty/point-transactions/sync')
+          .map(
+            (post) =>
+                (post.body as Map<String, dynamic>)['transactions']
+                    as List<dynamic>,
+          )
+          .expand((records) => records.cast<Map<String, dynamic>>())
+          .toList(growable: false);
+    }
+
+    test('outbound loyalty push is called during manual sync', () async {
+      final database = await buildDbWithPendingTx([
+        pointTx(
+          'ptx-1',
+          idempotencyKey: 'loyalty:earn:tenant-1:ticket-001:legacy',
+          invoiceId: 'ticket-001',
+        ),
+      ]);
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      expect(
+        capturedPosts.any((post) => post.path == '/loyalty/point-transactions/sync'),
+        true,
+      );
+      final records = loyaltyPostBodies();
+      expect(records, hasLength(1));
+      expect(records.single['idempotencyKey'],
+          'loyalty:earn:tenant-1:ticket-001:legacy');
+      expect(records.single['customerId'], 'cust-1');
+      expect(records.single['transactionType'], 'earn');
+      expect(records.single['units'], 12);
+      expect(records.single['ticketId'], 'ticket-001');
+      expect(records.single['terminalId'], 'term-1');
+      expect(records.single['origin'], 'POS');
+      expect(records.single['occurredAt'], '2026-01-01T12:00:00.000Z');
+    });
+
+    test('successful push marks rows synced', () async {
+      final database = await buildDbWithPendingTx([
+        pointTx(
+          'ptx-1',
+          idempotencyKey: 'loyalty:earn:tenant-1:ticket-001:legacy',
+          invoiceId: 'ticket-001',
+        ),
+        pointTx(
+          'ptx-2',
+          type: 'redeem',
+          transactionType: 'redeem',
+          points: -5,
+          units: -5,
+        ),
+      ]);
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      // ptx-2 carries no idempotency key: the payload derives a stable
+      // one from the tenant and the immutable local row id.
+      final records = loyaltyPostBodies();
+      expect(records, hasLength(2));
+      expect(
+        records.map((r) => r['idempotencyKey']),
+        containsAll([
+          'loyalty:earn:tenant-1:ticket-001:legacy',
+          'loyalty:sync:tenant-1:ptx-2',
+        ]),
+      );
+
+      final synced = await database.customerPointTransactionDao
+          .getTransactionsBySyncStatus('synced');
+      final pending = await database.customerPointTransactionDao
+          .getTransactionsBySyncStatus('pending');
+      expect(synced.map((tx) => tx.id), containsAll(['ptx-1', 'ptx-2']));
+      expect(pending, isEmpty);
+    });
+
+    test('loyalty failure does not break other domains and keeps rows pending',
+        () async {
+      final database = await buildDbWithPendingTx([
+        pointTx('ptx-fail', idempotencyKey: 'loyalty:earn:tenant-1:k:fail'),
+      ]);
+      final loyaltyFailureDio = Dio();
+      loyaltyFailureDio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.method.toUpperCase() == 'POST') {
+              capturedPosts.add(
+                CapturedPost(path: options.path, body: options.data),
+              );
+            }
+            if (options.path == '/loyalty/point-transactions/sync') {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  response: Response<dynamic>(
+                    requestOptions: options,
+                    statusCode: 500,
+                  ),
+                ),
+              );
+              return;
+            }
+            if (options.path == '/v1/sync/batch') {
+              final records =
+                  ((options.data as Map<String, dynamic>)['records']
+                          as List<dynamic>)
+                      .cast<Map<String, dynamic>>();
+              handler.resolve(
+                Response<dynamic>(
+                  data: {
+                    'status': 'OK',
+                    'received': records.length,
+                    'results': records
+                        .map(
+                          (record) => {...record, 'status': 'ACCEPTED'},
+                        )
+                        .toList(growable: false),
+                  },
+                  statusCode: 200,
+                  requestOptions: options,
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<dynamic>(
+                data: {'ok': true},
+                statusCode: 200,
+                requestOptions: options,
+              ),
+            );
+          },
+        ),
+      );
+      mockInventoryRepository.unsynced = [
+        InventoryMovement(
+          id: 'mov-after-loyalty',
+          insumoId: 'i-9',
+          type: MovementType.adjustment,
+          quantity: -1,
+          previousStock: 10,
+          newStock: 9,
+          timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+        ),
+      ];
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        loyaltyFailureDio,
+        database: database,
+      );
+
+      final outcome = await service.triggerManualSync();
+
+      // Fault isolation: a domain registered after loyalty still ran.
+      expect(
+        capturedPosts.any((post) => post.path == '/v1/sync/batch'),
+        true,
+      );
+      expect(mockInventoryRepository.syncedIds, contains('mov-after-loyalty'));
+      // Offline-first: the failed loyalty rows stay pending for retry.
+      final pending = await database.customerPointTransactionDao
+          .getTransactionsBySyncStatus('pending');
+      expect(pending.map((tx) => tx.id), ['ptx-fail']);
+      expect(outcome.status, isNot(SyncRunStatus.complete));
+      expect(service.lastSyncError, contains('Loyalty'));
+    });
+  });
+
+  group('Slice 5c Cash Shifts Outbound (finding H3)', () {
+    CashierSessionEntity shiftSession(
+      String id, {
+      bool isClosed = false,
+      int? closedAt,
+      double? closingCountedNio,
+      double? differenceNio,
+      int? zReportSequence,
+      String terminalId = 'term-1',
+    }) {
+      return CashierSessionEntity(
+        id: id,
+        userId: 'user-1',
+        terminalId: terminalId,
+        openedAt: DateTime.parse('2026-01-01T12:00:00Z').millisecondsSinceEpoch,
+        closedAt: closedAt,
+        openingBalanceNio: 5000,
+        openingBalanceUsd: 0,
+        expectedNio: 5000,
+        expectedUsd: 0,
+        closingCountedNio: closingCountedNio,
+        differenceNio: differenceNio,
+        zReportSequence: zReportSequence,
+        isClosed: isClosed,
+        syncStatus: 'pending',
+      );
+    }
+
+    CashMovementEntity cashMovement(
+      String id, {
+      String shiftId = 'shift-1',
+    }) {
+      return CashMovementEntity(
+        id: id,
+        shiftId: shiftId,
+        terminalId: 'term-1',
+        type: 'CASH_IN',
+        amountNio: 1000,
+        reason: 'Fondo de cambio',
+        timestamp: DateTime.parse('2026-01-01T12:05:00Z').millisecondsSinceEpoch,
+        syncStatus: 'pending',
+      );
+    }
+
+    Future<AppDatabase> buildDbWithPendingCashData({
+      List<CashierSessionEntity> sessions = const [],
+      List<CashMovementEntity> movements = const [],
+    }) async {
+      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      for (final session in sessions) {
+        await database.cashierSessionDao.insertSession(session);
+      }
+      for (final movement in movements) {
+        await database.cashMovementDao.insertMovement(movement);
+      }
+      return database;
+    }
+
+    List<Map<String, dynamic>> cashShiftPostSessions() {
+      return capturedPosts
+          .where((post) => post.path == '/sales/shifts/sync')
+          .map(
+            (post) =>
+                (post.body as Map<String, dynamic>)['sessions'] as List<dynamic>,
+          )
+          .expand((records) => records.cast<Map<String, dynamic>>())
+          .toList(growable: false);
+    }
+
+    List<Map<String, dynamic>> cashShiftPostMovements() {
+      return capturedPosts
+          .where((post) => post.path == '/sales/shifts/sync')
+          .map(
+            (post) => (post.body as Map<String, dynamic>)['movements']
+                as List<dynamic>,
+          )
+          .expand((records) => records.cast<Map<String, dynamic>>())
+          .toList(growable: false);
+    }
+
+    test('outbound cash shift push is called during manual sync', () async {
+      final database = await buildDbWithPendingCashData(
+        sessions: [shiftSession('shift-1a')],
+        movements: [cashMovement('cmv-1a', shiftId: 'shift-1a')],
+      );
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      expect(
+        capturedPosts.any((post) => post.path == '/sales/shifts/sync'),
+        true,
+      );
+      // In-memory Floor databases are shared across builders in this suite,
+      // so every assertion is scoped to this test's own row ids.
+      final sessions = cashShiftPostSessions()
+          .where((s) => s['id'] == 'shift-1a')
+          .toList(growable: false);
+      expect(sessions, hasLength(1));
+      expect(sessions.single['terminalId'], 'term-1');
+      expect(sessions.single['cashierId'], 'user-1');
+      expect(sessions.single['status'], 'OPEN');
+      expect(sessions.single['initialFloatNio'], 5000);
+      expect(sessions.single['openedAt'], '2026-01-01T12:00:00.000Z');
+      final movements = cashShiftPostMovements()
+          .where((m) => m['id'] == 'cmv-1a')
+          .toList(growable: false);
+      expect(movements, hasLength(1));
+      expect(movements.single['shiftId'], 'shift-1a');
+      expect(movements.single['type'], 'CASH_IN');
+      expect(movements.single['amountNio'], 1000);
+      expect(movements.single['timestamp'], '2026-01-01T12:05:00.000Z');
+    });
+
+    test('successful push marks closed sessions and movements synced; open sessions stay pending', () async {
+      final database = await buildDbWithPendingCashData(
+        sessions: [
+          // Already closed on this terminal: safe to mark synced after push.
+          shiftSession(
+            'shift-2c',
+            isClosed: true,
+            closedAt: DateTime.parse('2026-01-01T20:00:00Z')
+                .millisecondsSinceEpoch,
+            closingCountedNio: 5200,
+            differenceNio: 200,
+            zReportSequence: 7,
+          ),
+          // Still open: its closure must be pushed on a later pass, so it
+          // intentionally stays pending after an accepted push.
+          shiftSession('shift-2o'),
+        ],
+        movements: [cashMovement('cmv-2a')],
+      );
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      final sessions = cashShiftPostSessions();
+      expect(
+        sessions.map((s) => s['id']),
+        containsAll(['shift-2c', 'shift-2o']),
+      );
+      final closedPayload =
+          sessions.firstWhere((s) => s['id'] == 'shift-2c');
+      expect(closedPayload['status'], 'CLOSED');
+      expect(closedPayload['closedAt'], '2026-01-01T20:00:00.000Z');
+      expect(closedPayload['finalCountedNio'], 5200);
+      expect(closedPayload['differenceNio'], 200);
+      expect(closedPayload['zReportSequence'], 7);
+
+      final closedRow =
+          await database.cashierSessionDao.getSessionById('shift-2c');
+      expect(closedRow!.syncStatus, 'synced');
+      final openRow =
+          await database.cashierSessionDao.getSessionById('shift-2o');
+      expect(openRow!.syncStatus, 'pending');
+      final pendingMovements = await database.cashMovementDao
+          .getMovementsBySyncStatus('pending');
+      expect(pendingMovements.map((m) => m.id), isNot(contains('cmv-2a')));
+      final syncedMovements = await database.cashMovementDao
+          .getMovementsBySyncStatus('synced');
+      expect(syncedMovements.map((m) => m.id), contains('cmv-2a'));
+    });
+
+    test('cash shift failure does not break other domains and keeps rows pending', () async {
+      final database = await buildDbWithPendingCashData(
+        sessions: [shiftSession('shift-3f')],
+        movements: [cashMovement('cmv-3f')],
+      );
+      final cashShiftFailureDio = Dio();
+      cashShiftFailureDio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.method.toUpperCase() == 'POST') {
+              capturedPosts.add(
+                CapturedPost(path: options.path, body: options.data),
+              );
+            }
+            if (options.path == '/sales/shifts/sync') {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  response: Response<dynamic>(
+                    requestOptions: options,
+                    statusCode: 500,
+                  ),
+                ),
+              );
+              return;
+            }
+            if (options.path == '/v1/sync/batch') {
+              final records =
+                  ((options.data as Map<String, dynamic>)['records']
+                          as List<dynamic>)
+                      .cast<Map<String, dynamic>>();
+              handler.resolve(
+                Response<dynamic>(
+                  data: {
+                    'status': 'OK',
+                    'received': records.length,
+                    'results': records
+                        .map(
+                          (record) => {...record, 'status': 'ACCEPTED'},
+                        )
+                        .toList(growable: false),
+                  },
+                  statusCode: 200,
+                  requestOptions: options,
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<dynamic>(
+                data: {'ok': true},
+                statusCode: 200,
+                requestOptions: options,
+              ),
+            );
+          },
+        ),
+      );
+      mockInventoryRepository.unsynced = [
+        InventoryMovement(
+          id: 'mov-after-cashshift',
+          insumoId: 'i-9',
+          type: MovementType.adjustment,
+          quantity: -1,
+          previousStock: 10,
+          newStock: 9,
+          timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+        ),
+      ];
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        cashShiftFailureDio,
+        database: database,
+      );
+
+      final outcome = await service.triggerManualSync();
+
+      // Fault isolation: a domain registered after cash shifts still ran.
+      expect(
+        capturedPosts.any((post) => post.path == '/v1/sync/batch'),
+        true,
+      );
+      expect(
+        mockInventoryRepository.syncedIds,
+        contains('mov-after-cashshift'),
+      );
+      // Offline-first: the failed cash shift rows stay pending for retry.
+      final pendingSession =
+          await database.cashierSessionDao.getSessionById('shift-3f');
+      expect(pendingSession!.syncStatus, 'pending');
+      final pendingMovements = await database.cashMovementDao
+          .getMovementsBySyncStatus('pending');
+      expect(pendingMovements.map((m) => m.id), contains('cmv-3f'));
+      expect(outcome.status, isNot(SyncRunStatus.complete));
+      expect(service.lastSyncError, contains('CashShifts'));
+    });
+  });
+
+  group('Slice 5d Loyalty, Promotions & Customers Inbound (findings M1-M3)', () {
+    test(
+      'pullInboundDeltas hydrates loyalty programs with rewards, promotions and customers',
+      () async {
+        final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-08-26T18:00:00.000Z',
+            'currentVersion': 1787745600000,
+            'deltas': {
+              'loyaltyPrograms': [
+                {
+                  'id': 'lp-101',
+                  'tenantId': 'tenant-1',
+                  'name': 'Café Loyal',
+                  'programType': 'SPEND_POINTS',
+                  'status': 'ACTIVE',
+                  'earningRule': {'pointsPerCurrency': 1},
+                  'eligibilityRule': {'minOrderAmount': 100},
+                  'configVersion': 3,
+                  'createdAt': '2026-08-01T00:00:00.000Z',
+                  'updatedAt': '2026-08-02T00:00:00.000Z',
+                  'rewards': [
+                    {
+                      'id': 'rw-101',
+                      'tenantId': 'tenant-1',
+                      'loyaltyProgramId': 'lp-101',
+                      'name': 'Café gratis',
+                      'rewardType': 'FREE_PRODUCT',
+                      'costUnits': 100,
+                      'benefitConfig': {'productId': 'prod-1'},
+                      'status': 'ACTIVE',
+                      'presentationOrder': 1,
+                      'configVersion': 2,
+                      'createdAt': '2026-08-01T00:00:00.000Z',
+                      'updatedAt': '2026-08-02T00:00:00.000Z',
+                    },
+                  ],
+                },
+              ],
+              'promotions': [
+                {
+                  'id': 'promo-101',
+                  'tenantId': 'tenant-1',
+                  'name': '2x1 Jueves',
+                  'type': 'buyXGetYFree',
+                  'targetProductId': 'prod-7',
+                  'buyQuantity': 2,
+                  'getQuantity': 1,
+                  'discountValue': 0.0,
+                  'minOrderAmount': 0.0,
+                  'daysOfWeek': ['4', '5'],
+                  'priority': 5,
+                  'isStackable': true,
+                  'isActive': true,
+                },
+              ],
+              'customers': [
+                {
+                  'id': 'cust-101',
+                  'tenantId': 'tenant-1',
+                  'name': 'María López',
+                  'taxId': 'XOT1234567',
+                  'phone': '5555101010',
+                  'email': 'maria@example.ni',
+                  'address': null,
+                  'pointsBalance': 42.5,
+                  'isActive': true,
+                  'createdAt': '2026-08-01T00:00:00.000Z',
+                  'updatedAt': '2026-08-02T00:00:00.000Z',
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+
+          // Loyalty program + embedded reward closure hydrated.
+          final savedProgram = await database.loyaltyProgramDao.getProgramById(
+            'lp-101',
+          );
+          expect(savedProgram, isNotNull);
+          expect(savedProgram!.name, 'Café Loyal');
+          expect(savedProgram.programType, 'SPEND_POINTS');
+          expect(savedProgram.configVersion, 3);
+          expect(
+            savedProgram.earningRuleJson,
+            contains('pointsPerCurrency'),
+          );
+          final savedRewards = await database.loyaltyRewardDao
+              .getRewardsByProgram('lp-101');
+          expect(savedRewards, hasLength(1));
+          expect(savedRewards.first.name, 'Café gratis');
+          expect(savedRewards.first.costUnits, 100);
+          expect(
+            savedRewards.first.benefitConfigJson,
+            contains('productId'),
+          );
+
+          // Promotion hydrated.
+          final savedPromotions = await database.promotionDao
+              .getAllPromotions();
+          expect(savedPromotions, hasLength(1));
+          expect(savedPromotions.first.name, '2x1 Jueves');
+          expect(savedPromotions.first.daysOfWeek, '4,5');
+          expect(savedPromotions.first.priority, 5);
+
+          // Customer hydrated.
+          final savedCustomer = await database.customerDao.getCustomerById(
+            'cust-101',
+          );
+          expect(savedCustomer, isNotNull);
+          expect(savedCustomer!.name, 'María López');
+          expect(savedCustomer.taxId, 'XOT1234567');
+          expect(savedCustomer.pointsBalance, 42.5);
+          // A cloud-delivered customer is a synced record: there is nothing
+          // local to push.
+          expect(savedCustomer.syncStatus, 'synced');
+
+          // Watermark stamped once at the end of the pull with the server's
+          // currentVersion.
+          final savedVersionConfig = await database.localConfigDao
+              .getConfigByKey('last_inbound_sync_version');
+          expect(savedVersionConfig, isNotNull);
+          expect(savedVersionConfig!.value, '1787745600000');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'skips malformed loyalty/promotion/customer rows without aborting the pull or the watermark',
+      () async {
+        final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-08-26T18:00:00.000Z',
+            'currentVersion': 1787745600001,
+            'deltas': {
+              'loyaltyPrograms': [
+                // Malformed program: missing id.
+                {
+                  'name': 'Sin identidad',
+                  'programType': 'SPEND_POINTS',
+                  'tenantId': 'tenant-1',
+                },
+                {
+                  'id': 'lp-102',
+                  'tenantId': 'tenant-1',
+                  'name': 'Sellos Pan',
+                  'programType': 'PRODUCT_STAMPS',
+                  'status': 'ACTIVE',
+                  'configVersion': 1,
+                  'rewards': [
+                    // Malformed reward inside an otherwise valid program.
+                    {'rewardType': 'FREE_PRODUCT'},
+                    {
+                      'id': 'rw-102',
+                      'tenantId': 'tenant-1',
+                      'loyaltyProgramId': 'lp-102',
+                      'name': 'Pan gratis',
+                      'rewardType': 'FREE_PRODUCT',
+                      'costUnits': 5,
+                      'status': 'ACTIVE',
+                    },
+                  ],
+                },
+              ],
+              'promotions': [
+                // Malformed promotion: missing name.
+                {'id': 'promo-broken', 'type': 'fixedDiscount'},
+                {
+                  'id': 'promo-102',
+                  'tenantId': 'tenant-1',
+                  'name': 'Descuento 10%',
+                  'type': 'percentageDiscount',
+                  'discountValue': 10.0,
+                  'isActive': true,
+                },
+              ],
+              'customers': [
+                // Malformed customer: missing name.
+                {'id': 'cust-broken'},
+                {
+                  'id': 'cust-102',
+                  'tenantId': 'tenant-1',
+                  'name': 'Pedro Pérez',
+                  'pointsBalance': 5.0,
+                  'isActive': true,
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          // The pull itself and the watermark survive malformed rows.
+          expect(result, isNotNull);
+          final savedVersionConfig = await database.localConfigDao
+              .getConfigByKey('last_inbound_sync_version');
+          expect(savedVersionConfig!.value, '1787745600001');
+
+          // Malformed program row never reached the local tables.
+          expect(await database.loyaltyProgramDao.getProgramById('lp-102'),
+              isNotNull);
+          final lp102Rewards = await database.loyaltyRewardDao
+              .getRewardsByProgram('lp-102');
+          expect(lp102Rewards, hasLength(1));
+          expect(lp102Rewards.first.id, 'rw-102');
+
+          final savedPromotions = await database.promotionDao
+              .getAllPromotions();
+          expect(savedPromotions.map((p) => p.id), ['promo-102']);
+
+          final brokenCustomer = await database.customerDao.getCustomerById(
+            'cust-broken',
+          );
+          expect(brokenCustomer, isNull);
+          final goodCustomer = await database.customerDao.getCustomerById(
+            'cust-102',
+          );
+          expect(goodCustomer, isNotNull);
+          expect(goodCustomer!.name, 'Pedro Pérez');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'merges cloud customers preserving POS-local fields and the local balance behind unsynced point transactions',
+      () async {
+        final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          // A locally created (express) customer, still unsynced, with a
+          // pending point transaction (slice 5b): the local balance is the
+          // truth until the ledger push lands.
+          await database.customerDao.saveCustomer(
+            CustomerEntity(
+              id: 'cust-local-pending',
+              name: 'Cliente Express Local',
+              pointsBalance: 50.0,
+              createdAt: 1787000000000,
+              updatedAt: 1787000000000,
+              syncStatus: 'pending',
+              customerCode: 'LOCAL-001',
+            ),
+          );
+          await database.customerPointTransactionDao.insertTransaction(
+            CustomerPointTransactionEntity(
+              id: 'tx-pending-1',
+              customerId: 'cust-local-pending',
+              type: 'earn',
+              points: 50.0,
+              balanceAfter: 50.0,
+              conversionRate: 1.0,
+              createdAt: 1787000001000,
+              syncStatus: 'pending',
+            ),
+          );
+
+          // A cloud-synced local customer with a locally generated code but
+          // no unsynced ledger: the cloud balance wins, the code survives.
+          await database.customerDao.saveCustomer(
+            CustomerEntity(
+              id: 'cust-synced',
+              name: 'Cliente Sincronizado',
+              pointsBalance: 10.0,
+              createdAt: 1787000000000,
+              updatedAt: 1787000000000,
+              syncStatus: 'synced',
+              customerCode: 'LOCAL-002',
+            ),
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-08-26T18:00:00.000Z',
+            'currentVersion': 1787745600002,
+            'deltas': {
+              'customers': [
+                {
+                  // Cloud carries a stale balance (999) because the terminal's
+                  // pending point transactions have not been ingested yet.
+                  'id': 'cust-local-pending',
+                  'tenantId': 'tenant-1',
+                  'name': 'Cliente Express Local',
+                  'phone': '5555999999',
+                  'pointsBalance': 999.0,
+                  'isActive': true,
+                },
+                {
+                  'id': 'cust-synced',
+                  'tenantId': 'tenant-1',
+                  'name': 'Cliente Sincronizado',
+                  'pointsBalance': 77.0,
+                  'isActive': true,
+                },
+              ],
+            },
+          };
+
+          await syncServiceWithDb.pullInboundDeltas();
+
+          // Unsynced ledger: LOCAL balance preserved, cloud 999 never applied.
+          final pendingCustomer = await database.customerDao.getCustomerById(
+            'cust-local-pending',
+          );
+          expect(pendingCustomer!.pointsBalance, 50.0);
+          // Locally generated code preserved (absent from the cloud contract).
+          expect(pendingCustomer.customerCode, 'LOCAL-001');
+          // The row is still unsynced upstream: stamping 'synced' would claim
+          // a push that never happened.
+          expect(pendingCustomer.syncStatus, 'pending');
+          // Cloud-authoritative synced attributes were merged.
+          expect(pendingCustomer.phone, '5555999999');
+
+          // No unsynced ledger: cloud balance wins, locally generated code
+          // still preserved.
+          final syncedCustomer = await database.customerDao.getCustomerById(
+            'cust-synced',
+          );
+          expect(syncedCustomer!.pointsBalance, 77.0);
+          expect(syncedCustomer.customerCode, 'LOCAL-002');
+          expect(syncedCustomer.syncStatus, 'synced');
+        } finally {
+          await database.close();
+        }
       },
     );
   });

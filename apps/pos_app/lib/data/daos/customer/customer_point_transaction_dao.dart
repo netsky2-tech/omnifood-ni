@@ -12,6 +12,12 @@ abstract class CustomerPointTransactionDao {
   @Query('SELECT * FROM customer_point_transactions WHERE sync_status = :status')
   Future<List<CustomerPointTransactionEntity>> getTransactionsBySyncStatus(String status);
 
+  /// Marks a pushed outbound point transaction as synced (slice 5b,
+  /// finding H2). Positional-arg-free literal UPDATE: not a @transaction
+  /// method, so named SQL binding here stays safe for code generation.
+  @Query("UPDATE customer_point_transactions SET sync_status = 'synced' WHERE id = :id")
+  Future<void> markSyncedById(String id);
+
   @Query('SELECT * FROM customer_point_transactions WHERE idempotency_key = :key LIMIT 1')
   Future<CustomerPointTransactionEntity?> findByIdempotencyKey(String key);
 
