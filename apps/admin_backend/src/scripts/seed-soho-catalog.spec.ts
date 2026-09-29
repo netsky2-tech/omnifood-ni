@@ -1,12 +1,7 @@
-import { EntityManager } from 'typeorm';
-import {
-  TENANT_CONTEXT_SET_CONFIG_SQL,
-} from '../core/database/tenant-transaction';
+import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../core/database/tenant-transaction';
 import { Insumo } from '../modules/inventory/entities/insumo.entity';
 import { Product } from '../modules/inventory/entities/product.entity';
-import {
-  RecipeDetail,
-} from '../modules/inventory/entities/recipe-detail.entity';
+import { RecipeDetail } from '../modules/inventory/entities/recipe-detail.entity';
 import {
   RecipeOrigin,
   RecipePublicationState,
@@ -27,10 +22,7 @@ jest.mock('@nestjs/core', () => ({
 const TENANT_ID = 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d';
 
 type EntityClass =
-  | typeof Insumo
-  | typeof Product
-  | typeof RecipeVersion
-  | typeof RecipeDetail;
+  typeof Insumo | typeof Product | typeof RecipeVersion | typeof RecipeDetail;
 
 interface FakeManager {
   find: jest.Mock;
@@ -52,8 +44,8 @@ function makeFakeManager(
 ): FakeManager {
   uuidCounter = 0;
   const manager: FakeManager = {
-    find: jest.fn(async (entityClass: EntityClass) =>
-      existing[entityClass.name] ?? [],
+    find: jest.fn(
+      async (entityClass: EntityClass) => existing[entityClass.name] ?? [],
     ),
     create: jest.fn((_entityClass: EntityClass, partial: object) => ({
       ...partial,
@@ -91,13 +83,10 @@ const savedVersionIdByName = (
   return saved ? (saved[1] as { id: string }).id : undefined;
 };
 
-const savedNames = (
-  manager: FakeManager,
-  entityClass: EntityClass,
-): string[] =>
+const savedNames = (manager: FakeManager, entityClass: EntityClass): string[] =>
   manager.save.mock.calls
     .filter((call) => call[0] === entityClass)
-    .map((call) => (call[1] as { name?: string }).name as string);
+    .map((call) => (call[1] as { name?: string }).name);
 
 describe('parseTenantIdArg (fail-closed CLI contract)', () => {
   it('rejects a missing --tenant-id', () => {
@@ -151,11 +140,7 @@ describe('seedSohoCatalog', () => {
     const dataSource = makeFakeDataSource(manager);
     const plan = buildSohoCatalogPlan();
 
-    const counts = await seedSohoCatalog(
-      dataSource as never,
-      TENANT_ID,
-      plan,
-    );
+    const counts = await seedSohoCatalog(dataSource as never, TENANT_ID, plan);
 
     expect(counts.insumosCreated).toBe(30);
     expect(counts.insumosSkipped).toBe(0);
@@ -178,7 +163,9 @@ describe('seedSohoCatalog', () => {
       (call) => call[0] === RecipeVersion,
     );
     const versionProductIds = new Set(
-      versionsSaved.map((call) => (call[1] as { product_id: string }).product_id),
+      versionsSaved.map(
+        (call) => (call[1] as { product_id: string }).product_id,
+      ),
     );
     const savedProducts = manager.save.mock.calls
       .filter((call) => call[0] === Product)
@@ -200,7 +187,9 @@ describe('seedSohoCatalog', () => {
       (call) => call[0] === RecipeVersion,
     );
     const americano12 = versionCalls.find(
-      (call) => (call[1] as { product_name: string }).product_name === 'Café Americano 12oz',
+      (call) =>
+        (call[1] as { product_name: string }).product_name ===
+        'Café Americano 12oz',
     );
     expect(americano12).toBeDefined();
     expect(americano12?.[1]).toMatchObject({
@@ -244,7 +233,9 @@ describe('seedSohoCatalog', () => {
       (call) => call[0] === RecipeVersion,
     );
     const desayuno = versionCalls.find(
-      (call) => (call[1] as { product_name: string }).product_name === 'Desayuno Americano',
+      (call) =>
+        (call[1] as { product_name: string }).product_name ===
+        'Desayuno Americano',
     );
     expect(desayuno).toBeDefined();
     const versionId = savedVersionIdByName(manager, 'Desayuno Americano');
@@ -260,19 +251,55 @@ describe('seedSohoCatalog', () => {
       .map((call) => call[1] as Record<string, unknown>);
 
     expect(details).toEqual([
-      expect.objectContaining({ ingredient_name: 'Huevos (bandeja)', quantity: 2, component_uom: 'unidades' }),
-      expect.objectContaining({ ingredient_name: 'Bacon (paquete)', quantity: 2, component_uom: 'tiras' }),
-      expect.objectContaining({ ingredient_name: 'Pancakes (preparados)', quantity: 2, component_uom: 'unidades' }),
-      expect.objectContaining({ ingredient_name: 'Mantequilla', quantity: 1, component_uom: 'porciones' }),
-      expect.objectContaining({ ingredient_name: 'Miel', quantity: 1, component_uom: 'porciones' }),
-      expect.objectContaining({ ingredient_name: 'Pan de masa madre', quantity: 1, component_uom: 'rebanadas' }),
+      expect.objectContaining({
+        ingredient_name: 'Huevos (bandeja)',
+        quantity: 2,
+        component_uom: 'unidades',
+      }),
+      expect.objectContaining({
+        ingredient_name: 'Bacon (paquete)',
+        quantity: 2,
+        component_uom: 'tiras',
+      }),
+      expect.objectContaining({
+        ingredient_name: 'Pancakes (preparados)',
+        quantity: 2,
+        component_uom: 'unidades',
+      }),
+      expect.objectContaining({
+        ingredient_name: 'Mantequilla',
+        quantity: 1,
+        component_uom: 'porciones',
+      }),
+      expect.objectContaining({
+        ingredient_name: 'Miel',
+        quantity: 1,
+        component_uom: 'porciones',
+      }),
+      expect.objectContaining({
+        ingredient_name: 'Pan de masa madre',
+        quantity: 1,
+        component_uom: 'rebanadas',
+      }),
     ]);
   });
 
   it('skips existing insumos, products and recipes on re-run without overwriting them', async () => {
-    const existingInsumo = { id: nextUuid(), tenant_id: TENANT_ID, name: 'huevos (BANDEJA) ' } as Insumo;
-    const existingAmericano = { id: nextUuid(), tenant_id: TENANT_ID, name: 'café americano 12oz' } as Product;
-    const existingDesayuno = { id: nextUuid(), tenant_id: TENANT_ID, name: 'Desayuno Americano' } as Product;
+    const existingInsumo = {
+      id: nextUuid(),
+      tenant_id: TENANT_ID,
+      name: 'huevos (BANDEJA) ',
+    } as Insumo;
+    const existingAmericano = {
+      id: nextUuid(),
+      tenant_id: TENANT_ID,
+      name: 'café americano 12oz',
+    } as Product;
+    const existingDesayuno = {
+      id: nextUuid(),
+      tenant_id: TENANT_ID,
+      name: 'Desayuno Americano',
+    } as Product;
     const existingVersion = {
       id: nextUuid(),
       tenant_id: TENANT_ID,
