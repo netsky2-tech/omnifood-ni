@@ -223,10 +223,29 @@ class ActivationSessionViewModel extends ChangeNotifier {
     }
 
     final result = await _sessionService.prepare(tenantId: tenantId);
-    _isPrepared = result.isSuccess && result.attempt != null;
-    _attempt = result.attempt;
-    _blockerCode = result.blockerCode;
-    _blockerMessage = result.blockerMessage;
+
+    // If discovery returned a fresh/unstarted attempt but a completed attempt
+    // already exists locally, prefer the completed one so the UI shows the
+    // completion screen instead of re-offering phases that already finished.
+    var attempt = result.attempt;
+    var attemptIsSuccess = result.isSuccess;
+    var attemptBlockerCode = result.blockerCode;
+    var attemptBlockerMessage = result.blockerMessage;
+    if (attempt != null &&
+        (attempt.localStatus == 'ASSIGNED' || attempt.localStatus == 'RUNNING')) {
+      final completed = await _sessionService
+          .getCompletedAttempt(tenantId);
+      if (completed != null &&
+          (completed.localStatus == 'ACTIVATED' ||
+              completed.localStatus == 'ACTIVATED_WITH_WARNING')) {
+        attempt = completed;
+      }
+    }
+
+    _isPrepared = attemptIsSuccess && attempt != null;
+    _attempt = attempt;
+    _blockerCode = attemptBlockerCode;
+    _blockerMessage = attemptBlockerMessage;
 
     // Restore phase gates from the attempt's persisted status so a resumed
     // activation (app restart, page re-entry) doesn't re-require phases that

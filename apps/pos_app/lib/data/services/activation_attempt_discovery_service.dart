@@ -131,21 +131,6 @@ class ActivationAttemptDiscoveryService {
     // 1. Restart-safe resolution: prefer a local attempt that is genuinely in
     // progress. A terminal or finished local row must not block a newly
     // created attempt, so anything else falls through to backend reconcile.
-    //
-    // 1a. Check for a completed attempt FIRST: if the activation already
-    // finished on this device, show the completion screen instead of
-    // discovering a stale backend-side attempt and re-offering phases.
-    final localCompleted = await _database.activationAttemptLocalDao
-        .getCompletedAttempt(trimmedTenantId);
-    if (localCompleted != null &&
-        _completedStatuses.contains(localCompleted.localStatus)) {
-      return ActivationAttemptDiscoveryResult(
-        isSuccess: true,
-        resolvedFromLocal: true,
-        attempt: localCompleted,
-      );
-    }
-
     final localActive =
         await _database.activationAttemptLocalDao.getActiveAttempt(trimmedTenantId);
     if (localActive != null &&
