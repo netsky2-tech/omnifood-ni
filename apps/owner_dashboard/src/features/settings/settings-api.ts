@@ -1,4 +1,5 @@
-import { api } from "@/lib/api";
+import { api, ApiError, getAccessToken } from "@/lib/api";
+import { getApiBaseUrl } from "@/lib/api-base-url";
 import {
   MAX_IMPORT_CHUNK_SIZE,
   type FiscalSetupFormValues,
@@ -69,6 +70,82 @@ export async function fetchImportErrors(
   return api.get<{ sessionToken: string; count: number; errors: RowErrorDiagnostic[] }>(
     `/onboarding/import/errors/${encodeURIComponent(sessionToken)}`,
   );
+}
+
+// --- Menu Import from Excel (template / preview / commit) ---
+
+/** GET endpoint that streams the ready-to-fill .xlsx template. */
+export const MENU_IMPORT_TEMPLATE_PATH = "/onboarding/menu-import/template";
+
+/** Download filename served by the template endpoint. */
+export const MENU_IMPORT_TEMPLATE_FILENAME = "plantilla_menu.xlsx";
+
+/** Client-side size guard (~4 MB) for the uploaded workbook. */
+export const MENU_IMPORT_MAX_FILE_BYTES = 4 * 1024 * 1024;
+
+/** Sheet + Excel row where an import problem was found. */
+export interface MenuImportRowIssue {
+  sheet: string;
+  row: number;
+  message: string;
+}
+
+/** A missing insumo the import will CREATE (never blocks; review cost/PAR). */
+export interface MenuImportInsumoToCreate {
+  name: string;
+  purchaseUom: string;
+  consumptionUom: string;
+  review: true;
+}
+
+/** Why a product's recipe was not created. */
+export interface MenuImportRecipeSkipped {
+  productName: string;
+  reason: "VERSION_ALREADY_EXISTS";
+  existingState: string;
+}
+
+/** Result contract shared by the menu-import preview and commit endpoints. */
+export interface MenuImportSummary {
+  categories: number;
+  productsToCreate: number;
+  productsToUpdate: number;
+  recipesToCreate: number;
+  recipesSkipped: MenuImportRecipeSkipped[];
+  insumosToCreate: MenuImportInsumoToCreate[];
+  errors: MenuImportRowIssue[];
+  warnings: MenuImportRowIssue[];
+}
+
+/**
+ * Downloads the .xlsx template as a Blob for a browser-side save.
+ * Implemented outside `api` because the response is binary, not JSON.
+ */
+export async function downloadMenuImportTemplate(): Promise<Blob> {
+  const token = getAccessToken();
+  const response = await fetch(`${getApiBaseUrl()}${MENU_IMPORT_TEMPLATE_PATH}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) {
+    throw new ApiError(`API error: ${response.status}`, {
+      status: response.status,
+      responseBody: null,
+      requestId: null,
+    });
+  }
+  return response.blob();
+}
+
+export async function previewMenuImport(fileBase64: string): Promise<MenuImportSummary> {
+  return api.post<MenuImportSummary>("/onboarding/menu-import/preview", {
+    fileBase64,
+  });
+}
+
+export async function commitMenuImport(fileBase64: string): Promise<MenuImportSummary> {
+  return api.post<MenuImportSummary>("/onboarding/menu-import/commit", {
+    fileBase64,
+  });
 }
 
 // --- ODAV-32: Chunked Upload Helper ---
