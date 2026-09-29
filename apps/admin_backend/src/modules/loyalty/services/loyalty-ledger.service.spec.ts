@@ -3,6 +3,7 @@ import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import { PointTransactionType } from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerPointTransaction } from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
+import { Customer } from '../../customers/entities/customer.entity';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 
 /**
@@ -38,6 +39,11 @@ const makeService = () => {
     save: jest.fn(async (value: Record<string, unknown>) => value),
   };
 
+  const custRepo = {
+    findOne: jest.fn().mockResolvedValue(null),
+    save: jest.fn(async (value: Record<string, unknown>) => value),
+  };
+
   // Issue #512 slice 4: pooled-repo sentinels — the binding guard proves the
   // service never touches them for the protected access.
   const pooledTxRepo = {
@@ -55,6 +61,7 @@ const makeService = () => {
   const managerGetRepository = jest.fn((entity: unknown) => {
     if (entity === CustomerPointTransaction) return txRepo;
     if (entity === CustomerLoyaltyAccountProjection) return projectionRepo;
+    if (entity === Customer) return custRepo;
     return null;
   });
   const manager = {
@@ -80,6 +87,8 @@ const makeService = () => {
     saved,
     txRepo,
     projectionRepo,
+    custRepo,
+    txQueryBuilder,
     pooledTxRepo,
     pooledProjectionRepo,
     manager,
@@ -147,6 +156,88 @@ describe('LoyaltyLedgerService.appendTransaction: transaction_type writer mappin
         idempotencyKey: 'key-1',
       }),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('recomputes customers.points_balance inside the bound tenant transaction (Batch 11a)', async () => {
+    const {
+      service,
+      custRepo,
+      txQueryBuilder,
+      manager,
+      managerGetRepository,
+      dataSource,
+    } = makeService();
+
+    txQueryBuilder.getRawOne.mockResolvedValue({ total: '42' });
+    custRepo.findOne.mockResolvedValue({
+      id: 'c-1',
+      tenant_id: 'tenant-1',
+      points_balance: 100,
+    });
+
+    await service.appendTransaction({ ...baseDto, transactionType: 'EARN' });
+
+    // The recompute reads the ledger SUM over the points column...
+    expect(txQueryBuilder.select).toHaveBeenCalledWith(
+      'COALESCE(SUM(tx.points), 0)',
+      'total',
+    );
+    expect(txQueryBuilder.where).toHaveBeenCalledWith(
+      'tx.tenant_id = :tenantId',
+      { tenantId: 'tenant-1' },
+    );
+    expect(txQueryBuilder.andWhere).toHaveBeenCalledWith(
+      'tx.customer_id = :customerId',
+      { customerId: 'c-1' },
+    );
+    // ...and writes the recomputed value back through the bound manager's
+    // customer repository (never the pooled path).
+    expect(managerGetRepository).toHaveBeenCalledWith(Customer);
+    expect(custRepo.findOne).toHaveBeenCalledWith({
+      where: { id: 'c-1', tenant_id: 'tenant-1' },
+    });
+    expect(custRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ points_balance: 42 }),
+    );
+    // The whole writeback ran inside the tenant-bound unit.
+    expect(dataSource.transaction).toHaveBeenCalled();
+    expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+      'tenant-1',
+    ]);
+  });
+
+  it('skips the balance recompute on the duplicate-idempotency-key early return (Batch 11a)', async () => {
+    const { service, txRepo, custRepo } = makeService();
+
+    txRepo.findOne.mockResolvedValue({
+      id: 'existing',
+      tenant_id: 'tenant-1',
+      customer_id: 'c-1',
+      loyalty_program_id: 'p-1',
+      units: 10,
+      transaction_type: 'earn',
+      type: 'earn',
+    });
+
+    await service.appendTransaction({
+      ...baseDto,
+      transactionType: 'EARN',
+      idempotencyKey: 'key-1',
+    });
+
+    expect(custRepo.findOne).not.toHaveBeenCalled();
+    expect(custRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('skips the balance writeback when the customer row does not exist yet', async () => {
+    const { service, custRepo } = makeService();
+
+    await expect(
+      service.appendTransaction({ ...baseDto, transactionType: 'EARN' }),
+    ).resolves.toBeDefined();
+
+    expect(custRepo.findOne).toHaveBeenCalled();
+    expect(custRepo.save).not.toHaveBeenCalled();
   });
 
   it('binds the appendTransaction access through the tenant transaction (issue #512 slice 4)', async () => {

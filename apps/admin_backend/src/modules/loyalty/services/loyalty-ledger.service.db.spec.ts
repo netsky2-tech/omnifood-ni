@@ -14,6 +14,7 @@ import {
 import { Customer } from '../../customers/entities/customer.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { RewardDefinition } from '../entities/reward-definition.entity';
+import { CustomersService } from '../../customers/services/customers.service';
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -109,8 +110,17 @@ async function createTestHarness() {
     dataSource,
   );
 
+  // Batch 11a: the real backoffice adjust path is exercised so both balance
+  // ingestion paths are proven to share one ledger-authoritative semantic.
+  const customersService = new CustomersService(
+    dataSource.getRepository(Customer),
+    dataSource.getRepository(CustomerPointTransaction),
+    dataSource,
+  );
+
   return {
     ledgerService,
+    customersService,
     txRepo: dataSource.getRepository(CustomerPointTransaction),
     projectionRepo: dataSource.getRepository(CustomerLoyaltyAccountProjection),
     programRepo: dataSource.getRepository(LoyaltyProgram),
@@ -364,6 +374,148 @@ describe('LoyaltyLedgerService (db)', () => {
 
       expect(projection.balance_units).toBe(18);
       expect(projection.projection_version).toBeGreaterThan(0);
+    });
+  });
+
+  describe('customer balance writeback (Batch 11a: ledger-authoritative cloud balance)', () => {
+    const balanceOf = async (id: string): Promise<number> => {
+      const customer = await harness.customerRepo.findOne({ where: { id } });
+      return Number(customer.points_balance);
+    };
+
+    const createCustomer = async (name: string): Promise<string> => {
+      const customer = await harness.customerRepo.save(
+        harness.customerRepo.create({
+          tenant_id: 'tenant-1',
+          name,
+          points_balance: 0,
+          is_active: true,
+        }),
+      );
+      return customer.id;
+    };
+
+    it('writes customers.points_balance = SUM(points) after a POS-origin append', async () => {
+      const id = await createCustomer('Balance Writeback Earn');
+
+      await harness.ledgerService.appendTransaction({
+        tenantId: 'tenant-1',
+        customerId: id,
+        loyaltyProgramId: programId,
+        ticketId: 'ticket-b11a-1',
+        transactionType: 'EARN',
+        units: 10,
+        idempotencyKey: `b11a:earn:1:${id}`,
+        origin: 'POS',
+        occurredAt: new Date(),
+      });
+
+      await expect(balanceOf(id)).resolves.toBe(10);
+    });
+
+    it('does not double-count the balance when the idempotency key repeats', async () => {
+      const id = await createCustomer('Balance Writeback Duplicate');
+      const dto = {
+        tenantId: 'tenant-1',
+        customerId: id,
+        loyaltyProgramId: programId,
+        ticketId: 'ticket-b11a-2',
+        transactionType: 'EARN' as const,
+        units: 10,
+        idempotencyKey: `b11a:earn:2:${id}`,
+        origin: 'POS',
+        occurredAt: new Date(),
+      };
+
+      await harness.ledgerService.appendTransaction(dto);
+      await expect(balanceOf(id)).resolves.toBe(10);
+
+      await harness.ledgerService.appendTransaction(dto);
+      await expect(balanceOf(id)).resolves.toBe(10);
+    });
+
+    it('accumulates a second different transaction into the same balance', async () => {
+      const id = await createCustomer('Balance Writeback Accumulate');
+      const base = {
+        tenantId: 'tenant-1',
+        customerId: id,
+        loyaltyProgramId: programId,
+        origin: 'POS',
+        occurredAt: new Date(),
+      };
+
+      await harness.ledgerService.appendTransaction({
+        ...base,
+        ticketId: 'ticket-b11a-3a',
+        transactionType: 'EARN',
+        units: 10,
+        idempotencyKey: `b11a:earn:3a:${id}`,
+      });
+      await harness.ledgerService.appendTransaction({
+        ...base,
+        ticketId: 'ticket-b11a-3b',
+        transactionType: 'EARN',
+        units: 5,
+        idempotencyKey: `b11a:earn:3b:${id}`,
+      });
+
+      await expect(balanceOf(id)).resolves.toBe(15);
+    });
+
+    it('decreases the balance for negative units (REVERSAL)', async () => {
+      const id = await createCustomer('Balance Writeback Reversal');
+      const base = {
+        tenantId: 'tenant-1',
+        customerId: id,
+        loyaltyProgramId: programId,
+        origin: 'POS',
+        occurredAt: new Date(),
+      };
+
+      await harness.ledgerService.appendTransaction({
+        ...base,
+        ticketId: 'ticket-b11a-4a',
+        transactionType: 'EARN',
+        units: 10,
+        idempotencyKey: `b11a:earn:4a:${id}`,
+      });
+      await harness.ledgerService.appendTransaction({
+        ...base,
+        ticketId: 'ticket-b11a-4b',
+        transactionType: 'REVERSAL',
+        units: -4,
+        idempotencyKey: `b11a:reversal:4b:${id}`,
+      });
+
+      await expect(balanceOf(id)).resolves.toBe(6);
+    });
+
+    it('keeps a cloud ADJUST and a POS append consistent on one SUM(points) semantic', async () => {
+      const id = await createCustomer('Balance Writeback Coexistence');
+
+      // Backoffice path: inserts the ADJUST ledger row and recomputes.
+      const adjust = await harness.customersService.adjustPoints(
+        'tenant-1',
+        id,
+        { points_delta: -6, reason: 'Batch 11a cloud adjust' },
+      );
+      await expect(balanceOf(id)).resolves.toBe(-6);
+      expect(adjust.transaction.type).toBe('adjust');
+
+      // POS path: appends through the idempotent ledger ingestion point.
+      await harness.ledgerService.appendTransaction({
+        tenantId: 'tenant-1',
+        customerId: id,
+        loyaltyProgramId: programId,
+        ticketId: 'ticket-b11a-5',
+        transactionType: 'EARN',
+        units: 4,
+        idempotencyKey: `b11a:earn:5:${id}`,
+        origin: 'POS',
+        occurredAt: new Date(),
+      });
+
+      await expect(balanceOf(id)).resolves.toBe(-2);
     });
   });
 });
