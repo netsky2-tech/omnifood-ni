@@ -57,6 +57,9 @@ dependencies:
   mobile_scanner: ^7.4.2
   # M10: native link-layer connectivity signals (fast path) for the POS.
   connectivity_plus: ^6.1.5
+  # OHAC pull negotiation (design §11.5 decision 30): the POS reads its own
+  # package version at runtime and sends it verbatim as the negotiated build.
+  package_info_plus: ^9.0.0
 dependency_overrides:
   analyzer: 6.4.1
 
@@ -80,6 +83,9 @@ dev_dependencies:
   mockito: ^5.4.4
   mocktail: ^1.0.4
   sqflite_common_ffi: ^2.3.3
+  # Test seam for the OHAC negotiation version reader: lets a test install a
+  # failing PackageInfoPlatform to prove decision 30's fail-closed omission.
+  package_info_plus_platform_interface: ^3.2.1
   flutter_launcher_icons: ^0.13.1
 
 # For information on the generic Dart part of this file, see the

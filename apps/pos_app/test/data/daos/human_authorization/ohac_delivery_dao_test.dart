@@ -5,6 +5,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
 import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
+import 'package:pos_app/data/models/human_authorization/staff_policy_epoch_v1.dart';
+import 'package:pos_app/data/models/human_authorization/terminal_state_machine.dart';
 
 /// DAO-level coverage for the OHAC local delivery tables (design §4.2, §5, §6).
 ///
@@ -765,6 +767,120 @@ void main() {
           '$name replay: ',
         );
       }
+    });
+
+    group('ensureTerminalState', () {
+      test('inserts the exact sentinel first row when none exists', () async {
+        expect(
+          await database.database.query('human_auth_terminal_state'),
+          isEmpty,
+        );
+
+        await database.ohacDeliveryDao.ensureTerminalState(
+          'tenant-1',
+          'terminal-1',
+          '2026-02-01T00:00:00.000Z',
+        );
+
+        final state = await database.ohacDeliveryDao
+            .findTerminalState('tenant-1', 'terminal-1');
+        expect(state, isNotNull);
+        // The sentinel row, from the entity doc comments and the state
+        // machine: ACTIVE at sequence 0 with the epoch chain's pre-epoch-1
+        // floor, no candidate, no negotiated facts, no fault, no
+        // authorization history, and the caller's timestamp (design §4.2,
+        // §5).
+        expectSameTerminalState(
+          state!,
+          OhacTerminalStateEntity(
+            tenantId: 'tenant-1',
+            terminalId: 'terminal-1',
+            state: OhacTerminalPhase.active.wire,
+            activeSequence: 0,
+            activeDigest: '',
+            candidateSequence: 0,
+            candidateDigest: '',
+            serverFloorSequence: 0,
+            serverFloorDigest: genesisDigest,
+            negotiatedPosBuild: '',
+            negotiatedBackendBuild: '',
+            negotiatedPolicySchema: '',
+            negotiatedAssertionSchema: '',
+            integrityClassification: '',
+            localAuthorizationSequence: 0,
+            revision: 0,
+            updatedAt: '2026-02-01T00:00:00.000Z',
+          ),
+        );
+      });
+
+      test('is idempotent: a second call changes nothing, not even the '
+          'revision or the timestamp', () async {
+        await database.ohacDeliveryDao.ensureTerminalState(
+          'tenant-1',
+          'terminal-1',
+          '2026-02-01T00:00:00.000Z',
+        );
+
+        await database.ohacDeliveryDao.ensureTerminalState(
+          'tenant-1',
+          'terminal-1',
+          '2026-02-02T00:00:00.000Z',
+        );
+
+        final rows = await database.database
+            .query('human_auth_terminal_state');
+        expect(rows, hasLength(1));
+        expect(rows.single['revision'], 0);
+        expect(rows.single['updated_at'], '2026-02-01T00:00:00.000Z');
+      });
+
+      test('leaves an existing row exactly as it was', () async {
+        final existing = terminalState(
+          state: 'RECEIVE_PENDING',
+          activeSequence: 3,
+          candidateSequence: 4,
+          candidateDigest: 'sha256:${'d' * 64}',
+          serverFloorSequence: 3,
+          negotiatedPosBuild: '1.0.0+1',
+          revision: 9,
+          updatedAt: '2026-01-15T00:00:00.000Z',
+        );
+        await database.ohacDeliveryDao.insertTerminalState(existing);
+
+        await database.ohacDeliveryDao.ensureTerminalState(
+          existing.tenantId,
+          existing.terminalId,
+          '2026-02-01T00:00:00.000Z',
+        );
+
+        final state = await database.ohacDeliveryDao.findTerminalState(
+          existing.tenantId,
+          existing.terminalId,
+        );
+        expectSameTerminalState(state!, existing);
+      });
+
+      test('keys the sentinel row by tenant and terminal, not globally',
+          () async {
+        await database.ohacDeliveryDao.ensureTerminalState(
+          'tenant-1',
+          'terminal-1',
+          '2026-02-01T00:00:00.000Z',
+        );
+        await database.ohacDeliveryDao.ensureTerminalState(
+          'tenant-2',
+          'terminal-1',
+          '2026-02-01T00:00:00.000Z',
+        );
+
+        final tenant1 = await database.ohacDeliveryDao
+            .findTerminalState('tenant-1', 'terminal-1');
+        final tenant2 = await database.ohacDeliveryDao
+            .findTerminalState('tenant-2', 'terminal-1');
+        expect(tenant1!.tenantId, 'tenant-1');
+        expect(tenant2!.tenantId, 'tenant-2');
+      });
     });
   });
 

@@ -34,6 +34,7 @@ import '../models/sales/cash_movement_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import 'authority_hydration_service.dart';
+import 'ohac_negotiation_parameters.dart';
 import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity.dart';
 import 'network_connectivity_service.dart';
 
@@ -2112,6 +2113,62 @@ class SyncService {
 
   Future<InboundSyncResult?> pullInboundDeltas() => _pullInboundDeltas();
 
+  /// Builds the four OHAC negotiation query parameters for the inbound pull
+  /// (design §11.5 decision 30, §12), or an empty map — the legacy-client
+  /// answer — when they cannot be read.
+  ///
+  /// Decision 30: the negotiated build is the POS's own package version read
+  /// at runtime, sent verbatim; when that read fails, ALL FOUR parameters
+  /// are omitted so the backend classifies the terminal as a legacy client
+  /// and omits the `humanAuthorization` member. A successful read is sent
+  /// verbatim even when empty: the backend deliberately distinguishes absent
+  /// (legacy) from present-blank (`UPGRADE_REQUIRED`).
+  ///
+  /// The floor parameter is the terminal's local `server_floor_sequence` —
+  /// the server-confirmed floor, not the active sequence, which legitimately
+  /// runs ahead while a candidate is unacknowledged and would turn every
+  /// such pull into `RECOVERY_REQUIRED`. The row is ensured first because
+  /// nothing else creates the fresh-install sentinel. Any failure reading
+  /// the floor state also omits the parameters: a pull that cannot state its
+  /// floor coherently must not claim negotiation it cannot support.
+  Future<Map<String, String>> _buildOhacNegotiationQueryParams() async {
+    final database = _database;
+    if (database == null) return const {};
+
+    final posBuild = await readOhacPosBuild();
+    if (posBuild == null) return const {};
+
+    try {
+      final tenantConfig = await database.localConfigDao.getConfigByKey(
+        'tenant_id',
+      );
+      final tenantId = tenantConfig?.value ?? 'tenant-1';
+      final terminalId = _auditRepository.deviceId;
+
+      await database.ohacDeliveryDao.ensureTerminalState(
+        tenantId,
+        terminalId,
+        DateTime.now().toIso8601String(),
+      );
+      final state = await database.ohacDeliveryDao.findTerminalState(
+        tenantId,
+        terminalId,
+      );
+      if (state == null) return const {};
+
+      return buildOhacNegotiationParameters(
+        posBuild: posBuild,
+        serverFloorSequence: state.serverFloorSequence,
+      );
+    } catch (e) {
+      developer.log(
+        '[SYNC_PULL] ohac_negotiation_omitted=$e',
+        name: 'SyncService',
+      );
+      return const {};
+    }
+  }
+
   Future<InboundSyncResult?> _pullInboundDeltas() async {
     if (_database == null) return null;
 
@@ -2128,6 +2185,12 @@ class SyncService {
           'sinceVersion': sinceVersion.trim(),
         'terminalId': _auditRepository.deviceId,
       };
+
+      // OHAC pull negotiation (design §11.5 decision 30, §12). The params
+      // are omitted entirely — the fail-closed legacy-client answer — when
+      // the POS cannot read its own version; this unit sends the request,
+      // it does not consume the response.
+      queryParams.addAll(await _buildOhacNegotiationQueryParams());
 
       final response = await _dio.get(
         '/v1/sync/inbound/deltas',

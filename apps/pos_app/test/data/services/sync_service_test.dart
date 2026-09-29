@@ -1,7 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:package_info_plus_platform_interface/package_info_data.dart';
+import 'package:package_info_plus_platform_interface/package_info_platform_interface.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
+import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
+import 'package:pos_app/data/models/human_authorization/staff_policy_epoch_v1.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
@@ -2937,6 +2942,467 @@ void main() {
       },
     );
 
+    group('OHAC pull negotiation (design §11.5 decision 30)', () {
+      test(
+        'omits every negotiation parameter when the version read throws '
+        '(fail-closed, decision 30)',
+        () async {
+          // Order-coupled by the package, not by choice: the injected
+          // failing platform is only consulted while package_info_plus'
+          // private static cache is empty, and package_info_plus 9.x caches
+          // the first successful `fromPlatform` read with no public reset.
+          // This test therefore must run before any successful
+          // `PackageInfo.setMockInitialValues` in this file. Removing the
+          // coupling needs a production seam (an injectable version reader)
+          // and is out of scope for a test-only change.
+          final originalPlatform = PackageInfoPlatform.instance;
+          PackageInfoPlatform.instance = _FailingPackageInfoPlatform();
+          addTearDown(() => PackageInfoPlatform.instance = originalPlatform);
+
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            Map<String, dynamic> captured = {};
+            final testDio = Dio();
+            testDio.interceptors.add(
+              InterceptorsWrapper(
+                onRequest: (options, handler) {
+                  if (options.path == '/v1/sync/inbound/deltas') {
+                    captured = Map<String, dynamic>.from(
+                      options.queryParameters,
+                    );
+                    handler.resolve(
+                      Response<dynamic>(
+                        statusCode: 200,
+                        requestOptions: options,
+                        data: {
+                          'status': 'success',
+                          'serverTime': '2026-08-26T18:30:00.000Z',
+                          'currentVersion': 1787750000000,
+                          'deltas': {
+                            'products': [],
+                            'catalogValues': [],
+                            'insumos': [],
+                            'recipes': [],
+                            'users': [],
+                          },
+                        },
+                      ),
+                    );
+                    return;
+                  }
+                  handler.resolve(
+                    Response<dynamic>(
+                      statusCode: 200,
+                      requestOptions: options,
+                      data: {'ok': true},
+                    ),
+                  );
+                },
+              ),
+            );
+
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              testDio,
+              database: database,
+            );
+
+            await syncServiceWithDb.pullInboundDeltas();
+
+            // A legacy client: the backend omits the humanAuthorization
+            // member when none of the four parameters is sent.
+            expect(captured.containsKey('ohacPosBuild'), isFalse);
+            expect(captured.containsKey('ohacPolicySchemas'), isFalse);
+            expect(captured.containsKey('ohacAssertionSchemas'), isFalse);
+            expect(captured.containsKey('ohacFloorSequence'), isFalse);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'omits every negotiation parameter when the floor-state read fails '
+        '(fail-closed, decision 30)',
+        () async {
+          // The version read succeeds here (a healthy PackageInfo mock), so
+          // the omission below can only come from the floor-state read the
+          // `ohacFloorSequence` parameter depends on: dropping the table
+          // makes ensureTerminalState/findTerminalState throw, and the
+          // builder must answer by omitting all four parameters rather than
+          // claiming a negotiation it cannot state. This test is
+          // declaration-order independent: it establishes its own
+          // PackageInfo state instead of relying on an empty static cache.
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            await database.database
+                .execute('DROP TABLE human_auth_terminal_state');
+
+            Map<String, dynamic> captured = {};
+            final testDio = Dio();
+            testDio.interceptors.add(
+              InterceptorsWrapper(
+                onRequest: (options, handler) {
+                  if (options.path == '/v1/sync/inbound/deltas') {
+                    captured = Map<String, dynamic>.from(
+                      options.queryParameters,
+                    );
+                    handler.resolve(
+                      Response<dynamic>(
+                        statusCode: 200,
+                        requestOptions: options,
+                        data: {
+                          'status': 'success',
+                          'serverTime': '2026-08-26T18:30:00.000Z',
+                          'currentVersion': 1787750000000,
+                          'deltas': {
+                            'products': [],
+                            'catalogValues': [],
+                            'insumos': [],
+                            'recipes': [],
+                            'users': [],
+                          },
+                        },
+                      ),
+                    );
+                    return;
+                  }
+                  handler.resolve(
+                    Response<dynamic>(
+                      statusCode: 200,
+                      requestOptions: options,
+                      data: {'ok': true},
+                    ),
+                  );
+                },
+              ),
+            );
+
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              testDio,
+              database: database,
+            );
+
+            await syncServiceWithDb.pullInboundDeltas();
+
+            // A pull that cannot state its floor coherently must not claim
+            // negotiation it cannot support: all four parameters omitted.
+            expect(captured.containsKey('ohacPosBuild'), isFalse);
+            expect(captured.containsKey('ohacPolicySchemas'), isFalse);
+            expect(captured.containsKey('ohacAssertionSchemas'), isFalse);
+            expect(captured.containsKey('ohacFloorSequence'), isFalse);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'sends the four negotiation parameters, reading the floor from the '
+        'terminal\'s local server-confirmed floor',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            await database.ohacDeliveryDao.insertTerminalState(
+              OhacTerminalStateEntity(
+                tenantId: 'tenant-1',
+                terminalId: 'dev-1',
+                state: 'ACTIVE',
+                // Deliberately different from serverFloorSequence below: the
+                // active sequence runs ahead of the acknowledged floor while
+                // a candidate is unacknowledged, so the assertion on
+                // `ohacFloorSequence` fails if the builder ever reads
+                // `active_sequence` instead of `server_floor_sequence`.
+                activeSequence: 9,
+                activeDigest: 'sha256:${'c' * 64}',
+                candidateSequence: 0,
+                candidateDigest: '',
+                serverFloorSequence: 5,
+                serverFloorDigest: 'sha256:${'c' * 64}',
+                negotiatedPosBuild: '',
+                negotiatedBackendBuild: '',
+                negotiatedPolicySchema: '',
+                negotiatedAssertionSchema: '',
+                integrityClassification: '',
+                localAuthorizationSequence: 0,
+                revision: 1,
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              ),
+            );
+
+            Map<String, dynamic> captured = {};
+            final testDio = Dio();
+            testDio.interceptors.add(
+              InterceptorsWrapper(
+                onRequest: (options, handler) {
+                  if (options.path == '/v1/sync/inbound/deltas') {
+                    captured = Map<String, dynamic>.from(
+                      options.queryParameters,
+                    );
+                    handler.resolve(
+                      Response<dynamic>(
+                        statusCode: 200,
+                        requestOptions: options,
+                        data: {
+                          'status': 'success',
+                          'serverTime': '2026-08-26T18:30:00.000Z',
+                          'currentVersion': 1787750000000,
+                          'deltas': {
+                            'products': [],
+                            'catalogValues': [],
+                            'insumos': [],
+                            'recipes': [],
+                            'users': [],
+                          },
+                        },
+                      ),
+                    );
+                    return;
+                  }
+                  handler.resolve(
+                    Response<dynamic>(
+                      statusCode: 200,
+                      requestOptions: options,
+                      data: {'ok': true},
+                    ),
+                  );
+                },
+              ),
+            );
+
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              testDio,
+              database: database,
+            );
+
+            await syncServiceWithDb.pullInboundDeltas();
+
+            // The composed pubspec `version` string: PackageInfo.version
+            // plus the `+` build suffix (version '2.3.4', build '11'),
+            // matching the exact-equality cohort gate.
+            expect(captured['ohacPosBuild'], '2.3.4+11');
+            expect(captured['ohacPolicySchemas'], staffPolicyEpochV1Schema);
+            expect(captured['ohacAssertionSchemas'], minimumAssertionSchema);
+            // The server-confirmed floor, NOT the active sequence: the
+            // active sequence legitimately runs ahead of what the server
+            // has acknowledged while a candidate is unacknowledged, and
+            // every such pull would be answered RECOVERY_REQUIRED. The
+            // seeded active (9) and floor (5) differ on purpose, so this
+            // assertion fails if the wrong column is ever read.
+            expect(captured['ohacFloorSequence'], '5');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'sends a present-but-empty build verbatim with all four '
+        'parameters (decision 30: blank build answers UPGRADE_REQUIRED, '
+        'absent build is a legacy client)',
+        () async {
+          // The version read SUCCEEDS here and the composed value is the
+          // empty string (empty version, blank build number). The contract
+          // under test is that the POS must not collapse a present-but-blank
+          // value into an omitted parameter: the backend answers an absent
+          // build as a legacy client ('not-participating') but a present-
+          // blank one with UPGRADE_REQUIRED. Omission is reserved for a
+          // version read that throws — the legacy-client leg tested above.
+          // Whether PackageInfo.version can actually be blank at runtime is
+          // unverified; this pins the distinction, not a measured state.
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '',
+            buildNumber: '',
+            buildSignature: '',
+          );
+
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            Map<String, dynamic> captured = {};
+            final testDio = Dio();
+            testDio.interceptors.add(
+              InterceptorsWrapper(
+                onRequest: (options, handler) {
+                  if (options.path == '/v1/sync/inbound/deltas') {
+                    captured = Map<String, dynamic>.from(
+                      options.queryParameters,
+                    );
+                    handler.resolve(
+                      Response<dynamic>(
+                        statusCode: 200,
+                        requestOptions: options,
+                        data: {
+                          'status': 'success',
+                          'serverTime': '2026-08-26T18:30:00.000Z',
+                          'currentVersion': 1787750000000,
+                          'deltas': {
+                            'products': [],
+                            'catalogValues': [],
+                            'insumos': [],
+                            'recipes': [],
+                            'users': [],
+                          },
+                        },
+                      ),
+                    );
+                    return;
+                  }
+                  handler.resolve(
+                    Response<dynamic>(
+                      statusCode: 200,
+                      requestOptions: options,
+                      data: {'ok': true},
+                    ),
+                  );
+                },
+              ),
+            );
+
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              testDio,
+              database: database,
+            );
+
+            await syncServiceWithDb.pullInboundDeltas();
+
+            // Present AND blank: a successful read that yields '' is still
+            // sent with all four parameters, so the backend answers
+            // UPGRADE_REQUIRED rather than legacy silence.
+            expect(captured['ohacPosBuild'], '');
+            expect(captured.containsKey('ohacPosBuild'), isTrue);
+            expect(captured.containsKey('ohacPolicySchemas'), isTrue);
+            expect(captured.containsKey('ohacAssertionSchemas'), isTrue);
+            expect(captured.containsKey('ohacFloorSequence'), isTrue);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'creates the sentinel terminal state when none exists, and sends the '
+        'pre-epoch floor',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            Map<String, dynamic> captured = {};
+            final testDio = Dio();
+            testDio.interceptors.add(
+              InterceptorsWrapper(
+                onRequest: (options, handler) {
+                  if (options.path == '/v1/sync/inbound/deltas') {
+                    captured = Map<String, dynamic>.from(
+                      options.queryParameters,
+                    );
+                    handler.resolve(
+                      Response<dynamic>(
+                        statusCode: 200,
+                        requestOptions: options,
+                        data: {
+                          'status': 'success',
+                          'serverTime': '2026-08-26T18:30:00.000Z',
+                          'currentVersion': 1787750000000,
+                          'deltas': {
+                            'products': [],
+                            'catalogValues': [],
+                            'insumos': [],
+                            'recipes': [],
+                            'users': [],
+                          },
+                        },
+                      ),
+                    );
+                    return;
+                  }
+                  handler.resolve(
+                    Response<dynamic>(
+                      statusCode: 200,
+                      requestOptions: options,
+                      data: {'ok': true},
+                    ),
+                  );
+                },
+              ),
+            );
+
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              testDio,
+              database: database,
+            );
+
+            await syncServiceWithDb.pullInboundDeltas();
+
+            expect(captured['ohacFloorSequence'], '0');
+
+            final state = await database.ohacDeliveryDao
+                .findTerminalState('tenant-1', 'dev-1');
+            expect(state, isNotNull);
+            expect(state!.state, 'ACTIVE');
+            expect(state.serverFloorSequence, 0);
+            expect(state.serverFloorDigest, 'GENESIS');
+            expect(state.revision, 0);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+    });
+
     test(
       'onInboundSync stream emits events and triggers reactive listeners',
       () async {
@@ -4235,4 +4701,13 @@ void main() {
       },
     );
   });
+}
+
+/// A package-info platform whose read always fails, standing in for the real
+/// platform channel being unavailable (decision 30's fail-closed condition).
+class _FailingPackageInfoPlatform extends PackageInfoPlatform {
+  @override
+  Future<PackageInfoData> getAll({String? baseUrl}) async {
+    throw StateError('platform read unavailable');
+  }
 }
