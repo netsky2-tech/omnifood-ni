@@ -41,7 +41,9 @@ import { TemplatePreviewService } from './services/template-preview.service';
 import { LegacyTemplateRecipeScanService } from './services/legacy-template-recipe-scan.service';
 import { LegacyImportIntegrityReportService } from './services/legacy-import-integrity-report.service';
 import { CanonicalCsvParserService } from './services/canonical-csv-parser.service';
+import { MenuImportService } from './services/menu-import.service';
 import { IndustryTemplateController } from './controllers/industry-template.controller';
+import { MenuImportController } from './controllers/menu-import.controller';
 import { FiscalSetupService } from './services/fiscal-setup.service';
 import { FiscalConfigVersionService } from './services/fiscal-config-version.service';
 import { FiscalSetupController } from './controllers/fiscal-setup.controller';
@@ -140,6 +142,7 @@ export const getRequiredOnboardingJwtSecret = (
   ],
   controllers: [
     IndustryTemplateController,
+    MenuImportController,
     FiscalSetupController,
     ImportStagingController,
     OnboardingSessionController,
@@ -156,6 +159,7 @@ export const getRequiredOnboardingJwtSecret = (
     LegacyTemplateRecipeScanService,
     LegacyImportIntegrityReportService,
     CanonicalCsvParserService,
+    MenuImportService,
     FiscalSetupService,
     FiscalConfigVersionService,
     ImportStagingService,
