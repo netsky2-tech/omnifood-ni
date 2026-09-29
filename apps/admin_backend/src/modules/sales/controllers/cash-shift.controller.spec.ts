@@ -1,8 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { CashShiftController } from './cash-shift.controller';
 import { CashShiftService } from '../services/cash-shift.service';
 import { JwtModule } from '@nestjs/jwt';
-import { Reflector } from '@nestjs/core';
+import { AuthGuard } from '../../identity/guards/auth.guard';
+import { RolesGuard } from '../../identity/guards/roles.guard';
+import { ROLES_KEY } from '../../../core/decorators/roles.decorator';
+import { UserRole } from '../../identity/entities/user.entity';
 import {
   CashShiftSession,
   CashShiftStatus,
@@ -11,8 +16,6 @@ import {
   CashMovement,
   CashMovementType,
 } from '../entities/cash-movement.entity';
-
-import { AuthGuard } from '../../identity/guards/auth.guard';
 
 describe('CashShiftController', () => {
   let controller: CashShiftController;
@@ -30,6 +33,7 @@ describe('CashShiftController', () => {
       openShift: jest.fn(),
       getActiveShiftByTerminal: jest.fn(),
       getCashShiftById: jest.fn(),
+      listShifts: jest.fn(),
       recordCashMovement: jest.fn(),
       closeShiftWithZReport: jest.fn(),
     } as unknown as jest.Mocked<CashShiftService>;
@@ -54,6 +58,69 @@ describe('CashShiftController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  describe('GET /sales/shifts (owner-dashboard list)', () => {
+    it('lists shift sessions for the requesting tenant with default params', async () => {
+      const mockShifts = [
+        {
+          id: 'shift-1',
+          tenant_id: 'tenant-test-1',
+          terminal_id: 'term-main',
+          status: CashShiftStatus.CLOSED,
+        },
+      ] as CashShiftSession[];
+      service.listShifts.mockResolvedValue(mockShifts);
+
+      const result = await controller.listShifts({ user: mockUser }, {});
+
+      expect(service.listShifts).toHaveBeenCalledWith('tenant-test-1', {
+        status: undefined,
+        limit: undefined,
+      });
+      expect(result).toEqual(mockShifts);
+    });
+
+    it('forwards the status filter and limit to the service', async () => {
+      service.listShifts.mockResolvedValue([]);
+
+      await controller.listShifts(
+        { user: mockUser },
+        { status: CashShiftStatus.OPEN, limit: 10 },
+      );
+
+      expect(service.listShifts).toHaveBeenCalledWith('tenant-test-1', {
+        status: CashShiftStatus.OPEN,
+        limit: 10,
+      });
+    });
+
+    it('gates the list route to OWNER and MANAGER via the RolesGuard', () => {
+      const roles = Reflect.getMetadata(
+        ROLES_KEY,
+        CashShiftController.prototype.listShifts,
+      );
+      expect(roles).toEqual([UserRole.OWNER, UserRole.MANAGER]);
+    });
+
+    const buildContext = (role: string): ExecutionContext =>
+      ({
+        switchToHttp: () => ({
+          getRequest: () => ({ user: { ...mockUser, role } }),
+        }),
+        getHandler: () => CashShiftController.prototype.listShifts,
+        getClass: () => CashShiftController,
+      }) as unknown as ExecutionContext;
+
+    it('allows an OWNER through the guard chain for the list route', () => {
+      const guard = new RolesGuard(new Reflector());
+      expect(guard.canActivate(buildContext(UserRole.OWNER))).toBe(true);
+    });
+
+    it('rejects a CASHIER on the list route (403 behavior at the guard)', () => {
+      const guard = new RolesGuard(new Reflector());
+      expect(guard.canActivate(buildContext(UserRole.CASHIER))).toBe(false);
+    });
   });
 
   describe('POST /sales/shifts/open', () => {

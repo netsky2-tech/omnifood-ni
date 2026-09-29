@@ -281,6 +281,71 @@ describe('CashShiftService', () => {
     });
   });
 
+  describe('listShifts', () => {
+    it('lists sessions for the tenant ordered by opened_at desc with the default limit', async () => {
+      const rows = [
+        { id: 'shift-b', opened_at: new Date('2026-09-02T03:00:00Z') },
+        { id: 'shift-a', opened_at: new Date('2026-09-01T03:00:00Z') },
+      ] as CashShiftSession[];
+      shiftRepo.find.mockResolvedValue(rows);
+
+      const result = await service.listShifts('tenant-1');
+
+      expect(shiftRepo.find).toHaveBeenCalledWith({
+        where: { tenant_id: 'tenant-1' },
+        order: { opened_at: 'DESC' },
+        take: 50,
+      });
+      expect(result).toEqual(rows);
+    });
+
+    it('applies the optional status filter and a custom limit', async () => {
+      shiftRepo.find.mockResolvedValue([]);
+
+      await service.listShifts('tenant-1', {
+        status: CashShiftStatus.CLOSED,
+        limit: 10,
+      });
+
+      expect(shiftRepo.find).toHaveBeenCalledWith({
+        where: {
+          tenant_id: 'tenant-1',
+          status: CashShiftStatus.CLOSED,
+        },
+        order: { opened_at: 'DESC' },
+        take: 10,
+      });
+    });
+
+    it('scopes every query to the requesting tenant (cross-tenant isolation)', async () => {
+      shiftRepo.find.mockResolvedValue([]);
+
+      await service.listShifts('tenant-A');
+      expect(shiftRepo.find).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: { tenant_id: 'tenant-A' },
+        }),
+      );
+
+      await service.listShifts('tenant-B');
+      expect(shiftRepo.find).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: { tenant_id: 'tenant-B' },
+        }),
+      );
+      // Two calls, two distinct tenant scopes: no cross-tenant leak.
+      expect(shiftRepo.find).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns an empty list when the tenant has no cash sessions', async () => {
+      shiftRepo.find.mockResolvedValue([]);
+
+      const result = await service.listShifts('tenant-empty');
+
+      expect(result).toEqual([]);
+    });
+  });
+
   // Issue #512 slice 5: the cash tables are now tenant-RLS protected, so
   // every cash access must run inside a tenant-bound transaction. This guard
   // has RUNTIME teeth: it injects a fake DataSource whose transaction()
@@ -295,6 +360,7 @@ describe('CashShiftService', () => {
       // transaction and would hit RLS on a connection with no tenant bound.
       const pooledShift = {
         findOne: jest.fn(),
+        find: jest.fn(),
         create: jest.fn(),
         save: jest.fn(),
         count: jest.fn(),
@@ -307,6 +373,7 @@ describe('CashShiftService', () => {
       // Bound instrumented repositories handed out by the transaction manager.
       const boundShift = {
         findOne: jest.fn(),
+        find: jest.fn(),
         create: jest.fn(),
         save: jest.fn(async (entity: unknown) => entity),
         count: jest.fn(),
@@ -351,7 +418,8 @@ describe('CashShiftService', () => {
 
       // Exercise every method: the two read-only lookups plus the three
       // logical write units (openShift, recordCashMovement,
-      // closeShiftWithZReport), each of which must be its own transaction.
+      // closeShiftWithZReport) and the read-only list, each of which must be
+      // its own transaction.
       boundShift.findOne.mockResolvedValueOnce(null); // getActiveShiftByTerminal
       expect(
         await bound.getActiveShiftByTerminal('tenant-1', 'term-main'),
@@ -361,6 +429,9 @@ describe('CashShiftService', () => {
       await expect(
         bound.getCashShiftById('tenant-1', 'shift-404'),
       ).rejects.toThrow('Turno de caja shift-404 no encontrado.');
+
+      boundShift.find.mockResolvedValueOnce([]); // listShifts
+      expect(await bound.listShifts('tenant-1')).toEqual([]);
 
       boundShift.findOne.mockResolvedValueOnce(null); // openShift read
       boundShift.create.mockReturnValueOnce({
@@ -405,10 +476,10 @@ describe('CashShiftService', () => {
         finalCountedUsd: 50.0,
       });
 
-      // FIVE logical units, FIVE transactions, each binding the tenant
+      // SIX logical units, SIX transactions, each binding the tenant
       // context exactly once with the production set_config SQL.
-      expect(boundDataSource.transaction).toHaveBeenCalledTimes(5);
-      expect(setConfigCalls).toHaveLength(5);
+      expect(boundDataSource.transaction).toHaveBeenCalledTimes(6);
+      expect(setConfigCalls).toHaveLength(6);
       for (const [sql, params] of setConfigCalls) {
         expect(sql).toBe(TENANT_CONTEXT_SET_CONFIG_SQL);
         expect(params).toEqual(['tenant-1']);
@@ -416,17 +487,19 @@ describe('CashShiftService', () => {
 
       // Every access resolved through the bound manager's repositories...
       expect(boundShift.findOne).toHaveBeenCalledTimes(5);
+      expect(boundShift.find).toHaveBeenCalledTimes(1);
       expect(boundShift.create).toHaveBeenCalledTimes(1);
       expect(boundShift.save).toHaveBeenCalledTimes(3); // open + movement + close
       expect(boundShift.count).toHaveBeenCalledTimes(1);
       expect(boundMovement.create).toHaveBeenCalledTimes(1);
       expect(boundMovement.save).toHaveBeenCalledTimes(1);
       // ...and the manager handed out only tenant-bound repositories.
-      expect(boundManager.getRepository).toHaveBeenCalledTimes(12);
+      expect(boundManager.getRepository).toHaveBeenCalledTimes(13);
 
       // RUNTIME TEETH: the pooled tripwires stayed silent. A reverted access
       // lands here and fails this assertion — no compile error involved.
       expect(pooledShift.findOne).not.toHaveBeenCalled();
+      expect(pooledShift.find).not.toHaveBeenCalled();
       expect(pooledShift.create).not.toHaveBeenCalled();
       expect(pooledShift.save).not.toHaveBeenCalled();
       expect(pooledShift.count).not.toHaveBeenCalled();

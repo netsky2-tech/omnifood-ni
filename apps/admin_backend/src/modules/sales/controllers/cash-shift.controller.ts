@@ -10,11 +10,14 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
+import { Roles } from '../../../core/decorators/roles.decorator';
+import { UserRole } from '../../identity/entities/user.entity';
 import { CashShiftService } from '../services/cash-shift.service';
 import {
   OpenCashShiftDto,
   RecordCashMovementRequestDto,
   CloseCashShiftDto,
+  ListCashShiftsQueryDto,
 } from '../dto/cash-shift.dto';
 
 interface RequestWithUser {
@@ -29,6 +32,23 @@ interface RequestWithUser {
 @UseGuards(AuthGuard, RolesGuard)
 export class CashShiftController {
   constructor(private readonly shiftService: CashShiftService) {}
+
+  /**
+   * Owner-dashboard oversight listing. Unlike the POS-operated routes below
+   * (driven by cashiers), this read is gated to OWNER/MANAGER, mirroring the
+   * other backoffice oversight read routes (reports, admin invoices).
+   */
+  @Get()
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async listShifts(
+    @Req() req: RequestWithUser,
+    @Query() query: ListCashShiftsQueryDto,
+  ) {
+    return this.shiftService.listShifts(req.user.tenant_id, {
+      status: query.status,
+      limit: query.limit,
+    });
+  }
 
   @Post('open')
   async openShift(@Req() req: RequestWithUser, @Body() dto: OpenCashShiftDto) {

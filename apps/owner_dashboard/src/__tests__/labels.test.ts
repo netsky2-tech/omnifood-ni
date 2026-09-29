@@ -6,8 +6,10 @@ import {
   importModeLabels,
   duplicateResolutionLabels,
   backendActivationErrorLabels,
+  cashShiftStatusLabels,
 } from "@/lib/labels";
 import { OnboardingLifecycleState } from "@/features/onboarding/types";
+import type { CashShiftStatus } from "@/features/cash/types";
 
 /**
  * Regression guard for the dashboard label layer (issue #587 / D2, D4).
@@ -29,6 +31,7 @@ const families: Record<string, Record<string, string>> = {
   importModeLabels,
   duplicateResolutionLabels,
   backendActivationErrorLabels,
+  cashShiftStatusLabels,
 };
 
 describe("label families — map hygiene", () => {
@@ -80,6 +83,13 @@ describe("label families — key sets verified against source enums", () => {
       ].sort(),
     );
   });
+
+  it("cashShiftStatusLabels matches CashShiftStatus exactly", () => {
+    const backendStatuses: CashShiftStatus[] = ["OPEN", "CLOSED"];
+    expect(Object.keys(cashShiftStatusLabels).sort()).toEqual(
+      [...backendStatuses].sort(),
+    );
+  });
 });
 
 describe("localize", () => {
@@ -91,5 +101,6 @@ describe("localize", () => {
   it("passes unknown codes through untouched (never crashes, never '(unknown)')", () => {
     expect(localize("SOME_FUTURE_CODE", lifecycleStateLabels)).toBe("SOME_FUTURE_CODE");
     expect(localize("SOME_FUTURE_CODE", backendActivationErrorLabels)).toBe("SOME_FUTURE_CODE");
+    expect(localize("SOME_FUTURE_CODE", cashShiftStatusLabels)).toBe("SOME_FUTURE_CODE");
   });
 });
