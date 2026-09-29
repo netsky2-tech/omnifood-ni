@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/domain/models/customer/customer.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
@@ -281,6 +282,25 @@ void main() {
       expect(find.text('Escanear código del cliente'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('qr_scan_close_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escanear código del cliente'), findsNothing);
+      expect(find.byKey(const Key('customer_code_input')), findsOneWidget);
+    });
+
+    testWidgets('Escape key closes the scanner overlay (NHILOS §46)',
+        (tester) async {
+      await tester.pumpWidget(
+        buildTestableDialog(scannerBuilder: fakeScannerBuilder),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('qr_scan_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Escanear código del cliente'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
 
       expect(find.text('Escanear código del cliente'), findsNothing);
