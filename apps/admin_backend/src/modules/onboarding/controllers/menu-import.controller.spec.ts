@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, StreamableFile } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
@@ -10,7 +10,11 @@ import { MenuImportRequestDto } from '../dto/menu-import.dto';
 
 describe('MenuImportController (Unit)', () => {
   let controller: MenuImportController;
-  let service: { preview: jest.Mock; commit: jest.Mock };
+  let service: {
+    preview: jest.Mock;
+    commit: jest.Mock;
+    buildTemplate: jest.Mock;
+  };
 
   const payload: MenuImportRequestDto = { fileBase64: 'aGVsbG8=' };
   const summary = {
@@ -25,7 +29,7 @@ describe('MenuImportController (Unit)', () => {
   };
 
   beforeEach(() => {
-    service = { preview: jest.fn(), commit: jest.fn() };
+    service = { preview: jest.fn(), commit: jest.fn(), buildTemplate: jest.fn() };
     service.preview.mockResolvedValue(summary);
     service.commit.mockResolvedValue(summary);
     controller = new MenuImportController(
@@ -59,6 +63,35 @@ describe('MenuImportController (Unit)', () => {
         UnauthorizedException,
       );
       expect(service.preview).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET template', () => {
+    it('streams the service-built workbook as an attachment with the xlsx mime type', async () => {
+      const workbookBytes = Buffer.from('template-workbook-bytes');
+      service.buildTemplate.mockResolvedValue(workbookBytes);
+
+      const result = await controller.template('tenant-A');
+
+      expect(result).toBeInstanceOf(StreamableFile);
+      expect(service.buildTemplate).toHaveBeenCalledTimes(1);
+
+      // Collect the streamed bytes and compare with the service buffer.
+      const chunks: Buffer[] = [];
+      for await (const chunk of result.getStream()) {
+        chunks.push(chunk as Buffer);
+      }
+      expect(Buffer.concat(chunks).equals(workbookBytes)).toBe(true);
+    });
+
+    it('rejects a missing or blank tenant before touching the service', async () => {
+      await expect(controller.template(undefined)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(controller.template('  ')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(service.buildTemplate).not.toHaveBeenCalled();
     });
   });
 

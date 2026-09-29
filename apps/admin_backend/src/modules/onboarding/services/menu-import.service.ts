@@ -32,6 +32,41 @@ const MAX_BASE64_LENGTH = 5 * 1024 * 1024;
 const ROUND_4 = 4;
 const ROUND_PRICE = 2;
 
+/**
+ * First worksheet of the downloadable template: plain-Spanish instructions.
+ * The import parser ignores this sheet (accent/case/space tolerant match) so
+ * the template can be uploaded back as-is without deleting the guide.
+ */
+export const TEMPLATE_GUIDE_SHEET_NAME = 'CÓMO LLENARLA';
+
+/** SOHO-style menu categories pre-created as worksheets in the template. */
+export const TEMPLATE_CATEGORIES = [
+  'CAFÉ CALIENTE',
+  'CAFÉ HELADO',
+  'DESAYUNOS',
+  'BATIDOS',
+  'BEBIDAS',
+  'POSTRES',
+] as const;
+
+/** One fully filled example row shipped on every data sheet. */
+const TEMPLATE_EXAMPLE_ROW = [
+  'Cappuccino 8oz',
+  110,
+  'Café molido',
+  18,
+  'g',
+] as const;
+
+const TEMPLATE_INSTRUCTIONS = [
+  'CÓMO LLENAR LA PLANTILLA DE MENÚ',
+  '1. Cada pestaña de este archivo corresponde a una categoría del menú (CAFÉ CALIENTE, CAFÉ HELADO, DESAYUNOS, BATIDOS, BEBIDAS, POSTRES). Puedes renombrarlas o agregar más pestañas: cada pestaña se importa como una categoría.',
+  '2. En cada pestaña usa exactamente estos encabezados (no los borres ni los renombres): producto | precio | insumo | cantidad | unidad.',
+  '3. Escribe una fila por ingrediente: repite el producto y su precio en cada fila de ingrediente. Si un producto no lleva receta, deja insumo, cantidad y unidad vacíos.',
+  '4. Ejemplo (ya cargado en cada pestaña): Cappuccino 8oz | 110 | Café molido | 18 | g. Usa unidades consistentes (g, ml, UN, L, KG).',
+  '5. No modifiques la pestaña CÓMO LLENARLA: el sistema la ignora al importar. Guarda el archivo como .xlsx y súbelo desde Configuración → Importar menú.',
+] as const;
+
 const round4 = (value: number): number => Number(value.toFixed(ROUND_4));
 const roundPrice = (value: number): number => Number(value.toFixed(ROUND_PRICE));
 
@@ -169,9 +204,62 @@ export class MenuImportService {
 
     const sheets: ParsedSheet[] = [];
     for (const sheet of workbook.worksheets) {
+      if (this.isGuideSheet(sheet.name)) continue;
       sheets.push(this.parseSheet(sheet));
     }
     return sheets;
+  }
+
+  /**
+   * Accent/case/space-tolerant match of the template's instruction sheet so
+   * the downloaded template can be uploaded back without manual deletion.
+   */
+  private isGuideSheet(name: string | undefined): boolean {
+    const normalized = (name ?? '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ');
+    return normalized === 'como llenarla';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Template generation (GET /onboarding/menu-import/template)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Builds the ready-to-fill .xlsx template fully in memory with exceljs:
+   * a first instruction sheet plus one pre-created sheet per SOHO category,
+   * each with the bold BOM header row and one filled example row.
+   */
+  async buildTemplate(): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+
+    const guide = workbook.addWorksheet(TEMPLATE_GUIDE_SHEET_NAME);
+    guide.getColumn(1).width = 110;
+    for (const line of TEMPLATE_INSTRUCTIONS) {
+      guide.addRow([line]);
+    }
+    // The title line stands out; instruction lines stay plain.
+    guide.getRow(1).font = { bold: true, size: 12 };
+
+    for (const category of TEMPLATE_CATEGORIES) {
+      const sheet = workbook.addWorksheet(category);
+      sheet.columns = [
+        { width: 30 },
+        { width: 12 },
+        { width: 30 },
+        { width: 12 },
+        { width: 10 },
+      ];
+      const headerRow = sheet.addRow([...MENU_COLUMNS]);
+      headerRow.font = { bold: true };
+      sheet.addRow([...TEMPLATE_EXAMPLE_ROW]);
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer as unknown as ArrayBuffer);
   }
 
   private parseSheet(sheet: ExcelJS.Worksheet): ParsedSheet {

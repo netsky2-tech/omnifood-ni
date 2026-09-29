@@ -561,4 +561,96 @@ describe('MenuImportService (Unit)', () => {
       expect(mockManager.save).toHaveBeenCalled();
     });
   });
+
+  describe('template generation (GET /template)', () => {
+    const EXPECTED_TEMPLATE_SHEETS = [
+      'CÓMO LLENARLA',
+      'CAFÉ CALIENTE',
+      'CAFÉ HELADO',
+      'DESAYUNOS',
+      'BATIDOS',
+      'BEBIDAS',
+      'POSTRES',
+    ];
+
+    const loadTemplate = async (): Promise<ExcelJS.Workbook> => {
+      const buffer = await service.buildTemplate();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+      return workbook;
+    };
+
+    it('builds a real .xlsx with the guide sheet first and one sheet per SOHO category', async () => {
+      const workbook = await loadTemplate();
+      expect(workbook.worksheets.map((ws) => ws.name)).toEqual(
+        EXPECTED_TEMPLATE_SHEETS,
+      );
+    });
+
+    it('declares the five BOM headers (bold) on every data sheet', async () => {
+      const workbook = await loadTemplate();
+      for (const name of EXPECTED_TEMPLATE_SHEETS.slice(1)) {
+        const sheet = workbook.getWorksheet(name);
+        expect(sheet).toBeDefined();
+        const headerRow = sheet!.getRow(1);
+        expect(headerRow.getCell(1).value).toBe('producto');
+        expect(headerRow.getCell(2).value).toBe('precio');
+        expect(headerRow.getCell(3).value).toBe('insumo');
+        expect(headerRow.getCell(4).value).toBe('cantidad');
+        expect(headerRow.getCell(5).value).toBe('unidad');
+        expect(headerRow.getCell(1).font?.bold).toBe(true);
+        expect(headerRow.getCell(5).font?.bold).toBe(true);
+      }
+    });
+
+    it('ships one fully filled example row per data sheet', async () => {
+      const workbook = await loadTemplate();
+      for (const name of EXPECTED_TEMPLATE_SHEETS.slice(1)) {
+        const sheet = workbook.getWorksheet(name);
+        expect(sheet).toBeDefined();
+        const row = sheet!.getRow(2);
+        expect(row.getCell(1).value).toBe('Cappuccino 8oz');
+        expect(row.getCell(2).value).toBe(110);
+        expect(row.getCell(3).value).toBe('Café molido');
+        expect(row.getCell(4).value).toBe(18);
+        expect(row.getCell(5).value).toBe('g');
+      }
+    });
+
+    it('contains plain-Spanish instructions on the guide sheet', async () => {
+      const workbook = await loadTemplate();
+      const guide = workbook.getWorksheet('CÓMO LLENARLA');
+      expect(guide).toBeDefined();
+      const lines: string[] = [];
+      guide!.eachRow((row) => {
+        const text = row.getCell(1).value;
+        if (typeof text === 'string' && text.trim()) lines.push(text);
+      });
+      expect(lines.length).toBeGreaterThanOrEqual(3);
+      const joined = lines.join(' ');
+      expect(joined).toContain('producto');
+      expect(joined).toContain('categoría');
+    });
+
+    it('round-trips: the generated template passes preview with no errors (guide sheet ignored)', async () => {
+      seedExisting();
+      const buffer = await service.buildTemplate();
+      const fileBase64 = Buffer.from(
+        buffer as unknown as ArrayBuffer,
+      ).toString('base64');
+
+      const summary = await service.preview(TENANT, { fileBase64 });
+
+      // The guide sheet is not a category and produces no error or warning.
+      expect(summary.errors).toEqual([]);
+      expect(summary.warnings).toEqual([]);
+      expect(summary.categories).toBe(6);
+      // The same example product repeated across all six sheets is ONE product.
+      expect(summary.productsToCreate).toBe(1);
+      expect(summary.recipesToCreate).toBe(1);
+      expect(summary.insumosToCreate.map((i) => i.name)).toEqual([
+        'Café molido',
+      ]);
+    });
+  });
 });
