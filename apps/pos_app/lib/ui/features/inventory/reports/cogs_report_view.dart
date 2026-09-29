@@ -215,6 +215,44 @@ class _CogsReportViewState extends State<CogsReportView> {
                 ],
                 const SizedBox(height: 16),
 
+                // 2.5 Cost-basis coverage banner (finding H10). Only when the
+                // period HAS movements and some/all lack purchase-cost data.
+                // Copy is the dashboard's ZERO_COST_BASIS note verbatim: the
+                // same failure must use the same words on both surfaces.
+                if (viewModel.hasCostCoverageWarning) ...[
+                  Container(
+                    key: const Key('cogs_cost_basis_warning_banner'),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.shade400, width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.amber.shade800,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Sin costo: algunos insumos todavía no tienen costo de compra registrado. '
+                            'Registra el costo de compra de esos insumos para calcular el margen.',
+                            style: TextStyle(
+                              color: Colors.amber.shade900,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
                 // 3. Search Bar
                 TextField(
                   controller: _searchController,
@@ -252,6 +290,12 @@ class _CogsReportViewState extends State<CogsReportView> {
                                 const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final item = viewModel.filteredItems[index];
+                              // NHILOS §34: "—" means unavailable/unknown,
+                              // never zero. When every movement of this item
+                              // lacks cost basis, its C$ 0.00 is a data gap,
+                              // not a real cost: show — instead.
+                              final costBasisMissing =
+                                  viewModel.isItemCostBasisMissing(item.insumoId);
                               return ListTile(
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12,
@@ -266,8 +310,11 @@ class _CogsReportViewState extends State<CogsReportView> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 subtitle: Text(
-                                  'Ventas: ${item.salesQuantity.toStringAsFixed(2)} ${item.consumptionUom} (C\$ ${item.salesCostNio.toStringAsFixed(2)})'
-                                  '${item.shrinkageQuantity > 0 ? ' • Mermas: ${item.shrinkageQuantity.toStringAsFixed(2)} ${item.consumptionUom} (C\$ ${item.shrinkageCostNio.toStringAsFixed(2)})' : ''}',
+                                  costBasisMissing
+                                      ? 'Ventas: ${item.salesQuantity.toStringAsFixed(2)} ${item.consumptionUom} (sin costo registrado)'
+                                          '${item.shrinkageQuantity > 0 ? ' • Mermas: ${item.shrinkageQuantity.toStringAsFixed(2)} ${item.consumptionUom} (sin costo registrado)' : ''}'
+                                      : 'Ventas: ${item.salesQuantity.toStringAsFixed(2)} ${item.consumptionUom} (C\$ ${item.salesCostNio.toStringAsFixed(2)})'
+                                          '${item.shrinkageQuantity > 0 ? ' • Mermas: ${item.shrinkageQuantity.toStringAsFixed(2)} ${item.consumptionUom} (C\$ ${item.shrinkageCostNio.toStringAsFixed(2)})' : ''}',
                                   style: const TextStyle(fontSize: 11),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
@@ -277,15 +324,22 @@ class _CogsReportViewState extends State<CogsReportView> {
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                      'C\$ ${item.totalCostNio.toStringAsFixed(2)}',
-                                      style: const TextStyle(
+                                      costBasisMissing
+                                          ? '—'
+                                          : 'C\$ ${item.totalCostNio.toStringAsFixed(2)}',
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w800,
                                         fontSize: 13,
+                                        color: costBasisMissing
+                                            ? colorScheme.onSurface.withValues(alpha: 0.5)
+                                            : null,
                                       ),
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '${item.costPercentage.toStringAsFixed(1)}% del total',
+                                      costBasisMissing
+                                          ? 'Sin costo'
+                                          : '${item.costPercentage.toStringAsFixed(1)}% del total',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,

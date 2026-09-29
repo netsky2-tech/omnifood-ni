@@ -114,4 +114,111 @@ void main() {
     expect(viewModel.errorMessage, contains('Storage IO failure'));
     expect(viewModel.report, isNull);
   });
+
+  group('cost coverage (H10 zero-cost basis UX)', () {
+    final uncostedInsumos = <Insumo>[
+      const Insumo(
+        id: 'ins-harina',
+        name: 'Harina',
+        consumptionUom: 'kg',
+        stock: 5.0,
+        averageCost: 0.0,
+      ),
+    ];
+
+    final uncostedMovements = <InventoryMovement>[
+      InventoryMovement(
+        id: 'mov-u1',
+        insumoId: 'ins-harina',
+        type: MovementType.sale,
+        quantity: -1.0,
+        previousStock: 5.0,
+        newStock: 4.0,
+        timestamp: now,
+      ),
+    ];
+
+    test('zero basis: all movements lack cost basis -> coverage zeroBasis, totals unchanged', () async {
+      when(() => repository.getActiveInsumos()).thenAnswer((_) async => uncostedInsumos);
+      when(() => repository.getAllMovements()).thenAnswer((_) async => uncostedMovements);
+
+      await viewModel.loadCogsReport();
+
+      expect(viewModel.costCoverage, CogsCostCoverage.zeroBasis);
+      expect(viewModel.hasCostCoverageWarning, isTrue);
+      expect(viewModel.missingBasisCount, 1);
+      expect(viewModel.totalMovementCount, 1);
+
+      // Coverage is derived data only: the COGS math must stay untouched.
+      expect(viewModel.totalCogsNio, 0.0);
+      expect(viewModel.filteredItems, hasLength(1));
+      expect(viewModel.filteredItems.single.totalCostNio, 0.0);
+      // Item-level: every movement of this insumo lacks basis.
+      expect(viewModel.isItemCostBasisMissing('ins-harina'), isTrue);
+    });
+
+    test('partial: mixed costed and uncosted movements -> coverage partial with counts', () async {
+      when(() => repository.getActiveInsumos()).thenAnswer((_) async => [...testInsumos, ...uncostedInsumos]);
+      when(() => repository.getAllMovements()).thenAnswer((_) async => [...testMovements, ...uncostedMovements]);
+
+      await viewModel.loadCogsReport();
+
+      // 3 costed movements + 1 uncosted movement.
+      expect(viewModel.costCoverage, CogsCostCoverage.partial);
+      expect(viewModel.hasCostCoverageWarning, isTrue);
+      expect(viewModel.missingBasisCount, 1);
+      expect(viewModel.totalMovementCount, 4);
+
+      // Math unchanged: costed totals must not absorb the uncosted movement.
+      expect(viewModel.totalCogsNio, 215.0);
+    });
+
+    test('complete: all movements have cost basis -> no warning, zero missing', () async {
+      when(() => repository.getActiveInsumos()).thenAnswer((_) async => testInsumos);
+      when(() => repository.getAllMovements()).thenAnswer((_) async => testMovements);
+
+      await viewModel.loadCogsReport();
+
+      expect(viewModel.costCoverage, CogsCostCoverage.complete);
+      expect(viewModel.hasCostCoverageWarning, isFalse);
+      expect(viewModel.missingBasisCount, 0);
+      expect(viewModel.totalMovementCount, 3);
+      expect(viewModel.isItemCostBasisMissing('ins-coffee'), isFalse);
+    });
+
+    test('explicitly recorded unitCostNio of 0.0 is a real cost, not missing basis', () async {
+      final recordedZeroMovements = <InventoryMovement>[
+        InventoryMovement(
+          id: 'mov-z1',
+          insumoId: 'ins-harina',
+          type: MovementType.sale,
+          quantity: -1.0,
+          previousStock: 5.0,
+          newStock: 4.0,
+          unitCostNio: 0.0,
+          timestamp: now,
+        ),
+      ];
+      when(() => repository.getActiveInsumos()).thenAnswer((_) async => uncostedInsumos);
+      when(() => repository.getAllMovements()).thenAnswer((_) async => recordedZeroMovements);
+
+      await viewModel.loadCogsReport();
+
+      expect(viewModel.costCoverage, CogsCostCoverage.complete);
+      expect(viewModel.missingBasisCount, 0);
+      expect(viewModel.isItemCostBasisMissing('ins-harina'), isFalse);
+    });
+
+    test('no movements: existing empty state keeps noMovements coverage', () async {
+      when(() => repository.getActiveInsumos()).thenAnswer((_) async => testInsumos);
+      when(() => repository.getAllMovements()).thenAnswer((_) async => <InventoryMovement>[]);
+
+      await viewModel.loadCogsReport();
+
+      expect(viewModel.costCoverage, CogsCostCoverage.noMovements);
+      expect(viewModel.hasCostCoverageWarning, isFalse);
+      expect(viewModel.missingBasisCount, 0);
+      expect(viewModel.totalMovementCount, 0);
+    });
+  });
 }
