@@ -259,7 +259,8 @@ export function useLinkingCodes() {
   return useQuery({
     queryKey: onboardingKeys.linkingCodes(),
     queryFn: fetchLinkingCodes,
-    refetchInterval: 5000,
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -327,9 +328,10 @@ export function useCancelActivationAttempt() {
     mutationFn: ({ attemptId, reason }: { attemptId: string; reason?: string }) =>
       cancelActivationAttempt(attemptId, reason),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: onboardingKeys.activationAttempt() });
-      queryClient.invalidateQueries({ queryKey: onboardingKeys.session() });
-      queryClient.invalidateQueries({ queryKey: onboardingKeys.readiness() });
+      // Immediately clear the cached active attempt so the card disappears
+      // without waiting for the next background poll.
+      queryClient.setQueryData(onboardingKeys.activationAttempt(), null);
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.all });
     },
   });
 }

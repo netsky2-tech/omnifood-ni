@@ -121,7 +121,7 @@ export class TerminalPrimingService {
         try {
           const rows: Array<{ maxSeq?: string | number | null }> =
             await manager.query(
-              `SELECT MAX(CAST(NULLIF(regexp_replace(number, '[^0-9]', '', 'g'), '') AS bigint)) AS "maxSeq"
+              `SELECT MAX(CAST(NULLIF(regexp_replace(invoice_number, '[^0-9]', '', 'g'), '') AS bigint)) AS "maxSeq"
              FROM invoices
              WHERE tenant_id = $1`,
               [trimmedTenantId],

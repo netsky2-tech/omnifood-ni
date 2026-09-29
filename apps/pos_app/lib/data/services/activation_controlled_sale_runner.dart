@@ -97,21 +97,39 @@ class ActivationControlledSaleRunner {
     // exception's real purpose: consecutivo inicial = 1 with an EMPTY
     // prefix. The tenant's real fiscal configuration replaces it via the
     // Business Profile form / server-side series (#554).
+    final cloudHighestEntity = await _database.localConfigDao
+        .getConfigByKey('dgi_cloud_highest_sequence');
+    final cloudHighest =
+        int.tryParse(cloudHighestEntity?.value ?? '') ?? 0;
+    final minRequiredStart = cloudHighest > 0 ? cloudHighest + 1 : 1;
+
     final existingSeries =
         await _database.localConfigDao.getConfigByKey('dgi_prefix');
     if (existingSeries == null) {
       // D-6: if the tenant already issued invoices in the cloud, seed the
       // sequence after the cloud's highest sequence number so the verification
       // sale never collides with an already-issued invoice.
-      final cloudHighestEntity = await _database.localConfigDao
-          .getConfigByKey('dgi_cloud_highest_sequence');
-      final cloudHighest =
-          int.tryParse(cloudHighestEntity?.value ?? '') ?? 0;
-      final start = cloudHighest > 0 ? cloudHighest + 1 : 1;
       await DgiNumberingServiceImpl(
         _database.localConfigDao,
         _database.invoiceDao,
-      ).initializeRange(prefix: '', start: start);
+      ).initializeRange(prefix: '', start: minRequiredStart);
+    } else if (cloudHighest > 0) {
+      // D-6 invariant: the local sequence cursor must NEVER lag behind
+      // the cloud's highest issued invoice. Advance it if it falls behind
+      // (e.g. after a re-attempt on an existing local database).
+      final currentConfig = await _database.localConfigDao
+          .getConfigByKey('dgi_current_number');
+      final currentNum = int.tryParse(currentConfig?.value ?? '') ?? 0;
+      if (currentNum < minRequiredStart) {
+        await _database.localConfigDao.saveConfig(
+          LocalConfigEntity(
+            key: 'dgi_current_number',
+            value: minRequiredStart.toString(),
+            description:
+                'Advanced to match cloud highest sequence (D-6).',
+          ),
+        );
+      }
     }
 
     // 1. Fetch Attempt & Assert Pre-Condition: RUNNING or already LOCAL_ACTIVATION_EVIDENCE_COMPLETE
