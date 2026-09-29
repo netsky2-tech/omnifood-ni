@@ -29,8 +29,8 @@ Add the three missing owner-dashboard pages from audit Batch 6: B6 (cash session
 
 ## Status
 - [x] 6a — commit 3458d658 (incl. backend GET /sales/shifts — no list route existed)
-- [x] 6b — commit see below (incl. backend GET /operations/audit/events — no events route existed)
-- [ ] 6c
+- [x] 6b — commit 68428e9a (incl. backend GET /operations/audit/events — no events route existed)
+- [x] 6c — tip of feat/dashboard-kardex-remediation ("feat(dashboard): add kardex remediation page")
 
 ## Commits
 - 6a: `feat(dashboard): add cash sessions page`

@@ -76,6 +76,41 @@ export const cashShiftStatusLabels: Record<string, string> = {
 };
 
 /**
+ * Kardex regularization queue statuses (slice 6c). Keys are the exact values
+ * of KardexQueueStatus (apps/admin_backend/src/modules/inventory/entities/
+ * kardex-recalculate-queue.entity.ts); COMPLETED is intentionally absent —
+ * the pending route excludes already-regularized rows, so a future COMPLETED
+ * value on the wire passes through untouched via `localize`. Canonical
+ * vocabulary (NHILOS §26/§27): one term per lifecycle state.
+ */
+export const kardexQueueStatusLabels: Record<string, string> = {
+  PENDING: "Pendiente",
+  PROCESSING: "En proceso",
+  BLOCKED: "Bloqueado",
+  FAILED: "Falló",
+};
+
+/**
+ * Inventory movement type labels (slice 6c). Keys are the exact values of
+ * MovementType (apps/admin_backend/src/modules/inventory/entities/
+ * inventory-movement.entity.ts), used on the kardex page to explain what
+ * triggered each detected correction. Unknown values pass through untouched
+ * via `localize`.
+ */
+export const kardexMovementTypeLabels: Record<string, string> = {
+  SALE: "Venta",
+  SALE_CANCEL: "Anulación de venta",
+  PURCHASE: "Compra",
+  ENTRADA_COMPRA: "Entrada de compra",
+  SHRINKAGE: "Merma",
+  PRODUCTION: "Producción",
+  CREDIT_NOTE_RESTOCK: "Nota de crédito",
+  ADJUSTMENT: "Ajuste",
+  REVERSAL: "Reversión",
+  INITIAL_STOCK: "Stock inicial",
+};
+
+/**
  * Audit event severity labels (slice 6b). Keys are the exact values of the
  * single backend AuditRiskClassifier taxonomy (audit-risk-classifier.ts):
  * CRITICAL / WARNING / INFO. Canonical vocabulary (NHILOS §26/§27): one term

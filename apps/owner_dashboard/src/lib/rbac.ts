@@ -13,7 +13,10 @@ export type AppAction =
   | "settings.configure"
   // Mirrors the backend permission 'sales:issue_credit_note'
   // (AppPermission.SALES_ISSUE_CREDIT_NOTE, B1c-2 slice A).
-  | "creditNotes.issue";
+  | "creditNotes.issue"
+  // Mirrors the backend @Roles(OWNER, MANAGER) on
+  // POST /inventory/regularization/approve (batch 6 slice 6c).
+  | "kardex.approve";
 
 /**
  * Route access policy aligned with the authoritative NestJS backend guards:
@@ -33,6 +36,8 @@ export type AppAction =
  * - /customers: OWNER, MANAGER, CASHIER, WAITER
  * - /settings: OWNER, MANAGER
  * - /menu-qr: OWNER, MANAGER
+ * - /kardex: OWNER, MANAGER (kardex regularization approval, mirrors backend
+ *   RegularizationController pending/approve route roles)
  */
 export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/": ["OWNER", "MANAGER"],
@@ -50,6 +55,7 @@ export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/loyalty": ["OWNER", "MANAGER"],
   "/settings": ["OWNER", "MANAGER"],
   "/menu-qr": ["OWNER", "MANAGER"],
+  "/kardex": ["OWNER", "MANAGER"],
 };
 
 export const ACTION_ROLE_PERMISSIONS: Record<AppAction, UserRole[]> = {
@@ -63,6 +69,7 @@ export const ACTION_ROLE_PERMISSIONS: Record<AppAction, UserRole[]> = {
   "fiscal.export": ["OWNER", "MANAGER"],
   "settings.configure": ["OWNER", "MANAGER"],
   "creditNotes.issue": ["OWNER", "MANAGER"],
+  "kardex.approve": ["OWNER", "MANAGER"],
 };
 
 export function canAccessRoute(role: UserRole | undefined | null, path: string): boolean {
