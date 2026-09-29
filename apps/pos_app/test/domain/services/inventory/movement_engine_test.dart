@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
+import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart';
+import 'package:pos_app/data/models/inventory/movement_entity.dart';
+import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/inventory/recipe.dart';
@@ -11,6 +14,7 @@ import 'package:pos_app/domain/models/fulfillment/fulfillment_contracts.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
+import 'package:pos_app/domain/services/inventory/negative_stock_regularization_service.dart';
 
 import 'movement_engine_test.mocks.dart';
 
@@ -2360,4 +2364,82 @@ void main() {
       verifyNever(mockRepo.saveMovement(any));
     });
   });
+
+  group('MovementEngine - recordPurchase regularization observability (M5)', () {
+    setUp(() {
+      final insumo = createInsumo(id: 'ins-1', name: 'Café', stock: 10);
+      when(mockRepo.getInsumoById('ins-1')).thenAnswer((_) async => insumo);
+      when(mockRepo.updateInsumoStock('ins-1', 12)).thenAnswer((_) async {});
+      when(mockRepo.updateInsumoCost(any, any)).thenAnswer((_) async {});
+      when(mockRepo.saveMovement(any)).thenAnswer((_) async {});
+    });
+
+    test(
+      'successful regularization persists the purchase without alerting',
+      () async {
+        engine = MovementEngineImpl(
+          mockRepo,
+          mockAlerts,
+          regularizationService: _FakeRegularizationService(),
+        );
+
+        await engine.recordPurchase('ins-1', 2, 1.0);
+
+        verify(mockRepo.saveMovement(any)).called(1);
+        verifyNever(mockAlerts.publishAlert(any));
+      },
+    );
+
+    test(
+      'regularization failure is observable without failing the purchase',
+      () async {
+        engine = MovementEngineImpl(
+          mockRepo,
+          mockAlerts,
+          regularizationService: _FakeRegularizationService(
+            throwOnProcess: StateError('kardex queue down'),
+          ),
+        );
+
+        // Must NOT throw even though regularization fails.
+        await engine.recordPurchase('ins-1', 2, 1.0);
+
+        // The purchase itself persisted: stock updated and movement saved.
+        verify(mockRepo.updateInsumoStock('ins-1', 12)).called(1);
+        verify(mockRepo.saveMovement(any)).called(1);
+
+        // And the failure is observable through the alert service.
+        final captured =
+            verify(mockAlerts.publishAlert(captureAny)).captured.single
+                as ForensicAlert;
+        expect(captured.alertType, 'INVENTORY_REGULARIZATION_FAILED');
+        expect(captured.severity, 'warning');
+        expect(captured.sourceDocumentId, 'ins-1');
+        expect(captured.sourceMovementId, isNotEmpty);
+        expect(captured.metadata?['error'], contains('kardex queue down'));
+      },
+    );
+  });
+}
+
+/// M5 (Batch 3): minimal fake of the concrete regularization service so the
+/// engine's post-purchase trigger can be exercised in both branches.
+class _FakeRegularizationService implements NegativeStockRegularizationService {
+  _FakeRegularizationService({this.throwOnProcess});
+
+  final Object? throwOnProcess;
+
+  @override
+  Future<List<KardexRecalculateQueueEntity>> processPendingQueueForInsumo({
+    required String insumoId,
+    required MovementEntity triggerMovement,
+    bool isClosedPeriod = false,
+  }) async {
+    final error = throwOnProcess;
+    if (error != null) throw error;
+    return const [];
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import '../../core/clock/monotonic_clock.dart';
 import '../../core/config/audit_config.dart';
@@ -46,8 +47,22 @@ class TenantCapabilityCache {
           value: jsonEncode(capability.diagnostics),
         ),
       );
-    } catch (_) {
-      clear();
+    } catch (e, st) {
+      // M9 (Batch 3): the server response was VALID — it failed only local
+      // config persistence. The in-memory capability is authoritative for
+      // this boot session, so it must be kept (wiping it made BOH features
+      // disappear on a transient storage failure). Only an invalid server
+      // response (capability == null) clears state. The refresh is reported
+      // as not fully persisted (false) so callers can detect degradation.
+      developer.log(
+        'audit_cap persistence failed for tenant $tenantId; keeping '
+        'in-memory capability for this boot session.',
+        name: 'TenantCapabilityCache',
+        level: 900, // WARNING
+        error: e,
+        stackTrace: st,
+      );
+      _active = capability;
       return false;
     }
     _active = capability;

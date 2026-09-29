@@ -2,10 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/mappers/inventory_mapper.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/product_entity.dart';
+import 'package:pos_app/data/models/inventory/recipe_entity.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_contracts.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/batch_deduction.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/inventory/recipe.dart';
 
 void main() {
   group('InventoryMapper', () {
@@ -87,5 +89,54 @@ void main() {
         expect(product.directStockInsumoId, isNull);
       },
     );
+
+    // M6 (Batch 3): the unknown-value fallbacks keep corrupt/offline data
+    // flowing (offline-first constraint), but must stay stable so any change
+    // in the fallback is deliberate.
+    test('falls back unknown ingredient type to insumo', () {
+      final entity = RecipeEntity(
+        id: 'r-1',
+        productId: 'p-1',
+        ingredientId: 'i-1',
+        ingredientType: 'totally_unknown_type',
+        quantity: 1,
+      );
+
+      final recipe = InventoryMapper.toRecipeDomain(entity);
+
+      expect(recipe.ingredientType, IngredientType.insumo);
+    });
+
+    test('falls back unknown movement type to adjustment', () {
+      final entity = MovementEntity(
+        id: 'mv-corrupt',
+        insumoId: 'ins-1',
+        type: 'mystery_movement',
+        quantity: -2.0,
+        previousStock: 10.0,
+        newStock: 8.0,
+        timestamp: DateTime.now().toIso8601String(),
+      );
+
+      final movement = InventoryMapper.toMovementDomain(entity);
+
+      expect(movement.type, MovementType.adjustment);
+    });
+
+    test('falls back unknown inventory policy to null', () {
+      final entity = ProductEntity(
+        id: 'p-corrupt',
+        name: 'Corrupt',
+        uom: 'unit',
+        stock: 0,
+        averageCost: 0,
+        sellPrice: 10,
+        inventoryPolicy: 'teleport_stock',
+      );
+
+      final product = InventoryMapper.toProductDomain(entity);
+
+      expect(product.inventoryPolicy, isNull);
+    });
   });
 }

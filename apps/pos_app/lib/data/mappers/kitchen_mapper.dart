@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
+
 import '../../domain/models/kitchen/kitchen_order.dart';
 import '../../domain/models/kitchen/kitchen_order_item.dart';
 import '../models/kitchen/kitchen_order_entity.dart';
@@ -44,8 +46,30 @@ class KitchenMapper {
             }
             return e.toString();
           }).toList();
+        } else {
+          // M7 (Batch 3): a non-list payload is unexpected evidence of a
+          // corrupt write; keep the defensive empty list but log the raw
+          // payload so the failure is diagnosable instead of silent.
+          developer.log(
+            'Kitchen order item ${entity.id} modifiersJson is not a JSON '
+            'list; keeping empty modifiers. Raw payload: '
+            '${entity.modifiersJson}',
+            name: 'KitchenMapper',
+            level: 900, // WARNING
+          );
         }
-      } catch (_) {
+      } catch (e) {
+        // M7 (Batch 3): a corrupted payload must never crash the kitchen
+        // display, but silently emptying modifiers loses the evidence that
+        // the guest DID pick modifiers. Log the parse failure together with
+        // the raw payload so it can be diagnosed offline.
+        developer.log(
+          'Kitchen order item ${entity.id} modifiersJson failed to parse; '
+          'keeping empty modifiers. Raw payload: ${entity.modifiersJson}',
+          name: 'KitchenMapper',
+          level: 900, // WARNING
+          error: e,
+        );
         modifiers = [];
       }
     }

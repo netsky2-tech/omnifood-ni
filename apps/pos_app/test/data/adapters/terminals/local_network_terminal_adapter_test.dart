@@ -96,6 +96,57 @@ void main() {
       expect(status, TerminalStatus.offline);
     });
 
+    test(
+      // M8 (Batch 3): a terminal that accepts the connection but never
+      // answers STATUS is TRANSIENT — it must not be reported as offline.
+      'checkStatus reports transient error when STATUS answer times out',
+      () async {
+        final silentServer = await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        silentServer.listen((socket) {
+          // Accept the connection but never answer STATUS.
+        });
+        final slowAdapter = LocalNetworkTerminalAdapter(
+          terminalId: 'SLOW-IP',
+          host: InternetAddress.loopbackIPv4.address,
+          port: silentServer.port,
+          statusTimeout: const Duration(milliseconds: 300),
+        );
+
+        final status = await slowAdapter.checkStatus();
+
+        expect(status, TerminalStatus.error);
+        await silentServer.close();
+      },
+    );
+
+    test(
+      // M8 (Batch 3): a reachable terminal that answers garbage is degraded,
+      // not offline.
+      'checkStatus reports error for malformed STATUS responses',
+      () async {
+        final garbageServer = await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        garbageServer.listen((socket) {
+          socket.write('GARBAGE-NOT-JSON\n');
+        });
+        final garbageAdapter = LocalNetworkTerminalAdapter(
+          terminalId: 'GARBAGE-IP',
+          host: InternetAddress.loopbackIPv4.address,
+          port: garbageServer.port,
+        );
+
+        final status = await garbageAdapter.checkStatus();
+
+        expect(status, TerminalStatus.error);
+        await garbageServer.close();
+      },
+    );
+
     test('processSale receives approved response and parses metadata accurately', () async {
       const intent = CardPaymentIntent(
         transactionId: 'TRX-TCP-01',

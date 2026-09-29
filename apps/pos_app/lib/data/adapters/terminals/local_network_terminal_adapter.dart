@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import '../../../domain/ports/card_terminal_port.dart';
 
@@ -16,6 +17,11 @@ class LocalNetworkTerminalAdapter implements CardTerminalPort {
 
   final Duration socketTimeout;
 
+  /// M8 (Batch 3): timeout for the STATUS answer once the socket connected.
+  /// Exposed for tests; a timeout here is a TRANSIENT condition (the terminal
+  /// accepted the connection but did not answer), not definitive offline.
+  final Duration statusTimeout;
+
   @override
   TerminalConnectionMode get connectionMode => TerminalConnectionMode.localNetworkTcp;
 
@@ -27,6 +33,7 @@ class LocalNetworkTerminalAdapter implements CardTerminalPort {
     this.port = 9000,
     this.acquirer = AcquirerBank.bac,
     this.socketTimeout = const Duration(seconds: 45),
+    this.statusTimeout = const Duration(seconds: 3),
   });
 
   @override
@@ -44,7 +51,7 @@ class LocalNetworkTerminalAdapter implements CardTerminalPort {
         if (!completer.isCompleted) completer.completeError(err);
       });
 
-      final response = await completer.future.timeout(const Duration(seconds: 3));
+      final response = await completer.future.timeout(statusTimeout);
       await socket.close();
 
       final data = jsonDecode(response) as Map<String, dynamic>;
@@ -56,8 +63,42 @@ class LocalNetworkTerminalAdapter implements CardTerminalPort {
         return TerminalStatus.busy;
       }
       return TerminalStatus.ready;
-    } catch (_) {
+    } on SocketException catch (e) {
+      // M8 (Batch 3): a socket-level failure (connection refused, network
+      // unreachable) means the terminal is DEFINITIVELY unreachable —
+      // `offline` remains the accurate status.
+      developer.log(
+        'Terminal $terminalId unreachable at $host:$port; reporting '
+        'definitive offline.',
+        name: 'LocalNetworkTerminalAdapter',
+        level: 900, // WARNING
+        error: e,
+      );
       return TerminalStatus.offline;
+    } on TimeoutException catch (e) {
+      // M8 (Batch 3): the socket connected but the terminal did not answer
+      // in time. That is a TRANSIENT condition (slow terminal, congested
+      // network), not a definitive offline state.
+      developer.log(
+        'Terminal $terminalId connected but STATUS answer timed out after '
+        '$statusTimeout; reporting transient error.',
+        name: 'LocalNetworkTerminalAdapter',
+        level: 900, // WARNING
+        error: e,
+      );
+      return TerminalStatus.error;
+    } catch (e, st) {
+      // M8 (Batch 3): malformed or unexpected response — the terminal IS
+      // reachable (it answered), so it is degraded, not offline.
+      developer.log(
+        'Terminal $terminalId returned an unexpected STATUS response; '
+        'reporting error.',
+        name: 'LocalNetworkTerminalAdapter',
+        level: 900, // WARNING
+        error: e,
+        stackTrace: st,
+      );
+      return TerminalStatus.error;
     }
   }
 
