@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -5,6 +8,8 @@ import 'package:package_info_plus_platform_interface/package_info_data.dart';
 import 'package:package_info_plus_platform_interface/package_info_platform_interface.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
+import 'package:pos_app/data/models/human_authorization/canonical.dart';
+import 'package:pos_app/data/models/human_authorization/error_codes.dart';
 import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
 import 'package:pos_app/data/models/human_authorization/staff_policy_epoch_v1.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
@@ -43,6 +48,8 @@ import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' hide Batch;
+
+import '../models/human_authorization/ohac_test_helpers.dart';
 
 class CapturedPost {
   final String path;
@@ -3396,6 +3403,705 @@ void main() {
             expect(state.serverFloorSequence, 0);
             expect(state.serverFloorDigest, 'GENESIS');
             expect(state.revision, 0);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+    });
+
+    group('OHAC pull epoch consumption (B2c-3b, design §4.2/§5/§9)', () {
+      const ohacTenant = '11111111-1111-4111-8111-111111111111';
+      const ohacPosBuild = '2.3.4+11';
+      const userA = '33333333-3333-4333-8333-333333333333';
+      const userB = '44444444-4444-4444-8444-444444444444';
+      final digestFive = 'sha256:${'d' * 64}';
+      final digestSix = 'sha256:${'e' * 64}';
+
+      Map<String, dynamic> epochEntry(String userId, List<String> permissions) =>
+          <String, dynamic>{
+            'userId': userId,
+            'status': 'ACTIVE',
+            'role': 'MANAGER',
+            'permissions': permissions,
+            'pinVerifier': <String, dynamic>{
+              'algorithm': 'bcrypt',
+              'formatVersion': '2b',
+              'encoded': r'$2b$10$abcdefghijklmnopqrstuv',
+            },
+            'attemptResetGeneration': '0',
+          };
+
+      /// A signed `ohac.staff-policy-epoch.v1` targeting THIS terminal's
+      /// identity, tenant and negotiated build, so only the consumption
+      /// logic under test can reject it.
+      Map<String, dynamic> signedEpochJson([
+        Map<String, dynamic> overrides = const {},
+      ]) =>
+          jsonDecode(utf8.decode(signBody(<String, dynamic>{
+            'schema': staffPolicyEpochV1Schema,
+            'tenantId': ohacTenant,
+            'targetTerminalId': 'dev-1',
+            'sequence': '1',
+            'previousSequence': '0',
+            'previousDigest': genesisDigest,
+            'publisherBackendBuild': 'backend-build-1',
+            'targetPosBuild': ohacPosBuild,
+            'minimumAssertionSchema': 'ohac.assertion.v1',
+            'policyEntries': <Map<String, dynamic>>[
+              epochEntry(userA, <String>['inventory:adjust', 'sales:void_invoice']),
+              epochEntry(userB, <String>['sales:void_invoice']),
+            ],
+            ...overrides,
+          }))) as Map<String, dynamic>;
+
+      Map<String, dynamic> deliverEnvelope(Map<String, dynamic> epochJson) => {
+            'status': 'DELIVER',
+            'epoch': epochJson,
+            // Sibling duplicates of the epoch's own values (backend
+            // `inbound-sync.service.ts` rendering).
+            'sequence': epochJson['sequence'],
+            'digest': epochJson['digest'],
+          };
+
+      Map<String, dynamic> deltasResponse({
+        Map<String, dynamic>? humanAuthorization,
+        int currentVersion = 1787750000000,
+      }) =>
+          {
+            'status': 'success',
+            'serverTime': '2026-08-26T18:30:00.000Z',
+            'currentVersion': currentVersion,
+            'deltas': {
+              'products': [],
+              'catalogValues': [],
+              'insumos': [],
+              'recipes': [],
+              'users': [],
+            },
+            'humanAuthorization': ?humanAuthorization,
+          };
+
+      Future<AppDatabase> buildDb() => $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+      Future<void> seedOhacTenant(AppDatabase database) =>
+          database.localConfigDao.saveConfig(
+            LocalConfigEntity(key: 'tenant_id', value: ohacTenant),
+          );
+
+      Future<void> seedTerminalState(
+        AppDatabase database, {
+        String state = 'ACTIVE',
+        int activeSequence = 0,
+        String activeDigest = genesisDigest,
+        int candidateSequence = 0,
+        String candidateDigest = '',
+        int revision = 1,
+      }) =>
+          database.ohacDeliveryDao.insertTerminalState(
+            OhacTerminalStateEntity(
+              tenantId: ohacTenant,
+              terminalId: 'dev-1',
+              state: state,
+              activeSequence: activeSequence,
+              activeDigest: activeDigest,
+              candidateSequence: candidateSequence,
+              candidateDigest: candidateDigest,
+              serverFloorSequence: 0,
+              serverFloorDigest: genesisDigest,
+              negotiatedPosBuild: '',
+              negotiatedBackendBuild: '',
+              negotiatedPolicySchema: '',
+              negotiatedAssertionSchema: '',
+              integrityClassification: '',
+              localAuthorizationSequence: 0,
+              revision: revision,
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            ),
+          );
+
+      SyncService serviceWithDb(AppDatabase database) => SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+      test(
+        'DELIVER accepted: epoch and entry rows persist with the canonical '
+        'payload and the negotiated facts, state flips to RECEIVE_PENDING',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          final epochJson = signedEpochJson();
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+              currentVersion: 1787750000001,
+            );
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            final epochRow = await database.ohacDeliveryDao
+                .findEpoch(ohacTenant, 'dev-1', 1);
+            expect(epochRow, isNotNull);
+            expect(epochRow!.digest, epochJson['digest']);
+
+            // Payload provenance: the stored payload is the CANONICAL
+            // envelope — re-canonicalizing it is byte-identical and its
+            // digest verifies.
+            final payloadBytes = Uint8List.fromList(
+              utf8.encode(epochRow.payload),
+            );
+            final recanonicalized = canonicalizeOhac(payloadBytes);
+            expect(recanonicalized, isA<OhacSuccess<Uint8List>>());
+            expect(
+              (recanonicalized as OhacSuccess<Uint8List>).value,
+              payloadBytes,
+            );
+            final payloadMap =
+                jsonDecode(epochRow.payload) as Map<String, dynamic>;
+            expect(verifyBodyDigest(payloadMap), isA<OhacSuccess<dynamic>>());
+
+            final state = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(state, isNotNull);
+            expect(state!.state, 'RECEIVE_PENDING');
+            expect(state.candidateSequence, 1);
+            expect(state.candidateDigest, epochJson['digest']);
+            expect(state.activeSequence, 0);
+            // The four negotiated facts: the POS's own build (the same
+            // string negotiation sent), the epoch's backend build and the
+            // two schemas.
+            expect(state.negotiatedPosBuild, ohacPosBuild);
+            expect(state.negotiatedBackendBuild, 'backend-build-1');
+            expect(state.negotiatedPolicySchema, staffPolicyEpochV1Schema);
+            expect(state.negotiatedAssertionSchema, 'ohac.assertion.v1');
+            expect(state.revision, 1);
+
+            final entries = await database.ohacDeliveryDao
+                .findEntries(ohacTenant, 'dev-1', 1);
+            expect(entries.map((entry) => entry.userId).toList(), [userA, userB]);
+            expect(
+              entries[0].permissions,
+              jsonEncode(<String>['inventory:adjust', 'sales:void_invoice']),
+            );
+            expect(entries[0].verifierAlgorithm, 'bcrypt');
+            expect(entries[0].verifierFormatVersion, '2b');
+            expect(entries[0].verifierEncoded, r'$2b$10$abcdefghijklmnopqrstuv');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'sentinel translation does NOT fire for a corrupt half-sentinel '
+        "head (0, <digest>) — the epoch is refused, fail closed",
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          final epochJson = signedEpochJson();
+          final corruptHeadDigest = 'sha256:${'f' * 64}';
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            // (0, <digest>) is NOT the documented (0, '') sentinel: the
+            // translation must not rewrite this head to GENESIS, so the
+            // epoch's previousDigest GENESIS fails the chain check against
+            // this head and the delivery is refused.
+            await seedTerminalState(
+              database,
+              state: 'ACTIVE',
+              activeSequence: 0,
+              activeDigest: corruptHeadDigest,
+              revision: 1,
+            );
+            capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+            );
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 1),
+              isNull,
+            );
+            final state = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(state!.state, 'ACTIVE');
+            expect(state.candidateSequence, 0);
+            expect(state.revision, 1);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'sentinel translation does NOT fire for a half-sentinel head '
+        "(1, '') — the empty head itself is refused, fail closed",
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          // Epoch 2 chains off sequence 1 with a real digest; the persisted
+          // head (1, '') is not the (0, '') sentinel, so the translation
+          // must not fire, and the empty acceptedDigest is neither GENESIS
+          // nor a digest: the policy layer refuses it before any chain
+          // comparison.
+          final epochJson = signedEpochJson(<String, dynamic>{
+            'sequence': '2',
+            'previousSequence': '1',
+            'previousDigest': 'sha256:${'c' * 64}',
+          });
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            await seedTerminalState(
+              database,
+              state: 'ACTIVE',
+              activeSequence: 1,
+              activeDigest: '',
+              revision: 1,
+            );
+            capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+            );
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 2),
+              isNull,
+            );
+            final state = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(state!.state, 'ACTIVE');
+            expect(state.candidateSequence, 0);
+            expect(state.revision, 1);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'DELIVER with a sibling sequence/digest that differs from the '
+        'epoch pair: fail closed, no persistence',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          final epochJson = signedEpochJson();
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            final envelope = deliverEnvelope(epochJson);
+            // Tamper the sibling rendering, not the epoch itself: the
+            // sibling pair no longer duplicates the epoch's own values.
+            envelope['sequence'] = '999';
+            capturedGets['/v1/sync/inbound/deltas'] =
+                deltasResponse(humanAuthorization: envelope);
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 1),
+              isNull,
+            );
+            final state = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(state!.state, 'ACTIVE');
+            expect(state.revision, 0);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'DELIVER whose epoch body was tampered after signing (inner digest '
+        'mismatch): fail closed, no persistence',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          final epochJson = signedEpochJson();
+          // Mutate one field without re-signing: the transmitted digest no
+          // longer covers the body, and the sibling pair still duplicates
+          // the epoch's own (stale) values, so only the inner digest check
+          // can catch this.
+          epochJson['publisherBackendBuild'] = 'backend-build-TAMPERED';
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+            );
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 1),
+              isNull,
+            );
+            final state = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(state!.state, 'ACTIVE');
+            expect(state.revision, 0);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'absent humanAuthorization member: nothing persisted, pull '
+        'succeeds (absence is never treated as DISABLED)',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            capturedGets['/v1/sync/inbound/deltas'] =
+                deltasResponse(); // member omitted entirely
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 1),
+              isNull,
+            );
+            final state = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(state!.state, 'ACTIVE');
+            expect(state.revision, 0);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'each non-DELIVER status (DISABLED, UPGRADE_REQUIRED, '
+        'RECOVERY_REQUIRED): no persistence, pull succeeds',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+
+          for (final status in const [
+            'DISABLED',
+            'UPGRADE_REQUIRED',
+            'RECOVERY_REQUIRED',
+          ]) {
+            final database = await buildDb();
+            try {
+              await seedOhacTenant(database);
+              capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+                humanAuthorization: {'status': status},
+              );
+
+              final result =
+                  await serviceWithDb(database).pullInboundDeltas();
+              expect(result, isNotNull, reason: status);
+
+              expect(
+                await database.ohacDeliveryDao
+                    .findEpoch(ohacTenant, 'dev-1', 1),
+                isNull,
+                reason: status,
+              );
+              final state = await database.ohacDeliveryDao
+                  .findTerminalState(ohacTenant, 'dev-1');
+              expect(state!.state, 'ACTIVE', reason: status);
+              expect(state.revision, 0, reason: status);
+            } finally {
+              await database.close();
+            }
+          }
+        },
+      );
+
+      test(
+        'duplicate delivery of the held candidate pair: no-op, no error, '
+        'state untouched across repeated identical deliveries',
+        () async {
+          // Branch observability, stated honestly. The Duplicate branch is
+          // NOT row-level distinguishable from its mis-routes:
+          //
+          // - receiveCandidateEpoch (ohac_delivery_dao.dart) throws before
+          //   any write unless `state == ACTIVE` AND
+          //   `epoch.sequence == activeSequence + 1`. Every Duplicate
+          //   decision means the epoch equals the active pair or the
+          //   candidate pair: an active-pair match never reaches the
+          //   decision (validateEpochAcceptance rejects sequence <= accepted
+          //   first), and a candidate-pair match implies a pending candidate
+          //   whose terminal is in RECEIVE_PENDING — so R's ACTIVE guard
+          //   fires before any row changes. There is no row delta to
+          //   observe.
+          // - An Accept mis-route in this same scenario also dies inside R's
+          //   ACTIVE guard, swallowed by the consumption containment — also
+          //   leaving no row. The only observable difference between the
+          //   branches is the developer.log output, and dart:developer log
+          //   has no in-process capture API: this suite's log-capture
+          //   convention (ZoneSpecification(print:), see
+          //   fiscal_projection_repair_service_test.dart) captures
+          //   debugPrint/print only, while SyncService logs via
+          //   developer.log. Capturing it would require changing the
+          //   production logging mechanism — accepted limitation, not
+          //   silently dropped.
+          //
+          // What IS pinned below: the IntegrityLoss mis-route flips the
+          // state (caught by the state assertions), and no-op-ness holds
+          // across REPEATED identical deliveries with the state byte-
+          // identical, revision frozen, and no local events appended.
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          // The terminal already holds epoch 6 as its candidate pair: the
+          // SAME signed envelope the backend redelivers.
+          final epochJson = signedEpochJson(<String, dynamic>{
+            'sequence': '6',
+            'previousSequence': '5',
+            'previousDigest': digestFive,
+          });
+          final heldCandidateDigest = epochJson['digest'] as String;
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            await seedTerminalState(
+              database,
+              state: 'RECEIVE_PENDING',
+              activeSequence: 5,
+              activeDigest: digestFive,
+              candidateSequence: 6,
+              candidateDigest: heldCandidateDigest,
+              revision: 1,
+            );
+            capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+            );
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            // No-op: no epoch row written, candidate pair and revision
+            // exactly as seeded.
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 6),
+              isNull,
+            );
+            final stateAfterFirstPull = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(stateAfterFirstPull!.state, 'RECEIVE_PENDING');
+            expect(stateAfterFirstPull.candidateSequence, 6);
+            expect(
+              stateAfterFirstPull.candidateDigest,
+              heldCandidateDigest,
+            );
+            expect(stateAfterFirstPull.revision, 1);
+
+            // Idempotence over repetition: the SAME envelope delivered again
+            // must converge on the identical state, with the local event log
+            // untouched and the newest epoch row still the active one.
+            final resultAgain =
+                await serviceWithDb(database).pullInboundDeltas();
+            expect(resultAgain, isNotNull);
+
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 6),
+              isNull,
+            );
+            final newest = await database.ohacDeliveryDao.findNewestEpoch(
+              ohacTenant,
+              'dev-1',
+            );
+            expect(newest, isNull); // no epoch rows exist at all
+            final stateAfterSecondPull = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(
+              stateAfterSecondPull!.revision,
+              stateAfterFirstPull.revision,
+            );
+            expect(stateAfterSecondPull.state, 'RECEIVE_PENDING');
+            expect(stateAfterSecondPull.candidateSequence, 6);
+            expect(
+              stateAfterSecondPull.candidateDigest,
+              heldCandidateDigest,
+            );
+            expect(
+              await database.ohacDeliveryDao.findEventsForTerminal(
+                ohacTenant,
+                'dev-1',
+              ),
+              isEmpty,
+            );
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'integrity-loss decision (same candidate sequence, different '
+        'digest): markIntegrityLoss applied with the decision classification',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          // Epoch 6 re-signed with different content: same candidate
+          // sequence as the held pair, different digest — the §9
+          // ACK_INCONSISTENT conflict.
+          final epochJson = signedEpochJson(<String, dynamic>{
+            'sequence': '6',
+            'previousSequence': '5',
+            'previousDigest': digestFive,
+            'publisherBackendBuild': 'backend-build-2',
+          });
+          expect(epochJson['digest'], isNot(digestSix));
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            await seedTerminalState(
+              database,
+              state: 'RECEIVE_PENDING',
+              activeSequence: 5,
+              activeDigest: digestFive,
+              candidateSequence: 6,
+              candidateDigest: digestSix,
+              revision: 1,
+            );
+            capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+            );
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            // The conflicting epoch is never persisted.
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 6),
+              isNull,
+            );
+            final state = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(state!.state, 'INTEGRITY_LOSS');
+            expect(state.integrityClassification, 'ACK_INCONSISTENT');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'R failure (state not ACTIVE): pull still completes and the '
+        'watermark still advances (containment)',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          final epochJson = signedEpochJson();
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            // RECEIVE_PENDING with genesis sentinels: the epoch still passes
+            // acceptance and the receive decision (sequence 1 == active 0 +
+            // 1), so the ONLY thing that can refuse it is transaction R's
+            // own ACTIVE precondition — exactly the containment under test.
+            await seedTerminalState(
+              database,
+              state: 'RECEIVE_PENDING',
+              activeSequence: 0,
+              activeDigest: genesisDigest,
+              candidateSequence: 0,
+              candidateDigest: '',
+              revision: 1,
+            );
+            capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+              currentVersion: 1787759999999,
+            );
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            // The failed receive left nothing behind...
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 1),
+              isNull,
+            );
+            final state = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(state!.state, 'RECEIVE_PENDING');
+            expect(state.revision, 1);
+            // ...and the pull's watermark still advanced.
+            final watermark = await database.localConfigDao
+                .getConfigByKey('last_inbound_sync_version');
+            expect(watermark!.value, '1787759999999');
           } finally {
             await database.close();
           }
