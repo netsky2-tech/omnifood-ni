@@ -46,6 +46,12 @@ const Map<String, String> kActivationBlockerLabels = <String, String>{
       'El producto de verificación no está en el catálogo local. Sincronice el catálogo e intente de nuevo.',
   'ATTEMPT_NOT_PREPARED':
       'No hay un intento preparado. Complete la preparación antes de continuar.',
+  'ATTEMPT_NOT_READY_FOR_CHECKS':
+      'El intento de activación ya avanzó de esta fase. Reinicie el proceso desde el dashboard o contacte soporte.',
+  'ATTEMPT_NOT_IN_RUNNING':
+      'La venta de verificación solo puede ejecutarse cuando el intento está en curso. Reinicie el proceso desde el dashboard.',
+  'ATTEMPT_NOT_READY_FOR_SYNC':
+      'La sincronización no está disponible en este estado del intento. Verifique que las fases anteriores se completaron correctamente.',
   'SESSION_USER_UNRESOLVED': 'No se pudo identificar al usuario autorizado de la sesión.',
   'TERMINAL_PRIMING_FAILED': 'Falló la preparación de la terminal en el servidor.',
   'TERMINAL_PRIMING_PAYLOAD_MALFORMED':

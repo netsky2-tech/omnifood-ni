@@ -86,7 +86,7 @@ class ActivationPreOfflineRunner {
         isReadyForOffline: false,
         checks: const {},
         blockers: [
-          "ATTEMPT_NOT_READY_FOR_CHECKS: Attempt is in status '${attempt.localStatus}', must be in 'ASSIGNED' or 'RUNNING' to run the pre-offline checks",
+          "ATTEMPT_NOT_READY_FOR_CHECKS: estado actual '${attempt.localStatus}' — esta fase solo puede ejecutarse desde 'ASSIGNED' o 'RUNNING'",
         ],
       );
     }

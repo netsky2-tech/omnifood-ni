@@ -366,6 +366,8 @@ class AuthRepositoryImpl implements AuthRepository {
       );
     } on DioException catch (e) {
       final status = e.response?.statusCode;
+      debugPrint('[LinkClaim] DioException: type=${e.type}, status=$status, '
+          'message=${e.message}, url=${e.requestOptions.uri}');
       if (status == 401 || status == 403) {
         // Backend collapses unknown/expired/claimed/revoked codes into one
         // 401: surface a single generic failure, never enumerate.
@@ -383,6 +385,12 @@ class AuthRepositoryImpl implements AuthRepository {
       throw LinkingClaimException(
         'Error de conexión. Verifique su red e intente de nuevo.',
         statusCode: status,
+      );
+    } catch (e) {
+      debugPrint('[LinkClaim] Unexpected error: $e');
+      throw LinkingClaimException(
+        'Error de conexión. Verifique su red e intente de nuevo.',
+        statusCode: null,
       );
     }
   }

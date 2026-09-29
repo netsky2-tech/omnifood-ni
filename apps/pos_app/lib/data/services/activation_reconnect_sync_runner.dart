@@ -79,7 +79,7 @@ class ActivationReconnectSyncRunner {
         isSuccess: false,
         attemptStatus: attempt.localStatus,
         errors: [
-          "ATTEMPT_NOT_READY_FOR_SYNC: Attempt is in status '${attempt.localStatus}', must be in 'LOCAL_ACTIVATION_EVIDENCE_COMPLETE' or 'SYNC_VERIFICATION_PENDING'",
+          "ATTEMPT_NOT_READY_FOR_SYNC: estado actual '${attempt.localStatus}' — la sincronización solo puede ejecutarse desde 'LOCAL_ACTIVATION_EVIDENCE_COMPLETE' o 'SYNC_VERIFICATION_PENDING'",
         ],
       );
     }
@@ -104,6 +104,8 @@ class ActivationReconnectSyncRunner {
     // failed replay aborts before the outbox drain and before finalization.
     final persistedChecks = await _database.activationCheckResultLocalDao
         .getChecksForAttempt(trimmedTenantId, trimmedAttemptId);
+    // ignore: avoid_print
+    print('[ReconnectSync] persistedChecks=${persistedChecks.length}');
     bool replayFailed = false;
     for (final check in persistedChecks) {
       final Map<String, dynamic>? details = check.detailsSanitizedJson == null
@@ -122,12 +124,16 @@ class ActivationReconnectSyncRunner {
       );
       if (!delivered) {
         replayFailed = true;
+        // ignore: avoid_print
+        print('[ReconnectSync] CHECK REPLAY FAILED: ${check.checkCode} status=${check.status}');
         errors.add(
           "Persisted check '${check.checkCode}' replay unacknowledged by backend",
         );
       }
     }
     if (replayFailed) {
+      // ignore: avoid_print
+      print('[ReconnectSync] REPLAY FAILED - returning early before envelope flush');
       // Attempt stays in SYNC_VERIFICATION_PENDING (already transitioned above)
       // so a later retry can resume; outbox envelopes remain PENDING.
       final pendingBeforeDrain = await _database.activationOutboxDao.getPendingEnvelopes(trimmedTenantId);
@@ -148,6 +154,20 @@ class ActivationReconnectSyncRunner {
     final attemptEnvelopes = pendingEnvelopes
         .where((e) => e.activationAttemptId == trimmedAttemptId)
         .toList();
+
+    // ignore: avoid_print
+    print('[ReconnectSync] pendingEnvelopes=${pendingEnvelopes.length} attemptEnvelopes=${attemptEnvelopes.length}');
+    for (final env in attemptEnvelopes) {
+      // ignore: avoid_print
+      print('[ReconnectSync] pending envelope: id=${env.id} type=${env.eventType} status=${env.syncStatus}');
+    }
+    final allAttemptEnvelopes = await _database.activationOutboxDao.getEnvelopesByAttempt(trimmedTenantId, trimmedAttemptId);
+    // ignore: avoid_print
+    print('[ReconnectSync] ALL attempt envelopes=${allAttemptEnvelopes.length}');
+    for (final env in allAttemptEnvelopes) {
+      // ignore: avoid_print
+      print('[ReconnectSync] all envelope: id=${env.id} type=${env.eventType} status=${env.syncStatus}');
+    }
 
     int syncedCount = 0;
     bool syncFailed = false;
@@ -180,10 +200,14 @@ class ActivationReconnectSyncRunner {
             break;
 
           case 'VERIFICATION_SALE':
+            // ignore: avoid_print
+            print('[ReconnectSync] Sending VERIFICATION_SALE envelope ${env.id}');
             delivered = await _syncPort.sendVerificationSale(
               attemptId: trimmedAttemptId,
               salePayload: payload,
             );
+            // ignore: avoid_print
+            print('[ReconnectSync] VERIFICATION_SALE delivered=$delivered');
             break;
 
           default:

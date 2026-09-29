@@ -147,7 +147,7 @@ class ActivationControlledSaleRunner {
         isSuccess: false,
         attemptStatus: attempt.localStatus,
         errors: [
-          "ATTEMPT_NOT_IN_RUNNING: Attempt is in status '${attempt.localStatus}', must be in 'RUNNING' to execute controlled offline sale",
+          "ATTEMPT_NOT_IN_RUNNING: estado actual '${attempt.localStatus}' — la venta de verificación solo puede ejecutarse cuando el intento está en estado 'RUNNING'",
         ],
       );
     }

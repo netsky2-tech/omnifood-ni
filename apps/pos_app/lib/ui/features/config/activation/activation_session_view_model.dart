@@ -88,6 +88,63 @@ class ActivationSessionViewModel extends ChangeNotifier {
   /// service's own exception text, surfaced verbatim).
   String? get errorMessage => _errorMessage;
 
+  /// Translates raw runner errors to operator-friendly Spanish.
+  /// Raw messages carry envelope UUIDs and snake_case event types that
+  /// must never reach the UI (NHILOS §39.4).
+  static String friendlyError(List<String> rawErrors) {
+    final friendly = <String>[];
+    for (final e in rawErrors) {
+      if (e.contains('Delivery unacknowledged') ||
+          e.contains('delivery unacknowledged')) {
+        friendly.add(
+          'No se pudo confirmar la entrega de un evento de activación al servidor. '
+          'Verifique su conexión e intente de nuevo.',
+        );
+      } else if (e.contains('Error delivering envelope')) {
+        friendly.add(
+          'Error al enviar evidencia de activación al servidor. '
+          'Verifique su conexión e intente de nuevo.',
+        );
+      } else if (e.contains('replay unacknowledged')) {
+        friendly.add(
+          'Una verificación previa no fue reconocida por el servidor. '
+          'Reintente la fase.',
+        );
+      } else if (e.contains('POST_RECONNECT_SYNC')) {
+        friendly.add(
+          'La sincronización posterior a la reconexión falló. '
+          'Verifique su conexión e intente de nuevo.',
+        );
+      } else if (e.contains('SALE_RECEIPT_PATH_FAILED')) {
+        friendly.add(
+          'No se pudo imprimir el comprobante de la venta de verificación. '
+          'Revise la impresora e intente de nuevo.',
+        );
+      } else if (e.contains('Error de comunicación con el servidor')) {
+        friendly.add(e);
+      } else if (e.contains('ATTEMPT_NOT_READY_FOR_CHECKS') ||
+          e.contains('ATTEMPT_NOT_PREPARED') ||
+          e.contains('NO_ACTIVE_ATTEMPT') ||
+          e.contains('ATTEMPT_NOT_IN_RUNNING') ||
+          e.contains('ATTEMPT_NOT_READY_FOR_SYNC')) {
+        friendly.add(
+          'El intento de activación no está en el estado correcto para esta fase. '
+          'Reinicie el proceso desde el dashboard.',
+        );
+      } else {
+        // NHILOS §39.4: never expose raw backend error text to the operator.
+        // Unknown codes get a generic message; the raw text stays in logs.
+        // ignore: avoid_print
+        print('[FriendlyError] Unmapped raw error: $e');
+        friendly.add(
+          'Ocurrió un error inesperado durante la activación. '
+          'Revise la conexión e intente de nuevo.',
+        );
+      }
+    }
+    return friendly.join('\n');
+  }
+
   /// Result of the pre-offline checks phase, exactly as the service
   /// returned it. Null until the phase has run.
   PreOfflineRunnerSummary? get preOfflineChecksResult =>
@@ -170,6 +227,32 @@ class ActivationSessionViewModel extends ChangeNotifier {
     _attempt = result.attempt;
     _blockerCode = result.blockerCode;
     _blockerMessage = result.blockerMessage;
+
+    // Restore phase gates from the attempt's persisted status so a resumed
+    // activation (app restart, page re-entry) doesn't re-require phases that
+    // already completed. Without this, preOfflineChecksSucceeded and
+    // controlledSaleSucceeded stay null and every button stays disabled.
+    final status = result.attempt?.localStatus;
+    if (status != null) {
+      const phase2Plus = {
+        'LOCAL_ACTIVATION_EVIDENCE_COMPLETE',
+        'SYNC_VERIFICATION_PENDING',
+        'EVIDENCE_ACKED',
+        'ACTIVATED',
+        'ACTIVATED_WITH_WARNING',
+      };
+      const phase1Plus = {
+        ...phase2Plus,
+        'RUNNING',
+      };
+      if (phase1Plus.contains(status)) {
+        _preOfflineChecksSucceeded = true;
+      }
+      if (phase2Plus.contains(status)) {
+        _controlledSaleSucceeded = true;
+      }
+    }
+
     notifyListeners();
   }
 
@@ -188,7 +271,7 @@ class ActivationSessionViewModel extends ChangeNotifier {
       _preOfflineChecksResult = summary;
       _preOfflineChecksSucceeded = summary.isReadyForOffline;
       if (!summary.isReadyForOffline) {
-        _errorMessage = summary.blockers.join('\n');
+        _errorMessage = friendlyError(summary.blockers);
       }
     });
   }
@@ -205,7 +288,7 @@ class ActivationSessionViewModel extends ChangeNotifier {
       _controlledSaleSucceeded =
           result.isSuccess && (_preOfflineChecksSucceeded ?? false);
       if (!result.isSuccess) {
-        _errorMessage = result.errors.join('\n');
+        _errorMessage = friendlyError(result.errors);
       }
     });
   }
@@ -218,7 +301,7 @@ class ActivationSessionViewModel extends ChangeNotifier {
       _reconnectSyncSucceeded =
           result.isSuccess && (_controlledSaleSucceeded ?? false);
       if (!result.isSuccess) {
-        _errorMessage = result.errors.join('\n');
+        _errorMessage = friendlyError(result.errors);
       }
     });
   }

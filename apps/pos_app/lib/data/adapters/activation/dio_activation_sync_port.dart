@@ -83,15 +83,25 @@ class DioActivationSyncPort implements ActivationSyncPort {
   }) async {
     final terminalId = (claimPayload['declarativeTerminalId'] as String? ?? '')
         .trim();
-    if (attemptId.trim().isEmpty || terminalId.isEmpty) return false;
+    if (attemptId.trim().isEmpty || terminalId.isEmpty) {
+      // ignore: avoid_print
+      print('[FirstSaleClaim] REJECT: attemptId=$attemptId terminalId=$terminalId');
+      return false;
+    }
     try {
       final response = await _dio.post<dynamic>(
         'onboarding/activation/attempts/${attemptId.trim()}/first-sale-claim',
         data: claimPayload,
         options: Options(headers: {'x-device-terminal-id': terminalId}),
       );
+      // ignore: avoid_print
+      print('[FirstSaleClaim] status=${response.statusCode}');
       return _isSuccess(response.statusCode);
-    } on DioException {
+    } on DioException catch (e) {
+      // ignore: avoid_print
+      print('[FirstSaleClaim] DioException: type=${e.type} status=${e.response?.statusCode}');
+      // ignore: avoid_print
+      print('[FirstSaleClaim] responseBody=${e.response?.data}');
       return false;
     }
   }
@@ -107,6 +117,8 @@ class DioActivationSyncPort implements ActivationSyncPort {
     if (attemptId.trim().isEmpty ||
         terminalId.isEmpty ||
         terminalId != sourceDeviceId) {
+      // ignore: avoid_print
+      print('[VerifSale] REJECT: attemptId=$attemptId terminalId=$terminalId sourceDeviceId=$sourceDeviceId');
       return false;
     }
     try {
@@ -115,8 +127,12 @@ class DioActivationSyncPort implements ActivationSyncPort {
         data: salePayload,
         options: Options(headers: {'x-device-terminal-id': terminalId}),
       );
+      // ignore: avoid_print
+      print('[VerifSale] status=${response.statusCode} body=${response.data}');
       return _isSuccess(response.statusCode);
-    } on DioException {
+    } on DioException catch (e) {
+      // ignore: avoid_print
+      print('[VerifSale] DioException: status=${e.response?.statusCode} body=${e.response?.data}');
       return false;
     }
   }

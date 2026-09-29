@@ -377,6 +377,16 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
                       fontStyle: FontStyle.italic,
                     ),
               ),
+            ] else if (_controlledSaleAction(viewModel) == null &&
+                !viewModel.isPhaseLoading(
+                    ActivationSessionPhase.controlledOfflineSale)) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Fase 2 ya completada. Continúe con la fase 3.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontStyle: FontStyle.italic,
+                    ),
+              ),
             ],
           ],
         ),
@@ -507,7 +517,9 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
     if (error == null) return false;
     final blockers = viewModel.preOfflineChecksResult?.blockers ?? const [];
     if (blockers.isEmpty) return false;
-    return error.trim() == blockers.join('\n').trim();
+    // Compare against the same friendly translation used for errorMessage.
+    return error.trim() ==
+        ActivationSessionViewModel.friendlyError(blockers).trim();
   }
 
   /// Localizes one raw runner blocker string. Blockers are reported either
@@ -569,6 +581,20 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
   VoidCallback? _controlledSaleAction(ActivationSessionViewModel viewModel) {
     if (viewModel.preOfflineChecksSucceeded != true ||
         viewModel.isPhaseLoading(ActivationSessionPhase.controlledOfflineSale)) {
+      return null;
+    }
+    // Phase 2 is already complete when the attempt has advanced past
+    // LOCAL_ACTIVATION_EVIDENCE_COMPLETE. Re-running it would hit
+    // ATTEMPT_NOT_IN_RUNNING.
+    final status = viewModel.attempt?.localStatus;
+    const phase2Done = {
+      'LOCAL_ACTIVATION_EVIDENCE_COMPLETE',
+      'SYNC_VERIFICATION_PENDING',
+      'EVIDENCE_ACKED',
+      'ACTIVATED',
+      'ACTIVATED_WITH_WARNING',
+    };
+    if (status != null && phase2Done.contains(status)) {
       return null;
     }
     return viewModel.executeControlledOfflineSale;
