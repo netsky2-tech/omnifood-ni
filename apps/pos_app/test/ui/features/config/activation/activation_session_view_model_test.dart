@@ -127,6 +127,81 @@ void main() {
     );
   });
 
+  ActivationAttemptLocalEntity attemptWithStatus(String status) =>
+      ActivationAttemptLocalEntity(
+        attemptId: 'attempt-1',
+        tenantId: 'tenant-1',
+        candidateTerminalId: 'terminal-1',
+        localStatus: status,
+        requiredFiscalRevision: 1,
+        requiredFiscalFingerprint: 'fp-1',
+        verificationProductId: 'product-1',
+        assignedAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      );
+
+  group('prepare phase-gate restoration (R3-001/R4-001)', () {
+    for (final status in [
+      'EVIDENCE_ACKED',
+      'ACTIVATED',
+      'ACTIVATED_WITH_WARNING',
+    ]) {
+      test('restores every gate including reconnect-sync for $status',
+          () async {
+        when(() => sessionService.prepare(tenantId: 'tenant-1')).thenAnswer(
+          (_) async => ActivationSessionPreparationResult(
+            isSuccess: true,
+            attempt: attemptWithStatus(status),
+          ),
+        );
+
+        await viewModel.prepare();
+
+        expect(viewModel.isPrepared, isTrue);
+        expect(viewModel.preOfflineChecksSucceeded, isTrue);
+        expect(viewModel.controlledSaleSucceeded, isTrue);
+        expect(
+          viewModel.reconnectSyncSucceeded,
+          isTrue,
+          reason: 'a resumed attempt past the sync phase must not re-require '
+              'the reconnect-sync phase (R3-001/R4-001 deadlock)',
+        );
+      });
+    }
+
+    test('SYNC_VERIFICATION_PENDING restores earlier gates but keeps '
+        'reconnect-sync pending', () async {
+      when(() => sessionService.prepare(tenantId: 'tenant-1')).thenAnswer(
+        (_) async => ActivationSessionPreparationResult(
+          isSuccess: true,
+          attempt: attemptWithStatus('SYNC_VERIFICATION_PENDING'),
+        ),
+      );
+
+      await viewModel.prepare();
+
+      expect(viewModel.preOfflineChecksSucceeded, isTrue);
+      expect(viewModel.controlledSaleSucceeded, isTrue);
+      expect(viewModel.reconnectSyncSucceeded, isNot(equals(true)),
+          reason: 'sync is genuinely pending for this status');
+    });
+
+    test('RUNNING restores only the pre-offline gate', () async {
+      when(() => sessionService.prepare(tenantId: 'tenant-1')).thenAnswer(
+        (_) async => ActivationSessionPreparationResult(
+          isSuccess: true,
+          attempt: attemptWithStatus('RUNNING'),
+        ),
+      );
+
+      await viewModel.prepare();
+
+      expect(viewModel.preOfflineChecksSucceeded, isTrue);
+      expect(viewModel.controlledSaleSucceeded, isNot(equals(true)));
+      expect(viewModel.reconnectSyncSucceeded, isNot(equals(true)));
+    });
+  });
+
   group('prepare', () {
     test('uses the tenant of the currently logged-in user and exposes the '
         'resolved attempt on success', () async {
