@@ -3479,7 +3479,8 @@ void main() {
               'recipes': [],
               'users': [],
             },
-            'humanAuthorization': ?humanAuthorization,
+            // ignore: use_null_aware_elements
+            if (humanAuthorization != null) 'humanAuthorization': humanAuthorization,
           };
 
       Future<AppDatabase> buildDb() => $FloorAppDatabase.inMemoryDatabaseBuilder().build();
