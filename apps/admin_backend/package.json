@@ -30,7 +30,8 @@
     "migration:show": "ts-node -r tsconfig-paths/register node_modules/typeorm/cli.js -d src/data-source.ts migration:show",
     "provision": "ts-node -r tsconfig-paths/register src/scripts/provision.ts",
     "seed:test": "ts-node -r tsconfig-paths/register src/scripts/seed-test-data.ts",
-    "seed:onboarding-founder-pilot": "ts-node -r tsconfig-paths/register src/scripts/seed-onboarding-founder-pilot.ts"
+    "seed:onboarding-founder-pilot": "ts-node -r tsconfig-paths/register src/scripts/seed-onboarding-founder-pilot.ts",
+    "seed:soho-catalog": "ts-node -r tsconfig-paths/register src/scripts/seed-soho-catalog.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
