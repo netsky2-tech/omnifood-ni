@@ -68,6 +68,16 @@ export async function fetchActiveActivationAttempt(): Promise<ActivationAttempt 
   return api.get<ActivationAttempt | null>("/onboarding/activation/attempts/active");
 }
 
+export async function cancelActivationAttempt(
+  attemptId: string,
+  reason?: string,
+): Promise<ActivationAttempt> {
+  return api.post<ActivationAttempt>(
+    `/onboarding/activation/attempts/${attemptId}/cancel`,
+    { reason },
+  );
+}
+
 /**
  * Generates a single-use terminal linking code for the caller's tenant
  * (issue #556 stage 12c). Human-auth: the tenant and actor identity come from

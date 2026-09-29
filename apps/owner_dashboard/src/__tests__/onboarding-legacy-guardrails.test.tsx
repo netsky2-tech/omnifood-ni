@@ -168,7 +168,7 @@ describe("ONB1.5D/E — Legacy Baseline & Visible Scope Guardrails", () => {
     expect(activationBtn).not.toBeDisabled();
   });
 
-  it("displays visible scope guardrails preventing cloud drive / complex mapper scope creep (ONB1.5E)", async () => {
+  it("does not render legacy scope guardrails card (replaced by activation management)", async () => {
     render(
       <TestWrapper>
         <SetupCenterView />
@@ -176,13 +176,11 @@ describe("ONB1.5D/E — Legacy Baseline & Visible Scope Guardrails", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("onboarding-scope-guardrails")).toBeInTheDocument();
+      expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
     });
 
-    const guardrails = screen.getByTestId("onboarding-scope-guardrails");
-    expect(within(guardrails).getByText(/Límites de Alcance Normativo/i)).toBeInTheDocument();
-    expect(within(guardrails).getByText(/Sin dependencias de almacenamiento en la nube/i)).toBeInTheDocument();
-    expect(within(guardrails).getByText(/Sin obligatoriedad de insumos, recetas ni 4 CSVs complejos/i)).toBeInTheDocument();
+    // Legacy guardrails card was replaced by activation attempt management
+    expect(screen.queryByTestId("onboarding-scope-guardrails")).not.toBeInTheDocument();
 
     // Verify neither Google Drive nor Dropbox nor drag-and-drop mappers are rendered
     expect(screen.queryByText(/Google Drive/i)).not.toBeInTheDocument();

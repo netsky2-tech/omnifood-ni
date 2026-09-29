@@ -8,6 +8,7 @@ import {
   fetchOnboardingCatalogSummary,
   startActivationAttempt,
   fetchActiveActivationAttempt,
+  cancelActivationAttempt,
   generateLinkingCode,
   fetchLinkingCodes,
 } from "./onboarding-api";
@@ -309,5 +310,26 @@ export function useStartActivationAttempt() {
 export function useGenerateLinkingCode() {
   return useMutation({
     mutationFn: () => generateLinkingCode(),
+  });
+}
+
+/**
+ * Fetches the current active activation attempt (CREATED or IN_PROGRESS),
+ * or null when none exists.
+ */
+/**
+ * Cancels an active activation attempt, releasing the ACTIVE_ATTEMPT_EXISTS
+ * lock so a new attempt can be started (e.g., after terminal re-link).
+ */
+export function useCancelActivationAttempt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ attemptId, reason }: { attemptId: string; reason?: string }) =>
+      cancelActivationAttempt(attemptId, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.activationAttempt() });
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.session() });
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.readiness() });
+    },
   });
 }

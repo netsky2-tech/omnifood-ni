@@ -4,6 +4,7 @@ import {
   useOnboardingCatalogSummary,
   useActiveActivationAttempt,
   useStartActivationAttempt,
+  useCancelActivationAttempt,
   useGenerateLinkingCode,
   useLinkingCodes,
 } from "./use-onboarding";
@@ -47,6 +48,7 @@ import {
   Users,
   ExternalLink,
   Smartphone,
+  Ban,
 } from "lucide-react";
 
 interface SetupCenterViewProps {
@@ -131,6 +133,8 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
   const { data: activeAttempt } = useActiveActivationAttempt();
   const startActivationAttempt = useStartActivationAttempt();
+  const cancelActivationAttempt = useCancelActivationAttempt();
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const generateLinkingCode = useGenerateLinkingCode();
   const { data: linkingCodes } = useLinkingCodes();
   const claimableLinkingCodes = selectClaimableLinkingCodes(linkingCodes);
@@ -1255,43 +1259,89 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
         </CardContent>
       </Card>
 
-      {/* Visible Scope Guardrails (ONB1.5E / AC-42, AC-43, AC-44) */}
-      <Card data-testid="onboarding-scope-guardrails" className="border-border/70 bg-muted/20">
-        <CardHeader className="py-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
-              <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
-              Límites de Alcance Normativo
-            </CardTitle>
-            <Badge variant="secondary" className="text-[10px] font-mono">
-              V1 Scope
-            </Badge>
-          </div>
-          <CardDescription className="text-xs text-muted-foreground mt-0.5">
-            Ruta corta y directa hacia venta en POS (V1) sin burocracia de configuración.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="py-2 space-y-2 text-xs text-muted-foreground">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div className="p-2 rounded bg-background/80 border flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span>Sin dependencias de almacenamiento en la nube externo</span>
+      {/* Activation Attempt Management */}
+      {activeAttempt && (
+        <Card data-testid="activation-attempt-management" className="border-border/70">
+          <CardHeader className="py-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                <Clock className="h-4 w-4 text-primary shrink-0" />
+                Intento de Activacion Activo
+              </CardTitle>
+              <Badge
+                variant={
+                  activeAttempt.status === ActivationAttemptStatus.IN_PROGRESS
+                    ? "default"
+                    : "secondary"
+                }
+                className="text-[10px]"
+              >
+                {activeAttempt.status === ActivationAttemptStatus.CREATED
+                  ? "Creado"
+                  : "En progreso"}
+              </Badge>
             </div>
-            <div className="p-2 rounded bg-background/80 border flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span>Sin mapeadores complejos de columnas (formato CSV canónico directo)</span>
-            </div>
-            <div className="p-2 rounded bg-background/80 border flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span>Sin obligatoriedad de insumos, recetas ni 4 CSVs complejos para operar</span>
-            </div>
-            <div className="p-2 rounded bg-background/80 border flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span>Enriquecimiento de inventario y Kardex postergable a operación regular BOH</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+            <CardDescription className="text-xs text-muted-foreground mt-0.5">
+              Terminal {activeAttempt.candidateTerminalId}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="py-2 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Mientras este intento este activo, no se puede iniciar uno nuevo. Si la terminal fue re-vinculada con un ID nuevo, cancele este intento y comience uno nuevo.
+            </p>
+            {!cancelConfirmOpen ? (
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="cancel-activation-attempt-btn"
+                disabled={!hasActivationPermission || cancelActivationAttempt.isPending}
+                onClick={() => setCancelConfirmOpen(true)}
+                className="w-full text-xs h-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+              >
+                <Ban className="h-3 w-3 mr-1.5" />
+                Cancelar intento de activacion
+              </Button>
+            ) : (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                <p className="text-xs text-destructive font-medium">
+                  Cancelar este intento? Se marcara como fallido y podra iniciar uno nuevo para la terminal correcta.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="cancel-activation-confirm-btn"
+                    disabled={cancelActivationAttempt.isPending}
+                    onClick={() => {
+                      cancelActivationAttempt.mutate(
+                        { attemptId: activeAttempt.id, reason: "CANCELLED_BY_OPERATOR" },
+                        { onSuccess: () => setCancelConfirmOpen(false) },
+                      );
+                    }}
+                    className="flex-1 text-xs h-7 bg-destructive text-white hover:bg-destructive/90"
+                  >
+                    {cancelActivationAttempt.isPending ? "Cancelando..." : "Si, cancelar"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    data-testid="cancel-activation-dismiss-btn"
+                    onClick={() => setCancelConfirmOpen(false)}
+                    className="flex-1 text-xs h-7"
+                  >
+                    Volver
+                  </Button>
+                </div>
+              </div>
+            )}
+            {cancelActivationAttempt.isError && (
+              <p className="text-xs text-destructive">
+                No se pudo cancelar el intento. Intente de nuevo.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Unified Catalog Acquisition Modal */}
       <CatalogAcquisitionModal
