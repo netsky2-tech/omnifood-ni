@@ -16,6 +16,7 @@ import '../models/activation/activation_check_result_local_entity.dart';
 import '../models/activation/activation_outbox_envelope_entity.dart';
 import '../models/activation/first_successful_sale_claim_entity.dart';
 import '../models/sales/invoice_entity.dart';
+import '../models/local_config_entity.dart';
 import 'activation_clock_manager.dart';
 import 'sync_service.dart';
 import '../../domain/usecases/inventory/checkout_inventory_preparation_service.dart';
