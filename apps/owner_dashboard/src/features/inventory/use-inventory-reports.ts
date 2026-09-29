@@ -5,8 +5,9 @@ import {
   fetchCogs,
   fetchKardex,
   fetchAlerts,
+  fetchPurchases,
 } from "./inventory-api";
-import type { KardexFilters } from "./types";
+import type { KardexFilters, PurchaseFilters } from "./types";
 
 export function useValuation() {
   const tenantId = useTenantId();
@@ -40,6 +41,15 @@ export function useAlerts() {
   return useQuery({
     queryKey: ["inventory", tenantId, "alerts"],
     queryFn: ({ signal }) => fetchAlerts({ signal }),
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function usePurchases(filters: PurchaseFilters = {}) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ["inventory", tenantId, "purchases", filters],
+    queryFn: ({ signal }) => fetchPurchases(filters, { signal }),
     staleTime: 2 * 60 * 1000,
   });
 }
