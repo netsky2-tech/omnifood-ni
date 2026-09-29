@@ -847,6 +847,10 @@ class SyncService {
       if (tx.terminalId != null) 'terminalId': tx.terminalId,
       if (tx.programVersion != null) 'programVersion': tx.programVersion,
       if (tx.rewardVersion != null) 'rewardVersion': tx.rewardVersion,
+      // Floor's pinned analyzer (6.4.1) cannot parse null-aware map elements
+      // (`?x`) during build_runner codegen, so keep the collection-if form
+      // and silence the newer lint that prefers `?`.
+      // ignore: use_null_aware_elements
       if (commercialSnapshot != null)
         'commercialSnapshot': commercialSnapshot,
       'origin': tx.origin ?? 'POS',
