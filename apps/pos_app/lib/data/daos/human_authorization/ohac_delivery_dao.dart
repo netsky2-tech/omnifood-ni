@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../models/human_authorization/field_guards.dart';
 import '../../models/human_authorization/ohac_delivery_entities.dart';
+import '../../models/human_authorization/staff_policy_epoch_v1.dart';
 import '../../models/human_authorization/terminal_state_machine.dart';
 
 /// Consolidated DAO for the OHAC local delivery tables.
@@ -135,6 +136,57 @@ abstract class OhacDeliveryDao {
 
   @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertTerminalState(OhacTerminalStateEntity state);
+
+  /// Creates the terminal's first state row when none exists, so the pull
+  /// negotiation always has a floor to report (design §4.2).
+  ///
+  /// `human_auth_terminal_state` is a mutable singleton with NOT NULL columns
+  /// and no DEFAULT on the fresh-install path, and no seeder creates the
+  /// first row — without this, the `ohacFloorSequence` parameter has nothing
+  /// to read. The row is keyed by caller-supplied [tenantId]/[terminalId]
+  /// because the pull already sources identity from local config and the
+  /// audit repository; deriving the row from an epoch envelope would let the
+  /// row validate the envelope that created it.
+  ///
+  /// Idempotent by read-then-insert: an existing row — including one in any
+  /// transition state — is left untouched, so this is safe to call on every
+  /// pull. The sentinel values are the entity's own "absent" sentinels (see
+  /// `OhacTerminalStateEntity`): `ACTIVE` at sequence 0 with the epoch
+  /// chain's pre-epoch-1 floor, no candidate, no negotiated facts, no fault,
+  /// no authorization history, revision 0, and the caller's timestamp.
+  /// Positional arguments only: named arguments break Floor 1.5.0's
+  /// generated `@transaction` code (AGENTS.md, design §13).
+  @transaction
+  Future<void> ensureTerminalState(
+    String tenantId,
+    String terminalId,
+    String newUpdatedAt,
+  ) async {
+    final existing = await findTerminalState(tenantId, terminalId);
+    if (existing != null) return;
+
+    await insertTerminalState(
+      OhacTerminalStateEntity(
+        tenantId: tenantId,
+        terminalId: terminalId,
+        state: OhacTerminalPhase.active.wire,
+        activeSequence: 0,
+        activeDigest: '',
+        candidateSequence: 0,
+        candidateDigest: '',
+        serverFloorSequence: 0,
+        serverFloorDigest: genesisDigest,
+        negotiatedPosBuild: '',
+        negotiatedBackendBuild: '',
+        negotiatedPolicySchema: '',
+        negotiatedAssertionSchema: '',
+        integrityClassification: '',
+        localAuthorizationSequence: 0,
+        revision: 0,
+        updatedAt: newUpdatedAt,
+      ),
+    );
+  }
 
   /// Receive: the terminal takes the pending state and records the received
   /// candidate pair plus the four negotiated facts. This is the widest

@@ -78,4 +78,8 @@ void main() {
       'transaction', () {
     expectPositionalTransaction('submitCandidateAcknowledgement');
   });
+
+  test('ensureTerminalState is generated as a positional transaction', () {
+    expectPositionalTransaction('ensureTerminalState');
+  });
 }

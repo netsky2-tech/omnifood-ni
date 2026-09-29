@@ -8143,6 +8143,25 @@ class _$OhacDeliveryDao extends OhacDeliveryDao {
   }
 
   @override
+  Future<void> ensureTerminalState(
+    String tenantId,
+    String terminalId,
+    String newUpdatedAt,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.ensureTerminalState(tenantId, terminalId, newUpdatedAt);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.ohacDeliveryDao
+            .ensureTerminalState(tenantId, terminalId, newUpdatedAt);
+      });
+    }
+  }
+
+  @override
   Future<void> receiveCandidateEpoch(
     OhacPolicyEpochEntity epoch,
     List<OhacPolicyEntryEntity> entries,
