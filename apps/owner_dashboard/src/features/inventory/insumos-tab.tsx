@@ -1,6 +1,11 @@
-import { useState, useMemo } from "react";
-import { useInsumos, useCreateInsumo, useUpdateInsumo } from "@/features/recipes/use-recipes";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useCreateInsumo, useUpdateInsumo } from "@/features/recipes/use-recipes";
 import type { Insumo, CreateInsumoInput } from "@/features/recipes/types";
+import { api } from "@/lib/api";
+import { useTenantId } from "@/lib/tenant";
+import { useSafeSearchParams } from "@/lib/safe-search-params";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +30,9 @@ import {
   Layers,
   AlertTriangle,
   Scale,
+  X,
+  Power,
+  PowerOff,
 } from "lucide-react";
 
 function formatCurrency(amount: number): string {
@@ -41,14 +49,29 @@ function formatNumber(n: number): string {
   }).format(n);
 }
 
+/**
+ * Dashboard catalog query: includes inactive insumos so the lifecycle is
+ * visible and controllable (deactivate/reactivate row actions). Child of the
+ * shared `insumosQueryKey` prefix, so create/update mutations automatically
+ * invalidate it. The recipes editor keeps using the active-only `useInsumos`.
+ */
+function useDashboardInsumos() {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ["recipes", tenantId, "insumos", "dashboard-with-inactive"],
+    queryFn: ({ signal }) => api.get<Insumo[]>("/insumos?includeInactive=true", { signal }),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 interface InsumoFormState {
   name: string;
   purchaseUom: string;
   consumptionUom: string;
-  conversionFactor: number;
-  averageCost: number;
-  parLevel: number | "";
-  minStock: number | "";
+  conversionFactor: string;
+  averageCost: string;
+  parLevel: string;
+  minStock: string;
   is_perishable: boolean;
   negativeStockPolicy: "ALLOW_TEMPORARY" | "RESTRICT";
 }
@@ -57,24 +80,66 @@ const DEFAULT_FORM: InsumoFormState = {
   name: "",
   purchaseUom: "UN",
   consumptionUom: "UN",
-  conversionFactor: 1,
-  averageCost: 0,
+  conversionFactor: "1",
+  averageCost: "0",
   parLevel: "",
   minStock: "",
   is_perishable: false,
   negativeStockPolicy: "RESTRICT",
 };
 
+const FACTOR_ERROR = "El factor de conversión debe ser mayor que 0.";
+
+function formsEqual(a: InsumoFormState, b: InsumoFormState): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function InsumosTab() {
-  const { data: insumos, isLoading } = useInsumos();
+  const { data: insumos, isLoading } = useDashboardInsumos();
   const createInsumo = useCreateInsumo();
   const updateInsumo = useUpdateInsumo();
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchParams, setSearchParams] = useSafeSearchParams();
+  const [searchTerm, setSearchTerm] = useState(
+    () => searchParams.get("q_insumos") ?? "",
+  );
   const [modalOpen, setModalOpen] = useState(false);
   const [editingInsumo, setEditingInsumo] = useState<Insumo | null>(null);
   const [form, setForm] = useState<InsumoFormState>(DEFAULT_FORM);
+  const [initialForm, setInitialForm] = useState<InsumoFormState>(DEFAULT_FORM);
   const [formError, setFormError] = useState<string | null>(null);
+  const [factorError, setFactorError] = useState<string | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+  const allowCloseRef = useRef(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<Insumo | null>(null);
+
+  const isDirty = !formsEqual(form, initialForm);
+  const saving = createInsumo.isPending || updateInsumo.isPending;
+
+  // Form-level errors are announced (role="alert") and focused so keyboard
+  // and screen-reader users land on the explanation (§18.3).
+  useEffect(() => {
+    if (formError && errorRef.current) {
+      errorRef.current.focus();
+    }
+  }, [formError]);
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value.trim()) {
+          next.set("q_insumos", value);
+        } else {
+          next.delete("q_insumos");
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   const filteredInsumos = useMemo(() => {
     if (!insumos) return [];
@@ -88,43 +153,79 @@ export function InsumosTab() {
     );
   }, [insumos, searchTerm]);
 
+  // Stats scope the active catalog; inactive rows are lifecycle context, not
+  // operating stock.
   const stats = useMemo(() => {
-    if (!insumos) return { total: 0, perishable: 0, lowStock: 0 };
+    const active = (insumos ?? []).filter((i) => i.is_active);
     return {
-      total: insumos.length,
-      perishable: insumos.filter((i) => i.is_perishable).length,
-      lowStock: insumos.filter((i) => i.parLevel && i.stock <= i.parLevel).length,
+      total: active.length,
+      perishable: active.filter((i) => i.is_perishable).length,
+      lowStock: active.filter((i) => i.parLevel && i.stock <= i.parLevel).length,
     };
   }, [insumos]);
+
+  const closeDialog = () => {
+    allowCloseRef.current = false;
+    setDiscardConfirmOpen(false);
+    setModalOpen(false);
+    setFormError(null);
+    setFactorError(null);
+  };
+
+  /** Guarded close: prompts before discarding unsaved edits (§20). */
+  const requestClose = () => {
+    if (isDirty && !allowCloseRef.current) {
+      setDiscardConfirmOpen(true);
+      return;
+    }
+    closeDialog();
+  };
 
   const handleOpenCreate = () => {
     setEditingInsumo(null);
     setForm(DEFAULT_FORM);
+    setInitialForm(DEFAULT_FORM);
     setFormError(null);
+    setFactorError(null);
+    allowCloseRef.current = false;
+    setDiscardConfirmOpen(false);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (insumo: Insumo) => {
     setEditingInsumo(insumo);
-    setForm({
+    const values: InsumoFormState = {
       name: insumo.name,
       purchaseUom: insumo.purchaseUom || insumo.consumption_uom || "UN",
       consumptionUom: insumo.consumptionUom || insumo.consumption_uom || "UN",
-      conversionFactor: insumo.conversionFactor ?? 1,
-      averageCost: insumo.averageCost ?? 0,
-      parLevel: insumo.parLevel ?? "",
-      minStock: insumo.minStock ?? "",
+      conversionFactor: String(insumo.conversionFactor ?? 1),
+      averageCost: String(insumo.averageCost ?? 0),
+      parLevel: insumo.parLevel != null ? String(insumo.parLevel) : "",
+      minStock: insumo.minStock != null ? String(insumo.minStock) : "",
       is_perishable: insumo.is_perishable ?? false,
       negativeStockPolicy: (insumo.negativeStockPolicy === "ALLOW_TEMPORARY"
         ? "ALLOW_TEMPORARY"
         : "RESTRICT"),
-    });
+    };
+    setForm(values);
+    setInitialForm(values);
     setFormError(null);
+    setFactorError(null);
+    allowCloseRef.current = false;
+    setDiscardConfirmOpen(false);
     setModalOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFactorBlur = () => {
+    const factor = Number(form.conversionFactor);
+    if (!form.conversionFactor.trim() || Number.isNaN(factor) || factor <= 0) {
+      setFactorError(FACTOR_ERROR);
+    } else {
+      setFactorError(null);
+    }
+  };
+
+  const submitForm = async (mode: "close" | "createAnother") => {
     setFormError(null);
 
     const name = form.name.trim();
@@ -136,8 +237,12 @@ export function InsumosTab() {
       setFormError("Las unidades de medida son obligatorias.");
       return;
     }
-    if (form.conversionFactor <= 0) {
-      setFormError("El factor de conversión debe ser mayor que 0.");
+    const factor = Number(form.conversionFactor);
+    if (!form.conversionFactor.trim() || Number.isNaN(factor) || factor <= 0) {
+      // Field-level problem only: announcing it again in the form banner would
+      // make screen readers read the same message twice (R1, §18.3). The
+      // banner stays reserved for name/UoM/server failures.
+      setFactorError(FACTOR_ERROR);
       return;
     }
 
@@ -145,10 +250,10 @@ export function InsumosTab() {
       name,
       purchaseUom: form.purchaseUom.trim().toUpperCase(),
       consumptionUom: form.consumptionUom.trim().toUpperCase(),
-      conversionFactor: Number(form.conversionFactor),
+      conversionFactor: factor,
       averageCost: Number(form.averageCost) || 0,
-      parLevel: form.parLevel === "" ? undefined : Number(form.parLevel),
-      minStock: form.minStock === "" ? undefined : Number(form.minStock),
+      parLevel: form.parLevel.trim() === "" ? undefined : Number(form.parLevel),
+      minStock: form.minStock.trim() === "" ? undefined : Number(form.minStock),
       is_perishable: form.is_perishable,
       negativeStockPolicy: form.negativeStockPolicy,
     };
@@ -163,17 +268,68 @@ export function InsumosTab() {
           title: "Insumo actualizado",
           description: `Se guardaron los cambios de '${name}'.`,
         });
+        closeDialog();
       } else {
         await createInsumo.mutateAsync(payload);
         toast({
           title: "Insumo creado",
           description: `El insumo '${name}' ya está disponible para recetas e inventario.`,
         });
+        if (mode === "createAnother") {
+          // §19.3: reset for the next item but keep the dialog open.
+          setForm(DEFAULT_FORM);
+          setInitialForm(DEFAULT_FORM);
+          setFormError(null);
+          setFactorError(null);
+        } else {
+          closeDialog();
+        }
       }
-      setModalOpen(false);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Error al guardar el insumo";
-      setFormError(msg);
+      setFormError(getApiErrorMessage(err, "Error al guardar el insumo"));
+    }
+  };
+
+  const handleDeactivateConfirm = async () => {
+    if (!deactivateTarget) return;
+    try {
+      await updateInsumo.mutateAsync({
+        id: deactivateTarget.id,
+        input: { is_active: false },
+      });
+      toast({
+        title: "Insumo desactivado",
+        description: `'${deactivateTarget.name}' ya no está disponible para recetas ni movimientos. Puedes reactivarlo cuando quieras.`,
+      });
+      setDeactivateTarget(null);
+    } catch (err: unknown) {
+      toast({
+        variant: "destructive",
+        title: "No se pudo desactivar el insumo",
+        description: getApiErrorMessage(
+          err,
+          "Intenta de nuevo en unos minutos.",
+        ),
+      });
+    }
+  };
+
+  const handleReactivate = async (insumo: Insumo) => {
+    try {
+      await updateInsumo.mutateAsync({ id: insumo.id, input: { is_active: true } });
+      toast({
+        title: "Insumo reactivado",
+        description: `'${insumo.name}' vuelve a estar disponible para recetas e inventario.`,
+      });
+    } catch (err: unknown) {
+      toast({
+        variant: "destructive",
+        title: "No se pudo reactivar el insumo",
+        description: getApiErrorMessage(
+          err,
+          "Intenta de nuevo en unos minutos.",
+        ),
+      });
     }
   };
 
@@ -211,9 +367,20 @@ export function InsumosTab() {
             data-testid="insumos-search-input"
             placeholder="Buscar insumo por nombre o unidad de medida..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 text-sm"
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9 pr-8 text-sm"
           />
+          {searchTerm && (
+            <button
+              type="button"
+              data-testid="insumos-search-clear"
+              aria-label="Limpiar búsqueda"
+              onClick={() => handleSearchChange("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         <Button
           data-testid="add-insumo-btn"
@@ -310,16 +477,46 @@ export function InsumosTab() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          data-testid={`edit-insumo-${ins.id}`}
-                          onClick={() => handleOpenEdit(ins)}
-                          className="h-8 w-8 p-0"
-                          title="Editar insumo"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            data-testid={`edit-insumo-${ins.id}`}
+                            aria-label="Editar insumo"
+                            onClick={() => handleOpenEdit(ins)}
+                            className="h-8 w-8 p-0"
+                            title="Editar insumo"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </Button>
+                          {ins.is_active ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              data-testid={`deactivate-insumo-${ins.id}`}
+                              aria-label="Desactivar insumo"
+                              title="Desactivar insumo"
+                              disabled={saving}
+                              onClick={() => setDeactivateTarget(ins)}
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                            >
+                              <PowerOff className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              data-testid={`reactivate-insumo-${ins.id}`}
+                              aria-label="Reactivar insumo"
+                              title="Reactivar insumo"
+                              disabled={saving}
+                              onClick={() => handleReactivate(ins)}
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                            >
+                              <Power className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -331,9 +528,38 @@ export function InsumosTab() {
       )}
 
       {/* Insumo Creation / Editing Modal */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md">
-          <form onSubmit={handleSubmit} className="space-y-4">
+      <Dialog
+        open={modalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            requestClose();
+          } else {
+            setModalOpen(true);
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-md"
+          onEscapeKeyDown={(e) => {
+            if (isDirty) {
+              e.preventDefault();
+              setDiscardConfirmOpen(true);
+            }
+          }}
+          onInteractOutside={(e) => {
+            if (isDirty) {
+              e.preventDefault();
+              setDiscardConfirmOpen(true);
+            }
+          }}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitForm("close");
+            }}
+            className="space-y-4"
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Layers className="h-5 w-5 text-primary" />
@@ -345,7 +571,13 @@ export function InsumosTab() {
             </DialogHeader>
 
             {formError && (
-              <div className="p-3 text-xs bg-destructive/10 text-destructive rounded-md border border-destructive/20 flex items-start gap-2">
+              <div
+                ref={errorRef}
+                tabIndex={-1}
+                role="alert"
+                data-testid="insumo-form-error"
+                className="p-3 text-xs bg-destructive/10 text-destructive rounded-md border border-destructive/20 flex items-start gap-2 focus-visible:outline-none"
+              >
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>{formError}</span>
               </div>
@@ -406,10 +638,19 @@ export function InsumosTab() {
                     min="0.0001"
                     placeholder="1 Compra = N Consumo"
                     value={form.conversionFactor}
-                    onChange={(e) =>
-                      setForm({ ...form, conversionFactor: parseFloat(e.target.value) || 1 })
-                    }
+                    onChange={(e) => {
+                      // Keep the raw string: no silent coercion while typing.
+                      setForm({ ...form, conversionFactor: e.target.value });
+                      if (factorError) setFactorError(null);
+                    }}
+                    onBlur={handleFactorBlur}
+                    aria-invalid={factorError ? true : undefined}
                   />
+                  {factorError && (
+                    <p className="text-[10px] text-destructive" role="alert">
+                      {factorError}
+                    </p>
+                  )}
                   <p className="text-[10px] text-muted-foreground">
                     Ej: 1 L = 1000 ML (factor 1000)
                   </p>
@@ -426,9 +667,7 @@ export function InsumosTab() {
                     min="0"
                     placeholder="0.00"
                     value={form.averageCost}
-                    onChange={(e) =>
-                      setForm({ ...form, averageCost: parseFloat(e.target.value) || 0 })
-                    }
+                    onChange={(e) => setForm({ ...form, averageCost: e.target.value })}
                   />
                 </div>
               </div>
@@ -445,12 +684,7 @@ export function InsumosTab() {
                     step="any"
                     placeholder="Opcional"
                     value={form.parLevel}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        parLevel: e.target.value === "" ? "" : parseFloat(e.target.value) || 0,
-                      })
-                    }
+                    onChange={(e) => setForm({ ...form, parLevel: e.target.value })}
                   />
                 </div>
                 <div className="space-y-1">
@@ -464,12 +698,7 @@ export function InsumosTab() {
                     step="any"
                     placeholder="Opcional"
                     value={form.minStock}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        minStock: e.target.value === "" ? "" : parseFloat(e.target.value) || 0,
-                      })
-                    }
+                    onChange={(e) => setForm({ ...form, minStock: e.target.value })}
                   />
                 </div>
               </div>
@@ -493,18 +722,30 @@ export function InsumosTab() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setModalOpen(false)}
+                onClick={requestClose}
                 className="text-xs h-8"
               >
                 Cancelar
               </Button>
+              {!editingInsumo && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  data-testid="insumo-form-save-another"
+                  disabled={saving}
+                  onClick={() => submitForm("createAnother")}
+                  className="text-xs h-8"
+                >
+                  Guardar y crear otro
+                </Button>
+              )}
               <Button
                 type="submit"
                 data-testid="insumo-form-submit"
-                disabled={createInsumo.isPending || updateInsumo.isPending}
-                className="text-xs h-8"
+                disabled={saving}
+                className="text-xs h-8 min-w-[9rem]"
               >
-                {createInsumo.isPending || updateInsumo.isPending
+                {saving
                   ? "Guardando..."
                   : editingInsumo
                   ? "Guardar Cambios"
@@ -512,6 +753,86 @@ export function InsumosTab() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dirty-state confirm (§20): Escape/overlay/Cancelar with unsaved edits. */}
+      <Dialog
+        open={discardConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) setDiscardConfirmOpen(false);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>¿Descartar los cambios del insumo?</DialogTitle>
+            <DialogDescription>
+              Hay cambios sin guardar en el formulario. Si sales ahora, se perderán.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="insumo-discard-stay-btn"
+              onClick={() => setDiscardConfirmOpen(false)}
+              className="text-xs h-8"
+            >
+              Seguir editando
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              data-testid="insumo-discard-confirm-btn"
+              onClick={() => {
+                allowCloseRef.current = true;
+                closeDialog();
+              }}
+              className="text-xs h-8"
+            >
+              Descartar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivation confirm (§23.1): object, consequence, reversibility, scope. */}
+      <Dialog
+        open={deactivateTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeactivateTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              ¿Desactivar el insumo '{deactivateTarget?.name}'?
+            </DialogTitle>
+            <DialogDescription>
+              El insumo dejará de estar disponible para recetas y movimientos de
+              inventario. Puedes reactivarlo en cualquier momento desde esta misma tabla.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeactivateTarget(null)}
+              className="text-xs h-8"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              data-testid="insumo-deactivate-confirm-btn"
+              disabled={saving}
+              onClick={handleDeactivateConfirm}
+              className="text-xs h-8"
+            >
+              Desactivar insumo
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -2,25 +2,30 @@
  * Insumos management tab — Dashboard CRUD evidence (SOHO go-live readiness).
  *
  * The owner must be able to create and maintain materia prima (insumos) from
- * the web dashboard, not only from the POS: search, stats, empty state and
- * the create/edit dialog follow the NHILOS backoffice experience standard.
+ * the web dashboard, not only from the POS: search (with reset), stats, empty
+ * state, dirty-state protection and the create/edit dialog follow the NHILOS
+ * backoffice experience standard (audit AT-02, AT-03, AT-09 and BX-017/018/020).
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InsumosTab } from "@/features/inventory/insumos-tab";
 import {
-  useInsumos,
   useCreateInsumo,
   useUpdateInsumo,
 } from "@/features/recipes/use-recipes";
+import { api } from "@/lib/api";
+import { toast } from "@/hooks/use-toast";
 import type { Insumo } from "@/features/recipes/types";
 
 vi.mock("@/features/recipes/use-recipes", () => ({
-  useInsumos: vi.fn(() => ({ data: [], isLoading: false })),
   useCreateInsumo: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useUpdateInsumo: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+}));
+
+vi.mock("@/lib/api", () => ({
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -32,6 +37,12 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+/** Renders the tab and waits for the catalog query to resolve. */
+async function renderLoadedTab() {
+  render(<InsumosTab />, { wrapper: TestWrapper });
+  await screen.findByText("Café en Grano");
 }
 
 const MOCK_INSUMOS: Insumo[] = [
@@ -65,14 +76,27 @@ const MOCK_INSUMOS: Insumo[] = [
     negativeStockPolicy: "RESTRICT",
     is_active: true,
   },
+  {
+    id: "ins-3",
+    tenant_id: "t1",
+    name: "Crema Baja en Grasa",
+    purchaseUom: "L",
+    consumptionUom: "ML",
+    conversionFactor: 1000,
+    stock: 0,
+    averageCost: 80,
+    parLevel: null,
+    minStock: null,
+    is_perishable: true,
+    negativeStockPolicy: "RESTRICT",
+    is_active: false,
+  },
 ];
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(useInsumos).mockReturnValue({
-    data: MOCK_INSUMOS,
-    isLoading: false,
-  } as ReturnType<typeof useInsumos>);
+  window.history.replaceState(null, "", "/");
+  vi.mocked(api.get).mockResolvedValue(MOCK_INSUMOS);
   vi.mocked(useCreateInsumo).mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue({}),
     isPending: false,
@@ -84,8 +108,8 @@ beforeEach(() => {
 });
 
 describe("InsumosTab", () => {
-  it("renders the insumos list with conversion and FIFO properties", () => {
-    render(<InsumosTab />, { wrapper: TestWrapper });
+  it("renders the insumos list with conversion and FIFO properties", async () => {
+    await renderLoadedTab();
 
     expect(screen.getByText("Café en Grano")).toBeInTheDocument();
     expect(screen.getByText("Leche Entera")).toBeInTheDocument();
@@ -93,28 +117,38 @@ describe("InsumosTab", () => {
     expect(screen.getByText("LB")).toBeInTheDocument();
     expect(screen.getByText("G")).toBeInTheDocument();
     // Perishable property badge (FIFO control).
-    expect(screen.getByText("Perecedero")).toBeInTheDocument();
-    // Stats reflect the loaded rows.
+    expect(
+      within(screen.getByTestId("insumo-row-ins-2")).getByText("Perecedero"),
+    ).toBeInTheDocument();
+    // Stats reflect the active rows (inactive lifecycle rows are excluded).
     expect(screen.getByText("Total Insumos")).toBeInTheDocument();
   });
 
-  it("shows an empty state with guidance when no insumos exist", () => {
-    vi.mocked(useInsumos).mockReturnValue({
-      data: [],
-      isLoading: false,
-    } as unknown as ReturnType<typeof useInsumos>);
+  it("shows the Inactivo badge only for genuinely inactive rows (BX-018)", async () => {
+    await renderLoadedTab();
+
+    const inactiveRow = screen.getByTestId("insumo-row-ins-3");
+    expect(within(inactiveRow).getByText("Inactivo")).toBeInTheDocument();
+    expect(screen.getByTestId("insumo-row-ins-1")).not.toHaveTextContent("Inactivo");
+    // Deactivate/reactivate row actions are reachable.
+    expect(screen.getByTestId("deactivate-insumo-ins-1")).toBeInTheDocument();
+    expect(screen.getByTestId("reactivate-insumo-ins-3")).toBeInTheDocument();
+  });
+
+  it("shows an empty state with guidance when no insumos exist", async () => {
+    vi.mocked(api.get).mockResolvedValue([]);
 
     render(<InsumosTab />, { wrapper: TestWrapper });
 
     expect(
-      screen.getByText(/Comience agregando materia prima/i),
+      await screen.findByText(/Comience agregando materia prima/i),
     ).toBeInTheDocument();
     expect(screen.getByTestId("add-insumo-btn")).not.toBeDisabled();
   });
 
   it("filters rows by search term", async () => {
     const user = userEvent.setup();
-    render(<InsumosTab />, { wrapper: TestWrapper });
+    await renderLoadedTab();
 
     await user.type(screen.getByTestId("insumos-search-input"), "leche");
 
@@ -122,6 +156,29 @@ describe("InsumosTab", () => {
       expect(screen.getByText("Leche Entera")).toBeInTheDocument();
       expect(screen.queryByText("Café en Grano")).not.toBeInTheDocument();
     });
+  });
+
+  it("restores the full dataset via the search clear control (AT-09 / BX-001)", async () => {
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    const input = screen.getByTestId("insumos-search-input");
+    await user.type(input, "leche");
+    await waitFor(() => {
+      expect(screen.queryByText("Café en Grano")).not.toBeInTheDocument();
+    });
+
+    // The clear control only exists while a term is applied.
+    const clear = screen.getByTestId("insumos-search-clear");
+    expect(clear).toHaveAccessibleName("Limpiar búsqueda");
+    await user.click(clear);
+
+    await waitFor(() => {
+      expect(screen.getByText("Café en Grano")).toBeInTheDocument();
+      expect(screen.getByText("Leche Entera")).toBeInTheDocument();
+    });
+    expect(input).toHaveValue("");
+    expect(screen.queryByTestId("insumos-search-clear")).not.toBeInTheDocument();
   });
 
   it("creates an insumo through the dialog with the required fields", async () => {
@@ -132,7 +189,7 @@ describe("InsumosTab", () => {
     } as unknown as ReturnType<typeof useCreateInsumo>);
 
     const user = userEvent.setup();
-    render(<InsumosTab />, { wrapper: TestWrapper });
+    await renderLoadedTab();
 
     await user.click(screen.getByTestId("add-insumo-btn"));
     await user.type(screen.getByTestId("insumo-form-name"), "Azúcar Blanca");
@@ -165,7 +222,7 @@ describe("InsumosTab", () => {
     } as unknown as ReturnType<typeof useCreateInsumo>);
 
     const user = userEvent.setup();
-    render(<InsumosTab />, { wrapper: TestWrapper });
+    await renderLoadedTab();
 
     await user.click(screen.getByTestId("add-insumo-btn"));
     await user.click(screen.getByTestId("insumo-form-submit"));
@@ -178,6 +235,89 @@ describe("InsumosTab", () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
+  it("announces and focuses the form-level error banner (AT-03 / BX-005)", async () => {
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    await user.click(screen.getByTestId("insumo-form-submit"));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/El nombre del insumo es obligatorio/i);
+    expect(alert).toHaveFocus();
+  });
+
+  it("announces an invalid-factor submit exactly once, at field level (R1)", async () => {
+    const mutateAsync = vi.fn();
+    vi.mocked(useCreateInsumo).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateInsumo>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    await user.type(screen.getByTestId("insumo-form-name"), "Canela");
+    await user.clear(screen.getByTestId("insumo-form-conversion-factor"));
+    await user.click(screen.getByTestId("insumo-form-submit"));
+
+    // The factor problem must be announced once — a duplicated form-level
+    // role="alert" would make screen readers read it twice.
+    const alerts = screen.getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent(FACTOR_COPY);
+    // No form-level banner is rendered for this field-level failure.
+    expect(screen.queryByTestId("insumo-form-error")).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("insumo-form-conversion-factor"),
+    ).toHaveAttribute("aria-invalid", "true");
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("maps transport failures to actionable Spanish copy (AT-03 / BX-004)", async () => {
+    vi.mocked(useCreateInsumo).mockReturnValue({
+      mutateAsync: vi.fn().mockRejectedValue(new Error("Failed to fetch")),
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateInsumo>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    await user.type(screen.getByTestId("insumo-form-name"), "Canela");
+    await user.click(screen.getByTestId("insumo-form-submit"));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/Error de conexión/i);
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+    // The dialog stays open with the typed data preserved.
+    expect(screen.getByTestId("insumo-form-name")).toHaveValue("Canela");
+  });
+
+  it("shows a submit button whose width class is stable while saving (BX-006)", async () => {
+    const user = userEvent.setup();
+    const view = render(<InsumosTab />, { wrapper: TestWrapper });
+    await screen.findByText("Café en Grano");
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+
+    const submit = screen.getByTestId("insumo-form-submit");
+    const idleClass = submit.className;
+    expect(idleClass).toContain("min-w-");
+
+    // The pending state comes from the mutation hook; flip it and re-render.
+    vi.mocked(useCreateInsumo).mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+      isPending: true,
+    } as unknown as ReturnType<typeof useCreateInsumo>);
+    view.rerender(<InsumosTab />);
+
+    const saving = screen.getByTestId("insumo-form-submit");
+    expect(saving).toHaveTextContent("Guardando...");
+    expect(saving.className).toBe(idleClass);
+  });
+
   it("edits an existing insumo through the dialog", async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     vi.mocked(useUpdateInsumo).mockReturnValue({
@@ -186,7 +326,7 @@ describe("InsumosTab", () => {
     } as unknown as ReturnType<typeof useUpdateInsumo>);
 
     const user = userEvent.setup();
-    render(<InsumosTab />, { wrapper: TestWrapper });
+    await renderLoadedTab();
 
     await user.click(screen.getByTestId("edit-insumo-ins-1"));
     await waitFor(() => {
@@ -194,6 +334,9 @@ describe("InsumosTab", () => {
         screen.getByText(/Editar Insumo/i),
       ).toBeInTheDocument();
     });
+    expect(screen.getByTestId("edit-insumo-ins-1")).toHaveAccessibleName(
+      "Editar insumo",
+    );
 
     await user.clear(screen.getByTestId("insumo-form-par-level"));
     await user.type(screen.getByTestId("insumo-form-par-level"), "3000");
@@ -210,28 +353,211 @@ describe("InsumosTab", () => {
     });
   });
 
-  it("surfaces backend errors in the dialog instead of closing it", async () => {
+  it("warns before discarding dirty form state on Escape and keeps it on 'Seguir editando' (AT-02 / BX-003)", async () => {
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    await user.type(screen.getByTestId("insumo-form-name"), "Canela Molida");
+    await user.keyboard("{Escape}");
+
+    const confirm = await screen.findByText("¿Descartar los cambios del insumo?");
+    expect(confirm).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("insumo-discard-stay-btn"));
+    expect(screen.queryByText("¿Descartar los cambios del insumo?")).not.toBeInTheDocument();
+    expect(screen.getByTestId("insumo-form-name")).toHaveValue("Canela Molida");
+    expect(
+      screen.getByText(/Nuevo Insumo de Materia Prima/i),
+    ).toBeInTheDocument();
+  });
+
+  it("closes silently on Escape when the form is pristine (AT-02 / BX-003)", async () => {
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("insumo-form-name")).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText("¿Descartar los cambios del insumo?"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("warns through Cancelar with unsaved edits, then discards on confirm", async () => {
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    await user.type(screen.getByTestId("insumo-form-name"), "Canela");
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(await screen.findByText("¿Descartar los cambios del insumo?")).toBeInTheDocument();
+    await user.click(screen.getByTestId("insumo-discard-confirm-btn"));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("insumo-form-name")).not.toBeInTheDocument();
+    });
+  });
+
+  it("validates the conversion factor on blur without coercing while typing (BX-017)", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
     vi.mocked(useCreateInsumo).mockReturnValue({
-      mutateAsync: vi
-        .fn()
-        .mockRejectedValue(
-          new Error("Ya existe un insumo con el nombre 'Azúcar Blanca'"),
-        ),
+      mutateAsync,
       isPending: false,
     } as unknown as ReturnType<typeof useCreateInsumo>);
 
     const user = userEvent.setup();
-    render(<InsumosTab />, { wrapper: TestWrapper });
+    await renderLoadedTab();
 
     await user.click(screen.getByTestId("add-insumo-btn"));
-    await user.type(screen.getByTestId("insumo-form-name"), "Azúcar Blanca");
+
+    // A cleared factor stays empty (no silent snap back to 1).
+    const factor = screen.getByTestId("insumo-form-conversion-factor");
+    await user.clear(factor);
+    expect(factor).toHaveValue(null);
+
+    // Blur surfaces the rule instead of waiting for submit.
+    await user.tab();
+    expect(screen.getByText(FACTOR_COPY)).toBeInTheDocument();
+
+    // A legal sub-1 factor is accepted and parsed at submit time.
+    await user.type(factor, "0.5");
+    await user.type(screen.getByTestId("insumo-form-name"), "Canela");
     await user.click(screen.getByTestId("insumo-form-submit"));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Ya existe un insumo con el nombre/i),
-      ).toBeInTheDocument();
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ conversionFactor: 0.5 }),
+      );
     });
-    expect(screen.getByTestId("insumo-form-submit")).toBeInTheDocument();
+  });
+
+  it("submits and keeps the dialog open with a reset form via 'Guardar y crear otro' (BX-020)", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    vi.mocked(useCreateInsumo).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateInsumo>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    await user.type(screen.getByTestId("insumo-form-name"), "Canela Molida");
+    await user.click(screen.getByTestId("insumo-form-save-another"));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ name: "Canela Molida" }),
+      );
+    });
+    // Dialog stays open, form reset for the next insumo.
+    expect(screen.getByTestId("insumo-form-name")).toHaveValue("");
+    expect(
+      screen.getByText(/Nuevo Insumo de Materia Prima/i),
+    ).toBeInTheDocument();
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Insumo creado" }),
+    );
+  });
+
+  it("does not offer 'Guardar y crear otro' while editing", async () => {
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("edit-insumo-ins-1"));
+    await waitFor(() => {
+      expect(screen.getByText(/Editar Insumo/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("insumo-form-save-another")).not.toBeInTheDocument();
+  });
+
+  it("deactivates an insumo after a proportionate confirmation (BX-018)", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    vi.mocked(useUpdateInsumo).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateInsumo>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("deactivate-insumo-ins-1"));
+
+    // Confirmation names the object, the consequence and the reversibility.
+    expect(
+      await screen.findByText("¿Desactivar el insumo 'Café en Grano'?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/dejará de estar disponible para recetas y movimientos/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/reactivarlo en cualquier momento/i)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("insumo-deactivate-confirm-btn"));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        id: "ins-1",
+        input: { is_active: false },
+      });
+    });
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Insumo desactivado" }),
+    );
+  });
+
+  it("reactivates an inactive insumo directly without confirmation (BX-018)", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    vi.mocked(useUpdateInsumo).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateInsumo>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("reactivate-insumo-ins-3"));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith({
+        id: "ins-3",
+        input: { is_active: true },
+      });
+    });
+    expect(
+      screen.queryByText("¿Desactivar el insumo 'Crema Baja en Grasa'?"),
+    ).not.toBeInTheDocument();
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Insumo reactivado" }),
+    );
+  });
+
+  it("surfaces a mapped error when deactivation is rejected (BX-018)", async () => {
+    vi.mocked(useUpdateInsumo).mockReturnValue({
+      mutateAsync: vi
+        .fn()
+        .mockRejectedValue(
+          new Error("El insumo está referenciado por recetas publicadas"),
+        ),
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateInsumo>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("deactivate-insumo-ins-1"));
+    await user.click(screen.getByTestId("insumo-deactivate-confirm-btn"));
+
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ variant: "destructive" }),
+      );
+    });
   });
 });
+
+const FACTOR_COPY = "El factor de conversión debe ser mayor que 0.";

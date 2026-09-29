@@ -9,6 +9,7 @@
 import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "@/features/settings/settings-page";
 import {
@@ -30,7 +31,7 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
-function TestWrapper({ children }: { children: React.ReactNode }) {
+function QueryWrapper({ children }: { children: React.ReactNode }) {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
@@ -38,6 +39,25 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
     },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+function TestWrapper({ children }: { children: React.ReactNode }) {
+  // The wizard navigates to /inventory?tab=insumos after a commit (BX-019),
+  // so the whole page render happens inside a router.
+  return <MemoryRouter><QueryWrapper>{children}</QueryWrapper></MemoryRouter>;
+}
+
+function RoutedTestWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <MemoryRouter initialEntries={["/settings"]}>
+      <QueryWrapper>
+        <Routes>
+          <Route path="/settings" element={<>{children}</>} />
+          <Route path="/inventory" element={<div data-testid="inventory-route" />} />
+        </Routes>
+      </QueryWrapper>
+    </MemoryRouter>
+  );
 }
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -273,5 +293,110 @@ describe("MenuImportWizard", () => {
     expect(screen.getByTestId("menu-import-client-error")).toBeInTheDocument();
     expect(previewMenuImport).not.toHaveBeenCalled();
     expect(commitMenuImport).not.toHaveBeenCalled();
+  });
+
+  it("states the true size limit (3,5 MB) when rejecting an oversized file (AT-06 / BX-011)", async () => {
+    render(
+      <TestWrapper>
+        <SettingsPage initialTab="import" />
+      </TestWrapper>,
+    );
+
+    const oversized = new File(
+      [new ArrayBuffer(3.5 * 1024 * 1024 + 10)],
+      "menu.xlsx",
+      { type: XLSX_MIME },
+    );
+    await uploadFile(oversized);
+
+    const error = screen.getByTestId("menu-import-client-error");
+    expect(error).toHaveTextContent("El archivo supera el límite de 3,5 MB.");
+    expect(error.textContent).not.toContain("4 MB");
+    expect(previewMenuImport).not.toHaveBeenCalled();
+  });
+
+  it("never renders raw backend enums or English row messages (AT-05 / BX-010)", async () => {
+    vi.mocked(previewMenuImport).mockResolvedValue(summaryWithErrors);
+
+    render(
+      <TestWrapper>
+        <SettingsPage initialTab="import" />
+      </TestWrapper>,
+    );
+    await uploadFile(makeXlsxFile());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("menu-import-preview-card")).toBeInTheDocument();
+    });
+
+    // Skipped reason and state render as human Spanish labels.
+    expect(screen.getByText(/ya tiene una versión de receta/i)).toBeInTheDocument();
+    expect(screen.getByText(/estado actual: Publicada/i)).toBeInTheDocument();
+    expect(screen.queryByText(/VERSION_ALREADY_EXISTS/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/PUBLISHED/)).not.toBeInTheDocument();
+
+    // Row error/warning messages are normalized to actionable Spanish.
+    const errorsTable = screen.getByTestId("menu-import-errors-table-body");
+    expect(errorsTable).toHaveTextContent("Falta la columna 'producto' en esta fila.");
+    expect(errorsTable.textContent).not.toContain("Row is missing");
+    const warningsTable = screen.getByTestId("menu-import-warnings-table-body");
+    expect(warningsTable).toHaveTextContent("La hoja 'VACÍA' no tiene filas de datos.");
+    expect(warningsTable.textContent).not.toContain("has no data rows");
+  });
+
+  it("shows a destructive alert on commit failure and keeps the preview for retry (AT-04 / BX-009)", async () => {
+    vi.mocked(previewMenuImport).mockResolvedValue(cleanSummary);
+    vi.mocked(commitMenuImport).mockRejectedValue({ status: 500 });
+
+    render(
+      <TestWrapper>
+        <SettingsPage initialTab="import" />
+      </TestWrapper>,
+    );
+    await uploadFile(makeXlsxFile());
+    await waitFor(() => {
+      expect(screen.getByTestId("menu-import-preview-card")).toBeInTheDocument();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("menu-import-confirm-btn"));
+
+    const alert = await screen.findByTestId("menu-import-commit-error");
+    expect(alert).toHaveTextContent("No se pudo completar la importación");
+    expect(alert).toHaveTextContent(/Error en el servidor/i);
+    expect(alert.textContent).not.toContain("500");
+
+    // Nothing was written and the work is not lost: preview stays, receipt does not appear.
+    expect(screen.getByTestId("menu-import-preview-card")).toBeInTheDocument();
+    expect(screen.queryByTestId("menu-import-committed-card")).not.toBeInTheDocument();
+    // Confirm re-enables for retry.
+    expect(screen.getByTestId("menu-import-confirm-btn")).toBeEnabled();
+  });
+
+  it("links the named next step after commit when new insumos were created (BX-019)", async () => {
+    vi.mocked(previewMenuImport).mockResolvedValue(cleanSummary);
+    vi.mocked(commitMenuImport).mockResolvedValue(cleanSummary);
+
+    render(
+      <RoutedTestWrapper>
+        <SettingsPage initialTab="import" />
+      </RoutedTestWrapper>,
+    );
+    await uploadFile(makeXlsxFile());
+    await waitFor(() => {
+      expect(screen.getByTestId("menu-import-preview-card")).toBeInTheDocument();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId("menu-import-confirm-btn"));
+    await waitFor(() => {
+      expect(screen.getByTestId("menu-import-committed-card")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByTestId("menu-import-go-insumos-btn"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("inventory-route")).toBeInTheDocument();
+    });
   });
 });
