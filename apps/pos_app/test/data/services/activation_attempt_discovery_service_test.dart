@@ -8,6 +8,7 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/activation/activation_attempt_local_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/ports/activation_sync_port.dart';
+import '../../support/unimplemented_activation_sync_defaults.dart';
 import 'package:pos_app/data/services/activation_attempt_discovery_service.dart';
 import 'package:pos_app/data/services/activation_clock_manager.dart';
 import 'package:pos_app/data/services/terminal_identity_service.dart';
@@ -37,7 +38,8 @@ ActivationAttemptSnapshot _activeSnapshot({
   );
 }
 
-class _StubActivationSyncPort extends ActivationSyncPort {
+class _StubActivationSyncPort extends ActivationSyncPort
+    with UnimplementedActivationSyncDefaults {
   _StubActivationSyncPort({this.snapshot});
 
   ActivationAttemptSnapshot? snapshot;

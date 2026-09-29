@@ -10,9 +10,11 @@ import 'package:pos_app/data/models/activation/activation_check_result_local_ent
 import 'package:pos_app/data/models/activation/activation_outbox_envelope_entity.dart';
 import 'package:pos_app/data/models/activation/first_successful_sale_claim_entity.dart';
 import 'package:pos_app/data/ports/activation_sync_port.dart';
+import '../../support/unimplemented_activation_sync_defaults.dart';
 import 'package:pos_app/data/services/activation_reconnect_sync_runner.dart';
 
-class FakeActivationSyncPort extends ActivationSyncPort {
+class FakeActivationSyncPort extends ActivationSyncPort
+    with UnimplementedActivationSyncDefaults {
   bool simulateNetworkFailure = false;
   bool simulateFinalizeFailure = false;
   String finalizeVerdict = 'PASS';

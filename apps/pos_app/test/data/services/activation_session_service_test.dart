@@ -6,6 +6,7 @@ import 'package:pos_app/data/models/activation/activation_check_result_local_ent
 import 'package:pos_app/data/models/inventory/product_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/ports/activation_sync_port.dart';
+import '../../support/unimplemented_activation_sync_defaults.dart';
 import 'package:pos_app/data/services/activation_attempt_discovery_service.dart';
 import 'package:pos_app/data/services/activation_controlled_sale_runner.dart';
 import 'package:pos_app/data/services/activation_pre_offline_runner.dart';
@@ -26,7 +27,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Records `fetchActiveAttempt` behavior, mirroring the discovery-test stub
 /// style (`activation_attempt_discovery_service_test.dart`).
-class _StubActivationSyncPort extends ActivationSyncPort {
+class _StubActivationSyncPort extends ActivationSyncPort
+    with UnimplementedActivationSyncDefaults {
   ActivationAttemptSnapshot? snapshot;
 
   /// When non-null, [fetchActiveAttempt] throws this instead of returning

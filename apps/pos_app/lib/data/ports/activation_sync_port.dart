@@ -1,6 +1,12 @@
 import '../../domain/models/activation/activation_attempt_snapshot.dart';
 import '../../domain/security/device_sync_credential_record.dart';
 
+/// Contract for cloud activation synchronization.
+///
+/// Production implements every method via `DioActivationSyncPort`.
+/// Test doubles that intentionally do not exercise a subset of these methods
+/// can mix in the shared test helper `UnimplementedActivationSyncDefaults`
+/// (see `test/support/unimplemented_activation_sync_defaults.dart`).
 abstract class ActivationSyncPort {
   Future<bool> sendCheck({
     required String attemptId,
@@ -34,9 +40,7 @@ abstract class ActivationSyncPort {
   /// reports no active attempt for the authenticated tenant. Network failures
   /// are thrown (not swallowed) so callers can distinguish "no attempt" from
   /// "backend unreachable" and fail closed.
-  Future<ActivationAttemptSnapshot?> fetchActiveAttempt() {
-    throw UnimplementedError();
-  }
+  Future<ActivationAttemptSnapshot?> fetchActiveAttempt();
 
   /// Explicitly calls POST /onboarding/activation/attempts/:id/device-sync-credential
   /// while a human authorized cloud session exists, parses the one-time response
@@ -45,9 +49,7 @@ abstract class ActivationSyncPort {
   Future<DeviceSyncCredentialRecord> provisionDeviceSyncCredential({
     required String attemptId,
     required String expectedDeviceId,
-  }) {
-    throw UnimplementedError();
-  }
+  });
 
   /// Calls POST /onboarding/activation/attempts/:id/device-sync-credential/confirm
   /// with exact credential ID, version, device, and renewal secret.
@@ -57,17 +59,13 @@ abstract class ActivationSyncPort {
     required String deviceId,
     required int credentialVersion,
     required String renewalSecret,
-  }) {
-    throw UnimplementedError();
-  }
+  });
 
   /// Calls POST /onboarding/activation/device-sync-credential with { deviceId }
   /// while a human authorized cloud session exists, resolving latest PASS attempt.
   Future<DeviceSyncCredentialRecord> provisionBootstrapDeviceSyncCredential({
     required String deviceId,
-  }) {
-    throw UnimplementedError();
-  }
+  });
 
   /// Calls POST /onboarding/activation/device-sync-credential/confirm
   /// with exact credential ID, version, device, and renewal secret,
@@ -77,9 +75,7 @@ abstract class ActivationSyncPort {
     required String deviceId,
     required int credentialVersion,
     required String renewalSecret,
-  }) {
-    throw UnimplementedError();
-  }
+  });
 }
 
 class FinalizeActivationResult {

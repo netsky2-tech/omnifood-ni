@@ -15,6 +15,7 @@ import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/security_profile_entity.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/ports/activation_sync_port.dart';
+import '../support/unimplemented_activation_sync_defaults.dart';
 import 'package:pos_app/data/repositories/audit_repository_impl.dart';
 import 'package:pos_app/data/repositories/auth_repository_impl.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
@@ -43,7 +44,8 @@ class MockAlertService extends Mock implements AlertService {
       Future<void>.value();
 }
 
-class FounderPilotRehearsalSyncPort extends ActivationSyncPort {
+class FounderPilotRehearsalSyncPort extends ActivationSyncPort
+    with UnimplementedActivationSyncDefaults {
   final List<Map<String, dynamic>> deliveredChecks = [];
   final List<Map<String, dynamic>> deliveredClaims = [];
   final List<Map<String, dynamic>> deliveredSales = [];

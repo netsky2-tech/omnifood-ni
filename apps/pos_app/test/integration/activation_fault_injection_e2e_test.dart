@@ -16,11 +16,13 @@ import 'package:pos_app/data/models/security_profile_entity.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/ports/activation_sync_port.dart';
+import '../support/unimplemented_activation_sync_defaults.dart';
 import 'package:pos_app/data/services/activation_clock_manager.dart';
 import 'package:pos_app/data/services/activation_reconnect_sync_runner.dart';
 import 'package:pos_app/data/services/local_auth_service.dart';
 
-class FaultyActivationSyncPort extends ActivationSyncPort {
+class FaultyActivationSyncPort extends ActivationSyncPort
+    with UnimplementedActivationSyncDefaults {
   bool simulateWanOutage = false;
   bool simulateCloudDownFinalizer = false;
   final List<Map<String, dynamic>> deliveredEnvelopes = [];
