@@ -1,5 +1,11 @@
+import 'dart:convert';
+
 import 'package:floor/floor.dart';
+import 'package:uuid/uuid.dart';
+
+import '../../models/human_authorization/field_guards.dart';
 import '../../models/human_authorization/ohac_delivery_entities.dart';
+import '../../models/human_authorization/terminal_state_machine.dart';
 
 /// Consolidated DAO for the OHAC local delivery tables.
 ///
@@ -285,6 +291,254 @@ abstract class OhacDeliveryDao {
   );
 
   // ---------------------------------------------------------------------------
+  // The two halves of the atomic candidate (design §5 step 2), split because
+  // §5.1's drain gate sits between them.
+  // ---------------------------------------------------------------------------
+
+  /// Transaction **R** of design §5 step 2: write the complete candidate and
+  /// leave the terminal in `RECEIVE_PENDING` with its candidate pair and the
+  /// four negotiated facts.
+  ///
+  /// Split from the submit half because a deferred terminal must **stay** in
+  /// `RECEIVE_PENDING` with the old epoch still governing (§5.1), which is only
+  /// possible if the receive is durable before the `ACK_SUBMITTING` flip is
+  /// gated. Everything here is one Floor `@transaction` with positional
+  /// arguments (§13 and `AGENTS.md`), so a crash leaves either the whole
+  /// candidate plus the pending flip or nothing at all — never a half-written
+  /// epoch presented for authorisation.
+  ///
+  /// The guard is read before anything is written: only a terminal in `ACTIVE`
+  /// may receive, and only the exact next sequence may be accepted. Both rules
+  /// belong to §5 step 1's acceptance contract; re-checking them at the write
+  /// boundary is what keeps a caller that skipped `evaluateDeliveredEpoch` from
+  /// clobbering a pending candidate or landing a gap.
+  ///
+  /// Verification is a read-back against what the caller already validated
+  /// rather than a second parse of the envelope: the envelope's digest was
+  /// checked by `parseStaffPolicyEpochV1` before this transaction opened, so
+  /// this only fails when the persisted rows disagree with that verdict or when
+  /// the flip loses its revision race.
+  ///
+  /// A duplicate receive is not this method's decision — `decideEpochReceive`
+  /// returns `OhacReceiveDuplicate` for a candidate already on record — so a
+  /// conflicting primary key here is a genuine conflict and throws.
+  @transaction
+  Future<void> receiveCandidateEpoch(
+    OhacPolicyEpochEntity epoch,
+    List<OhacPolicyEntryEntity> entries,
+    int expectedEntryCount,
+    String expectedDigest,
+    int expectedRevision,
+    String negotiatedPosBuild,
+    String negotiatedBackendBuild,
+    String negotiatedPolicySchema,
+    String negotiatedAssertionSchema,
+    String newUpdatedAt,
+  ) async {
+    final current = await findTerminalState(epoch.tenantId, epoch.terminalId);
+    if (current == null) {
+      throw StateError(
+        'OHAC terminal state is missing for ${epoch.terminalId}; there is no '
+        'state to put the candidate into',
+      );
+    }
+    if (current.state != OhacTerminalPhase.active.wire) {
+      throw StateError(
+        'OHAC receive requires ${OhacTerminalPhase.active.wire}, found '
+        '${current.state}',
+      );
+    }
+    if (epoch.sequence != current.activeSequence + 1) {
+      throw StateError(
+        'OHAC candidate sequence ${epoch.sequence} is not the next sequence '
+        'after ${current.activeSequence}',
+      );
+    }
+
+    await insertEpoch(epoch);
+    await insertEntries(entries);
+
+    final stored = await findEpoch(
+      epoch.tenantId,
+      epoch.terminalId,
+      epoch.sequence,
+    );
+    if (stored == null || stored.digest != expectedDigest) {
+      throw StateError(
+        'OHAC candidate for sequence ${epoch.sequence} was not written with '
+        'the digest the caller verified',
+      );
+    }
+    final storedEntries = await findEntries(
+      epoch.tenantId,
+      epoch.terminalId,
+      epoch.sequence,
+    );
+    if (storedEntries.length != expectedEntryCount) {
+      throw StateError(
+        'OHAC candidate for sequence ${epoch.sequence} holds '
+        '${storedEntries.length} entries, expected $expectedEntryCount',
+      );
+    }
+
+    final flipped = await receiveEpoch(
+      epoch.tenantId,
+      epoch.terminalId,
+      expectedRevision,
+      epoch.sequence,
+      expectedDigest,
+      negotiatedPosBuild,
+      negotiatedBackendBuild,
+      negotiatedPolicySchema,
+      negotiatedAssertionSchema,
+      newUpdatedAt,
+    );
+    if (flipped != 1) {
+      throw StateError(
+        'OHAC receive lost terminal-state revision $expectedRevision',
+      );
+    }
+  }
+
+  /// Transaction **S** of design §5 step 2: flip to `ACK_SUBMITTING`, apply the
+  /// epoch's explicit higher `attemptResetGeneration` resets, and append one
+  /// local fact per applied reset.
+  ///
+  /// **The drain gate is not here yet, and no released build may omit it.**
+  /// §5.1 makes the gate this flip's last precondition and says it "ships in
+  /// the same POS build pair and cohort gate as the epoch-ack path"; §12 step 4
+  /// makes a build pair without it not enablement-eligible. What makes this unit
+  /// safe *today* is narrower than either: the invariant is conditional on an
+  /// outbox that emits `ohac.assertion.v1`, and none exists (design decision
+  /// 31), so an ungated flip cannot lose anything yet — and nothing calls this
+  /// method either. §11.5 decision 32 is what permits the split at all: "the POS
+  /// half lands as separate review units … then the drain gate."
+  ///
+  /// So `main` may carry this flip before B3, but **no POS build containing it
+  /// may be released before B3 lands in that same build pair**, and B3 must
+  /// insert the gate as this flip's last precondition before the first
+  /// assertion-bearing outbox exists. `openspec/changes/offline-human-
+  /// authorization-credential/tasks.md` puts it harder than decision 32 does —
+  /// the flip and the gate "ship as one atomic unit" — which is the same
+  /// constraint read as a release rather than as a review unit.
+  ///
+  /// A replay while already submitted for the same candidate is a no-op rather
+  /// than an error: re-flipping would bump the revision and re-append identical
+  /// forensic facts. Any other precondition that does not hold throws, so the
+  /// transaction rolls back whole — §5 requires recovery to converge on one
+  /// complete state, never a partially applied epoch.
+  ///
+  /// A generation that cannot be ordered fails closed (see
+  /// [_parseAttemptResetGeneration]) instead of being skipped, because a reset
+  /// exists to release a lockout and a silently dropped one would leave an
+  /// operator believing an authorised reset took effect.
+  @transaction
+  Future<void> submitCandidateAcknowledgement(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    int expectedCandidateSequence,
+    String expectedCandidateDigest,
+    String newUpdatedAt,
+  ) async {
+    final current = await findTerminalState(tenantId, terminalId);
+    if (current == null) {
+      throw StateError('OHAC terminal state is missing for $terminalId');
+    }
+    if (current.state == OhacTerminalPhase.ackSubmitting.wire &&
+        current.candidateSequence == expectedCandidateSequence &&
+        current.candidateDigest == expectedCandidateDigest) {
+      return;
+    }
+    if (current.state != OhacTerminalPhase.receivePending.wire) {
+      throw StateError(
+        'OHAC submit requires ${OhacTerminalPhase.receivePending.wire}, found '
+        '${current.state}',
+      );
+    }
+    if (current.candidateSequence != expectedCandidateSequence ||
+        current.candidateDigest != expectedCandidateDigest) {
+      throw StateError(
+        'OHAC submit candidate sequence/digest does not match the candidate '
+        'on record',
+      );
+    }
+
+    final flipped = await submitAcknowledgement(
+      tenantId,
+      terminalId,
+      expectedRevision,
+      newUpdatedAt,
+    );
+    if (flipped != 1) {
+      throw StateError(
+        'OHAC submit lost terminal-state revision $expectedRevision',
+      );
+    }
+
+    final entries = await findEntries(
+      tenantId,
+      terminalId,
+      expectedCandidateSequence,
+    );
+    for (final entry in entries) {
+      final attempt = await findAttemptState(
+        tenantId,
+        terminalId,
+        entry.userId,
+      );
+      // No attempt row means no lockout to release: §6 resets attempts, it
+      // does not create them.
+      if (attempt == null) continue;
+
+      final storedGeneration = _parseAttemptResetGeneration(
+        attempt.resetGeneration,
+        entry.userId,
+      );
+      final candidateGeneration = _parseAttemptResetGeneration(
+        entry.attemptResetGeneration,
+        entry.userId,
+      );
+      // Replays and out-of-order generations are no-ops (design §6); only an
+      // explicit advance releases the lockout.
+      if (candidateGeneration <= storedGeneration) continue;
+
+      final updated = await updateAttemptStateIfRevisionMatches(
+        tenantId,
+        terminalId,
+        entry.userId,
+        attempt.revision,
+        '[]',
+        '',
+        entry.attemptResetGeneration,
+        attempt.localAuthorizationSequence,
+        newUpdatedAt,
+      );
+      if (updated != 1) {
+        throw StateError(
+          'OHAC attempt reset lost the revision for ${entry.userId}',
+        );
+      }
+
+      await appendEvent(
+        OhacLocalEventEntity(
+          id: const Uuid().v4(),
+          tenantId: tenantId,
+          terminalId: terminalId,
+          eventType: OhacLocalEventType.adminAttemptResetApplied,
+          sequence: expectedCandidateSequence,
+          payload: jsonEncode({
+            'userId': entry.userId,
+            'fromGeneration': attempt.resetGeneration,
+            'toGeneration': entry.attemptResetGeneration,
+          }),
+          createdAt: newUpdatedAt,
+        ),
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Append-only event log (forensic evidence).
   // ---------------------------------------------------------------------------
 
@@ -308,4 +562,23 @@ abstract class OhacDeliveryDao {
     String tenantId,
     String terminalId,
   );
+}
+
+/// Orders `attemptResetGeneration`, which the epoch contract defines as a
+/// decimal string (design §7.2).
+///
+/// A value that cannot be ordered fails closed instead of being skipped: the
+/// reset exists to release a lockout, so dropping one silently would leave an
+/// operator believing an authorised reset took effect when it did not. Nothing
+/// written by the contract's own parser can reach this path — it already
+/// requires `isDecimalString` — so a failure here means the stored row itself
+/// is corrupt, which is exactly what must not be papered over.
+BigInt _parseAttemptResetGeneration(String value, String userId) {
+  if (!isDecimalString(value)) {
+    throw StateError(
+      'OHAC attempt reset generation for $userId is not a decimal string; '
+      'refusing to drop an administrative reset rather than skip it',
+    );
+  }
+  return BigInt.parse(value);
 }

@@ -280,6 +280,26 @@ class OhacAttemptStateEntity {
   });
 }
 
+/// Event vocabulary for the append-only local event log (design §4.2, §5, §6).
+///
+/// The design asks for "local lifecycle facts" without naming them, so this
+/// wire value is an implementation choice recorded in the slice's tracker. It
+/// follows the one name the design does state for a reset event,
+/// `PIN_ATTEMPT_RESET_SUCCESS`, which belongs to §6's successful-PIN path and is
+/// therefore not reusable here: this fact records an administrative
+/// `attemptResetGeneration` advance applied during candidate activation.
+abstract final class OhacLocalEventType {
+  /// The terminal applied an epoch-declared `attemptResetGeneration` advance to
+  /// one user's durable attempt state (design §6: "applies it only during atomic
+  /// candidate activation and appends a local reset event").
+  ///
+  /// The payload carries the user and the generation move only. The reset's
+  /// actor and reason are audited by the backend when it increments the
+  /// generation, which is where that identity exists; no verifier, PIN or
+  /// assertion body may ever appear here (design §12 observability).
+  static const adminAttemptResetApplied = 'ADMIN_ATTEMPT_RESET_APPLIED';
+}
+
 /// Append-only local event log (design §4.2).
 @Entity(tableName: 'human_auth_local_events')
 class OhacLocalEventEntity {

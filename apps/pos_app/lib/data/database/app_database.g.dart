@@ -8141,4 +8141,83 @@ class _$OhacDeliveryDao extends OhacDeliveryDao {
     await _ohacLocalEventEntityInsertionAdapter.insert(
         event, OnConflictStrategy.abort);
   }
+
+  @override
+  Future<void> receiveCandidateEpoch(
+    OhacPolicyEpochEntity epoch,
+    List<OhacPolicyEntryEntity> entries,
+    int expectedEntryCount,
+    String expectedDigest,
+    int expectedRevision,
+    String negotiatedPosBuild,
+    String negotiatedBackendBuild,
+    String negotiatedPolicySchema,
+    String negotiatedAssertionSchema,
+    String newUpdatedAt,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.receiveCandidateEpoch(
+          epoch,
+          entries,
+          expectedEntryCount,
+          expectedDigest,
+          expectedRevision,
+          negotiatedPosBuild,
+          negotiatedBackendBuild,
+          negotiatedPolicySchema,
+          negotiatedAssertionSchema,
+          newUpdatedAt);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.ohacDeliveryDao.receiveCandidateEpoch(
+            epoch,
+            entries,
+            expectedEntryCount,
+            expectedDigest,
+            expectedRevision,
+            negotiatedPosBuild,
+            negotiatedBackendBuild,
+            negotiatedPolicySchema,
+            negotiatedAssertionSchema,
+            newUpdatedAt);
+      });
+    }
+  }
+
+  @override
+  Future<void> submitCandidateAcknowledgement(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    int expectedCandidateSequence,
+    String expectedCandidateDigest,
+    String newUpdatedAt,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.submitCandidateAcknowledgement(
+          tenantId,
+          terminalId,
+          expectedRevision,
+          expectedCandidateSequence,
+          expectedCandidateDigest,
+          newUpdatedAt);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.ohacDeliveryDao
+            .submitCandidateAcknowledgement(
+                tenantId,
+                terminalId,
+                expectedRevision,
+                expectedCandidateSequence,
+                expectedCandidateDigest,
+                newUpdatedAt);
+      });
+    }
+  }
 }

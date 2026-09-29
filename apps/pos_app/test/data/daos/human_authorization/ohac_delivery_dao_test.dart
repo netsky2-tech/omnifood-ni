@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
@@ -55,6 +57,7 @@ void main() {
     String terminalId = 'terminal-1',
     int sequence = 1,
     String userId = 'user-1',
+    String? attemptResetGeneration,
   }) =>
       OhacPolicyEntryEntity(
         tenantId: tenantId,
@@ -67,7 +70,8 @@ void main() {
         verifierAlgorithm: 'bcrypt',
         verifierFormatVersion: '2b',
         verifierEncoded: r'$2b$10$abcdefghijklmnopqrstuv',
-        attemptResetGeneration: 'gen-$sequence-$userId',
+        attemptResetGeneration:
+            attemptResetGeneration ?? 'gen-$sequence-$userId',
       );
 
   OhacTerminalStateEntity terminalState({
@@ -115,14 +119,16 @@ void main() {
     String userId = 'user-1',
     String? lockedUntil,
     int revision = 1,
+    String resetGeneration = 'gen-1',
+    String failureTimestamps = '["2026-01-01T00:00:00.000Z"]',
   }) =>
       OhacAttemptStateEntity(
         tenantId: tenantId,
         terminalId: terminalId,
         userId: userId,
-        failureTimestamps: '["2026-01-01T00:00:00.000Z"]',
+        failureTimestamps: failureTimestamps,
         lockedUntil: lockedUntil,
-        resetGeneration: 'gen-1',
+        resetGeneration: resetGeneration,
         localAuthorizationSequence: 7,
         revision: revision,
         updatedAt: '2026-01-01T00:00:00.000Z',
@@ -1123,6 +1129,478 @@ void main() {
             .revision,
         2,
       );
+    });
+  });
+
+  group('receiveCandidateEpoch — the atomic candidate transaction R', () {
+    final digest = 'sha256:${'d' * 64}';
+
+    OhacPolicyEpochEntity candidate({int sequence = 2}) => OhacPolicyEpochEntity(
+          tenantId: 'tenant-1',
+          terminalId: 'terminal-1',
+          sequence: sequence,
+          digest: digest,
+          previousSequence: sequence - 1,
+          previousDigest: 'sha256:${'a' * 64}',
+          schema: 'ohac.staff-policy-epoch.v1',
+          targetPosBuild: '1.0.0+1',
+          publisherBackendBuild: 'backend-1',
+          minimumAssertionSchema: 'ohac.assertion.v1',
+          payload: '{"sequence":$sequence}',
+          receivedAt: '2026-01-02T00:00:00.000Z',
+        );
+
+    final priorDigest = 'sha256:${'a' * 64}';
+
+    Future<void> seedActive({int revision = 1}) =>
+        database.ohacDeliveryDao.insertTerminalState(
+          terminalState(
+            state: 'ACTIVE',
+            activeSequence: 1,
+            activeDigest: priorDigest,
+            revision: revision,
+          ),
+        );
+
+    Future<void> expectNothingPersisted({
+      int revision = 1,
+      String stateName = 'ACTIVE',
+      int candidateSequence = 0,
+    }) async {
+      expect(
+        await database.database.query('human_auth_policy_epochs'),
+        isEmpty,
+        reason: 'a rolled-back receive must leave no epoch row',
+      );
+      expect(
+        await database.database.query('human_auth_policy_entries'),
+        isEmpty,
+        reason: 'a rolled-back receive must leave no entry rows',
+      );
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, stateName);
+      expect(state.revision, revision);
+      expect(state.candidateSequence, candidateSequence);
+    }
+
+    test('writes the epoch, its entries and the RECEIVE_PENDING flip in one '
+        'transaction', () async {
+      await seedActive();
+      final entries = [
+        entry(sequence: 2, userId: 'user-a'),
+        entry(sequence: 2, userId: 'user-b'),
+      ];
+
+      await database.ohacDeliveryDao.receiveCandidateEpoch(
+        candidate(),
+        entries,
+        entries.length,
+        digest,
+        1,
+        '1.0.0+1',
+        'backend-1',
+        'ohac.staff-policy-epoch.v1',
+        'ohac.assertion.v1',
+        '2026-01-02T00:00:00.000Z',
+      );
+
+      final stored =
+          await database.ohacDeliveryDao.findEpoch('tenant-1', 'terminal-1', 2);
+      expect(stored, isNotNull);
+      expect(stored!.digest, digest);
+      expect(
+        await database.ohacDeliveryDao.findEntries('tenant-1', 'terminal-1', 2),
+        hasLength(2),
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'RECEIVE_PENDING');
+      expect(state.candidateSequence, 2);
+      expect(state.candidateDigest, digest);
+      expect(state.negotiatedPosBuild, '1.0.0+1');
+      expect(state.negotiatedBackendBuild, 'backend-1');
+      expect(state.negotiatedPolicySchema, 'ohac.staff-policy-epoch.v1');
+      expect(state.negotiatedAssertionSchema, 'ohac.assertion.v1');
+      expect(state.revision, 2);
+      // The prior epoch keeps governing while RECEIVE_PENDING holds.
+      expect(state.activeSequence, 1);
+      expect(state.activeDigest, priorDigest);
+    });
+
+    test('a declared entry count the write does not satisfy rolls the whole '
+        'receive back', () async {
+      await seedActive();
+      final entries = [entry(sequence: 2, userId: 'user-a')];
+
+      await expectLater(
+        database.ohacDeliveryDao.receiveCandidateEpoch(
+          candidate(),
+          entries,
+          3, // the caller claims three entries; only one was supplied
+          digest,
+          1,
+          '1.0.0+1',
+          'backend-1',
+          'ohac.staff-policy-epoch.v1',
+          'ohac.assertion.v1',
+          '2026-01-02T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      await expectNothingPersisted();
+    });
+
+    test('a digest that is not the one the caller verified rolls the whole '
+        'receive back', () async {
+      await seedActive();
+      final entries = [entry(sequence: 2, userId: 'user-a')];
+
+      await expectLater(
+        database.ohacDeliveryDao.receiveCandidateEpoch(
+          candidate(),
+          entries,
+          entries.length,
+          'sha256:${'e' * 64}', // not the digest the epoch row carries
+          1,
+          '1.0.0+1',
+          'backend-1',
+          'ohac.staff-policy-epoch.v1',
+          'ohac.assertion.v1',
+          '2026-01-02T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      await expectNothingPersisted();
+    });
+
+    test('a stale terminal revision rolls the epoch write back with the flip '
+        'it cannot apply', () async {
+      await seedActive(revision: 1);
+      final entries = [entry(sequence: 2, userId: 'user-a')];
+
+      await expectLater(
+        database.ohacDeliveryDao.receiveCandidateEpoch(
+          candidate(),
+          entries,
+          entries.length,
+          digest,
+          99, // the row is at revision 1
+          '1.0.0+1',
+          'backend-1',
+          'ohac.staff-policy-epoch.v1',
+          'ohac.assertion.v1',
+          '2026-01-02T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      await expectNothingPersisted();
+    });
+
+    test('a receive from a terminal that is not ACTIVE writes nothing',
+        () async {
+      await database.ohacDeliveryDao.insertTerminalState(
+        terminalState(
+          state: 'RECEIVE_PENDING',
+          activeSequence: 1,
+          revision: 1,
+          candidateSequence: 2,
+          candidateDigest: 'sha256:${'f' * 64}',
+        ),
+      );
+
+      await expectLater(
+        database.ohacDeliveryDao.receiveCandidateEpoch(
+          candidate(),
+          [entry(sequence: 2, userId: 'user-a')],
+          1,
+          digest,
+          1,
+          '1.0.0+1',
+          'backend-1',
+          'ohac.staff-policy-epoch.v1',
+          'ohac.assertion.v1',
+          '2026-01-02T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      // The pending candidate already on record must be untouched: the guard
+      // fires before any write, so the row is exactly as it was seeded.
+      await expectNothingPersisted(
+        revision: 1,
+        stateName: 'RECEIVE_PENDING',
+        candidateSequence: 2,
+      );
+    });
+
+    test('a sequence that is not the next one writes nothing', () async {
+      await seedActive();
+
+      await expectLater(
+        database.ohacDeliveryDao.receiveCandidateEpoch(
+          candidate(sequence: 5),
+          [entry(sequence: 5, userId: 'user-a')],
+          1,
+          digest,
+          1,
+          '1.0.0+1',
+          'backend-1',
+          'ohac.staff-policy-epoch.v1',
+          'ohac.assertion.v1',
+          '2026-01-02T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      await expectNothingPersisted();
+    });
+  });
+
+  group('submitCandidateAcknowledgement — the submit transaction S', () {
+    final digest = 'sha256:${'f' * 64}';
+
+    Future<void> seedPending({int revision = 4}) =>
+        database.ohacDeliveryDao.insertTerminalState(
+          terminalState(
+            state: 'RECEIVE_PENDING',
+            activeSequence: 1,
+            revision: revision,
+            candidateSequence: 2,
+            candidateDigest: digest,
+          ),
+        );
+
+    test('flips to ACK_SUBMITTING, appends one reset fact per advanced '
+        'generation, and never carries verifier material', () async {
+      await seedPending();
+      await database.ohacDeliveryDao.insertEntries([
+        entry(sequence: 2, userId: 'user-advance', attemptResetGeneration: '2'),
+        entry(sequence: 2, userId: 'user-equal', attemptResetGeneration: '1'),
+        entry(sequence: 2, userId: 'user-lower', attemptResetGeneration: '1'),
+        entry(sequence: 2, userId: 'user-absent', attemptResetGeneration: '4'),
+      ]);
+      await database.ohacDeliveryDao.insertAttemptState(
+        attemptState(
+          userId: 'user-advance',
+          resetGeneration: '1',
+          lockedUntil: '2026-02-01T00:00:00.000Z',
+        ),
+      );
+      await database.ohacDeliveryDao.insertAttemptState(
+        attemptState(userId: 'user-equal', resetGeneration: '1'),
+      );
+      await database.ohacDeliveryDao.insertAttemptState(
+        attemptState(userId: 'user-lower', resetGeneration: '3'),
+      );
+
+      await database.ohacDeliveryDao.submitCandidateAcknowledgement(
+        'tenant-1',
+        'terminal-1',
+        4,
+        2,
+        digest,
+        '2026-01-03T00:00:00.000Z',
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'ACK_SUBMITTING');
+      expect(state.revision, 5);
+      // The flip alone leaves the candidate untouched for the acknowledgement.
+      expect(state.candidateSequence, 2);
+      expect(state.candidateDigest, digest);
+      expect(state.activeSequence, 1);
+
+      final advanced = await database.ohacDeliveryDao.findAttemptState(
+        'tenant-1',
+        'terminal-1',
+        'user-advance',
+      );
+      expect(advanced!.resetGeneration, '2');
+      expect(advanced.failureTimestamps, '[]');
+      expect(advanced.lockedUntil, isNull);
+      expect(advanced.revision, 2);
+
+      for (final userId in ['user-equal', 'user-lower']) {
+        final untouched =
+            await database.ohacDeliveryDao.findAttemptState(
+              'tenant-1',
+              'terminal-1',
+              userId,
+            );
+        expect(untouched!.revision, 1, reason: '$userId must not be reset');
+        expect(
+          untouched.failureTimestamps,
+          '["2026-01-01T00:00:00.000Z"]',
+        );
+      }
+
+      final events = await database.ohacDeliveryDao
+          .findEventsForTerminal('tenant-1', 'terminal-1');
+      expect(events, hasLength(1), reason: 'only the advanced user is a fact');
+      final fact = events.single;
+      expect(fact.eventType, 'ADMIN_ATTEMPT_RESET_APPLIED');
+      expect(fact.sequence, 2, reason: 'the fact belongs to the candidate');
+      // Pin the payload SHAPE, not just its contents: a fact that later grew
+      // a verifier or a PIN would otherwise satisfy every assertion below,
+      // because the three expected values would still be present alongside it.
+      expect(
+        (jsonDecode(fact.payload) as Map<String, dynamic>).keys.toList(),
+        ['userId', 'fromGeneration', 'toGeneration'],
+        reason: 'the local reset fact carries the user and the generation move '
+            'and nothing else (design §12 observability: no PIN, verifier, '
+            'token secret or assertion body)',
+      );
+      expect(fact.payload, contains('user-advance'));
+      expect(fact.payload, contains('"fromGeneration":"1"'));
+      expect(fact.payload, contains('"toGeneration":"2"'));
+      expect(fact.payload, isNot(contains(r'$2b$')));
+      expect(fact.payload, isNot(contains('verifier')));
+    });
+
+    test('a user with no attempt row is skipped and the flip still commits',
+        () async {
+      await seedPending();
+      await database.ohacDeliveryDao.insertEntries([
+        entry(sequence: 2, userId: 'user-never-seen', attemptResetGeneration: '9'),
+      ]);
+
+      await database.ohacDeliveryDao.submitCandidateAcknowledgement(
+        'tenant-1',
+        'terminal-1',
+        4,
+        2,
+        digest,
+        '2026-01-03T00:00:00.000Z',
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'ACK_SUBMITTING');
+      expect(
+        await database.ohacDeliveryDao.findEventsForTerminal('tenant-1', 'terminal-1'),
+        isEmpty,
+        reason: 'a user with no attempt row has nothing to reset',
+      );
+    });
+
+    test('a stored generation that is not a decimal string fails closed rather '
+        'than silently dropping an administrative reset', () async {
+      await seedPending();
+      await database.ohacDeliveryDao.insertEntries([
+        entry(sequence: 2, userId: 'user-bad', attemptResetGeneration: '2'),
+      ]);
+      await database.ohacDeliveryDao.insertAttemptState(
+        attemptState(userId: 'user-bad', resetGeneration: 'gen-legacy'),
+      );
+
+      await expectLater(
+        database.ohacDeliveryDao.submitCandidateAcknowledgement(
+          'tenant-1',
+          'terminal-1',
+          4,
+          2,
+          digest,
+          '2026-01-03T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'RECEIVE_PENDING', reason: 'the flip rolled back');
+      expect(state.revision, 4);
+      expect(
+        await database.ohacDeliveryDao.findEventsForTerminal('tenant-1', 'terminal-1'),
+        isEmpty,
+      );
+    });
+
+    test('a second submit for the same candidate is a no-op, not a second '
+        'flip and not a second fact', () async {
+      await seedPending();
+      await database.ohacDeliveryDao.insertEntries([
+        entry(sequence: 2, userId: 'user-advance', attemptResetGeneration: '2'),
+      ]);
+      await database.ohacDeliveryDao.insertAttemptState(
+        attemptState(userId: 'user-advance', resetGeneration: '1'),
+      );
+
+      Future<void> submit() => database.ohacDeliveryDao
+          .submitCandidateAcknowledgement(
+            'tenant-1',
+            'terminal-1',
+            4,
+            2,
+            digest,
+            '2026-01-03T00:00:00.000Z',
+          );
+
+      await submit();
+      await submit();
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'ACK_SUBMITTING');
+      expect(state.revision, 5, reason: 'the replay must not bump revision');
+      expect(
+        await database.ohacDeliveryDao.findEventsForTerminal('tenant-1', 'terminal-1'),
+        hasLength(1),
+        reason: 'the replay must not append a second reset fact',
+      );
+      final advanced = await database.ohacDeliveryDao.findAttemptState(
+        'tenant-1',
+        'terminal-1',
+        'user-advance',
+      );
+      expect(advanced!.revision, 2, reason: 'the replay must not re-reset');
+    });
+
+    test('a stale revision throws and changes nothing', () async {
+      await seedPending(revision: 4);
+
+      await expectLater(
+        database.ohacDeliveryDao.submitCandidateAcknowledgement(
+          'tenant-1',
+          'terminal-1',
+          7, // the row is at revision 4
+          2,
+          digest,
+          '2026-01-03T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'RECEIVE_PENDING');
+      expect(state.revision, 4);
+    });
+
+    test('a candidate pair that is not the one on record is refused', () async {
+      await seedPending(revision: 4);
+
+      await expectLater(
+        database.ohacDeliveryDao.submitCandidateAcknowledgement(
+          'tenant-1',
+          'terminal-1',
+          4,
+          2,
+          'sha256:${'0' * 64}', // not the candidate digest on record
+          '2026-01-03T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'RECEIVE_PENDING');
+      expect(state.revision, 4);
     });
   });
 }
