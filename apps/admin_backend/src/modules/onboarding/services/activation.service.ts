@@ -819,6 +819,64 @@ export class ActivationService {
     return attempt;
   }
 
+  /**
+   * Cancels an active activation attempt (CREATED or IN_PROGRESS).
+   * A cancelled attempt releases the ACTIVE_ATTEMPT_EXISTS lock so a new
+   * attempt can be started (e.g., after terminal re-link with a new device ID).
+   */
+  async cancelAttempt(
+    tenantId: string,
+    attemptId: string,
+    actorUserId: string,
+    reason?: string,
+  ): Promise<ActivationAttempt> {
+    const trimmedTenant = tenantId?.trim();
+    if (!trimmedTenant) {
+      throw new BadRequestException('tenantId is required');
+    }
+
+    return this.runTenantBound(trimmedTenant, async (manager) => {
+      const aRepo = manager.getRepository(ActivationAttempt);
+      const attempt = await aRepo.findOne({
+        where: { id: attemptId, tenantId: trimmedTenant },
+      });
+      if (!attempt) {
+        throw new NotFoundException(
+          `Activation attempt '${attemptId}' not found for tenant`,
+        );
+      }
+
+      if (
+        attempt.status !== ActivationAttemptStatus.CREATED &&
+        attempt.status !== ActivationAttemptStatus.IN_PROGRESS
+      ) {
+        throw new BadRequestException(
+          `Cannot cancel attempt in status '${attempt.status}'. Only CREATED or IN_PROGRESS attempts can be cancelled.`,
+        );
+      }
+
+      attempt.status = ActivationAttemptStatus.FAIL;
+      attempt.failureCode = reason?.trim() || 'CANCELLED_BY_OPERATOR';
+      attempt.completedAt = new Date();
+
+      await aRepo.save(attempt);
+
+      await this.changeLogService.log({
+        tenantId: trimmedTenant,
+        actor: { userId: actorUserId },
+        action: 'ONBOARDING_ACTIVATION_ATTEMPT_CANCELLED',
+        targetType: 'ActivationAttempt',
+        targetId: attempt.id,
+        changes: {
+          previousStatus: attempt.status,
+          reason: reason || 'CANCELLED_BY_OPERATOR',
+        },
+      });
+
+      return attempt;
+    });
+  }
+
   async getActiveAttempt(tenantId: string): Promise<ActivationAttempt | null> {
     return this.runTenantBound(tenantId, (manager) =>
       manager.getRepository(ActivationAttempt).findOne({
