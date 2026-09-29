@@ -20,7 +20,7 @@ import type { MenuImportSummary } from "@/features/settings/settings-api";
 
 vi.mock("@/features/settings/settings-api", () => ({
   MENU_IMPORT_TEMPLATE_FILENAME: "plantilla_menu.xlsx",
-  MENU_IMPORT_MAX_FILE_BYTES: 4 * 1024 * 1024,
+  MENU_IMPORT_MAX_FILE_BYTES: 3.5 * 1024 * 1024,
   downloadMenuImportTemplate: vi.fn(),
   previewMenuImport: vi.fn(),
   commitMenuImport: vi.fn(),
