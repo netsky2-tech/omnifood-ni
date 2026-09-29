@@ -1030,12 +1030,10 @@ describe('InventoryPurchaseService', () => {
         { id: 'doc-1', tenant_id: 'tenant-A', invoice_date: '2026-01-05' },
       ]);
       // listPurchases builds its own query builder on the bound manager.
-      manager.createQueryBuilder.mockImplementation(
-        (entity: unknown, alias: string) => {
-          if (entity === PurchaseDocument) return listQueryBuilder;
-          return queryBuilder;
-        },
-      );
+      manager.createQueryBuilder.mockImplementation((entity: unknown) => {
+        if (entity === PurchaseDocument) return listQueryBuilder;
+        return queryBuilder;
+      });
     });
 
     it('runs the history read inside a tenant-bound transaction with the tenant predicate', async () => {
