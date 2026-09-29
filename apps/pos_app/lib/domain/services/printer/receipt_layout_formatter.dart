@@ -465,8 +465,29 @@ class ReceiptLayoutFormatter {
         buffer.writeln(l);
       }
     }
-    if (doc.originInvoiceId != null && doc.originInvoiceId!.isNotEmpty) {
-      for (final l in formatKeyValue('Doc. Origen:', doc.originInvoiceId!)) {
+    // REQ-8 (slice 8a): the credit note's origin reference is the origin
+    // invoice's HUMAN fiscal number (e.g. 001-001-01-00000042), resolved by
+    // the view model at print time. Printed ONLY when resolved AND the
+    // document is a credit note — never the internal originInvoiceId UUID,
+    // never a placeholder. A missing reference prints no line at all.
+    if (doc.isCreditNote &&
+        doc.originDocumentReference != null &&
+        doc.originDocumentReference!.isNotEmpty) {
+      for (final l in formatKeyValue('Doc. Origen:', doc.originDocumentReference!)) {
+        buffer.writeln(l);
+      }
+    }
+
+    // DGI credit note (DT 09-2007): the compensating document names the
+    // persisted refund reason at document level. Sourced ONLY from the
+    // refund lines' persisted notes (createCreditNote stamps every line
+    // with the issued reason); rendered when the lines carry one unified
+    // reason and the document is not ALSO canceled (a canceled document's
+    // 'Motivo:' line is the cancellation reason — never mix the two).
+    // The formatter never invents fiscal copy.
+    final creditNoteReason = unifiedCreditNoteReason(doc);
+    if (!doc.isCanceled && creditNoteReason != null) {
+      for (final l in formatKeyValue('Motivo:', creditNoteReason)) {
         buffer.writeln(l);
       }
     }
@@ -914,8 +935,22 @@ class ReceiptLayoutFormatter {
         marginTextLine(builder, l);
       }
     }
-    if (doc.originInvoiceId != null && doc.originInvoiceId!.isNotEmpty) {
-      for (final l in formatKeyValue('Doc. Origen:', doc.originInvoiceId!)) {
+    // REQ-8 (slice 8a): same rule as the text renderer — only the resolved
+    // human fiscal number of the origin invoice, only on credit notes.
+    // Never the internal originInvoiceId UUID.
+    if (doc.isCreditNote &&
+        doc.originDocumentReference != null &&
+        doc.originDocumentReference!.isNotEmpty) {
+      for (final l in formatKeyValue('Doc. Origen:', doc.originDocumentReference!)) {
+        marginTextLine(builder, l);
+      }
+    }
+
+    // DGI credit note (DT 09-2007): document-level refund reason, same
+    // sourcing/guarding rules as the text renderer above. Never fabricated.
+    final creditNoteReason = unifiedCreditNoteReason(doc);
+    if (!doc.isCanceled && creditNoteReason != null) {
+      for (final l in formatKeyValue('Motivo:', creditNoteReason)) {
         marginTextLine(builder, l);
       }
     }
@@ -1457,12 +1492,10 @@ class ReceiptLayoutFormatter {
         printableCustomerRuc.toUpperCase() != 'N/A') {
       buffer.writeln(formatTwoColumns('RUC/Cedula:', printableCustomerRuc));
     }
-    if (invoice.originInvoiceId != null &&
-        invoice.originInvoiceId!.isNotEmpty) {
-      buffer.writeln(
-        formatTwoColumns('Doc. Origen:', invoice.originInvoiceId!),
-      );
-    }
+    // REQ-8 (slice 8a): the raw originInvoiceId is an internal identifier
+    // (UUID) that must NEVER print on a fiscal document. This legacy
+    // loyalty path carries no resolved origin reference, so it renders no
+    // origin line at all.
 
     buffer.writeln(drawLine('-'));
 
@@ -2058,5 +2091,20 @@ class ReceiptLayoutFormatter {
   static String _resolveDocumentTitle(InvoiceType type, TaxRegime regime) {
     if (type == InvoiceType.creditNote) return 'NOTA DE CREDITO';
     return regime.isCuotaFija ? 'COMPROBANTE DE VENTA' : 'FACTURA DE VENTA';
+  }
+
+  /// The document-level refund reason for a credit note, when its persisted
+  /// refund lines agree on exactly one non-blank note. Null for any other
+  /// document type, or when the lines disagree or carry no reason at all —
+  /// in those cases nothing is rendered and nothing is invented.
+  String? unifiedCreditNoteReason(ReceiptDocument doc) {
+    if (doc.documentTitle != 'NOTA DE CREDITO') return null;
+    final reasons = <String>{};
+    for (final line in doc.lines) {
+      final note = line.notes?.trim() ?? '';
+      if (note.isEmpty) continue;
+      reasons.add(note);
+    }
+    return reasons.length == 1 ? reasons.single : null;
   }
 }

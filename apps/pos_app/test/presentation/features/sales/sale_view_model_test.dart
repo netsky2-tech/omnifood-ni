@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
@@ -7,6 +8,11 @@ import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
+import 'package:pos_app/data/daos/sales/invoice_item_dao.dart';
+import 'package:pos_app/data/daos/sales/payment_dao.dart';
+import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
+import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
+import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/domain/usecases/sales/void_decision.dart';
 import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart';
@@ -112,6 +118,8 @@ class FakeTenantConfigService extends TenantConfigService {
   HoldTicketDao,
   PromotionDao,
   InvoiceDao,
+  InvoiceItemDao,
+  PaymentDao,
 ])
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -398,7 +406,8 @@ void main() {
         await viewModel.processReturn('INV-001', 'Error de cobro');
 
     expect(viewModel.errorMessage, 'Acceso denegado.');
-    expect(registered, isFalse);
+    // H5: null = nothing was issued, so there is no credit-note id to print.
+    expect(registered, isNull);
     verifyNever(mockSalesRepo.getInvoiceByNumber(any));
   });
 
@@ -437,7 +446,10 @@ void main() {
           lines: anyNamed('lines'),
           terminalId: anyNamed('terminalId'),
         ),
-      ).thenAnswer((_) async {});
+      ).thenAnswer((_) async => 'cn-returned-id');
+      // No printable document for this test: the print path resolves
+      // nothing and stays honestly false (asserted below).
+      when(mockSalesRepo.getInvoiceById(any)).thenAnswer((_) async => null);
 
       const refundLines = [
         CreditNoteRefundLine(originInvoiceItemId: 'line-1', quantity: 0.5),
@@ -462,7 +474,11 @@ void main() {
         ),
       ).called(1);
       expect(viewModel.errorMessage, isNull);
-      expect(registered, isTrue);
+      // H5: the NEW credit-note id is returned so the UI can print from the
+      // committed rows (H8); this test stubs no printable document, so the
+      // print path resolves nothing and stays honestly false.
+      expect(registered, 'cn-returned-id');
+      expect(viewModel.lastCreditNotePrintSucceeded, isFalse);
     },
   );
 
@@ -481,7 +497,7 @@ void main() {
 
     final registered = await viewModel.processReturn('F001-000404', 'Error');
 
-    expect(registered, isFalse);
+    expect(registered, isNull);
     expect(viewModel.errorMessage, 'Factura no encontrada: F001-000404');
     verifyNever(
       mockSalesRepo.createCreditNote(
@@ -494,6 +510,275 @@ void main() {
         terminalId: anyNamed('terminalId'),
       ),
     );
+  });
+
+  // ---------------------------------------------------------------------------
+  // H8 (batch 8 slice 8a): the fiscal print path for committed credit notes.
+  // Uses the production MockPrinterAdapter so the printed text is the REAL
+  // formatter output; the note is printed from its OWN persisted snapshot.
+  // ---------------------------------------------------------------------------
+  group('H8: processReturn prints the committed credit note', () {
+    const snapshotHeader = {
+      'businessName': 'Café Original',
+      'ruc': 'A0011234567890',
+      'fiscalAuthorizationNumber': 'AUT-DGI-2026-0001',
+      'taxRegime': 'REGIMEN_GENERAL',
+    };
+    const reason = 'Producto defectuoso';
+
+    late MockPrinterAdapter printer;
+    late MockInvoiceItemDao mockItemDao;
+    late MockPaymentDao mockPaymentDao;
+
+    InvoiceEntity creditNoteEntity() => InvoiceEntity(
+          id: 'cn-new-1',
+          number: '001-001-01-00000099',
+          createdAt: DateTime(2026, 10, 1, 9, 30).millisecondsSinceEpoch,
+          userId: 'cashier-1',
+          subtotal: -100,
+          totalTax: -15,
+          total: -115,
+          type: 'creditNote',
+          relatedInvoiceId: 'invoice-1',
+          originInvoiceId: 'invoice-1',
+          refundReasonCode: reason,
+          paymentStatus: 'paid',
+          syncStatus: 'pending',
+          fiscalHeaderSnapshot: jsonEncode(snapshotHeader),
+        );
+
+    void arrangeIssuableManager() {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'manager-1',
+          name: 'Manager',
+          role: UserRole.manager,
+          isActive: true,
+        ),
+      );
+      when(mockSalesRepo.getInvoiceByNumber('F001-000123')).thenAnswer(
+        (_) async => Invoice(
+          id: 'invoice-1',
+          number: 'F001-000123',
+          createdAt: DateTime(2026, 7, 13),
+          userId: 'cashier-1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          paymentStatus: PaymentStatus.paid,
+          syncStatus: SyncStatus.synced,
+          type: InvoiceType.regular,
+        ),
+      );
+      when(
+        mockSalesRepo.createCreditNote(
+          originalInvoiceId: anyNamed('originalInvoiceId'),
+          reason: anyNamed('reason'),
+          authorizedByUserId: anyNamed('authorizedByUserId'),
+          authorizedByRole: anyNamed('authorizedByRole'),
+          refundReasonPolicy: anyNamed('refundReasonPolicy'),
+          lines: anyNamed('lines'),
+          terminalId: anyNamed('terminalId'),
+        ),
+      ).thenAnswer((_) async => 'cn-new-1');
+      when(mockSalesRepo.getInvoiceById('cn-new-1')).thenAnswer(
+        (_) async => Invoice(
+          id: 'cn-new-1',
+          number: '001-001-01-00000099',
+          createdAt: DateTime(2026, 10, 1, 9, 30),
+          userId: 'cashier-1',
+          subtotal: -100,
+          totalTax: -15,
+          total: -115,
+          paymentStatus: PaymentStatus.paid,
+          syncStatus: SyncStatus.pending,
+          type: InvoiceType.creditNote,
+          relatedInvoiceId: 'invoice-1',
+          originInvoiceId: 'invoice-1',
+          refundReasonCode: reason,
+        ),
+      );
+      when(mockInvoiceDao.getInvoiceById('cn-new-1'))
+          .thenAnswer((_) async => creditNoteEntity());
+      // REQ-8 (slice 8a): the origin invoice row carries the HUMAN fiscal
+      // number the credit note must reference on paper.
+      when(mockInvoiceDao.getInvoiceById('invoice-1')).thenAnswer(
+        (_) async => InvoiceEntity(
+          id: 'invoice-1',
+          number: '001-001-01-00000042',
+          createdAt: DateTime(2026, 7, 13).millisecondsSinceEpoch,
+          userId: 'cashier-1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          type: 'regular',
+          paymentStatus: 'paid',
+          syncStatus: 'synced',
+        ),
+      );
+      when(mockItemDao.getItemsByInvoiceId('cn-new-1')).thenAnswer(
+        (_) async => [
+          InvoiceItemEntity(
+            id: 'cn-line-1',
+            invoiceId: 'cn-new-1',
+            productId: 'combo-1',
+            productName: 'RETURN: Combo 1',
+            quantity: -1,
+            unitPrice: 50,
+            originalTaxRate: 15,
+            appliedTaxRate: 15,
+            taxAmount: -7.5,
+            total: -57.5,
+            notes: reason,
+          ),
+        ],
+      );
+      when(mockPaymentDao.getPaymentsByInvoiceId('cn-new-1'))
+          .thenAnswer((_) async => []);
+    }
+
+    SaleViewModel buildPrintViewModel() => SaleViewModel(
+          mockSalesRepo,
+          mockInventoryRepo,
+          mockAuthRepo,
+          mockDb,
+          null,
+          true,
+          FakeTenantConfigService(fakeLocalConfigDao),
+          FakeKitchenOrderService(mockDb),
+          // Default PrinterConfigService backed by the fake DAO, plus the
+          // production-adapter fake printer: the same shape the void tests use.
+          null,
+          printer,
+        );
+
+    setUp(() {
+      printer = MockPrinterAdapter();
+      mockItemDao = MockInvoiceItemDao();
+      mockPaymentDao = MockPaymentDao();
+      when(mockDb.invoiceItemDao).thenReturn(mockItemDao);
+      when(mockDb.paymentDao).thenReturn(mockPaymentDao);
+    });
+
+    test(
+      'prints the fiscal copy from the note OWN snapshot and returns the id',
+      () async {
+        arrangeIssuableManager();
+        final vm = buildPrintViewModel();
+        await vm.loadCompanyTaxRegime();
+
+        final creditNoteId = await vm.processReturn('F001-000123', reason);
+
+        expect(creditNoteId, 'cn-new-1');
+        expect(vm.errorMessage, isNull);
+        expect(vm.lastCreditNotePrintSucceeded, isTrue,
+            reason: 'print failed: ${vm.lastPrintError}');
+        expect(printer.printHistory, hasLength(1));
+        final printed = printer.printHistory.single.printedText ?? '';
+        // The paper is a credit note naming the affected origin document by
+        // its HUMAN fiscal number and the persisted refund reason — never
+        // live config, never the internal UUID (REQ-8, slice 8a).
+        expect(printed, contains('NOTA DE CREDITO'));
+        expect(printed, contains('Doc. Origen:'));
+        expect(printed, contains('001-001-01-00000042'));
+        expect(printed, isNot(contains('invoice-1')));
+        expect(printed, contains('Motivo:'));
+        expect(printed, contains(reason));
+        expect(printed, contains('Café Original'));
+        expect(printed, contains('AUT-DGI-2026-0001'));
+      },
+    );
+
+    test(
+      'a missing origin invoice prints WITHOUT the origin line and never the UUID',
+      () async {
+        arrangeIssuableManager();
+        // REQ-8 (slice 8a) failure branch: the origin row cannot be loaded →
+        // the line is omitted, the print must NOT fail, and no UUID and no
+        // placeholder may be fabricated.
+        when(mockInvoiceDao.getInvoiceById('invoice-1'))
+            .thenAnswer((_) async => null);
+        final vm = buildPrintViewModel();
+        await vm.loadCompanyTaxRegime();
+
+        final creditNoteId = await vm.processReturn('F001-000123', reason);
+
+        expect(creditNoteId, 'cn-new-1');
+        expect(vm.lastCreditNotePrintSucceeded, isTrue,
+            reason: 'print failed: ${vm.lastPrintError}');
+        expect(printer.printHistory, hasLength(1));
+        final printed = printer.printHistory.single.printedText ?? '';
+        expect(printed, contains('NOTA DE CREDITO'));
+        expect(printed, isNot(contains('Doc. Origen:')));
+        expect(printed, isNot(contains('invoice-1')));
+        expect(printed, contains('Motivo:'));
+      },
+    );
+
+    test(
+      'a print failure does NOT fail the committed credit note (offline-first)',
+      () async {
+        arrangeIssuableManager();
+        printer.shouldFail = true;
+        final vm = buildPrintViewModel();
+        await vm.loadCompanyTaxRegime();
+
+        final creditNoteId = await vm.processReturn('F001-000123', reason);
+
+        // The note was committed and its id is returned: issuance stands.
+        expect(creditNoteId, 'cn-new-1');
+        expect(vm.errorMessage, isNull);
+        expect(vm.lastCreditNotePrintSucceeded, isFalse);
+        expect(printer.printHistory, hasLength(1));
+        expect(printer.printHistory.single.isSuccess, isFalse);
+      },
+    );
+
+    test(
+      'autoPrintInvoice=false skips the automatic copy; the id is still returned',
+      () async {
+        arrangeIssuableManager();
+        fakeLocalConfigDao.saveConfig(
+          LocalConfigEntity(key: 'printer_auto_invoice', value: 'false'),
+        );
+        final vm = buildPrintViewModel();
+        await vm.loadCompanyTaxRegime();
+
+        final creditNoteId = await vm.processReturn('F001-000123', reason);
+
+        expect(creditNoteId, 'cn-new-1');
+        expect(vm.lastCreditNotePrintSucceeded, isFalse);
+        expect(printer.printHistory, isEmpty,
+            reason: 'the operator hardware profile gates the automatic copy; '
+                'the manual REIMPRIMIR path still covers credit notes');
+      },
+    );
+
+    test('canIssueCreditNote gates the affordance to owner/manager', () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'u-1',
+          name: 'Cashier',
+          role: UserRole.cashier,
+          isActive: true,
+        ),
+      );
+      final vm = buildPrintViewModel();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(vm.canIssueCreditNote, isFalse);
+
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'u-2',
+          name: 'Owner',
+          role: UserRole.owner,
+          isActive: true,
+        ),
+      );
+      final ownerVm = buildPrintViewModel();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(ownerVm.canIssueCreditNote, isTrue);
+    });
   });
 
   test('voidInvoice denies a cashier an invoice he did not issue '

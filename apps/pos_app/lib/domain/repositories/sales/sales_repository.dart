@@ -78,7 +78,13 @@ abstract class SalesRepository {
     String reasonCode, {
     String? reasonDetail,
   });
-  Future<void> createCreditNote({
+  /// Creates a local credit note for [originalInvoiceId] and returns the NEW
+  /// credit note entity id so the caller can print and reference the
+  /// committed document (H5/H8: the UI prints from the persisted rows of
+  /// that id). Everything else is unchanged: negative amounts, compensating
+  /// movements, and the audit entry are untouched, and the note stays
+  /// local-only until DSI-6 authorization syncing exists.
+  Future<String> createCreditNote({
     required String originalInvoiceId,
     required String reason,
     // Submitted as audit metadata only; backend sync revalidates manager/owner

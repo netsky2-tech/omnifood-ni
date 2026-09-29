@@ -88,6 +88,11 @@ class SaleViewModel extends ChangeNotifier {
     PromotionsEngine? promotionsEngine,
     LoyaltyService? loyaltyService,
     String terminalId = '',
+
+    /// M11: customer identification service (QR/code/phone/search adapter
+    /// chain). Null disables identifyCustomer entirely, which is why the
+    /// production wiring in main.dart MUST inject it (manual entry included).
+    CustomerIdentificationService? identificationService,
   ]) : _tableOrderService = tableOrderService ?? TableOrderService(_database),
        _tenantConfigService =
            tenantConfigService ?? TenantConfigService(_database.localConfigDao),
@@ -102,7 +107,7 @@ class SaleViewModel extends ChangeNotifier {
        _promotionsEngine = promotionsEngine ?? const PromotionsEngine(),
        _loyaltyService = loyaltyService ?? const LoyaltyService(),
        _postPaidFeedbackService = const PostPaidFeedbackService(),
-       _identificationService = null,
+       _identificationService = identificationService,
        _rewardInteraction = null,
        _evaluationService = null,
        _terminalId = terminalId {
@@ -208,6 +213,13 @@ class SaleViewModel extends ChangeNotifier {
   /// the SnackBar claims only what happened; the audit stands either way).
   bool _lastReprintPrintSucceeded = false;
   bool get lastReprintPrintSucceeded => _lastReprintPrintSucceeded;
+
+  /// H8: honest split for credit notes — issuance success and the fiscal
+  /// print outcome are reported SEPARATELY. A failed print never un-happens
+  /// the committed note; the failure detail rides [lastPrintError] and the
+  /// manual REIMPRIMIR path covers credit notes (D-13).
+  bool _lastCreditNotePrintSucceeded = false;
+  bool get lastCreditNotePrintSucceeded => _lastCreditNotePrintSucceeded;
 
   PostPaidFeedback? _lastPostPaidFeedback;
   PostPaidFeedback? get lastPostPaidFeedback => _lastPostPaidFeedback;
@@ -662,6 +674,14 @@ class SaleViewModel extends ChangeNotifier {
   /// D-13: reprint capability (owner/manager/cashier; never waiter).
   bool get canReprint => hasSalesPermission(
       _currentUserRole, SalesPermission.reprintDocument);
+
+  /// H5: the credit-note affordance is visible only to the roles that can
+  /// actually issue one (manager/owner — the same gate [processReturn]
+  /// enforces inside the view model as defense-in-depth). Cashier/waiter
+  /// never see the control, so a denied tap cannot be part of the flow.
+  bool get canIssueCreditNote =>
+      _currentUserRole == UserRole.owner ||
+      _currentUserRole == UserRole.manager;
 
   bool _isSupervisorOverrideActive = false;
   bool get isSupervisorOverrideActive => _isSupervisorOverrideActive;
@@ -1565,10 +1585,14 @@ class SaleViewModel extends ChangeNotifier {
     Map<String, String>? fiscalHeader,
     TaxRegime? snapshotRegimeProvided,
 
-    /// D-13: when a fiscal snapshot is provided the header comes from it —
-    /// NEVER from live config. A reprint reproduces the document as issued.
+    /// D-13: true when printing a REIMPRESIÓN of the immutable fiscal
+    /// snapshot. A reprint reproduces the document as issued.
     bool isReprint = false,
     DateTime? reprintAt,
+
+    /// REQ-8 (slice 8a): the origin invoice's HUMAN fiscal number for credit
+    /// notes. Null → the origin line is omitted; never the internal UUID.
+    String? originDocumentReference,
   }) async {
     try {
       final config = await _printerConfigService.getPrinterConfig();
@@ -1693,6 +1717,7 @@ class SaleViewModel extends ChangeNotifier {
             : config.dgiAuthorizationCode,
         isReprint: isReprint,
         reprintAt: reprintAt,
+        originDocumentReference: originDocumentReference,
       );
 
       if (!res.isSuccess) {
@@ -1771,19 +1796,17 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
-  /// PARKED BY DESIGN (D-14 / #553 Part 1, B1c-1): POS-side credit-note
-  /// issuance has NO production call site — the UI affordance was removed
-  /// and the Backoffice (B1c-2) is the emitter for cross-day corrections.
-  /// This method is retained, UI-less, pending DSI-6
-  /// (openspec/changes/device-sync-credit-note-authorization), which will
-  /// restore POS-side issuance behind reauthentication evidence. Its tests
-  /// stay green as the defense-in-depth contract for that return; do not
-  /// delete this method as "dead code" without reading DSI-6 first.
+  /// H5 (batch 8 slice 8a): RESTORED production call site for POS-side
+  /// credit-note issuance. The manager/owner hard gate below is KEPT as
+  /// defense-in-depth behind the UI's [canIssueCreditNote] visibility gate;
+  /// DSI-6 will add the backend authorization-evidence path later. The
+  /// note is created locally and stays pending upstream acceptance.
   ///
-  /// Returns true only when the credit note was created locally. A locally
-  /// created note is still pending validation at sync time; this result
-  /// never claims upstream acceptance.
-  Future<bool> processReturn(
+  /// Returns the NEW credit note id (needed by the UI to print the fiscal
+  /// copy from the persisted rows), or null when nothing was issued. A
+  /// locally created note is still pending validation at sync time; a
+  /// non-null result never claims upstream acceptance.
+  Future<String?> processReturn(
     String invoiceNumber,
     String reason, {
     RefundReasonPolicy refundReasonPolicy =
@@ -1795,7 +1818,7 @@ class SaleViewModel extends ChangeNotifier {
     if (role == UserRole.cashier || role == UserRole.waiter) {
       _errorMessage = 'Acceso denegado.';
       notifyListeners();
-      return false;
+      return null;
     }
 
     _isLoading = true;
@@ -1804,15 +1827,15 @@ class SaleViewModel extends ChangeNotifier {
       final original = await _salesRepository.getInvoiceByNumber(invoiceNumber);
       if (original == null) {
         _errorMessage = 'Factura no encontrada: $invoiceNumber';
-        return false;
+        return null;
       }
 
       if (original.isCanceled) {
         _errorMessage = 'La factura ya está anulada.';
-        return false;
+        return null;
       }
 
-      await _salesRepository.createCreditNote(
+      final creditNoteId = await _salesRepository.createCreditNote(
         originalInvoiceId: original.id,
         reason: reason,
         authorizedByUserId: currentUser?.id ?? '',
@@ -1823,14 +1846,129 @@ class SaleViewModel extends ChangeNotifier {
         terminalId: _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01',
       );
 
+      // H8: print the fiscal copy from the PERSISTED rows of the new note
+      // (its own immutable snapshot + origin-copied regime), mirroring the
+      // reprint machinery — never live config, never fabricated values.
+      // Offline-first: a print failure must NOT roll back or fail the
+      // committed credit note; the outcome is surfaced separately through
+      // [lastCreditNotePrintSucceeded] and the manual REIMPRIMIR path.
+      _lastCreditNotePrintSucceeded = false;
+      final creditNote = await _salesRepository.getInvoiceById(creditNoteId);
+      if (creditNote != null) {
+        await _printCreditNoteCopy(
+          creditNote,
+          issuerName: currentUser?.name,
+        );
+      }
+
       _errorMessage = null;
-      return true;
+      return creditNoteId;
     } catch (e) {
       _errorMessage = 'Error al procesar devolución: $e';
-      return false;
+      return null;
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// H8: prints the committed credit note through the SAME printer path the
+  /// sale used ([_printInvoiceCopy] with the note's OWN fiscal snapshot).
+  /// Decisions (justified):
+  /// - autoPrint gating follows the sale path (printerConfig.autoPrintInvoice,
+  ///   sale_view_model.dart:1470): the operator's hardware profile decides
+  ///   whether the copy prints automatically; when gated off the existing
+  ///   REIMPRIMIR action still prints credit notes (D-13 reprints any
+  ///   invoice from its snapshot).
+  /// - payments: the credit note has NO payment rows by contract (issued
+  ///   with an empty tender list); the empty list is passed through and the
+  ///   formatter renders 'Condicion: Contado' — consistent with the note's
+  ///   persisted paymentStatus 'paid'. No tender lines are fabricated.
+  /// - snapshot anomalies (missing/corrupt header snapshot) surface as a
+  ///   print failure in [lastPrintError]; the committed note is unaffected.
+  Future<void> _printCreditNoteCopy(
+    Invoice creditNote, {
+    String? issuerName,
+  }) async {
+    try {
+      final config = await _printerConfigService.getPrinterConfig();
+      if (!config.autoPrintInvoice) return;
+
+      final entity = await _database.invoiceDao.getInvoiceById(creditNote.id);
+      final snapshot = _parseFiscalHeaderSnapshot(
+        entity?.fiscalHeaderSnapshot,
+        creditNote.id,
+      );
+      if (snapshot == null) return;
+
+      // REQ-8 (slice 8a): a credit note must name the origin invoice by its
+      // HUMAN fiscal number (e.g. 001-001-01-00000042), never the internal
+      // originInvoiceId UUID (a DGI fiscal document must not expose internal
+      // identifiers). Resolved read-only at print time; when the origin row
+      // cannot be loaded the line is simply omitted — the print NEVER fails
+      // for the origin reference and no placeholder is fabricated.
+      String? originDocumentReference;
+      final originId = creditNote.originInvoiceId;
+      if (originId != null && originId.isNotEmpty) {
+        final originEntity = await _database.invoiceDao
+            .getInvoiceById(originId)
+            .catchError((_) => null);
+        final originNumber = originEntity?.number.trim() ?? '';
+        if (originNumber.isNotEmpty) {
+          originDocumentReference = originNumber;
+        }
+      }
+
+      _lastCreditNotePrintSucceeded = await _printInvoiceCopy(
+        creditNote,
+        cashierName: issuerName,
+        fiscalHeader: snapshot.header,
+        snapshotRegimeProvided: snapshot.regime,
+        originDocumentReference: originDocumentReference,
+      );
+    } catch (e) {
+      _lastPrintError = e.toString();
+      notifyListeners();
+    }
+  }
+
+  /// Decodes the persisted fiscal header snapshot of a document. Any
+  /// anomaly (missing, corrupted, unknown regime) returns null after
+  /// recording the reason in [lastPrintError] — the same fail-closed rule
+  /// as prepareReprintInvoice, because printing from live config would
+  /// fabricate a legal document.
+  _FiscalSnapshotHeader? _parseFiscalHeaderSnapshot(
+    String? rawSnapshot,
+    String invoiceId,
+  ) {
+    final raw = rawSnapshot?.trim() ?? '';
+    if (raw.isEmpty) {
+      _lastPrintError =
+          'La nota de crédito $invoiceId no tiene instantánea fiscal guardada.';
+      notifyListeners();
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final rawRegime = decoded['taxRegime'];
+      if (rawRegime is! String) {
+        throw const FormatException('taxRegime is missing or not a string');
+      }
+      final regime = TaxRegime.fromString(rawRegime);
+      if (regime == null) {
+        throw const FormatException('taxRegime is not a known regime code');
+      }
+      return _FiscalSnapshotHeader(
+        header: decoded.map(
+          (key, value) => MapEntry(key, value is String ? value : ''),
+        ),
+        regime: regime,
+      );
+    } catch (e) {
+      _lastPrintError =
+          'La instantánea fiscal de $invoiceId está corrupta o incompleta: $e';
+      notifyListeners();
+      return null;
     }
   }
 
@@ -1929,4 +2067,17 @@ class SaleViewModel extends ChangeNotifier {
     _syncSubscription?.cancel();
     super.dispose();
   }
+}
+
+/// H8: the decoded fiscal header snapshot of a document (header facts plus
+/// the regime AS ISSUED). Produced only from persisted snapshot bytes —
+/// never from live configuration.
+class _FiscalSnapshotHeader {
+  final Map<String, String> header;
+  final TaxRegime regime;
+
+  const _FiscalSnapshotHeader({
+    required this.header,
+    required this.regime,
+  });
 }

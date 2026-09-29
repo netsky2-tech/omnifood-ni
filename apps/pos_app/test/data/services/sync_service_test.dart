@@ -90,7 +90,7 @@ class MockSalesRepository implements SalesRepository {
   }
 
   @override
-  Future<void> createCreditNote({
+  Future<String> createCreditNote({
     required String originalInvoiceId,
     required String reason,
     required String authorizedByUserId,
@@ -843,8 +843,14 @@ void main() {
   });
 
   test(
-    'emits pending credit notes as sales sync records before inventory replay',
+    'DSI-6: holds local credit notes OUT of the device sales batch',
     () async {
+      // SyncCreditNoteAuthGuard (sync-credit-note-auth.guard.ts:38-73)
+      // fails closed with 403 for ANY device batch containing CREDIT_NOTE,
+      // stalling unrelated sales and tripping AUTH_BLOCKED
+      // (AP_KNOWN_LIMITATIONS.md L3). The client therefore never puts a
+      // credit note on the wire while DSI-6 is unimplemented: the note
+      // stays pending locally and nothing is posted.
       mockSalesRepository.unsyncedAggregates = [
         {
           'id': 'credit-note-1',
@@ -865,159 +871,75 @@ void main() {
           ],
         },
       ];
-      mockInventoryRepository.unsynced = [
-        InventoryMovement(
-          id: 'movement-after-credit-note',
-          insumoId: 'i-9',
-          type: MovementType.sale,
-          quantity: -2,
-          previousStock: 4,
-          newStock: 2,
-          timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
-        ),
-      ];
 
-      await syncService.triggerManualSync();
-
-      expect(capturedPosts, isNotEmpty);
-      final firstPost = capturedPosts.first.body as Map<String, dynamic>;
-      final firstRecord =
-          (firstPost['records'] as List<dynamic>).single
-              as Map<String, dynamic>;
-      expect(firstRecord['flowType'], 'sales');
-      expect(firstRecord['documentType'], 'CREDIT_NOTE');
-      expect(firstRecord['sourceSequence'], 12);
-      expect(
-        firstRecord['idempotencyKey'],
-        'credit-note:pos-terminal-1:credit-note-1',
-      );
-      expect(
-        (firstRecord['invoice'] as Map<String, dynamic>)['originInvoiceId'],
-        'sale-1',
-      );
-      expect(mockSalesRepository.syncedInvoiceIdBatches, [
-        ['credit-note-1'],
-      ]);
-    },
-  );
-
-  test(
-    'keeps backend-rejected credit notes pending instead of marking them synced',
-    () async {
-      mockSalesRepository.unsyncedAggregates = [
-        {
-          'id': 'credit-note-over-refund',
-          'number': 'NC-OVER-REFUND',
-          'documentType': 'CREDIT_NOTE',
-          'terminalId': 'pos-terminal-1',
-          'sourceSequence': 13,
-          'idempotencyKey':
-              'credit-note:pos-terminal-1:credit-note-over-refund',
-          'originInvoiceId': 'sale-1',
-          'refundReasonPolicy': 'FINANCIAL_ONLY',
-          'items': [
-            {
-              'id': 'credit-line-over-refund',
-              'originInvoiceItemId': 'sale-line-1',
-              'quantity': -99,
-              'total': -5750.0,
-            },
-          ],
-        },
-      ];
-      respondToInventoryBatchWith(
-        (records) => {
-          'status': 'OK',
-          'received': records.length,
-          'results': [
-            {
-              ...records.single,
-              'status': 'REJECTED',
-              'code': 'CREDIT_NOTE_REFUND_QUANTITY_EXCEEDED',
-              'message':
-                  'credit-note refund quantity exceeds the origin item quantity',
-            },
-          ],
-        },
-      );
-
-      await syncService.triggerManualSync();
-
-      final salesPost = capturedPosts.singleWhere(
-        (post) => post.path == '/v1/sync/batch',
-      );
-      final record =
-          ((salesPost.body as Map<String, dynamic>)['records'] as List<dynamic>)
-                  .single
-              as Map<String, dynamic>;
-      expect(record['documentType'], 'CREDIT_NOTE');
-      expect(
-        record['idempotencyKey'],
-        'credit-note:pos-terminal-1:credit-note-over-refund',
-      );
-      expect(mockSalesRepository.syncedInvoiceIdBatches, isEmpty);
-    },
-  );
-
-  test(
-    'keeps held origin-missing credit notes pending and retries them on the next sync pass',
-    () async {
-      final heldCreditNote = {
-        'id': 'credit-note-held-origin',
-        'number': 'NC-HELD-001',
-        'documentType': 'CREDIT_NOTE',
-        'terminalId': 'pos-terminal-1',
-        'sourceSequence': 18,
-        'idempotencyKey': 'credit-note:pos-terminal-1:credit-note-held-origin',
-        'originInvoiceId': 'sale-not-yet-synced',
-        'refundReasonPolicy': 'FINANCIAL_ONLY',
-        'items': [
-          {
-            'id': 'credit-line-held-origin',
-            'originInvoiceItemId': 'sale-line-not-yet-synced',
-            'quantity': -1,
-            'total': -57.5,
-          },
-        ],
-      };
-      mockSalesRepository.unsyncedAggregates = [heldCreditNote];
-      var attempt = 0;
-      respondToInventoryBatchWith((records) {
-        attempt += 1;
-        return {
-          'status': 'OK',
-          'received': records.length,
-          'results': [
-            {
-              ...records.single,
-              'status': attempt == 1 ? 'STAGED_FUTURE' : 'ACCEPTED',
-              'code': attempt == 1 ? 'HELD_ORIGIN_MISSING' : 'APPLIED',
-              'retryable': attempt == 1,
-            },
-          ],
-        };
-      });
-
-      await syncService.triggerManualSync();
       await syncService.triggerManualSync();
 
       final salesPosts = capturedPosts
           .where((post) => post.path == '/v1/sync/batch')
           .toList(growable: false);
-      expect(salesPosts, hasLength(2));
-      for (final post in salesPosts) {
-        final record =
-            ((post.body as Map<String, dynamic>)['records'] as List<dynamic>)
-                    .single
-                as Map<String, dynamic>;
-        expect(record['documentType'], 'CREDIT_NOTE');
-        expect(
-          record['idempotencyKey'],
-          'credit-note:pos-terminal-1:credit-note-held-origin',
-        );
-      }
+      expect(salesPosts, isEmpty,
+          reason: 'a device envelope with a CREDIT_NOTE record would be '
+              'rejected wholesale with 403');
+      // The held note is NOT acknowledged locally — it stays pending for
+      // DSI-6.
+      expect(mockSalesRepository.syncedInvoiceIdBatches, isEmpty);
+    },
+  );
+
+  test(
+    'DSI-6: a normal sale still syncs when a credit note is pending',
+    () async {
+      mockSalesRepository.unsyncedAggregates = [
+        {
+          'id': 'credit-note-1',
+          'number': 'NC-001',
+          'documentType': 'CREDIT_NOTE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 12,
+          'idempotencyKey': 'credit-note:pos-terminal-1:credit-note-1',
+          'originInvoiceId': 'sale-1',
+          'refundReasonPolicy': 'FINANCIAL_ONLY',
+          'items': [
+            {
+              'id': 'credit-line-1',
+              'originInvoiceItemId': 'sale-line-1',
+              'quantity': -1,
+              'total': -57.5,
+            },
+          ],
+        },
+        {
+          'id': 'sale-1',
+          'number': 'F001-000001',
+          'documentType': 'SALE',
+          'terminalId': 'pos-terminal-1',
+          'sourceSequence': 11,
+          'idempotencyKey': 'sale:pos-terminal-1:sale-1',
+          'items': <Map<String, Object?>>[],
+          'payments': <Map<String, Object?>>[],
+        },
+      ];
+
+      await syncService.triggerManualSync();
+
+      final salesPosts = capturedPosts
+          .where((post) => post.path == '/v1/sync/batch')
+          .toList(growable: false);
+      expect(salesPosts, hasLength(1));
+      final postedRecords =
+          (salesPosts.single.body as Map<String, dynamic>)['records']
+              as List<dynamic>;
+      // Only the sale travels; the pending credit note is held back.
+      expect(postedRecords, hasLength(1));
+      expect((postedRecords.single as Map<String, dynamic>)['documentType'],
+          'SALE');
+      expect(
+        (postedRecords.single as Map<String, dynamic>)['idempotencyKey'],
+        'sale:pos-terminal-1:sale-1',
+      );
+      // The sale is acknowledged; the credit note stays pending locally.
       expect(mockSalesRepository.syncedInvoiceIdBatches, [
-        ['credit-note-held-origin'],
+        ['sale-1'],
       ]);
     },
   );
@@ -1050,16 +972,6 @@ void main() {
           'sourceSequence': 16,
           'idempotencyKey': 'sale:pos-terminal-1:sale-mismatch',
         },
-        {
-          'id': 'credit-note-blocked',
-          'number': 'NC-BLOCKED',
-          'documentType': 'CREDIT_NOTE',
-          'terminalId': 'pos-terminal-1',
-          'sourceSequence': 17,
-          'idempotencyKey': 'credit-note:pos-terminal-1:credit-note-blocked',
-          'originInvoiceId': 'sale-accepted',
-          'refundReasonPolicy': 'FINANCIAL_ONLY',
-        },
       ];
       respondToInventoryBatchWith(
         (records) => {
@@ -1069,7 +981,6 @@ void main() {
             {...records[0], 'status': 'ACCEPTED'},
             {...records[1], 'status': 'DUPLICATE'},
             {...records[2], 'status': 'IDEMPOTENCY_MISMATCH'},
-            {...records[3], 'status': 'BLOCKED_BY_PRIOR_FAILURE'},
           ],
         },
       );
@@ -1220,7 +1131,8 @@ void main() {
   );
 
   test(
-    'orders mixed offline sale and credit note aggregates by local source sequence',
+    'DSI-6: orders sale aggregates by local source sequence and holds the '
+    'credit note out of the batch',
     () async {
       mockSalesRepository.unsyncedAggregates = [
         {
@@ -1251,13 +1163,13 @@ void main() {
       final records =
           ((salesPost.body as Map<String, dynamic>)['records'] as List<dynamic>)
               .cast<Map<String, dynamic>>();
+      // Only the sale travels (DSI-6 hold); ordering by source sequence is
+      // preserved for the documents that do travel.
       expect(records.map((record) => record['invoiceId']), [
         'sale-before-credit-note',
-        'credit-note-after-sale',
       ]);
       expect(mockSalesRepository.syncedInvoiceIdBatches.single, [
         'sale-before-credit-note',
-        'credit-note-after-sale',
       ]);
     },
   );

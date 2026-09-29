@@ -87,6 +87,7 @@ class IPosPrinterAdapter implements PrinterPort {
     String? fiscalAuthorizationNumber,
     bool isReprint = false,
     DateTime? reprintAt,
+    String? originDocumentReference,
   }) async {
     final status = await checkStatus();
     if (status == PrinterStatus.outOfPaper) {
@@ -139,6 +140,7 @@ class IPosPrinterAdapter implements PrinterPort {
         fiscalAuthorizationNumber: fiscalAuthorizationNumber,
         isReprint: isReprint,
         reprintAt: reprintAt,
+        originDocumentReference: originDocumentReference,
       );
       formattedText = formatter.formatReceiptDocumentText(document);
     }

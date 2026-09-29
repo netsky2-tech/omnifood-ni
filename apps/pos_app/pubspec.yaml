@@ -53,6 +53,8 @@ dependencies:
   encrypt: ^5.0.3
   file_picker: ^8.1.7
   image_picker: ^1.1.2
+  # Customer QR/barcode scanning (M11): camera scanner for customer identification.
+  mobile_scanner: ^7.4.2
 dependency_overrides:
   analyzer: 6.4.1
 

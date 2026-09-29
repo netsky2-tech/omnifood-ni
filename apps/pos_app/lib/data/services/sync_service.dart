@@ -670,9 +670,28 @@ class SyncService {
           final keyB = (b['idempotencyKey'] as String?) ?? '';
           return keyA.compareTo(keyB);
         });
-      final sentRecords = records
+      // DSI-6 (openspec/changes/device-sync-credit-note-authorization):
+      // while device-batch CREDIT_NOTE authorization auditing is
+      // unimplemented, the backend fails closed — SyncCreditNoteAuthGuard
+      // 403s the ENTIRE envelope containing any CREDIT_NOTE record
+      // (sync-credit-note-auth.guard.ts:38-73), which stalls unrelated
+      // sales and trips the misleading AUTH_BLOCKED flag (see
+      // AP_KNOWN_LIMITATIONS.md L3). Local credit notes are therefore HELD
+      // OUT of outbound device batches — same exclusion pattern as
+      // _isCreditNoteRestockMovement in the inventory outbox — and remain
+      // pending locally until DSI-6 re-enables their transport. Nothing in
+      // the backend guard is weakened.
+      final deviceSafeRecords = records
+          .where((record) => record['documentType'] != 'CREDIT_NOTE')
+          .toList(growable: false);
+      final sentRecords = deviceSafeRecords
           .take(_batchEnvelopeLimit)
           .toList(growable: false);
+      if (sentRecords.isEmpty) {
+        // Everything pending was held back (DSI-6 hold): never post an
+        // empty envelope.
+        return;
+      }
       developer.log(
         'Sales sync: posting ${sentRecords.length} records to /v1/sync/batch',
         name: 'SyncService',

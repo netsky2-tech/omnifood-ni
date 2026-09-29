@@ -82,6 +82,14 @@ abstract class PrinterPort {
 
     /// D-13: reprint request timestamp, printed next to the banner.
     DateTime? reprintAt,
+
+    /// REQ-8 (slice 8a): the origin invoice's HUMAN fiscal number (e.g.
+    /// 001-001-01-00000042) for DGI credit notes, resolved at print time.
+    /// Null → the origin line is omitted from the receipt. The raw
+    /// originInvoiceId is an internal identifier (UUID) that must NEVER be
+    /// printed on a fiscal document; do not repeat with this field the
+    /// mistake this port previously made dropping customerRuc (#540 T4).
+    String? originDocumentReference,
   });
 
   /// Prints a kitchen / KDS order ticket with buzzer / table identification.

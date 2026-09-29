@@ -844,7 +844,7 @@ class SalesRepositoryImpl implements SalesRepository {
   }
 
   @override
-  Future<void> createCreditNote({
+  Future<String> createCreditNote({
     required String originalInvoiceId,
     required String reason,
     required String authorizedByUserId,
@@ -1019,6 +1019,12 @@ class SalesRepositoryImpl implements SalesRepository {
     );
 
     await numberingService.incrementNumber();
+
+    // H5/H8: hand the committed credit-note id back so the caller can load
+    // the persisted document (its own fiscal snapshot + item rows) and print
+    // the fiscal copy. Returned only AFTER the transaction and numbering
+    // increment succeeded.
+    return creditNoteId;
   }
 
   List<InvoiceItemEntity> _buildRefundItems(
