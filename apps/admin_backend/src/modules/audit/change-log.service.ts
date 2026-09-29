@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
-import { classifyAuditSeverity } from './audit-risk-classifier';
+import {
+  classifyAuditSeverity,
+  AuditSeverity,
+} from './audit-risk-classifier';
 import { ChangeLog } from './entities/change-log.entity';
 
 /**
@@ -125,6 +128,66 @@ export class ChangeLogService {
         where: { tenant_id: tenantId },
         order: { created_at: 'DESC' },
       });
+
+    if (manager) {
+      return run(manager.getRepository(ChangeLog));
+    }
+
+    return runInTenantTransaction(this.dataSource, tenantId, (bound) =>
+      run(bound.getRepository(ChangeLog)),
+    );
+  }
+
+  /**
+   * Filtered, page-capped audit event read for the owner dashboard
+   * (GET /operations/audit/events). Same fail-closed tenant binding as every
+   * other access path (issue #512): pooled repos are never read. The
+   * severity filter uses the single AuditRiskClassifier taxonomy; INFO
+   * deliberately includes historical NULL-severity rows (backfill-free
+   * rule) so a filtered view and the executive summary agree on what INFO
+   * means. Deterministic sort: most recent first, id as the tiebreaker so
+   * same-timestamp rows paginate stably.
+   */
+  async findEvents(
+    tenantId: string,
+    filter: {
+      startInclusiveUtc?: Date | null;
+      endExclusiveUtc?: Date | null;
+      severity?: AuditSeverity;
+      limit: number;
+    },
+    manager?: EntityManager,
+  ): Promise<ChangeLog[]> {
+    const run = (repo: Repository<ChangeLog>) => {
+      const qb = repo
+        .createQueryBuilder('c')
+        .where('c.tenant_id = :tenantId', { tenantId })
+        .orderBy('c.created_at', 'DESC')
+        .addOrderBy('c.id', 'DESC')
+        .take(filter.limit);
+
+      if (filter.startInclusiveUtc) {
+        qb.andWhere('c.created_at >= :startInclusiveUtc', {
+          startInclusiveUtc: filter.startInclusiveUtc,
+        });
+      }
+      if (filter.endExclusiveUtc) {
+        qb.andWhere('c.created_at < :endExclusiveUtc', {
+          endExclusiveUtc: filter.endExclusiveUtc,
+        });
+      }
+      if (filter.severity === 'INFO') {
+        // Historical rows keep NULL severity and surface as INFO at read
+        // time (resolveAuditSeverity) — the filter must match that rule.
+        qb.andWhere('(c.severity = :severity OR c.severity IS NULL)', {
+          severity: 'INFO',
+        });
+      } else if (filter.severity) {
+        qb.andWhere('c.severity = :severity', { severity: filter.severity });
+      }
+
+      return qb.getMany();
+    };
 
     if (manager) {
       return run(manager.getRepository(ChangeLog));

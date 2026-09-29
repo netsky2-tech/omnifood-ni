@@ -25,6 +25,10 @@ import {
 } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { User } from '../../identity/entities/user.entity';
+import { LoyaltyProgram } from '../../loyalty/entities/loyalty-program.entity';
+import { RewardDefinition } from '../../loyalty/entities/reward-definition.entity';
+import { Promotion } from '../../promotions/entities/promotion.entity';
+import { Customer } from '../../customers/entities/customer.entity';
 import {
   InboundSyncQueryDto,
   InboundSyncResponseDto,
@@ -36,6 +40,10 @@ import {
   InboundSyncRecipeVersionDto,
   InboundSyncUserDto,
   InboundSyncForensicAlertDto,
+  InboundSyncLoyaltyProgramDto,
+  InboundSyncLoyaltyRewardDto,
+  InboundSyncPromotionDto,
+  InboundSyncCustomerDto,
 } from '../dto/inbound-sync.dto';
 import {
   FiscalAckDto,
@@ -168,6 +176,19 @@ export class InboundSyncService {
           : [],
       users: requestedTypes.has('users')
         ? await this.fetchUserDeltas(tenantId, sinceDate, entityManager)
+        : [],
+      loyaltyPrograms: requestedTypes.has('loyaltyprograms')
+        ? await this.fetchLoyaltyProgramDeltas(
+            tenantId,
+            sinceDate,
+            entityManager,
+          )
+        : [],
+      promotions: requestedTypes.has('promotions')
+        ? await this.fetchPromotionDeltas(tenantId, sinceDate, entityManager)
+        : [],
+      customers: requestedTypes.has('customers')
+        ? await this.fetchCustomerDeltas(tenantId, sinceDate, entityManager)
         : [],
       alerts: requestedTypes.has('alerts')
         ? await this.fetchAlertDeltas(tenantId, sinceDate, entityManager)
@@ -346,6 +367,9 @@ export class InboundSyncService {
         'recipeversions',
         'recipe_versions',
         'users',
+        'loyaltyprograms',
+        'promotions',
+        'customers',
         'alerts',
         'fiscal',
         'fiscal_config',
@@ -825,6 +849,205 @@ export class InboundSyncService {
             pinHash: u.security_profile.pin_hash ?? null,
           }
         : null,
+    }));
+  }
+
+  /**
+   * Slice 5d (finding M1): loyalty programs with their embedded reward
+   * closure. Both `loyalty_programs` and `loyalty_rewards` are
+   * tenant-protected, so the reads must ride the tenant-bound transaction
+   * manager; a missing manager fails closed with a 500 instead of silently
+   * reading through a pooled, unbound connection.
+   *
+   * Shape: one `loyaltyPrograms` key with rewards embedded per program. The
+   * incremental cursor matches a program when the program row itself OR any
+   * of its rewards changed after `sinceDate`; the returned program then
+   * carries its FULL current reward set (not just changed rewards), because
+   * the POS upserts rewards with conflict-replace and re-delivery is
+   * idempotent, while a partially delivered reward set would leave the
+   * terminal applying an inconsistent program.
+   */
+  private async fetchLoyaltyProgramDeltas(
+    tenantId: string,
+    sinceDate: Date | null,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncLoyaltyProgramDto[]> {
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound loyalty program sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const loyaltyProgramRepository = entityManager.getRepository(LoyaltyProgram);
+    const qb = loyaltyProgramRepository
+      .createQueryBuilder('program')
+      .where('program.tenant_id = :tenantId', { tenantId });
+
+    if (sinceDate) {
+      // A reward edit is a program change for sync purposes even when the
+      // program row itself is untouched.
+      qb.andWhere(
+        `(program.updated_at > :sinceDate OR EXISTS (
+        SELECT 1 FROM loyalty_rewards reward_cursor
+        WHERE reward_cursor.tenant_id = program.tenant_id
+          AND reward_cursor.loyalty_program_id = program.id
+          AND reward_cursor.updated_at > :sinceDate
+      ))`,
+        { sinceDate },
+      );
+    }
+
+    const items = await qb.getMany();
+    if (!items.length) {
+      return [];
+    }
+
+    const programIds = items.map((program) => program.id);
+    const rewardRepository = entityManager.getRepository(RewardDefinition);
+    const rewards = await rewardRepository
+      .createQueryBuilder('reward')
+      .where('reward.tenant_id = :tenantId', { tenantId })
+      .andWhere('reward.loyalty_program_id IN (:...programIds)', {
+        programIds,
+      })
+      .orderBy('reward.presentation_order', 'ASC')
+      .addOrderBy('reward.id', 'ASC')
+      .getMany();
+    const rewardsByProgramId = new Map<string, RewardDefinition[]>();
+    for (const reward of rewards) {
+      const matching = rewardsByProgramId.get(reward.loyalty_program_id) ?? [];
+      matching.push(reward);
+      rewardsByProgramId.set(reward.loyalty_program_id, matching);
+    }
+
+    return items.map((program) => ({
+      id: program.id,
+      tenantId: program.tenant_id,
+      name: program.name,
+      programType: program.program_type,
+      status: program.status,
+      startsAt: program.starts_at ?? null,
+      endsAt: program.ends_at ?? null,
+      earningRule: program.earning_rule,
+      eligibilityRule: program.eligibility_rule,
+      configVersion: program.config_version,
+      createdAt: program.created_at,
+      updatedAt: program.updated_at,
+      rewards: (rewardsByProgramId.get(program.id) ?? []).map((reward) =>
+        this.toLoyaltyRewardDto(reward),
+      ),
+    }));
+  }
+
+  private toLoyaltyRewardDto(
+    reward: RewardDefinition,
+  ): InboundSyncLoyaltyRewardDto {
+    return {
+      id: reward.id,
+      tenantId: reward.tenant_id,
+      loyaltyProgramId: reward.loyalty_program_id,
+      name: reward.name,
+      description: reward.description ?? null,
+      rewardType: reward.reward_type,
+      costUnits: reward.cost_units,
+      benefitConfig: reward.benefit_config,
+      status: reward.status,
+      startsAt: reward.starts_at ?? null,
+      endsAt: reward.ends_at ?? null,
+      presentationOrder: reward.presentation_order,
+      configVersion: reward.config_version,
+      createdAt: reward.created_at,
+      updatedAt: reward.updated_at,
+    };
+  }
+
+  /**
+   * Slice 5d (finding M2): promotions delta. `promotions` is
+   * tenant-protected — require the bound manager, same as
+   * fetchProductDeltas.
+   */
+  private async fetchPromotionDeltas(
+    tenantId: string,
+    sinceDate: Date | null,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncPromotionDto[]> {
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound promotion sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const promotionRepository = entityManager.getRepository(Promotion);
+    const qb = promotionRepository
+      .createQueryBuilder('promotion')
+      .where('promotion.tenant_id = :tenantId', { tenantId });
+
+    if (sinceDate) {
+      qb.andWhere('promotion.updated_at > :sinceDate', { sinceDate });
+    }
+
+    const items = await qb.getMany();
+    return items.map((p) => ({
+      id: p.id,
+      tenantId: p.tenant_id,
+      name: p.name,
+      type: p.type,
+      targetProductId: p.target_product_id ?? null,
+      targetCategoryId: p.target_category_id ?? null,
+      buyQuantity: p.buy_quantity,
+      getQuantity: p.get_quantity,
+      discountValue: Number(p.discount_value),
+      minOrderAmount: Number(p.min_order_amount),
+      daysOfWeek: p.days_of_week ?? null,
+      startTime: p.start_time ?? null,
+      endTime: p.end_time ?? null,
+      // `bigint` columns surface as strings through the driver: coerce back
+      // to the epoch-millis number the POS entity stores.
+      startDate: p.start_date != null ? Number(p.start_date) : null,
+      endDate: p.end_date != null ? Number(p.end_date) : null,
+      priority: p.priority,
+      isStackable: p.is_stackable,
+      isActive: p.is_active,
+      createdAt: p.created_at,
+      updatedAt: p.updated_at,
+    }));
+  }
+
+  /**
+   * Slice 5d (finding M3): customers delta. `customers` is
+   * tenant-protected — require the bound manager, same as
+   * fetchProductDeltas.
+   */
+  private async fetchCustomerDeltas(
+    tenantId: string,
+    sinceDate: Date | null,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncCustomerDto[]> {
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound customer sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const customerRepository = entityManager.getRepository(Customer);
+    const qb = customerRepository
+      .createQueryBuilder('customer')
+      .where('customer.tenant_id = :tenantId', { tenantId });
+
+    if (sinceDate) {
+      qb.andWhere('customer.updated_at > :sinceDate', { sinceDate });
+    }
+
+    const items = await qb.getMany();
+    return items.map((c) => ({
+      id: c.id,
+      tenantId: c.tenant_id,
+      name: c.name,
+      taxId: c.tax_id ?? null,
+      phone: c.phone ?? null,
+      email: c.email ?? null,
+      address: c.address ?? null,
+      pointsBalance: Number(c.points_balance),
+      isActive: c.is_active,
+      createdAt: c.created_at,
+      updatedAt: c.updated_at,
     }));
   }
 }

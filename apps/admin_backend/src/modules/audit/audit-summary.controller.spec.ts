@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import {
   GUARDS_METADATA,
   INTERCEPTORS_METADATA,
@@ -10,6 +10,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuditSummaryController } from './audit-summary.controller';
 import { AuditSummaryService } from './audit-summary.service';
+import { AuditEventsService } from './audit-events.service';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
@@ -50,6 +51,7 @@ describe('AuditSummaryController', () => {
 
   let app: INestApplication;
   let mockAuditSummaryService: { getExecutiveSummary: jest.Mock };
+  let mockAuditEventsService: { getEvents: jest.Mock };
 
   const summaryResponse = {
     criticalCount: 1,
@@ -67,6 +69,9 @@ describe('AuditSummaryController', () => {
   beforeAll(async () => {
     mockAuditSummaryService = {
       getExecutiveSummary: jest.fn().mockResolvedValue(summaryResponse),
+    };
+    mockAuditEventsService = {
+      getEvents: jest.fn().mockResolvedValue({ events: [], generatedAt: '2026-09-01T12:00:00.000Z' }),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -95,6 +100,10 @@ describe('AuditSummaryController', () => {
           useValue: mockAuditSummaryService,
         },
         {
+          provide: AuditEventsService,
+          useValue: mockAuditEventsService,
+        },
+        {
           provide: ConfigService,
           useValue: {
             get: (key: keyof typeof jwtEnvironment) => jwtEnvironment[key],
@@ -108,6 +117,15 @@ describe('AuditSummaryController', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
+    // Mirror main.ts: the query-param DTO contract (severity taxonomy, page
+    // cap) is enforced by the global ValidationPipe in production.
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     await app.init();
   });
 
@@ -193,5 +211,115 @@ describe('AuditSummaryController', () => {
     expect(
       mockAuditSummaryService.getExecutiveSummary,
     ).toHaveBeenLastCalledWith('tenant-1', '2026-08-01', '2026-08-31');
+  });
+
+  // Slice 6b (finding H6): GET /operations/audit/events backs the dashboard
+  // audit page on the SAME controller, guard chain, roles and JWT-derived
+  // tenant as the summary route.
+  describe('GET /operations/audit/events', () => {
+    const eventsResponse = {
+      events: [
+        {
+          id: 'log-1',
+          occurredAt: '2026-09-01T11:58:00.000Z',
+          actorEmail: 'owner@example.com',
+          actorRef: null,
+          action: 'ONBOARDING_ACTIVATION_CHECK_FAILED',
+          severity: 'CRITICAL',
+          targetType: 'ActivationAttempt',
+          targetId: 'attempt-1',
+        },
+      ],
+      generatedAt: '2026-09-01T12:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      mockAuditEventsService.getEvents.mockClear();
+      mockAuditEventsService.getEvents.mockResolvedValue(eventsResponse);
+    });
+
+    it('requires authentication', async () => {
+      await request(getHttpServer()).get('/operations/audit/events').expect(401);
+    });
+
+    it('returns 403 for CASHIER role', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/events')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
+        .expect(403);
+    });
+
+    it('returns 403 for WAITER role', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/events')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.WAITER)}`)
+        .expect(403);
+    });
+
+    it('returns the event list for OWNER with tenant derived from the JWT', async () => {
+      const jwtService = app.get(JwtService);
+      const response = await request(getHttpServer())
+        .get('/operations/audit/events')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(200)
+        .expect('Content-Type', /json/);
+
+      expect(mockAuditEventsService.getEvents).toHaveBeenCalledWith(
+        'tenant-1',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+      expect(response.body).toEqual(eventsResponse);
+    });
+
+    it('returns the event list for MANAGER', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/events')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+        .expect(200);
+    });
+
+    it('forwards the period, severity filter and page cap', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/events')
+        .query({
+          startDate: '2026-08-01',
+          endDate: '2026-08-31',
+          severity: 'WARNING',
+          limit: '25',
+        })
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(200);
+
+      expect(
+        mockAuditEventsService.getEvents,
+      ).toHaveBeenLastCalledWith('tenant-1', '2026-08-01', '2026-08-31', 'WARNING', 25);
+    });
+
+    it('rejects a severity outside the single classifier taxonomy with 400', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/events')
+        .query({ severity: 'SEVERE' })
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(400);
+      expect(mockAuditEventsService.getEvents).not.toHaveBeenCalled();
+    });
+
+    it('rejects a page cap above the documented maximum with 400', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/events')
+        .query({ limit: '250' })
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(400);
+      expect(mockAuditEventsService.getEvents).not.toHaveBeenCalled();
+    });
   });
 });

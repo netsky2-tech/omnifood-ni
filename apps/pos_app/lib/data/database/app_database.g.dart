@@ -6201,6 +6201,13 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
   }
 
   @override
+  Future<void> markSyncedById(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE customer_point_transactions SET sync_status = \'synced\' WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
   Future<CustomerPointTransactionEntity?> findByIdempotencyKey(
       String key) async {
     return _queryAdapter.query(

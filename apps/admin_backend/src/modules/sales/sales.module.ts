@@ -29,6 +29,8 @@ import { DatafonoEquipo } from './entities/datafono-equipo.entity';
 import { ProductInventoryMappingVersion } from '../inventory/entities/product-inventory-mapping-version.entity';
 import { CashShiftService } from './services/cash-shift.service';
 import { CashShiftController } from './controllers/cash-shift.controller';
+import { CashShiftSyncController } from './controllers/cash-shift-sync.controller';
+import { CashShiftSyncIngestionService } from './services/cash-shift-sync-ingestion.service';
 import { SalesReportsService } from './services/sales-reports.service';
 import { SyncHealthModule } from './sync-health/sync-health.module';
 import { FiscalReportsService } from './services/fiscal-reports.service';
@@ -81,12 +83,16 @@ import { forwardRef } from '@nestjs/common';
     InboundSyncController,
     ReportsController,
     CashShiftController,
+    // Batch 5 slice 5c (finding H3): POS-pushed cash shift sessions and
+    // cash movements, on the device transport (see the registry entry).
+    CashShiftSyncController,
   ],
   providers: [
     InvoicesService,
     SaleInventoryOutcomeService,
     InboundSyncService,
     CashShiftService,
+    CashShiftSyncIngestionService,
     SalesReportsService,
     FiscalReportsService,
     SalesExportService,

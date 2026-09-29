@@ -15,7 +15,10 @@ import { LoyaltyProfitAwareService } from './services/loyalty-profit-aware.servi
 import { TypeOrmInventoryCostQueryAdapter } from './services/inventory-cost-query.adapter';
 import { INVENTORY_COST_QUERY_PORT } from './domain/inventory-cost-query.port';
 import { LoyaltyController } from './controllers/loyalty.controller';
+import { LoyaltySyncController } from './controllers/loyalty-sync.controller';
+import { LoyaltySyncIngestionService } from './services/loyalty-sync-ingestion.service';
 import { IdentityModule } from '../identity/identity.module';
+import { DeviceSyncModule } from '../identity/device-sync.module';
 
 @Module({
   imports: [
@@ -28,11 +31,13 @@ import { IdentityModule } from '../identity/identity.module';
       Product,
     ]),
     IdentityModule,
+    DeviceSyncModule,
   ],
-  controllers: [LoyaltyController],
+  controllers: [LoyaltyController, LoyaltySyncController],
   providers: [
     LoyaltyService,
     LoyaltyLedgerService,
+    LoyaltySyncIngestionService,
     LegacyClassificationService,
     TicketPaidHandler,
     RedemptionService,

@@ -2572,6 +2572,16 @@ class MockCustomerPointTransactionDao extends _i1.Mock
           ) as _i55.Future<List<_i84.CustomerPointTransactionEntity>>);
 
   @override
+  _i55.Future<void> markSyncedById(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markSyncedById,
+          [id],
+        ),
+        returnValue: _i55.Future<void>.value(),
+        returnValueForMissingStub: _i55.Future<void>.value(),
+      ) as _i55.Future<void>);
+
+  @override
   _i55.Future<_i84.CustomerPointTransactionEntity?> findByIdempotencyKey(
           String? key) =>
       (super.noSuchMethod(

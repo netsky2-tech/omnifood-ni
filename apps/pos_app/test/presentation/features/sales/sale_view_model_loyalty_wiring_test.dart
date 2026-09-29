@@ -588,6 +588,212 @@ void main() {
     );
   });
 
+  group('loyalty failure handling (B1/B2/H9)', () {
+    const testProduct = Product(
+      id: 'prod-1',
+      name: 'Smash Burger',
+      uom: 'UN',
+      stock: 100,
+      averageCost: 60.0,
+      sellPrice: 120.0,
+      category: 'Food',
+    );
+
+    setUp(() {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'user-1',
+          name: 'Cashier',
+          role: UserRole.cashier,
+          isActive: true,
+        ),
+      );
+      when(
+        mockSalesRepo.saveSale(
+          invoice: anyNamed('invoice'),
+          items: anyNamed('items'),
+          payments: anyNamed('payments'),
+        ),
+      ).thenAnswer((_) async {});
+    });
+
+    /// Arranges a full reward-based sale (reward selected, evaluation
+    /// eligible) WITHOUT stubbing the point-transaction DAO, so each test
+    /// controls its own persistence outcome.
+    Future<void> arrangeRewardSale() async {
+      when(mockRewardInteraction.selectedRewardId).thenReturn(rewardId);
+      when(mockRewardInteraction.getSelectedReward(any)).thenReturn(testReward);
+      when(
+        mockProgramDao.getActivePrograms(tenantId),
+      ).thenAnswer((_) async => [testProgramEntity]);
+      when(
+        mockRewardDao.getActiveRewards(tenantId),
+      ).thenAnswer((_) async => [testRewardEntity]);
+
+      final evaluation = LoyaltyEvaluation(
+        customerId: customerId,
+        ticketId: '',
+        programs: [
+          ProgramEvaluation(
+            programId: programId,
+            programName: 'Smash Burger Club',
+            programType: LoyaltyProgramType.productStamps,
+            balanceUnits: 10,
+            eligibleRewards: [testReward.toEligibleReward()],
+          ),
+        ],
+      );
+      when(
+        mockEvaluationService.evaluate(
+          snapshot: anyNamed('snapshot'),
+          programs: anyNamed('programs'),
+          rewards: anyNamed('rewards'),
+          balanceMap: anyNamed('balanceMap'),
+        ),
+      ).thenReturn(evaluation);
+
+      viewModel.addToCart(testProduct);
+      await viewModel.selectCustomer(testCustomer);
+      viewModel.selectReward(rewardId);
+    }
+
+    test('H9: re-evaluation failure is observable and does not block cart flow',
+        () async {
+      when(
+        mockProgramDao.getActivePrograms(tenantId),
+      ).thenThrow(Exception('db locked'));
+
+      // Act: must not throw despite the DAO failure.
+      await viewModel.selectCustomer(testCustomer);
+
+      // Assert: failure is observable, not silently swallowed.
+      expect(viewModel.lastLoyaltyError, isNotNull);
+      expect(viewModel.lastLoyaltyError, contains('re-evaluate'));
+      expect(viewModel.currentEvaluation, isNull);
+
+      // Assert: cart flow keeps working after the failure.
+      viewModel.addToCart(testProduct);
+      expect(viewModel.cart, isNotEmpty);
+    });
+
+    test('B1: redeem persistence failure is observable and sale still completes',
+        () async {
+      await arrangeRewardSale();
+
+      var txCalls = 0;
+      when(
+        mockPointTxDao.recordPointTransactionAndUpdateBalance(
+            any, any, any, any),
+      ).thenAnswer((_) async {
+        txCalls++;
+        if (txCalls == 1) {
+          throw Exception('redeem write failed');
+        }
+      });
+
+      // Act: must not throw — local sale completion is never blocked.
+      await viewModel.processSale(
+        [PaymentMethod.cash],
+        customPayments: [
+          const Payment(
+            id: 'pay-1',
+            invoiceId: '',
+            method: PaymentMethod.cash,
+            amount: 138.0,
+          ),
+        ],
+      );
+
+      // Assert: failure is observable (first tx call = REDEEM).
+      expect(viewModel.lastLoyaltyError, isNotNull);
+      expect(viewModel.lastLoyaltyError, contains('redeem'));
+
+      // Assert: sale completed locally anyway (invoice persisted, earn
+      // transaction still attempted).
+      verify(
+        mockSalesRepo.saveSale(
+          invoice: anyNamed('invoice'),
+          items: anyNamed('items'),
+          payments: anyNamed('payments'),
+        ),
+      ).called(1);
+      verify(
+        mockPointTxDao.recordPointTransactionAndUpdateBalance(
+            any, any, any, any),
+      ).called(2);
+    });
+
+    test('B2: earn persistence failure is observable and sale still completes',
+        () async {
+      await arrangeRewardSale();
+
+      var txCalls = 0;
+      when(
+        mockPointTxDao.recordPointTransactionAndUpdateBalance(
+            any, any, any, any),
+      ).thenAnswer((_) async {
+        txCalls++;
+        if (txCalls == 2) {
+          throw Exception('earn write failed');
+        }
+      });
+
+      // Act: must not throw — local sale completion is never blocked.
+      await viewModel.processSale(
+        [PaymentMethod.cash],
+        customPayments: [
+          const Payment(
+            id: 'pay-1',
+            invoiceId: '',
+            method: PaymentMethod.cash,
+            amount: 138.0,
+          ),
+        ],
+      );
+
+      // Assert: failure is observable (second tx call = EARN, not REDEEM).
+      expect(viewModel.lastLoyaltyError, isNotNull);
+      expect(viewModel.lastLoyaltyError, contains('earn'));
+      expect(viewModel.lastLoyaltyError, isNot(contains('redeem')));
+
+      // Assert: sale completed locally anyway.
+      verify(
+        mockSalesRepo.saveSale(
+          invoice: anyNamed('invoice'),
+          items: anyNamed('items'),
+          payments: anyNamed('payments'),
+        ),
+      ).called(1);
+    });
+
+    test('success path: no loyalty error is recorded', () async {
+      await arrangeRewardSale();
+
+      when(
+        mockPointTxDao.recordPointTransactionAndUpdateBalance(
+            any, any, any, any),
+      ).thenAnswer((_) async {});
+
+      await viewModel.processSale(
+        [PaymentMethod.cash],
+        customPayments: [
+          const Payment(
+            id: 'pay-1',
+            invoiceId: '',
+            method: PaymentMethod.cash,
+            amount: 138.0,
+          ),
+        ],
+      );
+
+      expect(viewModel.lastLoyaltyError, isNull);
+      verify(
+        mockPointTxDao.recordPointTransactionAndUpdateBalance(
+            any, any, any, any),
+      ).called(2);
+    });
+  });
+
   group('processSale builds real LoyaltyEvaluation', () {
     test(
       'uses LoyaltyEvaluationService.evaluate instead of hardcoded evaluation',

@@ -6,8 +6,12 @@ import {
   importModeLabels,
   duplicateResolutionLabels,
   backendActivationErrorLabels,
+  cashShiftStatusLabels,
+  kardexQueueStatusLabels,
+  kardexMovementTypeLabels,
 } from "@/lib/labels";
 import { OnboardingLifecycleState } from "@/features/onboarding/types";
+import type { CashShiftStatus } from "@/features/cash/types";
 
 /**
  * Regression guard for the dashboard label layer (issue #587 / D2, D4).
@@ -29,6 +33,9 @@ const families: Record<string, Record<string, string>> = {
   importModeLabels,
   duplicateResolutionLabels,
   backendActivationErrorLabels,
+  cashShiftStatusLabels,
+  kardexQueueStatusLabels,
+  kardexMovementTypeLabels,
 };
 
 describe("label families — map hygiene", () => {
@@ -80,6 +87,38 @@ describe("label families — key sets verified against source enums", () => {
       ].sort(),
     );
   });
+
+  it("cashShiftStatusLabels matches CashShiftStatus exactly", () => {
+    const backendStatuses: CashShiftStatus[] = ["OPEN", "CLOSED"];
+    expect(Object.keys(cashShiftStatusLabels).sort()).toEqual(
+      [...backendStatuses].sort(),
+    );
+  });
+
+  it("kardexQueueStatusLabels matches the actionable KardexQueueStatus values exactly", () => {
+    // The pending route excludes COMPLETED (already-regularized rows), so
+    // the dashboard map covers exactly the actionable statuses.
+    expect(Object.keys(kardexQueueStatusLabels).sort()).toEqual(
+      ["PENDING", "PROCESSING", "BLOCKED", "FAILED"].sort(),
+    );
+  });
+
+  it("kardexMovementTypeLabels matches the backend MovementType enum exactly", () => {
+    expect(Object.keys(kardexMovementTypeLabels).sort()).toEqual(
+      [
+        "SALE",
+        "SALE_CANCEL",
+        "PURCHASE",
+        "ENTRADA_COMPRA",
+        "SHRINKAGE",
+        "PRODUCTION",
+        "CREDIT_NOTE_RESTOCK",
+        "ADJUSTMENT",
+        "REVERSAL",
+        "INITIAL_STOCK",
+      ].sort(),
+    );
+  });
 });
 
 describe("localize", () => {
@@ -91,5 +130,6 @@ describe("localize", () => {
   it("passes unknown codes through untouched (never crashes, never '(unknown)')", () => {
     expect(localize("SOME_FUTURE_CODE", lifecycleStateLabels)).toBe("SOME_FUTURE_CODE");
     expect(localize("SOME_FUTURE_CODE", backendActivationErrorLabels)).toBe("SOME_FUTURE_CODE");
+    expect(localize("SOME_FUTURE_CODE", cashShiftStatusLabels)).toBe("SOME_FUTURE_CODE");
   });
 });

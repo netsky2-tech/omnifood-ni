@@ -1,7 +1,8 @@
 import { Module, Global } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EMAIL_PORT } from '../../integrations/notifications/ports/email.port';
 import { SMS_PORT } from '../../integrations/notifications/ports/sms.port';
-import { ConsoleEmailAdapter } from '../../integrations/notifications/adapters/console-email.adapter';
+import { createEmailPort } from '../../integrations/notifications/email-provider.factory';
 import { ConsoleSmsAdapter } from '../../integrations/notifications/adapters/console-sms.adapter';
 import { LowStockListener } from './listeners/low-stock.listener';
 
@@ -10,7 +11,8 @@ import { LowStockListener } from './listeners/low-stock.listener';
   providers: [
     {
       provide: EMAIL_PORT,
-      useClass: ConsoleEmailAdapter,
+      inject: [ConfigService],
+      useFactory: createEmailPort,
     },
     {
       provide: SMS_PORT,

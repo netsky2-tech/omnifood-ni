@@ -318,6 +318,40 @@ describe('LoyaltyLedgerService (db)', () => {
       });
       expect(projection.balance_units).toBe(18);
     });
+
+    // Batch 5 slice 5b (finding H2): legacy POS rows pushed by the new
+    // outbound sync carry no program attribution. The ledger must record
+    // them (offline rows are the source of truth) without creating a
+    // projection row, because the projection is keyed by NOT NULL
+    // loyalty_program_id.
+    it('records a program-less legacy POS transaction without a projection row', async () => {
+      const tx = await harness.ledgerService.appendTransaction({
+        tenantId: 'tenant-1',
+        customerId,
+        loyaltyProgramId: undefined,
+        ticketId: 'ticket-901',
+        transactionType: 'EARN',
+        units: 12,
+        idempotencyKey: 'loyalty:sync:tenant-1:legacy-row-901',
+        origin: 'POS',
+        occurredAt: new Date(),
+      });
+
+      expect(tx.id).toBeDefined();
+      expect(tx.loyalty_program_id).toBeNull();
+      expect(tx.units).toBe(12);
+
+      const stored = await harness.txRepo.findOne({
+        where: { idempotency_key: 'loyalty:sync:tenant-1:legacy-row-901' },
+      });
+      expect(stored).toBeDefined();
+
+      const projections = await harness.projectionRepo.find({
+        where: { customer_id: customerId },
+      });
+      expect(projections).toHaveLength(1);
+      expect(projections[0].loyalty_program_id).toBe(programId);
+    });
   });
 
   describe('rebuildProjection', () => {

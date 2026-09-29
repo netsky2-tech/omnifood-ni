@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   ShoppingCart,
+  Wallet,
   Package,
   FileText,
   Tag,
@@ -11,6 +12,8 @@ import {
   Award,
   FlaskConical,
   Users,
+  History,
+  ClipboardCheck,
   Settings,
   QrCode,
   UserCircle,
@@ -36,6 +39,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: "Dashboard", path: "/", icon: LayoutDashboard, section: "Principal" },
   { label: "Ventas", path: "/sales", icon: ShoppingCart, section: "Principal" },
+  { label: "Sesiones de caja", path: "/cash", icon: Wallet, section: "Gestión" },
+  { label: "Correcciones de inventario", path: "/kardex", icon: ClipboardCheck, section: "Gestión" },
   { label: "Inventario", path: "/inventory", icon: Package, section: "Principal" },
   { label: "Fiscal", path: "/fiscal", icon: FileText, section: "Principal" },
   { label: "Catálogo", path: "/catalog", icon: Tag, section: "Gestión" },
@@ -45,6 +50,7 @@ const navItems: NavItem[] = [
   { label: "Recetas", path: "/recipes", icon: FlaskConical, section: "Gestión" },
   { label: "QR del menú", path: "/menu-qr", icon: QrCode, section: "Gestión" },
   { label: "Usuarios", path: "/users", icon: Users, section: "Administración", requiredRoles: ["OWNER"] },
+  { label: "Auditoría", path: "/audit", icon: History, section: "Administración" },
   { label: "Clientes", path: "/customers", icon: UserCircle, section: "Administración" },
   { label: "Configuración", path: "/settings", icon: Settings, section: "Administración" },
 ];

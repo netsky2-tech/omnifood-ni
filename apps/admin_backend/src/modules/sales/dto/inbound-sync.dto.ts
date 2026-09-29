@@ -202,6 +202,83 @@ export interface InboundSyncForensicAlertDto {
   createdAt: Date;
 }
 
+export interface InboundSyncLoyaltyRewardDto {
+  id: string;
+  tenantId: string;
+  loyaltyProgramId: string;
+  name: string;
+  description: string | null;
+  rewardType: string;
+  costUnits: number;
+  benefitConfig: Record<string, unknown>;
+  status: string;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  presentationOrder: number;
+  configVersion: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface InboundSyncLoyaltyProgramDto {
+  id: string;
+  tenantId: string;
+  name: string;
+  programType: string;
+  status: string;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  earningRule: Record<string, unknown>;
+  eligibilityRule: Record<string, unknown>;
+  configVersion: number;
+  createdAt: Date;
+  updatedAt: Date;
+  /**
+   * Full reward set of the returned program, not a delta of rewards: the
+   * POS upserts rewards with conflict-replace, so re-delivering unchanged
+   * rewards is idempotent, while delivering a program without its reward
+   * closure would leave the terminal applying a partially known program.
+   */
+  rewards: InboundSyncLoyaltyRewardDto[];
+}
+
+export interface InboundSyncPromotionDto {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: string;
+  targetProductId: string | null;
+  targetCategoryId: string | null;
+  buyQuantity: number;
+  getQuantity: number;
+  discountValue: number;
+  minOrderAmount: number;
+  daysOfWeek: string[] | null;
+  startTime: string | null;
+  endTime: string | null;
+  startDate: number | null;
+  endDate: number | null;
+  priority: number;
+  isStackable: boolean;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface InboundSyncCustomerDto {
+  id: string;
+  tenantId: string;
+  name: string;
+  taxId: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  pointsBalance: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface InboundSyncDeltasDto {
   products: InboundSyncProductDto[];
   catalogValues: InboundSyncCatalogValueDto[];
@@ -215,6 +292,16 @@ export interface InboundSyncDeltasDto {
    * it — but the service always populates it (empty when not requested).
    */
   alerts?: InboundSyncForensicAlertDto[];
+  /**
+   * Loyalty programs with their embedded reward closure (slice 5d, finding
+   * M1). Always populated by the service (empty when not requested), like
+   * the other required keys.
+   */
+  loyaltyPrograms: InboundSyncLoyaltyProgramDto[];
+  /** Promotions delta (slice 5d, finding M2). */
+  promotions: InboundSyncPromotionDto[];
+  /** Customers delta (slice 5d, finding M3). */
+  customers: InboundSyncCustomerDto[];
   fiscalConfig?: FiscalConfigSnapshot | null;
 }
 

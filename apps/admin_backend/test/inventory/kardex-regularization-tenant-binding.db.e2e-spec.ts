@@ -13,6 +13,8 @@ import { GovernanceApprovalService } from '../../src/modules/inventory/services/
 import { KardexCorrection } from '../../src/modules/inventory/entities/kardex-correction.entity';
 import { KardexRecalculateQueue } from '../../src/modules/inventory/entities/kardex-recalculate-queue.entity';
 import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
+import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
+import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { DeviceSyncCredential } from '../../src/modules/identity/entities/device-sync-credential.entity';
 import { ActivationAttempt } from '../../src/modules/onboarding/entities/activation-attempt.entity';
@@ -60,6 +62,8 @@ const postgresConnection = {
 const ALL_ENTITIES = [
   Tenant,
   InventoryMovement,
+  Insumo,
+  UomConversion,
   KardexCorrection,
   KardexRecalculateQueue,
   DeviceSyncCredential,
@@ -68,8 +72,9 @@ const ALL_ENTITIES = [
 
 /**
  * Tables the restricted runtime role must read. The regularization sync flow
- * writes kardex_correction and inventory_kardex, and SyncTransportGuard reads
- * the device credential tables back.
+ * writes kardex_correction and inventory_kardex, SyncTransportGuard reads
+ * the device credential tables back, and the pending-route read model
+ * enriches rows with insumo names (SELECT on insumos is required).
  */
 const RLS_ROLE_TABLES = [
   'tenants',
@@ -78,6 +83,7 @@ const RLS_ROLE_TABLES = [
   'kardex_recalculate_queue',
   'device_sync_credentials',
   'onboarding_activation_attempts',
+  'insumos',
 ] as const;
 
 /**
@@ -585,10 +591,10 @@ describe('Kardex regularization sync tenant binding E2E — real PostgreSQL unde
 
           expect(Array.isArray(res.body)).toBe(true);
           expect(res.body).toHaveLength(1);
-          expect(res.body[0].id).toBe(queueItemId);
-          expect(res.body.some((row: any) => row.id === otherQueueItemId)).toBe(
-            false,
-          );
+          expect(res.body[0].queueId).toBe(queueItemId);
+          expect(
+            res.body.some((row: any) => row.queueId === otherQueueItemId),
+          ).toBe(false);
         },
       );
     },

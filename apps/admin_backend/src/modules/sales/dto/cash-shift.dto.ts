@@ -4,9 +4,13 @@ import {
   IsNumber,
   IsOptional,
   IsEnum,
+  IsInt,
   Min,
+  Max,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { CashMovementType } from '../entities/cash-movement.entity';
+import { CashShiftStatus } from '../entities/cash-shift.entity';
 
 export class OpenCashShiftDto {
   @IsString()
@@ -75,4 +79,22 @@ export class CloseCashShiftDto {
   @IsString()
   @IsOptional()
   notes?: string;
+}
+
+/**
+ * Query params for the owner-dashboard cash-session list (GET /sales/shifts).
+ * `status` filters by lifecycle state; `limit` caps the page size with a sane
+ * default so the oversight surface never pulls an unbounded result set.
+ */
+export class ListCashShiftsQueryDto {
+  @IsOptional()
+  @IsEnum(CashShiftStatus)
+  status?: CashShiftStatus;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }

@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, EntityManager } from 'typeorm';
+import { Repository, DataSource, EntityManager, In, Not } from 'typeorm';
 import {
   bindTenantContext,
   resolveTenantContextId,
@@ -17,7 +17,9 @@ import {
 } from '../entities/kardex-recalculate-queue.entity';
 import { KardexCorrection } from '../entities/kardex-correction.entity';
 import { InventoryMovement } from '../entities/inventory-movement.entity';
+import { Insumo } from '../entities/insumo.entity';
 import { GovernanceApprovalService } from './governance-approval.service';
+import { KardexPendingQueueItemResponseDto } from '../dto/kardex-pending-queue-response.dto';
 
 export interface ApproveRegularizationInput {
   queueId: string;
@@ -39,7 +41,9 @@ export class KardexRegularizationService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async getPendingQueue(tenantId: string): Promise<KardexRecalculateQueue[]> {
+  async getPendingQueue(
+    tenantId: string,
+  ): Promise<KardexPendingQueueItemResponseDto[]> {
     // HR-01 (issue #486): the human pending route reads kardex_recalculate_queue,
     // which carries a FORCED tenant RLS policy. The read must run inside one
     // transaction whose app.tenant_id is bound before the first query, using a
@@ -47,16 +51,87 @@ export class KardexRegularizationService {
     // A blank tenant id fails here, before a connection is borrowed or any
     // SQL is issued.
     const tenant = resolveTenantContextId(tenantId);
-    return runInTenantTransaction(this.dataSource, tenant, async (manager) =>
-      manager.getRepository(KardexRecalculateQueue).find({
+    return runInTenantTransaction(this.dataSource, tenant, async (manager) => {
+      // Slice 6c (finding H7): COMPLETED rows are already-regularized cost
+      // history — the approve handler rejects them, so exposing them in the
+      // pending route would only invite a doomed re-approval. The dashboard
+      // queue is the actionable set: PENDING / PROCESSING / BLOCKED / FAILED.
+      const rows = await manager.getRepository(KardexRecalculateQueue).find({
         where: {
           tenant_id: tenant,
+          status: Not(KardexQueueStatus.COMPLETED),
         },
         order: {
           createdAt: 'ASC',
         },
-      }),
-    );
+      });
+
+      if (rows.length === 0) {
+        return [];
+      }
+
+      // Enrichment stays inside the same tenant-bound transaction (HR-01):
+      // every read goes through the manager-scoped repositories, never a
+      // global one, so the RLS app.tenant_id applies to movements and
+      // insumos too.
+      const movementIds = [
+        ...new Set(
+          rows.flatMap((row) => [row.originMovementId, row.triggerMovementId]),
+        ),
+      ];
+      const movements = await manager
+        .getRepository(InventoryMovement)
+        .find({ where: { id: In(movementIds), tenant_id: tenant } });
+      const movementById = new Map(
+        movements.map((m) => [m.id, m] as const),
+      );
+
+      const insumoIds = [...new Set(rows.map((row) => row.insumoId))];
+      const insumos = await manager.getRepository(Insumo).find({
+        where: { id: In(insumoIds), tenant_id: tenant },
+      });
+      const insumoNameById = new Map(insumos.map((i) => [i.id, i.name]));
+
+      return rows.map((row) => {
+        const origin = movementById.get(row.originMovementId);
+        const trigger = movementById.get(row.triggerMovementId);
+
+        // Same derivation the approval transaction applies, so the page
+        // previews exactly what approving will record. A dangling movement
+        // stays null (unknown on the wire, "—" in the UI) instead of 0.
+        let previousUnitCostNio: number | null = null;
+        let recalculatedUnitCostNio: number | null = null;
+        let deltaUnitCostNio: number | null = null;
+        let totalDeltaCostNio: number | null = null;
+        let affectedQuantity: number | null = null;
+
+        if (origin && trigger) {
+          const prevCost = Number(origin.unitCostNio || 0);
+          const newCost = Number(trigger.unitCostNio || prevCost);
+          const deltaUnit = newCost - prevCost;
+          const affectedQty = Math.abs(Number(origin.quantity || 0));
+          previousUnitCostNio = prevCost;
+          recalculatedUnitCostNio = newCost;
+          deltaUnitCostNio = deltaUnit;
+          affectedQuantity = affectedQty;
+          totalDeltaCostNio = Math.abs(deltaUnit * affectedQty);
+        }
+
+        return {
+          queueId: row.id,
+          status: row.status,
+          insumoId: row.insumoId,
+          insumoName: insumoNameById.get(row.insumoId) ?? null,
+          previousUnitCostNio,
+          recalculatedUnitCostNio,
+          deltaUnitCostNio,
+          totalDeltaCostNio,
+          affectedQuantity,
+          triggerMovementType: trigger?.type ?? null,
+          detectedAt: row.createdAt.toISOString(),
+        };
+      });
+    });
   }
 
   async approveRegularization(

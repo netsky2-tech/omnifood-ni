@@ -13,12 +13,19 @@ export type AppAction =
   | "settings.configure"
   // Mirrors the backend permission 'sales:issue_credit_note'
   // (AppPermission.SALES_ISSUE_CREDIT_NOTE, B1c-2 slice A).
-  | "creditNotes.issue";
+  | "creditNotes.issue"
+  // Mirrors the backend @Roles(OWNER, MANAGER) on
+  // POST /inventory/regularization/approve (batch 6 slice 6c).
+  | "kardex.approve";
 
 /**
  * Route access policy aligned with the authoritative NestJS backend guards:
  * - / (Dashboard): OWNER, MANAGER
  * - /sales: OWNER, MANAGER
+ * - /cash: OWNER, MANAGER (cash-session oversight, mirrors backend
+ *   CashShiftController list route roles)
+ * - /audit: OWNER, MANAGER (audit event oversight, mirrors backend
+ *   AuditSummaryController route roles)
  * - /inventory: OWNER, MANAGER, CASHIER (Kardex endpoint is open to CASHIER)
  * - /fiscal: OWNER, MANAGER
  * - /catalog: OWNER, MANAGER
@@ -29,10 +36,14 @@ export type AppAction =
  * - /customers: OWNER, MANAGER, CASHIER, WAITER
  * - /settings: OWNER, MANAGER
  * - /menu-qr: OWNER, MANAGER
+ * - /kardex: OWNER, MANAGER (kardex regularization approval, mirrors backend
+ *   RegularizationController pending/approve route roles)
  */
 export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/": ["OWNER", "MANAGER"],
   "/sales": ["OWNER", "MANAGER"],
+  "/cash": ["OWNER", "MANAGER"],
+  "/audit": ["OWNER", "MANAGER"],
   "/inventory": ["OWNER", "MANAGER"],
   "/fiscal": ["OWNER", "MANAGER"],
   "/catalog": ["OWNER", "MANAGER"],
@@ -44,6 +55,7 @@ export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/loyalty": ["OWNER", "MANAGER"],
   "/settings": ["OWNER", "MANAGER"],
   "/menu-qr": ["OWNER", "MANAGER"],
+  "/kardex": ["OWNER", "MANAGER"],
 };
 
 export const ACTION_ROLE_PERMISSIONS: Record<AppAction, UserRole[]> = {
@@ -57,6 +69,7 @@ export const ACTION_ROLE_PERMISSIONS: Record<AppAction, UserRole[]> = {
   "fiscal.export": ["OWNER", "MANAGER"],
   "settings.configure": ["OWNER", "MANAGER"],
   "creditNotes.issue": ["OWNER", "MANAGER"],
+  "kardex.approve": ["OWNER", "MANAGER"],
 };
 
 export function canAccessRoute(role: UserRole | undefined | null, path: string): boolean {
