@@ -9,6 +9,8 @@ import {
   uploadLargeDatasetInChunks,
   commitImport,
   fetchImportErrors,
+  previewMenuImport,
+  commitMenuImport,
   type ChunkedUploadOptions,
 } from "./settings-api";
 import type {
@@ -162,5 +164,43 @@ export function useImportErrors(sessionToken: string | null) {
     queryKey: SETTINGS_QUERY_KEYS.importErrors(sessionToken ?? ""),
     queryFn: () => fetchImportErrors(sessionToken!),
     enabled: Boolean(sessionToken),
+  });
+}
+
+// --- Menu Import from Excel ---
+
+export function useMenuImportPreview() {
+  return useMutation({
+    mutationFn: (fileBase64: string) => previewMenuImport(fileBase64),
+  });
+}
+
+export function useMenuImportCommit() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: (fileBase64: string) => commitMenuImport(fileBase64),
+    onSuccess: (result) => {
+      // Menu import writes products, recipes and insumos. The insumo and
+      // suggestion lists live under the ['recipes', tenantId, ...] prefix
+      // (insumosQueryKey / suggestionsQueryKey), so invalidating that root
+      // covers all three caches.
+      queryClient.invalidateQueries({ queryKey: ["products", tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["recipes", tenantId] });
+      toast({
+        variant: "success",
+        title: "Importación de menú completada",
+        description: `${result.categories} categorías: ${result.productsToCreate} productos creados, ${result.productsToUpdate} actualizados, ${result.recipesToCreate} recetas creadas.`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Error al confirmar la importación de menú",
+        description: getApiErrorMessage(err, "No se pudo confirmar la importación del menú"),
+      });
+    },
   });
 }

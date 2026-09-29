@@ -380,6 +380,9 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   { controller: 'CapabilityController', transport: 'human' },
   { controller: 'OnboardingCatalogController', transport: 'human' },
   { controller: 'IndustryTemplateController', transport: 'human' },
+  // Owner-dashboard menu import from Excel: base64 workbook posted from a
+  // human session; same transport class as the other onboarding surfaces.
+  { controller: 'MenuImportController', transport: 'human' },
   { controller: 'OnboardingSessionController', transport: 'human' },
   { controller: 'TerminalPrimingController', transport: 'human' },
   { controller: 'FiscalSetupController', transport: 'human' },

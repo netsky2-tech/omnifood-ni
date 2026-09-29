@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { FiscalSetupForm } from "./fiscal-setup-form";
 import { IndustryTemplatesList } from "./industry-templates-list";
 import { BulkImportWizard } from "./bulk-import-wizard";
+import { MenuImportWizard } from "./menu-import-wizard";
 import { SetupCenterView } from "@/features/onboarding/setup-center-view";
 import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { Landmark, Sparkles, FileSpreadsheet, Settings, Store } from "lucide-react";
@@ -136,7 +137,8 @@ export function SettingsPage({ initialTab = "setup" }: SettingsPageProps) {
         )}
 
         {activeTab === "import" && (
-          <div role="tabpanel" data-testid="tabpanel-import">
+          <div role="tabpanel" data-testid="tabpanel-import" className="space-y-6">
+            <MenuImportWizard />
             <BulkImportWizard />
           </div>
         )}
