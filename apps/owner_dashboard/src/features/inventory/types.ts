@@ -126,3 +126,40 @@ export interface KardexFilters {
   limit?: number;
   offset?: number;
 }
+
+// --- Purchase history (owner dashboard oversight read) ---
+
+export interface PurchaseDocumentItem {
+  id: string;
+  tenant_id: string;
+  insumo_id: string;
+  supplier_id: string;
+  invoice_number: string;
+  document_type: string;
+  correction_reason: string | null;
+  correction_for_purchase_document_id: string | null;
+  fiscal_authorization_code: string | null;
+  invoice_date: string;
+  entry_date: string;
+  entry_timestamp: string;
+  quantity: number;
+  unit_cost: number;
+  currency: string;
+  bcn_rate: number;
+  unit_cost_nio: number;
+  projected_cpp_nio: number;
+  lot_code: string | null;
+  received_date: string | null;
+  expiration_date: string | null;
+  created_at: string;
+  insumo?: { id: string; name: string; consumptionUom?: string } | null;
+  supplier?: { id: string; name: string } | null;
+}
+
+export interface PurchaseFilters {
+  startDate?: string;
+  endDate?: string;
+  supplierId?: string;
+  insumoId?: string;
+  limit?: number;
+}

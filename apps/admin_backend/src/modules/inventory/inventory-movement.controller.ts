@@ -34,6 +34,7 @@ import { Roles } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
 import { FxRateResolverService } from './fx-rate-resolver.service';
 import { GetBcnFxRateQueryDto } from './dto/get-bcn-fx-rate-query.dto';
+import { ListPurchasesQueryDto } from './dto/list-purchases-query.dto';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 import { CountSessionService } from './count-session.service';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
@@ -176,6 +177,30 @@ export class InventoryMovementController {
     return this.fxRateResolverService.getBcnRateByInvoiceDate(
       query.invoiceDate,
     );
+  }
+
+  /**
+   * Owner-dashboard purchase history (SOHO readiness). Human oversight read:
+   * the tenant comes from the authenticated human session via GetTenantId,
+   * and the query runs inside a tenant-bound transaction in the service.
+   * Purchase authoring stays on the POS (device transport) — this route only
+   * exposes history and costs for the office.
+   */
+  @Get('purchases')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async listPurchases(
+    @Query() query: ListPurchasesQueryDto,
+    @GetTenantId() tenantId: string,
+  ) {
+    return this.purchaseService.listPurchases({
+      tenantId,
+      startDate: query.startDate,
+      endDate: query.endDate,
+      supplierId: query.supplierId,
+      insumoId: query.insumoId,
+      limit: query.limit,
+    });
   }
 
   @Post('purchases')
