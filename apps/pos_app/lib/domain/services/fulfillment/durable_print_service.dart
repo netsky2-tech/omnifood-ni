@@ -86,6 +86,30 @@ class DurablePrintService {
       );
 
       final invoice = _parseInvoiceFromPayload(receiptJob.payload);
+      if (invoice == null) {
+        // H4: a corrupt payload must never be printed as a fabricated $0
+        // fiscal document. Fail the job safely and make it observable.
+        receiptState = 'FAILED';
+        await _database.fulfillmentPersistenceDao.updatePrintJobState(
+          receiptJob.id,
+          tenantId,
+          'FAILED',
+          receiptJob.retryCount + 1,
+        );
+        await _auditRepository.log(
+          'PRINT_PAYLOAD_CORRUPT',
+          metadata: jsonEncode({
+            'fulfillmentId': fulfillmentId,
+            'jobId': receiptJob.id,
+            'documentKind': receiptJob.documentKind,
+          }),
+        );
+        return PrintBatchResult(
+          success: false,
+          receiptState: receiptState,
+          ticketState: ticketState,
+        );
+      }
       final result = await _printerPort.printInvoice(
         invoice,
         items: const [],
@@ -263,6 +287,25 @@ class DurablePrintService {
         // Execute print on the copy
         if (copyJob.documentKind == 'RECEIPT') {
           final invoice = _parseInvoiceFromPayload(copyJob.payload);
+          if (invoice == null) {
+            // H4: never print a fabricated invoice from a corrupt payload.
+            // Mark the copy FAILED and make the failure observable.
+            await _database.fulfillmentPersistenceDao.updatePrintJobState(
+              copyJob.id,
+              tenantId,
+              'FAILED',
+              0,
+            );
+            await _auditRepository.log(
+              'PRINT_PAYLOAD_CORRUPT',
+              metadata: jsonEncode({
+                'fulfillmentId': copyJob.fulfillmentId,
+                'jobId': copyJob.id,
+                'documentKind': copyJob.documentKind,
+              }),
+            );
+            break;
+          }
           await _printerPort.printInvoice(
             invoice,
             items: const [],
@@ -377,28 +420,41 @@ class DurablePrintService {
     }
   }
 
-  Invoice _parseInvoiceFromPayload(String payload) {
+  /// Parses the receipt print payload. Returns `null` when the payload is
+  /// corrupt (invalid JSON, not an object, or missing the invoice identity)
+  /// so callers can fail the job safely instead of printing a fabricated
+  /// fiscal document (H4).
+  ///
+  /// Producer contract (`FulfillmentExecutionService`): the receipt payload
+  /// emits `invoiceNumber`, `cashierName`, `timestamp` and possibly `type`,
+  /// but not `invoiceId`. A payload is valid when at least one real invoice
+  /// identity field (`invoiceNumber` or `invoiceId`) is present and
+  /// non-empty; identity fields are never fabricated with defaults.
+  Invoice? _parseInvoiceFromPayload(String payload) {
+    final Object? decoded;
     try {
-      final json = jsonDecode(payload) as Map<String, dynamic>;
-      return Invoice(
-        id: json['invoiceId']?.toString() ?? 'unknown-id',
-        number: json['invoiceNumber']?.toString() ?? '001-001-01-00000000',
-        createdAt: DateTime.now(),
-        userId: json['cashierName']?.toString() ?? 'system',
-        subtotal: 0,
-        totalTax: 0,
-        total: 0,
-      );
+      decoded = jsonDecode(payload);
     } catch (_) {
-      return Invoice(
-        id: 'unknown-id',
-        number: '001-001-01-00000000',
-        createdAt: DateTime.now(),
-        userId: 'system',
-        subtotal: 0,
-        totalTax: 0,
-        total: 0,
-      );
+      return null;
     }
+    if (decoded is! Map<String, dynamic>) return null;
+    final invoiceId = _nonEmptyString(decoded['invoiceId']);
+    final invoiceNumber = _nonEmptyString(decoded['invoiceNumber']);
+    if (invoiceId == null && invoiceNumber == null) return null;
+    return Invoice(
+      id: invoiceId ?? invoiceNumber!,
+      number: invoiceNumber ?? invoiceId!,
+      createdAt: DateTime.now(),
+      userId: decoded['cashierName']?.toString() ?? 'system',
+      subtotal: 0,
+      totalTax: 0,
+      total: 0,
+    );
+  }
+
+  static String? _nonEmptyString(Object? value) {
+    if (value == null) return null;
+    final text = value.toString();
+    return text.isEmpty ? null : text;
   }
 }
