@@ -251,6 +251,18 @@ class ActivationSessionViewModel extends ChangeNotifier {
       if (phase2Plus.contains(status)) {
         _controlledSaleSucceeded = true;
       }
+      // R3-001/R4-001: statuses at or past EVIDENCE_ACKED prove the
+      // reconnect-sync phase already succeeded on a prior run. Restoring
+      // this gate prevents a resumed activation from deadlocking on a
+      // phase that is already complete.
+      const syncComplete = {
+        'EVIDENCE_ACKED',
+        'ACTIVATED',
+        'ACTIVATED_WITH_WARNING',
+      };
+      if (syncComplete.contains(status)) {
+        _reconnectSyncSucceeded = _controlledSaleSucceeded ?? false;
+      }
     }
 
     notifyListeners();
