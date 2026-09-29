@@ -67,7 +67,7 @@ cross-surface contracts).
 ### Untested
 13. Desktop (Windows/Linux) build with unconditional `mobile_scanner` import — no CI job; on-device scan, Escape binding, `errorBuilder` branch unverified.
 14. No integration test covers POS push → inbound customer-delta ordering (root of gap #1).
-15. ~~`npm run test:db` execution not confirmed~~ — RESUELTO (2026-09-29): confirmado en CI (.github/workflows/admin-backend-ci.yml) y ejecutado localmente en la rama feat/soho-go-live-readiness.
+15. ~~`npm run test:db` execution not confirmed~~ — RESUELTO (2026-09-29): confirmado en CI (.github/workflows/admin-backend-ci.yml) y ejecutado localmente en la rama feat/soho-go-live-readiness (48 suites / 277 tests, verdes).
 
 ### Minor hygiene
 16. `sync:pull` scope on write-ack routes (`inbound-sync.controller.ts:124,144`) — confirm naming intent.

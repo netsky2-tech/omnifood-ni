@@ -80,8 +80,14 @@ export const MENU_IMPORT_TEMPLATE_PATH = "/onboarding/menu-import/template";
 /** Download filename served by the template endpoint. */
 export const MENU_IMPORT_TEMPLATE_FILENAME = "plantilla_menu.xlsx";
 
-/** Client-side size guard (~4 MB) for the uploaded workbook. */
-export const MENU_IMPORT_MAX_FILE_BYTES = 4 * 1024 * 1024;
+/**
+ * Client-side size guard for the uploaded workbook.
+ * The server caps the base64 payload at 5 MiB of characters (`MAX_BASE64_LENGTH`
+ * in `apps/admin_backend/src/modules/onboarding/services/menu-import.service.ts`),
+ * which is only ~3.75 MiB of binary. 3.5 MiB binary encodes to ~4.67 MiB base64,
+ * safely under that ceiling.
+ */
+export const MENU_IMPORT_MAX_FILE_BYTES = 3.5 * 1024 * 1024;
 
 /** Sheet + Excel row where an import problem was found. */
 export interface MenuImportRowIssue {
