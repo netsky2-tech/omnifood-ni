@@ -847,7 +847,8 @@ class SyncService {
       if (tx.terminalId != null) 'terminalId': tx.terminalId,
       if (tx.programVersion != null) 'programVersion': tx.programVersion,
       if (tx.rewardVersion != null) 'rewardVersion': tx.rewardVersion,
-      'commercialSnapshot': ?commercialSnapshot,
+      if (commercialSnapshot != null)
+        'commercialSnapshot': commercialSnapshot,
       'origin': tx.origin ?? 'POS',
       'occurredAt': DateTime.fromMillisecondsSinceEpoch(
         tx.occurredAt ?? tx.createdAt,
