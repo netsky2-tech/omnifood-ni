@@ -7,6 +7,7 @@ import {
   PointTransactionType,
 } from '../../customers/entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../entities/customer-loyalty-account-projection.entity';
+import { Customer } from '../../customers/entities/customer.entity';
 
 interface TotalUnitsQueryResult {
   total?: string | number | null;
@@ -49,6 +50,46 @@ export interface AppendLoyaltyTxDto {
   origin?: string;
   occurredAt?: Date;
   reason?: string;
+}
+
+/**
+ * Batch 11a: the cloud loyalty balance is ledger-authoritative. Recomputes
+ * `customers.points_balance` as COALESCE(SUM(customer_point_transactions.points), 0)
+ * scoped to tenant + customer and persists it on the caller's tenant-bound
+ * manager. SUM runs over the `points` double column (NOT `units`, which is
+ * int and out of scope).
+ *
+ * Must always run inside the caller's tenant transaction (issue #512: the
+ * bound manager is the only access path). Returns the saved customer, or
+ * null when the customer row does not exist yet (e.g. an offline POS pushed
+ * a ledger row for a customer not synced to the cloud): the ledger row is
+ * still recorded; only the balance-column writeback is skipped.
+ */
+export async function recomputeCustomerPointsBalance(
+  manager: EntityManager,
+  tenantId: string,
+  customerId: string,
+): Promise<Customer | null> {
+  const txRepo = manager.getRepository(CustomerPointTransaction);
+  const result = await txRepo
+    .createQueryBuilder('tx')
+    .select('COALESCE(SUM(tx.points), 0)', 'total')
+    .where('tx.tenant_id = :tenantId', { tenantId })
+    .andWhere('tx.customer_id = :customerId', { customerId })
+    .getRawOne<TotalUnitsQueryResult>();
+
+  const total = Number(result?.total ?? 0);
+
+  const customerRepo = manager.getRepository(Customer);
+  const customer = await customerRepo.findOne({
+    where: { id: customerId, tenant_id: tenantId },
+  });
+  if (!customer) {
+    return null;
+  }
+
+  customer.points_balance = total;
+  return customerRepo.save(customer);
 }
 
 @Injectable()
@@ -154,8 +195,38 @@ export class LoyaltyLedgerService {
           );
         }
 
+        // Batch 11a: the global balance column is derived from the ledger
+        // inside the SAME tenant transaction. The duplicate-idempotency-key
+        // early return above intentionally skips this recompute: the original
+        // append already recomputed the balance within its committed
+        // transaction, so replays stay read-only and cannot double-count.
+        await this.recomputeCustomerBalance(
+          dto.tenantId,
+          dto.customerId,
+          manager,
+        );
+
         return savedTx;
       },
+    );
+  }
+
+  /**
+   * Batch 11a: public self-heal entry point for the global balance column.
+   * With a manager, it recomputes on the caller's tenant-bound unit; without
+   * one, it opens its own tenant transaction. `rebuildProjection` and
+   * `appendTransaction` both route through the same shared recompute.
+   */
+  async recomputeCustomerBalance(
+    tenantId: string,
+    customerId: string,
+    manager?: EntityManager,
+  ): Promise<Customer | null> {
+    if (manager) {
+      return recomputeCustomerPointsBalance(manager, tenantId, customerId);
+    }
+    return runInTenantTransaction(this.dataSource, tenantId, (bound) =>
+      recomputeCustomerPointsBalance(bound, tenantId, customerId),
     );
   }
 
@@ -208,7 +279,13 @@ export class LoyaltyLedgerService {
           });
         }
 
-        return projectionRepo.save(projection);
+        await projectionRepo.save(projection);
+
+        // Batch 11a: self-heal path — operators rebuilding a projection also
+        // refresh the ledger-authoritative global balance column.
+        await recomputeCustomerPointsBalance(manager, tenantId, customerId);
+
+        return projection;
       },
     );
   }

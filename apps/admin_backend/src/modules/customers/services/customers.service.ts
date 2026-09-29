@@ -9,6 +9,9 @@ import {
   LoyaltyTransactionOrigin,
 } from '../entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../../loyalty/entities/customer-loyalty-account-projection.entity';
+import {
+  recomputeCustomerPointsBalance,
+} from '../../loyalty/services/loyalty-ledger.service';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import { CustomerQueryDto } from '../dto/customer-query.dto';
@@ -168,8 +171,17 @@ export class CustomersService {
         });
 
         const savedTx = await txRepo.save(transaction);
-        customer.points_balance = newBalance;
-        const savedCust = await manager.getRepository(Customer).save(customer);
+        // Batch 11a: the balance column is ledger-authoritative. The ADJUST
+        // ledger row was just inserted, so both ingestion paths (backoffice
+        // adjust and POS append) share ONE balance semantic: recompute over
+        // SUM(points) instead of a delta write, which also self-heals a
+        // previously stale column.
+        const savedCust =
+          (await recomputeCustomerPointsBalance(
+            manager,
+            tenantId,
+            customerId,
+          )) ?? customer;
 
         if (dto.loyalty_program_id) {
           try {

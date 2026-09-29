@@ -38,6 +38,7 @@ describe('CustomersService', () => {
     find: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
+    createQueryBuilder: jest.fn(),
   };
   const mgrProjectionRepo = {
     findOne: jest.fn(),
@@ -120,6 +121,14 @@ describe('CustomersService', () => {
     mgrPointTxRepo.save
       .mockReset()
       .mockImplementation((entity: unknown) => Promise.resolve(entity));
+    // Batch 11a: the shared balance recompute reads SUM(points) from the
+    // ledger through a query builder on the bound manager.
+    mgrPointTxRepo.createQueryBuilder.mockReset().mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ total: '0' }),
+    });
 
     repo = {
       createQueryBuilder: jest.fn(),
@@ -216,18 +225,50 @@ describe('CustomersService', () => {
   it('should adjust customer points and save transaction in ledger', async () => {
     const customer = mockCustomer({ points_balance: 100 });
     mgrCustomerRepo.findOne.mockResolvedValue(customer);
+    // Batch 11a: the recompute reads SUM(points) from the ledger (mocked to
+    // include the just-inserted ADJUST row) and writes the column from it.
+    const sumQb = mgrPointTxRepo.createQueryBuilder();
+    sumQb.getRawOne.mockResolvedValue({ total: '150' });
 
     const result = await service.adjustPoints('tenant-1', 'cust-uuid-1', {
       points_delta: 50,
       reason: 'Bono de fidelidad por aniversario',
     });
 
+    expect(sumQb.select).toHaveBeenCalledWith('COALESCE(SUM(tx.points), 0)', 'total');
+    expect(sumQb.where).toHaveBeenCalledWith('tx.tenant_id = :tenantId', {
+      tenantId: 'tenant-1',
+    });
+    expect(sumQb.andWhere).toHaveBeenCalledWith(
+      'tx.customer_id = :customerId',
+      { customerId: 'cust-uuid-1' },
+    );
     expect(result.customer.points_balance).toBe(150);
     expect(result.transaction.points).toBe(50);
     expect(result.transaction.balance_after).toBe(150);
     expect(result.transaction.reason).toBe('Bono de fidelidad por aniversario');
     expect(mgrPointTxRepo.save).toHaveBeenCalled();
-    expect(mgrCustomerRepo.save).toHaveBeenCalledWith(customer);
+    expect(mgrCustomerRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ points_balance: 150 }),
+    );
+  });
+
+  it('adjust self-heals a stale balance column from the ledger (Batch 11a)', async () => {
+    const customer = mockCustomer({ points_balance: 100 });
+    mgrCustomerRepo.findOne.mockResolvedValue(customer);
+    // Ledger says 160 while the stale column says 100: the ledger wins.
+    mgrPointTxRepo
+      .createQueryBuilder()
+      .getRawOne.mockResolvedValue({ total: '160' });
+
+    const result = await service.adjustPoints('tenant-1', 'cust-uuid-1', {
+      points_delta: 50,
+      reason: 'Ajuste con columna desactualizada',
+    });
+
+    expect(result.customer.points_balance).toBe(160);
+    // The ADJUST row keeps its delta-based balance_after snapshot.
+    expect(result.transaction.balance_after).toBe(150);
   });
 
   it('binds the findOne access through the tenant transaction (issue #512 slice 4)', async () => {

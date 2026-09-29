@@ -52,6 +52,16 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
     }),
   };
 
+  interface FakeLoyaltyQueryBuilder {
+    select(): FakeLoyaltyQueryBuilder;
+    where(sql: string, params: { tenantId: string }): FakeLoyaltyQueryBuilder;
+    andWhere(
+      sql: string,
+      params: { customerId: string },
+    ): FakeLoyaltyQueryBuilder;
+    getRawOne(): Promise<{ total: number }>;
+  }
+
   const pointTxRepo = {
     find: jest.fn(
       (options: { where: { tenant_id?: string; customer_id?: string } }) => {
@@ -77,6 +87,33 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
     save: jest.fn((entity: CustomerPointTransaction) => {
       dbTransactions.push({ ...entity });
       return Promise.resolve(entity);
+    }),
+    // Batch 11a: the ledger-authoritative balance recompute reads
+    // SUM(points) through this chain. Faithful in-memory implementation so
+    // the fixture exercises the real production query shape.
+    createQueryBuilder: jest.fn(() => {
+      const state: { tenantId?: string; customerId?: string } = {};
+      const chain: FakeLoyaltyQueryBuilder = {
+        select: () => chain,
+        where: (_sql, params) => {
+          state.tenantId = params.tenantId;
+          return chain;
+        },
+        andWhere: (_sql, params) => {
+          state.customerId = params.customerId;
+          return chain;
+        },
+        getRawOne: async () => ({
+          total: dbTransactions
+            .filter(
+              (t) =>
+                t.tenant_id === state.tenantId &&
+                t.customer_id === state.customerId,
+            )
+            .reduce((sum, t) => sum + Number(t.points ?? 0), 0),
+        }),
+      };
+      return chain;
     }),
   };
 
@@ -189,6 +226,24 @@ describe('Customer Loyalty Points Module (E2E / Integration)', () => {
         created_at: new Date(),
         updated_at: new Date(),
       } as Customer);
+
+      // Batch 11a: customers.points_balance is ledger-authoritative
+      // (SUM(points)). The seeded 100.0 balance is backed by an opening
+      // ledger row, mirroring the production invariant that every balance
+      // change is recorded in customer_point_transactions.
+      dbTransactions.push({
+        id: 'pt-opening-cust-1',
+        tenant_id: 'tenant-A',
+        customer_id: 'cust-1',
+        type: PointTransactionType.ADJUST,
+        transaction_type: PointTransactionType.ADJUST,
+        points: 100.0,
+        units: 100,
+        balance_after: 100.0,
+        conversion_rate: 0.1,
+        reason: 'Saldo inicial',
+        created_at: new Date(),
+      } as CustomerPointTransaction);
 
       const token = createToken('tenant-A', UserRole.OWNER);
 
