@@ -5,11 +5,18 @@ import {
   fetchRecipeSnapshot,
   createRecipeVersion,
   fetchInsumos,
+  createInsumo,
+  updateInsumo,
   fetchPendingSuggestions,
   publishRecipeVersion,
   suggestionsQueryKey,
+  insumosQueryKey,
 } from './recipes-api';
-import type { CreateRecipeVersionInput } from './types';
+import type {
+  CreateRecipeVersionInput,
+  CreateInsumoInput,
+  UpdateInsumoInput,
+} from './types';
 
 export function useActiveRecipe(productId: string, enabled = true) {
   const tenantId = useTenantId();
@@ -48,9 +55,36 @@ export function useCreateRecipeVersion() {
 export function useInsumos() {
   const tenantId = useTenantId();
   return useQuery({
-    queryKey: ['recipes', tenantId, 'insumos'],
+    queryKey: insumosQueryKey(tenantId),
     queryFn: ({ signal }) => fetchInsumos({ signal }),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useCreateInsumo() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: (input: CreateInsumoInput) => createInsumo(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: insumosQueryKey(tenantId) });
+      queryClient.invalidateQueries({ queryKey: ['inventory', tenantId] });
+    },
+  });
+}
+
+export function useUpdateInsumo() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateInsumoInput }) =>
+      updateInsumo(id, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: insumosQueryKey(tenantId) });
+      queryClient.invalidateQueries({ queryKey: ['inventory', tenantId] });
+    },
   });
 }
 

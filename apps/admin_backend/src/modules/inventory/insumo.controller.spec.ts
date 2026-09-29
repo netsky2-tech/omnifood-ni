@@ -4,7 +4,12 @@ import { InsumoController } from './insumo.controller';
 import { Insumo } from './entities/insumo.entity';
 
 describe('InsumoController', () => {
-  const insumoRepo = { find: jest.fn() };
+  const insumoRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn((val: unknown) => val),
+    save: jest.fn(async (val: unknown) => ({ id: 'new-id', ...(val as object) })),
+  };
   const manager = {
     query: jest.fn(),
     getRepository: jest.fn(() => insumoRepo),
@@ -22,6 +27,7 @@ describe('InsumoController', () => {
     insumoRepo.find.mockResolvedValue([
       { id: 'ins-1', tenant_id: 'tenant-A', name: 'Arroz', is_active: true },
     ]);
+    insumoRepo.findOne.mockResolvedValue(null);
   });
 
   const buildController = () =>
@@ -73,5 +79,104 @@ describe('InsumoController', () => {
     expect(dataSource.transaction).not.toHaveBeenCalled();
     expect(manager.query).not.toHaveBeenCalled();
     expect(insumoRepo.find).not.toHaveBeenCalled();
+  });
+
+  describe('create (POST /insumos)', () => {
+    const validDto = {
+      name: 'Café Grano',
+      purchaseUom: 'LB',
+      consumptionUom: 'G',
+      conversionFactor: 454,
+      parLevel: 5000,
+      minStock: 1000,
+      averageCost: 350,
+    };
+
+    it('creates an insumo bound to the tenant transaction', async () => {
+      insumoRepo.findOne.mockResolvedValue(null);
+
+      const result = await buildController().create(validDto, 'tenant-A');
+
+      expect(result).toMatchObject({
+        tenant_id: 'tenant-A',
+        name: 'Café Grano',
+        purchaseUom: 'LB',
+        consumptionUom: 'G',
+        conversionFactor: 454,
+        is_active: true,
+      });
+      expect(insumoRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant_id: 'tenant-A',
+          name: 'Café Grano',
+          conversionFactor: 454,
+        }),
+      );
+      expect(insumoRepo.save).toHaveBeenCalled();
+    });
+
+    it('throws ConflictException when insumo name already exists for tenant', async () => {
+      insumoRepo.findOne.mockResolvedValue({
+        id: 'existing-id',
+        name: 'Café Grano',
+      });
+
+      await expect(
+        buildController().create(validDto, 'tenant-A'),
+      ).rejects.toThrow(/Ya existe un insumo con el nombre/);
+
+      expect(insumoRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update (PUT /insumos/:id)', () => {
+    it('updates an existing insumo fields', async () => {
+      insumoRepo.findOne.mockResolvedValue({
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+        name: 'Leche',
+        purchaseUom: 'L',
+        consumptionUom: 'ML',
+        conversionFactor: 1000,
+      });
+
+      const result = await buildController().update(
+        'ins-1',
+        { parLevel: 20000, averageCost: 55 },
+        'tenant-A',
+      );
+
+      expect(result).toMatchObject({
+        parLevel: 20000,
+        averageCost: 55,
+      });
+      expect(insumoRepo.save).toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when insumo is not found for tenant', async () => {
+      insumoRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        buildController().update('ins-missing', { name: 'Otro' }, 'tenant-A'),
+      ).rejects.toThrow(/no encontrado/);
+    });
+
+    it('throws ConflictException when updating name to an existing other insumo', async () => {
+      insumoRepo.findOne
+        .mockResolvedValueOnce({
+          id: 'ins-1',
+          tenant_id: 'tenant-A',
+          name: 'Leche',
+        })
+        .mockResolvedValueOnce({
+          id: 'ins-2',
+          tenant_id: 'tenant-A',
+          name: 'Café',
+        });
+
+      await expect(
+        buildController().update('ins-1', { name: 'Café' }, 'tenant-A'),
+      ).rejects.toThrow(/Ya existe otro insumo con el nombre/);
+    });
   });
 });
