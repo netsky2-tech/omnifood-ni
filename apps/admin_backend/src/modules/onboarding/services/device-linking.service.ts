@@ -60,7 +60,7 @@ export const DUMMY_LINKING_CODE_HASH =
  * session-scoped.
  */
 export const LINKING_CLAIM_FLAG_SQL =
-  "SELECT set_config('app.linking_claim', $1, true)";
+  "SELECT set_config('app.linking_claim', $1, true), set_config('app.tenant_id', '00000000-0000-0000-0000-000000000000', true)";
 
 /**
  * Candidate set for the claim scan. Deliberately bounded: rows must be
