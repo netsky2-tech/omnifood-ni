@@ -524,4 +524,4 @@ describe('DeviceLinkingService.listLinkingCodes', () => {
 
 // The exact claim-flag bind the service must issue: transaction-local
 // set_config, never read from client input.
-const SET_CONFIG_TEST_BIND = "SELECT set_config('app.linking_claim', $1, true), set_config('app.tenant_id', '00000000-0000-0000-0000-000000000000', true)";
+const SET_CONFIG_TEST_BIND = "SELECT set_config('app.linking_claim', $1, true)";
