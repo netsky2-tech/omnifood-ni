@@ -31,7 +31,7 @@ Remediate Batch 8 of the audit with FULL scope approved by the user: H5 (credit-
 
 ## Follow-ups (non-blocking)
 1. DSI-6: outbound device batches hold CREDIT_NOTE records (whole-batch 403 otherwise); unblock pending DSI-6 authorization auditing spec.
-2. Numbering parity open: POS shares sales DGI cursor; backend admin credit notes use CREDIT_NOTE_SERIES — fiscal/product decision.
+2. Numbering parity: POS shares sales DGI cursor; backend admin credit notes use CREDIT_NOTE_SERIES — fiscal/product decision. **RESUELTO (2026-09-29)** — el fundador decidió mantener el cursor único del POS (opción 1, sin serie NC separada); ver registro en `odd/tasks/go-live-decisions.md` (DEC-1). Consecuencia aceptada: formatos de NC distintos entre POS y backoffice; revisar antes de multi-terminal o canal mixto.
 3. Scan flow calls selectCustomer twice (identifyCustomer already selects) → loyalty re-eval runs twice; harmless but worth a cleanup.
 4. Escape keybinding + camera errorBuilder branch lack automated coverage; on-device physical scan validation pending.
 5. build_runner caution: --delete-conflicting-outputs with --build-filter in a dirty tree deleted 89 clean generated files once (restored byte-identical); audit `git status | awk '$1=="D"'` after any filtered regen.
