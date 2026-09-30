@@ -9,6 +9,19 @@
 - **Compras**: alta manual en web + historial (NO ciclo PO completo). Recibir mercadería física sigue en el POS.
 - **Alertas**: alcance = nuestras 3 pantallas (Insumos, Compras, Importar menú), con variantes semánticas success/warning/danger/info al estilo industria, respetando NHILOS standard y system design (el componente `Badge` ya tiene success/warning/info; `Alert` solo tiene default|destructive).
 
+## Status (2026-09-30)
+- [x] Slice 1 — Compras web: issue #712, PR #713 MERGED (bd40a82e), CI verde en main
+- [x] Slice 2 — Alertas variantes (success/warning/info) + badge Inactivo → secondary
+- [x] Slice 3 — UoM desde catálogo UOM + requeridos reales sin defaults "UN"
+- [x] Slice 4 — Amendment standard §17.5/§26.1/§40/§48/§54/§57 + template (solo inserciones)
+- [x] Slice 5 — gentle-ai-verify APPROVE WITH NOTES → 4 findings cerrados (messageLocale ES sin UUID, ## 26.1, previewKey honesto, shadcn Select) + e2e device 21/21
+
+## Pendientes explícitos (no deuda oculta)
+- Sync POS→cloud de proveedores (selector web arranca vacío con alta inline)
+- Validación de alta de compra en dispositivo físico SOHO
+- Residuos pre-existentes: `correctPurchase`/preview messages en inglés con UUID (rutas humanas viejas); ~488 throws en inglés repo-wide
+- Interacción visual Radix Select/dialog no verificada en navegador (tests de comportamiento ✓)
+
 ## Slices
 - [x] Slice 1 — Compras web: `GET /suppliers` + `POST /inventory/purchases/manual` (humano, OWNER/MANAGER, reutiliza `recordPurchase` con todo su camino SERIALIZABLE/kardex/CPP/unique-invoice) + form de alta en pestaña Compras con selects (proveedor/insumo) y preview de CPP (+1.7). Tests backend + FE. **Done 2026-09-30 — ver 'Evidence — Slice 1 implementación'.**
 - [ ] Slice 2 — Alertas variantes semánticas: extender componente `Alert` (default|destructive|success|warning|info) y aplicar en las 3 pantallas (wizard éxito→success/errores→destructive; insumos banner→danger; compras truncación→warning/error→danger). Badge Inactivo: destructive→neutro (§42.1/§26).
