@@ -16,6 +16,11 @@
 - [x] Slice 4 — Amendment standard §17.5/§26.1/§40/§48/§54/§57 + template (solo inserciones)
 - [x] Slice 5 — gentle-ai-verify APPROVE WITH NOTES → 4 findings cerrados (messageLocale ES sin UUID, ## 26.1, previewKey honesto, shadcn Select) + e2e device 21/21
 
+## Follow-ups de field testing (founder, 2026-09-30 post-release)
+- [ ] BUG (bloqueante): preview CPP muestra `id should not be empty. id must be a string` al digitar N° de factura → causa raíz: preview route valida con `PurchaseDocumentDto` (id @IsNotEmpty) pero el form manual no envía id (server-side uuid al commit). Fix en curso en branch `fix/soho-purchase-preview-feedback`: PreviewPurchaseDto sin id.
+- [ ] Mejora: presets de factor de conversión en form de insumos (§40 human defaults — pares UoM comunes, reversible, nunca auto-aplicado). En curso en la misma rama.
+- [ ] Feature: página de gestión de proveedores (hoy solo visibles desde el select del form de compras) — listar/buscar/editar/desactivar; falta `PUT /inventory/suppliers/:id` en backend. Pendiente de delegar.
+
 ## Pendientes explícitos (no deuda oculta)
 - Sync POS→cloud de proveedores (selector web arranca vacío con alta inline)
 - Validación de alta de compra en dispositivo físico SOHO
