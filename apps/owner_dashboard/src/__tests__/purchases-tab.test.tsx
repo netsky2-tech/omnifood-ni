@@ -456,6 +456,88 @@ describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
     );
   });
 
+  // Bug fix (founder real-device test, 2026-09-30): typing the invoice number
+  // completes the preview payload. The preview route — which never commits a
+  // document and never carries the server-generated purchase id — now
+  // validates with a preview-specific DTO, so a settled payload RESOLVES the
+  // projection. Regression guards: (1) the preview payload never carries an
+  // `id`, (2) when a preview fails the CPP card renders the mapped error path
+  // (getApiErrorMessage in purchases-form.tsx — never a raw err.message or
+  // [object Object], §18.2/AP-10) and keeps the submit gate closed, and (3)
+  // the card recovers and renders the projected cost once a preview succeeds
+  // for the current inputs.
+  it("fires the preview without an id, gates submit on preview errors and recovers", async () => {
+    // The form fires a preview on every settled payload (each invoice-number
+    // keystroke settles one) and drops stale in-flight responses via its seq
+    // guard, so only the LATEST deferred matters: rejectCurrent fails the
+    // active attempt; resolveCurrent recovers the active attempt.
+    const pending: Array<{
+      resolve: (value: typeof PREVIEW_RESULT) => void;
+      reject: (err: unknown) => void;
+    }> = [];
+    vi.mocked(fetchPurchasePreview).mockImplementation(
+      () =>
+        new Promise((resolve, reject) => {
+          pending.push({ resolve, reject });
+        }),
+    );
+    const rejectCurrent = (err: unknown) => {
+      pending.pop()?.reject(err);
+    };
+    const resolveCurrent = (value: typeof PREVIEW_RESULT) => {
+      pending.pop()?.resolve(value);
+    };
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await openAndFillForm(user);
+
+    // The settled payload fires the preview with exactly the
+    // ManualPurchaseInput contract: no document id (the manual route
+    // generates it server-side).
+    await waitFor(() => {
+      expect(fetchPurchasePreview).toHaveBeenCalled();
+    });
+    for (const call of vi.mocked(fetchPurchasePreview).mock.calls) {
+      expect(call[0]).not.toHaveProperty("id");
+    }
+
+    // The active (latest) attempt fails: the mapped error path renders (never
+    // a raw [object Object]) and the submit gate stays closed.
+    rejectCurrent({
+      status: 400,
+      responseBody: {
+        message: ["id should not be empty", "id must be a string"],
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-preview")).toHaveTextContent(
+        /No se pudo calcular|id should not be empty/i,
+      );
+    });
+    expect(screen.getByTestId("purchases-form-preview")).not.toHaveTextContent(
+      "[object Object]",
+    );
+    expect(screen.getByTestId("purchases-form-submit")).toBeDisabled();
+
+    // The owner edits an input (quantity 2 → 3): a new preview fires for the
+    // changed payload and the projected cost renders when it resolves — the
+    // card recovers without closing the form.
+    await user.type(screen.getByTestId("purchases-form-quantity"), "3");
+    await waitFor(() => {
+      expect(vi.mocked(fetchPurchasePreview).mock.calls.length).toBeGreaterThan(
+        1,
+      );
+    });
+    resolveCurrent(PREVIEW_RESULT);
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("purchases-preview-projected"),
+      ).toHaveTextContent("C$83.33");
+    });
+    expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+  });
+
   it("submits through the manual route, toasts, resets and keeps the panel open (§19.3)", async () => {
     const mutateAsync = mockCreatePurchase();
     const user = userEvent.setup();

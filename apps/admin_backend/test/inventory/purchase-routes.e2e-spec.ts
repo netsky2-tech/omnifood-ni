@@ -137,6 +137,30 @@ const officialModePurchasePayload = {
   fxRateMode: 'official' as const,
 };
 
+// Preview payload (POST /inventory/purchase): the PreviewPurchaseDto wall
+// forbids `id` (generated server-side at commit) and `fiscalAuthorizationCode`
+// (consumed only by the commit path), so the human preview requests below
+// carry exactly the fields the projection reads.
+const validPurchasePreviewPayload = {
+  insumoId: 'ins-1',
+  supplierId: 'sup-1',
+  invoiceNumber: 'INV-1001',
+  quantity: 2,
+  unitCost: 10,
+  currency: 'USD' as const,
+  invoiceDate: '2026-01-03',
+  entryTimestamp: '2026-01-03T08:15:00.000Z',
+  bcnRate: 36.5,
+};
+
+const officialModePurchasePreviewPayload = {
+  ...validPurchasePreviewPayload,
+  invoiceNumber: 'INV-2001',
+  invoiceDate: '2026-01-06',
+  entryTimestamp: '2026-01-06T08:15:00.000Z',
+  fxRateMode: 'official' as const,
+};
+
 const INVENTORY_API_PREFIX = '/api/inventory';
 
 // Device transport fixture (ST-03, issue #478): POST /inventory/purchases is
@@ -417,7 +441,7 @@ describe('Inventory purchase routes (integration)', () => {
   it('returns 401 for purchase preview when no bearer token is provided', async () => {
     await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchase`)
-      .send(validPurchasePayload)
+      .send(validPurchasePreviewPayload)
       .expect(401);
 
     expect(repositoryFindOne).not.toHaveBeenCalled();
@@ -526,7 +550,7 @@ describe('Inventory purchase routes (integration)', () => {
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
-      .send(validPurchasePayload)
+      .send(validPurchasePreviewPayload)
       .expect(401);
 
     const body = response.body as UnauthorizedResponseBody;
@@ -541,7 +565,7 @@ describe('Inventory purchase routes (integration)', () => {
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        ...validPurchasePayload,
+        ...validPurchasePreviewPayload,
         invoiceNumber: '   ',
       })
       .expect(400);
@@ -549,24 +573,44 @@ describe('Inventory purchase routes (integration)', () => {
     expect(repositoryFindOne).not.toHaveBeenCalled();
   });
 
-  it('returns 400 for purchase preview when fiscalAuthorizationCode is blank after trimming', async () => {
-    const token = signToken();
-
-    const response = await request(app.getHttpServer())
-      .post(`${INVENTORY_API_PREFIX}/purchase`)
-      .set('Authorization', `Bearer ${token}`)
+  // Re-pointed: the preview DTO no longer carries fiscalAuthorizationCode at
+  // all (it is consumed only by the commit path), so the blank-fiscal-code
+  // rule now lives on the device posting route (PurchaseDocumentDto) and is
+  // asserted there.
+  it('returns 400 for purchase posting when fiscalAuthorizationCode is blank after trimming', async () => {
+    await request(app.getHttpServer())
+      .post(`${INVENTORY_API_PREFIX}/purchases`)
+      .set('Authorization', deviceAuth())
       .send({
         ...validPurchasePayload,
         fiscalAuthorizationCode: '   ',
       })
       .expect(400);
 
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for purchase preview when the payload carries a client-supplied document id', async () => {
+    // PreviewPurchaseDto forbids `id`: the manual purchase document id is
+    // generated server-side at commit, so a posting-shaped payload must be
+    // rejected by the preview wall (forbidNonWhitelisted).
+    const token = signToken();
+
+    const response = await request(app.getHttpServer())
+      .post(`${INVENTORY_API_PREFIX}/purchase`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        ...validPurchasePreviewPayload,
+        id: 'purchase-doc-1',
+      })
+      .expect(400);
+
     const body = response.body as BadRequestResponseBody;
     expect(body.error).toBe('Bad Request');
     expect(body.message).toEqual(
-      expect.arrayContaining(['fiscalAuthorizationCode should not be empty']),
+      expect.arrayContaining(['property id should not exist']),
     );
-    expect(repositoryFindOne).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
   });
 
   it('accepts an authenticated manager purchase preview request and forwards tenant context', async () => {
@@ -575,7 +619,7 @@ describe('Inventory purchase routes (integration)', () => {
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
-      .send(validPurchasePayload)
+      .send(validPurchasePreviewPayload)
       .expect(201);
 
     const body = response.body as PurchasePreviewResponseBody;
@@ -610,7 +654,7 @@ describe('Inventory purchase routes (integration)', () => {
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        ...officialModePurchasePayload,
+        ...officialModePurchasePreviewPayload,
         bcnRate: undefined,
       })
       .expect(201);
@@ -643,7 +687,7 @@ describe('Inventory purchase routes (integration)', () => {
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        ...officialModePurchasePayload,
+        ...officialModePurchasePreviewPayload,
         invoiceDate: '2026-01-08',
         entryTimestamp: '2026-01-08T08:15:00.000Z',
         bcnRate: undefined,

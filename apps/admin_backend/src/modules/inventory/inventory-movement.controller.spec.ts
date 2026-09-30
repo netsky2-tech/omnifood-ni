@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { validate } from 'class-validator';
 import type { ExecutionContext } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import type { Request } from 'express';
@@ -37,6 +38,8 @@ import type { SyncMovementsDto } from './dto/create-inventory-movement.dto';
 import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { ManualPurchaseDto } from './dto/purchase-manual.dto';
+import { PurchaseDocumentDto } from './dto/purchase-document.dto';
+import { PreviewPurchaseDto } from './dto/preview-purchase.dto';
 import { CreateSupplierDto } from './dto/supplier.dto';
 
 const handlerOf = (handlerName: string): unknown => {
@@ -239,6 +242,156 @@ describe('InventoryMovementController device transport routes', () => {
         insumoId: undefined,
         limit: 50,
       });
+    });
+  });
+
+  describe('purchase CPP preview (POST inventory/purchase — human transport)', () => {
+    it('declares POST purchase as human with OWNER/MANAGER and never the device transport', () => {
+      const handler = handlerOf('previewPurchase');
+
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(AuthGuard);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(RolesGuard);
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+        UserRole.OWNER,
+        UserRole.MANAGER,
+      ]);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).not.toContain(
+        SyncTransportGuard,
+      );
+      expect(Reflect.getMetadata(SYNC_SCOPES_KEY, handler)).toBeUndefined();
+    });
+
+    // Bug fix (founder, 2026-09-30): the preview route validated with
+    // PurchaseDocumentDto, whose @IsNotEmpty `id` the dashboard's
+    // ManualPurchaseInput never sends (the document id is generated
+    // server-side at commit). The preview is a read-only CPP projection —
+    // `previewPurchase` never reads `id` — so its DTO must not require one.
+    it('validates with the preview DTO so a payload without id is accepted', async () => {
+      const previewPurchase = jest.fn().mockResolvedValue({});
+      (
+        controller as unknown as {
+          purchaseService: { previewPurchase: unknown };
+        }
+      ).purchaseService = { previewPurchase } as never;
+      const dto = Object.assign(new PreviewPurchaseDto(), {
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'F-900',
+        quantity: 2,
+        unitCost: 50,
+        currency: 'NIO',
+        invoiceDate: '2026-09-30',
+        entryTimestamp: '2026-09-30T10:00:00.000Z',
+      });
+
+      await controller.previewPurchase(dto, 'tenant-A');
+
+      expect(previewPurchase).toHaveBeenCalledWith({
+        // No id, no fiscalAuthorizationCode: the read-only projection never
+        // consumes them (assertBatchMetadata and the fiscal code only apply
+        // to the commit path, recordPurchase).
+        id: undefined,
+        fiscalAuthorizationCode: undefined,
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'F-900',
+        quantity: 2,
+        unitCost: 50,
+        currency: 'NIO',
+        invoiceDate: '2026-09-30',
+        entryTimestamp: '2026-09-30T10:00:00.000Z',
+        fxRateMode: undefined,
+        bcnRate: undefined,
+      });
+    });
+
+    it('still forwards explicit fx rate fields when present', async () => {
+      const previewPurchase = jest.fn().mockResolvedValue({});
+      (
+        controller as unknown as {
+          purchaseService: { previewPurchase: unknown };
+        }
+      ).purchaseService = { previewPurchase } as never;
+      const dto = Object.assign(new PreviewPurchaseDto(), {
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'F-900',
+        quantity: 2,
+        unitCost: 50,
+        currency: 'USD',
+        invoiceDate: '2026-09-30',
+        entryTimestamp: '2026-09-30T10:00:00.000Z',
+        fxRateMode: 'explicit',
+        bcnRate: 36.5,
+      });
+
+      await controller.previewPurchase(dto, 'tenant-A');
+
+      expect(previewPurchase).toHaveBeenCalledWith(
+        expect.objectContaining({
+          currency: 'USD',
+          fxRateMode: 'explicit',
+          bcnRate: 36.5,
+        }),
+      );
+    });
+
+    // The preview must still fail closed on real input errors: dropping `id`
+    // relaxes NOTHING else (§18.4 — the preview wall mirrors ManualPurchaseDto
+    // minus exactly the commit-only fields).
+    it('rejects a preview DTO with quantity 0', async () => {
+      const dto = Object.assign(new PreviewPurchaseDto(), {
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'F-900',
+        quantity: 0,
+        unitCost: 50,
+        currency: 'NIO',
+        invoiceDate: '2026-09-30',
+        entryTimestamp: '2026-09-30T10:00:00.000Z',
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.map((e) => e.property)).toContain('quantity');
+    });
+
+    it('rejects a USD preview DTO without bcnRate in explicit mode', async () => {
+      const dto = Object.assign(new PreviewPurchaseDto(), {
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'F-900',
+        quantity: 2,
+        unitCost: 50,
+        currency: 'USD',
+        invoiceDate: '2026-09-30',
+        entryTimestamp: '2026-09-30T10:00:00.000Z',
+        fxRateMode: 'explicit',
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.map((e) => e.property)).toContain('bcnRate');
+    });
+
+    // Regression guard: the device transport contract keeps requiring the
+    // document id; only the preview route dropped it.
+    it('still rejects a PurchaseDocumentDto without id', async () => {
+      const dto = Object.assign(new PurchaseDocumentDto(), {
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'F-900',
+        quantity: 2,
+        unitCost: 50,
+        currency: 'NIO',
+        invoiceDate: '2026-09-30',
+        entryTimestamp: '2026-09-30T10:00:00.000Z',
+      });
+
+      const errors = await validate(dto);
+
+      expect(errors.map((e) => e.property)).toContain('id');
     });
   });
 

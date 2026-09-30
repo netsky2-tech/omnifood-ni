@@ -22,6 +22,7 @@ import {
   PurchaseDocumentDto,
 } from './dto/purchase-document.dto';
 import { ManualPurchaseDto } from './dto/purchase-manual.dto';
+import { PreviewPurchaseDto } from './dto/preview-purchase.dto';
 import { CreateSupplierDto } from './dto/supplier.dto';
 import { SyncRecipeVersionDocumentDto } from './dto/sync-recipe-version-document.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
@@ -152,17 +153,24 @@ export class InventoryMovementController {
   @Post('purchase')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  /**
+   * Read-only CPP preview for the owner dashboard's projected-cost card.
+   * The DTO is the preview-specific wall WITHOUT `id` (the manual purchase
+   * document id is generated server-side at commit — see ManualPurchaseDto)
+   * and without the batch fields `buildPreview` never reads. The commit
+   * routes (`POST /inventory/purchases` device, `POST /inventory/purchases`
+   * /manual` human) keep their own strict DTOs unchanged.
+   */
   async previewPurchase(
-    @Body() dto: PurchaseDocumentDto,
+    @Body() dto: PreviewPurchaseDto,
     @GetTenantId() tenantId: string,
   ) {
     return this.purchaseService.previewPurchase({
-      id: dto.id,
+      id: undefined,
       tenantId,
       insumoId: dto.insumoId,
       supplierId: dto.supplierId,
       invoiceNumber: dto.invoiceNumber,
-      fiscalAuthorizationCode: dto.fiscalAuthorizationCode,
       quantity: dto.quantity,
       unitCost: dto.unitCost,
       currency: dto.currency,
