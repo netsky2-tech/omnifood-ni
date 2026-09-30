@@ -118,10 +118,21 @@ function selectClaimableLinkingCodes(
   linkingCodes: LinkingCodeResponse[] | undefined,
 ): LinkingCodeResponse[] {
   if (!Array.isArray(linkingCodes)) return [];
-  return linkingCodes.filter(
+  const claimed = linkingCodes.filter(
     (code): code is LinkingCodeResponse & { deviceId: string } =>
       code.status === LinkingCodeStatus.CLAIMED && typeof code.deviceId === "string" && code.deviceId !== "",
   );
+  // Only show the most recent claimed code: older claimed codes are from
+  // previous linking sessions and would confuse the operator with stale
+  // terminal IDs that no longer match this device.
+  if (claimed.length === 0) return [];
+  const sorted = [...claimed].sort((a, b) => {
+    const aTime = new Date(a.claimedAt ?? a.createdAt).getTime();
+    const bTime = new Date(b.claimedAt ?? b.createdAt).getTime();
+    return bTime - aTime;
+  });
+  const mostRecent = sorted[0];
+  return mostRecent ? [mostRecent] : [];
 }
 
 export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
