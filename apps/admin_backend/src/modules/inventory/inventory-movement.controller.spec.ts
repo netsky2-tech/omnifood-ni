@@ -40,7 +40,11 @@ import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { ManualPurchaseDto } from './dto/purchase-manual.dto';
 import { PurchaseDocumentDto } from './dto/purchase-document.dto';
 import { PreviewPurchaseDto } from './dto/preview-purchase.dto';
-import { CreateSupplierDto } from './dto/supplier.dto';
+import {
+  CreateSupplierDto,
+  UpdateSupplierDto,
+  ListSuppliersQueryDto,
+} from './dto/supplier.dto';
 
 const handlerOf = (handlerName: string): unknown => {
   const handler = Object.getOwnPropertyDescriptor(
@@ -451,6 +455,24 @@ describe('InventoryMovementController device transport routes', () => {
       );
     });
 
+    it('declares PUT suppliers/:id as human with OWNER/MANAGER', () => {
+      const handler = handlerOf('updateSupplier');
+
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        AuthGuard,
+      );
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        RolesGuard,
+      );
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+        UserRole.OWNER,
+        UserRole.MANAGER,
+      ]);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).not.toContain(
+        SyncTransportGuard,
+      );
+    });
+
     it('delegates the manual purchase to recordPurchase with a server-generated id and the bound tenant', async () => {
       const recordPurchase = jest.fn().mockResolvedValue({});
       (
@@ -513,7 +535,7 @@ describe('InventoryMovementController device transport routes', () => {
       });
     });
 
-    it('delegates the supplier list read with the bound tenant', async () => {
+    it('delegates the supplier list read with the bound tenant and query flags', async () => {
       const listSuppliers = jest.fn().mockResolvedValue([]);
       (
         controller as unknown as {
@@ -521,9 +543,43 @@ describe('InventoryMovementController device transport routes', () => {
         }
       ).purchaseService = { listSuppliers } as never;
 
-      await controller.listSuppliers('tenant-A');
+      const query = Object.assign(new ListSuppliersQueryDto(), {
+        includeInactive: true,
+      });
 
-      expect(listSuppliers).toHaveBeenCalledWith({ tenantId: 'tenant-A' });
+      await controller.listSuppliers('tenant-A', query);
+
+      expect(listSuppliers).toHaveBeenCalledWith({
+        tenantId: 'tenant-A',
+        includeInactive: true,
+      });
+    });
+
+    it('delegates supplier update with the bound tenant and route params', async () => {
+      const updateSupplier = jest.fn().mockResolvedValue({ id: 'sup-1' });
+      (
+        controller as unknown as {
+          purchaseService: { updateSupplier: unknown };
+        }
+      ).purchaseService = { updateSupplier } as never;
+
+      const dto = Object.assign(new UpdateSupplierDto(), {
+        name: 'Nuevo Nombre',
+        phone: '8888-7777',
+        isActive: false,
+      });
+
+      await controller.updateSupplier('sup-1', dto, 'tenant-A');
+
+      expect(updateSupplier).toHaveBeenCalledWith({
+        id: 'sup-1',
+        tenantId: 'tenant-A',
+        name: 'Nuevo Nombre',
+        phone: '8888-7777',
+        contactPerson: undefined,
+        creditTerms: undefined,
+        isActive: false,
+      });
     });
   });
 

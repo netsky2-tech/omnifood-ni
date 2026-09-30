@@ -1269,6 +1269,24 @@ describe('InventoryPurchaseService', () => {
       expect(dataSource.getRepository).not.toHaveBeenCalled();
     });
 
+    it('lists all suppliers including inactive when includeInactive is true', async () => {
+      manager.find.mockResolvedValue([
+        { id: 'sup-1', name: 'Proveedor Activo', is_active: true },
+        { id: 'sup-2', name: 'Proveedor Inactivo', is_active: false },
+      ]);
+
+      const result = await service.listSuppliers({
+        tenantId: 'tenant-A',
+        includeInactive: true,
+      });
+
+      expect(result).toHaveLength(2);
+      expect(manager.find).toHaveBeenCalledWith(Supplier, {
+        where: { tenant_id: 'tenant-A' },
+        order: { name: 'ASC' },
+      });
+    });
+
     it('creates a supplier bound to the requesting tenant with only the name required', async () => {
       manager.create = jest.fn(
         (_entity: unknown, payload: Record<string, unknown>) => payload,
@@ -1313,6 +1331,102 @@ describe('InventoryPurchaseService', () => {
         service.createSupplier({ tenantId: '  ', name: 'Proveedor' }),
       ).rejects.toThrow(BadRequestException);
       expect(transaction).not.toHaveBeenCalled();
+    });
+
+    it('updates supplier fields and status within tenant transaction', async () => {
+      const existingSupplier = {
+        id: 'sup-1',
+        tenant_id: 'tenant-A',
+        name: 'Proveedor Original',
+        phone: '1111-2222',
+        contact_person: 'Carlos',
+        credit_terms: '15 dias',
+        is_active: true,
+      };
+
+      manager.findOne.mockImplementation((entity: unknown, options: { where: Record<string, unknown> }) => {
+        if (entity === Supplier) {
+          if (options.where.id === 'sup-1' && options.where.tenant_id === 'tenant-A') {
+            return Promise.resolve({ ...existingSupplier });
+          }
+          if (options.where.name === 'Proveedor Nuevo' && options.where.tenant_id === 'tenant-A') {
+            return Promise.resolve(null);
+          }
+        }
+        return Promise.resolve(null);
+      });
+
+      manager.save = jest.fn((_entity: unknown, payload: Record<string, unknown>) =>
+        Promise.resolve(payload),
+      );
+
+      const updated = await service.updateSupplier({
+        id: 'sup-1',
+        tenantId: 'tenant-A',
+        name: 'Proveedor Nuevo',
+        phone: '9999-8888',
+        contactPerson: 'Maria',
+        creditTerms: '30 dias',
+        isActive: false,
+      });
+
+      expect(updated).toMatchObject({
+        id: 'sup-1',
+        name: 'Proveedor Nuevo',
+        phone: '9999-8888',
+        contact_person: 'Maria',
+        credit_terms: '30 dias',
+        is_active: false,
+      });
+      expect(manager.save).toHaveBeenCalledWith(
+        Supplier,
+        expect.objectContaining({
+          id: 'sup-1',
+          name: 'Proveedor Nuevo',
+          is_active: false,
+        }),
+      );
+    });
+
+    it('throws NotFoundException when updating a non-existent supplier or other tenant', async () => {
+      manager.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.updateSupplier({
+          id: 'sup-missing',
+          tenantId: 'tenant-A',
+          name: 'Otro Nombre',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws ConflictException when renaming to a name that already belongs to another supplier', async () => {
+      const existingSupplier = {
+        id: 'sup-1',
+        tenant_id: 'tenant-A',
+        name: 'Proveedor Uno',
+      };
+      const duplicateSupplier = {
+        id: 'sup-2',
+        tenant_id: 'tenant-A',
+        name: 'Proveedor Dos',
+      };
+
+      manager.findOne.mockImplementation((entity: unknown, options: { where: Record<string, unknown> }) => {
+        if (entity === Supplier) {
+          if (options.where.id === 'sup-1') return Promise.resolve(existingSupplier);
+          if (options.where.name === 'Proveedor Dos') return Promise.resolve(duplicateSupplier);
+        }
+        return Promise.resolve(null);
+      });
+
+      await expect(
+        service.updateSupplier({
+          id: 'sup-1',
+          tenantId: 'tenant-A',
+          name: 'Proveedor Dos',
+        }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 });

@@ -8,12 +8,15 @@ import {
   fetchPurchases,
   fetchSuppliers,
   createSupplier,
+  updateSupplier,
   createManualPurchase,
 } from "./inventory-api";
 import type {
   KardexFilters,
   PurchaseFilters,
+  SupplierFilters,
   CreateSupplierInput,
+  UpdateSupplierInput,
   ManualPurchaseInput,
 } from "./types";
 
@@ -64,11 +67,11 @@ export function usePurchases(filters: PurchaseFilters = {}) {
 
 // --- SOHO purchases: manual web entry (human transport) ---
 
-export function useSuppliers() {
+export function useSuppliers(filters: SupplierFilters = {}) {
   const tenantId = useTenantId();
   return useQuery({
-    queryKey: ["inventory", tenantId, "suppliers"],
-    queryFn: ({ signal }) => fetchSuppliers({ signal }),
+    queryKey: ["inventory", tenantId, "suppliers", filters],
+    queryFn: ({ signal }) => fetchSuppliers(filters, { signal }),
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -79,6 +82,21 @@ export function useCreateSupplier() {
 
   return useMutation({
     mutationFn: (input: CreateSupplierInput) => createSupplier(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["inventory", tenantId, "suppliers"],
+      });
+    },
+  });
+}
+
+export function useUpdateSupplier() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateSupplierInput }) =>
+      updateSupplier(id, input),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["inventory", tenantId, "suppliers"],

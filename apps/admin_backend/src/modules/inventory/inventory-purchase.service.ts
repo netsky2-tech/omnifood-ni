@@ -143,20 +143,30 @@ export class InventoryPurchaseService {
 
   /**
    * Owner-dashboard supplier catalog (SOHO purchases). Human oversight read
-   * of the ACTIVE suppliers for the tenant, riding one tenant-bound
-   * transaction so FORCE RLS authorizes the read via `app.tenant_id`.
+   * of the suppliers for the tenant, riding one tenant-bound transaction so
+   * FORCE RLS authorizes the read via `app.tenant_id`. By default returns
+   * active suppliers only; `includeInactive: true` returns the full roster.
    *
    * Known limitation (documented in the slice task): suppliers seeded on the
    * POS (database_seeder.dart) stay POS-local — there is no POS→cloud
    * supplier sync yet, so those rows do not appear here until the web-side
    * supplier management creates cloud rows (separate sync work).
    */
-  async listSuppliers(input: { tenantId: string }): Promise<Supplier[]> {
+  async listSuppliers(input: {
+    tenantId: string;
+    includeInactive?: boolean;
+  }): Promise<Supplier[]> {
     const tenantId = this.requireTenantId(input.tenantId);
+    const where: { tenant_id: string; is_active?: boolean } = {
+      tenant_id: tenantId,
+    };
+    if (!input.includeInactive) {
+      where.is_active = true;
+    }
 
     return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
       manager.find(Supplier, {
-        where: { tenant_id: tenantId, is_active: true },
+        where,
         order: { name: 'ASC' },
       }),
     );
@@ -191,6 +201,77 @@ export class InventoryPurchaseService {
         contact_person: input.contactPerson?.trim() || null,
         credit_terms: input.creditTerms?.trim() || null,
       });
+
+      return manager.save(Supplier, supplier);
+    });
+  }
+
+  /**
+   * Human supplier update from the owner dashboard. Tenant-bound write:
+   * verifies existence within the caller's tenant context, prevents
+   * duplicate names, and supports updating contact info or toggling active status.
+   */
+  async updateSupplier(input: {
+    id: string;
+    tenantId: string;
+    name?: string;
+    phone?: string;
+    contactPerson?: string;
+    creditTerms?: string;
+    isActive?: boolean;
+  }): Promise<Supplier> {
+    const tenantId = this.requireTenantId(input.tenantId);
+    const id = input.id?.trim();
+
+    if (!id) {
+      throw new BadRequestException('El ID del proveedor es obligatorio.');
+    }
+
+    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
+      const supplier = await manager.findOne(Supplier, {
+        where: { id, tenant_id: tenantId },
+      });
+
+      if (!supplier) {
+        throw new NotFoundException('Proveedor no encontrado.');
+      }
+
+      if (input.name !== undefined) {
+        const trimmedName = input.name.trim();
+        if (!trimmedName) {
+          throw new BadRequestException(
+            'El nombre del proveedor no puede estar vacío.',
+          );
+        }
+
+        if (trimmedName !== supplier.name) {
+          const duplicate = await manager.findOne(Supplier, {
+            where: { tenant_id: tenantId, name: trimmedName },
+          });
+          if (duplicate && duplicate.id !== supplier.id) {
+            throw new ConflictException(
+              `Ya existe otro proveedor con el nombre '${trimmedName}'.`,
+            );
+          }
+        }
+        supplier.name = trimmedName;
+      }
+
+      if (input.phone !== undefined) {
+        supplier.phone = input.phone?.trim() || null;
+      }
+
+      if (input.contactPerson !== undefined) {
+        supplier.contact_person = input.contactPerson?.trim() || null;
+      }
+
+      if (input.creditTerms !== undefined) {
+        supplier.credit_terms = input.creditTerms?.trim() || null;
+      }
+
+      if (input.isActive !== undefined) {
+        supplier.is_active = input.isActive;
+      }
 
       return manager.save(Supplier, supplier);
     });

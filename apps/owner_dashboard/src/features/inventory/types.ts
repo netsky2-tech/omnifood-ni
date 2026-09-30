@@ -198,6 +198,18 @@ export interface CreateSupplierInput {
   creditTerms?: string;
 }
 
+export interface UpdateSupplierInput {
+  name?: string;
+  phone?: string;
+  contactPerson?: string;
+  creditTerms?: string;
+  isActive?: boolean;
+}
+
+export interface SupplierFilters {
+  includeInactive?: boolean;
+}
+
 /** Mirrors InventoryPurchaseService.PurchasePreview (backend). */
 export interface PurchasePreviewResult {
   invoiceDate: string;

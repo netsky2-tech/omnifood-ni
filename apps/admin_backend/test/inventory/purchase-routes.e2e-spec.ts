@@ -230,6 +230,7 @@ describe('Inventory purchase routes (integration)', () => {
   const manager = {
     createQueryBuilder: jest.fn(),
     findOne: jest.fn(),
+    find: jest.fn(),
     query: jest.fn(),
     save: jest.fn(),
     create: jest.fn(),
@@ -978,5 +979,100 @@ describe('Inventory purchase routes (integration)', () => {
       InventoryMovement,
       expect.objectContaining({ sourceDocumentType: 'PURCHASE_CORRECTION' }),
     );
+  });
+
+  it('returns 401 for GET /inventory/suppliers when no bearer token is provided', async () => {
+    await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/suppliers`)
+      .expect(401);
+  });
+
+  it('returns 200 with suppliers list for an authenticated manager', async () => {
+    const token = signToken();
+    const suppliers = [
+      { id: 'sup-1', name: 'Distribuidora A', is_active: true },
+    ];
+    manager.find.mockResolvedValue(suppliers);
+
+    const response = await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/suppliers`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(response.body).toEqual(suppliers);
+    expect(manager.find).toHaveBeenCalledWith(Supplier, {
+      where: { tenant_id: 'tenant-A', is_active: true },
+      order: { name: 'ASC' },
+    });
+  });
+
+  it('forwards includeInactive=true in GET /inventory/suppliers', async () => {
+    const token = signToken();
+    manager.find.mockResolvedValue([]);
+
+    await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/suppliers?includeInactive=true`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(manager.find).toHaveBeenCalledWith(Supplier, {
+      where: { tenant_id: 'tenant-A' },
+      order: { name: 'ASC' },
+    });
+  });
+
+  it('returns 403 for PUT /inventory/suppliers/:id when role is CASHIER', async () => {
+    const token = signToken({ role: UserRole.CASHIER });
+
+    await request(app.getHttpServer())
+      .put(`${INVENTORY_API_PREFIX}/suppliers/sup-1`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Nuevo Nombre' })
+      .expect(403);
+  });
+
+  it('returns 200 for PUT /inventory/suppliers/:id updating supplier details for an owner', async () => {
+    const token = signToken({ role: UserRole.OWNER });
+    const existing = {
+      id: 'sup-1',
+      tenant_id: 'tenant-A',
+      name: 'Proveedor Viejo',
+      phone: '1234',
+      is_active: true,
+    };
+
+    manager.findOne.mockImplementation((entity: unknown, options?: unknown) => {
+      if (entity === Supplier) {
+        const where = (options as { where?: Record<string, unknown> })?.where;
+        if (where?.id === 'sup-1' && where?.tenant_id === 'tenant-A') {
+          return Promise.resolve({ ...existing });
+        }
+        if (where?.name === 'Proveedor Nuevo') {
+          return Promise.resolve(null);
+        }
+      }
+      return Promise.resolve(null);
+    });
+
+    manager.save.mockImplementation((_entity: unknown, payload: Record<string, unknown>) =>
+      Promise.resolve(payload),
+    );
+
+    const response = await request(app.getHttpServer())
+      .put(`${INVENTORY_API_PREFIX}/suppliers/sup-1`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Proveedor Nuevo',
+        phone: '5555-4321',
+        isActive: false,
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      id: 'sup-1',
+      name: 'Proveedor Nuevo',
+      phone: '5555-4321',
+      is_active: false,
+    });
   });
 });

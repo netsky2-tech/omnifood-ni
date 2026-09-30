@@ -8,8 +8,10 @@ import type {
   PurchaseDocumentItem,
   PurchaseFilters,
   SupplierItem,
+  SupplierFilters,
   ManualPurchaseInput,
   CreateSupplierInput,
+  UpdateSupplierInput,
   PurchasePreviewResult,
 } from "./types";
 import {
@@ -80,14 +82,23 @@ export function fetchPurchases(filters: PurchaseFilters = {}, opts?: ApiClientMe
 
 // --- SOHO purchases: manual web entry (human transport routes) ---
 
-export function fetchSuppliers(opts?: ApiClientMethodOptions) {
+export function fetchSuppliers(
+  filters: SupplierFilters = {},
+  opts?: ApiClientMethodOptions,
+) {
+  const query = filters.includeInactive ? "?includeInactive=true" : "";
+  const url = `/inventory/suppliers${query}`;
   return opts
-    ? api.get<SupplierItem[]>("/inventory/suppliers", opts)
-    : api.get<SupplierItem[]>("/inventory/suppliers");
+    ? api.get<SupplierItem[]>(url, opts)
+    : api.get<SupplierItem[]>(url);
 }
 
 export function createSupplier(input: CreateSupplierInput) {
   return api.post<SupplierItem>("/inventory/suppliers", input);
+}
+
+export function updateSupplier(id: string, input: UpdateSupplierInput) {
+  return api.put<SupplierItem>(`/inventory/suppliers/${id}`, input);
 }
 
 /**
