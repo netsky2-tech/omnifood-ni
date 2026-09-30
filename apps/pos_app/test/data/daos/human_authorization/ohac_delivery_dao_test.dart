@@ -5,8 +5,32 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
 import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
+
+import 'package:pos_app/domain/security/ohac_outbox_registry.dart';
+
 import 'package:pos_app/data/models/human_authorization/staff_policy_epoch_v1.dart';
+
 import 'package:pos_app/data/models/human_authorization/terminal_state_machine.dart';
+
+/// The decision-31 test registrant: a mutable assertion-bearing outbox whose
+/// drain and quarantine state the tests move directly.
+class TestDrainOutbox
+    implements OhacAssertionBearingOutbox, OhacQuarantineReportingOutbox {
+  @override
+  final String outboxId;
+
+  int? lowestUnconsumed;
+  int? lowestQuarantined;
+
+  TestDrainOutbox(this.outboxId,
+      {this.lowestUnconsumed, this.lowestQuarantined});
+
+  @override
+  Future<int?> lowestUnconsumedAssertionSequence() async => lowestUnconsumed;
+
+  @override
+  Future<int?> lowestQuarantinedAssertionSequence() async => lowestQuarantined;
+}
 
 /// DAO-level coverage for the OHAC local delivery tables (design §4.2, §5, §6).
 ///
@@ -92,6 +116,8 @@ void main() {
     String negotiatedPolicySchema = '',
     String negotiatedAssertionSchema = '',
     String integrityClassification = '',
+    String? ackDeferralReason,
+    int? ackDeferralCount,
     int localAuthorizationSequence = 0,
     String updatedAt = '2026-01-01T00:00:00.000Z',
   }) =>
@@ -110,6 +136,8 @@ void main() {
         negotiatedPolicySchema: negotiatedPolicySchema,
         negotiatedAssertionSchema: negotiatedAssertionSchema,
         integrityClassification: integrityClassification,
+        ackDeferralReason: ackDeferralReason,
+        ackDeferralCount: ackDeferralCount,
         localAuthorizationSequence: localAuthorizationSequence,
         revision: revision,
         updatedAt: updatedAt,
@@ -1521,6 +1549,7 @@ void main() {
         2,
         digest,
         '2026-01-03T00:00:00.000Z',
+          OhacOutboxRegistry(),
       );
 
       final state = await database.ohacDeliveryDao
@@ -1593,6 +1622,7 @@ void main() {
         2,
         digest,
         '2026-01-03T00:00:00.000Z',
+          OhacOutboxRegistry(),
       );
 
       final state = await database.ohacDeliveryDao
@@ -1623,6 +1653,7 @@ void main() {
           2,
           digest,
           '2026-01-03T00:00:00.000Z',
+          OhacOutboxRegistry(),
         ),
         throwsA(isA<StateError>()),
       );
@@ -1655,6 +1686,7 @@ void main() {
             2,
             digest,
             '2026-01-03T00:00:00.000Z',
+              OhacOutboxRegistry(),
           );
 
       await submit();
@@ -1688,6 +1720,7 @@ void main() {
           2,
           digest,
           '2026-01-03T00:00:00.000Z',
+          OhacOutboxRegistry(),
         ),
         throwsA(isA<StateError>()),
       );
@@ -1709,6 +1742,7 @@ void main() {
           2,
           'sha256:${'0' * 64}', // not the candidate digest on record
           '2026-01-03T00:00:00.000Z',
+          OhacOutboxRegistry(),
         ),
         throwsA(isA<StateError>()),
       );
@@ -1717,6 +1751,276 @@ void main() {
           .findTerminalState('tenant-1', 'terminal-1');
       expect(state!.state, 'RECEIVE_PENDING');
       expect(state.revision, 4);
+    });
+  });
+
+
+  group('submitCandidateAcknowledgement — the §5.1 drain gate in S (B3, '
+      'design §5.1, §11.5 decision 31)', () {
+    final digest = 'sha256:${'f' * 64}';
+
+    // Fresh registry + registrant per test: registrations must never leak
+    // between tests. The named test registrants are decision 31's
+    // exercisers: no production outbox emits ohac.assertion.v1 yet.
+    (OhacOutboxRegistry, TestDrainOutbox) freshGate(String outboxId) {
+      final registry = OhacOutboxRegistry();
+      final outbox = TestDrainOutbox(outboxId);
+      registry.register(outbox);
+      return (registry, outbox);
+    }
+
+    Future<void> seedPending({
+      int revision = 4,
+      String? ackDeferralReason,
+      int? ackDeferralCount,
+    }) =>
+        database.ohacDeliveryDao.insertTerminalState(
+          terminalState(
+            state: 'RECEIVE_PENDING',
+            activeSequence: 1,
+            revision: revision,
+            candidateSequence: 2,
+            candidateDigest: digest,
+            ackDeferralReason: ackDeferralReason,
+            ackDeferralCount: ackDeferralCount,
+          ),
+        );
+
+    test('a registered blocker at ≤ candidate-1 defers: no flip, reason and '
+        'count set, deferral event appended atomically', () async {
+      await seedPending();
+      final (registry, blocker) = freshGate('credit-note-outbox');
+      blocker.lowestUnconsumed = 1;
+
+      await database.ohacDeliveryDao.submitCandidateAcknowledgement(
+        'tenant-1',
+        'terminal-1',
+        4,
+        2,
+        digest,
+        '2026-01-03T00:00:00.000Z',
+        registry,
+      );
+
+      // No flip: the terminal stays RECEIVE_PENDING with the old epoch
+      // governing (§5.1 line 180) — authorization is NOT frozen.
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'RECEIVE_PENDING');
+      expect(state.ackDeferralReason, 'OHAC_ACK_DEFERRED_OUTBOX');
+      expect(state.ackDeferralCount, 1,
+          reason: 'the count starts at 1 for this candidate');
+      // The deferral itself is one CAS: revision 4 -> 5, nothing else moved.
+      expect(state.revision, 5);
+      expect(state.candidateSequence, 2);
+      expect(state.candidateDigest, digest);
+
+      final events = await database.ohacDeliveryDao
+          .findEventsForTerminal('tenant-1', 'terminal-1');
+      expect(events, hasLength(1),
+          reason: 'the deferral event is appended in the same transaction');
+      final event = events.single;
+      expect(event.eventType, 'OHAC_ACK_DEFERRED_OUTBOX');
+      expect(event.sequence, 2);
+      // Pin the payload SHAPE by key list (repo convention), never by
+      // substring: a later payload that grew a verifier or an assertion body
+      // would still contain the values below.
+      expect(
+        (jsonDecode(event.payload) as Map<String, dynamic>).keys.toList(),
+        ['candidateSequence', 'blockingOutboxIds', 'retryCount',
+            'retryBoundReached'],
+        reason: 'the deferral fact carries the candidate, the blockers, the '
+            'count and the bound flag and nothing else (design §12: no PIN, '
+            'verifier, token secret or assertion body)',
+      );
+      final payload = jsonDecode(event.payload) as Map<String, dynamic>;
+      expect(payload['candidateSequence'], 2);
+      expect(payload['blockingOutboxIds'], ['credit-note-outbox']);
+      expect(payload['retryCount'], 1);
+      expect(payload['retryBoundReached'], isFalse);
+    });
+
+    test('a deferral increments the count for the SAME candidate', () async {
+      await seedPending(ackDeferralReason: 'OHAC_ACK_DEFERRED_OUTBOX',
+          ackDeferralCount: 2);
+      final (registry, blocker) = freshGate('credit-note-outbox');
+      blocker.lowestUnconsumed = 1;
+
+      await database.ohacDeliveryDao.submitCandidateAcknowledgement(
+        'tenant-1',
+        'terminal-1',
+        4,
+        2,
+        digest,
+        '2026-01-03T00:00:00.000Z',
+        registry,
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'RECEIVE_PENDING');
+      expect(state.ackDeferralCount, 3);
+    });
+
+    test('reaching the retry bound marks the deferral event '
+        'retryBoundReached=true; below it stays false', () async {
+      // Count 4 -> 5 == the design placeholder bound.
+      await seedPending(ackDeferralReason: 'OHAC_ACK_DEFERRED_OUTBOX',
+          ackDeferralCount: 4);
+      final (registry, blocker) = freshGate('credit-note-outbox');
+      blocker.lowestUnconsumed = 1;
+
+      await database.ohacDeliveryDao.submitCandidateAcknowledgement(
+        'tenant-1',
+        'terminal-1',
+        4,
+        2,
+        digest,
+        '2026-01-03T00:00:00.000Z',
+        registry,
+      );
+
+      final events = await database.ohacDeliveryDao
+          .findEventsForTerminal('tenant-1', 'terminal-1');
+      final payload =
+          jsonDecode(events.single.payload) as Map<String, dynamic>;
+      expect(payload['retryCount'], 5);
+      expect(payload['retryBoundReached'], isTrue,
+          reason: 'the count reached OhacOutboxRegistry.ohacAckDeferredRetryBound; '
+              'the operator-visible quarantine-review log lives in the '
+              'sync caller (developer.log has no in-process capture)');
+    });
+
+    test('a drained registry passes: the flip commits, the reason clears, '
+        'the count persists as history', () async {
+      await seedPending(
+          ackDeferralReason: 'OHAC_ACK_DEFERRED_OUTBOX', ackDeferralCount: 2);
+      // An empty registry -> passed: the same path a drained outbox
+      // exercises.
+      final registry = OhacOutboxRegistry();
+
+      await database.ohacDeliveryDao.submitCandidateAcknowledgement(
+        'tenant-1',
+        'terminal-1',
+        4,
+        2,
+        digest,
+        '2026-01-03T00:00:00.000Z',
+        registry,
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'ACK_SUBMITTING');
+      expect(state.ackDeferralReason, isNull,
+          reason: 'a successful flip clears the deferral reason');
+      expect(state.ackDeferralCount, 2,
+          reason: 'the count persists as history after the flip');
+      expect(
+        await database.ohacDeliveryDao
+            .findEventsForTerminal('tenant-1', 'terminal-1'),
+        isEmpty,
+        reason: 'a pass appends no deferral event',
+      );
+    });
+
+    test('a quarantined-only outbox is excluded from the gate: the flip '
+        'proceeds exactly as a pass (§5.1 line 182)', () async {
+      await seedPending();
+      final (registry, quarantinedOnly) = freshGate('quarantined-outbox');
+      quarantinedOnly.lowestUnconsumed = null;
+      quarantinedOnly.lowestQuarantined = 1;
+
+      await database.ohacDeliveryDao.submitCandidateAcknowledgement(
+        'tenant-1',
+        'terminal-1',
+        4,
+        2,
+        digest,
+        '2026-01-03T00:00:00.000Z',
+        registry,
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'ACK_SUBMITTING');
+      expect(state.ackDeferralReason, isNull);
+      expect(
+        await database.ohacDeliveryDao
+            .findEventsForTerminal('tenant-1', 'terminal-1'),
+        isEmpty,
+      );
+    });
+
+    test('receiving a NEW candidate resets the deferral reason and count '
+        '(the reset lives in R\'s receiveEpoch CAS)', () async {
+      // A terminal whose previous candidate was deferred (and whose ack
+      // eventually succeeded) is ACTIVE again, carrying the deferral
+      // history. The next candidate's receive must start with a clean
+      // deferral observation.
+      await database.ohacDeliveryDao.insertTerminalState(
+        terminalState(
+          state: 'ACTIVE',
+          activeSequence: 1,
+          revision: 3,
+          ackDeferralReason: 'OHAC_ACK_DEFERRED_OUTBOX',
+          ackDeferralCount: 4,
+        ),
+      );
+
+      await database.ohacDeliveryDao.receiveCandidateEpoch(
+        epoch(sequence: 2),
+        [entry(sequence: 2)],
+        1,
+        'sha256:${'a' * 64}',
+        3,
+        '',
+        'backend-1',
+        'ohac.staff-policy-epoch.v1',
+        'ohac.assertion.v1',
+        '2026-01-03T00:00:00.000Z',
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'RECEIVE_PENDING');
+      expect(state.candidateSequence, 2);
+      expect(state.ackDeferralReason, isNull,
+          reason: 'a new candidate starts with no deferral reason');
+      expect(state.ackDeferralCount, isNull,
+          reason: 'the count belongs to one candidate\'s lifetime');
+    });
+
+    test('a losing revision CAS on the deferral write throws and leaves '
+        'every column and the event log untouched', () async {
+      await seedPending(revision: 4);
+      final (registry, blocker) = freshGate('credit-note-outbox');
+      blocker.lowestUnconsumed = 1;
+
+      await expectLater(
+        database.ohacDeliveryDao.submitCandidateAcknowledgement(
+          'tenant-1',
+          'terminal-1',
+          7, // the row is at revision 4
+          2,
+          digest,
+          '2026-01-03T00:00:00.000Z',
+          registry,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'RECEIVE_PENDING');
+      expect(state.revision, 4);
+      expect(state.ackDeferralReason, isNull);
+      expect(state.ackDeferralCount, isNull);
+      expect(
+        await database.ohacDeliveryDao
+            .findEventsForTerminal('tenant-1', 'terminal-1'),
+        isEmpty,
+      );
     });
   });
 

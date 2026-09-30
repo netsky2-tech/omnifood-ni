@@ -77,6 +77,13 @@ void main() {
   test('submitCandidateAcknowledgement is generated as a positional '
       'transaction', () {
     expectPositionalTransaction('submitCandidateAcknowledgement');
+    // B3 (design §5.1, §11.5 decision 31): the drain-gate registry rides
+    // along as a positional parameter — a named parameter would break the
+    // generated wrapper, and the gate must live inside the SAME transaction
+    // as the flip it guards.
+    final signature = signatureOf('submitCandidateAcknowledgement');
+    expect(signature, contains('OhacOutboxRegistry ohacOutboxRegistry'),
+        reason: 'the drain gate must be consultable inside transaction S');
   });
 
   test('ensureTerminalState is generated as a positional transaction', () {

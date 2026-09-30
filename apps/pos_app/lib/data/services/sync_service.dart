@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../../domain/repositories/audit_repository.dart';
+import '../../domain/security/ohac_outbox_registry.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
 import '../../domain/models/inventory/inventory_movement.dart';
 import '../../domain/repositories/inventory/inventory_repository.dart';
@@ -168,6 +169,16 @@ class SyncService {
   final NetworkConnectivityService? _connectivityService;
   final FiscalInboxHandler? _fiscalInboxHandler;
 
+  /// The §5.1 assertion drain gate registry (B3, design §5.1, §11.5
+  /// decision 31). Constructor-injected so tests can register a test
+  /// registrant; defaults to a fresh EMPTY registry, which always passes —
+  /// the inert decision-31 behavior. No production registrations exist:
+  /// all 11 existing outbox structures in this app carry no assertion and
+  /// no epoch sequence (measured while landing this unit), and none emits
+  /// `ohac.assertion.v1`; DSI-6's credit-note outbox registers the first
+  /// real assertions.
+  final OhacOutboxRegistry _ohacOutboxRegistry;
+
   final StreamController<InboundSyncResult> _inboundSyncController =
       StreamController<InboundSyncResult>.broadcast();
 
@@ -219,12 +230,14 @@ class SyncService {
     AppDatabase? database,
     NetworkConnectivityService? connectivityService,
     FiscalInboxHandler? fiscalInboxHandler,
+    OhacOutboxRegistry? ohacOutboxRegistry,
   }) : _role = role,
        _database = database,
        _connectivityService = connectivityService,
        _fiscalInboxHandler =
            fiscalInboxHandler ??
-           (database != null ? FiscalInboxHandler(database) : null);
+           (database != null ? FiscalInboxHandler(database) : null),
+       _ohacOutboxRegistry = ohacOutboxRegistry ?? OhacOutboxRegistry();
 
   void _updateStatus(CloudSyncStatus newStatus) {
     if (_status != newStatus) {
@@ -2330,6 +2343,7 @@ class SyncService {
           mapping.epochEntity.sequence,
           mapping.epoch.digest,
           DateTime.now().toIso8601String(),
+          _ohacOutboxRegistry,
         );
         final ackState = await database.ohacDeliveryDao.findTerminalState(
           state.tenantId,
@@ -2340,6 +2354,15 @@ class SyncService {
             '[SYNC_PULL] ohac_ack_deferred reason=terminal_state_missing',
             name: 'SyncService',
           );
+          return;
+        }
+        if (ackState.state == OhacTerminalPhase.receivePending.wire) {
+          // B3 (design §5.1 lines 176/180): transaction S evaluated the
+          // drain gate and deferred — the flip did NOT happen, so nothing
+          // may be POSTed: the server floor must not advance while a
+          // registered outbox holds a prior-epoch assertion. The deferral is
+          // retried on the next sync cycle by the reconciliation step.
+          _logOhacAckDeferred(ackState);
           return;
         }
         await _submitOhacAcknowledgement(
@@ -2379,6 +2402,123 @@ class SyncService {
     }
   }
 
+  /// Logs one drain-gate deferral observation (B3, design §5.1 line 180:
+  /// "the deferral is observable (terminal-state reason
+  /// `OHAC_ACK_DEFERRED_OUTBOX`, §10, plus metrics) and retried on every
+  /// subsequent sync cycle").
+  ///
+  /// When the candidate's deferral count has reached the design's bounded
+  /// retry placeholder ([OhacOutboxRegistry.ohacAckDeferredRetryBound]), the
+  /// log escalates to WARNING with `quarantineReview=true`: the retry bound
+  /// governs the drain gate only (§5.1 line 182) and imposes no admissibility
+  /// TTL on the assertion itself. The reason column stays
+  /// `OHAC_ACK_DEFERRED_OUTBOX` — no invented reason vocabulary; actual
+  /// terminal-side quarantine classification is DSI-6's decision.
+  void _logOhacAckDeferred(OhacTerminalStateEntity state) {
+    final count = state.ackDeferralCount ?? 0;
+    final boundReached =
+        count >= OhacOutboxRegistry.ohacAckDeferredRetryBound;
+    developer.log(
+      '[SYNC_PULL] ohac_ack_deferred '
+      'reason=${OhacLocalEventType.ackDeferredOutbox} '
+      'candidate=${state.candidateSequence} '
+      'count=$count '
+      'quarantineReview=$boundReached',
+      name: 'SyncService',
+      // dart:developer's log takes the severity as an int (800 = INFO,
+      // 900 = WARNING per its documented Level values).
+      level: boundReached ? 900 : 800,
+    );
+  }
+
+  /// Retries a drain-gate deferral (B3, design §5.1 line 180: retried on
+  /// every subsequent sync cycle). Runs from the reconciliation step, which
+  /// fires on every pull before epoch consumption — so a candidate sitting
+  /// in `RECEIVE_PENDING` with a recorded deferral reason re-enters
+  /// transaction S, which re-evaluates the gate; a pass flips and the ack is
+  /// sent exactly as on the accept path. A still-blocking gate logs the
+  /// deferral and waits for the next cycle.
+  ///
+  /// This path can only fire when a deferral was recorded, which requires a
+  /// registered assertion-bearing outbox — with the empty production
+  /// registry the pull behaves byte-identically to the pre-B3 build
+  /// (decision 31's inert structure).
+  Future<void> _retryDeferredOhacAcknowledgement(
+    OhacTerminalStateEntity state,
+  ) async {
+    final database = _database!;
+    final tenantId = state.tenantId;
+    final terminalId = state.terminalId;
+
+    // A deferred terminal always carries a candidate pair; the sentinel pair
+    // here would mean a deferral recorded against nothing — refuse and leave
+    // it for the integrity paths.
+    if (state.candidateSequence <= 0 || state.candidateDigest.isEmpty) {
+      developer.log(
+        '[SYNC_PULL] ohac_deferral_retry_refused reason=candidate_pair_missing',
+        name: 'SyncService',
+      );
+      return;
+    }
+
+    await database.ohacDeliveryDao.submitCandidateAcknowledgement(
+      tenantId,
+      terminalId,
+      state.revision,
+      state.candidateSequence,
+      state.candidateDigest,
+      DateTime.now().toIso8601String(),
+      _ohacOutboxRegistry,
+    );
+
+    final after = await database.ohacDeliveryDao.findTerminalState(
+      tenantId,
+      terminalId,
+    );
+    if (after == null) {
+      developer.log(
+        '[SYNC_PULL] ohac_deferral_retry_refused reason=terminal_state_missing',
+        name: 'SyncService',
+      );
+      return;
+    }
+    if (after.state == OhacTerminalPhase.receivePending.wire) {
+      // Still blocked: same containment as the accept path.
+      _logOhacAckDeferred(after);
+      return;
+    }
+
+    // The gate passed and the flip committed: send the acknowledgement
+    // exactly as the accept path would have.
+    final epoch = await database.ohacDeliveryDao.findEpoch(
+      tenantId,
+      terminalId,
+      after.candidateSequence,
+    );
+    if (epoch == null) {
+      developer.log(
+        '[SYNC_PULL] ohac_deferral_retry_refused reason=epoch_row_missing',
+        name: 'SyncService',
+      );
+      return;
+    }
+    final posBuild = await readOhacPosBuild();
+    if (posBuild == null) {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=pos_build_unreadable '
+        'phase=ACK_SUBMITTING',
+        name: 'SyncService',
+      );
+      return;
+    }
+    await _submitOhacAcknowledgement(
+      after,
+      epoch,
+      posBuild,
+      reason: 'drain_gate_retry',
+    );
+  }
+
   /// The OHAC acknowledgement client and reconnect reconciliation (unit
   /// B2d, design §5 steps 3-5, §9, §10).
   ///
@@ -2413,6 +2553,14 @@ class SyncService {
       terminalId,
     );
     if (state == null) return;
+    if (state.state == OhacTerminalPhase.receivePending.wire) {
+      // B3 (design §5.1 line 180): a recorded drain-gate deferral is retried
+      // on every subsequent sync cycle. Without a recorded reason the pull
+      // behaves exactly as before B3.
+      if (state.ackDeferralReason == null) return;
+      await _retryDeferredOhacAcknowledgement(state);
+      return;
+    }
     if (state.state != OhacTerminalPhase.ackSubmitting.wire) return;
 
     // A submitting terminal always carries a candidate pair; the sentinel

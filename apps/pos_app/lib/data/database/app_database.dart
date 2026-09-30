@@ -101,13 +101,14 @@ import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 import 'package:pos_app/data/daos/inventory/authority_ingestion_verdict_dao.dart';
 import '../daos/human_authorization/ohac_delivery_dao.dart';
+import '../../domain/security/ohac_outbox_registry.dart';
 
 import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
 
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 59,
+  version: 60,
   entities: [
     UserEntity,
     SecurityProfileEntity,

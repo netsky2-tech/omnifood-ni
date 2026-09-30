@@ -576,4 +576,151 @@ void main() {
       expect(await db.query('human_auth_local_events'), hasLength(1));
     });
   });
+
+  group('migration59_60 — the drain-gate deferral columns (B3, design §5.1, '
+      '§11.5 decision 31)', () {
+    Future<Database> openAt59() async {
+      final db = await openDatabase(
+        inMemoryDatabasePath,
+        version: 52,
+        onCreate: (db, version) async {
+          // A legacy schema: the OHAC tables do not exist yet, so the real
+          // migration chain below creates them exactly as any v52 device
+          // would have experienced.
+          await db.execute('CREATE TABLE legacy_marker (id TEXT PRIMARY KEY)');
+        },
+      );
+      // The real chain to v59 — not a hand-written schema — so this test's
+      // "previous version" is byte-identical to what shipped, triggers and
+      // all.
+      await migration52_53.migrate(db);
+      await migration53_54.migrate(db);
+      await migration54_55.migrate(db);
+      await migration55_56.migrate(db);
+      await migration56_57.migrate(db);
+      await migration57_58.migrate(db);
+      await migration58_59.migrate(db);
+      return db;
+    }
+
+    test('adds the two nullable deferral columns additively', () async {
+      final db = await openAt59();
+      addTearDown(db.close);
+
+      await migration59_60.migrate(db);
+
+      final columns = await columnNames(db, 'human_auth_terminal_state');
+      expect(columns, contains('ack_deferral_reason'));
+      expect(columns, contains('ack_deferral_count'));
+      // The exact upgrade-path shape: nullable TEXT / INTEGER with no
+      // default, the same full parity as ack_receipt_id — the deferral is
+      // legitimately absent until the gate defers, so no NOT NULL/DEFAULT
+      // trade-off exists (SQLite cannot add NOT NULL without a default; a
+      // Floor entity cannot declare one). The fresh-install path must pin
+      // the SAME shape in ohac_delivery_install_parity_test.dart.
+      final shapes = await columnShapes(db, 'human_auth_terminal_state');
+      expect(
+        shapes['ack_deferral_reason'],
+        'TEXT notnull=0 default=null',
+        reason: 'the §10 deferral reason is absent until the gate defers',
+      );
+      expect(
+        shapes['ack_deferral_count'],
+        'INTEGER notnull=0 default=null',
+        reason: 'the retry-bound counter is absent until the gate defers',
+      );
+    });
+
+    test('leaves pre-existing rows exactly as they were, deferral null',
+        () async {
+      final db = await openAt59();
+      addTearDown(db.close);
+      await db.insert('human_auth_terminal_state', {
+        'tenant_id': 'tenant-1',
+        'terminal_id': 'terminal-1',
+        'state': 'ACTIVE',
+        'active_sequence': 4,
+        'active_digest': 'sha256:${'c' * 64}',
+        'candidate_sequence': 0,
+        'candidate_digest': '',
+        'server_floor_sequence': 4,
+        'server_floor_digest': 'sha256:${'c' * 64}',
+        'revision': 7,
+        'updated_at': '2026-01-01T00:00:00.000Z',
+      });
+
+      await migration59_60.migrate(db);
+
+      final row = (await db.query('human_auth_terminal_state')).single;
+      expect(row['state'], 'ACTIVE');
+      expect(row['active_sequence'], 4);
+      expect(row['revision'], 7);
+      expect(row['ack_deferral_reason'], isNull);
+      expect(row['ack_deferral_count'], isNull);
+    });
+
+    test('is idempotent when it runs twice', () async {
+      final db = await openAt59();
+      addTearDown(db.close);
+
+      await migration59_60.migrate(db);
+      await migration59_60.migrate(db);
+
+      final columns = await columnNames(db, 'human_auth_terminal_state');
+      expect(
+        columns.where((name) => name == 'ack_deferral_reason'),
+        hasLength(1),
+        reason: 'the column must exist exactly once after a re-run',
+      );
+      expect(
+        columns.where((name) => name == 'ack_deferral_count'),
+        hasLength(1),
+        reason: 'the column must exist exactly once after a re-run',
+      );
+    });
+
+    test('the append-only triggers survive the migration', () async {
+      final db = await openAt59();
+      addTearDown(db.close);
+
+      await migration59_60.migrate(db);
+
+      await db.insert('human_auth_policy_epochs', {
+        'tenant_id': 'tenant-1',
+        'terminal_id': 'terminal-1',
+        'sequence': 1,
+        'digest': 'sha256:${'a' * 64}',
+        'previous_sequence': 0,
+        'previous_digest': 'GENESIS',
+        'schema': 'ohac.staff-policy-epoch.v1',
+        'target_pos_build': '1.0.0+1',
+        'publisher_backend_build': 'backend-1',
+        'minimum_assertion_schema': 'ohac.assertion.v1',
+        'payload': '{}',
+        'received_at': '2026-01-01T00:00:00.000Z',
+      });
+      await db.insert('human_auth_local_events', {
+        'id': 'event-1',
+        'tenant_id': 'tenant-1',
+        'terminal_id': 'terminal-1',
+        'event_type': 'OHAC_ACK_DEFERRED_OUTBOX',
+        'sequence': 1,
+        'payload': '{}',
+        'created_at': '2026-01-01T00:00:00.000Z',
+      });
+
+      await expectLater(
+        db.rawUpdate(
+          "UPDATE human_auth_policy_epochs SET payload = 'tampered'",
+        ),
+        throwsA(isA<DatabaseException>()),
+      );
+      await expectLater(
+        db.rawDelete('DELETE FROM human_auth_local_events'),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect(await db.query('human_auth_policy_epochs'), hasLength(1));
+      expect(await db.query('human_auth_local_events'), hasLength(1));
+    });
+  });
 }

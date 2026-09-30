@@ -86,7 +86,9 @@ pendings outside this effort unless the owner extends it.
   none of those members. Backend envelope: `apps/admin_backend/src/modules/sales/dto/inbound-sync.dto.ts:337`.
 
 ### U2 — B2d: acknowledgement client and reconnect reconciliation
-- Status: IMPLEMENTED — issue #710 (`status:approved`, `type:feature`); PR pending.
+- Status: **MERGED as `bd6254df`** (PR #711, issue #710 closed). Branch `feat/ohac-pos-ack-client`
+  deleted remotely. All checks green on the final tree (`lint-and-test` 8m8s, `build-check` 2m21s,
+  Cloudflare, GitGuardian).
 - Independent verification: **FIX-FIRST → all fixed**: 1 BLOCKING (`SEQUENCE_GAP` classified
   backwards as `LOCAL_ROLLBACK` — the backend defines it as claim-AHEAD-of-floor
   (`acknowledgement.ts:28`, `spec:97,115`), moved to `ACK_INCONSISTENT` with the §10 retryable
@@ -120,7 +122,62 @@ pendings outside this effort unless the owner extends it.
   have no column — decide whether the receipt lands in the local event log, and implement it.
 
 ### U3 — B3: drain gate and outbox registration
-- Status: PENDING
+- Status: **IMPLEMENTED + INDEPENDENTLY VERIFIED (APPROVE, 0 blockers) — PAUSED BEFORE COMMIT.**
+  Issue #714 ready (`status:approved`, `type:feature`). Worktree `feat/ohac-pos-drain-gate` holds
+  the full uncommitted delta (15 files incl. 2 new) + this tracker edit. Delivery (commit → PR →
+  CI → merge) is the first action when work resumes.
+- **Native review for this candidate: declined by the host** — first START returned an expired
+  consent binding (`consent-binding-expired`, `lineage_created: false`), the fresh START returned
+  `consent-declined-this-candidate` (`lineage_created: false`, `mutation_performed: false`). No
+  lineage exists for U3, no authority burned. A decline is candidate-scoped, not the kill switch.
+  **Owner decision required at resume: deliver U3 on the independent verification below, or hold.**
+- Independent verification: **APPROVE, 0 blocking** — gate is genuinely S's last precondition (the
+  replay no-op cannot re-enter `ACK_SUBMITTING`); deferral atomicity (single CAS + same-transaction
+  event, losing CAS rolls back everything); empty-registry byte-identity with U2 (0-deletion test
+  diff, 101/101); `app_database.dart` registry import necessary (generated `part` emits the type).
+  3 observations, all accepted: quarantine "never silent" only structurally prepared (inert,
+  DSI-6 owns terminal-side classification); cross-DAO probe limitation recorded for DSI-6; doc
+  drift fixed here (the bound log is WARNING/900, not ERROR).
+- Evidence: RED→GREEN in 4 rounds (registry 10, migration 33, gate 55, caller); focused OHAC 102 +
+  sync 101; mutation proofs — flip-despite-deferral killed by 3 DAO tests, count-not-incrementing
+  required a build_runner re-run (SQL compiles into `.g.dart`) and was killed by 2 tests; both
+  restored sha256 byte-identical; `flutter analyze` clean; `build_runner` clean; full `test/data/`
+  0 assertion failures (1 loader flake per run, verbatim known message, isolated reruns green).
+  Authored ≈1,608 lines (registry 237, DAO +108, sync +150, migrations +37, entities +38, tests
+  ~1,138) — overage declared.
+- Decisions applied by the writer (from the pre-dispatch rulings):
+  1. Registry in new `lib/domain/security/ohac_outbox_registry.dart` (framework-free):
+     `OhacAssertionBearingOutbox` interface (`outboxId`,
+     `lowestUnconsumedAssertionSequence()` — null = drained), `OhacOutboxRegistry` with
+     `register` / `isRegistered` (R1-008 fail-closed coupler, consumed by U4's emitter) /
+     `evaluate(candidateSequence)` → passed | deferred(reason `OHAC_ACK_DEFERRED_OUTBOX`,
+     blocking ids) | quarantined. Empty registry → passed (inert, decision 31).
+  2. Gate seat: registry passed **positionally into S** (precedent: `appendForensicLog`'s
+     closure param), evaluated inside S as the last precondition before the flip. Deferred →
+     S sets the deferral state + appends the local event + does NOT flip, staying `Future<void>`
+     (positional §13 test regex intact). Caller detects deferral by re-reading state.
+     Cross-DAO limitation recorded for DSI-6: a real registrant probe cannot run a `@Query` on
+     another DAO from inside the transaction-scoped DAO — evaluation may have to move to
+     immediately-before-S then.
+  3. Migration 59→60 adds `ack_deferral_reason` (TEXT, nullable) + `ack_deferral_count`
+     (INTEGER, nullable) — §5.1 requires the deferral to be observable as a terminal-state
+     reason and the design gives no column; parity shape assertions both paths; chain-tail pin
+     update (mechanical, same pattern as 58→59).
+  4. Retry bound: constant `ohacAckDeferredRetryBound = 5`, documented as the design's
+     "bounded, configured number" placeholder pending DSI-6 configuration (design fixes no
+     value). On reaching the bound: operator-visible ERROR log + deferral event payload flag;
+     no invented vocabulary. Terminal-side quarantine CLASSIFICATION deferred to DSI-6 (nothing
+     is quarantinable until a real assertion-bearing outbox exists); the registry's
+     `quarantined` outcome + drained-disposition semantics IS decision 31's inert quarantine
+     structure, exercised by the test registrant.
+  5. Operator visibility = reason column + ERROR logs (repo `developer.log` convention) +
+     append-only local events. NO UI change in this unit (a badge/dialog change would drag the
+     NHILOS standard into B3); badge surfacing recorded as a follow-up needing a NHILOS audit.
+  6. R1-008 coupler tested NOW: unregistered outbox attempting assertion creation refuses
+     (fail-closed), via the test registrant — U4 will consume `isRegistered`.
+- Known design gaps flagged by the scout (recorded, not silently resolved): no
+  `OHAC_ACK_DEFERRED_OUTBOX` constant exists anywhere today; no deferral/quarantine column;
+  no retry-bound value in the design.
 - Registry, registration coupler, blocked `ACK_SUBMITTING` transition, `OHAC_ACK_DEFERRED_OUTBOX`
   reason, bounded retries, quarantine with operator visibility. Inert until a registrant exists
   (test registrant only; DSI-6 credit-note outbox is the named future registrant). Decision 31.
