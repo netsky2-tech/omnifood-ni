@@ -113,7 +113,11 @@ void main() {
       'negotiated_backend_build',
       'negotiated_policy_schema',
       'negotiated_assertion_schema',
+      // B2d (design §5 step 4): the ack receipt of record. The fresh-install
+      // order is the entity's field order, which places the receipt after
+      // the classification column (the upgrade path appends it last).
       'integrity_classification',
+      'ack_receipt_id',
       'local_authorization_sequence',
       'revision',
       'updated_at',
@@ -147,6 +151,28 @@ void main() {
         reason: column,
       );
     }
+  });
+
+  test('a fresh install carries the nullable ack receipt column with the '
+      'exact upgrade-path shape', () async {
+    final db = await buildFreshDatabase();
+
+    final shapes = await columnShapes(
+      db.database,
+      'human_auth_terminal_state',
+    );
+    // The parity this column promises: the receipt is absent until a 201
+    // arrives, so the column is nullable TEXT with no default on BOTH
+    // install paths — unlike the ten NOT NULL extension columns, where the
+    // paths must diverge on DEFAULT (SQLite cannot add NOT NULL without a
+    // default; a Floor entity cannot declare one). Asserting the exact
+    // shape here pins that no drift creeps in in either direction.
+    expect(
+      shapes['ack_receipt_id'],
+      'TEXT notnull=0 default=null',
+      reason: 'identical shape to the upgrade path pinned in '
+          'ohac_delivery_migration_test.dart',
+    );
   });
 
   test('a fresh install creates both OHAC indexes', () async {

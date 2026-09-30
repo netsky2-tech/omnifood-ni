@@ -180,7 +180,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 58,
+      version: 59,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -316,7 +316,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `human_auth_policy_entries` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `status` TEXT NOT NULL, `role` TEXT NOT NULL, `permissions` TEXT NOT NULL, `verifier_algorithm` TEXT NOT NULL, `verifier_format_version` TEXT NOT NULL, `verifier_encoded` TEXT NOT NULL, `attempt_reset_generation` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`, `sequence`, `user_id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `human_auth_terminal_state` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `state` TEXT NOT NULL, `active_sequence` INTEGER NOT NULL, `active_digest` TEXT NOT NULL, `candidate_sequence` INTEGER NOT NULL, `candidate_digest` TEXT NOT NULL, `server_floor_sequence` INTEGER NOT NULL, `server_floor_digest` TEXT NOT NULL, `negotiated_pos_build` TEXT NOT NULL, `negotiated_backend_build` TEXT NOT NULL, `negotiated_policy_schema` TEXT NOT NULL, `negotiated_assertion_schema` TEXT NOT NULL, `integrity_classification` TEXT NOT NULL, `local_authorization_sequence` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`))');
+            'CREATE TABLE IF NOT EXISTS `human_auth_terminal_state` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `state` TEXT NOT NULL, `active_sequence` INTEGER NOT NULL, `active_digest` TEXT NOT NULL, `candidate_sequence` INTEGER NOT NULL, `candidate_digest` TEXT NOT NULL, `server_floor_sequence` INTEGER NOT NULL, `server_floor_digest` TEXT NOT NULL, `negotiated_pos_build` TEXT NOT NULL, `negotiated_backend_build` TEXT NOT NULL, `negotiated_policy_schema` TEXT NOT NULL, `negotiated_assertion_schema` TEXT NOT NULL, `integrity_classification` TEXT NOT NULL, `ack_receipt_id` TEXT, `local_authorization_sequence` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `human_auth_attempt_state` (`tenant_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `failure_timestamps` TEXT NOT NULL, `locked_until` TEXT, `reset_generation` TEXT NOT NULL, `local_authorization_sequence` INTEGER NOT NULL, `revision` INTEGER NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `terminal_id`, `user_id`))');
         await database.execute(
@@ -7847,6 +7847,7 @@ class _$OhacDeliveryDao extends OhacDeliveryDao {
                   'negotiated_policy_schema': item.negotiatedPolicySchema,
                   'negotiated_assertion_schema': item.negotiatedAssertionSchema,
                   'integrity_classification': item.integrityClassification,
+                  'ack_receipt_id': item.ackReceiptId,
                   'local_authorization_sequence':
                       item.localAuthorizationSequence,
                   'revision': item.revision,
@@ -7968,7 +7969,7 @@ class _$OhacDeliveryDao extends OhacDeliveryDao {
   ) async {
     return _queryAdapter.query(
         'SELECT * FROM human_auth_terminal_state WHERE tenant_id = ?1 AND terminal_id = ?2 LIMIT 1',
-        mapper: (Map<String, Object?> row) => OhacTerminalStateEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, state: row['state'] as String, activeSequence: row['active_sequence'] as int, activeDigest: row['active_digest'] as String, candidateSequence: row['candidate_sequence'] as int, candidateDigest: row['candidate_digest'] as String, serverFloorSequence: row['server_floor_sequence'] as int, serverFloorDigest: row['server_floor_digest'] as String, negotiatedPosBuild: row['negotiated_pos_build'] as String, negotiatedBackendBuild: row['negotiated_backend_build'] as String, negotiatedPolicySchema: row['negotiated_policy_schema'] as String, negotiatedAssertionSchema: row['negotiated_assertion_schema'] as String, integrityClassification: row['integrity_classification'] as String, localAuthorizationSequence: row['local_authorization_sequence'] as int, revision: row['revision'] as int, updatedAt: row['updated_at'] as String),
+        mapper: (Map<String, Object?> row) => OhacTerminalStateEntity(tenantId: row['tenant_id'] as String, terminalId: row['terminal_id'] as String, state: row['state'] as String, activeSequence: row['active_sequence'] as int, activeDigest: row['active_digest'] as String, candidateSequence: row['candidate_sequence'] as int, candidateDigest: row['candidate_digest'] as String, serverFloorSequence: row['server_floor_sequence'] as int, serverFloorDigest: row['server_floor_digest'] as String, negotiatedPosBuild: row['negotiated_pos_build'] as String, negotiatedBackendBuild: row['negotiated_backend_build'] as String, negotiatedPolicySchema: row['negotiated_policy_schema'] as String, negotiatedAssertionSchema: row['negotiated_assertion_schema'] as String, integrityClassification: row['integrity_classification'] as String, localAuthorizationSequence: row['local_authorization_sequence'] as int, ackReceiptId: row['ack_receipt_id'] as String?, revision: row['revision'] as int, updatedAt: row['updated_at'] as String),
         arguments: [tenantId, terminalId]);
   }
 
@@ -8046,6 +8047,30 @@ class _$OhacDeliveryDao extends OhacDeliveryDao {
           expectedRevision,
           serverFloorSequence,
           serverFloorDigest,
+          newUpdatedAt
+        ]);
+  }
+
+  @override
+  Future<int?> confirmWithReceipt(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    int serverFloorSequence,
+    String serverFloorDigest,
+    String receiptId,
+    String newUpdatedAt,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE human_auth_terminal_state SET state = \'ACTIVE\', active_sequence = candidate_sequence, active_digest = candidate_digest, candidate_sequence = 0, candidate_digest = \'\', server_floor_sequence = ?4, server_floor_digest = ?5, ack_receipt_id = ?6, revision = revision + 1, updated_at = ?7 WHERE tenant_id = ?1 AND terminal_id = ?2 AND revision = ?3',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [
+          tenantId,
+          terminalId,
+          expectedRevision,
+          serverFloorSequence,
+          serverFloorDigest,
+          receiptId,
           newUpdatedAt
         ]);
   }
@@ -8166,6 +8191,49 @@ class _$OhacDeliveryDao extends OhacDeliveryDao {
           ..database = transaction;
         await transactionDatabase.ohacDeliveryDao
             .ensureTerminalState(tenantId, terminalId, newUpdatedAt);
+      });
+    }
+  }
+
+  @override
+  Future<void> confirmAcknowledgementWithReceipt(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    int expectedSequence,
+    String expectedDigest,
+    String receiptId,
+    int serverFloorSequence,
+    String serverFloorDigest,
+    String newUpdatedAt,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.confirmAcknowledgementWithReceipt(
+          tenantId,
+          terminalId,
+          expectedRevision,
+          expectedSequence,
+          expectedDigest,
+          receiptId,
+          serverFloorSequence,
+          serverFloorDigest,
+          newUpdatedAt);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.ohacDeliveryDao
+            .confirmAcknowledgementWithReceipt(
+                tenantId,
+                terminalId,
+                expectedRevision,
+                expectedSequence,
+                expectedDigest,
+                receiptId,
+                serverFloorSequence,
+                serverFloorDigest,
+                newUpdatedAt);
       });
     }
   }

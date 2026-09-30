@@ -35,6 +35,8 @@ import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import 'authority_hydration_service.dart';
 import 'ohac_negotiation_parameters.dart';
+import '../models/human_authorization/field_guards.dart';
+import '../models/human_authorization/ohac_acknowledgement_request.dart';
 import '../models/human_authorization/ohac_delivery_entities.dart';
 import '../models/human_authorization/ohac_epoch_persistence_mapper.dart';
 import '../models/human_authorization/ohac_terminal_snapshot_adapter.dart';
@@ -2166,8 +2168,51 @@ class SyncService {
 
     final status = envelope['status']?.toString();
     if (status != 'DELIVER') {
-      // DISABLED / UPGRADE_REQUIRED / RECOVERY_REQUIRED (and any unknown
-      // status) carry no epoch: nothing to apply, nothing to persist.
+      if (status == 'RECOVERY_REQUIRED') {
+        // Unit B2d (design §5 step 5, §9): the backend answers
+        // RECOVERY_REQUIRED when the floor THIS terminal reported is ahead
+        // of what the server has acknowledged — i.e. "local above floor
+        // with a confirmed-active claim". There is no legitimate local path
+        // to that state (our floor only advances on a server receipt), so
+        // this is a server-side loss or rollback against this terminal's
+        // recorded history. §9's classification for a "local/server floor"
+        // conflict is ACK_INCONSISTENT: fail closed, quarantine, security
+        // investigation plus recovery. DISABLED and UPGRADE_REQUIRED remain
+        // no-ops (§10 zero fallback).
+        final database = _database!;
+        final tenantConfig = await database.localConfigDao.getConfigByKey(
+          'tenant_id',
+        );
+        final tenantId = tenantConfig?.value ?? 'tenant-1';
+        final terminalId = _auditRepository.deviceId;
+        final recoveryState = await database.ohacDeliveryDao
+            .findTerminalState(tenantId, terminalId);
+        if (recoveryState == null) {
+          developer.log(
+            '[SYNC_PULL] ohac_recovery_required_refused '
+            'reason=terminal_state_missing',
+            name: 'SyncService',
+          );
+          return;
+        }
+        if (recoveryState.state != OhacTerminalPhase.integrityLoss.wire) {
+          await database.ohacDeliveryDao.markIntegrityLoss(
+            tenantId,
+            terminalId,
+            recoveryState.revision,
+            OhacIntegrityClassification.ackInconsistent.wire,
+            DateTime.now().toIso8601String(),
+          );
+        }
+        developer.log(
+          '[SYNC_PULL] ohac_recovery_required classification='
+          '${OhacIntegrityClassification.ackInconsistent.wire}',
+          name: 'SyncService',
+        );
+        return;
+      }
+      // DISABLED / UPGRADE_REQUIRED (and any unknown status) carry no
+      // epoch: nothing to apply, nothing to persist.
       developer.log(
         '[SYNC_PULL] ohac_epoch status=$status action=noop',
         name: 'SyncService',
@@ -2263,6 +2308,46 @@ class SyncService {
           '[SYNC_PULL] ohac_epoch_accepted sequence=${mapping.epoch.sequence}',
           name: 'SyncService',
         );
+
+        // Design §5 steps 3-4 (unit B2d): a freshly received candidate must
+        // not sit in RECEIVE_PENDING — flip to ACK_SUBMITTING (transaction
+        // S) and immediately send the acknowledgement. The flip is the S
+        // transaction's own precondition-checked move; its revision is read
+        // back because R just bumped it.
+        final submittedState = await database.ohacDeliveryDao
+            .findTerminalState(state.tenantId, state.terminalId);
+        if (submittedState == null) {
+          developer.log(
+            '[SYNC_PULL] ohac_ack_deferred reason=terminal_state_missing',
+            name: 'SyncService',
+          );
+          return;
+        }
+        await database.ohacDeliveryDao.submitCandidateAcknowledgement(
+          state.tenantId,
+          state.terminalId,
+          submittedState.revision,
+          mapping.epochEntity.sequence,
+          mapping.epoch.digest,
+          DateTime.now().toIso8601String(),
+        );
+        final ackState = await database.ohacDeliveryDao.findTerminalState(
+          state.tenantId,
+          state.terminalId,
+        );
+        if (ackState == null) {
+          developer.log(
+            '[SYNC_PULL] ohac_ack_deferred reason=terminal_state_missing',
+            name: 'SyncService',
+          );
+          return;
+        }
+        await _submitOhacAcknowledgement(
+          ackState,
+          mapping.epochEntity,
+          posBuild,
+          reason: 'candidate_received',
+        );
       case OhacReceiveDuplicate():
         developer.log(
           '[SYNC_PULL] ohac_epoch status=duplicate action=noop',
@@ -2292,6 +2377,369 @@ class SyncService {
           name: 'SyncService',
         );
     }
+  }
+
+  /// The OHAC acknowledgement client and reconnect reconciliation (unit
+  /// B2d, design §5 steps 3-5, §9, §10).
+  ///
+  /// **Phase-driven retry (§5 step 5).** Runs on every pull, before the
+  /// epoch consumption: a terminal whose acknowledgement never reached the
+  /// server (lost POST, lost response, process death) sits in
+  /// `ACK_SUBMITTING` with `active == floor`, so `decideReconciliation`
+  /// would answer `NothingToReconcile` and freeze it forever. The phase
+  /// itself is the retry trigger — not a reconciliation arithmetic — so
+  /// `decideReconciliation` is deliberately left uncalled here.
+  ///
+  /// With an intact candidate the identical request is resent (same derived
+  /// idempotency key, so the server replays the stored receipt instead of
+  /// answering `IDEMPOTENCY_CONFLICT`). With a candidate that can no longer
+  /// be proven intact (missing epoch row, digest drift) or a missing
+  /// candidate pair, §5 step 5's "below floor ... otherwise" branch applies:
+  /// `INTEGRITY_LOSS` with the §9 classification (`LOCAL_ROLLBACK` for the
+  /// lost/mismatched candidate — the wire spelling of §5.5's
+  /// ROLLBACK_DETECTED; `AUTH_STATE_MISSING` for the required-row shape a
+  /// submitting terminal can never legitimately have).
+  Future<void> _reconcileOhacAcknowledgement() async {
+    final database = _database;
+    if (database == null) return;
+
+    final tenantConfig = await database.localConfigDao.getConfigByKey(
+      'tenant_id',
+    );
+    final tenantId = tenantConfig?.value ?? 'tenant-1';
+    final terminalId = _auditRepository.deviceId;
+    final state = await database.ohacDeliveryDao.findTerminalState(
+      tenantId,
+      terminalId,
+    );
+    if (state == null) return;
+    if (state.state != OhacTerminalPhase.ackSubmitting.wire) return;
+
+    // A submitting terminal always carries a candidate pair; the sentinel
+    // pair here is required-row loss (§9 AUTH_STATE_MISSING).
+    final candidateSequence = state.candidateSequence;
+    final candidateDigest = state.candidateDigest;
+    if (candidateSequence <= 0 || candidateDigest.isEmpty) {
+      await _markOhacIntegrityLoss(
+        state,
+        OhacIntegrityClassification.authStateMissing,
+        'candidate_pair_missing',
+      );
+      return;
+    }
+
+    // The intact check: the immutable epoch row behind the candidate must
+    // still exist and still carry the digest the state claims. Anything
+    // else is §5 step 5's not-intact branch → LOCAL_ROLLBACK.
+    final epoch = await database.ohacDeliveryDao.findEpoch(
+      tenantId,
+      terminalId,
+      candidateSequence,
+    );
+    if (epoch == null || epoch.digest != candidateDigest) {
+      await _markOhacIntegrityLoss(
+        state,
+        OhacIntegrityClassification.localRollback,
+        'candidate_not_intact',
+      );
+      return;
+    }
+
+    // The identical request needs the POS's own build. A failed read stays
+    // in ACK_SUBMITTING (fail closed, retry on a later pull): never send a
+    // partial body.
+    final posBuild = await readOhacPosBuild();
+    if (posBuild == null) {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=pos_build_unreadable '
+        'phase=ACK_SUBMITTING',
+        name: 'SyncService',
+      );
+      return;
+    }
+
+    await _submitOhacAcknowledgement(
+      state,
+      epoch,
+      posBuild,
+      reason: 'reconnect_retry',
+    );
+  }
+
+  /// Sends the acknowledgement for [epoch] and, on a cross-checked 201
+  /// receipt, records it and promotes the candidate (§5 steps 3-4).
+  ///
+  /// Every outcome is contained: this method logs and returns — it never
+  /// throws and never breaks the pull or the watermark.
+  ///
+  /// Outcome map (§10):
+  /// - 201 + cross-checked claim → transaction C (confirm + promote);
+  /// - 409 with a claim-fatal `resultCode` → `markIntegrityLoss` with the
+  ///   §9 classification (see [_classifyOhacAckRejection]);
+  /// - 409 `UNAVAILABLE`, a network error, a 5xx, any other indeterminate
+  ///   answer → stay `ACK_SUBMITTING` (`OHAC_ACK_RESPONSE_LOST`: retry the
+  ///   identical ack);
+  /// - an unbuildable request → stay `ACK_SUBMITTING` (fail closed; a
+  ///   partial body is never sent).
+  Future<void> _submitOhacAcknowledgement(
+    OhacTerminalStateEntity state,
+    OhacPolicyEpochEntity epoch,
+    String posBuild, {
+    required String reason,
+  }) async {
+    final database = _database!;
+    final body = buildOhacAcknowledgementRequestBody(
+      epoch: epoch,
+      tenantId: state.tenantId,
+      terminalId: state.terminalId,
+      posBuild: posBuild,
+      negotiatedAssertionSchema: state.negotiatedAssertionSchema,
+    );
+    if (body == null) {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=request_unbuildable '
+        'reason_tag=$reason phase=ACK_SUBMITTING',
+        name: 'SyncService',
+      );
+      return;
+    }
+
+    final Response<dynamic> response;
+    try {
+      response = await _dio.post(
+        '/v1/sync/inbound/human-authorization/staff-policy/ack',
+        data: body,
+      );
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      // asObject rejects a non-String-keyed body safely instead of throwing
+      // (a Map<String, dynamic>.from would): a hostile or malformed error
+      // body must be treated as an unparseable code, never break the pull.
+      final resultCode = asObject(e.response?.data)?['resultCode']?.toString();
+      if (statusCode == 409) {
+        final classification = _classifyOhacAckRejection(resultCode);
+        if (classification == null) {
+          // `UNAVAILABLE`: indeterminate — the claim may or may not have
+          // been accepted. Stay in ACK_SUBMITTING and retry.
+          developer.log(
+            '[SYNC_PULL] ohac_ack_deferred reason=server_unavailable '
+            'phase=ACK_SUBMITTING',
+            name: 'SyncService',
+          );
+          return;
+        }
+        await _markOhacIntegrityLoss(
+          state,
+          classification,
+          'ack_rejected_${resultCode ?? 'unknown_code'}',
+        );
+        return;
+      }
+      // Network error or 5xx: §10 OHAC_ACK_RESPONSE_LOST — the request may
+      // have reached the server; only the identical retry converges.
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=transport_error '
+        'status_code=$statusCode phase=ACK_SUBMITTING',
+        name: 'SyncService',
+        error: e,
+      );
+      return;
+    } catch (e) {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=unexpected_error '
+        'phase=ACK_SUBMITTING',
+        name: 'SyncService',
+        error: e,
+      );
+      return;
+    }
+
+    if (response.statusCode != 201) {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=unexpected_status '
+        'status_code=${response.statusCode} phase=ACK_SUBMITTING',
+        name: 'SyncService',
+      );
+      return;
+    }
+    final data = response.data;
+    if (data is! Map) {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=response_not_map '
+        'phase=ACK_SUBMITTING',
+        name: 'SyncService',
+      );
+      return;
+    }
+    // asObject rejects a non-String-keyed receipt safely instead of
+    // throwing (a Map<String, dynamic>.from would): an indeterminate body
+    // stays in ACK_SUBMITTING, it never escapes this method.
+    final receipt = asObject(data);
+    if (receipt == null) {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=response_not_object '
+        'phase=ACK_SUBMITTING',
+        name: 'SyncService',
+      );
+      return;
+    }
+    if (receipt['status']?.toString().toUpperCase() != 'ACCEPTED') {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=response_not_accepted '
+        'phase=ACK_SUBMITTING',
+        name: 'SyncService',
+      );
+      return;
+    }
+
+    // Cross-check the receipt against the claim BEFORE confirming: a 201
+    // that does not describe the claim we sent is a same-claim conflict,
+    // and §9's classification for a local/server ack disagreement is
+    // ACK_INCONSISTENT. Confirming the receipt blindly would promote a
+    // pair the server never acknowledged.
+    final responseSequence = receipt['sequence']?.toString();
+    final responseDigest = receipt['digest']?.toString();
+    if (responseSequence != epoch.sequence.toString() ||
+        responseDigest != epoch.digest) {
+      await _markOhacIntegrityLoss(
+        state,
+        OhacIntegrityClassification.ackInconsistent,
+        'ack_response_mismatch',
+      );
+      return;
+    }
+
+    final receiptId = receipt['receiptId']?.toString() ?? '';
+    final floorSequence =
+        int.tryParse(receipt['floorSequence']?.toString() ?? '');
+    if (receiptId.isEmpty || floorSequence == null) {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=receipt_unparseable '
+        'phase=ACK_SUBMITTING',
+        name: 'SyncService',
+      );
+      return;
+    }
+
+    // §5 step 4: atomically record the receipt and promote the candidate.
+    // The floor digest is the confirmed claim itself: the acknowledged
+    // epoch IS the new server floor (the 201 carries no separate
+    // floorDigest field). Re-read the state first — S or a retry cycle may
+    // have moved the revision since [state] was read.
+    final fresh = await database.ohacDeliveryDao.findTerminalState(
+      state.tenantId,
+      state.terminalId,
+    );
+    if (fresh == null) {
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=terminal_state_missing '
+        'phase=ACK_SUBMITTING',
+        name: 'SyncService',
+      );
+      return;
+    }
+    try {
+      await database.ohacDeliveryDao.confirmAcknowledgementWithReceipt(
+        fresh.tenantId,
+        fresh.terminalId,
+        fresh.revision,
+        epoch.sequence,
+        epoch.digest,
+        receiptId,
+        floorSequence,
+        epoch.digest,
+        DateTime.now().toIso8601String(),
+      );
+      developer.log(
+        '[SYNC_PULL] ohac_ack_confirmed sequence=${epoch.sequence} '
+        'floor=$floorSequence',
+        name: 'SyncService',
+      );
+    } catch (e) {
+      // §5 step 4: "If the final local write fails, retrying the same ack
+      // returns the receipt." Contained; the next pull's phase-driven retry
+      // resends the identical request.
+      developer.log(
+        '[SYNC_PULL] ohac_ack_deferred reason=confirm_write_failed '
+        'phase=ACK_SUBMITTING',
+        name: 'SyncService',
+        error: e,
+      );
+    }
+  }
+
+  /// The §9 classification for a 409 ack rejection `resultCode`, or `null`
+  /// for the indeterminate answer that must stay in `ACK_SUBMITTING`.
+  ///
+  /// Every mapped code means the claim can never be accepted (§9/§10):
+  /// - `DIGEST_MISMATCH`, `CHAIN_MISMATCH`: the claim conflicts with what
+  ///   the server signed/published for this chain — §9's "same-sequence
+  ///   digest conflict" and "local/server floor conflict" family →
+  ///   `ACK_INCONSISTENT`.
+  /// - `UNKNOWN_EPOCH`: the server has no epoch at this position at all —
+  ///   the local claim contradicts the server's chain → `ACK_INCONSISTENT`.
+  /// - `IDEMPOTENCY_CONFLICT`: impossible with a claim-derived key unless
+  ///   the server sees a DIFFERENT claim under this terminal's key — the
+  ///   persisted claim is not what the state says → `ACK_INCONSISTENT`.
+  /// - `STALE_SEQUENCE`: the claim is behind the floor the server already
+  ///   holds — §9's "local sequence below server floor" (reconnect reading:
+  ///   a terminal that lost its local rows) → `LOCAL_ROLLBACK`.
+  /// - `SEQUENCE_GAP`: the backend contract defines this as "the client
+  ///   skipped ahead of the next epoch it is owed"
+  ///   (`contracts/acknowledgement.ts`; `acknowledgement.spec.ts` proves it
+  ///   is only reachable when the claim sequence is AHEAD of the server's
+  ///   floor). An ahead-of-floor claim is a local/server floor conflict,
+  ///   the same family as RECOVERY_REQUIRED (§5 step 5) →
+  ///   `ACK_INCONSISTENT`. §10 tension, recorded deliberately: §10 lists
+  ///   `OHAC_SEQUENCE_GAP` as "Yes after pull | request next contiguous
+  ///   epoch" — retryable — but that vocabulary describes the pull-side
+  ///   delivery loop, while this is the ack path's fail-closed verdict. The
+  ///   code follows §9's classification and this divergence is recorded
+  ///   here rather than silently resolved, mirroring how
+  ///   `terminal_state_machine.dart` records the §5.5/§9
+  ///   ROLLBACK_DETECTED/LOCAL_ROLLBACK spelling tension.
+  /// - `UNAVAILABLE`: the backend could not decide → indeterminate, `null`.
+  /// - anything else: unmapped — fail closed (`ACK_INCONSISTENT`); an
+  ///   unknown rejection verdict is never worth a retry that could confirm
+  ///   a claim the server may already have refused terminally.
+  OhacIntegrityClassification? _classifyOhacAckRejection(String? resultCode) {
+    switch (resultCode) {
+      case 'DIGEST_MISMATCH':
+      case 'CHAIN_MISMATCH':
+      case 'UNKNOWN_EPOCH':
+      case 'IDEMPOTENCY_CONFLICT':
+        return OhacIntegrityClassification.ackInconsistent;
+      case 'SEQUENCE_GAP':
+        return OhacIntegrityClassification.ackInconsistent;
+      case 'STALE_SEQUENCE':
+        return OhacIntegrityClassification.localRollback;
+      case 'UNAVAILABLE':
+        return null;
+      default:
+        return OhacIntegrityClassification.ackInconsistent;
+    }
+  }
+
+  /// Applies a §9 classification to the terminal state and logs it.
+  Future<void> _markOhacIntegrityLoss(
+    OhacTerminalStateEntity state,
+    OhacIntegrityClassification classification,
+    String reason,
+  ) async {
+    final database = _database!;
+    final marked = await database.ohacDeliveryDao.markIntegrityLoss(
+      state.tenantId,
+      state.terminalId,
+      state.revision,
+      classification.wire,
+      DateTime.now().toIso8601String(),
+    );
+    developer.log(
+      '[SYNC_PULL] ohac_ack_integrity_loss '
+      'classification=${classification.wire} reason=$reason '
+      'applied=${marked == 1}',
+      name: 'SyncService',
+    );
   }
 
   /// Builds the four OHAC negotiation query parameters for the inbound pull
@@ -3151,6 +3599,22 @@ class SyncService {
               name: 'SyncService',
             );
           }
+        }
+
+        // 6a. OHAC reconnect reconciliation (unit B2d, §5 step 5): retry
+        // a pending acknowledgement on every pull, before consuming new
+        // epoch work. Contained exactly like the consumption below: an OHAC
+        // reconciliation failure must never fail the pull nor block the
+        // watermark update.
+        try {
+          await _reconcileOhacAcknowledgement();
+        } catch (e, stackTrace) {
+          developer.log(
+            '[SYNC_PULL] ohac_ack_reconciliation_failed reason=exception',
+            name: 'SyncService',
+            error: e,
+            stackTrace: stackTrace,
+          );
         }
 
         // 6b. OHAC human-authorization epoch consumption (unit B2c-3b,

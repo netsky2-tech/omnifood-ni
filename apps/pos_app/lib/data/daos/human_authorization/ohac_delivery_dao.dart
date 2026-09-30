@@ -274,6 +274,129 @@ abstract class OhacDeliveryDao {
     String newUpdatedAt,
   );
 
+  /// Transaction **C** of design §5 step 4: record the ack receipt and
+  /// promote the candidate to ACTIVE in one atomic local write.
+  ///
+  /// §5 step 4: "The POS atomically records the receipt and promotes
+  /// candidate to ACTIVE. Only then can it authorize. If the final local
+  /// write fails, retrying the same ack returns the receipt." The receipt
+  /// of record is one row after C: the governing pair, the server floor,
+  /// the receipt ID and the negotiated backend build all read back from
+  /// `human_auth_terminal_state` (the backend 201 response carries no
+  /// `serverBuild`, so §5.4's server build is the negotiated
+  /// `epoch.publisherBackendBuild` already persisted by R).
+  ///
+  /// The guards are read before anything is written: only a terminal in
+  /// `ACK_SUBMITTING` may confirm, and only the exact server-confirmed
+  /// candidate pair may be promoted — a confirmation of a claim the local
+  /// candidate does not hold would promote a policy row the server never
+  /// signed for this terminal. The revision CAS on the UPDATE itself is the
+  /// atomicity: `0` affected rows means a concurrent transition won the row
+  /// and NOTHING changed, which — like R and S — throws so the caller
+  /// retries the identical acknowledgement instead of confirming a
+  /// half-moved state.
+  ///
+  /// This transaction supersedes `confirmAcknowledgement` and
+  /// `recordServerFloor` in production: the receipt, promotion, floor and
+  /// CAS move belongs to ONE write, not three. The two frozen single-field
+  /// transitions are kept untouched for their pinned tests; no production
+  /// caller remains for either.
+  ///
+  /// One lifecycle fact is appended per confirmed ack (`OHAC_ACK_CONFIRMED`);
+  /// the append-only log is forensic evidence, not the receipt of record.
+  /// Positional arguments only: named arguments break Floor 1.5.0's
+  /// generated `@transaction` code (AGENTS.md, design §13).
+  @transaction
+  Future<void> confirmAcknowledgementWithReceipt(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    int expectedSequence,
+    String expectedDigest,
+    String receiptId,
+    int serverFloorSequence,
+    String serverFloorDigest,
+    String newUpdatedAt,
+  ) async {
+    final current = await findTerminalState(tenantId, terminalId);
+    if (current == null) {
+      throw StateError('OHAC terminal state is missing for $terminalId');
+    }
+    if (current.state != OhacTerminalPhase.ackSubmitting.wire) {
+      throw StateError(
+        'OHAC confirm requires ${OhacTerminalPhase.ackSubmitting.wire}, '
+        'found ${current.state}',
+      );
+    }
+    if (current.candidateSequence != expectedSequence ||
+        current.candidateDigest != expectedDigest) {
+      throw StateError(
+        'OHAC confirm claim (sequence $expectedSequence) does not match the '
+        'candidate on record '
+        '(${current.candidateSequence})',
+      );
+    }
+
+    final confirmed = await confirmWithReceipt(
+      tenantId,
+      terminalId,
+      expectedRevision,
+      serverFloorSequence,
+      serverFloorDigest,
+      receiptId,
+      newUpdatedAt,
+    );
+    if (confirmed != 1) {
+      throw StateError(
+        'OHAC confirm lost terminal-state revision $expectedRevision',
+      );
+    }
+
+    await appendEvent(
+      OhacLocalEventEntity(
+        id: const Uuid().v4(),
+        tenantId: tenantId,
+        terminalId: terminalId,
+        eventType: OhacLocalEventType.ackConfirmed,
+        sequence: expectedSequence,
+        payload: jsonEncode({
+          'receiptId': receiptId,
+          'fromFloorSequence': current.serverFloorSequence,
+          'toFloorSequence': serverFloorSequence,
+        }),
+        createdAt: newUpdatedAt,
+      ),
+    );
+  }
+
+  /// The CAS write behind [confirmAcknowledgementWithReceipt]: promotion,
+  /// candidate clear, floor, receipt and revision move in one UPDATE whose
+  /// WHERE pins the expected revision.
+  @Query(
+    'UPDATE human_auth_terminal_state '
+    'SET state = \'ACTIVE\', '
+    'active_sequence = candidate_sequence, '
+    'active_digest = candidate_digest, '
+    'candidate_sequence = 0, '
+    "candidate_digest = '', "
+    'server_floor_sequence = :serverFloorSequence, '
+    'server_floor_digest = :serverFloorDigest, '
+    'ack_receipt_id = :receiptId, '
+    'revision = revision + 1, '
+    'updated_at = :newUpdatedAt '
+    'WHERE tenant_id = :tenantId AND terminal_id = :terminalId '
+    'AND revision = :expectedRevision',
+  )
+  Future<int?> confirmWithReceipt(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    int serverFloorSequence,
+    String serverFloorDigest,
+    String receiptId,
+    String newUpdatedAt,
+  );
+
   /// Mark integrity loss: the loss state and the classification together.
   @Query(
     'UPDATE human_auth_terminal_state '

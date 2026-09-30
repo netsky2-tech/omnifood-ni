@@ -193,6 +193,14 @@ class OhacTerminalStateEntity {
   @ColumnInfo(name: 'integrity_classification')
   final String integrityClassification;
 
+  /// The acknowledgement receipt ID the backend returned for the confirmed
+  /// epoch (design §5 step 4), or `null` while the current epoch has not
+  /// been confirmed. Nullable because the column is only meaningful after a
+  /// 201 receipt — and SQLite cannot add a NOT NULL column without a
+  /// default (see `candidateSequence` above).
+  @ColumnInfo(name: 'ack_receipt_id')
+  final String? ackReceiptId;
+
   /// Terminal-local authorization sequence, forced by the authority (design
   /// §4.2, §6). Note: `human_auth_attempt_state` also carries a column of
   /// this name with a per-user meaning; that duplication is a known open
@@ -223,6 +231,7 @@ class OhacTerminalStateEntity {
     required this.negotiatedAssertionSchema,
     required this.integrityClassification,
     required this.localAuthorizationSequence,
+    this.ackReceiptId,
     required this.revision,
     required this.updatedAt,
   });
@@ -298,6 +307,15 @@ abstract final class OhacLocalEventType {
   /// generation, which is where that identity exists; no verifier, PIN or
   /// assertion body may ever appear here (design §12 observability).
   static const adminAttemptResetApplied = 'ADMIN_ATTEMPT_RESET_APPLIED';
+
+  /// The terminal recorded the backend's acknowledgement receipt and
+  /// promoted the candidate to the governing epoch (design §5 step 4).
+  ///
+  /// The payload carries the receipt ID and the server floor move only;
+  /// the receipt's existence is itself persisted on the terminal-state row
+  /// (`ack_receipt_id`), so this event is the forensic fact, not the
+  /// receipt of record. No verifier, PIN or assertion body may appear here.
+  static const ackConfirmed = 'OHAC_ACK_CONFIRMED';
 }
 
 /// Append-only local event log (design §4.2).

@@ -42,7 +42,9 @@ pendings outside this effort unless the owner extends it.
   `test/data/` run) so later failures are attributable.
 
 ### U1 — B2c-3b: consume the `humanAuthorization` member
-- Status: IMPLEMENTED — issue #706 (`status:approved`, `type:feature`); PR pending.
+- Status: **MERGED as `b06597f4`** (PR #707, issue #706 closed). Branch
+  `feat/ohac-pos-pull-consumption` deleted remotely. All checks green on the final tree
+  (`lint-and-test` 9m41s, `build-check` 2m13s, Cloudflare, GitGuardian); merged 2026-09-30.
 - Independent verification (`gentle-ai-verify`): **approve, 0 BLOCKING**, 4 SHOULD-FIX — all 4
   closed by the writer (negative sentinel pins; duplicate-branch strengthening with the
   row-level-impossibility documented, citing R's guards; mapper test 3 renamed to what it proves;
@@ -66,6 +68,14 @@ pendings outside this effort unless the owner extends it.
   — deterministic, not transient. Owner decision (this session): **deliver U1 on the independent
   verification above**; the native review did not run for this candidate and no authority was
   acknowledged.
+- **Two CI facts worth keeping**: (1) the first CI run failed on a `?` null-aware map element the
+  pinned analyzer 6.4.1 cannot parse (`sync_service_test.dart:3482`) even though the SDK parser
+  accepts it — fixed with the repo's collection-if + `ignore: use_null_aware_elements` pattern, and
+  `dart run build_runner build` now passes with zero generated churn; (2) two
+  `activation_attempt_discovery_service_test.dart` tests failed on the old base `1a90f237` —
+  they also fail on clean `main` at `b2ab6e7a` (same 2 of 2441) and are fixed at `bc5145cc`,
+  unrelated to OHAC. Merging `origin/main` into the branch (owner-approved instead of rebase)
+  turned the final run green: **2459+ tests passing**.
 - Response side of the pull: the mapper that nobody has written (no production file constructs
   `OhacPolicyEpochEntity`/`OhacPolicyEntryEntity`), the four explicit statuses (`DELIVER`,
   `DISABLED`, `UPGRADE_REQUIRED`, `RECOVERY_REQUIRED`), the two absence outcomes
@@ -76,7 +86,33 @@ pendings outside this effort unless the owner extends it.
   none of those members. Backend envelope: `apps/admin_backend/src/modules/sales/dto/inbound-sync.dto.ts:337`.
 
 ### U2 — B2d: acknowledgement client and reconnect reconciliation
-- Status: PENDING
+- Status: IMPLEMENTED — issue #710 (`status:approved`, `type:feature`); PR pending.
+- Independent verification: **FIX-FIRST → all fixed**: 1 BLOCKING (`SEQUENCE_GAP` classified
+  backwards as `LOCAL_ROLLBACK` — the backend defines it as claim-AHEAD-of-floor
+  (`acknowledgement.ts:28`, `spec:97,115`), moved to `ACK_INCONSISTENT` with the §10 retryable
+  reading recorded as a divergence; RED proven) + 2 SHOULD-FIX (idempotency-key collision
+  property untested → collision test + pinned 64-hex golden + mutation proof; `Map.from` outside
+  local try vs "never throws" docstring → `asObject()` guard + 2 containment tests, one RED-proven).
+- Evidence: focused OHAC suites 98/98, sync 97/97, `flutter analyze` clean, `dart run build_runner
+  build` clean (unchanged `git status`), full `test/data/` final **1173/1173** (4 loader flakes
+  across 4 runs, all the verbatim known `WebSocketException` message, 0 assertion failures).
+  4 mutation proofs, sha256 byte-identical restores. Authored: production 763 + tests 1,710 =
+  **2,473 lines, 6.2× the guard, overage declared**.
+- What shipped: pure 8-field ack builder + claim-derived idempotency key; migration 58→59
+  (`ack_receipt_id`); atomic `confirmAcknowledgementWithReceipt` (receipt + floor + promotion +
+  `OHAC_ACK_CONFIRMED` event in ONE CAS, §5 step 4); R→S→POST→cross-check→confirm flow; 409
+  `resultCode` → §9 classification (fail closed on unmapped); phase-driven retry on every pull
+  (closes the `NothingToReconcile` freeze the scout found); `RECOVERY_REQUIRED` →
+  `INTEGRITY_LOSS/ACK_INCONSISTENT`; `confirmAcknowledgement`/`recordServerFloor` remain frozen
+  and production-unused (superseded, recorded in the DAO doc comment).
+- Writer incident (recorded): one prohibited `git checkout --` during a mutation restore reverted
+  its own in-progress `sync_service.dart`; recovered byte-identical from a /tmp copy, sha256
+  verified; no other file ever touched by git commands.
+- **Native review `review-cd47a21c34ae3bc8` failed twice** with the exact U1 signature
+  (`pi-host-relay-transport-failure` / `reviewer-empty-output` / `stopReason: length`, ~108s) —
+  now 5/5 identical failures across 2 lineages: deterministic provider infrastructure fault.
+  Owner decision: **deliver U2 on the independent verification**, same as U1; no authority
+  acknowledged. Both open lineages remain in `reviewing` state, unacknowledged.
 - `POST /v1/sync/inbound/human-authorization/staff-policy/ack` (backend controller exists); body
   carries claim + negotiated facts only, identity from device credentials.
 - Reconnect reconciliation: retry while `ACK_SUBMITTING`, integrity loss.
