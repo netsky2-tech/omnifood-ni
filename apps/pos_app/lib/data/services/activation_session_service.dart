@@ -152,6 +152,15 @@ class ActivationSessionService {
     );
   }
 
+  /// Returns the most recent completed attempt (ACTIVATED or
+  /// ACTIVATED_WITH_WARNING) for the tenant, or null. Used by the view
+  /// to prefer a finished attempt over a stale one discovered from backend.
+  Future<ActivationAttemptLocalEntity?> getCompletedAttempt(
+    String tenantId,
+  ) async {
+    return _database.activationAttemptLocalDao.getCompletedAttempt(tenantId);
+  }
+
   /// Phase 1: runs the pre-offline checks through the injected runner.
   Future<PreOfflineRunnerSummary> runPreOfflineChecks({
     required String authorizedUserId,

@@ -615,7 +615,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                   },
                 })
               }
-              disabled={generateLinkingCode.isPending || !hasActivationPermission}
+              disabled={generateLinkingCode.isPending || !hasActivationPermission || isAwaitingDeviceChecks}
               className="flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
             >
               <Smartphone className="h-4 w-4" />
@@ -623,6 +623,12 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 ? "Generando código..."
                 : "Generar código de vinculación"}
             </Button>
+          )}
+          {isAwaitingDeviceChecks && !linkingCode && (
+            <p className="text-[11px] text-amber-700 font-medium flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+              Hay un intento de activación en curso. Cancelalo antes de generar un nuevo código.
+            </p>
           )}
           {linkingCode && (
             <div
@@ -721,7 +727,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                       size="sm"
                       data-testid="start-activation-for-terminal-btn"
                       onClick={() => code.deviceId && handleStartActivationForClaimedDevice(code.deviceId)}
-                      disabled={startActivationAttempt.isPending || !hasActivationPermission || !code.deviceId}
+                      disabled={startActivationAttempt.isPending || !hasActivationPermission || !code.deviceId || isAwaitingDeviceChecks}
                       className="self-start sm:self-auto flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
                     >
                       <Store className="h-4 w-4" />

@@ -67,6 +67,8 @@ void main() {
     sessionService = _MockActivationSessionService();
     authRepository = _MockAuthRepository();
     primingService = _MockActivationPrimingService();
+    when(() => sessionService.getCompletedAttempt('tenant-1'))
+        .thenAnswer((_) async => null);
     when(() => authRepository.getCurrentUser())
         .thenAnswer((_) async => loggedInUser);
     when(() => primingService.primeTerminal()).thenAnswer(
@@ -87,6 +89,8 @@ void main() {
   });
 
   void stubPreparationSuccess() {
+    when(() => sessionService.getCompletedAttempt('tenant-1'))
+        .thenAnswer((_) async => null);
     when(() => sessionService.prepare(tenantId: 'tenant-1')).thenAnswer(
       (_) async => ActivationSessionPreparationResult(
         isSuccess: true,
@@ -99,6 +103,8 @@ void main() {
     String code = 'NO_ACTIVE_ATTEMPT',
     String message = 'No hay un intento de activación activo para este tenant.',
   }) {
+    when(() => sessionService.getCompletedAttempt('tenant-1'))
+        .thenAnswer((_) async => null);
     when(() => sessionService.prepare(tenantId: 'tenant-1')).thenAnswer(
       (_) async => ActivationSessionPreparationResult(
         isSuccess: false,

@@ -63,6 +63,8 @@ void main() {
   );
 
   void stubSuccessfulSession() {
+    when(() => sessionService.getCompletedAttempt('tenant-1'))
+        .thenAnswer((_) async => null);
     when(() => sessionService.prepare(tenantId: 'tenant-1')).thenAnswer(
       (_) async => ActivationSessionPreparationResult(
         isSuccess: true,
@@ -108,6 +110,8 @@ void main() {
     sessionService = _MockActivationSessionService();
     authRepository = _MockAuthRepository();
     primingService = _MockActivationPrimingService();
+    when(() => sessionService.getCompletedAttempt('tenant-1'))
+        .thenAnswer((_) async => null);
     when(() => authRepository.getCurrentUser())
         .thenAnswer((_) async => loggedInUser);
     when(() => primingService.primeTerminal()).thenAnswer(

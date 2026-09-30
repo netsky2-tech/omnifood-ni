@@ -368,11 +368,19 @@ class DioActivationSyncPort implements ActivationSyncPort {
 
     Response<dynamic> response;
     try {
+      final reqUrl = '${_dio.options.baseUrl}onboarding/activation/device-sync-credential';
+      final reqHeaders = Map<String, dynamic>.from(_dio.options.headers);
+      // ignore: avoid_print
+      print('[Bootstrap] REQUEST url=$reqUrl headers=${reqHeaders.keys.toList()}');
       response = await _dio.post<dynamic>(
         'onboarding/activation/device-sync-credential',
         data: {'deviceId': cleanDeviceId},
       );
+      // ignore: avoid_print
+      print('[Bootstrap] status=${response.statusCode}');
     } on DioException catch (e) {
+      // ignore: avoid_print
+      print('[Bootstrap] FAIL type=${e.type} status=${e.response?.statusCode} url=${e.requestOptions.uri} data=${e.response?.data}');
       final statusCode = e.response?.statusCode;
       final errorData = e.response?.data;
       final errorCode = errorData is Map

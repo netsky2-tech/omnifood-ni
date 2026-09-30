@@ -70,6 +70,13 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
             return const Center(child: CircularProgressIndicator());
           }
 
+          // Activation already completed: show success screen with redirect.
+          final attemptStatus = viewModel.attempt?.localStatus;
+          if (attemptStatus == 'ACTIVATED' ||
+              attemptStatus == 'ACTIVATED_WITH_WARNING') {
+            return _buildActivationComplete(context, attemptStatus!);
+          }
+
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -91,6 +98,59 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// Shown when the attempt is already ACTIVATED or ACTIVATED_WITH_WARNING.
+  /// Gives the operator a clear completion state and a path back to the POS
+  /// instead of re-showing phase cards that would hit status guards.
+  Widget _buildActivationComplete(BuildContext context, String status) {
+    final isWarning = status == 'ACTIVATED_WITH_WARNING';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isWarning ? Icons.check_circle_outline : Icons.check_circle,
+              size: 80,
+              color: isWarning ? Colors.amber : Colors.green,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              isWarning ? 'Activado con advertencia' : 'Terminal activado',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              isWarning
+                  ? 'La activación se completó con una advertencia menor. '
+                      'La terminal está lista para operar.'
+                  : 'La activación se completó correctamente. '
+                      'La terminal está lista para operar.',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              key: const Key('go_to_pos_button'),
+              onPressed: () {
+                Navigator.of(context).pushReplacementNamed('/home');
+              },
+              icon: const Icon(Icons.point_of_sale),
+              label: const Text('Ir al POS'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 16),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

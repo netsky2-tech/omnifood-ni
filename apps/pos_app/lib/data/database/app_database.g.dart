@@ -6757,6 +6757,15 @@ class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
   }
 
   @override
+  Future<ActivationAttemptLocalEntity?> getCompletedAttempt(
+      String tenantId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM activation_attempts_local WHERE tenant_id = ?1 AND local_status IN (\'ACTIVATED\', \'ACTIVATED_WITH_WARNING\') ORDER BY assigned_at DESC LIMIT 1',
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
+        arguments: [tenantId]);
+  }
+
+  @override
   Future<void> deleteByTenantId(String tenantId) async {
     await _queryAdapter.queryNoReturn(
         'DELETE FROM activation_attempts_local WHERE tenant_id = ?1',

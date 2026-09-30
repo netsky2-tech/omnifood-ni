@@ -115,6 +115,14 @@ class ActivationAttemptDiscoveryService {
     'SYNC_VERIFICATION_PENDING',
   };
 
+  /// Terminal states: the activation already finished on this device.
+  /// Discovery must prefer these over a stale backend-side attempt so the
+  /// UI shows the completion screen instead of re-offering phases.
+  static const _completedStatuses = {
+    'ACTIVATED',
+    'ACTIVATED_WITH_WARNING',
+  };
+
   Future<ActivationAttemptDiscoveryResult> discoverActiveAttempt({
     required String tenantId,
   }) async {
