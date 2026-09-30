@@ -68,6 +68,7 @@ function buildEnvelope(overrides: {
         {
           id: 'user-uuid-1',
           name: 'Encargado',
+          tenantId: 'tenant-abc',
           email: 'encargado@tenant.test',
           role: 'ENCARGADO',
           isActive: true,
