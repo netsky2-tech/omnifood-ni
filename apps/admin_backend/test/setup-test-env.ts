@@ -12,3 +12,6 @@ process.env.JWT_ACCESS_TTL_SECONDS ??= '3600';
 process.env.JWT_REFRESH_TTL_SECONDS ??= '604800';
 process.env.JWT_CLOCK_TOLERANCE_SECONDS ??= '5';
 process.env.JWT_ALGORITHM ??= 'HS256';
+process.env.HUMAN_AUTHORIZATION_RECOVERY_PEPPER ??=
+  'test-only-recovery-pepper-with-at-least-thirty-two-bytes';
+process.env.OMNIFOOD_BACKEND_BUILD ??= 'backend-build-1';

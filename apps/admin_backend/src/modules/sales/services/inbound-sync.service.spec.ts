@@ -18,6 +18,8 @@ import { Customer } from '../../customers/entities/customer.entity';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
 import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
 import { StaffPolicyEpochAcknowledgementService } from '../../identity/human-authorization/services/staff-policy-epoch-acknowledgement.service';
+import { RecoveryTokenService } from '../../identity/human-authorization/services/recovery-token.service';
+import { OHAC_ERROR_HTTP_STATUS } from '../../identity/human-authorization/contracts/error-codes';
 import type { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
 import { CatalogType } from '../../catalog/catalog-type';
 
@@ -48,6 +50,7 @@ describe('InboundSyncService', () => {
   let service: InboundSyncService;
   const deliveryMock = { negotiate: jest.fn() };
   const acknowledgementMock = { acknowledge: jest.fn() };
+  const recoveryTokenMock = { redeem: jest.fn() };
   const devicePrincipal = {
     principalType: 'DEVICE_SYNC',
     credentialId: 'cred-1',
@@ -194,6 +197,10 @@ describe('InboundSyncService', () => {
         {
           provide: StaffPolicyEpochAcknowledgementService,
           useValue: acknowledgementMock,
+        },
+        {
+          provide: RecoveryTokenService,
+          useValue: recoveryTokenMock,
         },
       ],
     }).compile();
@@ -1117,11 +1124,9 @@ describe('InboundSyncService', () => {
     it('fails closed when the acknowledgement service is not wired', async () => {
       // A composition without OHAC must not answer as though it had recorded
       // anything, so the terminal gets a conflict rather than a silent success.
-      const bareService = new (service.constructor as new (
-        ...args: unknown[]
-      ) => typeof service)(
-        ...(Array.from({ length: 9 }, () => ({})) as unknown[]),
-      );
+      const bareService = new (
+        service.constructor as new (...args: unknown[]) => typeof service
+      )(...(Array.from({ length: 9 }, () => ({})) as unknown[]));
 
       await expect(
         bareService.acknowledgeStaffPolicyEpoch(
@@ -1132,6 +1137,146 @@ describe('InboundSyncService', () => {
       ).rejects.toMatchObject({
         status: 409,
         response: { status: 'REJECTED', resultCode: 'UNAVAILABLE' },
+      });
+    });
+  });
+
+  describe('OHAC recovery token redemption (design §9, §10 HTTP mapping)', () => {
+    const redeemDto = {
+      token: 'ohr1.66666666-6666-4666-8666-666666666666.abc',
+      idempotencyKey: 'idem-1',
+      posBuild: 'pos-build-1',
+      policySchema: 'ohac.staff-policy-snapshot.v1',
+      assertionSchema: 'ohac.assertion.v1',
+    };
+
+    beforeEach(() => {
+      recoveryTokenMock.redeem.mockReset();
+      process.env.OMNIFOOD_BACKEND_BUILD = 'backend-build-1';
+    });
+
+    it('returns the redemption receipt shape for a first redemption', async () => {
+      recoveryTokenMock.redeem.mockResolvedValue({
+        status: 'redeemed',
+        receipt: {
+          tokenId: 'token-1',
+          terminalId: 'pos-terminal-01',
+          redeemedAt: new Date('2026-09-28T12:05:00Z'),
+        },
+      });
+
+      const response = await service.redeemHumanAuthorizationRecoveryToken(
+        'tenant-1',
+        devicePrincipal,
+        redeemDto,
+      );
+
+      expect(response).toEqual({
+        status: 'REDEEMED',
+        tokenId: 'token-1',
+        terminalId: 'pos-terminal-01',
+        redeemedAt: '2026-09-28T12:05:00.000Z',
+      });
+    });
+
+    it('marks a lost-response replay as REPLAYED with the same receipt', async () => {
+      recoveryTokenMock.redeem.mockResolvedValue({
+        status: 'replayed',
+        receipt: {
+          tokenId: 'token-1',
+          terminalId: 'pos-terminal-01',
+          redeemedAt: new Date('2026-09-28T12:05:00Z'),
+        },
+      });
+
+      const response = await service.redeemHumanAuthorizationRecoveryToken(
+        'tenant-1',
+        devicePrincipal,
+        redeemDto,
+      );
+
+      expect(response.status).toBe('REPLAYED');
+      expect(response.tokenId).toBe('token-1');
+    });
+
+    it('maps an expired token through OHAC_ERROR_HTTP_STATUS to its §10 status', async () => {
+      recoveryTokenMock.redeem.mockResolvedValue({
+        status: 'rejected',
+        resultCode: 'OHAC_RECOVERY_EXPIRED',
+      });
+
+      await expect(
+        service.redeemHumanAuthorizationRecoveryToken(
+          'tenant-1',
+          devicePrincipal,
+          redeemDto,
+        ),
+      ).rejects.toMatchObject({
+        status: OHAC_ERROR_HTTP_STATUS.OHAC_RECOVERY_EXPIRED,
+        response: { resultCode: 'OHAC_RECOVERY_EXPIRED' },
+      });
+    });
+
+    it('maps a binding mismatch to its §10 status (403 family)', async () => {
+      recoveryTokenMock.redeem.mockResolvedValue({
+        status: 'rejected',
+        resultCode: 'OHAC_RECOVERY_BINDING_MISMATCH',
+      });
+
+      await expect(
+        service.redeemHumanAuthorizationRecoveryToken(
+          'tenant-1',
+          devicePrincipal,
+          redeemDto,
+        ),
+      ).rejects.toMatchObject({
+        status: OHAC_ERROR_HTTP_STATUS.OHAC_RECOVERY_BINDING_MISMATCH,
+        response: { resultCode: 'OHAC_RECOVERY_BINDING_MISMATCH' },
+      });
+    });
+
+    it('takes the tenant/terminal/credential from the principal and pins the deployment backend build', async () => {
+      recoveryTokenMock.redeem.mockResolvedValue({
+        status: 'redeemed',
+        receipt: {
+          tokenId: 'token-1',
+          terminalId: 'pos-terminal-01',
+          redeemedAt: new Date('2026-09-28T12:05:00Z'),
+        },
+      });
+
+      await service.redeemHumanAuthorizationRecoveryToken(
+        'tenant-1',
+        devicePrincipal,
+        redeemDto,
+      );
+
+      expect(recoveryTokenMock.redeem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          terminalId: 'pos-terminal-01',
+          credentialId: 'cred-1',
+          backendBuild: 'backend-build-1',
+          token: redeemDto.token,
+          idempotencyKey: 'idem-1',
+        }),
+      );
+    });
+
+    it('fails closed with OHAC_TEMPORARY_UNAVAILABLE when the recovery service is not wired', async () => {
+      const bareService = new (
+        service.constructor as new (...args: unknown[]) => typeof service
+      )(...(Array.from({ length: 9 }, () => ({})) as unknown[]));
+
+      await expect(
+        bareService.redeemHumanAuthorizationRecoveryToken(
+          'tenant-1',
+          devicePrincipal,
+          redeemDto,
+        ),
+      ).rejects.toMatchObject({
+        status: 503,
+        response: { resultCode: 'OHAC_TEMPORARY_UNAVAILABLE' },
       });
     });
   });
@@ -1650,9 +1795,7 @@ describe('InboundSyncService', () => {
       );
 
       // Fail closed means fail before any SQL: the pooled reads never run.
-      expect(
-        mockLoyaltyProgramRepo.createQueryBuilder,
-      ).not.toHaveBeenCalled();
+      expect(mockLoyaltyProgramRepo.createQueryBuilder).not.toHaveBeenCalled();
       expect(mockLoyaltyRewardRepo.createQueryBuilder).not.toHaveBeenCalled();
       expect(mockPromotionRepo.createQueryBuilder).not.toHaveBeenCalled();
       expect(mockCustomerRepo.createQueryBuilder).not.toHaveBeenCalled();
