@@ -35,6 +35,11 @@ import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import 'authority_hydration_service.dart';
 import 'ohac_negotiation_parameters.dart';
+import '../models/human_authorization/ohac_delivery_entities.dart';
+import '../models/human_authorization/ohac_epoch_persistence_mapper.dart';
+import '../models/human_authorization/ohac_terminal_snapshot_adapter.dart';
+import '../models/human_authorization/staff_policy_epoch_v1.dart';
+import '../models/human_authorization/terminal_state_machine.dart';
 import 'package:pos_app/data/models/inventory/authority_ingestion_verdict_entity.dart';
 import 'network_connectivity_service.dart';
 
@@ -2113,6 +2118,182 @@ class SyncService {
 
   Future<InboundSyncResult?> pullInboundDeltas() => _pullInboundDeltas();
 
+  /// Consumes the `humanAuthorization` member of an inbound pull response
+  /// (unit B2c-3b; design §4.2, §5, §9).
+  ///
+  /// Member semantics (backend `inbound-sync.dto.ts` / delivery service):
+  /// the member is a top-level sibling of `deltas`, and its absence means
+  /// either 'not participating' or 'up to date' — indistinguishable
+  /// client-side, so absence and every non-`DELIVER` status (`DISABLED`,
+  /// `UPGRADE_REQUIRED`, `RECOVERY_REQUIRED`) are no-ops: never persisted,
+  /// and absence is never treated as a DISABLED state change.
+  ///
+  /// `DELIVER` carries `{status, epoch, sequence, digest}` where the sibling
+  /// `sequence`/`digest` merely duplicate the epoch's own values; a mismatch
+  /// between the two renderings fails closed before anything is parsed or
+  /// written.
+  ///
+  /// Identity comes from the persisted terminal state, never from the epoch:
+  /// the mapper asserts the envelope against `state.tenantId`/
+  /// `state.terminalId` and throws on mismatch. `ensureTerminalState` already
+  /// ran during this pull's negotiation, but this method must not assume the
+  /// row exists — a missing row is a fail-closed refusal, and any `StateError`
+  /// R raises (state not `ACTIVE`, sequence race) is contained by the caller's
+  /// try/catch so consumption can never fail the pull or the watermark.
+  ///
+  /// The negotiated facts recorded by R reuse the same build string this
+  /// client negotiated with (`readOhacPosBuild()`), the epoch's
+  /// `publisherBackendBuild`, and the envelope's two schema ids.
+  Future<void> _consumeHumanAuthorizationEpoch(
+    Map<dynamic, dynamic> data,
+  ) async {
+    final member = data['humanAuthorization'];
+    if (member == null) {
+      developer.log(
+        '[SYNC_PULL] ohac_epoch member=absent action=noop',
+        name: 'SyncService',
+      );
+      return;
+    }
+    if (member is! Map) {
+      developer.log(
+        '[SYNC_PULL] ohac_epoch_refused reason=member_not_map',
+        name: 'SyncService',
+      );
+      return;
+    }
+    final envelope = Map<String, dynamic>.from(member);
+
+    final status = envelope['status']?.toString();
+    if (status != 'DELIVER') {
+      // DISABLED / UPGRADE_REQUIRED / RECOVERY_REQUIRED (and any unknown
+      // status) carry no epoch: nothing to apply, nothing to persist.
+      developer.log(
+        '[SYNC_PULL] ohac_epoch status=$status action=noop',
+        name: 'SyncService',
+      );
+      return;
+    }
+
+    final epochRaw = envelope['epoch'];
+    if (epochRaw is! Map) {
+      developer.log(
+        '[SYNC_PULL] ohac_epoch_refused reason=epoch_not_map',
+        name: 'SyncService',
+      );
+      return;
+    }
+    final epochMap = Map<String, dynamic>.from(epochRaw);
+
+    // Cross-check the sibling pair against the epoch's own values before
+    // anything else: the backend renders them as a redundancy, and a
+    // truncated or tampered rendering must be detected before parsing.
+    if (envelope['sequence'] != epochMap['sequence'] ||
+        envelope['digest'] != epochMap['digest']) {
+      developer.log(
+        '[SYNC_PULL] ohac_epoch_refused reason=sibling_pair_mismatch',
+        name: 'SyncService',
+      );
+      return;
+    }
+
+    final database = _database!;
+    final tenantConfig = await database.localConfigDao.getConfigByKey(
+      'tenant_id',
+    );
+    final tenantId = tenantConfig?.value ?? 'tenant-1';
+    final terminalId = _auditRepository.deviceId;
+    final state = await database.ohacDeliveryDao.findTerminalState(
+      tenantId,
+      terminalId,
+    );
+    if (state == null) {
+      // The negotiation step ensures the row on every pull, but never assume
+      // it: no state row, no consumption.
+      developer.log(
+        '[SYNC_PULL] ohac_epoch_refused reason=terminal_state_missing',
+        name: 'SyncService',
+      );
+      return;
+    }
+
+    final posBuild = await readOhacPosBuild();
+    if (posBuild == null) {
+      // The negotiated build cannot be read, so nothing can be matched
+      // against the epoch's targetPosBuild: refuse rather than guess.
+      developer.log(
+        '[SYNC_PULL] ohac_epoch_refused reason=pos_build_unreadable',
+        name: 'SyncService',
+      );
+      return;
+    }
+
+    // Parse + map before deciding: the envelope digest is the only check
+    // that detects byte-level corruption, and R needs the mapped rows.
+    final mapping = mapDeliveredEpochForPersistence(
+      epochMap: epochMap,
+      tenantId: state.tenantId,
+      terminalId: state.terminalId,
+      receivedAt: DateTime.now().toIso8601String(),
+    );
+
+    final decision = evaluateDeliveredEpoch(
+      epoch: mapping.epoch,
+      state: _acceptanceStateFor(state),
+      supportedPosBuild: posBuild,
+    );
+
+    switch (decision) {
+      case OhacReceiveAccept():
+        // Transaction R takes positional arguments in its exact declared
+        // order (Floor @transaction, AGENTS.md, design §13).
+        await database.ohacDeliveryDao.receiveCandidateEpoch(
+          mapping.epochEntity,
+          mapping.entryEntities,
+          mapping.entryEntities.length,
+          mapping.epoch.digest,
+          state.revision,
+          posBuild,
+          mapping.epoch.publisherBackendBuild,
+          mapping.epoch.schema,
+          mapping.epoch.minimumAssertionSchema,
+          DateTime.now().toIso8601String(),
+        );
+        developer.log(
+          '[SYNC_PULL] ohac_epoch_accepted sequence=${mapping.epoch.sequence}',
+          name: 'SyncService',
+        );
+      case OhacReceiveDuplicate():
+        developer.log(
+          '[SYNC_PULL] ohac_epoch status=duplicate action=noop',
+          name: 'SyncService',
+        );
+      case OhacReceiveReject(:final error):
+        // Stale or gapped epoch: a normal race against other terminals of
+        // the tenant. No persistence, no fault.
+        developer.log(
+          '[SYNC_PULL] ohac_epoch_rejected code=${error.code} '
+          'field=${error.field}',
+          name: 'SyncService',
+        );
+      case OhacReceiveIntegrityLoss(:final classification):
+        // §9 quarantine semantics: record the fault class on the terminal
+        // state. Reconciliation of INTEGRITY_LOSS is B2d's scope.
+        final marked = await database.ohacDeliveryDao.markIntegrityLoss(
+          state.tenantId,
+          state.terminalId,
+          state.revision,
+          classification.wire,
+          DateTime.now().toIso8601String(),
+        );
+        developer.log(
+          '[SYNC_PULL] ohac_epoch_integrity_loss '
+          'classification=${classification.wire} applied=${marked == 1}',
+          name: 'SyncService',
+        );
+    }
+  }
+
   /// Builds the four OHAC negotiation query parameters for the inbound pull
   /// (design §11.5 decision 30, §12), or an empty map — the legacy-client
   /// answer — when they cannot be read.
@@ -2167,6 +2348,47 @@ class SyncService {
       );
       return const {};
     }
+  }
+
+  /// The persisted active-pair sentinel is `(0, '')` — "no epoch" — while
+  /// the policy layer expresses the position before epoch 1 in chain
+  /// vocabulary: `(0, 'GENESIS')` (design §4.1; the entity doc comment calls
+  /// 0/`GENESIS` "the epoch chain's own representation of the position before
+  /// epoch 1", and the adapter's own coverage seeds a fresh terminal that
+  /// way). Translating the sentinel here lets a fresh terminal accept epoch
+  /// 1 without weakening anything: epoch 1 still has to present
+  /// `previousSequence '0'` AND `previousDigest 'GENESIS'`, identity, build
+  /// and a valid digest. A real active head already speaks the chain
+  /// vocabulary and passes through untouched, and a corrupt row `(0,`
+  /// `<digest>`) is not translated, so its head simply fails the chain
+  /// check — fail closed.
+  ///
+  /// Flagged for the parent: the alternative fix is seeding `GENESIS` in
+  /// `ensureTerminalState` itself (a frozen surface for this unit); the
+  /// translation is the contained in-surface resolution.
+  OhacTerminalStateEntity _acceptanceStateFor(OhacTerminalStateEntity state) {
+    if (state.activeSequence != 0 || state.activeDigest.isNotEmpty) {
+      return state;
+    }
+    return OhacTerminalStateEntity(
+      tenantId: state.tenantId,
+      terminalId: state.terminalId,
+      state: state.state,
+      activeSequence: state.activeSequence,
+      activeDigest: genesisDigest,
+      candidateSequence: state.candidateSequence,
+      candidateDigest: state.candidateDigest,
+      serverFloorSequence: state.serverFloorSequence,
+      serverFloorDigest: state.serverFloorDigest,
+      negotiatedPosBuild: state.negotiatedPosBuild,
+      negotiatedBackendBuild: state.negotiatedBackendBuild,
+      negotiatedPolicySchema: state.negotiatedPolicySchema,
+      negotiatedAssertionSchema: state.negotiatedAssertionSchema,
+      integrityClassification: state.integrityClassification,
+      localAuthorizationSequence: state.localAuthorizationSequence,
+      revision: state.revision,
+      updatedAt: state.updatedAt,
+    );
   }
 
   Future<InboundSyncResult?> _pullInboundDeltas() async {
@@ -2929,6 +3151,22 @@ class SyncService {
               name: 'SyncService',
             );
           }
+        }
+
+        // 6b. OHAC human-authorization epoch consumption (unit B2c-3b,
+        // design §4.2, §5). Contained: an OHAC consumption failure must
+        // never fail the pull nor block the watermark update — §5.1 keeps
+        // pull-side receipt decoupled from the ack path, and a refused or
+        // failed consumption converges on the next pull.
+        try {
+          await _consumeHumanAuthorizationEpoch(data);
+        } catch (e, stackTrace) {
+          developer.log(
+            '[SYNC_PULL] ohac_epoch_consumption_failed reason=exception',
+            name: 'SyncService',
+            error: e,
+            stackTrace: stackTrace,
+          );
         }
 
         // Update local sync watermark version
