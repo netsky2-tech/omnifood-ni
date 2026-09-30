@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import {
   CashShiftSession,
   CashShiftStatus,
@@ -10,6 +10,7 @@ import type {
   CashMovementSyncItemDto,
   CashShiftSessionSyncItemDto,
 } from '../dto/cash-shift-sync.dto';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 
 export type CashShiftSyncStatus = 'ACCEPTED' | 'FAILED';
 
@@ -71,6 +72,7 @@ export class CashShiftSyncIngestionService {
   private readonly logger = new Logger(CashShiftSyncIngestionService.name);
 
   constructor(
+    private readonly dataSource: DataSource,
     @InjectRepository(CashShiftSession)
     private readonly shiftsRepository: Repository<CashShiftSession>,
     @InjectRepository(CashMovement)
@@ -81,45 +83,56 @@ export class CashShiftSyncIngestionService {
     tenantId: string,
     batch: CashShiftSyncBatch,
   ): Promise<CashShiftSyncResult> {
-    const results: CashShiftSyncResultItem[] = [];
-    let processed = 0;
-    let failed = 0;
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager: EntityManager) => {
+        const shiftsRepo = manager.getRepository(CashShiftSession);
+        const movementsRepo = manager.getRepository(CashMovement);
+        const results: CashShiftSyncResultItem[] = [];
+        let processed = 0;
+        let failed = 0;
 
-    for (const record of batch.sessions) {
-      try {
-        await this.upsertSession(tenantId, record);
-        processed += 1;
-        results.push({ idempotencyKey: record.id, status: 'ACCEPTED' });
-      } catch (error: unknown) {
-        failed += 1;
-        results.push(this.toFailure(tenantId, 'session', record.id, error));
-      }
-    }
+        for (const record of batch.sessions) {
+          try {
+            await this.upsertSession(tenantId, record, shiftsRepo);
+            processed += 1;
+            results.push({ idempotencyKey: record.id, status: 'ACCEPTED' });
+          } catch (error: unknown) {
+            failed += 1;
+            results.push(this.toFailure(tenantId, 'session', record.id, error));
+          }
+        }
 
-    for (const record of batch.movements) {
-      try {
-        await this.insertMovementOnce(tenantId, record);
-        processed += 1;
-        results.push({ idempotencyKey: record.id, status: 'ACCEPTED' });
-      } catch (error: unknown) {
-        failed += 1;
-        results.push(this.toFailure(tenantId, 'movement', record.id, error));
-      }
-    }
+        for (const record of batch.movements) {
+          try {
+            await this.insertMovementOnce(tenantId, record, movementsRepo);
+            processed += 1;
+            results.push({ idempotencyKey: record.id, status: 'ACCEPTED' });
+          } catch (error: unknown) {
+            failed += 1;
+            results.push(
+              this.toFailure(tenantId, 'movement', record.id, error),
+            );
+          }
+        }
 
-    return {
-      received: batch.sessions.length + batch.movements.length,
-      processed,
-      failed,
-      results,
-    };
+        return {
+          received: batch.sessions.length + batch.movements.length,
+          processed,
+          failed,
+          results,
+        };
+      },
+    );
   }
 
   private async upsertSession(
     tenantId: string,
     record: CashShiftSessionSyncItemDto,
+    shiftsRepo: Repository<CashShiftSession>,
   ): Promise<void> {
-    const existing = await this.shiftsRepository.findOne({
+    const existing = await shiftsRepo.findOne({
       where: { id: record.id },
     });
     if (existing) {
@@ -128,20 +141,21 @@ export class CashShiftSyncIngestionService {
           `Cash shift session '${record.id}' already exists under a different tenant`,
         );
       }
-      await this.shiftsRepository.update(
+      await shiftsRepo.update(
         { id: existing.id, tenant_id: tenantId },
         this.toSessionValues(tenantId, record),
       );
       return;
     }
-    await this.shiftsRepository.insert(this.toSessionValues(tenantId, record));
+    await shiftsRepo.insert(this.toSessionValues(tenantId, record));
   }
 
   private async insertMovementOnce(
     tenantId: string,
     record: CashMovementSyncItemDto,
+    movementsRepo: Repository<CashMovement>,
   ): Promise<void> {
-    const existing = await this.movementsRepository.findOne({
+    const existing = await movementsRepo.findOne({
       where: { id: record.id },
     });
     if (existing) {
@@ -153,7 +167,7 @@ export class CashShiftSyncIngestionService {
       // Idempotent replay: movements are immutable, nothing to update.
       return;
     }
-    await this.movementsRepository.insert({
+    await movementsRepo.insert({
       id: record.id,
       tenant_id: tenantId,
       shift_id: record.shiftId,

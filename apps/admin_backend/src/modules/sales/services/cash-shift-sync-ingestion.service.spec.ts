@@ -1,4 +1,7 @@
+import { DataSource } from 'typeorm';
 import { CashShiftSyncIngestionService } from './cash-shift-sync-ingestion.service';
+import { CashShiftSession } from '../entities/cash-shift.entity';
+import { CashMovement } from '../entities/cash-movement.entity';
 import type {
   CashMovementSyncItemDto,
   CashShiftSessionSyncItemDto,
@@ -16,6 +19,22 @@ function repoStub(): RepoStub {
     insert: jest.fn().mockResolvedValue({}),
     update: jest.fn().mockResolvedValue({}),
   };
+}
+
+function makeDataSource(shifts: unknown, movements: unknown): DataSource {
+  const manager = {
+    query: jest.fn().mockResolvedValue(undefined),
+    getRepository: (entity: unknown) => {
+      if (entity === CashShiftSession) return shifts;
+      if (entity === CashMovement) return movements;
+      return undefined;
+    },
+  };
+  return {
+    transaction: jest.fn(async (cb: (m: unknown) => Promise<unknown>) =>
+      cb(manager),
+    ),
+  } as unknown as DataSource;
 }
 
 function posSession(overrides: Record<string, unknown> = {}) {
@@ -52,6 +71,7 @@ describe('CashShiftSyncIngestionService', () => {
     const shifts = repoStub();
     const movements = repoStub();
     const service = new CashShiftSyncIngestionService(
+      makeDataSource(shifts, movements),
       shifts as never,
       movements as never,
     );
@@ -115,6 +135,7 @@ describe('CashShiftSyncIngestionService', () => {
       tenant_id: 'tenant-1',
     });
     const service = new CashShiftSyncIngestionService(
+      makeDataSource(shifts, movements),
       shifts as never,
       movements as never,
     );
@@ -168,6 +189,7 @@ describe('CashShiftSyncIngestionService', () => {
     );
     const movements = repoStub();
     const service = new CashShiftSyncIngestionService(
+      makeDataSource(shifts, movements),
       shifts as never,
       movements as never,
     );
@@ -201,6 +223,7 @@ describe('CashShiftSyncIngestionService', () => {
       .mockRejectedValueOnce(new Error('invalid input value for enum type'))
       .mockResolvedValueOnce({});
     const service = new CashShiftSyncIngestionService(
+      makeDataSource(shifts, movements),
       shifts as never,
       movements as never,
     );
@@ -232,6 +255,7 @@ describe('CashShiftSyncIngestionService', () => {
     const shifts = repoStub();
     const movements = repoStub();
     const service = new CashShiftSyncIngestionService(
+      makeDataSource(shifts, movements),
       shifts as never,
       movements as never,
     );
