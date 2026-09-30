@@ -404,6 +404,9 @@ describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () =>
       id: "code-sc-claimed",
       status: LinkingCodeStatus.CLAIMED,
       deviceId: "POS-07",
+      // H-3: mirrors LinkingCodeResponseDto.lastAttemptStatus (latest
+      // activation attempt for the bound device; null when unknown).
+      lastAttemptStatus: null,
       expiresAt: "2026-09-03T19:15:00.000Z",
       claimedAt: "2026-09-03T19:05:00.000Z",
       createdAt: "2026-09-03T19:00:00.000Z",
@@ -519,6 +522,57 @@ describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () =>
     expect(await screen.findByTestId("activation-awaiting-device-checks")).toHaveTextContent(
       "POS-07",
     );
+  });
+
+  // H-3 (duplicate-activation guard): a claimed code whose device already
+  // passed activation must NOT be offered again. Offering it starts a
+  // second attempt for an activated device and mints a second ACTIVE sync
+  // credential, pinning tenant sync freshness to STALE. Per-device, never
+  // gated on the tenant lifecycle (a Food Park legitimately runs multiple
+  // terminals: other claimed devices stay offerable).
+  it("does not offer activation for a device whose latest attempt passed", async () => {
+    grantRole(UserRole.OWNER);
+    routeFetch({
+      linkingCodes: [makeClaimedCode({ lastAttemptStatus: ActivationAttemptStatus.PASS })],
+    });
+
+    render(
+      <TestWrapper>
+        <SetupCenterView />
+      </TestWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
+    });
+
+    // The detection section itself stays (other devices may still be
+    // linkable) but no claimed-terminal item or activation button appears.
+    await waitFor(() => {
+      expect(screen.queryByTestId("claimed-terminal-item")).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("start-activation-for-terminal-btn")).not.toBeInTheDocument();
+  });
+
+  it("still offers activation for a device whose latest attempt passed with warnings", async () => {
+    grantRole(UserRole.OWNER);
+    routeFetch({
+      linkingCodes: [makeClaimedCode({ lastAttemptStatus: ActivationAttemptStatus.PASS_WITH_WARNING })],
+    });
+
+    render(
+      <TestWrapper>
+        <SetupCenterView />
+      </TestWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
+    });
+
+    // PASS_WITH_WARNING is not PASS: the retry path stays reachable.
+    expect(await screen.findByTestId("claimed-terminal-item")).toBeInTheDocument();
+    expect(screen.getByTestId("start-activation-for-terminal-btn")).toBeInTheDocument();
   });
 
   it("keeps the action unavailable without the activation permission and shows the guard note", async () => {
