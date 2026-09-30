@@ -167,6 +167,58 @@ This execution plan operationalizes the **Front-of-House (FOH) Sales Module**, *
 
 ---
 
+### Batch 7: Shift Handover (Cambio de Operador)
+
+> **Estado:** Parcial. El hueco de navegación y su guarda de turno están en curso (ver *Entregado en este batch*). La semántica de traspaso —arqueo ciego, responsabilidad de saldo y linaje de turnos— sigue sin descomponer. **Nota de numeración:** los números 4-6 ya los ocupa el backlog diferido de §6, por eso este batch salta a 7. Existe un drift previo no resuelto: §9 recomienda "Batch 6 (Adaptabilidad Multi-Tenant)" mientras §6 define Batch 6 como "Automated Hardware". Se señala, no se corrige aquí.
+
+- **Goal:** Let one cashier hand the terminal to another without destroying the device session, without letting an open cash shift be silently inherited, and with a clear record of which operator was responsible for which sales and which float.
+- **Traceability:** DEC-01 (§2, *"Support shift handovers with blind counting"* — decided but never decomposed into a batch until now); §7 risk row *"Cash Float Inconsistencies across Shift Handover"*; Batch 1 (shift lifecycle, `status: 'OPEN'` sale gate); Batch 3 (pending-voucher reconciliation, which a handover must not be able to dodge).
+- **Prerequisites and dependencies:** Batch 1 (open shift required for checkout), Batch 3 (voucher reconciliation before Corte Z).
+
+#### Entregado en este batch
+
+- **Separación de las dos capas de auth (restricción arquitectónica, duradera).** El POS confunde hoy *auth de dispositivo/tenant* (JWT de administrador: habilita sync y vínculo de tenant) con *auth de operador* (PIN de staff vía `AuthRepository.loginOffline()`, que solo rota `_currentUser` y no toca token alguno). `logout()` (`apps/pos_app/lib/data/repositories/auth_repository_impl.dart:621-635`) limpia `_accessToken`, saca el header `Authorization` de Dio y borra `access_token` del secure storage. Por eso, antes de este batch, cambiar de operador implicaba destruir la sesión del dispositivo: la única ruta a `/lock` era el login (`apps/pos_app/lib/ui/features/auth/views/login_view.dart:84,100`). **Regla a mantener en adelante:** ninguna operación de cambio de operador puede invocar `logout()` ni tocar el token de dispositivo.
+- **Entrada `Cambiar operador` en el drawer con guarda de turno.** Rota solo la capa de operador y navega a `/lock`; si el operador saliente tiene un turno abierto (`SaleViewModel.activeSession != null`, poblado por `checkActiveSession()`), **no** permite el pase y rutea a `/sales/cash` para que cierre caja primero. Esto implementa la decisión de producto *"forzar cierre de caja antes de pasar"* como guarda, no como flujo de traspaso.
+
+#### In scope (restante)
+
+- Blind count on handover: the incoming operator enters a physical count **before** seeing the expected float, mirroring the Arqueo ciego rule already used by Corte X/Z.
+- Shift lineage: an explicit link from a closed shift to the shift that continues on the same terminal, so a chain of handovers within one business day is reconstructable.
+- Float responsibility: what happens to a variance discovered at handover — attributed to the outgoing operator, and how it is recorded without mutating the closed shift (append-only, DGI).
+- Pending-voucher blocker: a handover must not let unreconciled card vouchers pass to an operator who did not take them (depends on Batch 3's Corte Z blocker).
+- Operator attribution telemetry: which operator was logged in when each sale, void, and cash movement was committed.
+
+#### Out of scope
+
+- Supervisor-authorized handover (product decision: incoming PIN only).
+- Concurrent multi-operator sessions on one terminal.
+- Physical drawer topology changes (Batch 6 / Food Park QSR mode).
+
+#### Acceptance criteria
+
+1. Changing operator preserves the device/tenant session: cloud sync keeps working with no re-login and no credential re-issue.
+2. A handover is refused while the outgoing operator has an open shift, with actionable Spanish copy and a direct route to the cash view.
+3. The incoming operator's PIN is the only credential required.
+4. After the switch, `checkActiveSession()` resolves the **new** operator's own shift for this terminal, never the previous operator's (already scoped by `getActiveSessionForUserAndTerminal`, issue #552).
+5. No sales, voids or cash movements can be attributed to the wrong operator across a handover.
+6. Corte Z of the outgoing shift cannot be skipped by handing over instead.
+
+#### Touched surfaces
+
+- Frontend: `apps/pos_app/lib/ui/widgets/app_drawer.dart`, `apps/pos_app/lib/ui/features/auth/views/lock_screen_view.dart`, `apps/pos_app/lib/ui/features/cash/`, `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart`.
+- Backend (lineage/responsibility, if it must survive to cloud): `apps/admin_backend/src/modules/sales/entities/cash-shift.entity.ts`.
+
+#### Tests and linked evidence
+
+- `apps/pos_app/test/ui/widgets/app_drawer_test.dart` — switch navigates to `/lock` and does **not** call `logout()`; open shift routes to `/sales/cash` instead; Spanish copy asserted.
+- Pending: handover blind-count suite; shift-lineage test; cross-operator attribution regression.
+
+#### Estimate
+
+2-3 vertical slices beyond what is delivered here, ~350 lines per slice, Medium risk (financial responsibility, not just navigation).
+
+---
+
 ## 6. Milestone-Level Deferred Backlog
 
 1. **Batch 4 (Cuentas Abiertas, Retención de Tickets y Mesas)**:
