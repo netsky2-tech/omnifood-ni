@@ -1,3 +1,6 @@
+import {
+  ActivationAttemptStatus,
+} from '../entities/activation-attempt.entity';
 import { DeviceLinkingCodeStatus } from '../entities/device-linking-code.entity';
 
 /**
@@ -19,6 +22,15 @@ export class LinkingCodeResponseDto {
 
   /** Set when the code transitioned to CLAIMED; null otherwise. */
   claimedAt!: Date | null;
+
+  /**
+   * Latest activation attempt status for the bound device; null when the
+   * code is unclaimed or its device never started an attempt. Lets the
+   * dashboard suppress the one-click activation offer for devices that
+   * already passed activation (H-3: a second attempt would mint a second
+   * ACTIVE sync credential and pin tenant sync freshness to STALE).
+   */
+  lastAttemptStatus!: ActivationAttemptStatus | null;
 
   createdAt!: Date;
 }

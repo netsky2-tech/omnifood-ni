@@ -162,6 +162,9 @@ function makeLinkingCode(
     id: "code-569",
     status: LinkingCodeStatus.CLAIMED,
     deviceId: "POS-07",
+    // H-3: mirrors LinkingCodeResponseDto.lastAttemptStatus (latest
+    // activation attempt for the bound device; null when unknown).
+    lastAttemptStatus: null,
     expiresAt: "2026-09-05T11:15:00.000Z",
     claimedAt: "2026-09-05T11:05:00.000Z",
     createdAt: "2026-09-05T11:00:00.000Z",

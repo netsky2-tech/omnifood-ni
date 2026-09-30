@@ -6,12 +6,16 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { randomInt } from 'crypto';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, In } from 'typeorm';
 import {
   bindTenantContext,
   runInTenantTransaction,
 } from '../../../core/database/tenant-transaction';
 import { LinkingCodeResponseDto } from '../dto/linking-code-response.dto';
+import {
+  ActivationAttempt,
+  ActivationAttemptStatus,
+} from '../entities/activation-attempt.entity';
 import {
   DeviceLinkingCode,
   DeviceLinkingCodeStatus,
@@ -271,6 +275,15 @@ export class DeviceLinkingService {
    * filters every other tenant's rows and the explicit `where` keeps the
    * predicate deterministic. The projection deliberately drops `codeHash`
    * and `tenantId` (see LinkingCodeResponseDto).
+   *
+   * For every bound device the projection also carries `lastAttemptStatus`
+   * (H-3): resolved with ONE batched tenant-scoped query over activation
+   * attempts (candidate OR trusted terminal id in the bound set, ordered
+   * by startedAt DESC) so the first row seen per device is its latest
+   * attempt — never one query per code row (no N+1). Codes whose device
+   * already passed activation can then be suppressed downstream (offering
+   * activation for an activated device mints a duplicate ACTIVE sync
+   * credential).
    */
   async listLinkingCodes(tenantId: string): Promise<LinkingCodeResponseDto[]> {
     const trimmedTenantId = tenantId?.trim();
@@ -289,10 +302,52 @@ export class DeviceLinkingService {
           order: { createdAt: 'DESC' },
           take: LINKING_CODES_LIST_LIMIT,
         });
+
+        const deviceIds = [
+          ...new Set(
+            rows.flatMap((row) => (row.deviceId ? [row.deviceId] : [])),
+          ),
+        ];
+        const deviceSet = new Set(deviceIds);
+        const latestStatusByDevice = new Map<
+          string,
+          ActivationAttemptStatus
+        >();
+        if (deviceIds.length > 0) {
+          const attempts = await manager
+            .getRepository(ActivationAttempt)
+            .find({
+              where: [
+                { tenantId: trimmedTenantId, candidateTerminalId: In(deviceIds) },
+                { tenantId: trimmedTenantId, trustedTerminalId: In(deviceIds) },
+              ],
+              order: { startedAt: 'DESC' },
+            });
+          for (const attempt of attempts) {
+            // Rows arrive ordered by startedAt DESC, so the first status
+            // observed per device is its latest attempt.
+            for (const terminalId of [
+              attempt.candidateTerminalId,
+              attempt.trustedTerminalId,
+            ]) {
+              if (
+                terminalId &&
+                deviceSet.has(terminalId) &&
+                !latestStatusByDevice.has(terminalId)
+              ) {
+                latestStatusByDevice.set(terminalId, attempt.status);
+              }
+            }
+          }
+        }
+
         return rows.map((row) => ({
           id: row.id,
           status: row.status,
           deviceId: row.deviceId,
+          lastAttemptStatus: row.deviceId
+            ? (latestStatusByDevice.get(row.deviceId) ?? null)
+            : null,
           expiresAt: row.expiresAt,
           claimedAt: row.claimedAt,
           createdAt: row.createdAt,

@@ -122,11 +122,20 @@ function selectClaimableLinkingCodes(
     (code): code is LinkingCodeResponse & { deviceId: string } =>
       code.status === LinkingCodeStatus.CLAIMED && typeof code.deviceId === "string" && code.deviceId !== "",
   );
+  // Exclude claimed codes whose device already completed activation (PASS).
+  // Offering a new attempt for an activated terminal creates a duplicate
+  // activation attempt, mints a second ACTIVE sync credential, and pins
+  // tenant sync freshness to STALE (defect H-3).
+  const activeCandidates = claimed.filter(
+    (c) => c.lastAttemptStatus !== "PASS",
+  );
   // Only show the most recent claimed code: older claimed codes are from
   // previous linking sessions and would confuse the operator with stale
-  // terminal IDs that no longer match this device.
-  if (claimed.length === 0) return [];
-  const sorted = [...claimed].sort((a, b) => {
+  // terminal IDs that no longer match this device. KEEP-CLAIMED codes whose
+  // device is in FAIL/PASS_WITH_WARNING/CREATED/IN_PROGRESS remain shown so
+  // the operator can retry activation for the same terminal.
+  if (activeCandidates.length === 0) return [];
+  const sorted = [...activeCandidates].sort((a, b) => {
     const aTime = new Date(a.claimedAt ?? a.createdAt).getTime();
     const bTime = new Date(b.claimedAt ?? b.createdAt).getTime();
     return bTime - aTime;

@@ -14,6 +14,10 @@ import {
   normalizeLinkingCode,
 } from './device-linking.service';
 import {
+  ActivationAttempt,
+  ActivationAttemptStatus,
+} from '../entities/activation-attempt.entity';
+import {
   DeviceLinkingCodeStatus,
   DeviceLinkingCode,
 } from '../entities/device-linking-code.entity';
@@ -440,20 +444,54 @@ describe('DeviceLinkingService.listLinkingCodes', () => {
     ...overrides,
   });
 
-  const buildListDataSource = (find: jest.Mock): DataSource =>
+  const buildAttemptRow = (
+    overrides: Partial<ActivationAttempt> = {},
+  ): ActivationAttempt => ({
+    id: 'attempt-1',
+    tenantId: 'tenant-1',
+    onboardingSessionId: 'session-1',
+    candidateTerminalId: 'POS-01',
+    trustedTerminalId: null,
+    status: ActivationAttemptStatus.PASS,
+    startedByUserId: 'user-9',
+    startedAt: new Date('2026-01-01T01:00:00Z'),
+    completedAt: new Date('2026-01-01T01:05:00Z'),
+    serverTimeAnchorAt: new Date('2026-01-01T01:00:00Z'),
+    requiredFiscalRevision: 1,
+    requiredFiscalFingerprint: 'fingerprint',
+    verificationProductId: 'product-1',
+    verificationProductRevision: 1,
+    verificationProductFingerprint: 'product-fingerprint',
+    verificationTicketId: null,
+    posBuild: null,
+    warningsCount: 0,
+    failureCode: null,
+    idempotencyKey: null,
+    createdAt: new Date('2026-01-01T01:00:00Z'),
+    updatedAt: new Date('2026-01-01T01:00:00Z'),
+    ...overrides,
+  });
+
+  const buildListDataSource = (
+    find: jest.Mock,
+    attemptFind: jest.Mock = jest.fn(async () => []),
+  ): DataSource =>
     ({
       // runInTenantTransaction: bind (no-op) and run the work callback with
-      // a manager whose repository surfaces the observed find.
+      // a manager whose repositories route by entity: DeviceLinkingCode to
+      // the listing find, ActivationAttempt to the batched latest-status
+      // find (one query per list call, never one per row).
       transaction: jest.fn(
         async (
           cb: (manager: {
             query: () => Promise<unknown[]>;
-            getRepository: () => { find: jest.Mock };
+            getRepository: (entity: unknown) => { find: jest.Mock };
           }) => Promise<unknown>,
         ) =>
           cb({
             query: jest.fn(async () => []),
-            getRepository: () => ({ find }),
+            getRepository: (entity: unknown) =>
+              entity === ActivationAttempt ? { find: attemptFind } : { find },
           }),
       ),
       getRepository: jest.fn(() => ({ find })),
@@ -471,7 +509,10 @@ describe('DeviceLinkingService.listLinkingCodes', () => {
       buildCodeRow({ id: 'code-1' }),
     ];
     const find = jest.fn(async () => rows);
-    const service = new DeviceLinkingService(buildListDataSource(find));
+    const attemptFind = jest.fn(async () => []);
+    const service = new DeviceLinkingService(
+      buildListDataSource(find, attemptFind),
+    );
 
     const result = await service.listLinkingCodes('tenant-1');
 
@@ -487,6 +528,7 @@ describe('DeviceLinkingService.listLinkingCodes', () => {
         id: 'code-2',
         status: DeviceLinkingCodeStatus.CLAIMED,
         deviceId: 'POS-01',
+        lastAttemptStatus: null,
         expiresAt: expect.any(Date),
         claimedAt: expect.any(Date),
         createdAt: expect.any(Date),
@@ -495,15 +537,149 @@ describe('DeviceLinkingService.listLinkingCodes', () => {
         id: 'code-1',
         status: DeviceLinkingCodeStatus.ACTIVE,
         deviceId: null,
+        lastAttemptStatus: null,
         expiresAt: expect.any(Date),
         claimedAt: null,
         createdAt: expect.any(Date),
       },
     ]);
+    // Unclaimed (ACTIVE) codes have no device, so no attempt lookup ever
+    // applies to them; the batched query only covers bound devices.
+    expect(attemptFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.anything(),
+        order: { startedAt: 'DESC' },
+      }),
+    );
     for (const item of result) {
       expect(item).not.toHaveProperty('codeHash');
       expect(item).not.toHaveProperty('tenantId');
     }
+  });
+
+  it('resolves the latest attempt status for a claimed code whose device has a PASS attempt', async () => {
+    const rows = [
+      buildCodeRow({
+        id: 'code-2',
+        status: DeviceLinkingCodeStatus.CLAIMED,
+        deviceId: 'POS-01',
+        claimedAt: new Date('2026-01-01T00:05:00Z'),
+        createdAt: new Date('2026-01-01T00:03:00Z'),
+      }),
+    ];
+    const find = jest.fn(async () => rows);
+    const attemptFind = jest.fn(async () => [buildAttemptRow()]);
+    const service = new DeviceLinkingService(
+      buildListDataSource(find, attemptFind),
+    );
+
+    const result = await service.listLinkingCodes('tenant-1');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.lastAttemptStatus).toBe(ActivationAttemptStatus.PASS);
+    // Exactly ONE batched attempt query (no N+1): tenant-scoped, restricted
+    // to the bound device set via candidate OR trusted terminal id, latest
+    // first so the first row seen per device is its latest status.
+    expect(attemptFind).toHaveBeenCalledTimes(1);
+    expect(attemptFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.arrayContaining([
+          {
+            tenantId: 'tenant-1',
+            candidateTerminalId: expect.objectContaining({ value: ['POS-01'] }),
+          },
+          {
+            tenantId: 'tenant-1',
+            trustedTerminalId: expect.objectContaining({ value: ['POS-01'] }),
+          },
+        ]),
+        order: { startedAt: 'DESC' },
+      }),
+    );
+  });
+
+  it('keeps lastAttemptStatus null for a claimed code whose device never started an attempt', async () => {
+    const rows = [
+      buildCodeRow({
+        id: 'code-2',
+        status: DeviceLinkingCodeStatus.CLAIMED,
+        deviceId: 'POS-07',
+        claimedAt: new Date('2026-01-01T00:05:00Z'),
+        createdAt: new Date('2026-01-01T00:03:00Z'),
+      }),
+    ];
+    const find = jest.fn(async () => rows);
+    const attemptFind = jest.fn(async () => []);
+    const service = new DeviceLinkingService(
+      buildListDataSource(find, attemptFind),
+    );
+
+    const result = await service.listLinkingCodes('tenant-1');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.lastAttemptStatus).toBeNull();
+    expect(attemptFind).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the latest attempt by startedAt when a device has FAIL then PASS', async () => {
+    const rows = [
+      buildCodeRow({
+        id: 'code-2',
+        status: DeviceLinkingCodeStatus.CLAIMED,
+        deviceId: 'POS-01',
+        claimedAt: new Date('2026-01-01T00:05:00Z'),
+        createdAt: new Date('2026-01-01T00:03:00Z'),
+      }),
+    ];
+    const find = jest.fn(async () => rows);
+    // The repository returns rows ordered by startedAt DESC (the query
+    // enforces it); latest first. Latest wins per device.
+    const attemptFind = jest.fn(async () => [
+      buildAttemptRow({
+        id: 'attempt-newest',
+        status: ActivationAttemptStatus.PASS,
+        startedAt: new Date('2026-01-01T02:00:00Z'),
+      }),
+      buildAttemptRow({
+        id: 'attempt-older',
+        status: ActivationAttemptStatus.FAIL,
+        failureCode: 'DEVICE_CHECKS_FAILED',
+        startedAt: new Date('2026-01-01T01:00:00Z'),
+      }),
+    ]);
+    const service = new DeviceLinkingService(
+      buildListDataSource(find, attemptFind),
+    );
+
+    const result = await service.listLinkingCodes('tenant-1');
+
+    expect(result[0]?.lastAttemptStatus).toBe(ActivationAttemptStatus.PASS);
+
+    // And symmetrically: when the newest attempt is the FAIL, FAIL wins.
+    const attemptFindFailLatest = jest.fn(async () => [
+      buildAttemptRow({
+        id: 'attempt-newest',
+        status: ActivationAttemptStatus.FAIL,
+        failureCode: 'DEVICE_CHECKS_FAILED',
+        startedAt: new Date('2026-01-01T02:00:00Z'),
+      }),
+      buildAttemptRow({
+        id: 'attempt-older',
+        status: ActivationAttemptStatus.PASS,
+        startedAt: new Date('2026-01-01T01:00:00Z'),
+      }),
+    ]);
+    const serviceFailLatest = new DeviceLinkingService(
+      buildListDataSource(find, attemptFindFailLatest),
+    );
+
+    const resultFailLatest = await serviceFailLatest.listLinkingCodes(
+      'tenant-1',
+    );
+
+    expect(resultFailLatest[0]?.lastAttemptStatus).toBe(
+      ActivationAttemptStatus.FAIL,
+    );
   });
 
   it('fails fast on a blank tenant id without touching the database', async () => {
