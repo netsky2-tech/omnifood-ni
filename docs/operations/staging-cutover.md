@@ -78,6 +78,7 @@ issues a certificate; the exact domain target for DNS is in section 7).
 | `JWT_REFRESH_TTL_SECONDS` | `604800` |
 | `JWT_CLOCK_TOLERANCE_SECONDS` | `5` |
 | `TOTP_SEED_ENCRYPTION_KEY` | `<fresh staging-only key>` |
+| `HUMAN_AUTHORIZATION_RECOVERY_PEPPER` | `<fresh ≥32-byte random staging-only secret>` (OHAC recovery-token pepper, design §9; the process aborts at startup without it) |
 | `CORS_ALLOWED_ORIGINS` | `https://soho.nhilospos.com` (exact origin, no trailing slash) |
 
 ### Environment variables — migration-credential set
