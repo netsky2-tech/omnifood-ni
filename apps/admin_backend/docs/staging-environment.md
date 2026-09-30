@@ -38,6 +38,7 @@ repository. `.env` files are never committed and never copied.
 | `JWT_AUDIENCE` | JWT audience claim | Required at boot by the identity JWT config (non-empty). |
 | `TOTP_SEED_ENCRYPTION_KEY` | TOTP seed encryption | Required for TOTP-backed auth flows. |
 | `CORS_ALLOWED_ORIGINS` | Browser CORS allowlist | Comma-separated exact origins. Staging: `https://soho.nhilospos.com`. Required because staging runs with `NODE_ENV=production`. |
+| `HUMAN_AUTHORIZATION_RECOVERY_PEPPER` | OHAC recovery-token HMAC pepper | Required at boot (design §9 fail-fast: bootstrap aborts before listening when missing, empty, <32 bytes, untrimmed, or a published placeholder). Fresh ≥32-byte random value per environment (e.g. `openssl rand -base64 48`); never reuse `JWT_SECRET`. Rotating invalidates outstanding unredeemed recovery tokens (runbook event). |
 
 ## Conditional variables
 
