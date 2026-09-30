@@ -166,6 +166,51 @@ export const auditActorRefLabels: Record<string, string> = {
 };
 
 /**
+ * Menu-import skipped-recipe reasons, verified against
+ * `menu-import.service.ts` (`reason: 'VERSION_ALREADY_EXISTS'`). Used in the
+ * wizard preview so the owner never sees a raw backend enum (BX-010). Unknown
+ * reasons pass through untouched via `localize`.
+ */
+export const menuImportSkipReasonLabels: Record<string, string> = {
+  VERSION_ALREADY_EXISTS: "ya tiene una versión de receta",
+};
+
+/**
+ * Recipe publication states, verified against `RecipePublicationState`
+ * (apps/admin_backend/src/modules/inventory/entities/recipe-version.entity.ts).
+ * Used for the menu-import skipped list ("estado actual: …") so the owner sees
+ * the §26 status vocabulary, not the raw wire value (BX-010).
+ */
+export const publicationStateLabels: Record<string, string> = {
+  DRAFT: "Borrador",
+  PUBLISHED: "Publicada",
+  ARCHIVED: "Archivada",
+};
+
+/**
+ * Frontend-first normalization of the backend's English row-issue messages
+ * (`menu-import.service.ts` `assemble()`), so the owner reads actionable
+ * Spanish in the errors/warnings tables (BX-010). The Excel column names
+ * quoted inside the messages ('producto', 'precio', …) are kept verbatim: they
+ * mirror what the owner typed in the workbook. Unknown messages pass through
+ * unchanged so a new backend message never breaks the preview.
+ */
+export function normalizeMenuImportIssueMessage(message: string): string {
+  const patterns: [RegExp, string][] = [
+    [/^Sheet '(.+)' has no data rows$/, "La hoja '$1' no tiene filas de datos."],
+    [/^Row is missing '(.+)'$/, "Falta la columna '$1' en esta fila."],
+    [/^'(.+?)' for product '(.+?)' is missing or not numeric$/, "El campo '$1' del producto '$2' falta o no es numérico."],
+    [/^Conflicting precio (.+) for product '(.+?)' \(first-seen price (.+)\)$/, "Precio contradictorio ($1) para el producto '$2'; el primer precio visto fue $3."],
+    [/^'(.+?)' for ingredient '(.+?)' is missing or not numeric$/, "El campo '$1' del insumo '$2' falta o no es numérico."],
+    [/^'(.+?)' for ingredient '(.+?)' is missing$/, "Falta el campo '$1' del insumo '$2'."],
+  ];
+  for (const [pattern, replacement] of patterns) {
+    if (pattern.test(message)) return message.replace(pattern, replacement);
+  }
+  return message;
+}
+
+/**
  * Documented machine failure codes of POST /onboarding/activation/attempts,
  * verified against apps/admin_backend/src/modules/onboarding/services/
  * activation.service.ts. When one of these codes appears in the backend

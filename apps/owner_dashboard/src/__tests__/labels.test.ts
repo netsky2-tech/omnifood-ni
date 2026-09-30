@@ -13,6 +13,9 @@ import {
   auditActionLabels,
   auditTargetTypeLabels,
   auditActorRefLabels,
+  menuImportSkipReasonLabels,
+  publicationStateLabels,
+  normalizeMenuImportIssueMessage,
 } from "@/lib/labels";
 import * as labelsLib from "@/lib/labels";
 import { OnboardingLifecycleState } from "@/features/onboarding/types";
@@ -45,6 +48,8 @@ const families: Record<string, Record<string, string>> = {
   auditActionLabels,
   auditTargetTypeLabels,
   auditActorRefLabels,
+  menuImportSkipReasonLabels,
+  publicationStateLabels,
 };
 
 describe("label families — guard coverage", () => {
@@ -141,6 +146,45 @@ describe("label families — key sets verified against source enums", () => {
         "REVERSAL",
         "INITIAL_STOCK",
       ].sort(),
+    );
+  });
+  it("menuImportSkipReasonLabels covers the documented skip reasons", () => {
+    expect(Object.keys(menuImportSkipReasonLabels).sort()).toEqual(
+      ["VERSION_ALREADY_EXISTS"].sort(),
+    );
+  });
+
+  it("publicationStateLabels matches RecipePublicationState exactly", () => {
+    expect(Object.keys(publicationStateLabels).sort()).toEqual(
+      ["DRAFT", "PUBLISHED", "ARCHIVED"].sort(),
+    );
+  });
+});
+
+describe("normalizeMenuImportIssueMessage", () => {
+  it.each([
+    ["Row is missing 'producto'", "Falta la columna 'producto' en esta fila."],
+    ["Sheet 'VACÍA' has no data rows", "La hoja 'VACÍA' no tiene filas de datos."],
+    [
+      "'precio' for product 'Espresso' is missing or not numeric",
+      "El campo 'precio' del producto 'Espresso' falta o no es numérico.",
+    ],
+    [
+      "Conflicting precio 2 for product 'Latte' (first-seen price 1)",
+      "Precio contradictorio (2) para el producto 'Latte'; el primer precio visto fue 1.",
+    ],
+    [
+      "'cantidad' for ingredient 'Leche' is missing or not numeric",
+      "El campo 'cantidad' del insumo 'Leche' falta o no es numérico.",
+    ],
+    ["'unidad' for ingredient 'Leche' is missing", "Falta el campo 'unidad' del insumo 'Leche'."],
+  ])("normalizes %j", (raw, expected) => {
+    expect(normalizeMenuImportIssueMessage(raw)).toBe(expected);
+  });
+
+  it("passes unknown backend messages through unchanged", () => {
+    expect(normalizeMenuImportIssueMessage("Some future backend message")).toBe(
+      "Some future backend message",
     );
   });
 });

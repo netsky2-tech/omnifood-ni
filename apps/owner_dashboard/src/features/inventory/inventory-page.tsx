@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { formatLocalDate } from "@/lib/utils";
 import { toFiniteNumber } from "@/lib/numeric";
@@ -428,6 +428,8 @@ export function InventoryPage() {
     };
   });
 
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
   const severityFilter =
     searchParams.get("status") || searchParams.get("severity") || undefined;
 
@@ -443,6 +445,36 @@ export function InventoryPage() {
     );
   };
 
+  // Range edits ride the URL (§9.4): refresh and copied support links keep
+  // the financial scope of the purchases/COGS/kardex tabs.
+  const handleRangeChange = (nextRange: DateRangeValue) => {
+    setRange(nextRange);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("startDate", nextRange.startDate);
+        next.set("endDate", nextRange.endDate);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+
+  // Roving-tabindex arrow-key traversal (§46), matching Settings parity.
+  const handleTabKeyDown = (event: React.KeyboardEvent, index: number) => {
+    let next: number | null = null;
+    if (event.key === "ArrowRight") next = (index + 1) % TABS.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + TABS.length) % TABS.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = TABS.length - 1;
+    const target = next !== null ? TABS[next] : undefined;
+    if (target) {
+      event.preventDefault();
+      handleTabChange(target.id);
+      tabRefs.current[TABS.indexOf(target)]?.focus();
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -453,17 +485,30 @@ export function InventoryPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <DateRangePicker value={range} onChange={setRange} />
+          <DateRangePicker value={range} onChange={handleRangeChange} />
         </div>
       </div>
 
       <div className="border-b border-border">
-        <nav className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0" aria-label="Secciones de inventario">
-          {TABS.map((tab) => (
+        <nav
+          className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto pb-1 sm:pb-0"
+          aria-label="Secciones de inventario"
+          role="tablist"
+        >
+          {TABS.map((tab, index) => (
             <button
               key={tab.id}
+              ref={(el) => {
+                tabRefs.current[index] = el;
+              }}
+              id={`tab-${tab.id}`}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              tabIndex={activeTab === tab.id ? 0 : -1}
+              data-testid={`inventory-tab-${tab.id}`}
               type="button"
               onClick={() => handleTabChange(tab.id)}
+              onKeyDown={(e) => handleTabKeyDown(e, index)}
               className={`rounded border-b-2 px-1 py-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2 ${
                 activeTab === tab.id
                   ? "border-primary text-primary"
@@ -476,7 +521,12 @@ export function InventoryPage() {
         </nav>
       </div>
 
-      <div>
+      <div
+        role="tabpanel"
+        id={`tabpanel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
+        tabIndex={0}
+      >
         {activeTab === "valuation" && <ValuationTab />}
         {activeTab === "insumos" && <InsumosTab />}
         {activeTab === "purchases" && (

@@ -6,6 +6,7 @@
  * the confirm button is additionally gated on an error-free preview.
  */
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   downloadMenuImportTemplate,
   MENU_IMPORT_MAX_FILE_BYTES,
@@ -13,6 +14,12 @@ import {
 } from "./settings-api";
 import { useMenuImportPreview, useMenuImportCommit } from "./use-settings";
 import { getApiErrorMessage } from "@/lib/api-error";
+import {
+  localize,
+  menuImportSkipReasonLabels,
+  normalizeMenuImportIssueMessage,
+  publicationStateLabels,
+} from "@/lib/labels";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -32,6 +39,7 @@ import {
   Upload,
   CheckCircle2,
   AlertTriangle,
+  ArrowRight,
   Loader2,
   RefreshCw,
   TriangleAlert,
@@ -58,7 +66,31 @@ function CountCell({
   );
 }
 
+/** True limit, rendered with a Spanish decimal comma — never a rounded "4 MB" (§37). */
+function formatSizeLimitMb(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+}
+
+/**
+ * Router-safe navigation, mirroring the useSafeSearchParams degradation
+ * pattern: isolated test renders (no Router) fall back to a plain navigation
+ * instead of crashing the tree.
+ */
+function useSafeNavigate(): (to: string) => void {
+  try {
+    // Same suppression rationale as lib/safe-search-params.ts.
+    // oxlint-disable-next-line react-hooks/rules-of-hooks
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useNavigate();
+  } catch {
+    return (to: string) => {
+      window.location.assign(to);
+    };
+  }
+}
+
 export function MenuImportWizard() {
+  const navigate = useSafeNavigate();
   const [fileBase64, setFileBase64] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [preview, setPreview] = useState<MenuImportSummary | null>(null);
@@ -103,7 +135,7 @@ export function MenuImportWizard() {
     }
     if (file.size > MENU_IMPORT_MAX_FILE_BYTES) {
       setClientError(
-        `El archivo supera el límite de ${Math.round(MENU_IMPORT_MAX_FILE_BYTES / (1024 * 1024))} MB.`,
+        `El archivo supera el límite de ${formatSizeLimitMb(MENU_IMPORT_MAX_FILE_BYTES)}.`,
       );
       return;
     }
@@ -265,7 +297,8 @@ export function MenuImportWizard() {
                   {preview.recipesSkipped.map((skipped) => (
                     <li key={skipped.productName}>
                       <span className="font-medium text-foreground">{skipped.productName}</span>{" "}
-                      — {skipped.reason} (estado actual: {skipped.existingState})
+                      — {localize(skipped.reason, menuImportSkipReasonLabels)} (estado actual:{" "}
+                      {localize(skipped.existingState, publicationStateLabels)})
                     </li>
                   ))}
                 </ul>
@@ -314,7 +347,9 @@ export function MenuImportWizard() {
                       <TableRow key={`${issue.sheet}-${issue.row}-${i}`}>
                         <TableCell className="font-mono text-xs">{issue.sheet}</TableCell>
                         <TableCell className="font-mono text-xs tabular-nums">{issue.row}</TableCell>
-                        <TableCell className="text-xs text-destructive">{issue.message}</TableCell>
+                        <TableCell className="text-xs text-destructive">
+                          {normalizeMenuImportIssueMessage(issue.message)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -341,12 +376,29 @@ export function MenuImportWizard() {
                       <TableRow key={`${issue.sheet}-${issue.row}-${i}`}>
                         <TableCell className="font-mono text-xs">{issue.sheet}</TableCell>
                         <TableCell className="font-mono text-xs tabular-nums">{issue.row}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{issue.message}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {normalizeMenuImportIssueMessage(issue.message)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
+            )}
+
+            {/* Commit failure is never silent (§30/§36): the preview stays
+                on screen and nothing was written (fail-closed backend). */}
+            {commitMutation.isError && (
+              <Alert variant="destructive" data-testid="menu-import-commit-error">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>No se pudo completar la importación</AlertTitle>
+                <AlertDescription>
+                  {getApiErrorMessage(
+                    commitMutation.error,
+                    "No se escribió nada en tu catálogo: la importación falla cerrada. Verifica tu conexión e intenta de nuevo.",
+                  )}
+                </AlertDescription>
+              </Alert>
             )}
 
             <div className="flex items-center justify-between pt-4 border-t">
@@ -405,7 +457,18 @@ export function MenuImportWizard() {
                 testId="menu-import-committed-recipes-create"
               />
             </div>
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {committed.insumosToCreate.length > 0 && (
+                <Button
+                  variant="outline"
+                  data-testid="menu-import-go-insumos-btn"
+                  onClick={() => navigate("/inventory?tab=insumos")}
+                  className="flex items-center gap-2"
+                >
+                  Ir a Insumos
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              )}
               <Button variant="outline" onClick={handleReset} className="flex items-center gap-2">
                 <RefreshCw className="h-4 w-4" />
                 Importar otro archivo
