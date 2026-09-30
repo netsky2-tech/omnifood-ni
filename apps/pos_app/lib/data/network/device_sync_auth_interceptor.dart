@@ -28,19 +28,19 @@ class DeviceSyncAuthInterceptor extends Interceptor {
 
   static const String _syncPathPrefix = 'v1/sync';
 
-  /// Inventory document writes transmitted by the background sync pass on the
-  /// device sync Dio. The backend guards exactly these routes with
-  /// SyncTransportGuard (ST-03/ST-04/ST-06, issues #478/#445 and the
-  /// regularization sync work unit); every other inventory route stays
-  /// human-transported and must never receive the device token. Keep this
-  /// allowlist explicit and exact-match: widening it to all of `/inventory/*`
-  /// would leak device credentials to human surfaces.
-  static const List<String> _deviceTransportedInventoryRoutes = [
+  /// Routes guarded by SyncTransportGuard on the backend that are transmitted
+  /// on the device sync Dio client. Keep this allowlist explicit and exact-match
+  /// to avoid leaking device credentials to human surfaces.
+  static const List<String> _deviceTransportedRoutes = [
     'inventory/purchases',
     'inventory/recipes/versions',
     'inventory/production-orders/close',
     'inventory/count-sessions',
     'inventory/regularization/sync',
+    'inventory/movements/sync',
+    'sales/shifts/sync',
+    'sales/invoices/sync',
+    'loyalty/point-transactions/sync',
   ];
 
   static String _normalizePath(String path) {
@@ -60,9 +60,9 @@ class DeviceSyncAuthInterceptor extends Interceptor {
         normalized.startsWith('$_syncPathPrefix/');
   }
 
-  static bool isDeviceTransportedInventoryRoute(String path) {
+  static bool isDeviceTransportedRoute(String path) {
     final normalized = _normalizePath(path);
-    return _deviceTransportedInventoryRoutes.contains(normalized);
+    return _deviceTransportedRoutes.contains(normalized);
   }
 
   @override
@@ -73,8 +73,8 @@ class DeviceSyncAuthInterceptor extends Interceptor {
     final path = options.path;
 
     // Bearer token must ONLY be attached to canonical /v1/sync/* routes and
-    // the explicitly allowlisted device-transported inventory document routes
-    if (!isSyncRoute(path) && !isDeviceTransportedInventoryRoute(path)) {
+    // the explicitly allowlisted device-transported routes
+    if (!isSyncRoute(path) && !isDeviceTransportedRoute(path)) {
       handler.next(options);
       return;
     }
@@ -127,8 +127,8 @@ class DeviceSyncAuthInterceptor extends Interceptor {
       return handler.next(err);
     }
 
-    // Only retry for sync routes
-    if (!isSyncRoute(options.path)) {
+    // Only retry for sync routes and allowlisted device-transported routes
+    if (!isSyncRoute(options.path) && !isDeviceTransportedRoute(options.path)) {
       return handler.next(err);
     }
 
