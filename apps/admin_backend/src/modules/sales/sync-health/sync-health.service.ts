@@ -219,10 +219,21 @@ export class SyncHealthService {
     // participation. Explicitly revoked/retired devices are excluded (their
     // historical receipts must not block freshness forever); absence of
     // recent activity never excludes a device on its own.
+    //
+    // Orphan exclusion: a device with receipts but NO credential entry at
+    // all is a stale ID left behind by a re-link (pm clear + new linking
+    // code). Its single historical activation receipt must not drag the
+    // tenant watermark backwards. Only devices with a known credential
+    // lifecycle participate.
     const excludedStatuses: string[] = [
       DeviceSyncCredentialStatus.REVOKED,
       DeviceSyncCredentialStatus.RETIRED,
     ];
+    const allCredentialDeviceIds = new Set(
+      SyncHealthService.latestCredentialByDevice(credentials).map(
+        (credential) => credential.deviceId,
+      ),
+    );
     const excludedDeviceIds = new Set(
       SyncHealthService.latestCredentialByDevice(credentials)
         .filter((credential) => excludedStatuses.includes(credential.status))
@@ -249,9 +260,28 @@ export class SyncHealthService {
 
     // The device/terminal set is the union of observed sync streams,
     // participating provisioned credentials, and gap-evidence rows.
+    // Orphaned receipt-only devices (no credential ever provisioned) are
+    // excluded ONLY when the credential lifecycle is in use (at least one
+    // credential exists). This preserves backwards compatibility for
+    // deployments without credential provisioning while excluding stale
+    // IDs from re-links on credential-managed tenants.
     const deviceIds = new Set<string>();
-    for (const stream of receiptStreams) deviceIds.add(stream.deviceId);
+    const hasCredentialLifecycle = allCredentialDeviceIds.size > 0;
+    for (const stream of receiptStreams) {
+      if (excludedDeviceIds.has(stream.deviceId)) continue;
+      if (
+        hasCredentialLifecycle &&
+        !allCredentialDeviceIds.has(stream.deviceId)
+      ) {
+        continue;
+      }
+      deviceIds.add(stream.deviceId);
+    }
     for (const row of [...rejectedAbove, ...outboxPending]) {
+      if (excludedDeviceIds.has(row.deviceId)) continue;
+      if (hasCredentialLifecycle && !allCredentialDeviceIds.has(row.deviceId)) {
+        continue;
+      }
       deviceIds.add(row.deviceId);
     }
     for (const deviceId of participatingCredentialByDevice.keys()) {
@@ -261,6 +291,12 @@ export class SyncHealthService {
     const streamsByDevice = new Map<string, ReceiptStreamRow[]>();
     for (const stream of receiptStreams) {
       if (excludedDeviceIds.has(stream.deviceId)) continue;
+      if (
+        hasCredentialLifecycle &&
+        !allCredentialDeviceIds.has(stream.deviceId)
+      ) {
+        continue;
+      }
       const streams = streamsByDevice.get(stream.deviceId) ?? [];
       streams.push(stream);
       streamsByDevice.set(stream.deviceId, streams);
