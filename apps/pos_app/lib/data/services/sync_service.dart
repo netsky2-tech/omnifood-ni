@@ -6,6 +6,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import '../../domain/repositories/audit_repository.dart';
+import '../../domain/security/ohac_integrity_classifier.dart';
+import '../../domain/security/ohac_observability.dart';
 import '../../domain/security/ohac_outbox_registry.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
 import '../../domain/models/inventory/inventory_movement.dart';
@@ -232,13 +234,30 @@ class SyncService {
     NetworkConnectivityService? connectivityService,
     FiscalInboxHandler? fiscalInboxHandler,
     OhacOutboxRegistry? ohacOutboxRegistry,
+    void Function(OhacObservabilityFact fact)? ohacFactObserver,
   }) : _role = role,
        _database = database,
        _connectivityService = connectivityService,
        _fiscalInboxHandler =
            fiscalInboxHandler ??
            (database != null ? FiscalInboxHandler(database) : null),
-       _ohacOutboxRegistry = ohacOutboxRegistry ?? OhacOutboxRegistry();
+       _ohacOutboxRegistry = ohacOutboxRegistry ?? OhacOutboxRegistry(),
+       _ohacFactObserver = ohacFactObserver;
+
+  /// Test/production seam for OHAC observability facts (design §12): when
+  /// null, facts go to `developer.log` via [logOhacFact].
+  final void Function(OhacObservabilityFact fact)? _ohacFactObserver;
+
+  /// Emits one OHAC observability fact (design §12/§16): the injected
+  /// observer wins (tests); the default writes a `developer.log` line.
+  void _emitOhacFact(OhacObservabilityFact fact) {
+    final observer = _ohacFactObserver;
+    if (observer != null) {
+      observer(fact);
+      return;
+    }
+    logOhacFact(fact);
+  }
 
   void _updateStatus(CloudSyncStatus newStatus) {
     if (_status != newStatus) {
@@ -2214,13 +2233,26 @@ class SyncService {
           return;
         }
         if (recoveryState.state != OhacTerminalPhase.integrityLoss.wire) {
-          await database.ohacDeliveryDao.markIntegrityLoss(
+          // §9 classification routing (U5b): the RECOVERY_REQUIRED answer
+          // is a local/server floor conflict → the classifier's
+          // ACK_INCONSISTENT family, via the single mapping source.
+          final classification = classifyOhacIntegrity(
+            const OhacConditionAckInconsistent('recovery_required'),
+          );
+          final marked = await database.ohacDeliveryDao.markIntegrityLoss(
             tenantId,
             terminalId,
             recoveryState.revision,
-            OhacIntegrityClassification.ackInconsistent.wire,
+            classification.wire,
             DateTime.now().toIso8601String(),
           );
+          _emitOhacFact(ohacIntegrityClassifiedFact(
+            tenantId: tenantId,
+            terminalId: terminalId,
+            classification: classification.wire,
+            reason: 'recovery_required',
+            applied: marked == 1,
+          ));
         }
         developer.log(
           '[SYNC_PULL] ohac_recovery_required classification='
@@ -2326,6 +2358,11 @@ class SyncService {
           '[SYNC_PULL] ohac_epoch_accepted sequence=${mapping.epoch.sequence}',
           name: 'SyncService',
         );
+        _emitOhacFact(ohacEpochPublicationFact(
+          action: 'accepted',
+          sequence: mapping.epoch.sequence,
+          detail: 'candidate_received',
+        ));
 
         // Design §5 steps 3-4 (unit B2d): a freshly received candidate must
         // not sit in RECEIVE_PENDING — flip to ACK_SUBMITTING (transaction
@@ -2377,11 +2414,21 @@ class SyncService {
           reason: 'candidate_received',
         );
       case OhacReceiveDuplicate():
+        _emitOhacFact(ohacEpochPublicationFact(
+          action: 'duplicate',
+          sequence: mapping.epoch.sequence,
+          detail: 'already_held',
+        ));
         developer.log(
           '[SYNC_PULL] ohac_epoch status=duplicate action=noop',
           name: 'SyncService',
         );
       case OhacReceiveReject(:final error):
+        _emitOhacFact(ohacEpochPublicationFact(
+          action: 'rejected',
+          sequence: mapping.epoch.sequence,
+          detail: error.code,
+        ));
         // Stale or gapped epoch: a normal race against other terminals of
         // the tenant. No persistence, no fault.
         developer.log(
@@ -2399,6 +2446,13 @@ class SyncService {
           classification.wire,
           DateTime.now().toIso8601String(),
         );
+        _emitOhacFact(ohacIntegrityClassifiedFact(
+          tenantId: state.tenantId,
+          terminalId: state.terminalId,
+          classification: classification.wire,
+          reason: 'epoch_receive_conflict',
+          applied: marked == 1,
+        ));
         developer.log(
           '[SYNC_PULL] ohac_epoch_integrity_loss '
           'classification=${classification.wire} applied=${marked == 1}',
@@ -2423,6 +2477,13 @@ class SyncService {
     final count = state.ackDeferralCount ?? 0;
     final boundReached =
         count >= OhacOutboxRegistry.ohacAckDeferredRetryBound;
+    _emitOhacFact(ohacAckDeferredFact(
+      reason: OhacLocalEventType.ackDeferredOutbox,
+      phase: state.state,
+      candidateSequence: state.candidateSequence,
+      deferralCount: count,
+      quarantineReview: boundReached,
+    ));
     developer.log(
       '[SYNC_PULL] ohac_ack_deferred '
       'reason=${OhacLocalEventType.ackDeferredOutbox} '
@@ -2575,7 +2636,9 @@ class SyncService {
     if (candidateSequence <= 0 || candidateDigest.isEmpty) {
       await _markOhacIntegrityLoss(
         state,
-        OhacIntegrityClassification.authStateMissing,
+        classifyOhacIntegrity(
+          const OhacConditionAuthStateMissing('candidate_pair_missing'),
+        ),
         'candidate_pair_missing',
       );
       return;
@@ -2592,7 +2655,9 @@ class SyncService {
     if (epoch == null || epoch.digest != candidateDigest) {
       await _markOhacIntegrityLoss(
         state,
-        OhacIntegrityClassification.localRollback,
+        classifyOhacIntegrity(
+          const OhacConditionLocalRollback('candidate_not_intact'),
+        ),
         'candidate_not_intact',
       );
       return;
@@ -2628,7 +2693,8 @@ class SyncService {
   /// Outcome map (§10):
   /// - 201 + cross-checked claim → transaction C (confirm + promote);
   /// - 409 with a claim-fatal `resultCode` → `markIntegrityLoss` with the
-  ///   §9 classification (see [_classifyOhacAckRejection]);
+  ///   §9 classification (see `classifyOhacAckRejection` in
+  ///   `ohac_integrity_classifier.dart`, the single mapping source);
   /// - 409 `UNAVAILABLE`, a network error, a 5xx, any other indeterminate
   ///   answer → stay `ACK_SUBMITTING` (`OHAC_ACK_RESPONSE_LOST`: retry the
   ///   identical ack);
@@ -2670,10 +2736,18 @@ class SyncService {
       // body must be treated as an unparseable code, never break the pull.
       final resultCode = asObject(e.response?.data)?['resultCode']?.toString();
       if (statusCode == 409) {
-        final classification = _classifyOhacAckRejection(resultCode);
-        if (classification == null) {
+        // §9 classification routing (U5b): the 409 verdict comes from the
+        // classifier — the single mapping source for conditions → classes.
+        final verdict = classifyOhacAckRejection(resultCode);
+        if (verdict is OhacAckIndeterminate) {
           // `UNAVAILABLE`: indeterminate — the claim may or may not have
           // been accepted. Stay in ACK_SUBMITTING and retry.
+          _emitOhacFact(ohacAckOutcomeFact(
+            outcome: 'deferred',
+            reason: 'server_unavailable',
+            sequence: epoch.sequence,
+            floorSequence: state.serverFloorSequence,
+          ));
           developer.log(
             '[SYNC_PULL] ohac_ack_deferred reason=server_unavailable '
             'phase=ACK_SUBMITTING',
@@ -2681,15 +2755,22 @@ class SyncService {
           );
           return;
         }
+        final loss = verdict as OhacAckIntegrityLoss;
         await _markOhacIntegrityLoss(
           state,
-          classification,
+          loss.classification,
           'ack_rejected_${resultCode ?? 'unknown_code'}',
         );
         return;
       }
       // Network error or 5xx: §10 OHAC_ACK_RESPONSE_LOST — the request may
       // have reached the server; only the identical retry converges.
+      _emitOhacFact(ohacAckOutcomeFact(
+        outcome: 'deferred',
+        reason: 'transport_error',
+        sequence: epoch.sequence,
+        floorSequence: state.serverFloorSequence,
+      ));
       developer.log(
         '[SYNC_PULL] ohac_ack_deferred reason=transport_error '
         'status_code=$statusCode phase=ACK_SUBMITTING',
@@ -2708,6 +2789,12 @@ class SyncService {
     }
 
     if (response.statusCode != 201) {
+      _emitOhacFact(ohacAckOutcomeFact(
+        outcome: 'deferred',
+        reason: 'unexpected_status',
+        sequence: epoch.sequence,
+        floorSequence: state.serverFloorSequence,
+      ));
       developer.log(
         '[SYNC_PULL] ohac_ack_deferred reason=unexpected_status '
         'status_code=${response.statusCode} phase=ACK_SUBMITTING',
@@ -2756,7 +2843,9 @@ class SyncService {
         responseDigest != epoch.digest) {
       await _markOhacIntegrityLoss(
         state,
-        OhacIntegrityClassification.ackInconsistent,
+        classifyOhacIntegrity(
+          const OhacConditionAckInconsistent('ack_response_mismatch'),
+        ),
         'ack_response_mismatch',
       );
       return;
@@ -2808,6 +2897,12 @@ class SyncService {
         'floor=$floorSequence',
         name: 'SyncService',
       );
+      _emitOhacFact(ohacAckOutcomeFact(
+        outcome: 'confirmed',
+        reason: 'receipt_accepted',
+        sequence: epoch.sequence,
+        floorSequence: floorSequence,
+      ));
     } catch (e) {
       // §5 step 4: "If the final local write fails, retrying the same ack
       // returns the receipt." Contained; the next pull's phase-driven retry
@@ -2818,58 +2913,6 @@ class SyncService {
         name: 'SyncService',
         error: e,
       );
-    }
-  }
-
-  /// The §9 classification for a 409 ack rejection `resultCode`, or `null`
-  /// for the indeterminate answer that must stay in `ACK_SUBMITTING`.
-  ///
-  /// Every mapped code means the claim can never be accepted (§9/§10):
-  /// - `DIGEST_MISMATCH`, `CHAIN_MISMATCH`: the claim conflicts with what
-  ///   the server signed/published for this chain — §9's "same-sequence
-  ///   digest conflict" and "local/server floor conflict" family →
-  ///   `ACK_INCONSISTENT`.
-  /// - `UNKNOWN_EPOCH`: the server has no epoch at this position at all —
-  ///   the local claim contradicts the server's chain → `ACK_INCONSISTENT`.
-  /// - `IDEMPOTENCY_CONFLICT`: impossible with a claim-derived key unless
-  ///   the server sees a DIFFERENT claim under this terminal's key — the
-  ///   persisted claim is not what the state says → `ACK_INCONSISTENT`.
-  /// - `STALE_SEQUENCE`: the claim is behind the floor the server already
-  ///   holds — §9's "local sequence below server floor" (reconnect reading:
-  ///   a terminal that lost its local rows) → `LOCAL_ROLLBACK`.
-  /// - `SEQUENCE_GAP`: the backend contract defines this as "the client
-  ///   skipped ahead of the next epoch it is owed"
-  ///   (`contracts/acknowledgement.ts`; `acknowledgement.spec.ts` proves it
-  ///   is only reachable when the claim sequence is AHEAD of the server's
-  ///   floor). An ahead-of-floor claim is a local/server floor conflict,
-  ///   the same family as RECOVERY_REQUIRED (§5 step 5) →
-  ///   `ACK_INCONSISTENT`. §10 tension, recorded deliberately: §10 lists
-  ///   `OHAC_SEQUENCE_GAP` as "Yes after pull | request next contiguous
-  ///   epoch" — retryable — but that vocabulary describes the pull-side
-  ///   delivery loop, while this is the ack path's fail-closed verdict. The
-  ///   code follows §9's classification and this divergence is recorded
-  ///   here rather than silently resolved, mirroring how
-  ///   `terminal_state_machine.dart` records the §5.5/§9
-  ///   ROLLBACK_DETECTED/LOCAL_ROLLBACK spelling tension.
-  /// - `UNAVAILABLE`: the backend could not decide → indeterminate, `null`.
-  /// - anything else: unmapped — fail closed (`ACK_INCONSISTENT`); an
-  ///   unknown rejection verdict is never worth a retry that could confirm
-  ///   a claim the server may already have refused terminally.
-  OhacIntegrityClassification? _classifyOhacAckRejection(String? resultCode) {
-    switch (resultCode) {
-      case 'DIGEST_MISMATCH':
-      case 'CHAIN_MISMATCH':
-      case 'UNKNOWN_EPOCH':
-      case 'IDEMPOTENCY_CONFLICT':
-        return OhacIntegrityClassification.ackInconsistent;
-      case 'SEQUENCE_GAP':
-        return OhacIntegrityClassification.ackInconsistent;
-      case 'STALE_SEQUENCE':
-        return OhacIntegrityClassification.localRollback;
-      case 'UNAVAILABLE':
-        return null;
-      default:
-        return OhacIntegrityClassification.ackInconsistent;
     }
   }
 
@@ -2887,6 +2930,13 @@ class SyncService {
       classification.wire,
       DateTime.now().toIso8601String(),
     );
+    _emitOhacFact(ohacIntegrityClassifiedFact(
+      tenantId: state.tenantId,
+      terminalId: state.terminalId,
+      classification: classification.wire,
+      reason: reason,
+      applied: marked == 1,
+    ));
     developer.log(
       '[SYNC_PULL] ohac_ack_integrity_loss '
       'classification=${classification.wire} reason=$reason '

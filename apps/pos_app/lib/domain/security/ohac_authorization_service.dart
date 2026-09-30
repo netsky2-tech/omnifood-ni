@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../data/daos/human_authorization/ohac_delivery_dao.dart';
 import 'ohac_assertion_emitter.dart';
 import 'ohac_authorization_port.dart';
+import 'ohac_observability.dart';
 import 'ohac_outbox_registry.dart';
 
 /// The POS application service for operation-bound local PIN authorization
@@ -61,6 +62,11 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
   /// race. Production leaves it null.
   final bool Function()? debugForceAttemptCasLoss;
 
+  /// Observability seam (design §12): receives one fact per authorization
+  /// decision. Null (production default) emits nothing; facts carry
+  /// IDs/digests/enums/counts only, never PIN/verifier/assertion material.
+  final void Function(OhacObservabilityFact fact)? onFact;
+
   OhacAssertionEmitter get assertionEmitter =>
       OhacAssertionEmitter(ohacOutboxRegistry);
 
@@ -73,6 +79,7 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
     bool Function(String pin, String verifierEncoded)? pinComparer,
     this.maxCasRetries = 3,
     this.debugForceAttemptCasLoss,
+    this.onFact,
   })  : clock = clock ?? DateTime.now,
         newId = newId ?? _defaultNewId,
         pinComparer = pinComparer ?? _defaultPinComparer;
@@ -82,6 +89,26 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
   static bool _defaultPinComparer(String pin, String verifierEncoded) =>
       BCrypt.checkpw(pin, verifierEncoded);
 
+  /// Emits one authorization-decision fact (design §12) when [onFact] is
+  /// set; null emits nothing. Facts carry reason tokens and counts only.
+  void _emitDecision(
+    String outcome,
+    String reason, {
+    required String tenantId,
+    required String terminalId,
+    required int epochSequence,
+    required String posBuild,
+  }) {
+    onFact?.call(ohacAuthorizationDecisionFact(
+      outcome: outcome,
+      reason: reason,
+      tenantId: tenantId,
+      terminalId: terminalId,
+      epochSequence: epochSequence,
+      posBuild: posBuild,
+    ));
+  }
+
   @override
   Future<OhacAssertionResult> authorizeOperation(
     OhacAuthorizationRequest request,
@@ -90,6 +117,14 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
     // before any durable state could be touched.
     final invalidFields = _validateRequest(request);
     if (invalidFields.isNotEmpty) {
+      _emitDecision(
+        'denied',
+        OhacAuthorizationDenialReason.invalidRequest,
+        tenantId: request.tenantId,
+        terminalId: request.terminalId,
+        epochSequence: 0,
+        posBuild: '',
+      );
       return const OhacAssertionDenied(
         OhacAuthorizationDenialReason.invalidRequest,
       );
@@ -108,6 +143,14 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
         terminalState.state != 'ACTIVE' ||
         terminalState.activeSequence < 1 ||
         terminalState.activeDigest.isEmpty) {
+      _emitDecision(
+        'denied',
+        OhacAuthorizationDenialReason.noActiveEpoch,
+        tenantId: request.tenantId,
+        terminalId: request.terminalId,
+        epochSequence: 0,
+        posBuild: posBuild ?? '',
+      );
       return const OhacAssertionDenied(
         OhacAuthorizationDenialReason.noActiveEpoch,
       );
@@ -118,6 +161,14 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
       terminalState.activeSequence,
     );
     if (epoch == null) {
+      _emitDecision(
+        'denied',
+        OhacAuthorizationDenialReason.noActiveEpoch,
+        tenantId: request.tenantId,
+        terminalId: request.terminalId,
+        epochSequence: 0,
+        posBuild: posBuild ?? '',
+      );
       return const OhacAssertionDenied(
         OhacAuthorizationDenialReason.noActiveEpoch,
       );
@@ -126,6 +177,14 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
     // exact-string mismatch is a non-cohort build — both deny closed.
     // Version alone never enables.
     if (posBuild == null || epoch.targetPosBuild != posBuild) {
+      _emitDecision(
+        'denied',
+        OhacAuthorizationDenialReason.buildMismatch,
+        tenantId: request.tenantId,
+        terminalId: request.terminalId,
+        epochSequence: terminalState.activeSequence,
+        posBuild: posBuild ?? '',
+      );
       return const OhacAssertionDenied(
         OhacAuthorizationDenialReason.buildMismatch,
       );
@@ -134,6 +193,14 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
     // 3. R1-008 registry gate: an unregistered outbox's assertions would be
     // invisible to the §5.1 drain gate. Deny before any durable write.
     if (!ohacOutboxRegistry.isRegistered(request.outboxId)) {
+      _emitDecision(
+        'denied',
+        OhacAuthorizationDenialReason.unregisteredOutbox,
+        tenantId: request.tenantId,
+        terminalId: request.terminalId,
+        epochSequence: terminalState.activeSequence,
+        posBuild: posBuild!,
+      );
       return const OhacAssertionDenied(
         OhacAuthorizationDenialReason.unregisteredOutbox,
       );
@@ -149,6 +216,14 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
       request.userId,
     );
     if (entry == null || entry.status != 'ACTIVE') {
+      _emitDecision(
+        'denied',
+        OhacAuthorizationDenialReason.userNotEligible,
+        tenantId: request.tenantId,
+        terminalId: request.terminalId,
+        epochSequence: terminalState.activeSequence,
+        posBuild: posBuild!,
+      );
       return const OhacAssertionDenied(
         OhacAuthorizationDenialReason.userNotEligible,
       );
@@ -178,6 +253,14 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
     }
     final granted = entryPermissions.cast<String>().toSet();
     if (!request.permissionsUsed.every(granted.contains)) {
+      _emitDecision(
+        'denied',
+        OhacAuthorizationDenialReason.permissionDenied,
+        tenantId: request.tenantId,
+        terminalId: request.terminalId,
+        epochSequence: terminalState.activeSequence,
+        posBuild: posBuild!,
+      );
       return const OhacAssertionDenied(
         OhacAuthorizationDenialReason.permissionDenied,
       );
@@ -197,6 +280,14 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
       rethrow;
     }
     if (!outcome.authorized) {
+      _emitDecision(
+        'denied',
+        outcome.denialReason!,
+        tenantId: request.tenantId,
+        terminalId: request.terminalId,
+        epochSequence: terminalState.activeSequence,
+        posBuild: posBuild!,
+      );
       return OhacAssertionDenied(outcome.denialReason!);
     }
 
@@ -234,6 +325,14 @@ class OhacAuthorizationService implements OhacAuthorizationPort {
         '${failure.error} — refusing to return a partial authorization',
       );
     }
+    _emitDecision(
+      'authorized',
+      'pin_verified',
+      tenantId: request.tenantId,
+      terminalId: request.terminalId,
+      epochSequence: terminalState.activeSequence,
+      posBuild: posBuild!,
+    );
     return OhacAssertionAuthorized(
       (creation as OhacSuccess<OhacAssertionV1>).value,
     );

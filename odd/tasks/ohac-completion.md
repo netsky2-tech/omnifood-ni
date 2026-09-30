@@ -258,7 +258,24 @@ pendings outside this effort unless the owner extends it.
 - Backend: `npm test`, `npm run test:e2e`, `npx eslint <paths>` (never `npm run lint`).
 
 ### U5b — D-POS: integrity classifier + ordered clear-data + POS observability
-- Status: PENDING (next unit after U5a merges). Scout facts: `OhacIntegrityClassification` and
+- Status: **IMPLEMENTED + INDEPENDENTLY VERIFIED (APPROVE, 0 blockers) — READY TO SHIP.**
+  Issue #729 (`status:approved`, `type:feature`).
+- Independent verification: APPROVE, 0 blocking; **4 SHOULD-FIX closed** — vacuous fail-closed loop
+  replaced by the real D-RED **chain** (real classifier → `markIntegrityLoss` persistence with
+  column pinned → denial, zero PIN comparisons; mapping-swap mutation kills 4), sync-level
+  fail-closed-default e2e (unmapped 409 code → `ACK_INCONSISTENT`, fail-open default mutation
+  kills it), misleading test name, "single mapping source" claim scoped honestly (state-machine
+  decision-attached mappings are a deliberately decoupled layer — `data/models` must not import domain).
+- Evidence: RED (40 behavioral failures vs stubs) → GREEN (classifier 13, coordinator 6,
+  observability 10, fail-closed 10, sync facts 3); full `test/domain/` 750/750; full `test/data/`
+  0 assertion failures (1 known loader flake per run, isolated-green); analyze + build_runner clean;
+  **4 mutation proofs** (ordering inverted, unknown→none, digest/scope swap, default→indeterminate)
+  sha256 byte-identical. Authored ~1,988 lines, ~5× guard, overage declared.
+- **Native review `review-65b2f342139847e8`** (HIGH, 4 lenses, 10 files / 2,050 lines): group
+  forecast **4 model runs** acknowledged; capture failed `reviewer-empty-output` /
+  `stopReason: length` (203s) on `review-resilience` — **10th identical failure across 6
+  lineages**. No relaunch; no verdict, no authority acknowledged. Delivered under the owner's
+  standing OHAC authorization. Scout facts: `OhacIntegrityClassification` and
   `markIntegrityLoss` exist (callers in sync_service); NO factory-reset/clear-data flow exists
   (`DeviceSyncBootstrapCoordinator` is the restore-transport seam to order first); POS has no
   metrics — `developer.log` + `pos_product_telemetry_service` are the conventions; the redeem
