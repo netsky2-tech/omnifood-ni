@@ -46,6 +46,7 @@ import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
+import 'package:pos_app/domain/security/ohac_outbox_registry.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' hide Batch;
@@ -57,6 +58,27 @@ class CapturedPost {
   final dynamic body;
 
   CapturedPost({required this.path, required this.body});
+}
+
+
+/// The decision-31 test registrant for the drain gate (B3): a mutable
+/// assertion-bearing outbox whose drain state the tests move directly.
+class MutableOhacTestOutbox
+    implements OhacAssertionBearingOutbox, OhacQuarantineReportingOutbox {
+  @override
+  final String outboxId;
+
+  int? lowestUnconsumed;
+  int? lowestQuarantined;
+
+  MutableOhacTestOutbox(this.outboxId,
+      {this.lowestUnconsumed, this.lowestQuarantined});
+
+  @override
+  Future<int?> lowestUnconsumedAssertionSequence() async => lowestUnconsumed;
+
+  @override
+  Future<int?> lowestQuarantinedAssertionSequence() async => lowestQuarantined;
 }
 
 class MockSalesRepository implements SalesRepository {
@@ -4153,6 +4175,440 @@ void main() {
           }
         },
       );
+    });
+
+    group(
+        'OHAC drain-gate deferral (B3, design §5.1 lines 176/180/182, §11.5 '
+        'decision 31, review-ledger R1-008)', () {
+      const ohacTenant = '11111111-1111-4111-8111-111111111111';
+      const ohacPosBuild = '2.3.4+11';
+      const userA = '33333333-3333-4333-8333-333333333333';
+      const ackPath =
+          '/v1/sync/inbound/human-authorization/staff-policy/ack';
+      const receiptId = '7e6c1c2a-0f4e-4f7a-9c5a-1b2c3d4e5f60';
+      final digestOne = 'sha256:${'c' * 64}';
+
+      Map<String, dynamic> epochEntry(String userId, List<String> permissions) =>
+          <String, dynamic>{
+            'userId': userId,
+            'status': 'ACTIVE',
+            'role': 'MANAGER',
+            'permissions': permissions,
+            'pinVerifier': <String, dynamic>{
+              'algorithm': 'bcrypt',
+              'formatVersion': '2b',
+              'encoded': r'$2b$10$abcdefghijklmnopqrstuv',
+            },
+            'attemptResetGeneration': '0',
+          };
+
+      /// A signed epoch 2 targeting THIS terminal: epoch 1 already governs
+      /// (seeded active), so the candidate lands at sequence 2 and a held
+      /// assertion at sequence 1 is a real "≤ n-1" blocker.
+      Map<String, dynamic> signedEpochJson() =>
+          jsonDecode(utf8.decode(signBody(<String, dynamic>{
+            'schema': staffPolicyEpochV1Schema,
+            'tenantId': ohacTenant,
+            'targetTerminalId': 'dev-1',
+            'sequence': '2',
+            'previousSequence': '1',
+            'previousDigest': digestOne,
+            'publisherBackendBuild': 'backend-build-1',
+            'targetPosBuild': ohacPosBuild,
+            'minimumAssertionSchema': 'ohac.assertion.v1',
+            'policyEntries': <Map<String, dynamic>>[
+              epochEntry(userA, <String>['sales:void_invoice']),
+            ],
+          }))) as Map<String, dynamic>;
+
+      Map<String, dynamic> deliverEnvelope(Map<String, dynamic> epochJson) => {
+            'status': 'DELIVER',
+            'epoch': epochJson,
+            'sequence': epochJson['sequence'],
+            'digest': epochJson['digest'],
+          };
+
+      Map<String, dynamic> deltasResponse({
+        Map<String, dynamic>? humanAuthorization,
+        int currentVersion = 1787750000000,
+      }) =>
+          {
+            'status': 'success',
+            'serverTime': '2026-08-26T18:30:00.000Z',
+            'currentVersion': currentVersion,
+            'deltas': {
+              'products': [],
+              'catalogValues': [],
+              'insumos': [],
+              'recipes': [],
+              'users': [],
+            },
+            // ignore: use_null_aware_elements
+            if (humanAuthorization != null)
+              'humanAuthorization': humanAuthorization,
+          };
+
+      /// A 201 receipt exactly as the backend renders it.
+      Map<String, dynamic> ackReceipt(String digest) =>
+          {
+            'status': 'ACCEPTED',
+            'receiptId': receiptId,
+            'sequence': 2,
+            'digest': digest,
+            'floorSequence': 2,
+          };
+
+      /// Installs an interceptor answering the inbound pull from the captured
+      /// GET map and every POST to the ack path with a 201 receipt.
+      void installOhacInterceptor({
+        required Map<String, Object?> Function() deltas,
+        Object? Function(CapturedPost post)? onAck,
+      }) {
+        dio.interceptors.clear();
+        dio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.method.toUpperCase() == 'POST' &&
+                  options.path == ackPath) {
+                final post =
+                    CapturedPost(path: options.path, body: options.data);
+                capturedPosts.add(post);
+                handler.resolve(
+                  Response<dynamic>(
+                    data: onAck?.call(post) ?? {'ok': true},
+                    statusCode: 201,
+                    requestOptions: options,
+                  ),
+                );
+                return;
+              }
+              if (options.method.toUpperCase() == 'GET' &&
+                  options.path == '/v1/sync/inbound/deltas') {
+                handler.resolve(
+                  Response<dynamic>(
+                    data: deltas(),
+                    statusCode: 200,
+                    requestOptions: options,
+                  ),
+                );
+                return;
+              }
+              handler.resolve(
+                Response<dynamic>(
+                  data: {'ok': true},
+                  statusCode: 200,
+                  requestOptions: options,
+                ),
+              );
+            },
+          ),
+        );
+      }
+
+      Future<AppDatabase> buildDb() =>
+          $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+      Future<void> seedOhacTenant(AppDatabase database) =>
+          database.localConfigDao.saveConfig(
+            LocalConfigEntity(key: 'tenant_id', value: ohacTenant),
+          );
+
+      /// Seeds epoch 1 as the governing active pair, so the delivered epoch 2
+      /// is a genuine next candidate.
+      Future<void> seedActiveAtEpochOne(AppDatabase database) =>
+          database.ohacDeliveryDao.insertTerminalState(
+            OhacTerminalStateEntity(
+              tenantId: ohacTenant,
+              terminalId: 'dev-1',
+              state: 'ACTIVE',
+              activeSequence: 1,
+              activeDigest: digestOne,
+              candidateSequence: 0,
+              candidateDigest: '',
+              serverFloorSequence: 1,
+              serverFloorDigest: digestOne,
+              negotiatedPosBuild: '',
+              negotiatedBackendBuild: '',
+              negotiatedPolicySchema: '',
+              negotiatedAssertionSchema: '',
+              integrityClassification: '',
+              localAuthorizationSequence: 0,
+              revision: 1,
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            ),
+          );
+
+      Future<OhacTerminalStateEntity?> terminalState(AppDatabase database) =>
+          database.ohacDeliveryDao.findTerminalState(ohacTenant, 'dev-1');
+
+      test(
+          'accept with a registered blocker defers: state stays '
+          'RECEIVE_PENDING, no ack POST, reason column set, deferral event '
+          'appended, pull and watermark still complete', () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final registry = OhacOutboxRegistry();
+        final outbox = MutableOhacTestOutbox('credit-note-outbox');
+        outbox.lowestUnconsumed = 1; // ≤ candidate(2) - 1: a real blocker.
+        registry.register(outbox);
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          await seedActiveAtEpochOne(database);
+          installOhacInterceptor(
+            deltas: () => deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+              currentVersion: 1787750000001,
+            ),
+          );
+
+          final result = await SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+            ohacOutboxRegistry: registry,
+          ).pullInboundDeltas();
+          expect(result, isNotNull);
+
+          // The candidate was received (R) but the flip was gated (S
+          // deferred).
+          final state = await terminalState(database);
+          expect(state!.state, 'RECEIVE_PENDING');
+          expect(state.candidateSequence, 2);
+          expect(state.candidateDigest, epochJson['digest']);
+          expect(state.ackDeferralReason, 'OHAC_ACK_DEFERRED_OUTBOX');
+          expect(state.ackDeferralCount, 1);
+
+          // No acknowledgement was sent: the server floor cannot advance
+          // while the gate holds (§5.1 line 176).
+          expect(
+            capturedPosts.where((post) => post.path == ackPath),
+            isEmpty,
+          );
+
+          final events = await database.ohacDeliveryDao
+              .findEventsForTerminal(ohacTenant, 'dev-1');
+          expect(events, hasLength(1));
+          final event = events.single;
+          expect(event.eventType, 'OHAC_ACK_DEFERRED_OUTBOX');
+          expect(event.sequence, 2);
+          expect(
+            (jsonDecode(event.payload) as Map<String, dynamic>).keys.toList(),
+            [
+              'candidateSequence',
+              'blockingOutboxIds',
+              'retryCount',
+              'retryBoundReached',
+            ],
+            reason: 'payload pinned by key list (repo convention)',
+          );
+          final payload = jsonDecode(event.payload) as Map<String, dynamic>;
+          expect(payload['candidateSequence'], 2);
+          expect(payload['blockingOutboxIds'], ['credit-note-outbox']);
+          expect(payload['retryCount'], 1);
+          expect(payload['retryBoundReached'], isFalse);
+
+          // The pull itself completed and the watermark advanced: the
+          // deferral is contained, never a sync failure.
+          final watermark = await database.localConfigDao
+              .getConfigByKey('last_inbound_sync_version');
+          expect(watermark!.value, '1787750000001');
+        } finally {
+          await database.close();
+        }
+      });
+
+      test(
+          'the deferral retries on the next sync cycle and the count '
+          'increments for the same candidate', () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final registry = OhacOutboxRegistry();
+        final outbox = MutableOhacTestOutbox('credit-note-outbox');
+        outbox.lowestUnconsumed = 1;
+        registry.register(outbox);
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          await seedActiveAtEpochOne(database);
+          // The SAME envelope is redelivered on every pull.
+          installOhacInterceptor(
+            deltas: () => deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+            ),
+          );
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+            ohacOutboxRegistry: registry,
+          );
+
+          await service.pullInboundDeltas();
+          await service.pullInboundDeltas();
+          await service.pullInboundDeltas();
+
+          final state = await terminalState(database);
+          expect(state!.state, 'RECEIVE_PENDING');
+          expect(state.ackDeferralReason, 'OHAC_ACK_DEFERRED_OUTBOX');
+          expect(state.ackDeferralCount, 3,
+              reason: 'each subsequent sync cycle retries the gate and '
+                  'increments the count for the SAME candidate');
+          expect(
+            capturedPosts.where((post) => post.path == ackPath),
+            isEmpty,
+          );
+
+          final events = await database.ohacDeliveryDao
+              .findEventsForTerminal(ohacTenant, 'dev-1');
+          expect(events, hasLength(3));
+        } finally {
+          await database.close();
+        }
+      });
+
+      test(
+          'reaching the retry bound marks retryBoundReached=true on the '
+          'deferral event (the operator-visible quarantine-review log itself '
+          'is developer.log, which has no in-process capture — accepted '
+          'limitation, not silently dropped)', () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final registry = OhacOutboxRegistry();
+        final outbox = MutableOhacTestOutbox('credit-note-outbox');
+        outbox.lowestUnconsumed = 1;
+        registry.register(outbox);
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          await seedActiveAtEpochOne(database);
+          installOhacInterceptor(
+            deltas: () =>
+                deltasResponse(humanAuthorization: deliverEnvelope(epochJson)),
+          );
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+            ohacOutboxRegistry: registry,
+          );
+
+          // Pulls 1..5 drive the count 1..5; the bound is reached on the
+          // fifth (OhacOutboxRegistry.ohacAckDeferredRetryBound == 5).
+          for (var i = 0; i < 5; i++) {
+            await service.pullInboundDeltas();
+          }
+
+          final state = await terminalState(database);
+          expect(state!.ackDeferralCount, 5);
+          final events = await database.ohacDeliveryDao
+              .findEventsForTerminal(ohacTenant, 'dev-1');
+          expect(events, hasLength(5));
+          final lastPayload =
+              jsonDecode(events.last.payload) as Map<String, dynamic>;
+          expect(lastPayload['retryCount'], 5);
+          expect(lastPayload['retryBoundReached'], isTrue);
+          final earlierPayload =
+              jsonDecode(events.first.payload) as Map<String, dynamic>;
+          expect(earlierPayload['retryBoundReached'], isFalse);
+        } finally {
+          await database.close();
+        }
+      });
+
+      test(
+          'once the outbox drains, the next pull flips, POSTs and confirms: '
+          'the reason clears and the candidate promotes', () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final registry = OhacOutboxRegistry();
+        final outbox = MutableOhacTestOutbox('credit-note-outbox');
+        outbox.lowestUnconsumed = 1;
+        registry.register(outbox);
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          await seedActiveAtEpochOne(database);
+          installOhacInterceptor(
+            deltas: () =>
+                deltasResponse(humanAuthorization: deliverEnvelope(epochJson)),
+            onAck: (post) => ackReceipt(epochJson['digest'] as String),
+          );
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+            ohacOutboxRegistry: registry,
+          );
+
+          // First pull: deferred.
+          await service.pullInboundDeltas();
+          expect((await terminalState(database))!.state, 'RECEIVE_PENDING');
+          expect(
+            capturedPosts.where((post) => post.path == ackPath),
+            isEmpty,
+          );
+
+          // The assertion is consumed by the backend: the outbox drains.
+          outbox.lowestUnconsumed = null;
+
+          // Next pull: the gate passes, the flip commits, the ack is sent and
+          // the 201 receipt promotes the candidate.
+          await service.pullInboundDeltas();
+
+          final ackPosts =
+              capturedPosts.where((post) => post.path == ackPath).toList();
+          expect(ackPosts, hasLength(1),
+              reason: 'exactly one acknowledgement, sent only after the drain');
+
+          final state = await terminalState(database);
+          expect(state!.state, 'ACTIVE');
+          expect(state.activeSequence, 2);
+          expect(state.ackDeferralReason, isNull,
+              reason: 'the successful flip cleared the deferral reason');
+          expect(state.ackDeferralCount, 1,
+              reason: 'the count persists as history after the flip');
+          expect(state.ackReceiptId, receiptId);
+        } finally {
+          await database.close();
+        }
+      });
     });
 
     test(

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:floor/floor.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../domain/security/ohac_outbox_registry.dart';
 import '../../models/human_authorization/field_guards.dart';
 import '../../models/human_authorization/ohac_delivery_entities.dart';
 import '../../models/human_authorization/staff_policy_epoch_v1.dart';
@@ -190,7 +191,11 @@ abstract class OhacDeliveryDao {
 
   /// Receive: the terminal takes the pending state and records the received
   /// candidate pair plus the four negotiated facts. This is the widest
-  /// transition; it owns no other field.
+  /// transition; it owns no other field — except the drain-gate deferral
+  /// observation, which it RESETS: a new candidate (R's CAS) starts a new
+  /// candidate lifetime, so the previous candidate's deferral reason and
+  /// count are cleared here rather than anywhere downstream (design §5.1,
+  /// B3).
   @Query(
     'UPDATE human_auth_terminal_state '
     'SET state = \'RECEIVE_PENDING\', '
@@ -200,6 +205,8 @@ abstract class OhacDeliveryDao {
     'negotiated_backend_build = :negotiatedBackendBuild, '
     'negotiated_policy_schema = :negotiatedPolicySchema, '
     'negotiated_assertion_schema = :negotiatedAssertionSchema, '
+    'ack_deferral_reason = NULL, '
+    'ack_deferral_count = NULL, '
     'revision = revision + 1, '
     'updated_at = :newUpdatedAt '
     'WHERE tenant_id = :tenantId AND terminal_id = :terminalId '
@@ -219,9 +226,12 @@ abstract class OhacDeliveryDao {
   );
 
   /// Submit: the acknowledgement is being sent; the candidate is untouched.
+  /// A successful flip clears a prior drain-gate deferral reason; the
+  /// deferral count persists as history (see `OhacTerminalStateEntity`).
   @Query(
     'UPDATE human_auth_terminal_state '
     'SET state = \'ACK_SUBMITTING\', '
+    'ack_deferral_reason = NULL, '
     'revision = revision + 1, '
     'updated_at = :newUpdatedAt '
     'WHERE tenant_id = :tenantId AND terminal_id = :terminalId '
@@ -231,6 +241,27 @@ abstract class OhacDeliveryDao {
     String tenantId,
     String terminalId,
     int expectedRevision,
+    String newUpdatedAt,
+  );
+
+  /// The §5.1 drain-gate deferral write (B3): record the §10 reason and
+  /// bump the retry-bound counter in one CAS, WITHOUT flipping. The count is
+  /// incremented inside SQL from whatever the row holds, so a concurrent
+  /// transition can never lose an increment.
+  @Query(
+    'UPDATE human_auth_terminal_state '
+    'SET ack_deferral_reason = :reasonCode, '
+    'ack_deferral_count = COALESCE(ack_deferral_count, 0) + 1, '
+    'revision = revision + 1, '
+    'updated_at = :newUpdatedAt '
+    'WHERE tenant_id = :tenantId AND terminal_id = :terminalId '
+    'AND revision = :expectedRevision',
+  )
+  Future<int?> deferAcknowledgement(
+    String tenantId,
+    String terminalId,
+    int expectedRevision,
+    String reasonCode,
     String newUpdatedAt,
   );
 
@@ -579,23 +610,22 @@ abstract class OhacDeliveryDao {
   /// epoch's explicit higher `attemptResetGeneration` resets, and append one
   /// local fact per applied reset.
   ///
-  /// **The drain gate is not here yet, and no released build may omit it.**
-  /// §5.1 makes the gate this flip's last precondition and says it "ships in
-  /// the same POS build pair and cohort gate as the epoch-ack path"; §12 step 4
-  /// makes a build pair without it not enablement-eligible. What makes this unit
-  /// safe *today* is narrower than either: the invariant is conditional on an
-  /// outbox that emits `ohac.assertion.v1`, and none exists (design decision
-  /// 31), so an ungated flip cannot lose anything yet — and nothing calls this
-  /// method either. §11.5 decision 32 is what permits the split at all: "the POS
-  /// half lands as separate review units … then the drain gate."
-  ///
-  /// So `main` may carry this flip before B3, but **no POS build containing it
-  /// may be released before B3 lands in that same build pair**, and B3 must
-  /// insert the gate as this flip's last precondition before the first
-  /// assertion-bearing outbox exists. `openspec/changes/offline-human-
-  /// authorization-credential/tasks.md` puts it harder than decision 32 does —
-  /// the flip and the gate "ship as one atomic unit" — which is the same
-  /// constraint read as a release rather than as a review unit.
+  /// **The drain gate is this flip's last precondition (B3, design §5.1
+  /// line 176, §11.5 decision 31, review-ledger R1-008).** The registry
+  /// [ohacOutboxRegistry] is a positional parameter because Floor 1.5.0's
+  /// generated `@transaction` code breaks on named arguments (§13 and
+  /// `AGENTS.md`) — the same reason `appendForensicLog` takes its closure
+  /// positionally. On a deferral the terminal stays `RECEIVE_PENDING` with
+  /// the old epoch governing and authorization NOT frozen (§5.1 line 180):
+  /// the deferral reason and retry-bound counter move in one CAS, the
+  /// deferral event appends in the SAME transaction, and the method returns
+  /// without flipping — the caller detects the deferral by re-reading the
+  /// state and retries on the next sync cycle. On a pass (or over
+  /// quarantine — §5.1 line 182 excludes quarantined items from the gate)
+  /// the flip commits and clears any prior deferral reason; the count
+  /// persists as history. Receiving a NEW candidate resets both in R's own
+  /// CAS (`receiveEpoch`), because the count belongs to one candidate's
+  /// lifetime.
   ///
   /// A replay while already submitted for the same candidate is a no-op rather
   /// than an error: re-flipping would bump the revision and re-append identical
@@ -615,6 +645,7 @@ abstract class OhacDeliveryDao {
     int expectedCandidateSequence,
     String expectedCandidateDigest,
     String newUpdatedAt,
+    OhacOutboxRegistry ohacOutboxRegistry,
   ) async {
     final current = await findTerminalState(tenantId, terminalId);
     if (current == null) {
@@ -637,6 +668,65 @@ abstract class OhacDeliveryDao {
         'OHAC submit candidate sequence/digest does not match the candidate '
         'on record',
       );
+    }
+
+    // The §5.1 drain gate (B3, decision 31): the flip's LAST precondition.
+    // "A terminal MUST NOT enter `ACK_SUBMITTING` ... while any local outbox
+    // that emits `ohac.assertion.v1` payloads still holds an unconsumed
+    // assertion attributed to any sequence ≤ n" (§5.1 line 176) — the gate
+    // is consulted inside this same transaction, so the deferral record and
+    // the deferral event commit atomically or not at all, and the pull path
+    // cannot bypass the gate. With an empty registry the gate passes and the
+    // flip behaves exactly as it did before B3 (decision 31's inert
+    // structure; the census found no assertion-bearing outbox to register).
+    final gate = await ohacOutboxRegistry.evaluate(
+      candidateSequence: expectedCandidateSequence,
+    );
+    switch (gate.outcome) {
+      case OhacDrainGateOutcome.deferred:
+        // §5.1 line 180: the epoch stays RECEIVE/PENDING, epoch n continues
+        // to govern, authorization is not frozen. Record the §10 reason and
+        // bump the retry-bound counter, append the deferral fact, and return
+        // WITHOUT flipping — the caller retries on the next sync cycle.
+        final deferred = await deferAcknowledgement(
+          tenantId,
+          terminalId,
+          expectedRevision,
+          gate.reasonCode,
+          newUpdatedAt,
+        );
+        if (deferred != 1) {
+          throw StateError(
+            'OHAC submit lost terminal-state revision $expectedRevision '
+            'while deferring on the drain gate',
+          );
+        }
+        await appendEvent(
+          OhacLocalEventEntity(
+            id: const Uuid().v4(),
+            tenantId: tenantId,
+            terminalId: terminalId,
+            eventType: OhacLocalEventType.ackDeferredOutbox,
+            sequence: expectedCandidateSequence,
+            payload: jsonEncode({
+              'candidateSequence': expectedCandidateSequence,
+              'blockingOutboxIds': gate.blockingOutboxIds,
+              'retryCount': (current.ackDeferralCount ?? 0) + 1,
+              'retryBoundReached':
+                  (current.ackDeferralCount ?? 0) + 1 >=
+                      OhacOutboxRegistry.ohacAckDeferredRetryBound,
+            }),
+            createdAt: newUpdatedAt,
+          ),
+        );
+        return;
+      case OhacDrainGateOutcome.passed:
+      case OhacDrainGateOutcome.quarantined:
+        // §5.1 line 182: quarantined items are excluded from the gate, so
+        // `quarantined` is an effective pass — the flip proceeds exactly as
+        // `passed`; the distinct outcome is observability only ("never
+        // silent"), consumed by the registry's decision, not persisted here.
+        break;
     }
 
     final flipped = await submitAcknowledgement(

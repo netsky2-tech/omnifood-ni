@@ -116,8 +116,12 @@ void main() {
       // B2d (design §5 step 4): the ack receipt of record. The fresh-install
       // order is the entity's field order, which places the receipt after
       // the classification column (the upgrade path appends it last).
+      // B3 (design §5.1, §11.5 decision 31): the drain-gate deferral
+      // observation columns follow the receipt, same entity-order rule.
       'integrity_classification',
       'ack_receipt_id',
+      'ack_deferral_reason',
+      'ack_deferral_count',
       'local_authorization_sequence',
       'revision',
       'updated_at',
@@ -170,6 +174,33 @@ void main() {
     expect(
       shapes['ack_receipt_id'],
       'TEXT notnull=0 default=null',
+      reason: 'identical shape to the upgrade path pinned in '
+          'ohac_delivery_migration_test.dart',
+    );
+  });
+
+  test('a fresh install carries the nullable drain-gate deferral columns '
+      'with the exact upgrade-path shape', () async {
+    final db = await buildFreshDatabase();
+
+    final shapes = await columnShapes(
+      db.database,
+      'human_auth_terminal_state',
+    );
+    // B3 (design §5.1, §11.5 decision 31): the deferral observation columns
+    // have the same full parity as ack_receipt_id — the deferral is
+    // legitimately absent until the drain gate defers, so the column is
+    // nullable with no default on BOTH install paths. Asserting the exact
+    // shape here pins that no drift creeps in in either direction.
+    expect(
+      shapes['ack_deferral_reason'],
+      'TEXT notnull=0 default=null',
+      reason: 'identical shape to the upgrade path pinned in '
+          'ohac_delivery_migration_test.dart',
+    );
+    expect(
+      shapes['ack_deferral_count'],
+      'INTEGER notnull=0 default=null',
       reason: 'identical shape to the upgrade path pinned in '
           'ohac_delivery_migration_test.dart',
     );

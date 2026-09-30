@@ -1,4 +1,5 @@
 import 'package:floor/floor.dart';
+import 'package:pos_app/domain/security/ohac_outbox_registry.dart';
 
 /// Local OHAC delivery persistence (design §4.2, §5, §6).
 ///
@@ -201,6 +202,28 @@ class OhacTerminalStateEntity {
   @ColumnInfo(name: 'ack_receipt_id')
   final String? ackReceiptId;
 
+  /// The §10 terminal-state deferral reason while the §5.1 drain gate holds
+  /// the `ACK_SUBMITTING` flip (design §5.1 line 180, §11.5 decision 31),
+  /// or `null` when the current candidate is not deferred. Nullable because
+  /// the column is legitimately absent until the gate defers (SQLite cannot
+  /// add a NOT NULL column without a default — same trade-off note as
+  /// `candidateSequence` above). Set by transaction S on a deferral with
+  /// `ohacAckDeferredOutboxReason`; cleared when the gate passes and the
+  /// flip commits; reset to `NULL` by transaction R when a new candidate is
+  /// received.
+  @ColumnInfo(name: 'ack_deferral_reason')
+  final String? ackDeferralReason;
+
+  /// How many times the CURRENT candidate's acknowledgement has been
+  /// deferred by the drain gate (design §5.1 line 182: "a bounded,
+  /// configured number of push retries"). Nullable like the reason;
+  /// incremented by transaction S on each deferral of the same candidate,
+  /// and reset to `NULL` by transaction R together with the reason — the
+  /// count belongs to one candidate's lifetime. On a successful flip the
+  /// reason clears but the count persists as history.
+  @ColumnInfo(name: 'ack_deferral_count')
+  final int? ackDeferralCount;
+
   /// Terminal-local authorization sequence, forced by the authority (design
   /// §4.2, §6). Note: `human_auth_attempt_state` also carries a column of
   /// this name with a per-user meaning; that duplication is a known open
@@ -232,6 +255,8 @@ class OhacTerminalStateEntity {
     required this.integrityClassification,
     required this.localAuthorizationSequence,
     this.ackReceiptId,
+    this.ackDeferralReason,
+    this.ackDeferralCount,
     required this.revision,
     required this.updatedAt,
   });
@@ -316,6 +341,19 @@ abstract final class OhacLocalEventType {
   /// (`ack_receipt_id`), so this event is the forensic fact, not the
   /// receipt of record. No verifier, PIN or assertion body may appear here.
   static const ackConfirmed = 'OHAC_ACK_CONFIRMED';
+
+  /// The §5.1 drain gate deferred the `ACK_SUBMITTING` flip: a registered
+  /// assertion-bearing outbox still holds an unconsumed assertion
+  /// attributed to a sequence ≤ candidate - 1 (design §5.1 line 176, §11.5
+  /// decision 31). Appended by transaction S in the same atomic write that
+  /// records the deferral on the terminal state. The payload carries the
+  /// candidate sequence, the blocking outbox ids, the deferral count and
+  /// whether the retry bound was reached; no assertion body, verifier or PIN
+  /// may ever appear here (design §12 observability). The wire value is
+  /// also the terminal-state reason persisted in `ack_deferral_reason`; its
+  /// canonical constant lives in `ohac_outbox_registry.dart` next to the
+  /// gate that produces it.
+  static const ackDeferredOutbox = ohacAckDeferredOutboxReason;
 }
 
 /// Append-only local event log (design §4.2).

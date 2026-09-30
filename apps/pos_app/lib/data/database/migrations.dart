@@ -2611,6 +2611,42 @@ final migration58_59 = Migration(58, 59, (database) async {
   );
 });
 
+final migration59_60 = Migration(59, 60, (database) async {
+  // B3 (design §5.1 lines 176/180, §11.5 decision 31): the drain-gate
+  // deferral observation on the terminal state. §5.1 REQUIRES the deferral
+  // to be observable as a terminal-state reason (`OHAC_ACK_DEFERRED_OUTBOX`,
+  // §10) plus a retry-bound counter, and no column existed. Transaction S
+  // writes both inside the atomic deferral write; transaction R resets them
+  // when a new candidate is received; the successful flip clears the reason
+  // and lets the count persist as history (see the entity fields).
+  //
+  // Nullable TEXT / INTEGER with no default — full parity, not a divergence:
+  // the deferral is legitimately absent until the gate defers, so no
+  // NOT NULL/DEFAULT trade-off exists (same shape argument as
+  // migration58_59's ack_receipt_id). The Floor entity's generated DDL
+  // produces the identical nullable shape on a fresh install; both shapes
+  // are pinned in ohac_delivery_migration_test.dart and
+  // ohac_delivery_install_parity_test.dart.
+  //
+  // Each ADD COLUMN is guarded individually (same pattern as migration56_57;
+  // SQLite has no ADD COLUMN IF NOT EXISTS), so the migration is safe to
+  // re-run.
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(human_auth_terminal_state)',
+  );
+  final names = columns.map((row) => row['name'] as String).toSet();
+  if (!names.contains('ack_deferral_reason')) {
+    await database.execute(
+      'ALTER TABLE human_auth_terminal_state ADD COLUMN ack_deferral_reason TEXT',
+    );
+  }
+  if (!names.contains('ack_deferral_count')) {
+    await database.execute(
+      'ALTER TABLE human_auth_terminal_state ADD COLUMN ack_deferral_count INTEGER',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2661,6 +2697,7 @@ final allMigrations = [
   migration56_57,
   migration57_58,
   migration58_59,
+  migration59_60,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open
