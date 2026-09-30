@@ -3,7 +3,10 @@
 Authority: `openspec/changes/offline-human-authorization-credential/design.md` §4.1, §4.2, §5, §5.1, §6, §9, §11.4 decisions 24-29, §11.5 decisions 30-34, and §16.3. This file is an ODD execution projection only; OpenSpec remains the authority.
 
 Base: `origin/main` (`ee305224`, merged PR #397). The authority landed first on `262088a2` (PR #395).
-Status: IN PROGRESS — B1a (entities and migration) is merged; B1b (the DAOs) is the only open unit in B1.
+Status: **CLOSED for the B-phase (B1a, B1a.1, B1b, B2a–B2d, B3 all merged).** The completion effort
+(U1–U6: B2c-3b, B2d, B3, Slice C, Slice D backend+POS, close-out) is recorded in
+`odd/tasks/ohac-completion.md`, including final evidence, T-*/DEP-* pendings and the authority
+divergences awaiting amendment.
 App: `apps/pos_app` (Flutter). Unlike the backend half, this phase runs `flutter test`.
 
 ## Decisions already made (do not reopen)
@@ -143,7 +146,11 @@ Delivered in two units, because the request side and the response side are separ
 - Evidence: `flutter analyze` clean; `sync_service` 70/70; `ohac_negotiation_parameters` 8/8; DAO 42/42; positional §13 3/3; `test/data/` 1103 passing with 0 assertion failures. Both discriminators proved by mutation with byte-identical md5 restores. Independent verification confirmed the production files byte-identical to pre-correction hashes, so every test fix was genuinely test-only.
 - Carried forward: whether `PackageInfo.version` can be `''` at runtime is **unverified**, so the present-blank test is stated as pinning a **contract** (the backend's absent-vs-blank distinction) rather than a measured runtime state.
 
-###### B2c-3b — Consuming the `humanAuthorization` member — NEXT
+###### B2c-3b — Consuming the `humanAuthorization` member — MERGED as `b06597f4` (PR #707, issue #706)
+
+> **Delivered.** See `odd/tasks/ohac-completion.md` (U1) for the full evidence record: the value
+> object → persistence mapper, the four explicit statuses, the two absence outcomes,
+> `evaluateDeliveredEpoch`, transaction R, and the `(0,'')`→`(0,'GENESIS')` sentinel bridge.
 
 - Consumption of the member the request side now actually elicits: the four explicit statuses (`DELIVER`, `DISABLED`, `UPGRADE_REQUIRED`, `RECOVERY_REQUIRED`) plus the two absence outcomes, `evaluateDeliveredEpoch`, and transaction R.
 - The member is a **top-level sibling of `deltas` and `fiscalConfig`**, not nested under `deltas`; `epoch` carries the payload with `sequence`/`digest` as siblings, and the three statuses carry no `epoch`, `sequence` or `digest` at all.
@@ -151,12 +158,19 @@ Delivered in two units, because the request side and the response side are separ
 
 Still outstanding after B2c-3a: the original B2c-3 note about consuming `humanAuthorization` and the decision-30 negotiation parameters — the parameters half is now delivered, the consumption half is B2c-3b above.
 
-#### B2d — Acknowledgement client and reconnect reconciliation
+#### B2d — Acknowledgement client and reconnect reconciliation — MERGED as `bd6254df` (PR #711, issue #710)
+
+> **Delivered.** See `odd/tasks/ohac-completion.md` (U2): ack client, atomic receipt
+> (`ack_receipt_id`, migration 58→59), phase-driven retry, `RECOVERY_REQUIRED` fail-closed.
 
 - The acknowledgement client against `POST /v1/sync/inbound/human-authorization/staff-policy/ack`, with the body carrying the claim and the negotiated facts only and identity taken from the device credentials rather than the body.
 - Reconnect reconciliation for the two crash windows: a retry while `ACK_SUBMITTING`, and integrity loss.
 
-### B3 — Drain gate and outbox registration (POS)
+### B3 — Drain gate and outbox registration (POS) — MERGED as `ef53072e` (PR #715, issue #714)
+
+> **Delivered.** See `odd/tasks/ohac-completion.md` (U3): registry + R1-008 coupler, gate as S's
+> last precondition, `OHAC_ACK_DEFERRED_OUTBOX` deferral (migration 59→60), retry bound 5,
+> inert quarantine structure — test registrant only, load-bearing at DSI-6.
 
 - The registry, the registration coupler, the blocked `ACK_SUBMITTING` transition, the `OHAC_ACK_DEFERRED_OUTBOX` reason, the bounded retry count, and the quarantine with operator visibility.
 - Inert until a registrant exists, so its tests use a test registrant and state that plainly.
