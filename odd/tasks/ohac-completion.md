@@ -258,8 +258,8 @@ pendings outside this effort unless the owner extends it.
 - Backend: `npm test`, `npm run test:e2e`, `npx eslint <paths>` (never `npm run lint`).
 
 ### U5b — D-POS: integrity classifier + ordered clear-data + POS observability
-- Status: **IMPLEMENTED + INDEPENDENTLY VERIFIED (APPROVE, 0 blockers) — READY TO SHIP.**
-  Issue #729 (`status:approved`, `type:feature`).
+- Status: **MERGED as `b204ecd5`** (PR #730, issue #729 closed). Branch `feat/ohac-d-pos` deleted
+  remotely. All checks green (`lint-and-test` 9m55s, `build-check` 2m12s, Cloudflare, GitGuardian).
 - Independent verification: APPROVE, 0 blocking; **4 SHOULD-FIX closed** — vacuous fail-closed loop
   replaced by the real D-RED **chain** (real classifier → `markIntegrityLoss` persistence with
   column pinned → denial, zero PIN comparisons; mapping-swap mutation kills 4), sync-level
@@ -285,11 +285,87 @@ pendings outside this effort unless the owner extends it.
   `test/data/models/human_authorization/`, `test/data/daos/human_authorization/`.
 
 ### U6 — Close: tracker + authority divergences
-- Status: PENDING
-- Update `odd/tasks/ohac-pos.md` and this file with final evidence; record T-*/DEP-* pendings;
-  restate the §5.1/§11.5-vs-tasks.md build-pair-vs-atomic-unit divergence for the authority
-  amendment (owner decision pending, not resolved here).
+- Status: **DONE** (this entry).
 
-## Evidence log
+## Final evidence log — the effort, end to end
 
-(updated per unit: commit, PR, issue, authored lines, test counts, verification findings)
+| Unit | Delivered | Merge | PR | Issue | Verification | Native review |
+|---|---|---|---|---|---|---|
+| P0 | Worktree ff to origin/main + baseline | — | — | — | analyze clean, 0 assertion failures | — |
+| U1 (B2c-3b) | consume `humanAuthorization`: mapper, 4 statuses, 2 absences, transaction R | `b06597f4` | #707 | #706 | APPROVE 0 blockers, 4 SF closed, 1,381 lines | `review-00e9ef1e…` failed 3× (`reviewer-empty-output`) |
+| U2 (B2d) | ack client, atomic receipt (58→59), phase-driven retry, RECOVERY_REQUIRED | `bd6254df` | #711 | #710 | FIX-FIRST → 1 blocker (`SEQUENCE_GAP` inverted) + 2 SF closed, 2,473 lines | `review-cd47a21c…` failed 2× |
+| U3 (B3) | drain gate, registry, R1-008 coupler, deferral (59→60), inert quarantine | `ef53072e` | #715 | #714 | APPROVE 0 blockers, 3 observations accepted, ~1,608 lines | host declined consent (candidate-scoped), then provider fault |
+| U4 (Slice C) | durable PIN attempts, assertion emitter (23-field `ohac.assertion.v1`), cohort/build gate | `a8786b4b` | #721 | #720 | APPROVE 0 blockers, 6 findings closed, ~2,916 lines | `review-82435911…` failed (HIGH, 4-lens group) |
+| U5a (D-backend) | verifier port §8, recovery tokens §9, §10 codes, §12 counters | `3264f9ed` | #728 | #727 | APPROVE 0 blockers, 3 SF + 2 observations closed, ~4,300 lines | `review-7766571f…` failed 1× |
+| U5b (D-POS) | integrity classifier §9, ordered recovery coordinator, observability facts | `b204ecd5` | #730 | #729 | APPROVE 0 blockers, 4 SF closed, ~1,988 lines | `review-65b2f342…` failed (HIGH, 4-lens group) |
+
+- **Every unit**: issue with `status:approved` + `type:feature`, RED→GREEN TDD, ≥2 mutation proofs
+  with sha256 byte-identical restores, independent verification before delivery, CI green
+  (`lint-and-test`, `build-check`/`build`, Cloudflare, GitGuardian; backend also `npm test`
+  3,300+, `test:db` 294, `test:e2e --runInBand` 686), squash merge + branch deleted.
+- **Native review provider fault (recorded incident)**: `reviewer-empty-output` / `stopReason:
+  length` on EVERY capture — 10 failures across 6 lineages, both 1-lens and 4-lens groups, both
+  `current-changes` and `base-diff` projections, candidates from 580 to 4,342 lines. Deterministic;
+  no verdict ever produced; no authority acknowledged on any lineage. Owner decisions: delivered
+  on independent verification for U1–U4 (explicit), U5a/U5b under the standing OHAC authorization
+  + the same recorded criterion. All six lineages remain in `reviewing` state.
+- **Estimate**: ~16,600 authored lines across the effort (production + tests, overage declared per
+  unit under the real-coverage exception); 7 issues, 6 PRs, 6 squash merges, 0 rollbacks.
+
+## T-* / I-* dated status (verified by grep this session — never trust the checkboxes)
+
+- **T-1 conformance fixtures/runner**: shared `fixtures/human-authorization/v1/` consumed by BOTH
+  runtimes (Dart via `ohac_test_helpers.dart`; TS contract specs); a `conformance` CI check ran on
+  PR #704. Formal checkbox state: open — evidence exists.
+- **T-2 migration runtime tests**: `1809000000000-CreateHumanAuthorizationCore.spec.ts` EXISTS;
+  subsequent OHAC migrations also have specs. Substantially present.
+- **T-3 no-PIN-in-assertion contract tests**: present in `test/domain/security/` (emitter round-trip,
+  `PIN material never leaks`, hostile-material observability guard). Present.
+- **T-4 Q80 physical acceptance / T-5 non-destructive rollback / T-6 residual-boundary regression /
+  T-7 final phase gate**: OPEN — physical acceptance and the final gate need the owner's device +
+  release run.
+- **I-2/I-4/I-5 (backend migrations, pepper secret module, module registration)**: DONE in code
+  (migrations existed pre-effort; pepper config + env wiring landed in U5a; module wiring in U5a).
+  **Deployment action outstanding: set `HUMAN_AUTHORIZATION_RECOVERY_PEPPER` in production env —
+  the app FAILS FAST without it (by design, U5a).**
+- **decision 29 (`attempt_reset_generation` writer)**: CONFIRMED still absent (grep: only readers).
+  Its own issue remains open; the "Audited reset" spec scenario holds in aggregate only once it lands.
+
+## DEP-* — external, owned by the owner (NOT this effort)
+
+- **DEP-1** DSI-7 policy sign-off (clear-data/reinstall transport restoration).
+- **DEP-2** DSI-6 amendment package (§17) — also the named future registrant for the drain gate and
+  the first consumer of `HumanAuthorizationVerifierPort`.
+- **DEP-3** DSI-8 acceptance (separate scope).
+- **DEP-4** numeric rollout thresholds (§16.7).
+
+## Authority divergences recorded for amendment (unresolved by design)
+
+1. **Build-pair vs atomic-unit**: design §5.1/§11.5 decision 32 (POS half as separate review units,
+   gate last, build-pair release constraint) vs `tasks.md` (state machine + flip + gate "ship as one
+   atomic unit"). Code adopted the build-pair reading; PR sequencing followed decision 32.
+2. **`OHAC_SEQUENCE_GAP` retryable (§10) vs fail-closed `ACK_INCONSISTENT` mapping (§9)** — recorded
+   in the classifier comment; mapping follows §9, §10's reading recorded.
+3. **`ROLLBACK_DETECTED` (§5.5 prose) vs `LOCAL_ROLLBACK` (§9 table)** — pre-existing spelling tension,
+   machine follows §9 (noted by B2b).
+4. **§5.4 receipt schema includes "server build" but the ack response carries none** — satisfied from
+   `negotiated_backend_build` (persisted by R); backend contract short of the design text.
+5. **§9 rotation audit event** — rotation works (old-pepper tokens deny) but no rotation event is
+   appended; recorded in U5a verification, runbook-only for now.
+
+## Follow-ups recorded (each with its reason)
+
+- **Sentinel reconciliation**: `human_auth_terminal_state.active_digest` seeded `''` by the frozen
+  DAO vs `'GENESIS'` required by the policy layer (bridged at the acceptance boundary in U1, negative
+  pins in U4). A future unit should seed `GENESIS` and drop the bridge.
+- **Deferral badge UI** (operator visibility of `OHAC_ACK_DEFERRED_OUTBOX` in the sync dialog):
+  needs a NHILOS-standard audit — deliberately kept out of U3.
+- **DSI-6 cross-DAO probe limitation**: the drain gate evaluates inside the transaction-scoped DAO;
+  a real registrant needing another DAO's `@Query` may require moving evaluation to
+  immediately-before-S. Recorded for DSI-6.
+- **Auth-decision facts dormant**: `OhacAuthorizationService` has no production caller yet (U4 is
+  the library; the consumer wires it under DSI-6/enablement).
+- **Parallel `npm run test:e2e` fixture race** (pre-existing, cross-worker): serial run is the
+  reliable command until the shared-role helper is made worker-safe.
+- **Cloudflare Pages transient build failure** on PR #721: retried green with an empty retrigger
+  commit; no root cause available (external logs).
