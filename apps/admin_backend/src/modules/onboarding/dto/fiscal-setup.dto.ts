@@ -25,6 +25,41 @@ export enum FiscalRegime {
 }
 
 /**
+ * BXW-007 U1: POS canon vocabulary (apps/pos_app TenantOperationMode) for the
+ * tenant's operation mode. The POS default is FOODPARK_QSR.
+ */
+export enum TenantOperationMode {
+  FOODPARK_QSR = 'FOODPARK_QSR',
+  RESTAURANT = 'RESTAURANT',
+  HYBRID = 'HYBRID',
+}
+
+/**
+ * BXW-007 U1: POS canon vocabulary (checkout_fx_mode) for the checkout FX
+ * source. The POS default is COMMERCIAL.
+ */
+export enum CheckoutFxMode {
+  COMMERCIAL = 'COMMERCIAL',
+  BCN_OFFICIAL = 'BCN_OFFICIAL',
+}
+
+export function readTenantOperationModeOrNull(
+  raw: unknown,
+): TenantOperationMode | null {
+  return (Object.values(TenantOperationMode) as string[]).includes(
+    raw as string,
+  )
+    ? (raw as TenantOperationMode)
+    : null;
+}
+
+export function readCheckoutFxModeOrNull(raw: unknown): CheckoutFxMode | null {
+  return (Object.values(CheckoutFxMode) as string[]).includes(raw as string)
+    ? (raw as CheckoutFxMode)
+    : null;
+}
+
+/**
  * D-21 (#554): DGI authorization rejection messages, exported so specs pin
  * the exact boundary wording.
  */
@@ -105,6 +140,28 @@ export class FiscalSetupDto {
   @IsBoolean()
   pricesIncludeTax: boolean;
 
+  /**
+   * BXW-007 U1 rev 2: Business Profile operation mode — POS canon vocabulary.
+   * OPTIONAL: absence asserts nothing and leaves the persisted parameter
+   * untouched (D-16/D-21 spirit); an explicit null is the clear sentinel; an
+   * invalid value is still rejected at the boundary.
+   */
+  @IsOptional()
+  @IsEnum(TenantOperationMode, {
+    message: 'operationMode must be either FOODPARK_QSR, RESTAURANT or HYBRID',
+  })
+  operationMode?: TenantOperationMode | null;
+
+  /**
+   * BXW-007 U1 rev 2: checkout FX source — same optionality contract as
+   * operationMode.
+   */
+  @IsOptional()
+  @IsEnum(CheckoutFxMode, {
+    message: 'checkoutFxMode must be either COMMERCIAL or BCN_OFFICIAL',
+  })
+  checkoutFxMode?: CheckoutFxMode | null;
+
   @IsOptional()
   @IsString()
   phone?: string;
@@ -158,6 +215,10 @@ export interface FiscalSetupResponse {
   taxRateIva: number;
   pricesIncludeTax: boolean;
   commercialFxSpread: number;
+  /** BXW-007 U1 rev 2: null = the tenant never configured it (required key, nullable value). */
+  operationMode: TenantOperationMode | null;
+  /** BXW-007 U1 rev 2: null = the tenant never configured it (required key, nullable value). */
+  checkoutFxMode: CheckoutFxMode | null;
   /** D-21 (#554): null means no active authorization (or tombstoned/cleared). */
   dgiAuthorizationCode: string | null;
   dgiAuthorizationIssuedAt: string | null;

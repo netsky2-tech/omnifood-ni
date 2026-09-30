@@ -17,6 +17,10 @@ import {
   runInTenantTransaction,
 } from '../../../core/database/tenant-transaction';
 import {
+  readCheckoutFxModeOrNull,
+  readTenantOperationModeOrNull,
+} from '../dto/fiscal-setup.dto';
+import {
   FiscalRegime,
   FISCAL_PARAM_KEYS,
   DGI_NICARAGUA_TAX_RATES,
@@ -115,6 +119,17 @@ export class FiscalConfigVersionService {
     const commercialFxSpread =
       typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
 
+    // BXW-007 U1 rev 2: absence must read as absence (D-16/D-21 spirit) —
+    // both fields ride the fingerprinted payload as null when the tenant
+    // never configured them, keeping "never configured" distinguishable
+    // from "configured with the POS default".
+    const operationMode = readTenantOperationModeOrNull(
+      paramMap.get(FISCAL_PARAM_KEYS.OPERATION_MODE),
+    );
+    const checkoutFxMode = readCheckoutFxModeOrNull(
+      paramMap.get(FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE),
+    );
+
     // D-21 (#554): the authorization fields read as null when unconfigured
     // (or when a null/'' tombstone governs) — absence never reads as ''.
     const dgiAuthorizationCode = readDgiStringParam(
@@ -138,6 +153,8 @@ export class FiscalConfigVersionService {
       taxRate,
       pricesIncludeTax,
       commercialFxSpread,
+      operationMode,
+      checkoutFxMode,
       dgiAuthorizationCode,
       dgiAuthorizationIssuedAt,
       dgiAuthorizationExpiresAt,
@@ -272,6 +289,8 @@ export class FiscalConfigVersionService {
         taxRate: payload.taxRate,
         pricesIncludeTax: payload.pricesIncludeTax,
         commercialFxSpread: payload.commercialFxSpread,
+        operationMode: payload.operationMode,
+        checkoutFxMode: payload.checkoutFxMode,
         dgiAuthorizationCode: payload.dgiAuthorizationCode,
         dgiAuthorizationIssuedAt: payload.dgiAuthorizationIssuedAt,
         dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
@@ -288,6 +307,8 @@ export class FiscalConfigVersionService {
       taxRate: payload.taxRate,
       pricesIncludeTax: payload.pricesIncludeTax,
       commercialFxSpread: payload.commercialFxSpread,
+      operationMode: payload.operationMode,
+      checkoutFxMode: payload.checkoutFxMode,
       dgiAuthorizationCode: payload.dgiAuthorizationCode,
       dgiAuthorizationIssuedAt: payload.dgiAuthorizationIssuedAt,
       dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,

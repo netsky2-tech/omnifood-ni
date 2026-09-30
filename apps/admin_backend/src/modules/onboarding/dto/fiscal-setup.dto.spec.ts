@@ -1,10 +1,12 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import {
+  CheckoutFxMode,
   DGI_AUTHORIZATION_CODE_CHARSET_MESSAGE,
   DGI_AUTHORIZATION_CODE_TOO_LONG_MESSAGE,
   DGI_AUTHORIZATION_DATE_RANGE_MESSAGE,
   FiscalRegime,
   FiscalSetupDto,
+  TenantOperationMode,
 } from './fiscal-setup.dto';
 
 /**
@@ -35,6 +37,8 @@ const validBody = (): Record<string, unknown> => ({
   ruc: 'J0310000055555',
   commercialFxSpread: 0.5,
   pricesIncludeTax: true,
+  operationMode: TenantOperationMode.FOODPARK_QSR,
+  checkoutFxMode: CheckoutFxMode.COMMERCIAL,
 });
 
 describe('FiscalSetupDto (ValidationPipe boundary)', () => {
@@ -94,6 +98,90 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
         ruc: '  J0310000055555  ',
       });
       expect(dto.ruc).toBe('J0310000055555');
+    });
+  });
+
+  // BXW-007 U1 rev 2: the Business Profile fields are OPTIONAL. Absence
+  // asserts nothing and must leave the persisted parameter untouched (D-16/
+  // D-21 spirit: absence looks like absence). An INVALID value is still
+  // rejected at the boundary with the same wording; an explicit null is the
+  // clear sentinel, never defaulted into persistence.
+  describe('operationMode & checkoutFxMode (BXW-007 U1, rev 2)', () => {
+    it.each([
+      ['FOODPARK_QSR', TenantOperationMode.FOODPARK_QSR],
+      ['RESTAURANT', TenantOperationMode.RESTAURANT],
+      ['HYBRID', TenantOperationMode.HYBRID],
+    ])('accepts operationMode %s', async (_label, mode) => {
+      const dto = await transformBody({ ...validBody(), operationMode: mode });
+      expect(dto.operationMode).toBe(mode);
+    });
+
+    it.each([
+      ['COMMERCIAL', CheckoutFxMode.COMMERCIAL],
+      ['BCN_OFFICIAL', CheckoutFxMode.BCN_OFFICIAL],
+    ])('accepts checkoutFxMode %s', async (_label, mode) => {
+      const dto = await transformBody({ ...validBody(), checkoutFxMode: mode });
+      expect(dto.checkoutFxMode).toBe(mode);
+    });
+
+    it('accepts a body without operationMode and checkoutFxMode (absence asserts nothing)', async () => {
+      const body = { ...validBody() };
+      delete body.operationMode;
+      delete body.checkoutFxMode;
+
+      const dto = await transformBody(body);
+      expect(dto.operationMode).toBeUndefined();
+      expect(dto.checkoutFxMode).toBeUndefined();
+    });
+
+    it('accepts an explicit null as the clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        operationMode: null,
+        checkoutFxMode: null,
+      });
+      expect(dto.operationMode).toBeNull();
+      expect(dto.checkoutFxMode).toBeNull();
+    });
+
+    it.each([
+      ['an empty string', ''],
+      ['an unknown string', 'FOOD_PARK'],
+      ['a number', 123],
+    ])('rejects an operationMode that is %s', async (_label, mode) => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        operationMode: mode,
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(
+        'operationMode must be either FOODPARK_QSR, RESTAURANT or HYBRID',
+      );
+    });
+
+    it.each([
+      ['an empty string', ''],
+      ['an unknown string', 'BCN'],
+      ['a number', 42],
+    ])('rejects a checkoutFxMode that is %s', async (_label, mode) => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        checkoutFxMode: mode,
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(
+        'checkoutFxMode must be either COMMERCIAL or BCN_OFFICIAL',
+      );
     });
   });
 

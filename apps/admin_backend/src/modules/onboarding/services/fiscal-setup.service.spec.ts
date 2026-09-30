@@ -5,7 +5,11 @@ import { FiscalSetupService, FiscalRegime } from './fiscal-setup.service';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { SystemParametersConfig } from '../../inventory/entities/system-parameters-config.entity';
-import { FiscalSetupDto } from '../dto/fiscal-setup.dto';
+import {
+  CheckoutFxMode,
+  FiscalSetupDto,
+  TenantOperationMode,
+} from '../dto/fiscal-setup.dto';
 import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
 describe('FiscalSetupService (Unit & Triangulation)', () => {
@@ -134,6 +138,10 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       taxRateIva: 0.15,
       pricesIncludeTax: true,
       commercialFxSpread: 0.5,
+        // BXW-007 U1 rev 2: unconfigured params read as null (absence must
+        // look like absence, never rebased to a default).
+        operationMode: null,
+        checkoutFxMode: null,
       // D-21 (#554): the response must expose the authorization fields so the
       // dashboard can prefill the form and render its expiry banner.
       dgiAuthorizationCode: null,
@@ -195,6 +203,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         taxRateIva: 0.0,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
+        operationMode: null,
+        checkoutFxMode: null,
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,
@@ -218,6 +228,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       await expect(service.configureFiscalSetup('   ', dto)).rejects.toThrow(
@@ -232,6 +244,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         ruc: 'J0310000055555',
         commercialFxSpread: -0.1,
         pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       await expect(service.configureFiscalSetup(tenantId, dto)).rejects.toThrow(
@@ -249,6 +263,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       const result = await service.configureFiscalSetup(tenantId, dto, userId);
@@ -284,6 +300,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         ruc: 'J0310000055555',
         commercialFxSpread: 0.75,
         pricesIncludeTax: false,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       const result = await service.configureFiscalSetup(tenantId, dto, userId);
@@ -346,6 +364,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         ruc: 'J0310000099999',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       const result = await service.configureFiscalSetup(tenantId, dto, userId);
@@ -393,6 +413,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
           ruc,
           commercialFxSpread: 0.5,
           pricesIncludeTax: true,
+          operationMode: TenantOperationMode.FOODPARK_QSR,
+          checkoutFxMode: CheckoutFxMode.COMMERCIAL,
         };
 
         const rejection = service.configureFiscalSetup(tenantId, dto, userId);
@@ -419,6 +441,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         ruc: '  J0310000055555  ',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       const result = await service.configureFiscalSetup(tenantId, dto, userId);
@@ -444,6 +468,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       await service.configureFiscalSetup(tenantId, dto, userId);
@@ -541,6 +567,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         dgiAuthorizationCode: 'DGI-SFC-2024-00123',
         dgiAuthorizationIssuedAt: '2025-01-15',
         dgiAuthorizationExpiresAt: '2026-01-15',
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       await service.configureFiscalSetup(tenantId, dto, userId);
@@ -582,6 +610,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       await service.configureFiscalSetup(tenantId, dto, userId);
@@ -601,6 +631,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
         dgiAuthorizationCode: '',
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       await service.configureFiscalSetup(tenantId, dto, userId);
@@ -634,6 +666,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
         dgiAuthorizationCode: 'DGI-SFC-2024-00123',
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       await service.configureFiscalSetup(tenantId, dto, userId);
@@ -656,6 +690,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         dgiAuthorizationCode: 'DGI-SFC-2024-00123',
         dgiAuthorizationIssuedAt: '2025-01-15',
         dgiAuthorizationExpiresAt: '2026-01-15',
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       const result = await service.configureFiscalSetup(tenantId, dto, userId);
@@ -677,6 +713,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
         dgiAuthorizationExpiresAt: '',
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       const result = await service.configureFiscalSetup(tenantId, dto, userId);
@@ -707,6 +745,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         dgiAuthorizationCode: 'RES-SFC-145/2025',
         dgiAuthorizationIssuedAt: '2025-06-01',
         dgiAuthorizationExpiresAt: '2026-06-01',
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       await service.configureFiscalSetup(tenantId, dto, userId);
@@ -721,6 +761,279 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       expect(fetched.dgiAuthorizationCode).toBe('RES-SFC-145/2025');
       expect(fetched.dgiAuthorizationIssuedAt).toBe('2025-06-01');
       expect(fetched.dgiAuthorizationExpiresAt).toBe('2026-06-01');
+    });
+  });
+
+  // BXW-007 U1: the Business Profile on web carries the POS operation mode
+  // and checkout FX mode through the same append-only parameter channel so
+  // the fiscal config snapshot (and the POS sync) covers both.
+  describe('operation mode & checkout FX mode (BXW-007 U1)', () => {
+    const modeParamRow = (
+      paramKey: string,
+      paramValue: SystemParametersConfig['paramValue'],
+      version = 1,
+    ): SystemParametersConfig => ({
+      id: `${paramKey}-${version}`,
+      tenant_id: tenantId,
+      tenant: mockTenant,
+      paramKey,
+      paramValue,
+      version,
+      effectiveFrom: new Date('2026-01-01'),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: userId,
+      createdAt: new Date('2026-01-01'),
+    });
+
+    // Same active-view simulation as the DGI describe above: each
+    // upsertParameter call resolves the governing row for ITS OWN key over
+    // the initial rows plus everything saved during the transaction.
+    const configureActiveRows = (rows: SystemParametersConfig[]): void => {
+      mockManager.find.mockImplementation(
+        async (
+          _target: unknown,
+          criteria?: { where?: { paramKey?: string } },
+        ) => {
+          const savedRows = mockManager.save.mock.calls
+            .map((call) => call[1])
+            .filter(
+              (row): row is SystemParametersConfig & { paramKey: string } =>
+                typeof row === 'object' &&
+                row !== null &&
+                (row as { paramKey?: string }).paramKey !== undefined,
+            );
+          const all = [...rows, ...savedRows];
+          const candidates = criteria?.where?.paramKey
+            ? all.filter((row) => row.paramKey === criteria.where.paramKey)
+            : all;
+          const governing = new Map<string, SystemParametersConfig>();
+          for (const row of candidates) {
+            const current = governing.get(row.paramKey);
+            if (!current || row.version > current.version) {
+              governing.set(row.paramKey, row);
+            }
+          }
+          return [...governing.values()];
+        },
+      );
+    };
+
+    const savedRowsFor = (paramKey: string): unknown[] =>
+      mockManager.save.mock.calls
+        .map((call) => call[1])
+        .filter(
+          (row): row is SystemParametersConfig & { paramKey: string } =>
+            typeof row === 'object' &&
+            row !== null &&
+            (row as { paramKey?: string }).paramKey === paramKey,
+        );
+
+    beforeEach(() => {
+      mockManager.findOne.mockResolvedValue({ ...mockTenant });
+      configureActiveRows([]);
+    });
+
+    it('persists OPERATION_MODE and CHECKOUT_FX_MODE rows on POST', async () => {
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        operationMode: TenantOperationMode.RESTAURANT,
+        checkoutFxMode: CheckoutFxMode.BCN_OFFICIAL,
+      };
+
+      await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(savedRowsFor('OPERATION_MODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'OPERATION_MODE',
+            paramValue: TenantOperationMode.RESTAURANT,
+            version: 1,
+            isActive: true,
+          }),
+        ]),
+      );
+      expect(savedRowsFor('CHECKOUT_FX_MODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'CHECKOUT_FX_MODE',
+            paramValue: CheckoutFxMode.BCN_OFFICIAL,
+            version: 1,
+            isActive: true,
+          }),
+        ]),
+      );
+    });
+
+    it('reads the stored operationMode/checkoutFxMode in the GET response', async () => {
+      configureActiveRows([
+        modeParamRow('OPERATION_MODE', TenantOperationMode.RESTAURANT),
+        modeParamRow('CHECKOUT_FX_MODE', CheckoutFxMode.BCN_OFFICIAL),
+      ]);
+
+      tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
+      const result = await service.getFiscalSetup(tenantId);
+
+      expect(result.operationMode).toBe(TenantOperationMode.RESTAURANT);
+      expect(result.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
+    });
+
+    it('reads missing or corrupt stored values as null (absence must look like absence, never rebased to a default)', async () => {
+      // No rows at all: the tenant never configured the modes.
+      configureActiveRows([]);
+      tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
+      const unconfigured = await service.getFiscalSetup(tenantId);
+      expect(unconfigured.operationMode).toBeNull();
+      expect(unconfigured.checkoutFxMode).toBeNull();
+
+      // Corrupt rows: non-member and non-string values read as null too.
+      configureActiveRows([
+        modeParamRow('OPERATION_MODE', 'BOGUS_MODE'),
+        modeParamRow('CHECKOUT_FX_MODE', 123),
+      ]);
+      tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
+      const corrupted = await service.getFiscalSetup(tenantId);
+      expect(corrupted.operationMode).toBeNull();
+      expect(corrupted.checkoutFxMode).toBeNull();
+    });
+
+    it('leaves the persisted mode params untouched when the POST omits the keys', async () => {
+      const prior = [
+        modeParamRow('OPERATION_MODE', TenantOperationMode.RESTAURANT),
+        modeParamRow('CHECKOUT_FX_MODE', CheckoutFxMode.BCN_OFFICIAL),
+      ];
+      configureActiveRows(prior);
+
+      // Rev 2: no operationMode/checkoutFxMode keys — the web asserts nothing.
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      // No new rows for either key.
+      expect(savedRowsFor('OPERATION_MODE')).toHaveLength(0);
+      expect(savedRowsFor('CHECKOUT_FX_MODE')).toHaveLength(0);
+
+      // The prior rows are intact: still the governing version 1 rows.
+      expect(result.operationMode).toBe(TenantOperationMode.RESTAURANT);
+      expect(result.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
+    });
+
+    it('returns the just-saved values in the POST response', async () => {
+      configureActiveRows([]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        operationMode: TenantOperationMode.HYBRID,
+        checkoutFxMode: CheckoutFxMode.BCN_OFFICIAL,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(result.operationMode).toBe(TenantOperationMode.HYBRID);
+      expect(result.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
+    });
+
+    // D-16 spirit for the mode params: the dashboard's "Sin definir" sentinel
+    // sends an explicit null to hand local control back to each POS terminal.
+    // The clear must ride the same append-only supersession as the DGI
+    // fields: a new null tombstone row supersedes the prior governing row —
+    // never a mutation, never a stored '' or 'null' string.
+    it('clears a persisted operationMode with a superseding null tombstone on explicit null (append-only, D-16 spirit)', async () => {
+      const priorModeRow = modeParamRow(
+        'OPERATION_MODE',
+        TenantOperationMode.RESTAURANT,
+      );
+      configureActiveRows([priorModeRow]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        operationMode: null,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      // (a) Exactly one new row, with the right key and a null value.
+      expect(savedRowsFor('OPERATION_MODE')).toHaveLength(1);
+      expect(savedRowsFor('OPERATION_MODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'OPERATION_MODE',
+            paramValue: null,
+            version: 2,
+            isActive: true,
+            effectiveTo: null,
+          }),
+        ]),
+      );
+      // (b) Append-only: the prior governing row is never saved or mutated —
+      // only the tombstone is written, and the prior row keeps its version 1
+      // value intact.
+      expect(priorModeRow).toEqual(
+        modeParamRow('OPERATION_MODE', TenantOperationMode.RESTAURANT),
+      );
+      // (c) The post-write read resolves the tombstone as absent: null, not
+      // the string 'null', not a POS default, not the superseded value.
+      expect(result.operationMode).toBeNull();
+    });
+
+    it('clears a persisted checkoutFxMode with a superseding null tombstone on explicit null (append-only, D-16 spirit)', async () => {
+      const priorFxRow = modeParamRow(
+        'CHECKOUT_FX_MODE',
+        CheckoutFxMode.BCN_OFFICIAL,
+      );
+      configureActiveRows([priorFxRow]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        checkoutFxMode: null,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      // (a) Exactly one new row, with the right key and a null value.
+      expect(savedRowsFor('CHECKOUT_FX_MODE')).toHaveLength(1);
+      expect(savedRowsFor('CHECKOUT_FX_MODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'CHECKOUT_FX_MODE',
+            paramValue: null,
+            version: 2,
+            isActive: true,
+            effectiveTo: null,
+          }),
+        ]),
+      );
+      // (b) Append-only: the prior governing row is never saved or mutated —
+      // only the tombstone is written, and the prior row keeps its version 1
+      // value intact.
+      expect(priorFxRow).toEqual(
+        modeParamRow('CHECKOUT_FX_MODE', CheckoutFxMode.BCN_OFFICIAL),
+      );
+      // (c) The post-write read resolves the tombstone as absent: null, not
+      // the string 'null', not a POS default, not the superseded value.
+      expect(result.checkoutFxMode).toBeNull();
     });
   });
 });
