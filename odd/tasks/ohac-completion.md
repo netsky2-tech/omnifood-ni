@@ -122,69 +122,94 @@ pendings outside this effort unless the owner extends it.
   have no column — decide whether the receipt lands in the local event log, and implement it.
 
 ### U3 — B3: drain gate and outbox registration
-- Status: **IMPLEMENTED + INDEPENDENTLY VERIFIED (APPROVE, 0 blockers) — PAUSED BEFORE COMMIT.**
-  Issue #714 ready (`status:approved`, `type:feature`). Worktree `feat/ohac-pos-drain-gate` holds
-  the full uncommitted delta (15 files incl. 2 new) + this tracker edit. Delivery (commit → PR →
-  CI → merge) is the first action when work resumes.
-- **Native review for this candidate: declined by the host** — first START returned an expired
-  consent binding (`consent-binding-expired`, `lineage_created: false`), the fresh START returned
-  `consent-declined-this-candidate` (`lineage_created: false`, `mutation_performed: false`). No
-  lineage exists for U3, no authority burned. A decline is candidate-scoped, not the kill switch.
-  **Owner decision required at resume: deliver U3 on the independent verification below, or hold.**
-- Independent verification: **APPROVE, 0 blocking** — gate is genuinely S's last precondition (the
-  replay no-op cannot re-enter `ACK_SUBMITTING`); deferral atomicity (single CAS + same-transaction
-  event, losing CAS rolls back everything); empty-registry byte-identity with U2 (0-deletion test
-  diff, 101/101); `app_database.dart` registry import necessary (generated `part` emits the type).
-  3 observations, all accepted: quarantine "never silent" only structurally prepared (inert,
-  DSI-6 owns terminal-side classification); cross-DAO probe limitation recorded for DSI-6; doc
-  drift fixed here (the bound log is WARNING/900, not ERROR).
-- Evidence: RED→GREEN in 4 rounds (registry 10, migration 33, gate 55, caller); focused OHAC 102 +
-  sync 101; mutation proofs — flip-despite-deferral killed by 3 DAO tests, count-not-incrementing
-  required a build_runner re-run (SQL compiles into `.g.dart`) and was killed by 2 tests; both
-  restored sha256 byte-identical; `flutter analyze` clean; `build_runner` clean; full `test/data/`
-  0 assertion failures (1 loader flake per run, verbatim known message, isolated reruns green).
-  Authored ≈1,608 lines (registry 237, DAO +108, sync +150, migrations +37, entities +38, tests
-  ~1,138) — overage declared.
-- Decisions applied by the writer (from the pre-dispatch rulings):
-  1. Registry in new `lib/domain/security/ohac_outbox_registry.dart` (framework-free):
-     `OhacAssertionBearingOutbox` interface (`outboxId`,
-     `lowestUnconsumedAssertionSequence()` — null = drained), `OhacOutboxRegistry` with
-     `register` / `isRegistered` (R1-008 fail-closed coupler, consumed by U4's emitter) /
-     `evaluate(candidateSequence)` → passed | deferred(reason `OHAC_ACK_DEFERRED_OUTBOX`,
-     blocking ids) | quarantined. Empty registry → passed (inert, decision 31).
-  2. Gate seat: registry passed **positionally into S** (precedent: `appendForensicLog`'s
-     closure param), evaluated inside S as the last precondition before the flip. Deferred →
-     S sets the deferral state + appends the local event + does NOT flip, staying `Future<void>`
-     (positional §13 test regex intact). Caller detects deferral by re-reading state.
-     Cross-DAO limitation recorded for DSI-6: a real registrant probe cannot run a `@Query` on
-     another DAO from inside the transaction-scoped DAO — evaluation may have to move to
-     immediately-before-S then.
-  3. Migration 59→60 adds `ack_deferral_reason` (TEXT, nullable) + `ack_deferral_count`
-     (INTEGER, nullable) — §5.1 requires the deferral to be observable as a terminal-state
-     reason and the design gives no column; parity shape assertions both paths; chain-tail pin
-     update (mechanical, same pattern as 58→59).
-  4. Retry bound: constant `ohacAckDeferredRetryBound = 5`, documented as the design's
-     "bounded, configured number" placeholder pending DSI-6 configuration (design fixes no
-     value). On reaching the bound: operator-visible ERROR log + deferral event payload flag;
-     no invented vocabulary. Terminal-side quarantine CLASSIFICATION deferred to DSI-6 (nothing
-     is quarantinable until a real assertion-bearing outbox exists); the registry's
-     `quarantined` outcome + drained-disposition semantics IS decision 31's inert quarantine
-     structure, exercised by the test registrant.
-  5. Operator visibility = reason column + ERROR logs (repo `developer.log` convention) +
-     append-only local events. NO UI change in this unit (a badge/dialog change would drag the
-     NHILOS standard into B3); badge surfacing recorded as a follow-up needing a NHILOS audit.
-  6. R1-008 coupler tested NOW: unregistered outbox attempting assertion creation refuses
-     (fail-closed), via the test registrant — U4 will consume `isRegistered`.
-- Known design gaps flagged by the scout (recorded, not silently resolved): no
-  `OHAC_ACK_DEFERRED_OUTBOX` constant exists anywhere today; no deferral/quarantine column;
-  no retry-bound value in the design.
-- Registry, registration coupler, blocked `ACK_SUBMITTING` transition, `OHAC_ACK_DEFERRED_OUTBOX`
-  reason, bounded retries, quarantine with operator visibility. Inert until a registrant exists
-  (test registrant only; DSI-6 credit-note outbox is the named future registrant). Decision 31.
-- Must land before U4: the assertion emitter's R1-008 fail-closed precondition reads this registry.
+- Status: **MERGED as `ef53072e`** (PR #715, issue #714 closed). Branch `feat/ohac-pos-drain-gate`
+  deleted remotely. All checks green on the final tree (`lint-and-test` 9m54s, `build-check` 2m0s,
+  Cloudflare, GitGuardian). Owner decision: delivered on independent verification (APPROVE, 0 blockers)
+  after native review failed with provider infrastructure error.
 
 ### U4 — Slice C: durable PIN attempts + assertion creation (B4)
-- Status: PENDING
+- Status: **IMPLEMENTED + INDEPENDENTLY VERIFIED (APPROVE, 0 blockers) — READY TO SHIP.**
+  Issue #720 (`status:approved`, `type:feature`) on branch `feat/ohac-pos-slice-c`
+  @ `origin/main` `ef53072e`. Commit/PR/CI/merge next.
+- Verification round 2 (parent-led, after the writer): APPROVE, 0 blocking; **6 findings all
+  closed** — forced-CAS-loss seam + exhaustion tests (design §13 equivalence; retry-loop mutation
+  killed, sha256 restore `d969abb4…`), terminal-state invariant matrix (byte-identity of every
+  column except counter+`updated_at`; non-null deferral seed added by the parent after the writer
+  wrongly claimed `ack_deferral_*` absent — mutation through REGENERATED code killed it:
+  `Expected 'OHAC_ACK_DEFERRED_OUTBOX' / Actual <null>`, re-proving `@Query` SQL reaches runtime
+  only after build_runner), 23-field emitter test extended, corrupt-permissions → fail-closed
+  `StateError`, emitter digest-tamper test, temp-dir `addTearDown`.
+- Full-suite classification: 1 loader flake per run (verbatim known `WebSocketException`,
+  isolated-green) + 1 cross-file isolation flake (`validated_sale_inventory_authority_test`,
+  isolated 6/6) — **0 OHAC assertion failures**. Authored ≈2,916 lines total, 7.3× the guard,
+  overage declared.
+- **Native review `review-8243591185a6811c`** (tier HIGH, 4 lenses risk/resilience/readability/
+  reliability, 13 files / 2,983 lines, budget 200): START created the lineage (no consent needed);
+  group capture forecast **4 model runs** acknowledged once, then `reviewer-empty-output` /
+  `stopReason: length` on `review-resilience` — the **8th identical provider failure across 4
+  lineages and both 1-lens and 4-lens configurations**. Slots remain reoffered; no relaunch
+  (deterministic); no verdict, no authority acknowledged. Delivered under the owner's standing
+  OHAC authorization + the deliver-on-independent-verification criterion recorded for U1–U3.
+- Writer record preserved below.
+- Evidence (RED/GREEN with exact counts):
+  - RED (stubs throw `UnimplementedError`): policy 0/14, emitter 0/10, service 0/17, DAO group
+    0/6 — batch **+60 passed / -47 failed**; positional test RED before `build_runner`
+    (generated wrapper absent, `+4 -1`).
+  - GREEN: same batch **+107, 0 failures** (54 pre-existing DAO + 6 new DAO + 5 positional
+    + 14 policy + 10 emitter + 17 service).
+  - `flutter analyze` clean; `dart run build_runner build` clean with **zero churn**
+    (`app_database.g.dart` sha256 identical across two runs: `c10610a9…`).
+  - Full `flutter test test/data/`: **1200 passing, 0 assertion failures**, 1 loader failure
+    classified by verbatim known message (`WebSocketException: Invalid WebSocket upgrade request`,
+    `audit_repository_impl_test.dart`) — the recorded per-run flake class.
+  - Mutation proofs (2 riskiest discriminators), both killed and restored **sha256
+    byte-identical**:
+    - M1 lockout bypassed (`isLocked` → `false`): killed by 4 tests (policy boundary, DAO locked
+      denial, restart persistence, service locked denial). Orig `08f61efc…` = restored `08f61efc…`.
+    - M2 unregistered outbox emits (`isRegistered` gate disabled in emitter): killed by the
+      emitter R1-008 test (the service independently denies — defense in depth by design).
+      Orig `36d55d30…` = restored `36d55d30…`.
+  - Authored: production 744 (policy 120, emitter 216, port 132, service 276, DAO +316, entities
+    +11, .g.dart +34 generated) + tests 1,035 (policy 159, emitter 280, service 578, DAO +273,
+    positional +23) = **1,779 lines; real-coverage overage declared vs the 400-line guard**.
+- Design decisions taken while implementing:
+  1. **Audit linkage** (`localAuditId`/`localAuditEntryHash`): the appended
+     `PIN_ATTEMPT_RESET_SUCCESS` event's id and the OHAC digest over its canonical payload; the
+     event payload is number-free (C14N-1) and carries only userId, epochSequence and the stamped
+     sequence — never PIN/verifier/assertion body (§12).
+  2. **Emitter construction = parse round trip**: `create` stamps the digest over the canonical
+     22-field body and returns `parseAssertionV1(full)`, so the emitter can never emit an
+     assertion the verifier-side parser rejects.
+  3. **Terminal counter increments WITHOUT touching `revision`**: the counter is not a
+     transition-owned field; authorization must not interfere with the epoch state machine's CAS.
+  4. **Denial-before-write ordering**: request validation → cohort/build gate → R1-008 registry →
+     entry eligibility all deny BEFORE the transaction, so no gate failure ever mutates attempt
+     state or burns a sequence.
+  5. **Attempt-state CAS insert conflict** (concurrent first-write) is surfaced as
+     `OhacAttemptCasLostException` and retried fresh (§6, §11.5 decision 34); serialized sqflite
+     transactions make the retry defensive, and the concurrency-equivalence test proves distinct
+     monotonic sequences under parallel authorization.
+- Pre-dispatch architectural rulings (resolving the 7 open scout points):
+  1. **Field names pinned to the authoritative schema**: `schema, assertionId, tenantId, terminalId,
+     deviceCredentialId, deviceCredentialVersion, epochSequence, epochDigest, authorizerUserId,
+     operatorUserId, authorizerRole, permissionsUsed, operationType, operationSchema, operationDigest,
+     localAuthorizationSequence, localAuditId, localAuditEntryHash, posBuild, policySchema, trustLevel,
+     authorizedAt, digest` (no `signature`, exact match with `assertion.v1.ts` and `assertion_v1.dart`).
+  2. **Cohort gate**: in POS, cohort enablement is proven by the presence of an **acknowledged ACTIVE
+     epoch** (the backend `hasEnabledCohort` query only delivers epochs when the tenant cohort row is
+     enabled) + an **allowlisted exact POS/backend build pair** (`readOhacPosBuild() == epoch.targetPosBuild`).
+     Version alone never enables.
+  3. **`local_authorization_sequence`**: lives on `human_auth_terminal_state` (terminal-scoped counter),
+     incremented atomically when the assertion is emitted. `human_auth_attempt_state`'s column remains
+     per-user attempt tracking only.
+  4. **Durable attempt policy**: 3 failures / 60s rolling window -> 5-min lockout; successful attempt
+     resets failure timestamps and appends `OhacLocalEventType.pinAttemptResetSuccess` (`PIN_ATTEMPT_RESET_SUCCESS`).
+  5. **R1-008 fail-closed coupling**: `OhacAssertionEmitter` requires `OhacOutboxRegistry.isRegistered(outboxId)`,
+     refuses emission with `OHAC_UNREGISTERED_OUTBOX` if false.
+  6. **Transaction boundary**: single DAO transaction in `OhacDeliveryDao` for attempt CAS + terminal
+     sequence increment + audit event; returns the inputs for the domain's outbox enqueue.
+  7. **`PIN_ATTEMPT_RESET_SUCCESS`** added to `OhacLocalEventType`. No new migration needed (all 5
+     tables already exist with all columns, current schema version 60).
 - `C-RED`/`C-GREEN`/`C-TRIANGULATE`/`C-REFACTOR`/`C-EVIDENCE` per
   `openspec/.../tasks.md:200-230`: durable attempt service/DAO (positional Floor `@transaction`,
   revision-CAS), POS application service + domain port under `apps/pos_app/lib/domain/security/`,
