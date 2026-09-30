@@ -13,6 +13,7 @@ import '../../domain/models/sales/payment.dart';
 import '../../domain/ports/printer_port.dart';
 import '../../core/utils/nicaragua_fiscal_validator.dart';
 import '../../domain/services/config/printer_config_service.dart';
+import '../../domain/services/printer/printer_resolver.dart';
 import 'activation_required_config_adapter.dart';
 import 'terminal_identity_service.dart';
 
@@ -46,20 +47,30 @@ class ActivationPreOfflineRunner {
   final AppDatabase _database;
   final ActivationRequiredConfigAdapter _configAdapter;
   final TerminalIdentityService _terminalIdentity;
-  final PrinterPort _printer;
+  final PrinterPort? _injectedPrinterPort;
   final PrinterConfigService _printerConfigService;
 
   ActivationPreOfflineRunner({
     required AppDatabase database,
     required ActivationRequiredConfigAdapter configAdapter,
     required TerminalIdentityService terminalIdentityService,
-    required PrinterPort printerPort,
+    PrinterPort? printerPort,
     required PrinterConfigService printerConfigService,
   })  : _database = database,
         _configAdapter = configAdapter,
         _terminalIdentity = terminalIdentityService,
-        _printer = printerPort,
+        _injectedPrinterPort = printerPort,
         _printerConfigService = printerConfigService;
+
+  /// Resolves the effective printer port. An injected port (tests) wins;
+  /// otherwise the persisted profile is read fresh so a printer configured
+  /// after app startup is honored without a restart.
+  Future<PrinterPort> _resolvePrinter() async {
+    if (_injectedPrinterPort != null) return _injectedPrinterPort!;
+    return PrinterResolver.resolve(
+      await _printerConfigService.getPrinterConfig(),
+    );
+  }
 
   Future<PreOfflineRunnerSummary> runPreOfflineChecks(
     PreOfflineRunnerParams params,
@@ -168,7 +179,11 @@ class ActivationPreOfflineRunner {
     }
 
     // 4. PRINTER_AVAILABLE
-    final printerStatus = await _printer.checkStatus();
+    // Resolve dynamically from persisted config so a profile configured
+    // after app startup is honored without requiring a restart.
+    final effectivePrinter = _injectedPrinterPort ??
+        PrinterResolver.resolve(await _printerConfigService.getPrinterConfig());
+    final printerStatus = await effectivePrinter.checkStatus();
     final printerIsReady = printerStatus == PrinterStatus.ready;
     final check4 = ActivationCheckResultLocalEntity(
       id: const Uuid().v4(),
@@ -261,7 +276,7 @@ class ActivationPreOfflineRunner {
         total: 0,
         paymentStatus: PaymentStatus.paid,
       );
-      testPrintResult = await _printer.printInvoice(
+      testPrintResult = await (await _resolvePrinter()).printInvoice(
         testInvoice,
         items: [
           InvoiceItem(

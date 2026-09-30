@@ -297,7 +297,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       );
       expect(updatedSession?.currentActivationAttemptId).toBe(attempt.id);
 
-      // 2. Reject second concurrent attempt (application & database constraint)
+      // 2. Reject second concurrent attempt (application & database constraint).
+      // The session is ACTIVATION_IN_PROGRESS with an active attempt: the
+      // active-attempt guard fires first and throws ConflictException.
       await expect(
         activationService.startActivation(
           tenantId,

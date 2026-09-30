@@ -10,6 +10,7 @@ import '../../domain/ports/printer_port.dart';
 import '../services/sales/dgi_numbering_service_impl.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
 import '../../domain/services/config/printer_config_service.dart';
+import '../../domain/services/printer/printer_resolver.dart';
 import '../database/app_database.dart';
 import '../mappers/sales_mapper.dart';
 import '../models/activation/activation_check_result_local_entity.dart';
@@ -62,22 +63,32 @@ class ControlledSaleResult {
 class ActivationControlledSaleRunner {
   final AppDatabase _database;
   final SalesRepository _salesRepository;
-  final PrinterPort _printerPort;
+  final PrinterPort? _injectedPrinterPort;
   final ActivationClockManager? _clockManager;
   final PrinterConfigService _printerConfigService;
 
   ActivationControlledSaleRunner({
     required AppDatabase database,
     required SalesRepository salesRepository,
-    required PrinterPort printerPort,
+    PrinterPort? printerPort,
     ActivationClockManager? clockManager,
     PrinterConfigService? printerConfigService,
   })  : _database = database,
         _salesRepository = salesRepository,
-        _printerPort = printerPort,
+        _injectedPrinterPort = printerPort,
         _clockManager = clockManager,
         _printerConfigService =
             printerConfigService ?? PrinterConfigService(database.localConfigDao);
+
+  /// Resolves the effective printer port. An injected port (tests) wins;
+  /// otherwise the persisted profile is read fresh so a printer configured
+  /// after app startup is honored without a restart.
+  Future<PrinterPort> _resolvePrinter() async {
+    if (_injectedPrinterPort != null) return _injectedPrinterPort!;
+    return PrinterResolver.resolve(
+      await _printerConfigService.getPrinterConfig(),
+    );
+  }
 
   Future<ControlledSaleResult> executeControlledOfflineSale(
     ControlledSaleParams params,
@@ -337,7 +348,7 @@ class ActivationControlledSaleRunner {
     );
 
     // 5. Real Receipt / Printing Path Traversal
-    final printerStatus = await _printerPort.checkStatus();
+    final printerStatus = await (await _resolvePrinter()).checkStatus();
     final printerIsReady = printerStatus == PrinterStatus.ready;
     bool receiptPrintedSuccess = false;
     // Issue #561 (Option A): set when the owner disabled auto-print
@@ -408,7 +419,7 @@ class ActivationControlledSaleRunner {
         receiptRegimeEvidence = resolvedRegime.code;
         receiptPaperWidthEvidence = receiptConfig.paperWidthMm;
       } else {
-        final printResult = await _printerPort.printInvoice(
+        final printResult = await (await _resolvePrinter()).printInvoice(
           receiptInvoice,
           items: [receiptItem],
           payments: [receiptPayment],
