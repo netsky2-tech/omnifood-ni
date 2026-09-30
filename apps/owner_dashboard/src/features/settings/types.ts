@@ -14,6 +14,56 @@ export const FiscalRegime = {
 
 export type FiscalRegime = (typeof FiscalRegime)[keyof typeof FiscalRegime];
 
+// --- Business Profile (BXW-007 U2) ---
+
+/**
+ * BXW-007 U2: mirrors the backend TenantOperationMode enum (POS canon
+ * vocabulary, apps/pos_app TenantOperationMode). The POS default is
+ * FOODPARK_QSR.
+ */
+export const TenantOperationMode = {
+  FOODPARK_QSR: "FOODPARK_QSR",
+  RESTAURANT: "RESTAURANT",
+  HYBRID: "HYBRID",
+} as const;
+
+export type TenantOperationMode =
+  (typeof TenantOperationMode)[keyof typeof TenantOperationMode];
+
+/**
+ * BXW-007 U2: mirrors the backend CheckoutFxMode enum (POS canon checkout FX
+ * source). The POS default is COMMERCIAL.
+ */
+export const CheckoutFxMode = {
+  COMMERCIAL: "COMMERCIAL",
+  BCN_OFFICIAL: "BCN_OFFICIAL",
+} as const;
+
+export type CheckoutFxMode = (typeof CheckoutFxMode)[keyof typeof CheckoutFxMode];
+
+/**
+ * BXW-007 U2 (contract rev 2): never trust the stored string. A missing,
+ * null, non-string or non-member value resolves to null — "never configured
+ * in the cloud" — so the form can keep the neutral "Sin definir" sentinel
+ * instead of silently affirming a default. Affirming a default would
+ * downgrade terminals an operator set to RESTAURANT/HYBRID locally.
+ */
+export function resolveTenantOperationMode(
+  raw: unknown,
+): TenantOperationMode | null {
+  return (
+    Object.values(TenantOperationMode) as string[]
+  ).includes(raw as string)
+    ? (raw as TenantOperationMode)
+    : null;
+}
+
+export function resolveCheckoutFxMode(raw: unknown): CheckoutFxMode | null {
+  return (Object.values(CheckoutFxMode) as string[]).includes(raw as string)
+    ? (raw as CheckoutFxMode)
+    : null;
+}
+
 /**
  * D-21 (#554): DGI authorization code charset — letters, digits, hyphens and
  * slashes ONLY, mirroring the backend DGI_AUTHORIZATION_CODE_PATTERN.
@@ -40,6 +90,38 @@ export const fiscalSetupSchema = z.object({
   commercialFxSpread: z
     .number({ invalid_type_error: "El spread cambiario debe ser un número" })
     .min(0, "El spread cambiario debe ser mayor o igual a 0"),
+  // BXW-007 U2 (contract rev 2): OPTIONAL-UNTIL-SET. Absence (undefined,
+  // null, or the "" sentinel of the "Sin definir" select option) is valid:
+  // it means the tenant never configured the value in the cloud, and every
+  // terminal keeps its local value. A PRESENT value must be a valid wire
+  // literal — the Spanish rejection fires only for an invalid member. The
+  // submit path omits the key entirely when the sentinel is selected, so
+  // `""` never reaches the wire.
+  operationMode: z.preprocess(
+    (raw) => (raw === "" ? undefined : raw),
+    z.enum(
+      [
+        TenantOperationMode.FOODPARK_QSR,
+        TenantOperationMode.RESTAURANT,
+        TenantOperationMode.HYBRID,
+      ],
+      {
+        errorMap: () => ({
+          message:
+            "El modo de operación debe ser FOODPARK_QSR, RESTAURANT o HYBRID",
+        }),
+      },
+    ).nullish(),
+  ),
+  checkoutFxMode: z.preprocess(
+    (raw) => (raw === "" ? undefined : raw),
+    z.enum([CheckoutFxMode.COMMERCIAL, CheckoutFxMode.BCN_OFFICIAL], {
+      errorMap: () => ({
+        message:
+          "La tasa de cambio en cobro en divisas debe ser COMMERCIAL o BCN_OFFICIAL",
+      }),
+    }).nullish(),
+  ),
   pricesIncludeTax: z.boolean(),
   phone: z.string().trim().optional(),
   address: z.string().trim().optional(),
@@ -176,7 +258,14 @@ export function resolveDgiAuthorizationExpiryStatus(
   return { state: "none", daysUntilExpiry };
 }
 
-export type FiscalSetupFormValues = z.infer<typeof fiscalSetupSchema>;
+export type FiscalSetupFormValues = z.output<typeof fiscalSetupSchema>;
+/**
+ * BXW-007 U2 (rev 2): the RHF form-state type. The `""` sentinel of the
+ * "Sin definir" option and the preprocess normalization make the INPUT
+ * type differ from the parsed OUTPUT type, so the form is keyed on the
+ * input while onSubmit receives the normalized output.
+ */
+export type FiscalSetupFormInput = z.input<typeof fiscalSetupSchema>;
 
 export interface FiscalSetupResponse {
   tenantId: string;
@@ -186,6 +275,18 @@ export interface FiscalSetupResponse {
   taxRateIva: number;
   pricesIncludeTax: boolean;
   commercialFxSpread: number;
+  /**
+   * BXW-007 U2 (rev 2): null = the tenant never configured it in the cloud.
+   * Absent is tolerated for snapshots from configs predating U2 and is
+   * treated exactly like null — never as a default.
+   */
+  operationMode?: TenantOperationMode | null;
+  /**
+   * BXW-007 U2 (rev 2): null = the tenant never configured it in the cloud.
+   * Absent is tolerated for snapshots from configs predating U2 and is
+   * treated exactly like null — never as a default.
+   */
+  checkoutFxMode?: CheckoutFxMode | null;
   configuredAt?: string;
   /** D-21 (#554): null when no DGI authorization is configured. */
   dgiAuthorizationCode?: string | null;
