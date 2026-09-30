@@ -1,5 +1,11 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateIf,
+} from 'class-validator';
 
 const trimString = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -48,28 +54,32 @@ export class CreateSupplierDto {
  * Allows modifying contact information and activating/deactivating the supplier.
  */
 export class UpdateSupplierDto {
-  @IsOptional()
+  @ValidateIf((_obj, value) => value !== undefined)
   @IsString()
   @IsNotEmpty()
   @Transform(trimString)
   name?: string;
 
   @IsOptional()
+  @ValidateIf((_obj, value) => value !== undefined && value !== null)
   @IsString()
   @Transform(trimString)
   phone?: string;
 
   @IsOptional()
+  @ValidateIf((_obj, value) => value !== undefined && value !== null)
   @IsString()
   @Transform(trimString)
   contactPerson?: string;
 
   @IsOptional()
+  @ValidateIf((_obj, value) => value !== undefined && value !== null)
   @IsString()
   @Transform(trimString)
   creditTerms?: string;
 
   @IsOptional()
+  @ValidateIf((_obj, value) => value !== undefined && value !== null)
   @IsBoolean()
   @Transform(toBoolean)
   isActive?: boolean;

@@ -1031,6 +1031,16 @@ describe('Inventory purchase routes (integration)', () => {
       .expect(403);
   });
 
+  it('returns 400 for PUT /inventory/suppliers/:id when name is null', async () => {
+    const token = signToken({ role: UserRole.OWNER });
+
+    await request(app.getHttpServer())
+      .put(`${INVENTORY_API_PREFIX}/suppliers/sup-1`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: null })
+      .expect(400);
+  });
+
   it('returns 200 for PUT /inventory/suppliers/:id updating supplier details for an owner', async () => {
     const token = signToken({ role: UserRole.OWNER });
     const existing = {

@@ -237,7 +237,8 @@ export class InventoryPurchaseService {
       }
 
       if (input.name !== undefined) {
-        const trimmedName = input.name.trim();
+        const rawName = input.name as unknown;
+        const trimmedName = typeof rawName === 'string' ? rawName.trim() : '';
         if (!trimmedName) {
           throw new BadRequestException(
             'El nombre del proveedor no puede estar vacío.',
@@ -258,15 +259,22 @@ export class InventoryPurchaseService {
       }
 
       if (input.phone !== undefined) {
-        supplier.phone = input.phone?.trim() || null;
+        supplier.phone =
+          typeof input.phone === 'string' ? input.phone.trim() || null : null;
       }
 
       if (input.contactPerson !== undefined) {
-        supplier.contact_person = input.contactPerson?.trim() || null;
+        supplier.contact_person =
+          typeof input.contactPerson === 'string'
+            ? input.contactPerson.trim() || null
+            : null;
       }
 
       if (input.creditTerms !== undefined) {
-        supplier.credit_terms = input.creditTerms?.trim() || null;
+        supplier.credit_terms =
+          typeof input.creditTerms === 'string'
+            ? input.creditTerms.trim() || null
+            : null;
       }
 
       if (input.isActive !== undefined) {
