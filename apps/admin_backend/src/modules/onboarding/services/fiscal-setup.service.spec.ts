@@ -946,5 +946,94 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       expect(result.operationMode).toBe(TenantOperationMode.HYBRID);
       expect(result.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
     });
+
+    // D-16 spirit for the mode params: the dashboard's "Sin definir" sentinel
+    // sends an explicit null to hand local control back to each POS terminal.
+    // The clear must ride the same append-only supersession as the DGI
+    // fields: a new null tombstone row supersedes the prior governing row —
+    // never a mutation, never a stored '' or 'null' string.
+    it('clears a persisted operationMode with a superseding null tombstone on explicit null (append-only, D-16 spirit)', async () => {
+      const priorModeRow = modeParamRow(
+        'OPERATION_MODE',
+        TenantOperationMode.RESTAURANT,
+      );
+      configureActiveRows([priorModeRow]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        operationMode: null,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      // (a) Exactly one new row, with the right key and a null value.
+      expect(savedRowsFor('OPERATION_MODE')).toHaveLength(1);
+      expect(savedRowsFor('OPERATION_MODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'OPERATION_MODE',
+            paramValue: null,
+            version: 2,
+            isActive: true,
+            effectiveTo: null,
+          }),
+        ]),
+      );
+      // (b) Append-only: the prior governing row is never saved or mutated —
+      // only the tombstone is written, and the prior row keeps its version 1
+      // value intact.
+      expect(priorModeRow).toEqual(
+        modeParamRow('OPERATION_MODE', TenantOperationMode.RESTAURANT),
+      );
+      // (c) The post-write read resolves the tombstone as absent: null, not
+      // the string 'null', not a POS default, not the superseded value.
+      expect(result.operationMode).toBeNull();
+    });
+
+    it('clears a persisted checkoutFxMode with a superseding null tombstone on explicit null (append-only, D-16 spirit)', async () => {
+      const priorFxRow = modeParamRow(
+        'CHECKOUT_FX_MODE',
+        CheckoutFxMode.BCN_OFFICIAL,
+      );
+      configureActiveRows([priorFxRow]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+        checkoutFxMode: null,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      // (a) Exactly one new row, with the right key and a null value.
+      expect(savedRowsFor('CHECKOUT_FX_MODE')).toHaveLength(1);
+      expect(savedRowsFor('CHECKOUT_FX_MODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'CHECKOUT_FX_MODE',
+            paramValue: null,
+            version: 2,
+            isActive: true,
+            effectiveTo: null,
+          }),
+        ]),
+      );
+      // (b) Append-only: the prior governing row is never saved or mutated —
+      // only the tombstone is written, and the prior row keeps its version 1
+      // value intact.
+      expect(priorFxRow).toEqual(
+        modeParamRow('CHECKOUT_FX_MODE', CheckoutFxMode.BCN_OFFICIAL),
+      );
+      // (c) The post-write read resolves the tombstone as absent: null, not
+      // the string 'null', not a POS default, not the superseded value.
+      expect(result.checkoutFxMode).toBeNull();
+    });
   });
 });
