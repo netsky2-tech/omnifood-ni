@@ -258,19 +258,6 @@ export class InvoicesService {
           invoiceId: dto.id,
           tenant_id: tenantId,
         }));
-        console.log('[SYNC-INVOICES] items count:', itemPayloads.length);
-        for (const ip of itemPayloads) {
-          console.log(
-            '[SYNC-INVOICES] item id:',
-            JSON.stringify(ip.id),
-            'productId:',
-            JSON.stringify(ip.productId),
-            'recipeVersionId:',
-            JSON.stringify(ip.recipeVersionId),
-            'variantId:',
-            JSON.stringify(ip.variantId),
-          );
-        }
         await this.itemRepoFor(manager).upsert(itemPayloads, ['id']);
       }
       if (dto.payments?.length) {
@@ -280,17 +267,6 @@ export class InvoicesService {
             payment.id && payment.id.trim() !== '' ? payment.id : randomUUID(),
           invoiceId: dto.id,
         }));
-        console.log('[SYNC-INVOICES] payments count:', paymentPayloads.length);
-        for (const pp of paymentPayloads) {
-          console.log(
-            '[SYNC-INVOICES] payment id:',
-            JSON.stringify(pp.id),
-            'method:',
-            JSON.stringify(pp.method),
-            'reconciledByUserId:',
-            JSON.stringify(pp.reconciledByUserId),
-          );
-        }
         await this.paymentRepoFor(manager).upsert(paymentPayloads, ['id']);
       }
     }

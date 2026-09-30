@@ -71,10 +71,19 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
           }
 
           // Activation already completed: show success screen with redirect.
+          // Check both the attempt status AND the reconnect result — after
+          // phase 3 PASS the attempt row may not be refreshed yet.
           final attemptStatus = viewModel.attempt?.localStatus;
+          final reconnectStatus = viewModel.reconnectSyncResult?.attemptStatus;
           if (attemptStatus == 'ACTIVATED' ||
-              attemptStatus == 'ACTIVATED_WITH_WARNING') {
-            return _buildActivationComplete(context, attemptStatus!);
+              attemptStatus == 'ACTIVATED_WITH_WARNING' ||
+              reconnectStatus == 'ACTIVATED' ||
+              reconnectStatus == 'ACTIVATED_WITH_WARNING') {
+            final finalStatus =
+                (attemptStatus == 'ACTIVATED' || attemptStatus == 'ACTIVATED_WITH_WARNING')
+                    ? attemptStatus!
+                    : reconnectStatus!;
+            return _buildActivationComplete(context, finalStatus);
           }
 
           return SingleChildScrollView(

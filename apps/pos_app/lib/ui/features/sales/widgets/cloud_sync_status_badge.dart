@@ -288,8 +288,9 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
                     // Known discrete sync error codes render as Spanish
                     // labels (issue #587); composed summaries and arbitrary
                     // exception dumps pass through unchanged — the detail
-                    // box is diagnostic.
-                    localize(lastError, kSyncErrorLabels),
+                    // box is diagnostic. Split at ';' so the domain list
+                    // suffix doesn't prevent the code from being localized.
+                    _localizeSyncError(lastError),
                     style: TextStyle(color: Colors.red.shade900, fontSize: 11),
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,
@@ -340,6 +341,26 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
         );
       },
     );
+  }
+
+  /// Localizes a sync error that may carry a domain-list suffix after ';'.
+  /// Only splits when the prefix contains a colon (error-code shape like
+  /// `AUTH_BLOCKED: ...`); domain-name summaries like `AuditLogs; Sales`
+  /// pass through verbatim.
+  String _localizeSyncError(String error) {
+    final semicolonIndex = error.indexOf(';');
+    if (semicolonIndex > 0) {
+      final code = error.substring(0, semicolonIndex).trim();
+      // Error codes have a colon (AUTH_BLOCKED: ...); domain names don't.
+      if (code.contains(':')) {
+        final localized = localize(code, kSyncErrorLabels);
+        if (localized != code) {
+          final detail = error.substring(semicolonIndex + 1).trim();
+          return detail.isEmpty ? localized : '$localized — $detail';
+        }
+      }
+    }
+    return localize(error, kSyncErrorLabels);
   }
 
   Widget _buildDetailRow(String label, String value) {

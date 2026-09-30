@@ -525,8 +525,7 @@ void main() {
     });
 
     testWidgets(
-        'renders the finalized status reported by the backend after the '
-        'reconnect phase', (tester) async {
+        'renders the completion screen with redirect after the reconnect phase succeeds', (tester) async {
       await pumpThroughPhase1(tester);
       stubControlledSaleSuccess();
       stubReconnectSuccess(attemptStatus: 'ACTIVATED');
@@ -547,14 +546,10 @@ void main() {
       await tester.tap(find.byKey(const Key('run_reconnect_button')));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('finalized_status')), findsOneWidget);
-      expect(find.text('Activado'), findsOneWidget);
-      // The backend verdict is rendered through the label map too.
-      expect(find.text('Veredicto del backend: Aprobado'), findsOneWidget);
-      // The follow-up is credential provisioning and terminal readiness; the
-      // screen must not claim the device credential was already created.
-      expect(find.byKey(const Key('finalization_next_steps')), findsOneWidget);
-      expect(find.textContaining('credencial'), findsOneWidget);
+      // The completion screen replaces the phase cards after a successful
+      // reconnect — it shows the outcome and a redirect to the POS.
+      expect(find.byKey(const Key('go_to_pos_button')), findsOneWidget);
+      expect(find.text('Terminal activado'), findsOneWidget);
     });
 
     testWidgets(
