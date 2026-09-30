@@ -128,9 +128,11 @@ pendings outside this effort unless the owner extends it.
   after native review failed with provider infrastructure error.
 
 ### U4 — Slice C: durable PIN attempts + assertion creation (B4)
-- Status: **IMPLEMENTED + INDEPENDENTLY VERIFIED (APPROVE, 0 blockers) — READY TO SHIP.**
-  Issue #720 (`status:approved`, `type:feature`) on branch `feat/ohac-pos-slice-c`
-  @ `origin/main` `ef53072e`. Commit/PR/CI/merge next.
+- Status: **MERGED as `a8786b4b`** (PR #721, issue #720 closed). Branch `feat/ohac-pos-slice-c`
+  deleted remotely. All checks green (`lint-and-test` 10m11s, `build-check` 1m52s, Cloudflare,
+  GitGuardian). Note: the first Cloudflare Pages run failed transiently (no logs accessible; the
+  GitHub-side `flutter build web` smoke build passed on the same commit) — an empty retrigger
+  commit produced a fully green run; the empty commit is absorbed by the squash merge.
 - Verification round 2 (parent-led, after the writer): APPROVE, 0 blocking; **6 findings all
   closed** — forced-CAS-loss seam + exhaustion tests (design §13 equivalence; retry-loop mutation
   killed, sha256 restore `d969abb4…`), terminal-state invariant matrix (byte-identity of every
@@ -217,14 +219,53 @@ pendings outside this effort unless the owner extends it.
   unless BOTH tenant cohort and build pair match), `authorizeOverride` NOT the protocol boundary.
 - Without this unit no `ohac.assertion.v1` is ever emitted.
 
-### U5 — Slice D: verifier, recovery lifecycle, integrity classifier, observability
-- Status: PENDING
+### U5a — D-backend: verifier port + recovery lifecycle + backend observability
+- Status: **IMPLEMENTED + INDEPENDENTLY VERIFIED (APPROVE, 0 blockers) — READY TO SHIP.**
+  Issue #727 (`status:approved`, `type:feature`).
+- Independent verification: APPROVE, 0 blocking; **3 SHOULD-FIX closed** (HTTP transport-separation
+  e2e both directions + service-level §10 status mapping; expiry boundary tests at 14:59:59.999/
+  15:00:00 with `<=`→`<` mutation proof; check-order docstring restated as a precondition outside
+  the §8 eight + precedence test) **+ 2 cheap observations** (placeholder test now hits the right
+  branch; digest comment honest about relying on `parseAssertionV1`).
+- Evidence: `npm test` 3,324 pass; `npm run test:db` 294/294 (local Postgres reachable);
+  `npm run test:e2e -- --runInBand` 686/686; `npm run build` ok; `npx eslint <paths>` 0/0 (never
+  `npm run lint`). Parallel e2e failures = pre-existing cross-worker fixture race (unrelated
+  suites only, verified). 3 mutation proofs (floor-check skip, raw-secret storage, expiry `<=`)
+  with byte-identical sha256 restores. Authored ≈4,300 lines (production ≈1,965 + tests ≈2,330),
+  ~10× guard, overage declared.
+- **Native review `review-7766571f3974343a`** (medium, 1 lens, 25 files / 4,342 lines): START
+  created the lineage; forecast **1 model run** acknowledged; capture failed with
+  `reviewer-empty-output` / `stopReason: length` (143s) — the **9th identical provider failure
+  across 5 lineages**. No relaunch; no verdict, no authority acknowledged. Delivered under the
+  owner's standing OHAC authorization + the U1–U4 record.
+- U5a rulings: (1) `D-EVIDENCE`'s `npm run lint` is FORBIDDEN (repo script is `eslint --fix`) —
+  lint evidence = `npx eslint <paths>`; (2) pepper env vars must land in `.env.example`,
+  `.env.test.example` AND `test/setup-test-env.ts` in the same unit or startup fails; (3) new
+  human controllers must be registered in `test/support/route-transport-registry.ts`;
+  (4) `attempt_reset_generation` writer stays OUT (decision 29, own issue); (5) real-DB specs
+  (`.db.spec.ts`) run via `npm run test:db` — writer reports Postgres availability if it cannot run;
+  (6) verifier MUST NOT insert consumption or commit/rollback (consumer harness proves it).
+- Scout facts (measured at `65d84ebb`): `HumanAuthorizationVerifierPort` = 0 matches in `src/`;
+  no recovery service/controller/route; no pepper anywhere; `error-codes.ts` is a subset of §10;
+  entities for all 9 tables incl. recovery-token + verification-event already exist; module is
+  imported by `sales.module.ts`; pepper config follows the `identity/config/*jwt.config.ts`
+  fail-fast precedent.
 - `D-*` per `openspec/.../tasks.md:235-294`: `HumanAuthorizationVerifierPort.verify(...)` (does not
   exist anywhere under `apps/admin_backend/src` — measured), port must not insert consumption or
   commit/rollback, credential-binding-mismatch classification, recovery tokens
   (`ohr1.<tokenId>.<256-bit-secret>`, HMAC-SHA-256 storage, pepper fail-fast at startup), POS
   integrity classifier + ordered clear-data path, observability counters/audit facts.
 - Backend: `npm test`, `npm run test:e2e`, `npx eslint <paths>` (never `npm run lint`).
+
+### U5b — D-POS: integrity classifier + ordered clear-data + POS observability
+- Status: PENDING (next unit after U5a merges). Scout facts: `OhacIntegrityClassification` and
+  `markIntegrityLoss` exist (callers in sync_service); NO factory-reset/clear-data flow exists
+  (`DeviceSyncBootstrapCoordinator` is the restore-transport seam to order first); POS has no
+  metrics — `developer.log` + `pos_product_telemetry_service` are the conventions; the redeem
+  leg depends on U5a's device route (lands with U5a). Proposed surfaces: `lib/domain/security/`,
+  `lib/data/services/sync_service.dart`, `lib/data/models/human_authorization/`,
+  `lib/data/daos/human_authorization/ohac_delivery_dao.dart`, `test/domain/security/`,
+  `test/data/models/human_authorization/`, `test/data/daos/human_authorization/`.
 
 ### U6 — Close: tracker + authority divergences
 - Status: PENDING

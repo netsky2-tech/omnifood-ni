@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -53,6 +55,12 @@ import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-con
 import type { DeviceSyncPrincipal } from '../../identity/security/device-sync-principal';
 import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
 import { StaffPolicyEpochAcknowledgementService } from '../../identity/human-authorization/services/staff-policy-epoch-acknowledgement.service';
+import {
+  RecoveryTokenService,
+  type RecoveryRedeemOutcome,
+} from '../../identity/human-authorization/services/recovery-token.service';
+import { OHAC_ERROR_HTTP_STATUS } from '../../identity/human-authorization/contracts/error-codes';
+import type { RedeemHumanAuthorizationRecoveryDto } from '../dto/human-authorization-recovery.dto';
 import type { AcknowledgeStaffPolicyEpochDto } from '../dto/human-authorization-ack.dto';
 import { parseHumanAuthorizationNegotiation } from '../dto/human-authorization-negotiation';
 import type { HumanAuthorizationDeliveryDto } from '../dto/inbound-sync.dto';
@@ -93,6 +101,13 @@ export class InboundSyncService {
     private readonly humanAuthorizationDelivery?: StaffPolicyEpochDeliveryService,
     @Optional()
     private readonly humanAuthorizationAcknowledgement?: StaffPolicyEpochAcknowledgementService,
+    /**
+     * Recovery-token redemption (design §9). Optional so the inbound sync
+     * keeps working in compositions that do not wire OHAC, mirroring the
+     * delivery/acknowledgement seams above.
+     */
+    @Optional()
+    private readonly recoveryTokenService?: RecoveryTokenService,
   ) {}
 
   /**
@@ -333,6 +348,58 @@ export class InboundSyncService {
       sequence: outcome.receipt.sequence,
       digest: outcome.receipt.digest,
       floorSequence: outcome.receipt.floorSequence,
+    };
+  }
+
+  /**
+   * Redeems an OHAC recovery token for the authenticated device principal
+   * (design §9). Tenant and terminal come only from the principal the
+   * transport guard attached — never from the body — so a redemption can
+   * only ever bind to the terminal that authenticated. A denial is answered
+   * as an HTTP failure carrying its stable §10 code and status mapping, the
+   * same way an acknowledgement rejection is answered as a conflict.
+   */
+  async redeemHumanAuthorizationRecoveryToken(
+    tenantId: string,
+    devicePrincipal: DeviceSyncPrincipal,
+    dto: RedeemHumanAuthorizationRecoveryDto,
+  ): Promise<{
+    status: 'REDEEMED' | 'REPLAYED';
+    tokenId: string;
+    terminalId: string;
+    redeemedAt: string;
+  }> {
+    if (!this.recoveryTokenService) {
+      throw new HttpException(
+        { resultCode: 'OHAC_TEMPORARY_UNAVAILABLE' },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    const outcome: RecoveryRedeemOutcome =
+      await this.recoveryTokenService.redeem({
+        tenantId,
+        terminalId: devicePrincipal.deviceId,
+        credentialId: devicePrincipal.credentialId,
+        token: dto.token,
+        idempotencyKey: dto.idempotencyKey,
+        posBuild: dto.posBuild,
+        policySchema: dto.policySchema,
+        assertionSchema: dto.assertionSchema,
+        integrityClassification: dto.integrityClassification,
+        correlationId: dto.correlationId,
+        backendBuild: process.env.OMNIFOOD_BACKEND_BUILD ?? '',
+      });
+    if (outcome.status === 'rejected') {
+      throw new HttpException(
+        { resultCode: outcome.resultCode },
+        OHAC_ERROR_HTTP_STATUS[outcome.resultCode],
+      );
+    }
+    return {
+      status: outcome.status === 'replayed' ? 'REPLAYED' : 'REDEEMED',
+      tokenId: outcome.receipt.tokenId,
+      terminalId: outcome.receipt.terminalId,
+      redeemedAt: outcome.receipt.redeemedAt.toISOString(),
     };
   }
 
@@ -877,7 +944,8 @@ export class InboundSyncService {
         'Inbound loyalty program sync requires a tenant-bound transaction manager (app.tenant_id binding)',
       );
     }
-    const loyaltyProgramRepository = entityManager.getRepository(LoyaltyProgram);
+    const loyaltyProgramRepository =
+      entityManager.getRepository(LoyaltyProgram);
     const qb = loyaltyProgramRepository
       .createQueryBuilder('program')
       .where('program.tenant_id = :tenantId', { tenantId });

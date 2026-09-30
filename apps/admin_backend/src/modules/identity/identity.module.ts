@@ -28,6 +28,11 @@ import {
   IdentityJwtConfig,
   IdentityJwtConfigModule,
 } from './config/identity-jwt.config';
+import { HumanAuthorizationPepperStartupGuard } from './config/human-authorization-pepper.config';
+import { HumanAuthorizationRecoveryTokenController } from './human-authorization/controllers/recovery-token.controller';
+import { RecoveryTokenService } from './human-authorization/services/recovery-token.service';
+import { HumanAuthorizationMetricsService } from './human-authorization/services/human-authorization-metrics.service';
+import { OhacTenantTransaction } from './human-authorization/rls/ohac-tenant-transaction';
 
 @Module({
   imports: [
@@ -58,6 +63,7 @@ import {
     AuditController,
     UsersController,
     CapabilityController,
+    HumanAuthorizationRecoveryTokenController,
   ],
   providers: [
     AuthService,
@@ -73,6 +79,14 @@ import {
     PermissionsGuard,
     CurrentUserAuthorizationService,
     TenantCapabilityService,
+    // OHAC recovery lifecycle (design §9): the human routes live here where
+    // the human-session guards are registered; the device redeem route in the
+    // sales module consumes the exported service. The pepper is validated at
+    // bootstrap by the startup guard, never at module compile time.
+    OhacTenantTransaction,
+    HumanAuthorizationMetricsService,
+    RecoveryTokenService,
+    HumanAuthorizationPepperStartupGuard,
   ],
   exports: [
     JwtModule,
@@ -90,6 +104,8 @@ import {
     PermissionsGuard,
     CurrentUserAuthorizationService,
     TenantCapabilityService,
+    RecoveryTokenService,
+    HumanAuthorizationMetricsService,
   ],
 })
 export class IdentityModule {}

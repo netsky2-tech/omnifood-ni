@@ -22,6 +22,10 @@ import {
 import { FiscalAckDto } from '../../onboarding/dto/fiscal-config-version.dto';
 import { InboundSyncService } from '../services/inbound-sync.service';
 import { AcknowledgeStaffPolicyEpochDto } from '../dto/human-authorization-ack.dto';
+import {
+  RedeemHumanAuthorizationRecoveryDto,
+  RedeemHumanAuthorizationRecoveryResponseDto,
+} from '../dto/human-authorization-recovery.dto';
 
 interface InboundSyncRequest extends Request {
   devicePrincipal?: DeviceSyncPrincipal;
@@ -135,6 +139,32 @@ export class InboundSyncController {
       );
     }
     return this.inboundSyncService.acknowledgeStaffPolicyEpoch(
+      this.requireTenant(tenantId),
+      principal,
+      dto,
+    );
+  }
+
+  /**
+   * Redeems an OHAC recovery token online for the authenticated terminal
+   * (design §9). The transport guard already proved an active device
+   * credential; redemption restores human-authorization state only and
+   * never provisions, confirms, rotates, or revokes device credentials.
+   */
+  @Post('human-authorization/recovery/redeem')
+  @RequireSyncScopes('sync:pull')
+  async redeemRecoveryToken(
+    @Req() req: InboundSyncRequest,
+    @GetTenantId() tenantId: string | undefined,
+    @Body() dto: RedeemHumanAuthorizationRecoveryDto,
+  ): Promise<RedeemHumanAuthorizationRecoveryResponseDto> {
+    const principal = req.devicePrincipal;
+    if (!principal) {
+      throw new UnauthorizedException(
+        'DEVICE_PRINCIPAL_MISSING: an authenticated device is required to redeem a recovery token',
+      );
+    }
+    return this.inboundSyncService.redeemHumanAuthorizationRecoveryToken(
       this.requireTenant(tenantId),
       principal,
       dto,

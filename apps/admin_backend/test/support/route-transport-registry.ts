@@ -168,8 +168,7 @@ function declaredRoutes(controller: Type): RouteRecord[] {
       const handler = (proto as Record<string, unknown>)[key];
       if (typeof handler !== 'function') continue;
       const methodValue = Reflect.getMetadata(METHOD_METADATA, handler) as
-        | number
-        | undefined;
+        number | undefined;
       if (methodValue === undefined) continue;
       const handlerPath =
         (Reflect.getMetadata(PATH_METADATA, handler) as string | undefined) ??
@@ -376,6 +375,13 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
       'device sync token exchange (POS DeviceSyncExchangePort); authenticated by the renewal credential in the body, no human session',
   },
   { controller: 'AuditController', transport: 'human' },
+  // OHAC recovery tokens (design §9): issuance/revocation by an active
+  // OWNER/MANAGER human session; the device-side redeem route inherits the
+  // InboundSyncController device classification.
+  {
+    controller: 'HumanAuthorizationRecoveryTokenController',
+    transport: 'human',
+  },
   { controller: 'UsersController', transport: 'human' },
   { controller: 'CapabilityController', transport: 'human' },
   { controller: 'OnboardingCatalogController', transport: 'human' },
