@@ -1,9 +1,9 @@
-/// Robust numeric casting utilities (AGENTS.md / PRD data isolation).
-///
-/// PostgreSQL numeric/decimal columns are serialized as JSON strings by
-/// the TypeORM/pg driver to preserve decimal precision without IEEE 754 drift.
-/// These helpers coerce both [num] and [String] representations into safe
-/// typed primitives, returning null when absent or unparseable.
+// Robust numeric casting utilities (AGENTS.md / PRD data isolation).
+//
+// PostgreSQL numeric/decimal columns are serialized as JSON strings by
+// the TypeORM/pg driver to preserve decimal precision without IEEE 754 drift.
+// These helpers coerce both num and String representations into safe
+// typed primitives, returning null when absent or unparseable.
 
 double? asDouble(dynamic val) {
   if (val == null) return null;
