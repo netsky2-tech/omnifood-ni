@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/localization/label_map.dart';
+import '../../../../data/services/sync_service.dart';
 import 'activation_session_view_model.dart';
 
 /// Guided terminal-activation screen: an operator completes activation from
@@ -149,6 +150,12 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
             ElevatedButton.icon(
               key: const Key('go_to_pos_button'),
               onPressed: () {
+                // Trigger an immediate sync so the fresh terminal
+                // credentials and any pending outbox items are
+                // propagated to cloud as soon as the POS screen
+                // loads (the periodic 5-minute timer is too slow
+                // for post-activation readiness).
+                context.read<SyncService>().triggerManualSync();
                 Navigator.of(context).pushReplacementNamed('/home');
               },
               icon: const Icon(Icons.point_of_sale),
