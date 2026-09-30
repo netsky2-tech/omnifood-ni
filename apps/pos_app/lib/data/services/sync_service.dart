@@ -407,15 +407,24 @@ class SyncService {
     try {
       final database = _database;
       if (database == null) return null;
-      final count =
-          await database.authorityIngestionVerdictDao.countVerdicts() ?? 0;
-      if (count <= 0) return null;
+      // Only verdicts that are still UNRESOLVED surface here: the verdict
+      // table is append-only (audit material), so a stale verdict for a
+      // product the operator has since fixed (product no longer missing, no
+      // longer recorded SIMPLE) must not keep the badge above zero. Unknown
+      // products (p.id IS NULL) always stay reported. Cloud telemetry
+      // (AuthorityIngestionVerdicts.inertCountKey in local_configs) keeps
+      // counting raw historical rows; this is the operator-facing read
+      // model only (#613).
       final rows = await database.database.rawQuery(
         'SELECT v.product_id AS product_id, p.name AS product_name '
         'FROM authority_ingestion_verdicts v '
         'LEFT JOIN products p ON p.id = v.product_id '
+        'WHERE p.id IS NULL OR p.product_type = ? '
         'ORDER BY p.name',
+        const [AuthorityInertRecipe.inertProductType],
       );
+      final count = rows.length;
+      if (count <= 0) return null;
       final names = <String>{};
       for (final row in rows) {
         final name = row['product_name'];
