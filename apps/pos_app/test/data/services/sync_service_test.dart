@@ -10,6 +10,7 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
 import 'package:pos_app/data/models/human_authorization/canonical.dart';
 import 'package:pos_app/data/models/human_authorization/error_codes.dart';
+import 'package:pos_app/data/models/human_authorization/ohac_acknowledgement_request.dart';
 import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
 import 'package:pos_app/data/models/human_authorization/staff_policy_epoch_v1.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
@@ -3531,7 +3532,8 @@ void main() {
 
       test(
         'DELIVER accepted: epoch and entry rows persist with the canonical '
-        'payload and the negotiated facts, state flips to RECEIVE_PENDING',
+        'payload and the negotiated facts, state flips to ACK_SUBMITTING '
+        'and the ack is sent (deferred on a non-201)',
         () async {
           PackageInfo.setMockInitialValues(
             appName: 'OmniFood POS',
@@ -3577,7 +3579,13 @@ void main() {
             final state = await database.ohacDeliveryDao
                 .findTerminalState(ohacTenant, 'dev-1');
             expect(state, isNotNull);
-            expect(state!.state, 'RECEIVE_PENDING');
+            // Unit B2d (§5 steps 3-4): the accept path immediately flips to
+            // ACK_SUBMITTING (transaction S) and POSTs the acknowledgement.
+            // The default interceptor answers the ack with a generic 200,
+            // which is indeterminate — so the terminal stays in
+            // ACK_SUBMITTING for the next pull's retry. The end-to-end
+            // 201 confirm path is pinned in the B2d group below.
+            expect(state!.state, 'ACK_SUBMITTING');
             expect(state.candidateSequence, 1);
             expect(state.candidateDigest, epochJson['digest']);
             expect(state.activeSequence, 0);
@@ -3588,7 +3596,9 @@ void main() {
             expect(state.negotiatedBackendBuild, 'backend-build-1');
             expect(state.negotiatedPolicySchema, staffPolicyEpochV1Schema);
             expect(state.negotiatedAssertionSchema, 'ohac.assertion.v1');
-            expect(state.revision, 1);
+            // R bumps to 1, S to 2; the deferred ack writes nothing more.
+            expect(state.revision, 2);
+            expect(state.ackReceiptId, isNull);
 
             final entries = await database.ohacDeliveryDao
                 .findEntries(ohacTenant, 'dev-1', 1);
@@ -3828,8 +3838,8 @@ void main() {
       );
 
       test(
-        'each non-DELIVER status (DISABLED, UPGRADE_REQUIRED, '
-        'RECOVERY_REQUIRED): no persistence, pull succeeds',
+        'DISABLED and UPGRADE_REQUIRED: no persistence, pull succeeds; '
+        'RECOVERY_REQUIRED fails closed (B2d, §5 step 5)',
         () async {
           PackageInfo.setMockInitialValues(
             appName: 'OmniFood POS',
@@ -3842,7 +3852,6 @@ void main() {
           for (final status in const [
             'DISABLED',
             'UPGRADE_REQUIRED',
-            'RECOVERY_REQUIRED',
           ]) {
             final database = await buildDb();
             try {
@@ -3868,6 +3877,42 @@ void main() {
             } finally {
               await database.close();
             }
+          }
+        },
+      );
+
+      test(
+        'RECOVERY_REQUIRED marks integrity loss (B2d): the reported floor '
+        'is ahead of the server, so the terminal fails closed',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          final database = await buildDb();
+          try {
+            await seedOhacTenant(database);
+            capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+              humanAuthorization: {'status': 'RECOVERY_REQUIRED'},
+            );
+
+            final result = await serviceWithDb(database).pullInboundDeltas();
+            expect(result, isNotNull);
+
+            expect(
+              await database.ohacDeliveryDao.findEpoch(ohacTenant, 'dev-1', 1),
+              isNull,
+            );
+            final state = await database.ohacDeliveryDao
+                .findTerminalState(ohacTenant, 'dev-1');
+            expect(state!.state, 'INTEGRITY_LOSS');
+            expect(state.integrityClassification, 'ACK_INCONSISTENT');
+            expect(state.revision, 1);
+          } finally {
+            await database.close();
           }
         },
       );
@@ -4162,6 +4207,945 @@ void main() {
           expect(emittedEvent!.timestamp, '2026-08-26T19:00:00.000Z');
 
           await sub.cancel();
+        } finally {
+          await database.close();
+        }
+      },
+    );
+  });
+
+  group(
+      'OHAC acknowledgement client and reconnect reconciliation (B2d, design '
+      '§5 steps 4-5, §9, §10)',
+      () {
+    const ohacTenant = '11111111-1111-4111-8111-111111111111';
+    const ohacPosBuild = '2.3.4+11';
+    const userA = '33333333-3333-4333-8333-333333333333';
+    const userB = '44444444-4444-4444-8444-444444444444';
+    const ackPath = '/v1/sync/inbound/human-authorization/staff-policy/ack';
+    const receiptId = '7e6c1c2a-0f4e-4f7a-9c5a-1b2c3d4e5f60';
+
+    Map<String, dynamic> epochEntry(String userId, List<String> permissions) =>
+        <String, dynamic>{
+          'userId': userId,
+          'status': 'ACTIVE',
+          'role': 'MANAGER',
+          'permissions': permissions,
+          'pinVerifier': <String, dynamic>{
+            'algorithm': 'bcrypt',
+            'formatVersion': '2b',
+            'encoded': r'$2b$10$abcdefghijklmnopqrstuv',
+          },
+          'attemptResetGeneration': '0',
+        };
+
+    /// A signed `ohac.staff-policy-epoch.v1` for epoch 1 targeting THIS
+    /// terminal's identity, tenant and negotiated build.
+    Map<String, dynamic> signedEpochJson() =>
+        jsonDecode(utf8.decode(signBody(<String, dynamic>{
+          'schema': staffPolicyEpochV1Schema,
+          'tenantId': ohacTenant,
+          'targetTerminalId': 'dev-1',
+          'sequence': '1',
+          'previousSequence': '0',
+          'previousDigest': genesisDigest,
+          'publisherBackendBuild': 'backend-build-1',
+          'targetPosBuild': ohacPosBuild,
+          'minimumAssertionSchema': 'ohac.assertion.v1',
+          'policyEntries': <Map<String, dynamic>>[
+            epochEntry(userA, <String>['sales:void_invoice']),
+            epochEntry(userB, <String>['inventory:adjust']),
+          ],
+        }))) as Map<String, dynamic>;
+
+    Map<String, dynamic> deliverEnvelope(Map<String, dynamic> epochJson) => {
+          'status': 'DELIVER',
+          'epoch': epochJson,
+          'sequence': epochJson['sequence'],
+          'digest': epochJson['digest'],
+        };
+
+    Map<String, dynamic> deltasResponse({
+      Map<String, dynamic>? humanAuthorization,
+      int currentVersion = 1787750000000,
+    }) =>
+        {
+          'status': 'success',
+          'serverTime': '2026-08-26T18:30:00.000Z',
+          'currentVersion': currentVersion,
+          'deltas': {
+            'products': [],
+            'catalogValues': [],
+            'insumos': [],
+            'recipes': [],
+            'users': [],
+          },
+          // ignore: use_null_aware_elements
+          if (humanAuthorization != null)
+            'humanAuthorization': humanAuthorization,
+        };
+
+    /// A 201 receipt exactly as the backend renders it
+    /// (`staff-policy-ack.service.ts`): no `serverBuild` field.
+    Map<String, dynamic> ackReceipt({
+      String? digest,
+      Object? sequence = 1,
+      Object? floorSequence = 1,
+    }) =>
+        {
+          'status': 'ACCEPTED',
+          'receiptId': receiptId,
+          'sequence': sequence,
+          'digest': digest,
+          'floorSequence': floorSequence,
+        };
+
+    /// Installs an interceptor that answers the inbound pull from
+    /// [deltas] and every POST to the ack path via [onAck], which may
+    /// resolve a response or reject with a DioException — the three shapes
+    /// the acknowledgement client must distinguish (201, 409, network).
+    void installOhacInterceptor({
+      required Map<String, dynamic> Function() deltas,
+      required Object? Function(CapturedPost post) onAck,
+    }) {
+      dio.interceptors.clear();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.method.toUpperCase() == 'POST' &&
+                options.path == ackPath) {
+              final post = CapturedPost(path: options.path, body: options.data);
+              capturedPosts.add(post);
+              final answer = onAck(post);
+              if (answer is DioException) {
+                handler.reject(answer);
+              } else {
+                handler.resolve(
+                  Response<dynamic>(
+                    data: answer,
+                    statusCode: 201,
+                    requestOptions: options,
+                  ),
+                );
+              }
+              return;
+            }
+            if (options.method.toUpperCase() == 'GET' &&
+                options.path == '/v1/sync/inbound/deltas') {
+              handler.resolve(
+                Response<dynamic>(
+                  data: deltas(),
+                  statusCode: 200,
+                  requestOptions: options,
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<dynamic>(
+                data: {'ok': true},
+                statusCode: 200,
+                requestOptions: options,
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    DioException ackRejection(int statusCode, {String? resultCode}) =>
+        DioException(
+          requestOptions: RequestOptions(path: ackPath),
+          response: Response<dynamic>(
+            // ignore: use_null_aware_elements
+            data: {
+              'status': 'REJECTED',
+              // ignore: use_null_aware_elements
+              if (resultCode != null) 'resultCode': resultCode,
+              'sequence': 1,
+            },
+            statusCode: statusCode,
+            requestOptions: RequestOptions(path: ackPath),
+          ),
+          type: DioExceptionType.badResponse,
+        );
+
+    DioException ackNetworkError() => DioException(
+          requestOptions: RequestOptions(path: ackPath),
+          type: DioExceptionType.connectionError,
+          message: 'offline',
+        );
+
+    Future<AppDatabase> buildDb() =>
+        $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+    Future<void> seedOhacTenant(AppDatabase database) =>
+        database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'tenant_id', value: ohacTenant),
+        );
+
+    /// Seeds a terminal that already RECEIVED the candidate (post-R state):
+    /// `ACK_SUBMITTING` with the candidate pair on record, the negotiated
+    /// facts from the epoch, and the old epoch still governing.
+    Future<void> seedSubmittingTerminal(
+      AppDatabase database, {
+      required String digest,
+    }) async {
+      await database.ohacDeliveryDao.insertTerminalState(
+        OhacTerminalStateEntity(
+          tenantId: ohacTenant,
+          terminalId: 'dev-1',
+          state: 'ACK_SUBMITTING',
+          activeSequence: 0,
+          activeDigest: genesisDigest,
+          candidateSequence: 1,
+          candidateDigest: digest,
+          serverFloorSequence: 0,
+          serverFloorDigest: genesisDigest,
+          negotiatedPosBuild: ohacPosBuild,
+          negotiatedBackendBuild: 'backend-build-1',
+          negotiatedPolicySchema: staffPolicyEpochV1Schema,
+          negotiatedAssertionSchema: 'ohac.assertion.v1',
+          integrityClassification: '',
+          localAuthorizationSequence: 0,
+          revision: 2,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        ),
+      );
+    }
+
+    Future<OhacTerminalStateEntity?> terminalState(AppDatabase database) =>
+        database.ohacDeliveryDao.findTerminalState(ohacTenant, 'dev-1');
+
+    /// The expected request body: the exact eight DTO fields with the
+    /// derived idempotency key (the same derivation the implementation must
+    /// use — the key pins the claim identity, not a random value).
+    Map<String, String> expectedAckBody(Map<String, dynamic> epochJson) => {
+          'schema': staffPolicyEpochV1Schema,
+          'sequence': epochJson['sequence'].toString(),
+          'digest': epochJson['digest'] as String,
+          'previousSequence': epochJson['previousSequence'].toString(),
+          'previousDigest': epochJson['previousDigest'] as String,
+          'posBuild': ohacPosBuild,
+          'assertionSchema': 'ohac.assertion.v1',
+          'idempotencyKey': deriveOhacAckIdempotencyKey(
+            tenantId: ohacTenant,
+            terminalId: 'dev-1',
+            sequence: int.parse(epochJson['sequence'] as String),
+            digest: epochJson['digest'] as String,
+          ),
+        };
+
+    CapturedPost ackPost(List<CapturedPost> posts) =>
+        posts.firstWhere((post) => post.path == ackPath);
+
+    test(
+      'accept → submit → POST → confirm end-to-end: the body is the exact '
+      'eight fields and the state lands ACTIVE with the full receipt',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          installOhacInterceptor(
+            deltas: () => deltasResponse(
+              humanAuthorization: deliverEnvelope(epochJson),
+              currentVersion: 1787750000001,
+            ),
+            onAck: (_) => ackReceipt(digest: epochJson['digest'] as String),
+          );
+
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          final result = await service.pullInboundDeltas();
+          expect(result, isNotNull);
+
+          // The request: exactly the eight DTO fields, byte-for-byte on
+          // every value, identity nowhere in the body (the server derives
+          // tenant/terminal from the device principal).
+          final post = ackPost(capturedPosts);
+          expect(post.body, expectedAckBody(epochJson));
+
+          final state = await terminalState(database);
+          expect(state, isNotNull);
+          // §5 step 4: the candidate is promoted and the receipt recorded —
+          // the full receipt reads back from one row.
+          expect(state!.state, 'ACTIVE');
+          expect(state.activeSequence, 1);
+          expect(state.activeDigest, epochJson['digest']);
+          expect(state.candidateSequence, 0);
+          expect(state.candidateDigest, '');
+          expect(state.serverFloorSequence, 1);
+          expect(state.serverFloorDigest, epochJson['digest']);
+          expect(state.ackReceiptId, receiptId);
+          // The server build of §5.4 is the negotiated backend build — the
+          // 201 response carries no serverBuild field.
+          expect(state.negotiatedBackendBuild, 'backend-build-1');
+
+          // One lifecycle fact per confirmed ack.
+          final events = await database.ohacDeliveryDao.findEventsForTerminal(
+            ohacTenant,
+            'dev-1',
+          );
+          expect(
+            events.map((event) => event.eventType),
+            contains('OHAC_ACK_CONFIRMED'),
+          );
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'a 201 whose digest does not cross-check against the claim is an '
+      'acknowledgement inconsistency (§9 ACK_INCONSISTENT), not a confirm',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          installOhacInterceptor(
+            deltas: () =>
+                deltasResponse(humanAuthorization: deliverEnvelope(epochJson)),
+            onAck: (_) =>
+                ackReceipt(digest: 'sha256:${'9' * 64}'), // not the claim
+          );
+
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          final result = await service.pullInboundDeltas();
+          expect(result, isNotNull);
+
+          final state = await terminalState(database);
+          expect(state!.state, 'INTEGRITY_LOSS');
+          expect(state.integrityClassification, 'ACK_INCONSISTENT');
+          // No confirmation, no receipt, no promotion.
+          expect(state.ackReceiptId, isNull);
+          expect(state.activeSequence, 0);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    for (final rejection in const [
+      (code: 'UNKNOWN_EPOCH', classification: 'ACK_INCONSISTENT'),
+      (code: 'DIGEST_MISMATCH', classification: 'ACK_INCONSISTENT'),
+      (code: 'CHAIN_MISMATCH', classification: 'ACK_INCONSISTENT'),
+      (code: 'IDEMPOTENCY_CONFLICT', classification: 'ACK_INCONSISTENT'),
+      (code: 'SEQUENCE_GAP', classification: 'ACK_INCONSISTENT'),
+      (code: 'STALE_SEQUENCE', classification: 'LOCAL_ROLLBACK'),
+    ])
+    {
+      test(
+        'a 409 ${rejection.code} rejection fails closed as '
+        '${rejection.classification} (§9/§10), never a confirm',
+        () async {
+          PackageInfo.setMockInitialValues(
+            appName: 'OmniFood POS',
+            packageName: 'com.omnifood.pos',
+            version: '2.3.4',
+            buildNumber: '11',
+            buildSignature: '',
+          );
+          final epochJson = signedEpochJson();
+          final database = await buildDb();
+
+          try {
+            await seedOhacTenant(database);
+            installOhacInterceptor(
+              deltas: () =>
+                  deltasResponse(humanAuthorization: deliverEnvelope(epochJson)),
+              onAck: (_) => ackRejection(409, resultCode: rejection.code),
+            );
+
+            final service = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              dio,
+              database: database,
+            );
+            final result = await service.pullInboundDeltas();
+            expect(result, isNotNull);
+
+            final state = await terminalState(database);
+            expect(state!.state, 'INTEGRITY_LOSS');
+            expect(state.integrityClassification, rejection.classification);
+            expect(state.ackReceiptId, isNull);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+    }
+
+    test(
+      'a 409 UNAVAILABLE rejection is indeterminate: the terminal stays in '
+      'ACK_SUBMITTING for the next pull',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          installOhacInterceptor(
+            deltas: () =>
+                deltasResponse(humanAuthorization: deliverEnvelope(epochJson)),
+            onAck: (_) => ackRejection(409, resultCode: 'UNAVAILABLE'),
+          );
+
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          final result = await service.pullInboundDeltas();
+          expect(result, isNotNull);
+
+          final state = await terminalState(database);
+          expect(state!.state, 'ACK_SUBMITTING');
+          expect(state.integrityClassification, '');
+          expect(state.candidateSequence, 1);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'a network error on the ack is indeterminate (§10 '
+      'OHAC_ACK_RESPONSE_LOST): the pull and watermark survive and the '
+      'terminal stays in ACK_SUBMITTING',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          installOhacInterceptor(
+            deltas: () =>
+                deltasResponse(humanAuthorization: deliverEnvelope(epochJson)),
+            onAck: (_) => ackNetworkError(),
+          );
+
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          final result = await service.pullInboundDeltas();
+          // U1's containment guarantee must not regress: the OHAC failure
+          // never fails the pull nor blocks the watermark.
+          expect(result, isNotNull);
+          final watermark = await database.localConfigDao
+              .getConfigByKey('last_inbound_sync_version');
+          expect(watermark!.value, '1787750000000');
+
+          final state = await terminalState(database);
+          expect(state!.state, 'ACK_SUBMITTING');
+          expect(state.candidateDigest, epochJson['digest']);
+          expect(state.ackReceiptId, isNull);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'a 409 rejection body with non-String keys is contained: the '
+      'unparseable code fails closed (§9 ACK_INCONSISTENT) and never '
+      'escapes the acknowledgement client',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          dio.interceptors.clear();
+          dio.interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                if (options.method.toUpperCase() == 'POST' &&
+                    options.path == ackPath) {
+                  capturedPosts.add(
+                    CapturedPost(path: options.path, body: options.data),
+                  );
+                  handler.reject(
+                    DioException(
+                      requestOptions: RequestOptions(path: ackPath),
+                      response: Response<dynamic>(
+                        // A non-String key: an unparseable body must be
+                        // treated as an unknown code, never a crash.
+                        data: <dynamic, dynamic>{1: 'bad'},
+                        statusCode: 409,
+                        requestOptions: RequestOptions(path: ackPath),
+                      ),
+                      type: DioExceptionType.badResponse,
+                    ),
+                  );
+                  return;
+                }
+                if (options.method.toUpperCase() == 'GET' &&
+                    options.path == '/v1/sync/inbound/deltas') {
+                  handler.resolve(
+                    Response<dynamic>(
+                      data: deltasResponse(
+                        humanAuthorization: deliverEnvelope(epochJson),
+                      ),
+                      statusCode: 200,
+                      requestOptions: options,
+                    ),
+                  );
+                  return;
+                }
+                handler.resolve(
+                  Response<dynamic>(
+                    data: {'ok': true},
+                    statusCode: 200,
+                    requestOptions: options,
+                  ),
+                );
+              },
+            ),
+          );
+
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          final result = await service.pullInboundDeltas();
+          expect(result, isNotNull);
+
+          final state = await terminalState(database);
+          expect(state!.state, 'INTEGRITY_LOSS');
+          expect(state.integrityClassification, 'ACK_INCONSISTENT');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'a 201 receipt with non-String keys is contained: indeterminate, the '
+      'terminal stays in ACK_SUBMITTING',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          dio.interceptors.clear();
+          dio.interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                if (options.method.toUpperCase() == 'POST' &&
+                    options.path == ackPath) {
+                  capturedPosts.add(
+                    CapturedPost(path: options.path, body: options.data),
+                  );
+                  handler.resolve(
+                    Response<dynamic>(
+                      // A non-String key: an unparseable receipt is
+                      // indeterminate, never a confirm and never a crash.
+                      data: <dynamic, dynamic>{1: 'bad'},
+                      statusCode: 201,
+                      requestOptions: options,
+                    ),
+                  );
+                  return;
+                }
+                if (options.method.toUpperCase() == 'GET' &&
+                    options.path == '/v1/sync/inbound/deltas') {
+                  handler.resolve(
+                    Response<dynamic>(
+                      data: deltasResponse(
+                        humanAuthorization: deliverEnvelope(epochJson),
+                      ),
+                      statusCode: 200,
+                      requestOptions: options,
+                    ),
+                  );
+                  return;
+                }
+                handler.resolve(
+                  Response<dynamic>(
+                    data: {'ok': true},
+                    statusCode: 200,
+                    requestOptions: options,
+                  ),
+                );
+              },
+            ),
+          );
+
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          final result = await service.pullInboundDeltas();
+          expect(result, isNotNull);
+
+          final state = await terminalState(database);
+          expect(state!.state, 'ACK_SUBMITTING');
+          expect(state.integrityClassification, '');
+          expect(state.ackReceiptId, isNull);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'reconnect reconciliation: a pull later retries the PENDING '
+      'acknowledgement with the SAME idempotency key and body, then '
+      'confirms',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          // Pull 1 delivers the epoch; the ack response is lost.
+          capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+            humanAuthorization: deliverEnvelope(epochJson),
+          );
+          dio.interceptors.clear();
+          dio.interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                if (options.method.toUpperCase() == 'POST' &&
+                    options.path == ackPath) {
+                  capturedPosts.add(
+                    CapturedPost(path: options.path, body: options.data),
+                  );
+                  handler.reject(ackNetworkError());
+                  return;
+                }
+                if (options.method.toUpperCase() == 'GET' &&
+                    options.path == '/v1/sync/inbound/deltas') {
+                  handler.resolve(
+                    Response<dynamic>(
+                      data: deltasResponse(
+                        humanAuthorization: deliverEnvelope(epochJson),
+                      ),
+                      statusCode: 200,
+                      requestOptions: options,
+                    ),
+                  );
+                  return;
+                }
+                handler.resolve(
+                  Response<dynamic>(
+                    data: {'ok': true},
+                    statusCode: 200,
+                    requestOptions: options,
+                  ),
+                );
+              },
+            ),
+          );
+          await service.pullInboundDeltas();
+
+          var state = await terminalState(database);
+          expect(state!.state, 'ACK_SUBMITTING');
+
+          // Pull 2 carries no epoch (up to date) — but the phase-driven
+          // retry must resend the identical acknowledgement.
+          dio.interceptors.clear();
+          dio.interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) {
+                if (options.method.toUpperCase() == 'POST' &&
+                    options.path == ackPath) {
+                  capturedPosts.add(
+                    CapturedPost(path: options.path, body: options.data),
+                  );
+                  handler.resolve(
+                    Response<dynamic>(
+                      data: ackReceipt(digest: epochJson['digest'] as String),
+                      statusCode: 201,
+                      requestOptions: options,
+                    ),
+                  );
+                  return;
+                }
+                if (options.method.toUpperCase() == 'GET' &&
+                    options.path == '/v1/sync/inbound/deltas') {
+                  handler.resolve(
+                    Response<dynamic>(
+                      data: deltasResponse(),
+                      statusCode: 200,
+                      requestOptions: options,
+                    ),
+                  );
+                  return;
+                }
+                handler.resolve(
+                  Response<dynamic>(
+                    data: {'ok': true},
+                    statusCode: 200,
+                    requestOptions: options,
+                  ),
+                );
+              },
+            ),
+          );
+          await service.pullInboundDeltas();
+
+          final ackPosts =
+              capturedPosts.where((post) => post.path == ackPath).toList();
+          expect(ackPosts, hasLength(2));
+          // The identical request — same derived key, byte-for-byte body —
+          // is what makes the server replay the stored receipt instead of
+          // answering IDEMPOTENCY_CONFLICT.
+          expect(ackPosts[1].body, ackPosts[0].body);
+          expect(ackPosts[1].body, expectedAckBody(epochJson));
+
+          state = await terminalState(database);
+          expect(state!.state, 'ACTIVE');
+          expect(state.ackReceiptId, receiptId);
+          expect(state.serverFloorSequence, 1);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'a retry whose candidate epoch row is gone does not retry: §5 step 5 '
+      'marks integrity loss (ROLLBACK_DETECTED / §9 LOCAL_ROLLBACK)',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          // The state pair survives but the immutable epoch row was lost:
+          // the candidate can no longer be proven intact.
+          await seedSubmittingTerminal(database, digest: epochJson['digest'] as String);
+          installOhacInterceptor(
+            deltas: () => deltasResponse(),
+            onAck: (_) =>
+                ackReceipt(digest: epochJson['digest'] as String),
+          );
+
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          final result = await service.pullInboundDeltas();
+          expect(result, isNotNull);
+
+          // No ack POST went out for the unprovable candidate.
+          expect(
+            capturedPosts.where((post) => post.path == ackPath),
+            isEmpty,
+          );
+          final state = await terminalState(database);
+          expect(state!.state, 'INTEGRITY_LOSS');
+          expect(state.integrityClassification, 'LOCAL_ROLLBACK');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'RECOVERY_REQUIRED on the pull means the reported floor is ahead of '
+      'the server: fail closed (§5 step 5, §9 ACK_INCONSISTENT)',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          installOhacInterceptor(
+            deltas: () => deltasResponse(
+              humanAuthorization: {'status': 'RECOVERY_REQUIRED'},
+            ),
+            onAck: (_) => fail('no acknowledgement may be sent'),
+          );
+
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          final result = await service.pullInboundDeltas();
+          expect(result, isNotNull);
+
+          final state = await terminalState(database);
+          expect(state!.state, 'INTEGRITY_LOSS');
+          expect(state.integrityClassification, 'ACK_INCONSISTENT');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'DISABLED and UPGRADE_REQUIRED remain no-ops (§10 zero fallback)',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          // An ACTIVE terminal with no candidate: the negotiation statuses
+          // must not move it, and no acknowledgement may be sent for them.
+          await database.ohacDeliveryDao.insertTerminalState(
+            OhacTerminalStateEntity(
+              tenantId: ohacTenant,
+              terminalId: 'dev-1',
+              state: 'ACTIVE',
+              activeSequence: 0,
+              activeDigest: genesisDigest,
+              candidateSequence: 0,
+              candidateDigest: '',
+              serverFloorSequence: 0,
+              serverFloorDigest: genesisDigest,
+              negotiatedPosBuild: ohacPosBuild,
+              negotiatedBackendBuild: 'backend-build-1',
+              negotiatedPolicySchema: staffPolicyEpochV1Schema,
+              negotiatedAssertionSchema: 'ohac.assertion.v1',
+              integrityClassification: '',
+              localAuthorizationSequence: 0,
+              revision: 2,
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            ),
+          );
+          for (final status in ['DISABLED', 'UPGRADE_REQUIRED']) {
+            installOhacInterceptor(
+              deltas: () =>
+                  deltasResponse(humanAuthorization: {'status': status}),
+              onAck: (_) => fail('no acknowledgement may be sent for $status'),
+            );
+
+            final service = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              dio,
+              database: database,
+            );
+            final result = await service.pullInboundDeltas();
+            expect(result, isNotNull);
+
+            // The member was a pure no-op: no fault, no state change, no
+            // acknowledgement.
+            final state = await terminalState(database);
+            expect(state!.state, 'ACTIVE');
+            expect(state.integrityClassification, '');
+            expect(state.revision, 2);
+          }
+          expect(
+            capturedPosts.where((post) => post.path == ackPath),
+            isEmpty,
+          );
         } finally {
           await database.close();
         }

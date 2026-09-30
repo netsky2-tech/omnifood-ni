@@ -2581,6 +2581,36 @@ final migration57_58 = Migration(57, 58, (database) async {
   await _createAuthorityIngestionVerdictImmutabilityTriggers(database);
 });
 
+final migration58_59 = Migration(58, 59, (database) async {
+  // B2d (design §5 step 4): the acknowledgement receipt of record on the
+  // terminal state. After the 201 arrives, the confirmation transaction C
+  // writes the receipt ID next to the promoted active pair, the server
+  // floor and the revision in ONE atomic update, so §5.4's full receipt
+  // reads back from one row.
+  //
+  // Nullable TEXT with no default — and that is a full parity, not a
+  // divergence: the column is legitimately absent until a receipt arrives,
+  // so no NOT NULL/DEFAULT trade-off exists (unlike the ten extension
+  // columns of migration53_54, where SQLite's inability to add NOT NULL
+  // without a default forces a documented upgrade-path-only default). The
+  // Floor entity's generated DDL produces the identical nullable shape on
+  // a fresh install; both shapes are pinned in
+  // ohac_delivery_migration_test.dart and
+  // ohac_delivery_install_parity_test.dart.
+  //
+  // Same guarded pattern as migration53_54 (SQLite has no ADD COLUMN IF
+  // NOT EXISTS), so the migration is safe to re-run.
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(human_auth_terminal_state)',
+  );
+  if (columns.any((row) => row['name'] == 'ack_receipt_id')) {
+    return;
+  }
+  await database.execute(
+    'ALTER TABLE human_auth_terminal_state ADD COLUMN ack_receipt_id TEXT',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2630,6 +2660,7 @@ final allMigrations = [
   migration55_56,
   migration56_57,
   migration57_58,
+  migration58_59,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

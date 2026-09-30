@@ -82,4 +82,9 @@ void main() {
   test('ensureTerminalState is generated as a positional transaction', () {
     expectPositionalTransaction('ensureTerminalState');
   });
+
+  test('confirmAcknowledgementWithReceipt is generated as a positional '
+      'transaction', () {
+    expectPositionalTransaction('confirmAcknowledgementWithReceipt');
+  });
 }

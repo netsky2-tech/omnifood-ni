@@ -1719,4 +1719,209 @@ void main() {
       expect(state.revision, 4);
     });
   });
+
+  group('confirmAcknowledgementWithReceipt — the confirmation transaction C',
+      () {
+    final digest = 'sha256:${'f' * 64}';
+    const receiptId = '7e6c1c2a-0f4e-4f7a-9c5a-1b2c3d4e5f60';
+
+    /// Seeds the exact post-submit state transaction C operates on:
+    /// `ACK_SUBMITTING` with the candidate pair on record and the previous
+    /// epoch still governing (§5 step 3's committed flip).
+    Future<void> seedSubmitting({int revision = 7}) =>
+        database.ohacDeliveryDao.insertTerminalState(
+          terminalState(
+            state: 'ACK_SUBMITTING',
+            activeSequence: 1,
+            activeDigest: 'sha256:${'a' * 64}',
+            revision: revision,
+            candidateSequence: 2,
+            candidateDigest: digest,
+            serverFloorSequence: 1,
+            serverFloorDigest: 'sha256:${'a' * 64}',
+          ),
+        );
+
+    test('promotes the candidate, sets the floor pair, the receipt id, and '
+        'bumps the revision in one atomic write', () async {
+      await seedSubmitting();
+
+      await database.ohacDeliveryDao.confirmAcknowledgementWithReceipt(
+        'tenant-1',
+        'terminal-1',
+        7,
+        2,
+        digest,
+        receiptId,
+        2,
+        digest,
+        '2026-01-04T00:00:00.000Z',
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'ACTIVE');
+      // The candidate is promoted to the governing pair...
+      expect(state.activeSequence, 2);
+      expect(state.activeDigest, digest);
+      // ...and cleared back to its sentinels (§4.2).
+      expect(state.candidateSequence, 0);
+      expect(state.candidateDigest, '');
+      // The server-confirmed floor and the receipt of record (§5 step 4).
+      expect(state.serverFloorSequence, 2);
+      expect(state.serverFloorDigest, digest);
+      expect(state.ackReceiptId, receiptId);
+      expect(state.revision, 8);
+      expect(state.updatedAt, '2026-01-04T00:00:00.000Z');
+    });
+
+    test('appends exactly one local lifecycle fact per confirmed ack, and '
+        'the payload is pinned to the receipt move only', () async {
+      await seedSubmitting();
+
+      await database.ohacDeliveryDao.confirmAcknowledgementWithReceipt(
+        'tenant-1',
+        'terminal-1',
+        7,
+        2,
+        digest,
+        receiptId,
+        2,
+        digest,
+        '2026-01-04T00:00:00.000Z',
+      );
+
+      final events = await database.ohacDeliveryDao
+          .findEventsForTerminal('tenant-1', 'terminal-1');
+      expect(events, hasLength(1));
+      final fact = events.single;
+      expect(fact.eventType, 'OHAC_ACK_CONFIRMED');
+      expect(fact.sequence, 2, reason: 'the fact belongs to the new epoch');
+      // Pin the payload SHAPE: the fact carries the receipt identity and
+      // the floor move and nothing else (§12 observability).
+      expect(
+        (jsonDecode(fact.payload) as Map<String, dynamic>).keys.toList(),
+        ['receiptId', 'fromFloorSequence', 'toFloorSequence'],
+      );
+      expect(fact.payload, contains(receiptId));
+      expect(fact.payload, contains('"toFloorSequence":2'));
+    });
+
+    test('a losing revision CAS (seeded at revision 7) leaves EVERY column '
+        'untouched', () async {
+      await seedSubmitting();
+
+      await expectLater(
+        database.ohacDeliveryDao.confirmAcknowledgementWithReceipt(
+          'tenant-1',
+          'terminal-1',
+          6, // the row is at revision 7
+          2,
+          digest,
+          receiptId,
+          2,
+          digest,
+          '2026-01-04T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'ACK_SUBMITTING');
+      expect(state.activeSequence, 1);
+      expect(state.activeDigest, 'sha256:${'a' * 64}');
+      expect(state.candidateSequence, 2);
+      expect(state.candidateDigest, digest);
+      expect(state.serverFloorSequence, 1);
+      expect(state.serverFloorDigest, 'sha256:${'a' * 64}');
+      expect(state.ackReceiptId, isNull);
+      expect(state.revision, 7);
+      expect(
+        await database.ohacDeliveryDao
+            .findEventsForTerminal('tenant-1', 'terminal-1'),
+        isEmpty,
+      );
+    });
+
+    test('a terminal that is not ACK_SUBMITTING is refused and untouched',
+        () async {
+      await database.ohacDeliveryDao.insertTerminalState(
+        terminalState(
+          state: 'RECEIVE_PENDING',
+          activeSequence: 1,
+          revision: 7,
+          candidateSequence: 2,
+          candidateDigest: digest,
+        ),
+      );
+
+      await expectLater(
+        database.ohacDeliveryDao.confirmAcknowledgementWithReceipt(
+          'tenant-1',
+          'terminal-1',
+          7,
+          2,
+          digest,
+          receiptId,
+          2,
+          digest,
+          '2026-01-04T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'RECEIVE_PENDING');
+      expect(state.activeSequence, 1);
+      expect(state.candidateSequence, 2);
+      expect(state.ackReceiptId, isNull);
+      expect(state.revision, 7);
+    });
+
+    test('a candidate pair that is not the server-confirmed claim is refused '
+        'and untouched', () async {
+      await seedSubmitting();
+
+      await expectLater(
+        database.ohacDeliveryDao.confirmAcknowledgementWithReceipt(
+          'tenant-1',
+          'terminal-1',
+          7,
+          2,
+          'sha256:${'0' * 64}', // not the candidate digest on record
+          receiptId,
+          2,
+          'sha256:${'0' * 64}',
+          '2026-01-04T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.state, 'ACK_SUBMITTING');
+      expect(state.candidateDigest, digest);
+      expect(state.ackReceiptId, isNull);
+      expect(state.revision, 7);
+    });
+
+    test('a missing terminal state is refused', () async {
+      await expectLater(
+        database.ohacDeliveryDao.confirmAcknowledgementWithReceipt(
+          'tenant-1',
+          'terminal-1',
+          0,
+          2,
+          digest,
+          receiptId,
+          2,
+          digest,
+          '2026-01-04T00:00:00.000Z',
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+  });
 }
