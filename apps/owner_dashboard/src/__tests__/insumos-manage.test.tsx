@@ -15,13 +15,23 @@ import {
   useCreateInsumo,
   useUpdateInsumo,
 } from "@/features/recipes/use-recipes";
+import {
+  useCatalogValues,
+  useSeedCatalogDefaults,
+} from "@/features/catalog/use-catalog";
 import { api } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import type { Insumo } from "@/features/recipes/types";
+import type { CatalogValue } from "@/features/catalog/types";
 
 vi.mock("@/features/recipes/use-recipes", () => ({
   useCreateInsumo: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useUpdateInsumo: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+}));
+
+vi.mock("@/features/catalog/use-catalog", () => ({
+  useCatalogValues: vi.fn(() => ({ data: [], isLoading: false })),
+  useSeedCatalogDefaults: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -44,6 +54,30 @@ async function renderLoadedTab() {
   render(<InsumosTab />, { wrapper: TestWrapper });
   await screen.findByText("Café en Grano");
 }
+
+/** UOM catalog values mirroring the backend seed (codes are lowercase). */
+function makeUom(code: string, name: string): CatalogValue {
+  return {
+    id: `uom-${code}`,
+    tenant_id: "t1",
+    catalog_type: "UOM",
+    code,
+    name,
+    is_active: true,
+    sort_order: 0,
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+const MOCK_UOM_CATALOG: CatalogValue[] = [
+  makeUom("kg", "Kilogramo"),
+  makeUom("g", "Gramo"),
+  makeUom("lb", "Libra"),
+  makeUom("l", "Litro"),
+  makeUom("ml", "Mililitro"),
+  makeUom("un", "Unidad"),
+];
 
 const MOCK_INSUMOS: Insumo[] = [
   {
@@ -91,12 +125,37 @@ const MOCK_INSUMOS: Insumo[] = [
     negativeStockPolicy: "RESTRICT",
     is_active: false,
   },
+  {
+    id: "ins-4",
+    tenant_id: "t1",
+    name: "Queso Fresco",
+    // Stored unit that no longer exists in the catalog: editing must keep it
+    // selectable instead of silently dropping it (§48: never lose data).
+    purchaseUom: "DOCENA",
+    consumptionUom: "UN",
+    conversionFactor: 1,
+    stock: 12,
+    averageCost: 90,
+    parLevel: null,
+    minStock: null,
+    is_perishable: false,
+    negativeStockPolicy: "RESTRICT",
+    is_active: true,
+  },
 ];
 
 beforeEach(() => {
   vi.clearAllMocks();
   window.history.replaceState(null, "", "/");
   vi.mocked(api.get).mockResolvedValue(MOCK_INSUMOS);
+  vi.mocked(useCatalogValues).mockReturnValue({
+    data: MOCK_UOM_CATALOG,
+    isLoading: false,
+  } as unknown as ReturnType<typeof useCatalogValues>);
+  vi.mocked(useSeedCatalogDefaults).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useSeedCatalogDefaults>);
   vi.mocked(useCreateInsumo).mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue({}),
     isPending: false,
@@ -106,6 +165,16 @@ beforeEach(() => {
     isPending: false,
   } as unknown as ReturnType<typeof useUpdateInsumo>);
 });
+
+/** Opens a UoM catalog select and picks an option by its visible label. */
+async function pickUom(
+  user: ReturnType<typeof userEvent.setup>,
+  testId: string,
+  optionName: string | RegExp,
+) {
+  await user.click(screen.getByTestId(testId));
+  await user.click(await screen.findByRole("option", { name: optionName }));
+}
 
 describe("InsumosTab", () => {
   it("renders the insumos list with conversion and FIFO properties", async () => {
@@ -128,7 +197,12 @@ describe("InsumosTab", () => {
     await renderLoadedTab();
 
     const inactiveRow = screen.getByTestId("insumo-row-ins-3");
-    expect(within(inactiveRow).getByText("Inactivo")).toBeInTheDocument();
+    const inactiveBadge = within(inactiveRow).getByText("Inactivo");
+    expect(inactiveBadge).toBeInTheDocument();
+    // §26/§27: INACTIVE is a neutral lifecycle state — secondary palette,
+    // never the destructive/red exception palette.
+    expect(inactiveBadge).toHaveClass("bg-muted");
+    expect(inactiveBadge).not.toHaveClass("bg-red-50");
     expect(screen.getByTestId("insumo-row-ins-1")).not.toHaveTextContent("Inactivo");
     // Deactivate/reactivate row actions are reachable.
     expect(screen.getByTestId("deactivate-insumo-ins-1")).toBeInTheDocument();
@@ -193,10 +267,8 @@ describe("InsumosTab", () => {
 
     await user.click(screen.getByTestId("add-insumo-btn"));
     await user.type(screen.getByTestId("insumo-form-name"), "Azúcar Blanca");
-    await user.clear(screen.getByTestId("insumo-form-purchase-uom"));
-    await user.type(screen.getByTestId("insumo-form-purchase-uom"), "lb");
-    await user.clear(screen.getByTestId("insumo-form-consumption-uom"));
-    await user.type(screen.getByTestId("insumo-form-consumption-uom"), "g");
+    await pickUom(user, "insumo-form-purchase-uom", "Libra (lb)");
+    await pickUom(user, "insumo-form-consumption-uom", "Gramo (g)");
     await user.clear(screen.getByTestId("insumo-form-conversion-factor"));
     await user.click(screen.getByTestId("insumo-form-conversion-factor"));
     await user.keyboard("{Control>}a{/Control}454");
@@ -212,6 +284,113 @@ describe("InsumosTab", () => {
         }),
       );
     });
+  });
+
+  it("populates the UoM selects from the shared catalog with a placeholder", async () => {
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+
+    // §17.3/§40: no pre-filled default — the selects start on a placeholder.
+    expect(screen.getByTestId("insumo-form-purchase-uom")).toHaveTextContent(
+      "Selecciona la unidad",
+    );
+    expect(screen.getByTestId("insumo-form-consumption-uom")).toHaveTextContent(
+      "Selecciona la unidad",
+    );
+
+    await user.click(screen.getByTestId("insumo-form-purchase-uom"));
+    const listbox = await screen.findByRole("listbox");
+    for (const label of ["Kilogramo (kg)", "Libra (lb)", "Unidad (un)"]) {
+      expect(within(listbox).getByRole("option", { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it("blocks submission when a UoM is blank, with actionable copy (§17.3/§18.2)", async () => {
+    const mutateAsync = vi.fn();
+    vi.mocked(useCreateInsumo).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateInsumo>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    await user.type(screen.getByTestId("insumo-form-name"), "Canela");
+    await user.click(screen.getByTestId("insumo-form-submit"));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      /Selecciona la unidad de compra y la unidad de consumo/i,
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("keeps a stored UoM missing from the catalog selectable when editing", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    vi.mocked(useUpdateInsumo).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateInsumo>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("edit-insumo-ins-4"));
+    await waitFor(() => {
+      expect(screen.getByText(/Editar Insumo/i)).toBeInTheDocument();
+    });
+
+    // DOCENA is not in the catalog but stays selectable as a fallback item.
+    await user.click(screen.getByTestId("insumo-form-purchase-uom"));
+    const listbox = await screen.findByRole("listbox");
+    expect(
+      within(listbox).getByRole("option", { name: "DOCENA" }),
+    ).toBeInTheDocument();
+    expect(
+      within(listbox).getByRole("option", { name: "Libra (lb)" }),
+    ).toBeInTheDocument();
+
+    await user.click(within(listbox).getByRole("option", { name: "DOCENA" }));
+
+    // Saving keeps the stored unit untouched.
+    await user.click(screen.getByTestId("insumo-form-submit"));
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "ins-4",
+          input: expect.objectContaining({ purchaseUom: "DOCENA" }),
+        }),
+      );
+    });
+  });
+
+  it("shows seed guidance and seeds the UOM catalog when it is empty (§29)", async () => {
+    vi.mocked(useCatalogValues).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCatalogValues>);
+    const seedMutate = vi.fn();
+    vi.mocked(useSeedCatalogDefaults).mockReturnValue({
+      mutate: seedMutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useSeedCatalogDefaults>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+
+    // No dead-end disabled selects: guidance + one-click seed action (AP-17).
+    expect(screen.getByTestId("insumo-form-uom-empty")).toHaveTextContent(
+      /Aún no hay unidades de medida en tu catálogo/i,
+    );
+    expect(screen.getByTestId("insumo-form-purchase-uom")).toBeDisabled();
+
+    await user.click(screen.getByTestId("insumo-form-seed-uom-btn"));
+    expect(seedMutate).toHaveBeenCalledTimes(1);
   });
 
   it("blocks submission when the name is blank", async () => {
@@ -259,6 +438,8 @@ describe("InsumosTab", () => {
 
     await user.click(screen.getByTestId("add-insumo-btn"));
     await user.type(screen.getByTestId("insumo-form-name"), "Canela");
+    await pickUom(user, "insumo-form-purchase-uom", "Kilogramo (kg)");
+    await pickUom(user, "insumo-form-consumption-uom", "Gramo (g)");
     await user.clear(screen.getByTestId("insumo-form-conversion-factor"));
     await user.click(screen.getByTestId("insumo-form-submit"));
 
@@ -286,6 +467,8 @@ describe("InsumosTab", () => {
 
     await user.click(screen.getByTestId("add-insumo-btn"));
     await user.type(screen.getByTestId("insumo-form-name"), "Canela");
+    await pickUom(user, "insumo-form-purchase-uom", "Kilogramo (kg)");
+    await pickUom(user, "insumo-form-consumption-uom", "Gramo (g)");
     await user.click(screen.getByTestId("insumo-form-submit"));
 
     const alert = await screen.findByRole("alert");
@@ -427,6 +610,8 @@ describe("InsumosTab", () => {
     // A legal sub-1 factor is accepted and parsed at submit time.
     await user.type(factor, "0.5");
     await user.type(screen.getByTestId("insumo-form-name"), "Canela");
+    await pickUom(user, "insumo-form-purchase-uom", "Kilogramo (kg)");
+    await pickUom(user, "insumo-form-consumption-uom", "Gramo (g)");
     await user.click(screen.getByTestId("insumo-form-submit"));
 
     await waitFor(() => {
@@ -448,6 +633,8 @@ describe("InsumosTab", () => {
 
     await user.click(screen.getByTestId("add-insumo-btn"));
     await user.type(screen.getByTestId("insumo-form-name"), "Canela Molida");
+    await pickUom(user, "insumo-form-purchase-uom", "Kilogramo (kg)");
+    await pickUom(user, "insumo-form-consumption-uom", "Gramo (g)");
     await user.click(screen.getByTestId("insumo-form-save-another"));
 
     await waitFor(() => {

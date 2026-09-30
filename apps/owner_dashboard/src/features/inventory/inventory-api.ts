@@ -7,6 +7,10 @@ import type {
   KardexFilters,
   PurchaseDocumentItem,
   PurchaseFilters,
+  SupplierItem,
+  ManualPurchaseInput,
+  CreateSupplierInput,
+  PurchasePreviewResult,
 } from "./types";
 import {
   normalizeInventoryCoverage,
@@ -72,4 +76,33 @@ export function fetchPurchases(filters: PurchaseFilters = {}, opts?: ApiClientMe
     limit: filters.limit,
   })}`;
   return opts ? api.get<PurchaseDocumentItem[]>(url, opts) : api.get<PurchaseDocumentItem[]>(url);
+}
+
+// --- SOHO purchases: manual web entry (human transport routes) ---
+
+export function fetchSuppliers(opts?: ApiClientMethodOptions) {
+  return opts
+    ? api.get<SupplierItem[]>("/inventory/suppliers", opts)
+    : api.get<SupplierItem[]>("/inventory/suppliers");
+}
+
+export function createSupplier(input: CreateSupplierInput) {
+  return api.post<SupplierItem>("/inventory/suppliers", input);
+}
+
+/**
+ * Live CPP preview via the existing human route `POST /inventory/purchase`.
+ * Same field contract as the manual purchase; the preview runs no write
+ * (no kardex line, no document).
+ */
+export function fetchPurchasePreview(input: ManualPurchaseInput) {
+  return api.post<PurchasePreviewResult>("/inventory/purchase", input);
+}
+
+/** Manual purchase registration — human route, reuses backend recordPurchase. */
+export function createManualPurchase(input: ManualPurchaseInput) {
+  return api.post<{ purchaseDocument: PurchaseDocumentItem }>(
+    "/inventory/purchases/manual",
+    input,
+  );
 }

@@ -163,3 +163,51 @@ export interface PurchaseFilters {
   insumoId?: string;
   limit?: number;
 }
+
+// --- SOHO purchases: manual web entry (human transport) ---
+
+export interface SupplierItem {
+  id: string;
+  name: string;
+  phone: string | null;
+  contact_person: string | null;
+  credit_terms: string | null;
+  is_active: boolean;
+}
+
+export interface ManualPurchaseInput {
+  insumoId: string;
+  supplierId: string;
+  invoiceNumber: string;
+  quantity: number;
+  unitCost: number;
+  currency: 'NIO' | 'USD';
+  invoiceDate: string;
+  entryTimestamp: string;
+  fxRateMode?: 'explicit' | 'official';
+  bcnRate?: number;
+  lotCode?: string;
+  receivedDate?: string;
+  expirationDate?: string;
+}
+
+export interface CreateSupplierInput {
+  name: string;
+  phone?: string;
+  contactPerson?: string;
+  creditTerms?: string;
+}
+
+/** Mirrors InventoryPurchaseService.PurchasePreview (backend). */
+export interface PurchasePreviewResult {
+  invoiceDate: string;
+  currency: string;
+  bcnRate: number;
+  bcnRateSource: string;
+  unitCostNio: number;
+  previousCppNio: number;
+  projectedCppNio: number;
+  previousStock: number;
+  projectedStock: number;
+  requiresBatchTracking: boolean;
+}

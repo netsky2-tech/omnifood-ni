@@ -329,32 +329,34 @@ export function MenuImportWizard() {
             )}
 
             {preview.errors.length > 0 && (
-              <div className="space-y-2 border rounded-lg p-4 bg-destructive/5">
-                <h4 className="text-sm font-semibold flex items-center gap-2 text-destructive">
-                  <TriangleAlert className="h-4 w-4" />
+              <Alert variant="destructive" data-testid="menu-import-errors-block">
+                <TriangleAlert className="h-4 w-4" />
+                <AlertTitle>
                   Errores ({preview.errors.length}) — corrígelos en el Excel y vuelve a subir el archivo
-                </h4>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-40">Hoja</TableHead>
-                      <TableHead className="w-20">Fila</TableHead>
-                      <TableHead>Mensaje</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody data-testid="menu-import-errors-table-body">
-                    {preview.errors.map((issue, i) => (
-                      <TableRow key={`${issue.sheet}-${issue.row}-${i}`}>
-                        <TableCell className="font-mono text-xs">{issue.sheet}</TableCell>
-                        <TableCell className="font-mono text-xs tabular-nums">{issue.row}</TableCell>
-                        <TableCell className="text-xs text-destructive">
-                          {normalizeMenuImportIssueMessage(issue.message)}
-                        </TableCell>
+                </AlertTitle>
+                <AlertDescription>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-40">Hoja</TableHead>
+                        <TableHead className="w-20">Fila</TableHead>
+                        <TableHead>Mensaje</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody data-testid="menu-import-errors-table-body">
+                      {preview.errors.map((issue, i) => (
+                        <TableRow key={`${issue.sheet}-${issue.row}-${i}`}>
+                          <TableCell className="font-mono text-xs">{issue.sheet}</TableCell>
+                          <TableCell className="font-mono text-xs tabular-nums">{issue.row}</TableCell>
+                          <TableCell className="text-xs">
+                            {normalizeMenuImportIssueMessage(issue.message)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </AlertDescription>
+              </Alert>
             )}
 
             {preview.warnings.length > 0 && (
@@ -428,8 +430,8 @@ export function MenuImportWizard() {
         {/* Step 3: committed receipt */}
         {committed && (
           <div className="space-y-4" data-testid="menu-import-committed-card">
-            <Alert className="bg-emerald-500/5 border-emerald-500/30">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+            <Alert variant="success" data-testid="menu-import-receipt-alert">
+              <CheckCircle2 className="h-4 w-4" />
               <AlertTitle className="text-sm font-semibold">
                 ¡Importación de menú completada!
               </AlertTitle>

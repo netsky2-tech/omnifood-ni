@@ -20,7 +20,13 @@ import {
   useCogs,
   useKardex,
   useAlerts,
+  useSuppliers,
+  useCreateSupplier,
+  useCreateManualPurchase,
 } from "@/features/inventory/use-inventory-reports";
+import { useInsumos } from "@/features/recipes/use-recipes";
+import { fetchPurchasePreview } from "@/features/inventory/inventory-api";
+import { toast } from "@/hooks/use-toast";
 import type { PurchaseDocumentItem } from "@/features/inventory/types";
 
 vi.mock("@/features/inventory/use-inventory-reports", () => ({
@@ -29,10 +35,28 @@ vi.mock("@/features/inventory/use-inventory-reports", () => ({
   useCogs: vi.fn(),
   useKardex: vi.fn(),
   useAlerts: vi.fn(),
+  useSuppliers: vi.fn(),
+  useCreateSupplier: vi.fn(),
+  useCreateManualPurchase: vi.fn(),
+}));
+
+vi.mock("@/features/recipes/use-recipes", () => ({
+  useInsumos: vi.fn(),
+  // InsumosTab (rendered by InventoryPage tests) also consumes these.
+  useCreateInsumo: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+  useUpdateInsumo: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+}));
+
+vi.mock("@/features/inventory/inventory-api", () => ({
+  fetchPurchasePreview: vi.fn(),
+}));
+
+vi.mock("@/hooks/use-toast", () => ({
+  toast: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
-  api: { get: vi.fn().mockResolvedValue([]) },
+  api: { get: vi.fn().mockResolvedValue([]), post: vi.fn().mockResolvedValue({}) },
 }));
 
 function TestWrapper({ children }: { children: React.ReactNode }) {
@@ -92,6 +116,24 @@ const PAGE_FULL: PurchaseDocumentItem[] = Array.from({ length: 200 }, (_, i) =>
   makeDoc({ id: `doc-${i}`, invoice_number: `F-${i + 1}`, created_at: "2026-01-05T10:00:00.000Z" }),
 );
 
+const MOCK_INSUMOS = [
+  { id: "ins-1", name: "Café en Grano", is_perishable: false, is_active: true },
+  { id: "ins-2", name: "Leche Entera", is_perishable: true, is_active: true },
+];
+
+const PREVIEW_RESULT = {
+  invoiceDate: "2026-09-30",
+  currency: "NIO",
+  bcnRate: 1,
+  bcnRateSource: "NIO document rate",
+  unitCostNio: 100,
+  previousCppNio: 50,
+  projectedCppNio: 83.3333,
+  previousStock: 10,
+  projectedStock: 12,
+  requiresBatchTracking: false,
+};
+
 function mockQuery(partial: Partial<ReturnType<typeof usePurchases>>) {
   vi.mocked(usePurchases).mockReturnValue({
     data: undefined,
@@ -102,10 +144,47 @@ function mockQuery(partial: Partial<ReturnType<typeof usePurchases>>) {
   } as ReturnType<typeof usePurchases>);
 }
 
+function mockSuppliers(suppliers: Array<{ id: string; name: string }>) {
+  vi.mocked(useSuppliers).mockReturnValue({
+    data: suppliers,
+    isLoading: false,
+  } as ReturnType<typeof useSuppliers>);
+}
+
+function mockCreateSupplier(overrides: Partial<ReturnType<typeof useCreateSupplier>> = {}) {
+  vi.mocked(useCreateSupplier).mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue({ id: "sup-new", name: "Nuevo Proveedor" }),
+    isPending: false,
+    ...overrides,
+  } as unknown as ReturnType<typeof useCreateSupplier>);
+}
+
+function mockCreatePurchase(overrides: Partial<ReturnType<typeof useCreateManualPurchase>> = {}) {
+  const mutateAsync = vi.fn().mockResolvedValue({});
+  vi.mocked(useCreateManualPurchase).mockReturnValue({
+    mutateAsync,
+    isPending: false,
+    ...overrides,
+  } as unknown as ReturnType<typeof useCreateManualPurchase>);
+  return mutateAsync;
+}
+
+function mockInsumos() {
+  vi.mocked(useInsumos).mockReturnValue({
+    data: MOCK_INSUMOS,
+    isLoading: false,
+  } as unknown as ReturnType<typeof useInsumos>);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.history.replaceState(null, "", "/");
   mockQuery({ data: MOCK_DOCS });
+  mockSuppliers([{ id: "sup-1", name: "Café Supplier" }]);
+  mockCreateSupplier();
+  mockCreatePurchase();
+  mockInsumos();
+  vi.mocked(fetchPurchasePreview).mockResolvedValue(PREVIEW_RESULT);
 });
 
 describe("PurchasesTab", () => {
@@ -163,6 +242,9 @@ describe("PurchasesTab", () => {
     const notice = screen.getByTestId("purchases-truncation-notice");
     expect(notice).toHaveTextContent("Mostrando las 200 compras más recientes");
     expect(notice).toHaveTextContent("puede haber más en el rango");
+    // §42.1/§62: an exception the owner must see wears the semantic warning
+    // palette (border + tinted background), not a near-white tint.
+    expect(notice).toHaveClass("border-amber-200", "bg-amber-50", "text-amber-800");
   });
 
   it("does not show the truncation notice when the page is not full", () => {
@@ -185,12 +267,15 @@ describe("PurchasesTab", () => {
     expect(screen.getByText(/Cargando historial de compras/i)).toBeInTheDocument();
   });
 
-  it("shows the POS-authoring empty state when there are no documents", () => {
+  it("shows the empty state with the manual-entry path when there are no documents", () => {
     mockQuery({ data: [] });
     render(<PurchasesTab />, { wrapper: TestWrapper });
 
+    // Web authoring exists now (SOHO purchases): the empty state offers the
+    // creation path instead of sending the owner to the POS.
+    expect(screen.getByTestId("purchases-register-btn")).toBeInTheDocument();
     expect(
-      screen.getByText(/se registran desde el POS/i),
+      screen.getByText(/Sin compras registradas en este rango/i),
     ).toBeInTheDocument();
   });
 
@@ -199,9 +284,12 @@ describe("PurchasesTab", () => {
     mockQuery({ error: new Error("network down"), data: undefined, refetch });
     render(<PurchasesTab />, { wrapper: TestWrapper });
 
-    expect(
-      screen.getByText(/No se pudo cargar el historial de compras/i),
-    ).toBeInTheDocument();
+    const alert = screen.getByTestId("purchases-error-alert");
+    expect(alert).toHaveTextContent(
+      /No se pudo cargar el historial de compras/i,
+    );
+    // Destructive treatment for a failure state (§42.1), with icon + text.
+    expect(alert).toHaveClass("bg-destructive/10", "text-destructive");
 
     const user = userEvent.setup();
     await user.click(screen.getByTestId("purchases-retry-btn"));
@@ -241,12 +329,362 @@ describe("PurchasesTab", () => {
     expect(input).toHaveValue("");
   });
 
-  it("states that authoring remains on the POS", () => {
+  it("offers the manual web-entry flow while physical receiving stays on the POS", () => {
     render(<PurchasesTab />, { wrapper: TestWrapper });
 
+    // Primary action visible at the top of the tab (SOHO purchases).
+    expect(screen.getByTestId("purchases-register-btn")).toHaveTextContent(
+      "Registrar compra",
+    );
     expect(
-      screen.getByText(/El registro de nuevas compras se realiza desde el POS/i),
+      screen.getByText(/Puedes registrar compras aquí/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/la recepción física.*sigue gestionándose en el POS/i),
+    ).toBeInTheDocument();
+  });
+});
+
+/** The form dialog hosts the submit control; assert openness by its presence. */
+function expectFormOpen() {
+  const dialog = screen.getByRole("dialog");
+  expect(within(dialog).getByTestId("purchases-form-submit")).toBeInTheDocument();
+  return dialog;
+}
+
+/** Picks an option from a shadcn/Radix Select by its visible label (§48). */
+async function pickSelect(
+  user: ReturnType<typeof userEvent.setup>,
+  testId: string,
+  optionName: string | RegExp,
+) {
+  await user.click(screen.getByTestId(testId));
+  await user.click(await screen.findByRole("option", { name: optionName }));
+}
+
+/** Opens the manual purchase form and fills every NIO required field. */
+async function openAndFillForm(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId("purchases-register-btn"));
+  await pickSelect(user, "purchases-form-supplier", "Café Supplier");
+  await pickSelect(user, "purchases-form-insumo", "Café en Grano");
+  await user.type(screen.getByTestId("purchases-form-quantity"), "2");
+  await user.type(screen.getByTestId("purchases-form-unit-cost"), "100");
+  await user.type(screen.getByTestId("purchases-form-invoice-number"), "F-500");
+}
+
+describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
+  it("opens the form with supplier, insumo and currency selects", async () => {
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByTestId("purchases-register-btn"));
+
+    const dialog = expectFormOpen();
+    expect(
+      within(dialog).getByRole("heading", { name: "Registrar compra" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("purchases-form-supplier")).toBeInTheDocument();
+    expect(screen.getByTestId("purchases-form-insumo")).toBeInTheDocument();
+    expect(screen.getByTestId("purchases-form-currency")).toHaveTextContent(
+      "NIO (Córdobas)",
+    );
+    // Visible labels with required marks, no placeholder-as-label (§17.2/§17.3).
+    expect(screen.getByText("Proveedor *")).toBeInTheDocument();
+    expect(screen.getByText("Insumo *")).toBeInTheDocument();
+    expect(screen.getByText("Número de factura *")).toBeInTheDocument();
+  });
+
+  it("blocks submit while required fields are missing, with actionable copy", async () => {
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByTestId("purchases-register-btn"));
+    // Nothing filled yet: no preview payload, submit stays disabled and the
+    // preview panel tells the owner exactly what is missing (§18).
+    const submit = screen.getByTestId("purchases-form-submit");
+    expect(submit).toBeDisabled();
+    expect(screen.getByTestId("purchases-form-preview")).toHaveTextContent(
+      /Completa proveedor, insumo, cantidad, costo y factura/i,
+    );
+
+    // Partial fill is still not submittable.
+    await pickSelect(user, "purchases-form-supplier", "Café Supplier");
+    await user.type(screen.getByTestId("purchases-form-quantity"), "2");
+    expect(submit).toBeDisabled();
+  });
+
+  it("shows the CPP preview before submit and keeps submit disabled until it resolves", async () => {
+    let resolvePreview: (value: typeof PREVIEW_RESULT) => void = () => {};
+    vi.mocked(fetchPurchasePreview).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePreview = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await openAndFillForm(user);
+
+    // Preview in flight: no blind submit (§49 +1.7).
+    expect(screen.getByTestId("purchases-form-submit")).toBeDisabled();
+    expect(screen.getByTestId("purchases-form-preview")).toHaveTextContent(
+      /Calculando el costo proyectado/i,
+    );
+
+    resolvePreview(PREVIEW_RESULT);
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-preview-cpp")).toHaveTextContent(
+        /C\$50.00/i,
+      );
+    });
+    expect(screen.getByTestId("purchases-preview-projected")).toHaveTextContent(
+      "C$83.33",
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+    });
+    expect(fetchPurchasePreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supplierId: "sup-1",
+        insumoId: "ins-1",
+        quantity: 2,
+        unitCost: 100,
+        currency: "NIO",
+        invoiceNumber: "F-500",
+      }),
+    );
+  });
+
+  it("submits through the manual route, toasts, resets and keeps the panel open (§19.3)", async () => {
+    const mutateAsync = mockCreatePurchase();
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await openAndFillForm(user);
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+    });
+
+    await user.click(screen.getByTestId("purchases-form-submit"));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          supplierId: "sup-1",
+          insumoId: "ins-1",
+          quantity: 2,
+          unitCost: 100,
+          currency: "NIO",
+          invoiceNumber: "F-500",
+        }),
+      );
+    });
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Compra registrada" }),
+    );
+    // Multiple purchases are common: form resets for the next entry but the
+    // dialog stays open.
+    expect(screen.getByTestId("purchases-form-quantity")).toHaveValue(null);
+    expect(screen.getByTestId("purchases-form-supplier")).toHaveTextContent(
+      "Seleccione proveedor",
+    );
+    expectFormOpen();
+  });
+
+  it("surfaces server errors via getApiErrorMessage and preserves the form", async () => {
+    mockCreatePurchase({
+      mutateAsync: vi.fn().mockRejectedValue({
+        status: 409,
+        // The human manual route answers in business Spanish and never with a
+        // raw supplier UUID (standard §22/§39.1) — backend contract copy.
+        responseBody: {
+          message:
+            "Ya existe una compra registrada con la factura 'F-500' para el proveedor 'Café Supplier'.",
+        },
+      }),
+    });
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await openAndFillForm(user);
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+    });
+    await user.click(screen.getByTestId("purchases-form-submit"));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      /Ya existe una compra registrada con la factura 'F-500'/i,
+    );
+    // Dialog/panel preserved — no silent close over a failure.
+    expectFormOpen();
+  });
+
+  it("creates a supplier inline when the catalog is empty, then selects it", async () => {
+    mockSuppliers([]);
+    const createSupplierMutate = vi
+      .fn()
+      .mockResolvedValue({ id: "sup-new", name: "Nuevo Proveedor" });
+    mockCreateSupplier({ mutateAsync: createSupplierMutate });
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByTestId("purchases-register-btn"));
+
+    // Empty catalog: the quick-create path is offered without hiding the select.
+    expect(screen.getByTestId("purchases-supplier-create-name")).toBeInTheDocument();
+    expect(screen.getByText(/solo el nombre es obligatorio/i)).toBeInTheDocument();
+
+    await user.type(
+      screen.getByTestId("purchases-supplier-create-name"),
+      "Nuevo Proveedor",
+    );
+    // The catalog refreshes after creation; the form then auto-selects the
+    // new supplier for the purchase.
+    mockSuppliers([{ id: "sup-new", name: "Nuevo Proveedor" }]);
+    await user.click(screen.getByTestId("purchases-supplier-create-btn"));
+
+    await waitFor(() => {
+      expect(createSupplierMutate).toHaveBeenCalledWith({ name: "Nuevo Proveedor" });
+    });
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Proveedor creado" }),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-supplier")).toHaveTextContent(
+        "Nuevo Proveedor",
+      );
+    });
+  });
+
+  it("reveals the BCN rate input only for USD purchases and validates it", async () => {
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByTestId("purchases-register-btn"));
+
+    expect(
+      screen.queryByTestId("purchases-form-bcn-rate"),
+    ).not.toBeInTheDocument();
+
+    await pickSelect(user, "purchases-form-currency", "USD (Dólares)");
+    expect(screen.getByTestId("purchases-form-bcn-rate")).toBeInTheDocument();
+    expect(screen.getByText(/Tasa BCN \(C\$ por US\$\) \*/)).toBeInTheDocument();
+
+    // USD without a rate: preview never resolves, submit stays blocked.
+    await pickSelect(user, "purchases-form-supplier", "Café Supplier");
+    await pickSelect(user, "purchases-form-insumo", "Café en Grano");
+    await user.type(screen.getByTestId("purchases-form-quantity"), "2");
+    await user.type(screen.getByTestId("purchases-form-unit-cost"), "10");
+    await user.type(screen.getByTestId("purchases-form-invoice-number"), "F-USD");
+    expect(screen.getByTestId("purchases-form-submit")).toBeDisabled();
+
+    await user.type(screen.getByTestId("purchases-form-bcn-rate"), "36.8");
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+    });
+    expect(fetchPurchasePreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ currency: "USD", bcnRate: 36.8, fxRateMode: "explicit" }),
+    );
+  });
+
+  it("requires batch metadata for perishable insumos (backend FIFO rule)", async () => {
+    const mutateAsync = mockCreatePurchase();
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByTestId("purchases-register-btn"));
+    await pickSelect(user, "purchases-form-insumo", "Leche Entera (perecedero)");
+
+    expect(screen.getByText("Lote *")).toBeInTheDocument();
+    expect(screen.getByText("Fecha de recepción *")).toBeInTheDocument();
+    expect(screen.getByText("Fecha de vencimiento *")).toBeInTheDocument();
+
+    // Full valid non-batch data cannot submit while the batch fields are
+    // missing — the form gates before the backend's batch assertion.
+    await pickSelect(user, "purchases-form-supplier", "Café Supplier");
+    await user.type(screen.getByTestId("purchases-form-quantity"), "2");
+    await user.type(screen.getByTestId("purchases-form-unit-cost"), "100");
+    await user.type(screen.getByTestId("purchases-form-invoice-number"), "F-PER");
+    await waitFor(() => {
+      expect(fetchPurchasePreview).toHaveBeenCalled();
+    });
+    // Preview resolved, but the perishable batch fields are still required:
+    // the submit stays gated (client mirror of the backend batch assertion).
+    expect(screen.getByTestId("purchases-form-submit")).toBeDisabled();
+
+    await user.type(screen.getByTestId("purchases-form-lot"), "L-2026-01");
+    await user.type(screen.getByTestId("purchases-form-received"), "2026-09-30");
+    await user.type(screen.getByTestId("purchases-form-expiration"), "2026-10-30");
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+    });
+    await user.click(screen.getByTestId("purchases-form-submit"));
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lotCode: "L-2026-01",
+          receivedDate: "2026-09-30",
+          expirationDate: "2026-10-30",
+        }),
+      );
+    });
+  });
+
+  it("allows explicit acknowledgement when the preview fails, instead of submitting blind (§49)", async () => {
+    vi.mocked(fetchPurchasePreview).mockRejectedValue({
+      status: 500,
+      responseBody: { message: "Tasa oficial no disponible para la fecha" },
+    });
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await openAndFillForm(user);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/Tasa oficial no disponible/i);
+    expect(screen.getByTestId("purchases-form-submit")).toBeDisabled();
+
+    await user.click(screen.getByTestId("purchases-form-ack"));
+    expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+  });
+
+  it("keeps a resolved preview when batch fields change — they are not preview inputs (§49 +1.7)", async () => {
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByTestId("purchases-register-btn"));
+    await pickSelect(user, "purchases-form-insumo", "Leche Entera (perecedero)");
+    await pickSelect(user, "purchases-form-supplier", "Café Supplier");
+    await user.type(screen.getByTestId("purchases-form-quantity"), "2");
+    await user.type(screen.getByTestId("purchases-form-unit-cost"), "100");
+    await user.type(screen.getByTestId("purchases-form-invoice-number"), "F-PER");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-preview-projected")).toHaveTextContent(
+        "C$83.33",
+      );
+    });
+    // The preview refetches per preview-relevant keystroke; freeze the count
+    // once the projection resolved.
+    const callsAfterPreview = vi.mocked(fetchPurchasePreview).mock.calls.length;
+    expect(callsAfterPreview).toBeGreaterThan(0);
+
+    // Contract pin: the backend preview (`POST /inventory/purchase`) never
+    // reads lotCode/receivedDate/expirationDate, so toggling them must NOT
+    // refetch, invalidate the resolved preview, or clear the acknowledgement.
+    await user.type(screen.getByTestId("purchases-form-lot"), "L-2026-01");
+    await user.type(screen.getByTestId("purchases-form-received"), "2026-09-30");
+    await user.type(screen.getByTestId("purchases-form-expiration"), "2026-10-30");
+
+    expect(vi.mocked(fetchPurchasePreview).mock.calls.length).toBe(
+      callsAfterPreview,
+    );
+    expect(screen.getByTestId("purchases-preview-projected")).toHaveTextContent(
+      "C$83.33",
+    );
+    expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
   });
 });
 

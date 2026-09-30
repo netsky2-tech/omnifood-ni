@@ -4,6 +4,8 @@
 **Standard sections covered:** §0–§58  
 **Use for:** Any backoffice module audit
 
+**Amendments:** 2026-09-30 — added governed-fields (§17.5), default-vs-required clarification (§40), alert variants (§26.1), neutral-state badge note (§26), catalog consistency row (§28), DoD form bullet, and catalog guardrail (Appendix A). Version stays v2.1.
+
 # <MODULE> — NHILOS Experience Audit
 
 **Version:** 1.0  
@@ -189,6 +191,12 @@ If any finding reveals a conflict between product authority and experience stand
 |---|---|---|---|
 | | | | |
 
+### Governed fields (§17.5)
+
+| Surface | Governed values use shared catalog selector (units/currencies/categories/suppliers) | Free text where a catalog exists? | Empty-catalog guidance present |
+|---|---|---|---|
+| | | | |
+
 ---
 
 ## 15. Destructive / high-risk actions (§23)
@@ -217,6 +225,7 @@ If any finding reveals a conflict between product authority and experience stand
 
 - [ ] Consistent lifecycle terms: ACTIVE/INACTIVE/DRAFT/PENDING/PROCESSING/COMPLETE/PARTIAL/UNAVAILABLE/UNKNOWN/FAILED/CANCELED/VOID
 - [ ] No synonyms for same state (§26)
+- [ ] Neutral lifecycle states (e.g. INACTIVE) not styled with danger color (§26)
 - [ ] `—` means unavailable, never zero (§34)
 - [ ] Badge colors semantic, not decorative (§26)
 
@@ -312,6 +321,8 @@ If any finding reveals a conflict between product authority and experience stand
 |---|---|---|---|---|---|
 | | | | | | |
 
+- [ ] No default silently satisfies a required field (§40) — required governance fields start empty or require explicit confirmation
+
 ---
 
 ## 23. Progressive disclosure (§41)
@@ -329,6 +340,12 @@ If any finding reveals a conflict between product authority and experience stand
 | Color | Usage | Contrast ratio (WCAG AA ≥ 4.5:1) | Status |
 |---|---|---|---|
 | | | | |
+
+### Alert and notification variants (§26.1)
+
+| Surface | Variant matches business meaning | Perceptible tint/border/icon (not default neutral) | Danger not used for neutral states | Color not sole signal (§46) |
+|---|---|---|---|---|
+| | | | | |
 
 ### Visual restraint checklist (§42, §43)
 
@@ -418,6 +435,7 @@ If any finding reveals a conflict between product authority and experience stand
 | Date formats | | |
 | Currencies | | |
 | Status vocabulary | | |
+| Catalog-governed fields use shared catalog (§17.5) | | |
 | Toasts | | |
 | Empty states | | |
 | Destructive confirmations | | |
@@ -586,6 +604,7 @@ A module is **NHILOS Experience Ready** only when:
 ### Forms
 
 - [ ] Labels/requirements are clear
+- [ ] Catalog-governed fields use the shared catalog, not free text (§17.5)
 - [ ] Validation is actionable
 - [ ] Server errors preserve work where possible
 - [ ] Dirty-state loss is protected
@@ -685,6 +704,7 @@ A module is **NHILOS Experience Ready** only when:
 - [ ] Add new capabilities merely to create a +1
 - [ ] Change domain rules under experience justification
 - [ ] Declare PASS from documentation alone when implementation evidence is required
+- [ ] Declare a form or consistency PASS without checking whether a shared catalog exists for free-text entry fields
 - [ ] Remove important information merely to achieve minimalism
 - [ ] Use competitor behavior as authority over NHILOS product contracts
 

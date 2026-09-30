@@ -12,6 +12,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { Request } from 'express';
+import { randomUUID } from 'crypto';
 import { ShrinkageService } from './shrinkage.service';
 import { InventoryService } from './inventory.service';
 import { RecipeService } from './recipe.service';
@@ -20,6 +21,8 @@ import {
   PurchaseCorrectionDto,
   PurchaseDocumentDto,
 } from './dto/purchase-document.dto';
+import { ManualPurchaseDto } from './dto/purchase-manual.dto';
+import { CreateSupplierDto } from './dto/supplier.dto';
 import { SyncRecipeVersionDocumentDto } from './dto/sync-recipe-version-document.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../core/database/rls.interceptor';
@@ -235,6 +238,80 @@ export class InventoryMovementController {
       lotCode: dto.lotCode,
       receivedDate: dto.receivedDate,
       expirationDate: dto.expirationDate,
+    });
+  }
+
+  /**
+   * Owner-dashboard supplier catalog (SOHO purchases). Human oversight read;
+   * the tenant comes from the authenticated human session via GetTenantId.
+   * POS-local suppliers do not sync to the cloud yet — see the slice task
+   * evidence and `listSuppliers` in the purchase service.
+   */
+  @Get('suppliers')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async listSuppliers(@GetTenantId() tenantId: string) {
+    return this.purchaseService.listSuppliers({ tenantId });
+  }
+
+  /**
+   * Human supplier creation from the owner dashboard (SOHO purchases). The
+   * tenant comes from the authenticated human session, never from the body.
+   */
+  @Post('suppliers')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async createSupplier(
+    @Body() dto: CreateSupplierDto,
+    @GetTenantId() tenantId: string,
+  ) {
+    return this.purchaseService.createSupplier({
+      tenantId,
+      name: dto.name,
+      phone: dto.phone,
+      contactPerson: dto.contactPerson,
+      creditTerms: dto.creditTerms,
+    });
+  }
+
+  /**
+   * Human manual purchase entry (SOHO purchases, founder decision
+   * 2026-09-30): the owner registers a received/known purchase from the web.
+   * NO purchase-order lifecycle. This reuses `recordPurchase` unchanged —
+   * the SERIALIZABLE transaction, unique supplier+invoice guard, kardex
+   * movement, batch tracking and CPP projection all run on the same code
+   * path as the POS device transport. Differences: the document id is
+   * generated server-side, the tenant comes from the human session, the
+   * strict DTO validation wall is `ManualPurchaseDto`, and conflict/not-found
+   * errors reach the owner in business Spanish without raw UUIDs (standard
+   * §22/§39.1) via the `messageLocale` parameter — the domain rule itself
+   * stays shared with the device path in `recordPurchase`.
+   */
+  @Post('purchases/manual')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async recordManualPurchase(
+    @Body() dto: ManualPurchaseDto,
+    @GetTenantId() tenantId: string,
+  ) {
+    return this.purchaseService.recordPurchase({
+      id: randomUUID(),
+      tenantId,
+      insumoId: dto.insumoId,
+      supplierId: dto.supplierId,
+      invoiceNumber: dto.invoiceNumber,
+      fiscalAuthorizationCode: dto.fiscalAuthorizationCode,
+      quantity: dto.quantity,
+      unitCost: dto.unitCost,
+      currency: dto.currency,
+      invoiceDate: dto.invoiceDate,
+      entryTimestamp: dto.entryTimestamp,
+      fxRateMode: dto.fxRateMode,
+      bcnRate: dto.bcnRate,
+      lotCode: dto.lotCode,
+      receivedDate: dto.receivedDate,
+      expirationDate: dto.expirationDate,
+      messageLocale: 'es',
     });
   }
 
