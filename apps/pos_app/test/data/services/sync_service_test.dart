@@ -47,6 +47,7 @@ import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/security/ohac_outbox_registry.dart';
+import 'package:pos_app/domain/security/ohac_observability.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' hide Batch;
@@ -5064,6 +5065,50 @@ void main() {
     }
 
     test(
+      'a 409 UNMAPPED result code hits the fail-closed default (U5b): the '
+      'terminal records ACK_INCONSISTENT, never a retry, never a confirm',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final epochJson = signedEpochJson();
+        final database = await buildDb();
+
+        try {
+          await seedOhacTenant(database);
+          installOhacInterceptor(
+            deltas: () =>
+                deltasResponse(humanAuthorization: deliverEnvelope(epochJson)),
+            onAck: (_) => ackRejection(409, resultCode: 'SOMETHING_ELSE'),
+          );
+
+          final service = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          final result = await service.pullInboundDeltas();
+          expect(result, isNotNull);
+
+          final state = await terminalState(database);
+          expect(state!.state, 'INTEGRITY_LOSS',
+              reason: 'an unmapped rejection verdict is never indeterminate');
+          expect(state.integrityClassification, 'ACK_INCONSISTENT',
+              reason: 'the classifier fail-closed default (U5b)');
+          expect(state.ackReceiptId, isNull);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
       'a 409 UNAVAILABLE rejection is indeterminate: the terminal stays in '
       'ACK_SUBMITTING for the next pull',
       () async {
@@ -5602,6 +5647,197 @@ void main() {
             capturedPosts.where((post) => post.path == ackPath),
             isEmpty,
           );
+        } finally {
+          await database.close();
+        }
+      },
+    );
+  });
+
+
+  group('OHAC observability facts (U5b, design §12/§16)', () {
+    const ohacTenant = '11111111-1111-4111-8111-111111111111';
+    const ohacPosBuild = '2.3.4+11';
+    const userA = '33333333-3333-4333-8333-333333333333';
+    const ackPath = '/v1/sync/inbound/human-authorization/staff-policy/ack';
+    // Hostile material seeded into the flow through the signed epoch: the
+    // verifier encoding rides along in every DELIVER envelope, and no fact
+    // emitted anywhere in the pull may ever contain it (design §12).
+    const seededVerifier = r'$2b$10$abcdefghijklmnopqrstuv';
+
+    Map<String, dynamic> epochEntry(String userId, List<String> permissions) =>
+        <String, dynamic>{
+          'userId': userId,
+          'status': 'ACTIVE',
+          'role': 'MANAGER',
+          'permissions': permissions,
+          'pinVerifier': <String, dynamic>{
+            'algorithm': 'bcrypt',
+            'formatVersion': '2b',
+            'encoded': seededVerifier,
+          },
+          'attemptResetGeneration': '0',
+        };
+
+    Map<String, dynamic> signedEpochJson() =>
+        jsonDecode(utf8.decode(signBody(<String, dynamic>{
+          'schema': staffPolicyEpochV1Schema,
+          'tenantId': ohacTenant,
+          'targetTerminalId': 'dev-1',
+          'sequence': '1',
+          'previousSequence': '0',
+          'previousDigest': genesisDigest,
+          'publisherBackendBuild': 'backend-build-1',
+          'targetPosBuild': ohacPosBuild,
+          'minimumAssertionSchema': 'ohac.assertion.v1',
+          'policyEntries': <Map<String, dynamic>>[
+            epochEntry(userA, <String>['sales:void_invoice']),
+          ],
+        }))) as Map<String, dynamic>;
+
+    Map<String, dynamic> deliverEnvelope(Map<String, dynamic> epochJson) => {
+          'status': 'DELIVER',
+          'epoch': epochJson,
+          'sequence': epochJson['sequence'],
+          'digest': epochJson['digest'],
+        };
+
+    Map<String, dynamic> deltasResponse({
+      Map<String, dynamic>? humanAuthorization,
+    }) =>
+        {
+          'status': 'success',
+          'serverTime': '2026-08-26T18:30:00.000Z',
+          'currentVersion': 1787750000000,
+          'deltas': {
+            'products': [],
+            'catalogValues': [],
+            'insumos': [],
+            'recipes': [],
+            'users': [],
+          },
+          // ignore: use_null_aware_elements
+          if (humanAuthorization != null)
+            'humanAuthorization': humanAuthorization,
+        };
+
+    Future<AppDatabase> buildDb() =>
+        $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+    Future<void> seedOhacTenant(AppDatabase database) =>
+        database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'tenant_id', value: ohacTenant),
+        );
+
+    SyncService serviceWithDb(
+      AppDatabase database,
+      List<OhacObservabilityFact> facts,
+    ) =>
+        SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          dio,
+          database: database,
+          ohacFactObserver: facts.add,
+        );
+
+    test(
+      'RECOVERY_REQUIRED emits the integrity-classified fact with the '
+      'classification, reason and applied outcome (§9/§12)',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final facts = <OhacObservabilityFact>[];
+        final database = await buildDb();
+        try {
+          await seedOhacTenant(database);
+          capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+            humanAuthorization: {'status': 'RECOVERY_REQUIRED'},
+          );
+
+          final result =
+              await serviceWithDb(database, facts).pullInboundDeltas();
+          expect(result, isNotNull);
+
+          final classified = facts
+              .where((f) => f.event == 'ohac_integrity_classified')
+              .toList();
+          expect(classified, hasLength(1));
+          expect(classified.single.fields['classification'],
+              'ACK_INCONSISTENT');
+          expect(classified.single.fields['reason'], 'recovery_required');
+          expect(classified.single.fields['applied'], true);
+          expect(classified.single.fields['tenantId'], ohacTenant);
+          expect(classified.single.fields['terminalId'], 'dev-1');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'epoch acceptance and ack deferral emit publication/retry facts with '
+      'pinned content, and NO fact in the whole stream carries the seeded '
+      'verifier material (hostile-material guard, §12)',
+      () async {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: '2.3.4',
+          buildNumber: '11',
+          buildSignature: '',
+        );
+        final facts = <OhacObservabilityFact>[];
+        final database = await buildDb();
+        try {
+          await seedOhacTenant(database);
+          final epochJson = signedEpochJson();
+          capturedGets['/v1/sync/inbound/deltas'] = deltasResponse(
+            humanAuthorization: deliverEnvelope(epochJson),
+          );
+          // The ack POST answers 200: the claim is deferred (§10
+          // unexpected_status), which must surface as an ack-retry fact.
+
+          final result =
+              await serviceWithDb(database, facts).pullInboundDeltas();
+          expect(result, isNotNull);
+
+          final publication = facts
+              .where((f) => f.event == 'ohac_epoch_publication')
+              .toList();
+          expect(publication, hasLength(1));
+          expect(publication.single.fields['action'], 'accepted');
+          expect(publication.single.fields['sequence'], '1');
+
+          final retry = facts
+              .where((f) =>
+                  f.event == 'ohac_ack_outcome' &&
+                  f.fields['outcome'] == 'deferred')
+              .toList();
+          expect(retry, isNotEmpty);
+          expect(
+            retry.any((f) => f.fields['reason'] == 'unexpected_status'),
+            isTrue,
+          );
+
+          // The hostile-material guard: the seeded verifier encoding (and
+          // the signed epoch body) flowed through this pull, and none of
+          // the emitted facts may carry it.
+          for (final fact in facts) {
+            final line = serializeOhacFact(fact);
+            expect(line.contains(seededVerifier), isFalse,
+                reason: 'fact ${fact.event} leaked verifier material');
+            expect(line.contains('pinVerifier'), isFalse,
+                reason: 'fact ${fact.event} leaked verifier material');
+            expect(line.contains('attemptResetGeneration'), isFalse,
+                reason: 'fact ${fact.event} leaked epoch body material');
+          }
         } finally {
           await database.close();
         }
