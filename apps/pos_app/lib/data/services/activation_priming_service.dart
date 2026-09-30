@@ -6,6 +6,7 @@ import '../models/inventory/product_entity.dart';
 import '../models/local_config_entity.dart';
 import '../ports/activation_priming_port.dart';
 import 'fiscal_inbox_handler.dart';
+import '../../core/utils/numeric_utils.dart';
 
 /// The outcome of applying a priming payload to the local database.
 class ActivationPrimingResult {
@@ -98,9 +99,9 @@ class ActivationPrimingService {
           id: id,
           name: map['name'] as String,
           uom: map['uom'] as String? ?? 'UND',
-          stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
-          averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
-          sellPrice: (map['sellPrice'] as num?)?.toDouble() ?? 0.0,
+          stock: asDouble(map['stock']) ?? 0.0,
+          averageCost: asDouble(map['averageCost']) ?? 0.0,
+          sellPrice: asDouble(map['sellPrice']) ?? 0.0,
           isActive: map['isActive'] as bool? ?? true,
           sku: map['sku'] as String? ?? existing?.sku,
           barcode: map['barcode'] as String? ?? existing?.barcode,
@@ -111,7 +112,7 @@ class ActivationPrimingService {
           insumoId: map['insumoId'] as String?,
           createdAt: map['createdAt']?.toString() ?? existing?.createdAt,
           tenantId: map['tenantId'] as String? ?? existing?.tenantId,
-          taxRate: (map['taxRate'] as num?)?.toDouble() ?? 0.0,
+          taxRate: asDouble(map['taxRate']) ?? 0.0,
           isTaxExempt: map['isTaxExempt'] as bool? ?? false,
           inventoryPolicy:
               map['inventoryPolicy'] as String? ?? existing?.inventoryPolicy,
@@ -134,7 +135,7 @@ class ActivationPrimingService {
             code: map['code'] as String,
             name: map['name'] as String,
             isActive: map['isActive'] as bool? ?? true,
-            sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+            sortOrder: asInt(map['sortOrder']) ?? 0,
           );
         })
         .toList(growable: false);

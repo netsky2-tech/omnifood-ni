@@ -34,6 +34,7 @@ import '../models/sales/cashier_session_entity.dart';
 import '../models/sales/cash_movement_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
+import '../../core/utils/numeric_utils.dart';
 import 'authority_hydration_service.dart';
 import 'ohac_negotiation_parameters.dart';
 import '../models/human_authorization/field_guards.dart';
@@ -627,6 +628,8 @@ class SyncService {
       await operation();
       return true;
     } on DioException catch (dioErr, stackTrace) {
+      // ignore: avoid_print
+      print('[SyncDomainError] DioException in domain $domain: ${dioErr.message} status=${dioErr.response?.statusCode} data=${dioErr.response?.data}');
       final statusCode = dioErr.response?.statusCode;
       if (dioErr.error is DeviceSyncRevokedException ||
           (dioErr.response?.data is Map &&
@@ -667,6 +670,8 @@ class SyncService {
       developer.log('[SYNC_AUTH] credential_blocked=true: $e', name: 'SyncService');
       return false;
     } catch (error, stackTrace) {
+      // ignore: avoid_print
+      print('[SyncDomainError] Error in domain $domain: $error\n$stackTrace');
       developer.log(
         'Sync $domain failed; later domains will continue.',
         name: 'SyncService',
@@ -3060,9 +3065,9 @@ class SyncService {
               id: id,
               name: map['name'] as String,
               uom: map['uom'] as String? ?? 'UND',
-              stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
-              averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
-              sellPrice: (map['sellPrice'] as num?)?.toDouble() ?? 0.0,
+              stock: asDouble(map['stock']) ?? 0.0,
+              averageCost: asDouble(map['averageCost']) ?? 0.0,
+              sellPrice: asDouble(map['sellPrice']) ?? 0.0,
               isActive: map['isActive'] as bool? ?? true,
               sku: map['sku'] as String? ?? existing?.sku,
               barcode: map['barcode'] as String? ?? existing?.barcode,
@@ -3073,7 +3078,7 @@ class SyncService {
               insumoId: map['insumoId'] as String?,
               createdAt: map['createdAt']?.toString() ?? existing?.createdAt,
               tenantId: map['tenantId'] as String? ?? existing?.tenantId,
-              taxRate: (map['taxRate'] as num?)?.toDouble() ?? 0.0,
+              taxRate: asDouble(map['taxRate']) ?? 0.0,
               isTaxExempt: map['isTaxExempt'] as bool? ?? false,
               inventoryPolicy: map['inventoryPolicy'] as String? ?? existing?.inventoryPolicy,
               directStockInsumoId: map['directStockInsumoId'] as String? ?? existing?.directStockInsumoId,
@@ -3097,7 +3102,7 @@ class SyncService {
                 code: map['code'] as String,
                 name: map['name'] as String,
                 isActive: map['isActive'] as bool? ?? true,
-                sortOrder: (map['sortOrder'] as num?)?.toInt() ?? 0,
+                sortOrder: asInt(map['sortOrder']) ?? 0,
               );
             })
             .toList(growable: false);
@@ -3117,15 +3122,16 @@ class SyncService {
                 consumptionUom:
                     (map['consumptionUom'] ?? map['purchaseUom']) as String? ??
                     'UND',
-                stock: (map['stock'] as num?)?.toDouble() ?? 0.0,
-                averageCost: (map['averageCost'] as num?)?.toDouble() ?? 0.0,
+                stock: asDouble(map['stock']) ?? 0.0,
+                averageCost: asDouble(map['averageCost']) ?? 0.0,
                 isActive: map['isActive'] as bool? ?? true,
                 isPerishable: map['isPerishable'] as bool? ?? false,
                 // Issue #521 S1: stock alert thresholds from the backend
-                // delta; absent keys stay null (never 0).
-                parLevel: (map['parLevel'] as num?)?.toDouble(),
-                stockMin: (map['minStock'] as num?)?.toDouble(),
-                stockMax: (map['maxStock'] as num?)?.toDouble(),
+                // delta; coerced safely via asDouble (numeric/decimal columns
+                // are serialized as strings by TypeORM/pg driver).
+                parLevel: asDouble(map['parLevel']),
+                stockMin: asDouble(map['minStock'] ?? map['stockMin']),
+                stockMax: asDouble(map['maxStock'] ?? map['stockMax']),
               );
             })
             .toList(growable: false);
@@ -3144,7 +3150,7 @@ class SyncService {
                 productId: map['productId'] as String,
                 ingredientId: map['ingredientId'] as String,
                 ingredientType: map['ingredientType'] as String? ?? 'INSUMO',
-                quantity: (map['quantity'] as num?)?.toDouble() ?? 0.0,
+                quantity: asDouble(map['quantity']) ?? 0.0,
               );
             })
             .toList(growable: false);
@@ -3609,20 +3615,18 @@ class SyncService {
               type: type,
               targetProductId: map['targetProductId']?.toString(),
               targetCategoryId: map['targetCategoryId']?.toString(),
-              buyQuantity: (map['buyQuantity'] as num?)?.toInt() ?? 0,
-              getQuantity: (map['getQuantity'] as num?)?.toInt() ?? 0,
-              discountValue:
-                  (map['discountValue'] as num?)?.toDouble() ?? 0.0,
-              minOrderAmount:
-                  (map['minOrderAmount'] as num?)?.toDouble() ?? 0.0,
+              buyQuantity: asInt(map['buyQuantity']) ?? 0,
+              getQuantity: asInt(map['getQuantity']) ?? 0,
+              discountValue: asDouble(map['discountValue']) ?? 0.0,
+              minOrderAmount: asDouble(map['minOrderAmount']) ?? 0.0,
               daysOfWeek: rawDaysOfWeek
                   ?.map((day) => day.toString())
                   .join(','),
               startTime: map['startTime']?.toString(),
               endTime: map['endTime']?.toString(),
-              startDate: (map['startDate'] as num?)?.toInt(),
-              endDate: (map['endDate'] as num?)?.toInt(),
-              priority: (map['priority'] as num?)?.toInt() ?? 0,
+              startDate: asInt(map['startDate']),
+              endDate: asInt(map['endDate']),
+              priority: asInt(map['priority']) ?? 0,
               isStackable: map['isStackable'] as bool? ?? true,
               isActive: map['isActive'] as bool? ?? true,
             ),
@@ -3678,7 +3682,7 @@ class SyncService {
           final resolvedPointsBalance =
               existing != null && hasUnsyncedPointTransactions
                   ? existing.pointsBalance
-                  : (map['pointsBalance'] as num?)?.toDouble() ??
+                  : asDouble(map['pointsBalance']) ??
                       existing?.pointsBalance ??
                       0.0;
 
