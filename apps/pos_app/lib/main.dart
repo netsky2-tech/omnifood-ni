@@ -318,20 +318,17 @@ void main() async {
   final activationPrinterConfigService = PrinterConfigService(
     database.localConfigDao,
   );
-  final activationPrinterPort = PrinterResolver.resolve(
-    await activationPrinterConfigService.getPrinterConfig(),
-  );
+  // Printer port is resolved dynamically per-check inside each runner so a
+  // profile configured after app startup is honored without a restart.
   final activationPreOfflineRunner = ActivationPreOfflineRunner(
     database: database,
     configAdapter: activationConfigAdapter,
     terminalIdentityService: terminalIdentityService,
-    printerPort: activationPrinterPort,
     printerConfigService: activationPrinterConfigService,
   );
   final activationControlledSaleRunner = ActivationControlledSaleRunner(
     database: database,
     salesRepository: salesRepository,
-    printerPort: activationPrinterPort,
     printerConfigService: activationPrinterConfigService,
   );
   final activationReconnectSyncRunner = ActivationReconnectSyncRunner(
