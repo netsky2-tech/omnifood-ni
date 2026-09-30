@@ -217,6 +217,8 @@ class DeviceSyncBootstrapCoordinator {
 
     // Phase 1: Stage candidate locally
     await _store.stageCandidate(pendingRecord);
+    // ignore: avoid_print
+    print('[Bootstrap] Phase 1 staged candidate credentialId=${pendingRecord.credentialId}');
 
     // Phase 1 Verification: Read back candidate to ensure persistence integrity
     final verified = await _store.readCandidate();
@@ -235,6 +237,8 @@ class DeviceSyncBootstrapCoordinator {
     }
 
     // Phase 2: Confirm with server
+    // ignore: avoid_print
+    print('[Bootstrap] Phase 2 confirming with server...');
     DeviceSyncCredentialRecord confirmedRecord;
     try {
       if (targetAttemptId != null && targetAttemptId.trim().isNotEmpty) {
@@ -256,9 +260,13 @@ class DeviceSyncBootstrapCoordinator {
       }
     } catch (e) {
       _lastError = e.runtimeType.toString();
+      // ignore: avoid_print
+      print('[Bootstrap] Phase 2 confirm FAILED: $e');
       // Confirm failed: candidate remains staged in store for retry!
       rethrow;
     }
+    // ignore: avoid_print
+    print('[Bootstrap] Phase 2 confirmed OK');
 
     // Phase 3: Validate confirmed response and re-stage before active commit
     final DeviceSyncCredentialRecord recordToCommit;
@@ -276,6 +284,8 @@ class DeviceSyncBootstrapCoordinator {
     // Re-stage confirmed record and mark local lifecycle active by committing candidate
     await _store.stageCandidate(recordToCommit);
     await _store.commitCandidate();
+    // ignore: avoid_print
+    print('[Bootstrap] Phase 3 committed. credentialId=${recordToCommit.credentialId}');
     _credentialCoordinator?.invalidateAccessToken();
     await _captureTenantSlug(recordToCommit);
 

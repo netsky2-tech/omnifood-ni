@@ -512,6 +512,8 @@ class DioActivationSyncPort implements ActivationSyncPort {
     }
 
     try {
+      // ignore: avoid_print
+      print('[BootstrapConfirm] POST confirm credentialId=$credentialId deviceId=$cleanDeviceId');
       final response = await _dio.post<dynamic>(
         'onboarding/activation/device-sync-credential/confirm',
         data: {
@@ -521,6 +523,8 @@ class DioActivationSyncPort implements ActivationSyncPort {
           'renewalSecret': renewalSecret,
         },
       );
+      // ignore: avoid_print
+      print('[BootstrapConfirm] status=${response.statusCode}');
 
       final raw = response.data;
       if (raw is! Map) {

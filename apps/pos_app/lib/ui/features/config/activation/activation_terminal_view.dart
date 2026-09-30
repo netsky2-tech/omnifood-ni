@@ -652,6 +652,10 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
         viewModel.isPhaseLoading(ActivationSessionPhase.controlledOfflineSale)) {
       return null;
     }
+    // Phase 2 already ran successfully in this session.
+    if (viewModel.controlledSaleSucceeded == true) {
+      return null;
+    }
     // Phase 2 is already complete when the attempt has advanced past
     // LOCAL_ACTIVATION_EVIDENCE_COMPLETE. Re-running it would hit
     // ATTEMPT_NOT_IN_RUNNING.

@@ -97,6 +97,12 @@ class ActivationSessionService {
   final ActivationControlledSaleRunner _controlledSaleRunner;
   final ActivationReconnectSyncRunner _reconnectSyncRunner;
 
+  /// Invoked after the reconnect-sync phase reports ACTIVATED or
+  /// ACTIVATED_WITH_WARNING. Used to trigger the device-sync bootstrap,
+  /// which cannot run at login time because the backend requires a
+  /// finalized attempt first (closed bootstrap cycle).
+  Future<void> Function()? onActivationComplete;
+
   /// The attempt resolved by the last successful [prepare], or null.
   ActivationAttemptLocalEntity? _attempt;
 
@@ -195,12 +201,26 @@ class ActivationSessionService {
   /// runner (the runner replays the persisted checks itself).
   Future<ActivationReconnectSyncResult> syncActivationEvidence() async {
     final attempt = _requirePreparedAttempt();
-    return _reconnectSyncRunner.syncActivationEvidence(
+    final result = await _reconnectSyncRunner.syncActivationEvidence(
       ActivationReconnectSyncParams(
         tenantId: attempt.tenantId,
         attemptId: attempt.attemptId,
       ),
     );
+
+    // Trigger the device-sync bootstrap now that a finalized attempt exists.
+    if (result.isSuccess &&
+        (result.attemptStatus == 'ACTIVATED' ||
+            result.attemptStatus == 'ACTIVATED_WITH_WARNING')) {
+      try {
+        await onActivationComplete?.call();
+      } catch (_) {
+        // Bootstrap failure after activation is non-fatal: the activation
+        // itself succeeded. The badge will show AUTH_BLOCKED until retried.
+      }
+    }
+
+    return result;
   }
 
   /// Refuses with a named error when prepare() has not resolved an attempt.

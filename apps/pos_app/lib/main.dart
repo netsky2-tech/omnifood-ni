@@ -347,6 +347,19 @@ void main() async {
     controlledSaleRunner: activationControlledSaleRunner,
     reconnectSyncRunner: activationReconnectSyncRunner,
   );
+  // The device-sync bootstrap cannot run at login when no finalized attempt
+  // exists yet (closed bootstrap cycle). Trigger it right after activation
+  // succeeds so the device credential is provisioned and committed.
+  activationSessionService.onActivationComplete = () async {
+    try {
+      final user = await authRepository.getCurrentUser();
+      if (user != null) {
+        await deviceSyncBootstrapCoordinator.bootstrap(user: user);
+      }
+    } catch (e) {
+      debugPrint('[ActivationBootstrap] post-activation bootstrap failed: $e');
+    }
+  };
   // L1-10c: terminal priming before activation prepare(). Uses the same
   // human-authenticated Dio client as DioActivationSyncPort (the trust level
   // of the activation discovery call); the device path is untouched.
