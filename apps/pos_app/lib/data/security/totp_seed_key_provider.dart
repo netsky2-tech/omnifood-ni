@@ -14,7 +14,7 @@ class DeviceBoundTotpSeedKeyProvider implements TotpSeedKeyProvider {
   static const String _storageKey = 'totp_seed_encryption_key_v1';
 
   DeviceBoundTotpSeedKeyProvider({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true));
 
   final FlutterSecureStorage _storage;
 

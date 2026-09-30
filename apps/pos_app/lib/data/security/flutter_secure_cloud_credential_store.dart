@@ -5,18 +5,29 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../domain/security/cloud_credential_store.dart';
 
-const _keystoreOperationTimeout = Duration(seconds: 3);
+/// Timeout for Keystore operations.
+///
+/// 30 seconds on purpose. Android emulators and devices without hardware-backed
+/// Keystore can take 5-10 seconds (or more) for the first key-generation call.
+/// The previous 3-second timeout triggered the circuit-breaker on every emulator
+/// boot, permanently marking the circuit as DEGRADED and blocking all credential
+/// reads — see session issue (keystore overdue >22Ks in logcat).
+///
+/// Production devices with StrongBox/hardware-backed Keystore complete in <100ms
+/// so the higher timeout has zero real-world cost. If a read still exceeds 30s,
+/// the circuit-breaker correctly assumes a hung Keystore and fails fast.
+const _keystoreOperationTimeout = Duration(seconds: 30);
 
 /// Circuit-breaker states for the Keystore-backed credential store.
 ///
 /// Once DEGRADED, every subsequent operation fails immediately without
-/// touching the native Keystore — avoiding the 3-second timeout storm
+/// touching the native Keystore — avoiding the timeout storm
 /// that saturates logcat and blocks the Dart event loop.
 enum _CircuitState { available, degraded }
 
 class FlutterSecureCloudCredentialStore implements CloudCredentialStore {
   FlutterSecureCloudCredentialStore([FlutterSecureStorage? storage])
-      : _storage = storage ?? const FlutterSecureStorage();
+      : _storage = storage ?? FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true));
   final FlutterSecureStorage _storage;
 
   _CircuitState _circuitState = _CircuitState.available;

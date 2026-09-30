@@ -21,8 +21,8 @@ enum _CircuitState { available, degraded }
 class FlutterSecureDeviceSyncCredentialStore implements DeviceSyncCredentialStore {
   FlutterSecureDeviceSyncCredentialStore({
     FlutterSecureStorage? storage,
-    Duration timeout = const Duration(seconds: 3),
-  })  : _storage = storage ?? const FlutterSecureStorage(),
+    Duration timeout = const Duration(seconds: 30),
+  })  : _storage = storage ?? FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true)),
         _timeout = timeout;
 
   static const String storageKey = 'device_sync_credential_v1';
