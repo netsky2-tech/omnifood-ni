@@ -16,7 +16,11 @@ import {
   SystemParametersConfigActiveView,
 } from '../../inventory/entities/system-parameters-config.entity';
 import { EffectiveFiscalPayload } from '../dto/fiscal-config-version.dto';
-import { FiscalRegime } from '../dto/fiscal-setup.dto';
+import {
+  CheckoutFxMode,
+  FiscalRegime,
+  TenantOperationMode,
+} from '../dto/fiscal-setup.dto';
 import { computeJcsSha256 } from '../utils/canonical-jcs';
 import { normalizeTenantSlug } from '../../tenant/tenant-slug';
 
@@ -162,6 +166,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         taxRate: 0.15,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
+        // BXW-007 U1: unconfigured params read as the POS defaults.
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
         // D-21 (#554): no DGI authorization configured yet — absence reads
         // as null, never as an empty string.
         dgiAuthorizationCode: null,
@@ -276,6 +283,110 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
     });
   });
 
+  // BXW-007 U1: the Business Profile operation mode and checkout FX mode ride
+  // the fingerprinted effective payload so every material change is versioned
+  // and synced to the POS through the existing snapshot channel.
+  describe('operation mode & checkout FX mode exposure (BXW-007 U1)', () => {
+    const modeRow = (
+      paramKey: string,
+      paramValue: SystemParametersConfig['paramValue'],
+    ): SystemParametersConfig => ({
+      id: `mode-${paramKey}`,
+      tenant_id: tenantId,
+      tenant: mockTenant,
+      paramKey,
+      paramValue,
+      version: 1,
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: 'user-1',
+      createdAt: new Date(),
+    });
+
+    it('exposes the stored operationMode/checkoutFxMode in the effective payload', async () => {
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        modeRow('OPERATION_MODE', TenantOperationMode.RESTAURANT),
+        modeRow('CHECKOUT_FX_MODE', CheckoutFxMode.BCN_OFFICIAL),
+      ]);
+
+      const payload = await service.getEffectiveFiscalPayload(tenantId);
+
+      expect(payload.operationMode).toBe(TenantOperationMode.RESTAURANT);
+      expect(payload.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
+    });
+
+    it('falls back to the POS defaults when the stored values are missing, non-string or not members (never trust the DB string)', async () => {
+      const unconfigured = await service.getEffectiveFiscalPayload(tenantId);
+      expect(unconfigured.operationMode).toBe(TenantOperationMode.FOODPARK_QSR);
+      expect(unconfigured.checkoutFxMode).toBe(CheckoutFxMode.COMMERCIAL);
+
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        modeRow('OPERATION_MODE', 'BOGUS_MODE'),
+        modeRow('CHECKOUT_FX_MODE', 123),
+      ]);
+      const corrupted = await service.getEffectiveFiscalPayload(tenantId);
+      expect(corrupted.operationMode).toBe(TenantOperationMode.FOODPARK_QSR);
+      expect(corrupted.checkoutFxMode).toBe(CheckoutFxMode.COMMERCIAL);
+    });
+
+    it('exposes both fields in the config snapshot for cloud sync', async () => {
+      sysParamRepo.find.mockResolvedValue([
+        ...mockParams,
+        modeRow('OPERATION_MODE', TenantOperationMode.RESTAURANT),
+        modeRow('CHECKOUT_FX_MODE', CheckoutFxMode.BCN_OFFICIAL),
+      ]);
+      revisionRepo.findOne.mockResolvedValue(null);
+
+      const snapshot = await service.getFiscalConfigSnapshot(tenantId);
+
+      expect(snapshot.operationMode).toBe(TenantOperationMode.RESTAURANT);
+      expect(snapshot.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
+    });
+
+    it('covers both fields in the fingerprint: changing the operation mode changes it', async () => {
+      const baseline = await service.getEffectiveFiscalPayload(tenantId);
+      const baselineFingerprint = service.computeCanonicalFingerprint(baseline);
+
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        modeRow('OPERATION_MODE', TenantOperationMode.RESTAURANT),
+      ]);
+      const changed = await service.getEffectiveFiscalPayload(tenantId);
+      const changedFingerprint = service.computeCanonicalFingerprint(changed);
+
+      expect(changedFingerprint).not.toBe(baselineFingerprint);
+    });
+
+    it('records a strictly higher revision when the checkout FX mode changes materially', async () => {
+      const baselinePayload = await service.getEffectiveFiscalPayload(tenantId);
+      const baselineFingerprint =
+        service.computeCanonicalFingerprint(baselinePayload);
+
+      const existingRevision: FiscalConfigRevision = {
+        id: 'rev-1-id',
+        tenant_id: tenantId,
+        revision: 1,
+        fingerprint: baselineFingerprint,
+        payload: baselinePayload as unknown as Record<string, unknown>,
+        created_at: new Date('2026-01-01'),
+      };
+      revisionRepo.findOne.mockResolvedValueOnce(existingRevision);
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        modeRow('CHECKOUT_FX_MODE', CheckoutFxMode.BCN_OFFICIAL),
+      ]);
+
+      const result = await service.recordRevisionChange(tenantId);
+
+      expect(result.revision).toBe(2);
+      expect(result.fingerprint).not.toBe(baselineFingerprint);
+      expect(revisionRepo.save).toHaveBeenCalled();
+    });
+  });
+
   describe('Revision Tracking & Monotonic Increment', () => {
     it('creates baseline revision 1 when no revision exists yet', async () => {
       revisionRepo.findOne.mockResolvedValueOnce(null);
@@ -319,6 +430,8 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         taxRate: 0.0,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,

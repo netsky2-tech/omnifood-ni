@@ -2,7 +2,12 @@ import { UnauthorizedException } from '@nestjs/common';
 import { Request } from 'express';
 import { FiscalSetupController } from './fiscal-setup.controller';
 import { FiscalSetupService } from '../services/fiscal-setup.service';
-import { FiscalRegime, FiscalSetupDto } from '../dto/fiscal-setup.dto';
+import {
+  CheckoutFxMode,
+  FiscalRegime,
+  FiscalSetupDto,
+  TenantOperationMode,
+} from '../dto/fiscal-setup.dto';
 
 describe('FiscalSetupController (Unit)', () => {
   let controller: FiscalSetupController;
@@ -42,6 +47,8 @@ describe('FiscalSetupController (Unit)', () => {
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       service.getFiscalSetup.mockResolvedValueOnce(mockResponse);
@@ -60,6 +67,8 @@ describe('FiscalSetupController (Unit)', () => {
         ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       const req = { user: { sub: 'user-1' } } as unknown as Request;
@@ -78,6 +87,8 @@ describe('FiscalSetupController (Unit)', () => {
         ruc: 'J0310000055555',
         commercialFxSpread: 0.5,
         pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       const mockResponse = {
@@ -92,6 +103,8 @@ describe('FiscalSetupController (Unit)', () => {
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       };
 
       service.configureFiscalSetup.mockResolvedValueOnce(mockResponse);

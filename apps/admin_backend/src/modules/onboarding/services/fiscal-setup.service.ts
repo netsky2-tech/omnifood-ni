@@ -15,6 +15,8 @@ import {
   SystemParametersConfigActiveView,
 } from '../../inventory/entities/system-parameters-config.entity';
 import {
+  coerceCheckoutFxMode,
+  coerceTenantOperationMode,
   FiscalRegime,
   FiscalSetupDto,
   FiscalSetupResponse,
@@ -38,6 +40,10 @@ export const FISCAL_PARAM_KEYS = {
   TAX_RATE_IVA: 'TAX_RATE_IVA',
   PRICES_INCLUDE_TAX: 'PRICES_INCLUDE_TAX',
   COMMERCIAL_FX_SPREAD: 'COMMERCIAL_FX_SPREAD',
+  // BXW-007 U1: Business Profile operation mode + checkout FX source, so the
+  // fiscal config snapshot (and the POS sync) carries both.
+  OPERATION_MODE: 'OPERATION_MODE',
+  CHECKOUT_FX_MODE: 'CHECKOUT_FX_MODE',
   // D-21 (#554): optional DGI authorization letter fields.
   DGI_AUTHORIZATION_CODE: 'DGI_AUTHORIZATION_CODE',
   DGI_AUTHORIZATION_ISSUED_AT: 'DGI_AUTHORIZATION_ISSUED_AT',
@@ -126,6 +132,16 @@ export class FiscalSetupService {
     const commercialFxSpread =
       typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
 
+    // BXW-007 U1: never trust the stored DB string — the enum-whitelist
+    // coercion falls back to the POS defaults for a missing, non-string or
+    // non-member value.
+    const operationMode = coerceTenantOperationMode(
+      paramMap.get(FISCAL_PARAM_KEYS.OPERATION_MODE),
+    );
+    const checkoutFxMode = coerceCheckoutFxMode(
+      paramMap.get(FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE),
+    );
+
     let configVersion: FiscalConfigVersion | undefined;
     if (this.fiscalConfigVersionService) {
       const latest =
@@ -148,6 +164,8 @@ export class FiscalSetupService {
       taxRateIva,
       pricesIncludeTax,
       commercialFxSpread,
+      operationMode,
+      checkoutFxMode,
       ...this.dgiAuthorizationFields(paramMap),
       configVersion,
     };
@@ -260,6 +278,26 @@ export class FiscalSetupService {
           userId,
         );
 
+        // BXW-007 U1: Business Profile operation mode + checkout FX source
+        // ride the same append-only supersession as the core fiscal
+        // parameters, BEFORE recordRevisionChange so the revision fingerprint
+        // covers both from the first write.
+        await this.upsertParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.OPERATION_MODE,
+          dto.operationMode,
+          userId,
+        );
+
+        await this.upsertParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE,
+          dto.checkoutFxMode,
+          userId,
+        );
+
         // D-21 (#554): optional DGI authorization fields. An absent field
         // leaves any prior authorization untouched; a blank code clears it
         // through a superseding null tombstone (append-only contract).
@@ -329,6 +367,15 @@ export class FiscalSetupService {
           taxRateIva: targetTaxRate,
           pricesIncludeTax: dto.pricesIncludeTax,
           commercialFxSpread: dto.commercialFxSpread,
+          // BXW-007 U1: read back through the post-write view so the POST
+          // response reflects the effective persisted state, same as the DGI
+          // authorization fields below.
+          operationMode: coerceTenantOperationMode(
+            postWriteMap.get(FISCAL_PARAM_KEYS.OPERATION_MODE),
+          ),
+          checkoutFxMode: coerceCheckoutFxMode(
+            postWriteMap.get(FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE),
+          ),
           ...this.dgiAuthorizationFields(postWriteMap),
           configVersion,
           configuredAt,

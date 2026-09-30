@@ -25,6 +25,47 @@ export enum FiscalRegime {
 }
 
 /**
+ * BXW-007 U1: POS canon vocabulary (apps/pos_app TenantOperationMode) for the
+ * tenant's operation mode. The POS default is FOODPARK_QSR.
+ */
+export enum TenantOperationMode {
+  FOODPARK_QSR = 'FOODPARK_QSR',
+  RESTAURANT = 'RESTAURANT',
+  HYBRID = 'HYBRID',
+}
+
+/**
+ * BXW-007 U1: POS canon vocabulary (checkout_fx_mode) for the checkout FX
+ * source. The POS default is COMMERCIAL.
+ */
+export enum CheckoutFxMode {
+  COMMERCIAL = 'COMMERCIAL',
+  BCN_OFFICIAL = 'BCN_OFFICIAL',
+}
+
+export const TENANT_OPERATION_MODE_DEFAULT = TenantOperationMode.FOODPARK_QSR;
+export const CHECKOUT_FX_MODE_DEFAULT = CheckoutFxMode.COMMERCIAL;
+
+/**
+ * BXW-007 U1: never trust the stored DB string. A missing, non-string or
+ * non-member value falls back to the POS default instead of propagating a
+ * corrupted or legacy parameter into the payload/fingerprint.
+ */
+export function coerceTenantOperationMode(raw: unknown): TenantOperationMode {
+  return (Object.values(TenantOperationMode) as string[]).includes(
+    raw as string,
+  )
+    ? (raw as TenantOperationMode)
+    : TENANT_OPERATION_MODE_DEFAULT;
+}
+
+export function coerceCheckoutFxMode(raw: unknown): CheckoutFxMode {
+  return (Object.values(CheckoutFxMode) as string[]).includes(raw as string)
+    ? (raw as CheckoutFxMode)
+    : CHECKOUT_FX_MODE_DEFAULT;
+}
+
+/**
  * D-21 (#554): DGI authorization rejection messages, exported so specs pin
  * the exact boundary wording.
  */
@@ -105,6 +146,25 @@ export class FiscalSetupDto {
   @IsBoolean()
   pricesIncludeTax: boolean;
 
+  /**
+   * BXW-007 U1: Business Profile operation mode — POS canon vocabulary.
+   * REQUIRED: the POS contract must never guess, and an unknown value must
+   * be rejected at the boundary, never defaulted into persistence.
+   */
+  @IsEnum(TenantOperationMode, {
+    message: 'operationMode must be either FOODPARK_QSR, RESTAURANT or HYBRID',
+  })
+  operationMode: TenantOperationMode;
+
+  /**
+   * BXW-007 U1: checkout FX source — POS canon vocabulary. REQUIRED for the
+   * same reason as operationMode.
+   */
+  @IsEnum(CheckoutFxMode, {
+    message: 'checkoutFxMode must be either COMMERCIAL or BCN_OFFICIAL',
+  })
+  checkoutFxMode: CheckoutFxMode;
+
   @IsOptional()
   @IsString()
   phone?: string;
@@ -158,6 +218,10 @@ export interface FiscalSetupResponse {
   taxRateIva: number;
   pricesIncludeTax: boolean;
   commercialFxSpread: number;
+  /** BXW-007 U1: POS canon operation mode carried through sync. */
+  operationMode: TenantOperationMode;
+  /** BXW-007 U1: POS canon checkout FX source carried through sync. */
+  checkoutFxMode: CheckoutFxMode;
   /** D-21 (#554): null means no active authorization (or tombstoned/cleared). */
   dgiAuthorizationCode: string | null;
   dgiAuthorizationIssuedAt: string | null;

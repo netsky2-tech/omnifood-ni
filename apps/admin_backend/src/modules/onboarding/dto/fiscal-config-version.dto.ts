@@ -1,4 +1,8 @@
-import { FiscalRegime } from './fiscal-setup.dto';
+import {
+  CheckoutFxMode,
+  FiscalRegime,
+  TenantOperationMode,
+} from './fiscal-setup.dto';
 
 export interface FiscalConfigVersion {
   revision: number;
@@ -13,6 +17,10 @@ export interface EffectiveFiscalPayload {
   ruc: string | null;
   taxRate: number;
   tenantId: string;
+  /** BXW-007 U1: POS canon operation mode — rides the fingerprint. */
+  operationMode: TenantOperationMode;
+  /** BXW-007 U1: POS canon checkout FX source — rides the fingerprint. */
+  checkoutFxMode: CheckoutFxMode;
   /** D-21 (#554): null when no DGI authorization is configured. */
   dgiAuthorizationCode: string | null;
   dgiAuthorizationIssuedAt: string | null;
@@ -27,6 +35,10 @@ export interface FiscalConfigSnapshot {
   taxRate: number;
   pricesIncludeTax: boolean;
   commercialFxSpread?: number;
+  /** BXW-007 U1: POS canon operation mode (optional so existing builders keep compiling). */
+  operationMode?: TenantOperationMode;
+  /** BXW-007 U1: POS canon checkout FX source (optional so existing builders keep compiling). */
+  checkoutFxMode?: CheckoutFxMode;
   /** D-21 (#554): null when no DGI authorization is configured. */
   dgiAuthorizationCode?: string | null;
   dgiAuthorizationIssuedAt?: string | null;

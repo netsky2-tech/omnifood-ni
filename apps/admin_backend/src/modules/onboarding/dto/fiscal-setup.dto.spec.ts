@@ -1,10 +1,12 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import {
+  CheckoutFxMode,
   DGI_AUTHORIZATION_CODE_CHARSET_MESSAGE,
   DGI_AUTHORIZATION_CODE_TOO_LONG_MESSAGE,
   DGI_AUTHORIZATION_DATE_RANGE_MESSAGE,
   FiscalRegime,
   FiscalSetupDto,
+  TenantOperationMode,
 } from './fiscal-setup.dto';
 
 /**
@@ -35,6 +37,8 @@ const validBody = (): Record<string, unknown> => ({
   ruc: 'J0310000055555',
   commercialFxSpread: 0.5,
   pricesIncludeTax: true,
+  operationMode: TenantOperationMode.FOODPARK_QSR,
+  checkoutFxMode: CheckoutFxMode.COMMERCIAL,
 });
 
 describe('FiscalSetupDto (ValidationPipe boundary)', () => {
@@ -94,6 +98,105 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
         ruc: '  J0310000055555  ',
       });
       expect(dto.ruc).toBe('J0310000055555');
+    });
+  });
+
+  // BXW-007 U1: the Business Profile carries the POS canon vocabulary for
+  // the tenant operation mode and the checkout FX mode. Both fields are
+  // REQUIRED — a missing or unknown value must be rejected at the boundary,
+  // never defaulted into persistence.
+  describe('operationMode & checkoutFxMode (BXW-007 U1)', () => {
+    it.each([
+      ['FOODPARK_QSR', TenantOperationMode.FOODPARK_QSR],
+      ['RESTAURANT', TenantOperationMode.RESTAURANT],
+      ['HYBRID', TenantOperationMode.HYBRID],
+    ])('accepts operationMode %s', async (_label, mode) => {
+      const dto = await transformBody({ ...validBody(), operationMode: mode });
+      expect(dto.operationMode).toBe(mode);
+    });
+
+    it.each([
+      ['COMMERCIAL', CheckoutFxMode.COMMERCIAL],
+      ['BCN_OFFICIAL', CheckoutFxMode.BCN_OFFICIAL],
+    ])('accepts checkoutFxMode %s', async (_label, mode) => {
+      const dto = await transformBody({ ...validBody(), checkoutFxMode: mode });
+      expect(dto.checkoutFxMode).toBe(mode);
+    });
+
+    it.each([
+      ['an unknown string', 'FOOD_PARK'],
+      ['a number', 123],
+      ['null', null],
+    ])('rejects an operationMode that is %s', async (_label, mode) => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        operationMode: mode,
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(
+        'operationMode must be either FOODPARK_QSR, RESTAURANT or HYBRID',
+      );
+    });
+
+    it.each([
+      ['an unknown string', 'BCN'],
+      ['a number', 42],
+      ['null', null],
+    ])('rejects a checkoutFxMode that is %s', async (_label, mode) => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        checkoutFxMode: mode,
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(
+        'checkoutFxMode must be either COMMERCIAL or BCN_OFFICIAL',
+      );
+    });
+
+    it('rejects a body without operationMode (required, never defaulted)', async () => {
+      const body = { ...validBody() };
+      delete body.operationMode;
+
+      const error: BadRequestException = await transformBody(body).catch(
+        (e) => e,
+      );
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(
+        'operationMode must be either FOODPARK_QSR, RESTAURANT or HYBRID',
+      );
+    });
+
+    it('rejects a body without checkoutFxMode (required, never defaulted)', async () => {
+      const body = { ...validBody() };
+      delete body.checkoutFxMode;
+
+      const error: BadRequestException = await transformBody(body).catch(
+        (e) => e,
+      );
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(
+        'checkoutFxMode must be either COMMERCIAL or BCN_OFFICIAL',
+      );
     });
   });
 

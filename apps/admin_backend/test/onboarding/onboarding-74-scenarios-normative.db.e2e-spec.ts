@@ -125,7 +125,11 @@ import {
   CurrentUserAuthorizationService,
 } from '../../src/modules/identity/services/current-user-authorization.service';
 import { JwtAccessPayload } from '../../src/modules/identity/security/jwt-token.types';
-import { FiscalRegime } from '../../src/modules/onboarding/dto/fiscal-setup.dto';
+import {
+  CheckoutFxMode,
+  FiscalRegime,
+  TenantOperationMode,
+} from '../../src/modules/onboarding/dto/fiscal-setup.dto';
 
 import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 import {
@@ -760,6 +764,8 @@ describe('ONB1.10D: Full Regression of the 74 Normative Architecture Scenarios (
             ruc: 'J0310000001234',
             commercialFxSpread: 0.05,
             pricesIncludeTax: true,
+            operationMode: TenantOperationMode.FOODPARK_QSR,
+            checkoutFxMode: CheckoutFxMode.COMMERCIAL,
           });
 
         // 5. primer reconciliation con readiness ya válido setea saleReadyFirstAt una sola vez
@@ -1066,6 +1072,8 @@ describe('ONB1.10D: Full Regression of the 74 Normative Architecture Scenarios (
             ruc: 'J0310000009999',
             commercialFxSpread: 0.05,
             pricesIncludeTax: true,
+            operationMode: TenantOperationMode.FOODPARK_QSR,
+            checkoutFxMode: CheckoutFxMode.COMMERCIAL,
           });
         expect([200, 201]).toContain(fiscalRes.status);
         expect(fiscalRes.body.configVersion).toBeDefined();
@@ -1089,6 +1097,8 @@ describe('ONB1.10D: Full Regression of the 74 Normative Architecture Scenarios (
             ruc: 'J0310000009999',
             commercialFxSpread: 0.05,
             pricesIncludeTax: true,
+            operationMode: TenantOperationMode.FOODPARK_QSR,
+            checkoutFxMode: CheckoutFxMode.COMMERCIAL,
           });
         expect([200, 201]).toContain(dupRes.status);
         expect(dupRes.body.configVersion.revision).toBe(currentRev.revision);

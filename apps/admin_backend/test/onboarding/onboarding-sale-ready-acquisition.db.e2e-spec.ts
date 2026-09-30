@@ -48,7 +48,11 @@ import { OnboardingStateReconciler } from '../../src/modules/onboarding/services
 import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/services/onboarding-idempotency.coordinator';
 import { FiscalSetupService } from '../../src/modules/onboarding/services/fiscal-setup.service';
 import { FiscalSetupController } from '../../src/modules/onboarding/controllers/fiscal-setup.controller';
-import { FiscalRegime } from '../../src/modules/onboarding/dto/fiscal-setup.dto';
+import {
+  CheckoutFxMode,
+  FiscalRegime,
+  TenantOperationMode,
+} from '../../src/modules/onboarding/dto/fiscal-setup.dto';
 import { IndustryTemplateService } from '../../src/modules/onboarding/services/industry-template.service';
 import { IndustryTemplateController } from '../../src/modules/onboarding/controllers/industry-template.controller';
 import { TemplatePreviewService } from '../../src/modules/onboarding/services/template-preview.service';
@@ -593,6 +597,22 @@ async function withAcquisitionIsolatedSchema(
 }
 
 describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (PostgreSQL Real DB)', () => {
+  // BXW-007 U1: single shared fiscal POST payload factory — the required
+  // operationMode/checkoutFxMode live here so a vocabulary change cannot
+  // silently desynchronize the fiscal POST bodies from the boundary contract.
+  const buildFiscalPayload = (
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> => ({
+    regime: FiscalRegime.CUOTA_FIJA,
+    businessName: 'Café Central',
+    ruc: 'J0310000055555',
+    commercialFxSpread: 0.5,
+    pricesIncludeTax: true,
+    operationMode: TenantOperationMode.FOODPARK_QSR,
+    checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+    ...overrides,
+  });
+
   it('enforces permission guards on fiscal and catalog writes: Cashier and default Manager are rejected with 403', async () => {
     await withAcquisitionIsolatedSchema(
       'onb15_perms',
@@ -601,24 +621,14 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
         await request(app.getHttpServer())
           .post('/onboarding/fiscal-setup')
           .set('Authorization', `Bearer ${cashierToken}`)
-          .send({
-            regime: FiscalRegime.CUOTA_FIJA,
-            businessName: 'Unauth Café',
-            commercialFxSpread: 0.5,
-            pricesIncludeTax: true,
-          })
+          .send(buildFiscalPayload({ businessName: 'Unauth Café' }))
           .expect(403);
 
         // Manager cannot configure fiscal without explicit ONBOARDING_FISCAL_CONFIGURE permission (403)
         await request(app.getHttpServer())
           .post('/onboarding/fiscal-setup')
           .set('Authorization', `Bearer ${managerToken}`)
-          .send({
-            regime: FiscalRegime.CUOTA_FIJA,
-            businessName: 'Unauth Café',
-            commercialFxSpread: 0.5,
-            pricesIncludeTax: true,
-          })
+          .send(buildFiscalPayload({ businessName: 'Unauth Café' }))
           .expect(403);
 
         // Cashier cannot create manual product (403)
@@ -659,15 +669,14 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
         const fiscalRes = await request(app.getHttpServer())
           .post('/onboarding/fiscal-setup')
           .set('Authorization', `Bearer ${ownerToken}`)
-          .send({
-            regime: FiscalRegime.CUOTA_FIJA,
-            businessName: 'Café Managua Central',
-            ruc: 'J0310000012345',
-            commercialFxSpread: 0.5,
-            pricesIncludeTax: true,
-            phone: '+505 8888-0000', // Non-persisted field (AC-05)
-            address: 'Plaza Central', // Non-persisted field (AC-05)
-          })
+          .send(
+            buildFiscalPayload({
+              businessName: 'Café Managua Central',
+              ruc: 'J0310000012345',
+              phone: '+505 8888-0000', // Non-persisted field (AC-05)
+              address: 'Plaza Central', // Non-persisted field (AC-05)
+            }),
+          )
           .expect(201);
 
         expect(fiscalRes.body.businessName).toBe('Café Managua Central');
@@ -741,13 +750,13 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
         await request(app.getHttpServer())
           .post('/onboarding/fiscal-setup')
           .set('Authorization', `Bearer ${ownerToken}`)
-          .send({
-            regime: FiscalRegime.REGIMEN_GENERAL,
-            businessName: 'Coffee Boutique',
-            ruc: 'J0310000070701',
-            commercialFxSpread: 0.5,
-            pricesIncludeTax: true,
-          })
+          .send(
+            buildFiscalPayload({
+              regime: FiscalRegime.REGIMEN_GENERAL,
+              businessName: 'Coffee Boutique',
+              ruc: 'J0310000070701',
+            }),
+          )
           .expect(201);
 
         // 2. Apply Industry Template CAFETERIA
@@ -783,13 +792,12 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
         await request(app.getHttpServer())
           .post('/onboarding/fiscal-setup')
           .set('Authorization', `Bearer ${ownerToken}`)
-          .send({
-            regime: FiscalRegime.CUOTA_FIJA,
-            businessName: 'MiniMarket Express',
-            ruc: 'J0310000074802',
-            commercialFxSpread: 0.5,
-            pricesIncludeTax: true,
-          })
+          .send(
+            buildFiscalPayload({
+              businessName: 'MiniMarket Express',
+              ruc: 'J0310000074802',
+            }),
+          )
           .expect(201);
 
         // 2. Upload and commit CSV batch
@@ -838,13 +846,12 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
         await request(app.getHttpServer())
           .post('/onboarding/fiscal-setup')
           .set('Authorization', `Bearer ${ownerToken}`)
-          .send({
-            regime: FiscalRegime.CUOTA_FIJA,
-            businessName: 'Combo Store',
-            ruc: 'J0310000080203',
-            commercialFxSpread: 0.5,
-            pricesIncludeTax: true,
-          })
+          .send(
+            buildFiscalPayload({
+              businessName: 'Combo Store',
+              ruc: 'J0310000080203',
+            }),
+          )
           .expect(201);
 
         // 1. Create manual product

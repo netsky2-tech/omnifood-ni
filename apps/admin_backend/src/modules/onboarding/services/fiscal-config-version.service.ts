@@ -17,6 +17,10 @@ import {
   runInTenantTransaction,
 } from '../../../core/database/tenant-transaction';
 import {
+  coerceCheckoutFxMode,
+  coerceTenantOperationMode,
+} from '../dto/fiscal-setup.dto';
+import {
   FiscalRegime,
   FISCAL_PARAM_KEYS,
   DGI_NICARAGUA_TAX_RATES,
@@ -115,6 +119,16 @@ export class FiscalConfigVersionService {
     const commercialFxSpread =
       typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
 
+    // BXW-007 U1: never trust the stored DB string — the enum-whitelist
+    // coercion falls back to the POS defaults for a missing, non-string or
+    // non-member value, and both fields ride the fingerprinted payload.
+    const operationMode = coerceTenantOperationMode(
+      paramMap.get(FISCAL_PARAM_KEYS.OPERATION_MODE),
+    );
+    const checkoutFxMode = coerceCheckoutFxMode(
+      paramMap.get(FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE),
+    );
+
     // D-21 (#554): the authorization fields read as null when unconfigured
     // (or when a null/'' tombstone governs) — absence never reads as ''.
     const dgiAuthorizationCode = readDgiStringParam(
@@ -138,6 +152,8 @@ export class FiscalConfigVersionService {
       taxRate,
       pricesIncludeTax,
       commercialFxSpread,
+      operationMode,
+      checkoutFxMode,
       dgiAuthorizationCode,
       dgiAuthorizationIssuedAt,
       dgiAuthorizationExpiresAt,
@@ -272,6 +288,8 @@ export class FiscalConfigVersionService {
         taxRate: payload.taxRate,
         pricesIncludeTax: payload.pricesIncludeTax,
         commercialFxSpread: payload.commercialFxSpread,
+        operationMode: payload.operationMode,
+        checkoutFxMode: payload.checkoutFxMode,
         dgiAuthorizationCode: payload.dgiAuthorizationCode,
         dgiAuthorizationIssuedAt: payload.dgiAuthorizationIssuedAt,
         dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
@@ -288,6 +306,8 @@ export class FiscalConfigVersionService {
       taxRate: payload.taxRate,
       pricesIncludeTax: payload.pricesIncludeTax,
       commercialFxSpread: payload.commercialFxSpread,
+      operationMode: payload.operationMode,
+      checkoutFxMode: payload.checkoutFxMode,
       dgiAuthorizationCode: payload.dgiAuthorizationCode,
       dgiAuthorizationIssuedAt: payload.dgiAuthorizationIssuedAt,
       dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,

@@ -43,7 +43,11 @@ import { ImportStagingController } from '../../src/modules/onboarding/controller
 import { FiscalSetupService } from '../../src/modules/onboarding/services/fiscal-setup.service';
 import { IndustryTemplateService } from '../../src/modules/onboarding/services/industry-template.service';
 import { ImportStagingService } from '../../src/modules/onboarding/services/import-staging.service';
-import { FiscalRegime } from '../../src/modules/onboarding/dto/fiscal-setup.dto';
+import {
+  CheckoutFxMode,
+  FiscalRegime,
+  TenantOperationMode,
+} from '../../src/modules/onboarding/dto/fiscal-setup.dto';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
@@ -501,6 +505,8 @@ describe('W9 Backend PostgreSQL E2E — ODAV-31..34 Specifications', () => {
             ruc: 'J0310000055555',
             commercialFxSpread: 0.75,
             pricesIncludeTax: true,
+            operationMode: TenantOperationMode.FOODPARK_QSR,
+            checkoutFxMode: CheckoutFxMode.COMMERCIAL,
           });
 
         expect(res.status).toBe(201);

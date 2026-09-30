@@ -14,7 +14,11 @@ import {
   FiscalSetupService,
   FiscalRegime,
 } from '../../src/modules/onboarding/services/fiscal-setup.service';
-import { FiscalSetupResponse } from '../../src/modules/onboarding/dto/fiscal-setup.dto';
+import {
+  FiscalSetupResponse,
+  TenantOperationMode,
+  CheckoutFxMode,
+} from '../../src/modules/onboarding/dto/fiscal-setup.dto';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import {
   SystemParametersConfig,
@@ -37,6 +41,22 @@ interface BadRequestResponseBody {
 }
 
 describe('FiscalSetup (Integration & E2E)', () => {
+  // BXW-007 U1: single shared fiscal POST payload factory — the required
+  // operationMode/checkoutFxMode live here so a vocabulary change cannot
+  // silently desynchronize the 19 POST bodies from the boundary contract.
+  const buildFiscalPayload = (
+    overrides: Record<string, unknown> = {},
+  ): Record<string, unknown> => ({
+    regime: FiscalRegime.CUOTA_FIJA,
+    businessName: 'Café Central',
+    ruc: 'J0310000055555',
+    commercialFxSpread: 0.5,
+    pricesIncludeTax: true,
+    operationMode: TenantOperationMode.FOODPARK_QSR,
+    checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+    ...overrides,
+  });
+
   let app: INestApplication<App>;
   let jwtService: JwtService;
 
@@ -298,12 +318,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: FiscalRegime.CUOTA_FIJA,
-        businessName: 'Café Central',
-        commercialFxSpread: 0.5,
-        pricesIncludeTax: true,
-      })
+      .send(buildFiscalPayload())
       .expect(401);
   });
 
@@ -322,12 +337,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: FiscalRegime.CUOTA_FIJA,
-        businessName: 'Unauthorized Manager Café',
-        commercialFxSpread: 0.5,
-        pricesIncludeTax: true,
-      })
+      .send(buildFiscalPayload({ businessName: 'Unauthorized Manager Café' }))
       .expect(403);
   });
 
@@ -337,12 +347,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     const response = await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: FiscalRegime.CUOTA_FIJA,
-        businessName: '',
-        commercialFxSpread: 0.5,
-        pricesIncludeTax: true,
-      })
+      .send(buildFiscalPayload({ businessName: '' }))
       .expect(400);
 
     const body = response.body as BadRequestResponseBody;
@@ -355,12 +360,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     const response = await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: FiscalRegime.CUOTA_FIJA,
-        businessName: 'Café Central',
-        commercialFxSpread: -0.5,
-        pricesIncludeTax: true,
-      })
+      .send(buildFiscalPayload({ commercialFxSpread: -0.5 }))
       .expect(400);
 
     const body = response.body as BadRequestResponseBody;
@@ -375,12 +375,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     const response = await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: 'INVALID_REGIME',
-        businessName: 'Café Central',
-        commercialFxSpread: 0.5,
-        pricesIncludeTax: true,
-      })
+      .send(buildFiscalPayload({ regime: 'INVALID_REGIME' }))
       .expect(400);
 
     const body = response.body as BadRequestResponseBody;
@@ -392,12 +387,9 @@ describe('FiscalSetup (Integration & E2E)', () => {
   it('returns 400 when the issuer RUC is absent, blank, or malformed (FR-1)', async () => {
     const token = signToken();
 
-    const base = {
-      regime: FiscalRegime.CUOTA_FIJA,
-      businessName: 'Café Central',
-      commercialFxSpread: 0.5,
-      pricesIncludeTax: true,
-    };
+    const base: Record<string, unknown> = buildFiscalPayload();
+    // The first case exercises an absent ruc — keep that shape exactly.
+    delete base.ruc;
 
     const cases: Array<Record<string, unknown>> = [
       { ...base }, // ruc absent
@@ -443,6 +435,9 @@ describe('FiscalSetup (Integration & E2E)', () => {
       taxRateIva: 0.0,
       pricesIncludeTax: true,
       commercialFxSpread: 0.5,
+      // BXW-007 U1: unconfigured params read as the POS defaults.
+      operationMode: TenantOperationMode.FOODPARK_QSR,
+      checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       dgiAuthorizationCode: null,
       dgiAuthorizationIssuedAt: null,
       dgiAuthorizationExpiresAt: null,
@@ -452,13 +447,10 @@ describe('FiscalSetup (Integration & E2E)', () => {
   it('returns 201 and configures CUOTA_FIJA updating Tenant and sys parameters', async () => {
     const token = signToken({ tenant_id: 'tenant-A' });
 
-    const payload = {
-      regime: FiscalRegime.CUOTA_FIJA,
+    const payload = buildFiscalPayload({
       businessName: 'Comedor Doña Mary',
       ruc: 'J0310000099999',
-      commercialFxSpread: 0.5,
-      pricesIncludeTax: true,
-    };
+    });
 
     const response = await request(app.getHttpServer())
       .post(API_PREFIX)
@@ -484,13 +476,20 @@ describe('FiscalSetup (Integration & E2E)', () => {
     const params = dbSysParams.filter(
       (p) => p.tenant_id === 'tenant-A' && p.isActive,
     );
-    expect(params).toHaveLength(4);
+    // BXW-007 U1: 4 core params + OPERATION_MODE + CHECKOUT_FX_MODE.
+    expect(params).toHaveLength(6);
     expect(params.find((p) => p.paramKey === 'TAX_RATE_IVA')?.paramValue).toBe(
       0.0,
     );
     expect(params.find((p) => p.paramKey === 'FISCAL_REGIME')?.paramValue).toBe(
       FiscalRegime.CUOTA_FIJA,
     );
+    expect(
+      params.find((p) => p.paramKey === 'OPERATION_MODE')?.paramValue,
+    ).toBe(TenantOperationMode.FOODPARK_QSR);
+    expect(
+      params.find((p) => p.paramKey === 'CHECKOUT_FX_MODE')?.paramValue,
+    ).toBe(CheckoutFxMode.COMMERCIAL);
   });
 
   it('returns 201 and switches to REGIMEN_GENERAL (15% IVA) with versioning', async () => {
@@ -500,26 +499,26 @@ describe('FiscalSetup (Integration & E2E)', () => {
     await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: FiscalRegime.CUOTA_FIJA,
-        businessName: 'Restaurante Managua',
-        ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
-        pricesIncludeTax: true,
-      })
+      .send(
+        buildFiscalPayload({
+          businessName: 'Restaurante Managua',
+        }),
+      )
       .expect(201);
 
     // 2. Transition to REGIMEN_GENERAL (Formal DGI tax invoicing)
     const response = await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: FiscalRegime.REGIMEN_GENERAL,
-        businessName: 'Restaurante Managua S.A.',
-        ruc: 'J0310000012345',
-        commercialFxSpread: 0.75,
-        pricesIncludeTax: false,
-      })
+      .send(
+        buildFiscalPayload({
+          regime: FiscalRegime.REGIMEN_GENERAL,
+          businessName: 'Restaurante Managua S.A.',
+          ruc: 'J0310000012345',
+          commercialFxSpread: 0.75,
+          pricesIncludeTax: false,
+        }),
+      )
       .expect(201);
 
     const body = response.body as FiscalSetupResponse;
@@ -571,13 +570,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: FiscalRegime.CUOTA_FIJA,
-        businessName: 'Comedor Doña Mary',
-        ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
-        pricesIncludeTax: true,
-      })
+      .send(buildFiscalPayload({ businessName: 'Comedor Doña Mary' }))
       .expect(201);
 
     const firstRows = dbSysParams.map((p) => ({ ...p }));
@@ -588,13 +581,14 @@ describe('FiscalSetup (Integration & E2E)', () => {
     const response = await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: FiscalRegime.REGIMEN_GENERAL,
-        businessName: 'Comedor Doña Mary S.A.',
-        ruc: 'J0310000055555',
-        commercialFxSpread: 0.75,
-        pricesIncludeTax: false,
-      })
+      .send(
+        buildFiscalPayload({
+          regime: FiscalRegime.REGIMEN_GENERAL,
+          businessName: 'Comedor Doña Mary S.A.',
+          commercialFxSpread: 0.75,
+          pricesIncludeTax: false,
+        }),
+      )
       .expect(201);
 
     expect(response.body).toMatchObject({
@@ -618,6 +612,8 @@ describe('FiscalSetup (Integration & E2E)', () => {
     const secondRows = dbSysParams.filter(
       (p) => p.tenant_id === 'tenant-A' && p.version === 2,
     );
+    // Only the 4 CHANGED core params get a version-2 row; the unchanged
+    // BXW-007 U1 mode params are idempotent (asserted below).
     expect(secondRows).toHaveLength(4);
     expect(
       secondRows.find((p) => p.paramKey === 'FISCAL_REGIME')?.paramValue,
@@ -631,6 +627,18 @@ describe('FiscalSetup (Integration & E2E)', () => {
     expect(
       secondRows.find((p) => p.paramKey === 'COMMERCIAL_FX_SPREAD')?.paramValue,
     ).toBe(0.75);
+
+    // BXW-007 U1: the unchanged operationMode/checkoutFxMode are idempotent —
+    // no new version row is written when the governing value already matches.
+    const modeRows = dbSysParams.filter(
+      (p) =>
+        p.tenant_id === 'tenant-A' &&
+        (p.paramKey === 'OPERATION_MODE' || p.paramKey === 'CHECKOUT_FX_MODE'),
+    );
+    expect(modeRows).toHaveLength(2);
+    for (const row of modeRows) {
+      expect(row.version).toBe(1);
+    }
 
     // The active-configuration read resolves the SECOND values, not the first.
     const read = await request(app.getHttpServer())
@@ -659,13 +667,9 @@ describe('FiscalSetup (Integration & E2E)', () => {
     await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send({
-        regime: FiscalRegime.CUOTA_FIJA,
-        businessName: 'Comedor Doña Mary',
-        ruc: 'J0310000055555',
-        commercialFxSpread: 1.25, // non-default: the fallback is 0.5
-        pricesIncludeTax: true,
-      })
+      .send(
+        buildFiscalPayload({ commercialFxSpread: 1.25 }), // non-default: the fallback is 0.5
+      )
       .expect(201);
 
     const countBinds = (): number =>
@@ -695,26 +699,28 @@ describe('FiscalSetup (Integration & E2E)', () => {
     await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${tokenA}`)
-      .send({
-        regime: FiscalRegime.REGIMEN_GENERAL,
-        businessName: 'Tenant A Corp',
-        ruc: 'J0310000000001',
-        commercialFxSpread: 1.0,
-        pricesIncludeTax: false,
-      })
+      .send(
+        buildFiscalPayload({
+          regime: FiscalRegime.REGIMEN_GENERAL,
+          businessName: 'Tenant A Corp',
+          ruc: 'J0310000000001',
+          commercialFxSpread: 1.0,
+          pricesIncludeTax: false,
+        }),
+      )
       .expect(201);
 
     // Tenant B sets CUOTA_FIJA
     await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${tokenB}`)
-      .send({
-        regime: FiscalRegime.CUOTA_FIJA,
-        businessName: 'Tenant B Pulpería',
-        ruc: 'J0310000000002',
-        commercialFxSpread: 0.25,
-        pricesIncludeTax: true,
-      })
+      .send(
+        buildFiscalPayload({
+          businessName: 'Tenant B Pulpería',
+          ruc: 'J0310000000002',
+          commercialFxSpread: 0.25,
+        }),
+      )
       .expect(201);
 
     // Query Tenant A
