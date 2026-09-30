@@ -2,8 +2,13 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  CheckoutFxMode,
   FiscalRegime,
   fiscalSetupSchema,
+  resolveCheckoutFxMode,
+  resolveTenantOperationMode,
+  TenantOperationMode,
+  type FiscalSetupFormInput,
   type FiscalSetupFormValues,
 } from "./types";
 import { useFiscalSetup, useUpdateFiscalSetup } from "./use-settings";
@@ -41,13 +46,18 @@ export function FiscalSetupForm() {
     watch,
     reset,
     formState: { errors, isDirty },
-  } = useForm<FiscalSetupFormValues>({
+  } = useForm<FiscalSetupFormInput, unknown, FiscalSetupFormValues>({
     resolver: zodResolver(fiscalSetupSchema),
     defaultValues: {
       regime: FiscalRegime.CUOTA_FIJA,
       businessName: "",
       ruc: "",
       commercialFxSpread: 0.5,
+      // BXW-007 U2 (rev 2): "" is the "Sin definir" sentinel — never
+      // preselect a default, or any save would affirm a mode explicitly
+      // and silently downgrade terminals set locally to another value.
+      operationMode: "",
+      checkoutFxMode: "",
       pricesIncludeTax: true,
       phone: "",
       address: "",
@@ -77,6 +87,10 @@ export function FiscalSetupForm() {
         businessName: initialData.businessName ?? "",
         ruc: initialData.ruc ?? "",
         commercialFxSpread: initialData.commercialFxSpread ?? 0.5,
+        // BXW-007 U2 (rev 2): null / missing / invalid member → "" (Sin
+        // definir); a real value maps to itself. Never a default.
+        operationMode: resolveTenantOperationMode(initialData.operationMode) ?? "",
+        checkoutFxMode: resolveCheckoutFxMode(initialData.checkoutFxMode) ?? "",
         pricesIncludeTax: initialData.pricesIncludeTax ?? true,
         phone: "",
         address: "",
@@ -88,9 +102,40 @@ export function FiscalSetupForm() {
   }, [initialData, reset]);
 
   const onSubmit = (values: FiscalSetupFormValues) => {
-    const { dgiAuthorizationIssuedAt, dgiAuthorizationExpiresAt, ...rest } = values;
+    const {
+      dgiAuthorizationIssuedAt,
+      dgiAuthorizationExpiresAt,
+      operationMode,
+      checkoutFxMode,
+      ...rest
+    } = values;
+    // BXW-007: the wire decision for each sentinel-bearing field compares
+    // the CURRENT select value against the value that came from the GET
+    // (the saved snapshot), never against a constant nor the last click.
+    // Each field is evaluated independently:
+    //   - a real value is chosen → send the exact literal;
+    //   - sentinel while the snapshot held a REAL value → send null, the
+    //     tombstone that clears the stored value so every POS terminal
+    //     regains its local control (mirrors the DGI-date clear channel);
+    //   - sentinel while the snapshot was null/absent → OMIT the key:
+    //     the anti-downgrade guard for tenants never configured in the
+    //     cloud (an unrelated save never affirms a mode).
+    const operationModePayload =
+      operationMode !== undefined
+        ? { operationMode }
+        : resolveTenantOperationMode(initialData?.operationMode) !== null
+          ? { operationMode: null }
+          : {};
+    const checkoutFxModePayload =
+      checkoutFxMode !== undefined
+        ? { checkoutFxMode }
+        : resolveCheckoutFxMode(initialData?.checkoutFxMode) !== null
+          ? { checkoutFxMode: null }
+          : {};
     updateMutation.mutate({
       ...rest,
+      ...operationModePayload,
+      ...checkoutFxModePayload,
       // D-21 (#554) backend contract: the code is ALWAYS sent — '' clears
       // the stored value through a null tombstone — while blank dates are
       // omitted, because an absent field leaves any prior value untouched.
@@ -248,6 +293,62 @@ export function FiscalSetupForm() {
               </p>
               {errors.commercialFxSpread && (
                 <p className="text-xs text-destructive">{errors.commercialFxSpread.message}</p>
+              )}
+            </div>
+
+            {/* BXW-007 U2 (rev 2): Business Profile — operation mode (POS
+                canon vocabulary). "Sin definir" keeps each terminal's local
+                value; choosing a mode applies it to ALL synced terminals. */}
+            <div className="space-y-2">
+              <Label htmlFor="operationMode">Modo de Operación del Negocio</Label>
+              <select
+                id="operationMode"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                aria-invalid={Boolean(errors.operationMode)}
+                {...register("operationMode")}
+              >
+                <option value="">Sin definir (valor local de la terminal)</option>
+                <option value={TenantOperationMode.FOODPARK_QSR}>
+                  Food Park / QSR (mostrador, sin mesas)
+                </option>
+                <option value={TenantOperationMode.RESTAURANT}>
+                  Restaurante (mesas y comandas)
+                </option>
+                <option value={TenantOperationMode.HYBRID}>
+                  Híbrido (mostrador y mesas)
+                </option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Mientras esté Sin definir, cada terminal conserva su valor local. Al elegir un modo (mostrador para Food Park / QSR, mesas y comandas para Restaurante, o ambos en Híbrido), se aplica a TODAS las terminales sincronizadas. Si guarda volviendo a Sin definir, cada terminal recupera su control local.
+              </p>
+              {errors.operationMode && (
+                <p className="text-xs text-destructive">{errors.operationMode.message}</p>
+              )}
+            </div>
+
+            {/* BXW-007 U2 (rev 2): Business Profile — checkout FX source.
+                Same sentinel semantics: absence never overrides terminals. */}
+            <div className="space-y-2">
+              <Label htmlFor="checkoutFxMode">Tasa de Cambio en Cobro en Divisas</Label>
+              <select
+                id="checkoutFxMode"
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                aria-invalid={Boolean(errors.checkoutFxMode)}
+                {...register("checkoutFxMode")}
+              >
+                <option value="">Sin definir (valor local de la terminal)</option>
+                <option value={CheckoutFxMode.COMMERCIAL}>
+                  Tasa Comercial (aplica el spread configurado)
+                </option>
+                <option value={CheckoutFxMode.BCN_OFFICIAL}>
+                  Tasa Oficial BCN (sin spread)
+                </option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Mientras esté Sin definir, cada terminal conserva su valor local. Al elegir Comercial aplica el spread cambiario configurado; Oficial BCN cobra con la tasa oficial sin spread. Se aplica a TODAS las terminales sincronizadas. Si guarda volviendo a Sin definir, cada terminal recupera su control local.
+              </p>
+              {errors.checkoutFxMode && (
+                <p className="text-xs text-destructive">{errors.checkoutFxMode.message}</p>
               )}
             </div>
 
