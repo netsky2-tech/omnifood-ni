@@ -3407,11 +3407,27 @@ class SyncService {
         final userEntities = <UserEntity>[];
         final profileEntities = <SecurityProfileEntity>[];
 
+        // Terminal-local tenant binding (set at activation). Used only as the
+        // last-resort cure for user rows that would otherwise lose their
+        // tenant through the replace-upsert; never fabricated by this pull.
+        final localTenantConfig = await _database!.localConfigDao
+            .getConfigByKey('tenant_id');
+        final localTenantId = localTenantConfig?.value;
+
         for (final u in rawUsers) {
           final map = Map<String, dynamic>.from(u as Map);
           final userId = map['id'] as String;
           final secProfile = map['securityProfile'] as Map<String, dynamic>?;
           final pinHash = (secProfile?['pinHash'] as String?) ?? '';
+
+          // Tenant binding resolution for the replace-upsert: a column absent
+          // from the constructed entity is erased to NULL, so resolve in
+          // order: inbound delta -> existing row -> terminal-local binding.
+          // No default tenant is invented: a fabricated tenant would write
+          // cross-tenant data.
+          final existingUser = await _database!.userDao.findUserById(userId);
+          final deltaTenantId = map['tenantId'] as String?;
+          final tenantId = deltaTenantId ?? existingUser?.tenantId ?? localTenantId;
 
           userEntities.add(
             UserEntity(
@@ -3421,6 +3437,7 @@ class SyncService {
               pinHash: pinHash,
               isActive: map['isActive'] as bool? ?? true,
               email: map['email'] as String?,
+              tenantId: tenantId,
             ),
           );
 

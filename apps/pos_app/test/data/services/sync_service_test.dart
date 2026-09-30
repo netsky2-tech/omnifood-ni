@@ -18,6 +18,7 @@ import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/models/customer/customer_entity.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
@@ -2756,6 +2757,177 @@ void main() {
               .getConfigByKey('last_inbound_sync_version');
           expect(savedVersionConfig, isNotNull);
           expect(savedVersionConfig!.value, '1787745600000');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'user delta with tenantId stores the inbound tenant id on the user row',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-09-03T10:00:00.000Z',
+            'currentVersion': 1787745600001,
+            'deltas': {
+              'users': [
+                {
+                  'id': 'user-301',
+                  'name': 'Mesera Con Tenant',
+                  'email': 'tenant@omnifood.ni',
+                  'role': 'CASHIER',
+                  'isActive': true,
+                  'tenantId': 'tenant-inbound',
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+          expect(result!.usersCount, 1);
+
+          final savedUser = await database.userDao.findUserById('user-301');
+          expect(savedUser, isNotNull);
+          expect(savedUser!.name, 'Mesera Con Tenant');
+          // The inbound delta carries the tenant binding; the replace-upsert
+          // must not lose it.
+          expect(savedUser.tenantId, 'tenant-inbound');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'user delta missing tenantId preserves the existing row tenant id',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          // A locally provisioned user row that already carries a tenant
+          // binding from a previous pull or local activation.
+          await database.userDao.insertUsers([
+            UserEntity(
+              id: 'user-302',
+              name: 'Barista Antiguo',
+              role: 'CASHIER',
+              pinHash: 'old-pin',
+              isActive: true,
+              tenantId: 'tenant-existing',
+            ),
+          ]);
+
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-09-03T11:00:00.000Z',
+            'currentVersion': 1787745600002,
+            'deltas': {
+              'users': [
+                {
+                  'id': 'user-302',
+                  'name': 'Barista Actualizado',
+                  'email': 'barista2@omnifood.ni',
+                  'role': 'CASHIER',
+                  'isActive': true,
+                  // Legacy backend payload: no tenantId field at all.
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+          expect(result!.usersCount, 1);
+
+          final savedUser = await database.userDao.findUserById('user-302');
+          expect(savedUser, isNotNull);
+          // The delta fields are applied...
+          expect(savedUser!.name, 'Barista Actualizado');
+          // ...but the previously stored tenant id must survive the
+          // replace-upsert instead of being erased to NULL.
+          expect(savedUser.tenantId, 'tenant-existing');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'user delta missing tenantId with NULL existing row cures from local_configs',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          // Terminal already activated: local_configs holds the tenant
+          // binding key used by authority hydration, fulfillment, loyalty.
+          await database.localConfigDao.saveConfig(
+            LocalConfigEntity(key: 'tenant_id', value: 'tenant-cure'),
+          );
+
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-09-03T12:00:00.000Z',
+            'currentVersion': 1787745600003,
+            'deltas': {
+              'users': [
+                {
+                  'id': 'user-303',
+                  'name': 'Supervisora Curada',
+                  'email': 'supervisora@omnifood.ni',
+                  'role': 'SUPERVISOR',
+                  'isActive': true,
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+          expect(result!.usersCount, 1);
+
+          final savedUser = await database.userDao.findUserById('user-303');
+          expect(savedUser, isNotNull);
+          // No inbound tenantId and no existing row: the terminal-local
+          // tenant binding is the last-resort cure for already-NULL rows.
+          expect(savedUser!.tenantId, 'tenant-cure');
         } finally {
           await database.close();
         }
