@@ -201,7 +201,7 @@ class ActivationPreOfflineRunner {
     );
     checks['PRINTER_AVAILABLE'] = check4;
     if (!printerIsReady) {
-      blockers.add('PRINTER_AVAILABLE_FAILED: Printer is not ready (status: ${printerStatus.name})');
+      blockers.add('PRINTER_AVAILABLE_FAILED: La impresora no está lista (estado: ${printerStatus.name})');
     }
 
     // 5. TEST_PRINT
@@ -311,7 +311,7 @@ class ActivationPreOfflineRunner {
     }
     final testPrintPass = testPrintResult?.isSuccess ?? false;
     final testPrintFailure = testPrintResult?.message ??
-        'Cannot perform test print with unavailable printer';
+        'No se pudo realizar la impresión de prueba con la impresora no disponible';
     // Built before the literal to avoid a null-aware collection element, which
     // the code-generation analyzer cannot parse (CI runs build_runner).
     final testPrintEvidence = <String, Object?>{
@@ -369,7 +369,7 @@ class ActivationPreOfflineRunner {
     );
     checks['SQLITE_DURABILITY'] = check6;
     if (!sqliteDurable) {
-      blockers.add('SQLITE_DURABILITY_FAILED: Local SQLite database failed durability probe');
+      blockers.add('SQLITE_DURABILITY_FAILED: La base de datos local SQLite falló la prueba de durabilidad');
     }
 
     // Persist all checks in Floor SQLite

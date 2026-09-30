@@ -58,6 +58,14 @@ const Map<String, String> kActivationBlockerLabels = <String, String>{
       'La respuesta de preparación de la terminal no es utilizable. Verifique la conexión e intente de nuevo.',
   'PRINTER_AVAILABLE_FAILED':
       'La impresora no está lista. Revise su estado en Configuración.',
+  'TEST_PRINT_FAILED':
+      'La impresión de prueba falló. Verifique la impresora y el papel.',
+  'SQLITE_DURABILITY_FAILED':
+      'La base de datos local falló la prueba de durabilidad. Reinicie la aplicación.',
+  'AUTHORIZED_USER_LOCAL_FAILED':
+      'No se pudo verificar el usuario autorizado. Verifique el PIN.',
+  'REQUIRED_CONFIG_LOCAL_FAILED':
+      'La configuración requerida no está disponible localmente.',
   'TERMINAL_PRIMING_STATUS_MISSING':
       'El servidor no reportó el estado de preparación de la terminal.',
   'TERMINAL_PRIMING_SERVER_TIME_MISSING':
