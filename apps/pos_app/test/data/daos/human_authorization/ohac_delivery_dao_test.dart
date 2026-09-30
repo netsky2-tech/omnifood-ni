@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -83,6 +84,7 @@ void main() {
     String terminalId = 'terminal-1',
     int sequence = 1,
     String userId = 'user-1',
+    String status = 'ACTIVE',
     String? attemptResetGeneration,
   }) =>
       OhacPolicyEntryEntity(
@@ -90,7 +92,7 @@ void main() {
         terminalId: terminalId,
         sequence: sequence,
         userId: userId,
-        status: 'ACTIVE',
+        status: status,
         role: 'MANAGER',
         permissions: '["sales.sell"]',
         verifierAlgorithm: 'bcrypt',
@@ -2224,6 +2226,301 @@ void main() {
           digest,
           '2026-01-04T00:00:00.000Z',
         ),
+        throwsA(isA<StateError>()),
+      );
+    });
+  });
+
+  group('authorizePinOperation (Slice C, design §6)', () {
+    final now = DateTime.utc(2026, 1, 4, 12, 0, 0);
+
+    Future<void> seedActiveEpoch({String userId = 'user-1'}) async {
+      await database.ohacDeliveryDao.insertEpoch(epoch());
+      await database.ohacDeliveryDao.insertEntries([entry()]);
+      await database.ohacDeliveryDao.insertTerminalState(terminalState());
+    }
+
+    test('a successful check stamps the sequence, audit linkage, and a clean '
+        'attempt row', () async {
+      await seedActiveEpoch();
+
+      final outcome = await database.ohacDeliveryDao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now,
+        (verifierEncoded) => verifierEncoded == r'$2b$10$abcdefghijklmnopqrstuv',
+        false,
+      );
+
+      expect(outcome.authorized, isTrue);
+      expect(outcome.denialReason, isNull);
+      expect(outcome.localAuthorizationSequence, 1);
+      expect(outcome.localAuditId, isNotEmpty);
+      expect(outcome.localAuditEntryHash, startsWith('sha256:'));
+
+      final state = await database.ohacDeliveryDao
+          .findTerminalState('tenant-1', 'terminal-1');
+      expect(state!.localAuthorizationSequence, 1);
+
+      final attempt = await database.ohacDeliveryDao
+          .findAttemptState('tenant-1', 'terminal-1', 'user-1');
+      expect(attempt!.failureTimestamps, '[]');
+      expect(attempt.lockedUntil, isNull);
+      expect(attempt.localAuthorizationSequence, 1);
+
+      final events = await database.ohacDeliveryDao.findEventsForTerminal(
+        'tenant-1',
+        'terminal-1',
+      );
+      final resets = events
+          .where((e) =>
+              e.eventType == OhacLocalEventType.pinAttemptResetSuccess)
+          .toList();
+      expect(resets, hasLength(1));
+      expect(resets.single.id, outcome.localAuditId);
+      final payload = jsonDecode(resets.single.payload) as Map<String, dynamic>;
+      expect(payload['userId'], 'user-1');
+      expect(payload['localAuthorizationSequence'], '1');
+    });
+
+    test('a second successful check stamps the next sequence — no lost '
+        'update', () async {
+      await seedActiveEpoch();
+      final dao = database.ohacDeliveryDao;
+
+      final first = await dao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now,
+        (_) => true,
+        false,
+
+      );
+      final second = await dao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now.add(const Duration(seconds: 1)),
+        (_) => true,
+        false,
+
+      );
+
+      expect(first.localAuthorizationSequence, 1);
+      expect(second.localAuthorizationSequence, 2);
+    });
+
+    test('a wrong PIN records the failure and the third inside the window '
+        'locks', () async {
+      await seedActiveEpoch();
+      final dao = database.ohacDeliveryDao;
+
+      final first = await dao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now,
+        (_) => false,
+        false,
+
+      );
+      expect(first.authorized, isFalse);
+      expect(first.denialReason, 'OHAC_PIN_MISMATCH');
+
+      await dao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now.add(const Duration(seconds: 10)),
+        (_) => false,
+        false,
+
+      );
+      final third = await dao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now.add(const Duration(seconds: 20)),
+        (_) => false,
+        false,
+
+      );
+      expect(third.authorized, isFalse);
+
+      final attempt =
+          await dao.findAttemptState('tenant-1', 'terminal-1', 'user-1');
+      expect(
+        attempt!.lockedUntil,
+        now
+            .add(const Duration(seconds: 20))
+            .add(const Duration(minutes: 5))
+            .toIso8601String(),
+      );
+
+      // A locked pair is denied WITHOUT a bcrypt comparison: the closure is
+      // never invoked.
+      var closureInvoked = false;
+      final locked = await dao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now.add(const Duration(seconds: 30)),
+        (_) {
+          closureInvoked = true;
+          return true;
+        },
+        false,
+      );
+      expect(locked.authorized, isFalse);
+      expect(locked.denialReason, 'OHAC_ATTEMPT_LOCKED');
+      expect(closureInvoked, isFalse);
+    });
+
+    test('failures older than the window are pruned before counting',
+        () async {
+      await seedActiveEpoch();
+      final dao = database.ohacDeliveryDao;
+
+      await dao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now,
+        (_) => false,
+        false,
+
+      );
+      await dao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now.add(const Duration(seconds: 61)),
+        (_) => false,
+        false,
+
+      );
+      final third = await dao.authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now.add(const Duration(seconds: 62)),
+        (_) => false,
+        false,
+
+      );
+
+      expect(third.denialReason, 'OHAC_PIN_MISMATCH');
+      final attempt =
+          await dao.findAttemptState('tenant-1', 'terminal-1', 'user-1');
+      expect(
+        attempt!.lockedUntil,
+        isNull,
+        reason: 'the first failure was pruned; only two remain in window',
+      );
+      expect((jsonDecode(attempt.failureTimestamps) as List).length, 2);
+    });
+
+    test('attempt state persists across a restart and cannot be bypassed',
+        () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('ohac_attempt_restart');
+      // Deleted in a tear-down, never as the last statement of a test: a
+      // failed assertion would otherwise leak the temp directory.
+      addTearDown(() => tempDir.delete(recursive: true));
+      final dbPath = '${tempDir.path}/ohac_attempt.db';
+
+      final first = await $FloorAppDatabase
+          .databaseBuilder(dbPath)
+          .addMigrations(allMigrations)
+          .addCallback(inventoryMovementAppendOnlyCallback)
+          .build();
+      addTearDown(first.close);
+      await first.ohacDeliveryDao.insertEpoch(epoch());
+      await first.ohacDeliveryDao.insertEntries([entry()]);
+      await first.ohacDeliveryDao.insertTerminalState(terminalState());
+      for (var i = 0; i < 3; i++) {
+        await first.ohacDeliveryDao.authorizePinOperation(
+          'tenant-1',
+          'terminal-1',
+          'user-1',
+          now.add(Duration(seconds: i)),
+          (_) => false,
+          false,
+
+        );
+      }
+      await first.close();
+
+      // "Restart": a fresh database instance over the same file.
+      final reopened = await $FloorAppDatabase
+          .databaseBuilder(dbPath)
+          .addMigrations(allMigrations)
+          .addCallback(inventoryMovementAppendOnlyCallback)
+          .build();
+      addTearDown(reopened.close);
+
+      final attempt =
+          await reopened.ohacDeliveryDao.findAttemptState(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+      );
+      expect(attempt, isNotNull, reason: 'attempt state survives a restart');
+      expect(
+        attempt!.lockedUntil,
+        isNotNull,
+        reason: 'the lockout survives a restart',
+      );
+
+      final afterRestart = await reopened.ohacDeliveryDao
+          .authorizePinOperation(
+        'tenant-1',
+        'terminal-1',
+        'user-1',
+        now.add(const Duration(seconds: 5)),
+        (_) => true,
+        false,
+
+      );
+      expect(afterRestart.authorized, isFalse);
+      expect(afterRestart.denialReason, 'OHAC_ATTEMPT_LOCKED');
+    });
+
+    test('preconditions fail closed with StateError', () async {
+      final dao = database.ohacDeliveryDao;
+
+      // No terminal state at all.
+      await expectLater(
+        dao.authorizePinOperation('tenant-1', 'terminal-1', 'user-1', now,
+            (_) => true, false),
+        throwsA(isA<StateError>()),
+      );
+
+      // Terminal state without an acknowledged epoch (active sequence 0).
+      await dao.insertTerminalState(
+        terminalState(activeSequence: 0, activeDigest: ''),
+      );
+      await expectLater(
+        dao.authorizePinOperation('tenant-1', 'terminal-1', 'user-1', now,
+            (_) => true, false),
+        throwsA(isA<StateError>()),
+      );
+
+      // An epoch but no entry for the user.
+      await dao.insertEpoch(epoch());
+      await expectLater(
+        dao.authorizePinOperation('tenant-1', 'terminal-1', 'user-1', now,
+            (_) => true, false),
+        throwsA(isA<StateError>()),
+      );
+
+      // An INACTIVE entry.
+      await dao.insertEntries([entry(status: 'INACTIVE')]);
+      await expectLater(
+        dao.authorizePinOperation('tenant-1', 'terminal-1', 'user-1', now,
+            (_) => true, false),
         throwsA(isA<StateError>()),
       );
     });

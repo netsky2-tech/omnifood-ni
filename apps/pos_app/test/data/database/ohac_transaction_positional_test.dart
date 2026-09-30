@@ -15,8 +15,10 @@ void main() {
       File('lib/data/database/app_database.g.dart').readAsStringSync();
 
   String? signatureOf(String methodName) {
+    // Return types may be non-void (e.g. Slice C's authorization outcome), so
+    // the match tolerates any `Future<...>` type.
     final match = RegExp(
-      'Future<void> $methodName\\((.*?)\\) async \\{',
+      'Future<[^;{]*?> $methodName\\((.*?)\\) async \\{',
       dotAll: true,
     ).firstMatch(generated);
     return match?.group(1);
@@ -40,17 +42,11 @@ void main() {
     expect(signature, isNot(contains('}')));
     expect(signature, isNot(contains('required')));
 
-    expect(
-      generated,
-      contains('super.$methodName('),
-      reason: 'the generated wrapper must delegate into the transaction body',
-    );
-
     // Scope the transaction assertion to THIS method's generated block rather
     // than to the whole file: `app_database.g.dart` holds every DAO's wrapper,
     // so a file-wide `contains` would be satisfied by some other method and
     // would assert nothing about this one.
-    final start = generated.indexOf('Future<void> $methodName(');
+    final start = generated.indexOf(RegExp('Future<[^;{]*?> $methodName\\('));
     final nextMethod = generated.indexOf('Future<', start + 1);
     final block = generated.substring(
       start,
@@ -58,13 +54,13 @@ void main() {
     );
     expect(
       block,
-      contains('transaction<void>((transaction) async {'),
+      contains(RegExp(r'transaction<[^>]*>\(\(transaction\) async \{')),
       reason: '$methodName must actually run inside a sqflite transaction, '
           'scoped to its own generated block',
     );
     expect(
       block,
-      contains('super.$methodName('),
+      contains(RegExp('super\\s*\\.\\s*' + methodName + '\\(')),
       reason: '$methodName\'s wrapper must delegate into its own transaction '
           'body',
     );
@@ -93,5 +89,22 @@ void main() {
   test('confirmAcknowledgementWithReceipt is generated as a positional '
       'transaction', () {
     expectPositionalTransaction('confirmAcknowledgementWithReceipt');
+  });
+
+  test('authorizePinOperation is generated as a positional transaction', () {
+    expectPositionalTransaction('authorizePinOperation');
+    // Slice C (design §6): the PIN comparison rides along as a positional
+    // closure — the plaintext PIN never leaves the caller's closure, and the
+    // comparison runs INSIDE the same transaction as the attempt write, the
+    // sequence increment and the audit linkage.
+    final signature = signatureOf('authorizePinOperation');
+    expect(signature, isNotNull);
+    // The generator normalizes function-typed parameters (dropping the inner
+    // parameter name), so the closure's shape is asserted in generated form.
+    expect(
+      signature,
+      contains('bool Function(String) pinMatches'),
+      reason: 'the PIN comparison must ride along as a positional closure',
+    );
   });
 }

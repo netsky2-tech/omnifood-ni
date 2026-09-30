@@ -316,13 +316,18 @@ class OhacAttemptStateEntity {
 
 /// Event vocabulary for the append-only local event log (design §4.2, §5, §6).
 ///
-/// The design asks for "local lifecycle facts" without naming them, so this
-/// wire value is an implementation choice recorded in the slice's tracker. It
-/// follows the one name the design does state for a reset event,
-/// `PIN_ATTEMPT_RESET_SUCCESS`, which belongs to §6's successful-PIN path and is
-/// therefore not reusable here: this fact records an administrative
-/// `attemptResetGeneration` advance applied during candidate activation.
+/// The design asks for "local lifecycle facts" without naming them, so the
+/// wire values are implementation choices recorded in the slice's tracker,
+/// except the one name the design does state for the successful-PIN reset,
+/// `PIN_ATTEMPT_RESET_SUCCESS` (§6).
 abstract final class OhacLocalEventType {
+  /// The §6 successful-PIN reset event (Slice C): a successful fresh PIN
+  /// check resets that user-terminal count/backoff in the same authorization
+  /// transaction and appends this fact. The payload carries the user, the
+  /// governing epoch sequence and the stamped authorization sequence — never
+  /// a PIN, a verifier, or an assertion body (design §6, §12).
+  static const pinAttemptResetSuccess = 'PIN_ATTEMPT_RESET_SUCCESS';
+
   /// The terminal applied an epoch-declared `attemptResetGeneration` advance to
   /// one user's durable attempt state (design §6: "applies it only during atomic
   /// candidate activation and appends a local reset event").

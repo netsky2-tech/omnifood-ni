@@ -1,9 +1,14 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:floor/floor.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../domain/security/ohac_attempt_policy.dart';
+import '../../../domain/security/ohac_authorization_port.dart';
 import '../../../domain/security/ohac_outbox_registry.dart';
+import '../../models/human_authorization/canonical.dart';
+import '../../models/human_authorization/error_codes.dart';
 import '../../models/human_authorization/field_guards.dart';
 import '../../models/human_authorization/ohac_delivery_entities.dart';
 import '../../models/human_authorization/staff_policy_epoch_v1.dart';
@@ -804,6 +809,265 @@ abstract class OhacDeliveryDao {
   }
 
   // ---------------------------------------------------------------------------
+  // Durable PIN authorization transaction (design §6, Slice C).
+  // ---------------------------------------------------------------------------
+
+  /// The one §6 authorization transaction: verify ACTIVE state and entry
+  /// eligibility, read the attempt row, enforce the lockout, compare the PIN
+  /// through [pinMatches] (the plaintext PIN never leaves the caller's
+  /// closure; it is never a SQL argument), record the outcome, increment the
+  /// terminal-local authorization sequence, append the audit linkage, and
+  /// return the assertion inputs — all in ONE atomic write.
+  ///
+  /// Positional arguments only: named arguments break Floor 1.5.0's generated
+  /// `@transaction` code (§13, AGENTS.md). [now] is the caller's clock instant.
+  /// [forceAttemptCasLoss] is a TEST-ONLY seam (never pass true in
+  /// production): it makes the attempt-state write target a revision that
+  /// cannot match, deterministically raising the REAL CAS loss inside the
+  /// serialized transaction — the proof §13 requires that concurrency
+  /// tests cannot provide.
+  @transaction
+  Future<OhacPinAuthorizationOutcome> authorizePinOperation(
+    String tenantId,
+    String terminalId,
+    String userId,
+    DateTime now,
+    bool Function(String verifierEncoded) pinMatches,
+    bool forceAttemptCasLoss,
+  ) async {
+    final state = await findTerminalState(tenantId, terminalId);
+    if (state == null) {
+      throw StateError(
+        'OHAC authorization requires a terminal state for $terminalId',
+      );
+    }
+    if (state.state != OhacTerminalPhase.active.wire ||
+        state.activeSequence < 1 ||
+        state.activeDigest.isEmpty) {
+      throw StateError(
+        'OHAC authorization requires an acknowledged ACTIVE epoch; found '
+        '${state.state} at sequence ${state.activeSequence}',
+      );
+    }
+    final epoch = await findEpoch(tenantId, terminalId, state.activeSequence);
+    if (epoch == null) {
+      throw StateError(
+        'OHAC authorization requires the governing epoch '
+        '${state.activeSequence} to be on record',
+      );
+    }
+    final entry = await findEntryForUser(
+      tenantId,
+      terminalId,
+      state.activeSequence,
+      userId,
+    );
+    if (entry == null || entry.status != OhacPolicyStatus.active) {
+      throw StateError(
+        'OHAC authorization requires an ACTIVE epoch entry for $userId',
+      );
+    }
+
+    final attempt = await findAttemptState(tenantId, terminalId, userId);
+    final newUpdatedAt = now.toUtc().toIso8601String();
+
+    // §6 backoff: a lockout still in force denies WITHOUT a bcrypt check and
+    // without touching any state — the lockout already exists, and mutating
+    // it here would be an unauthorized write.
+    if (OhacAttemptPolicy.isLocked(attempt?.lockedUntil, now)) {
+      return OhacPinAuthorizationOutcome.denied(
+        OhacAuthorizationDenialReason.attemptLocked,
+        currentLocalAuthorizationSequence: state.localAuthorizationSequence,
+      );
+    }
+
+    // The plaintext PIN never leaves the caller's closure: this DAO receives
+    // only the comparison verdict, so the PIN can never reach a SQL argument,
+    // a log line, or a persisted field (design §6).
+    final pinOk = pinMatches(entry.verifierEncoded);
+    if (!pinOk) {
+      final decision = OhacAttemptPolicy.recordFailure(
+        storedFailureTimestamps: attempt?.failureTimestamps ?? '[]',
+        now: now,
+      );
+      final resetGeneration =
+          attempt?.resetGeneration ?? entry.attemptResetGeneration;
+      await _upsertAttemptState(
+        tenantId: tenantId,
+        terminalId: terminalId,
+        userId: userId,
+        existing: attempt,
+        newFailureTimestamps:
+            OhacAttemptPolicy.encodeFailureTimestamps(
+                decision.failureTimestamps),
+        newLockedUntil: decision.lockedUntil?.toUtc().toIso8601String() ?? '',
+        newResetGeneration: resetGeneration,
+        newLocalAuthorizationSequence:
+            attempt?.localAuthorizationSequence ?? 0,
+        newUpdatedAt: newUpdatedAt,
+        forceCasLoss: forceAttemptCasLoss,
+      );
+      return OhacPinAuthorizationOutcome.denied(
+        OhacAuthorizationDenialReason.pinMismatch,
+        currentLocalAuthorizationSequence: state.localAuthorizationSequence,
+      );
+    }
+
+    // §6 success path: reset the window, increment the terminal-local
+    // authorization sequence, and append the audit linkage — all inside this
+    // same transaction, so the stamped sequence and the reset commit or roll
+    // back together.
+    final bumped = await bumpTerminalAuthorizationSequence(
+      tenantId,
+      terminalId,
+      newUpdatedAt,
+    );
+    if (bumped != 1) {
+      throw StateError(
+        'OHAC authorization could not increment the terminal-local '
+        'authorization sequence for $terminalId',
+      );
+    }
+    final stampedState = await findTerminalState(tenantId, terminalId);
+    if (stampedState == null) {
+      throw StateError('OHAC terminal state vanished inside its own write');
+    }
+    final newSequence = stampedState.localAuthorizationSequence;
+
+    // The audit linkage (§7.1 `localAuditId` / `localAuditEntryHash`): the
+    // appended reset event's id and the digest over its canonical payload.
+    // The payload carries ids and the stamped sequence only — never a PIN, a
+    // verifier, or an assertion body (design §12).
+    final eventId = const Uuid().v4();
+    final payloadJson = jsonEncode({
+      'userId': userId,
+      'epochSequence': '${state.activeSequence}',
+      'localAuthorizationSequence': '$newSequence',
+    });
+    final canonicalPayload = canonicalizeOhac(
+      Uint8List.fromList(utf8.encode(payloadJson)),
+    );
+    if (canonicalPayload is! OhacSuccess<Uint8List>) {
+      throw StateError(
+        'OHAC audit payload failed canonicalization; refusing to append '
+        'unlinked audit evidence',
+      );
+    }
+    final entryHash = ohacDigest(canonicalPayload.value);
+    await appendEvent(
+      OhacLocalEventEntity(
+        id: eventId,
+        tenantId: tenantId,
+        terminalId: terminalId,
+        eventType: OhacLocalEventType.pinAttemptResetSuccess,
+        sequence: state.activeSequence,
+        payload: payloadJson,
+        createdAt: newUpdatedAt,
+      ),
+    );
+
+    await _upsertAttemptState(
+      tenantId: tenantId,
+      terminalId: terminalId,
+      userId: userId,
+      existing: attempt,
+      newFailureTimestamps: '[]',
+      newLockedUntil: '',
+      newResetGeneration: attempt?.resetGeneration ??
+          entry.attemptResetGeneration,
+      newLocalAuthorizationSequence: newSequence,
+      newUpdatedAt: newUpdatedAt,
+      forceCasLoss: forceAttemptCasLoss,
+    );
+
+    return OhacPinAuthorizationOutcome.authorized(
+      newLocalAuthorizationSequence: newSequence,
+      auditId: eventId,
+      auditEntryHash: entryHash,
+    );
+  }
+
+  /// Inserts or compare-and-set updates the attempt row. A new row inserts
+  /// with revision 0; an existing row CASes against its read revision. Both
+  /// failures mean a concurrent writer moved the row inside this same
+  /// serialized transaction window, so they surface as a CAS loss: the whole
+  /// authorization transaction rolls back and the caller retries fresh
+  /// (design §6, §11.5 decision 34).
+  Future<void> _upsertAttemptState({
+    required String tenantId,
+    required String terminalId,
+    required String userId,
+    required OhacAttemptStateEntity? existing,
+    required String newFailureTimestamps,
+    required String newLockedUntil,
+    required String newResetGeneration,
+    required int newLocalAuthorizationSequence,
+    required String newUpdatedAt,
+    bool forceCasLoss = false,
+  }) async {
+    if (existing == null) {
+      // Test-only forced loss: a fresh insert has no prior revision to CAS
+      // against, so the only faithful simulation of a lost race is the
+      // exception itself. Production never passes [forceCasLoss].
+      if (forceCasLoss) throw OhacAttemptCasLostException(userId);
+      try {
+        await insertAttemptState(
+          OhacAttemptStateEntity(
+            tenantId: tenantId,
+            terminalId: terminalId,
+            userId: userId,
+            failureTimestamps: newFailureTimestamps,
+            lockedUntil: newLockedUntil.isEmpty ? null : newLockedUntil,
+            resetGeneration: newResetGeneration,
+            localAuthorizationSequence: newLocalAuthorizationSequence,
+            revision: 0,
+            updatedAt: newUpdatedAt,
+          ),
+        );
+      } on Exception {
+        throw OhacAttemptCasLostException(userId);
+      }
+      return;
+    }
+
+    final updated = await updateAttemptStateIfRevisionMatches(
+      tenantId,
+      terminalId,
+      userId,
+      // Test-only forced loss: writing against a revision that cannot match
+      // makes the REAL CAS UPDATE return 0 and raise the REAL CAS-loss
+      // exception — the same code path a concurrent writer would trigger,
+      // reached deterministically inside the serialized transaction.
+      forceCasLoss ? existing.revision + 999999 : existing.revision,
+      newFailureTimestamps,
+      newLockedUntil,
+      newResetGeneration,
+      newLocalAuthorizationSequence,
+      newUpdatedAt,
+    );
+    if (updated != 1) {
+      throw OhacAttemptCasLostException(userId);
+    }
+  }
+
+  /// Atomically increments the authoritative terminal-local authorization
+  /// sequence (design §6, tracker ruling 3/7) and returns the affected row
+  /// count. The revision CAS of the epoch protocol is deliberately NOT
+  /// touched: the counter is not a transition-owned field, and authorization
+  /// must not interfere with the concurrent epoch state machine.
+  @Query(
+    'UPDATE human_auth_terminal_state '
+    'SET local_authorization_sequence = local_authorization_sequence + 1, '
+    'updated_at = :newUpdatedAt '
+    'WHERE tenant_id = :tenantId AND terminal_id = :terminalId',
+  )
+  Future<int?> bumpTerminalAuthorizationSequence(
+    String tenantId,
+    String terminalId,
+    String newUpdatedAt,
+  );
+
+  // ---------------------------------------------------------------------------
   // Append-only event log (forensic evidence).
   // ---------------------------------------------------------------------------
 
@@ -829,7 +1093,75 @@ abstract class OhacDeliveryDao {
   );
 }
 
-/// Orders `attemptResetGeneration`, which the epoch contract defines as a
+/// The immutable outcome of one authorization transaction (design §6):
+/// either the stamped assertion inputs or a denial reason — never both, and
+/// never PIN or verifier material.
+final class OhacPinAuthorizationOutcome {
+  /// Whether the PIN check passed and the transaction committed.
+  final bool authorized;
+
+  /// A stable `OhacAuthorizationDenialReason` value when [authorized] is
+  /// false; `null` otherwise.
+  final String? denialReason;
+
+  /// The terminal-local authorization sequence stamped by this transaction
+  /// (the incremented value on success; the untouched current value on a
+  /// denial).
+  final int localAuthorizationSequence;
+
+  /// The audit linkage stamped into the assertion: the appended local event's
+  /// id and the digest over its canonical payload (§7.1 `localAuditId` /
+  /// `localAuditEntryHash`). Empty on a denial.
+  final String localAuditId;
+  final String localAuditEntryHash;
+
+  const OhacPinAuthorizationOutcome._({
+    required this.authorized,
+    required this.denialReason,
+    required this.localAuthorizationSequence,
+    required this.localAuditId,
+    required this.localAuditEntryHash,
+  });
+
+  const OhacPinAuthorizationOutcome.authorized({
+    required int newLocalAuthorizationSequence,
+    required String auditId,
+    required String auditEntryHash,
+  }) : this._(
+          authorized: true,
+          denialReason: null,
+          localAuthorizationSequence: newLocalAuthorizationSequence,
+          localAuditId: auditId,
+          localAuditEntryHash: auditEntryHash,
+        );
+
+  const OhacPinAuthorizationOutcome.denied(
+    String reason, {
+    required int currentLocalAuthorizationSequence,
+  }) : this._(
+          authorized: false,
+          denialReason: reason,
+          localAuthorizationSequence: currentLocalAuthorizationSequence,
+          localAuditId: '',
+          localAuditEntryHash: '',
+        );
+}
+
+/// Thrown when the attempt-state revision compare-and-set loses its race
+/// (design §6, §11.5 decision 34). The whole authorization transaction rolls
+/// back — the caller retries from a fresh read; there is no partial state to
+/// resume.
+class OhacAttemptCasLostException implements Exception {
+  final String userId;
+
+  const OhacAttemptCasLostException(this.userId);
+
+  @override
+  String toString() =>
+      'OhacAttemptCasLostException: attempt-state revision lost for $userId';
+}
+
+/// Orders `attemptResetGeneration`, which the epoch contract defines as a a
 /// decimal string (design §7.2).
 ///
 /// A value that cannot be ordered fails closed instead of being skipped: the

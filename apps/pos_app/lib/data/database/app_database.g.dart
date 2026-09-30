@@ -8158,6 +8158,18 @@ class _$OhacDeliveryDao extends OhacDeliveryDao {
   }
 
   @override
+  Future<int?> bumpTerminalAuthorizationSequence(
+    String tenantId,
+    String terminalId,
+    String newUpdatedAt,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE human_auth_terminal_state SET local_authorization_sequence = local_authorization_sequence + 1, updated_at = ?3 WHERE tenant_id = ?1 AND terminal_id = ?2',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [tenantId, terminalId, newUpdatedAt]);
+  }
+
+  @override
   Future<List<OhacLocalEventEntity>> findEventsForTerminal(
     String tenantId,
     String terminalId,
@@ -8338,6 +8350,29 @@ class _$OhacDeliveryDao extends OhacDeliveryDao {
                 expectedCandidateDigest,
                 newUpdatedAt,
                 ohacOutboxRegistry);
+      });
+    }
+  }
+
+  @override
+  Future<OhacPinAuthorizationOutcome> authorizePinOperation(
+    String tenantId,
+    String terminalId,
+    String userId,
+    DateTime now,
+    bool Function(String) pinMatches,
+    bool forceAttemptCasLoss,
+  ) async {
+    if (database is sqflite.Transaction) {
+      return super.authorizePinOperation(
+          tenantId, terminalId, userId, now, pinMatches, forceAttemptCasLoss);
+    } else {
+      return (database as sqflite.Database)
+          .transaction<OhacPinAuthorizationOutcome>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        return transactionDatabase.ohacDeliveryDao.authorizePinOperation(
+            tenantId, terminalId, userId, now, pinMatches, forceAttemptCasLoss);
       });
     }
   }
