@@ -369,3 +369,36 @@ pendings outside this effort unless the owner extends it.
   reliable command until the shared-role helper is made worker-safe.
 - **Cloudflare Pages transient build failure** on PR #721: retried green with an empty retrigger
   commit; no root cause available (external logs).
+
+## Milestone: OHAC habilitación (parked — owner decision 2026-09-30)
+
+The feature is complete, merged, deployed to staging (pepper validated) and
+**dormant by design** (cohort disabled, no emission/verification callers). The
+work below is grouped by when it must land; NONE of it blocks the go-live pilot.
+
+### Antes de abrir cohort / habilitar en real
+- **T-5** non-destructive rollback test (disable cohort preserves epochs, acks, assertions) — dev, `.db.spec`.
+- **T-6** residual-boundary regressions (rooted/modified/hooked/copied verifier) — dev, partially.
+- **Sentinela GENESIS**: seed `'GENESIS'` in `ensureTerminalState`, drop the U1 acceptance
+  bridge, keep the negative pins — small unit.
+- **decision-29 writer**: `attempt_reset_generation` admin writer (its own issue) — needed for the
+  spec's "Audited reset" scenario.
+- **Badge de deferral** (`OHAC_ACK_DEFERRED_OUTBOX` operator visibility) — dev + NHILOS audit.
+
+### Owner / físico
+- **DEP-1** DSI-7 clear-data policy sign-off. **DEP-4** §16.7 rollout thresholds (numbers).
+- **DEP-3** DSI-8 acceptance (separate scope, never absorbed).
+- **T-4** Q80 physical acceptance scenarios (device + recorded evidence).
+
+### Con DSI-6 / al release
+- **DEP-2** DSI-6 amendment package (§17) + the cross-DAO drain-gate probe limitation.
+- **T-7** final phase gate (full backend `npm test`/`test:e2e`/`npx eslint`/`build` + `flutter test`)
+  run as release evidence at the end.
+- Auth-decision facts become live when `OhacAuthorizationService` gains its DSI-6 caller.
+
+### Amendments de autoridad (abiertos, no bloqueantes)
+1. Build-pair vs atomic-unit (§5.1/§11.5 vs tasks.md).
+2. `OHAC_SEQUENCE_GAP`: §10 retryable vs §9 fail-closed mapping.
+3. `ROLLBACK_DETECTED` (§5.5) vs `LOCAL_ROLLBACK` (§9) spelling.
+4. §5.4 receipt "server build" vs ack response lacking it (satisfied from negotiated fact).
+5. §9 rotation audit event not appended (rotation is runbook-only today).
