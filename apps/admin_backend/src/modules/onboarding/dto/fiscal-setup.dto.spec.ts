@@ -101,11 +101,12 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
     });
   });
 
-  // BXW-007 U1: the Business Profile carries the POS canon vocabulary for
-  // the tenant operation mode and the checkout FX mode. Both fields are
-  // REQUIRED — a missing or unknown value must be rejected at the boundary,
-  // never defaulted into persistence.
-  describe('operationMode & checkoutFxMode (BXW-007 U1)', () => {
+  // BXW-007 U1 rev 2: the Business Profile fields are OPTIONAL. Absence
+  // asserts nothing and must leave the persisted parameter untouched (D-16/
+  // D-21 spirit: absence looks like absence). An INVALID value is still
+  // rejected at the boundary with the same wording; an explicit null is the
+  // clear sentinel, never defaulted into persistence.
+  describe('operationMode & checkoutFxMode (BXW-007 U1, rev 2)', () => {
     it.each([
       ['FOODPARK_QSR', TenantOperationMode.FOODPARK_QSR],
       ['RESTAURANT', TenantOperationMode.RESTAURANT],
@@ -123,10 +124,30 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
       expect(dto.checkoutFxMode).toBe(mode);
     });
 
+    it('accepts a body without operationMode and checkoutFxMode (absence asserts nothing)', async () => {
+      const body = { ...validBody() };
+      delete body.operationMode;
+      delete body.checkoutFxMode;
+
+      const dto = await transformBody(body);
+      expect(dto.operationMode).toBeUndefined();
+      expect(dto.checkoutFxMode).toBeUndefined();
+    });
+
+    it('accepts an explicit null as the clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        operationMode: null,
+        checkoutFxMode: null,
+      });
+      expect(dto.operationMode).toBeNull();
+      expect(dto.checkoutFxMode).toBeNull();
+    });
+
     it.each([
+      ['an empty string', ''],
       ['an unknown string', 'FOOD_PARK'],
       ['a number', 123],
-      ['null', null],
     ])('rejects an operationMode that is %s', async (_label, mode) => {
       const error: BadRequestException = await transformBody({
         ...validBody(),
@@ -144,50 +165,14 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
     });
 
     it.each([
+      ['an empty string', ''],
       ['an unknown string', 'BCN'],
       ['a number', 42],
-      ['null', null],
     ])('rejects a checkoutFxMode that is %s', async (_label, mode) => {
       const error: BadRequestException = await transformBody({
         ...validBody(),
         checkoutFxMode: mode,
       }).catch((e) => e);
-
-      expect(error).toBeInstanceOf(BadRequestException);
-      const response = error.getResponse() as { message: string | string[] };
-      const messages = Array.isArray(response.message)
-        ? response.message
-        : [response.message];
-      expect(messages).toContain(
-        'checkoutFxMode must be either COMMERCIAL or BCN_OFFICIAL',
-      );
-    });
-
-    it('rejects a body without operationMode (required, never defaulted)', async () => {
-      const body = { ...validBody() };
-      delete body.operationMode;
-
-      const error: BadRequestException = await transformBody(body).catch(
-        (e) => e,
-      );
-
-      expect(error).toBeInstanceOf(BadRequestException);
-      const response = error.getResponse() as { message: string | string[] };
-      const messages = Array.isArray(response.message)
-        ? response.message
-        : [response.message];
-      expect(messages).toContain(
-        'operationMode must be either FOODPARK_QSR, RESTAURANT or HYBRID',
-      );
-    });
-
-    it('rejects a body without checkoutFxMode (required, never defaulted)', async () => {
-      const body = { ...validBody() };
-      delete body.checkoutFxMode;
-
-      const error: BadRequestException = await transformBody(body).catch(
-        (e) => e,
-      );
 
       expect(error).toBeInstanceOf(BadRequestException);
       const response = error.getResponse() as { message: string | string[] };

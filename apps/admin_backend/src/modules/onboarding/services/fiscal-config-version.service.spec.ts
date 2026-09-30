@@ -166,9 +166,11 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         taxRate: 0.15,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
-        // BXW-007 U1: unconfigured params read as the POS defaults.
-        operationMode: TenantOperationMode.FOODPARK_QSR,
-        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+        // BXW-007 U1 rev 2: unconfigured params read as null — the
+        // fingerprint of an unconfigured tenant must differ from one that
+        // explicitly configured the POS defaults.
+        operationMode: null,
+        checkoutFxMode: null,
         // D-21 (#554): no DGI authorization configured yet — absence reads
         // as null, never as an empty string.
         dgiAuthorizationCode: null,
@@ -317,10 +319,10 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       expect(payload.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
     });
 
-    it('falls back to the POS defaults when the stored values are missing, non-string or not members (never trust the DB string)', async () => {
+    it('reads unconfigured or corrupt values as null (absence must look like absence, never rebased to a default)', async () => {
       const unconfigured = await service.getEffectiveFiscalPayload(tenantId);
-      expect(unconfigured.operationMode).toBe(TenantOperationMode.FOODPARK_QSR);
-      expect(unconfigured.checkoutFxMode).toBe(CheckoutFxMode.COMMERCIAL);
+      expect(unconfigured.operationMode).toBeNull();
+      expect(unconfigured.checkoutFxMode).toBeNull();
 
       sysParamRepo.find.mockResolvedValueOnce([
         ...mockParams,
@@ -328,8 +330,8 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         modeRow('CHECKOUT_FX_MODE', 123),
       ]);
       const corrupted = await service.getEffectiveFiscalPayload(tenantId);
-      expect(corrupted.operationMode).toBe(TenantOperationMode.FOODPARK_QSR);
-      expect(corrupted.checkoutFxMode).toBe(CheckoutFxMode.COMMERCIAL);
+      expect(corrupted.operationMode).toBeNull();
+      expect(corrupted.checkoutFxMode).toBeNull();
     });
 
     it('exposes both fields in the config snapshot for cloud sync', async () => {
@@ -344,6 +346,31 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
 
       expect(snapshot.operationMode).toBe(TenantOperationMode.RESTAURANT);
       expect(snapshot.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
+    });
+
+    it('fingerprints null differently from an explicitly configured POS default', async () => {
+      const baseline = await service.getEffectiveFiscalPayload(tenantId);
+      const nullFingerprint = service.computeCanonicalFingerprint(baseline);
+      expect(baseline.operationMode).toBeNull();
+      expect(baseline.checkoutFxMode).toBeNull();
+
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        modeRow('OPERATION_MODE', TenantOperationMode.FOODPARK_QSR),
+        modeRow('CHECKOUT_FX_MODE', CheckoutFxMode.COMMERCIAL),
+      ]);
+      const explicitDefaults =
+        await service.getEffectiveFiscalPayload(tenantId);
+      const explicitFingerprint =
+        service.computeCanonicalFingerprint(explicitDefaults);
+      expect(explicitDefaults.operationMode).toBe(
+        TenantOperationMode.FOODPARK_QSR,
+      );
+      expect(explicitDefaults.checkoutFxMode).toBe(CheckoutFxMode.COMMERCIAL);
+
+      // The core rev-2 decision: never-configured vs configured-with-default
+      // are DIFFERENT configurations and must not collide in the fingerprint.
+      expect(explicitFingerprint).not.toBe(nullFingerprint);
     });
 
     it('covers both fields in the fingerprint: changing the operation mode changes it', async () => {
@@ -430,8 +457,8 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         taxRate: 0.0,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
-        operationMode: TenantOperationMode.FOODPARK_QSR,
-        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+        operationMode: null,
+        checkoutFxMode: null,
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,

@@ -15,11 +15,11 @@ import {
   SystemParametersConfigActiveView,
 } from '../../inventory/entities/system-parameters-config.entity';
 import {
-  coerceCheckoutFxMode,
-  coerceTenantOperationMode,
   FiscalRegime,
   FiscalSetupDto,
   FiscalSetupResponse,
+  readCheckoutFxModeOrNull,
+  readTenantOperationModeOrNull,
 } from '../dto/fiscal-setup.dto';
 import { isValidRuc } from '../utils/nicaragua-fiscal.validator';
 import { NICARAGUA_FISCAL_ID_REQUIRED_MESSAGE } from '../validators/is-valid-nicaragua-fiscal-id.validator';
@@ -132,13 +132,14 @@ export class FiscalSetupService {
     const commercialFxSpread =
       typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
 
-    // BXW-007 U1: never trust the stored DB string — the enum-whitelist
-    // coercion falls back to the POS defaults for a missing, non-string or
-    // non-member value.
-    const operationMode = coerceTenantOperationMode(
+    // BXW-007 U1 rev 2: absence must read as absence (D-16/D-21 spirit) — a
+    // missing, non-string or non-member stored value reads as null, never as
+    // a silently rebased default. "Never configured" stays distinguishable
+    // from "configured with the POS default".
+    const operationMode = readTenantOperationModeOrNull(
       paramMap.get(FISCAL_PARAM_KEYS.OPERATION_MODE),
     );
-    const checkoutFxMode = coerceCheckoutFxMode(
+    const checkoutFxMode = readCheckoutFxModeOrNull(
       paramMap.get(FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE),
     );
 
@@ -278,11 +279,11 @@ export class FiscalSetupService {
           userId,
         );
 
-        // BXW-007 U1: Business Profile operation mode + checkout FX source
-        // ride the same append-only supersession as the core fiscal
-        // parameters, BEFORE recordRevisionChange so the revision fingerprint
-        // covers both from the first write.
-        await this.upsertParameter(
+        // BXW-007 U1 rev 2: the mode params ride the same upsert-or-clear
+        // channel as the DGI fields — an absent key asserts NOTHING and
+        // leaves the prior row untouched; only before recordRevisionChange
+        // so a material write lands in the same revision.
+        await this.upsertOrClearParameter(
           manager,
           trimmedTenantId,
           FISCAL_PARAM_KEYS.OPERATION_MODE,
@@ -290,7 +291,7 @@ export class FiscalSetupService {
           userId,
         );
 
-        await this.upsertParameter(
+        await this.upsertOrClearParameter(
           manager,
           trimmedTenantId,
           FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE,
@@ -367,13 +368,13 @@ export class FiscalSetupService {
           taxRateIva: targetTaxRate,
           pricesIncludeTax: dto.pricesIncludeTax,
           commercialFxSpread: dto.commercialFxSpread,
-          // BXW-007 U1: read back through the post-write view so the POST
-          // response reflects the effective persisted state, same as the DGI
-          // authorization fields below.
-          operationMode: coerceTenantOperationMode(
+          // BXW-007 U1 rev 2: read back through the post-write view so the
+          // POST response reflects the effective persisted state — an omitted
+          // key reads the prior governing value, or null if never configured.
+          operationMode: readTenantOperationModeOrNull(
             postWriteMap.get(FISCAL_PARAM_KEYS.OPERATION_MODE),
           ),
-          checkoutFxMode: coerceCheckoutFxMode(
+          checkoutFxMode: readCheckoutFxModeOrNull(
             postWriteMap.get(FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE),
           ),
           ...this.dgiAuthorizationFields(postWriteMap),

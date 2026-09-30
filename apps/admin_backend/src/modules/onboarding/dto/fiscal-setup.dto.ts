@@ -43,26 +43,20 @@ export enum CheckoutFxMode {
   BCN_OFFICIAL = 'BCN_OFFICIAL',
 }
 
-export const TENANT_OPERATION_MODE_DEFAULT = TenantOperationMode.FOODPARK_QSR;
-export const CHECKOUT_FX_MODE_DEFAULT = CheckoutFxMode.COMMERCIAL;
-
-/**
- * BXW-007 U1: never trust the stored DB string. A missing, non-string or
- * non-member value falls back to the POS default instead of propagating a
- * corrupted or legacy parameter into the payload/fingerprint.
- */
-export function coerceTenantOperationMode(raw: unknown): TenantOperationMode {
+export function readTenantOperationModeOrNull(
+  raw: unknown,
+): TenantOperationMode | null {
   return (Object.values(TenantOperationMode) as string[]).includes(
     raw as string,
   )
     ? (raw as TenantOperationMode)
-    : TENANT_OPERATION_MODE_DEFAULT;
+    : null;
 }
 
-export function coerceCheckoutFxMode(raw: unknown): CheckoutFxMode {
+export function readCheckoutFxModeOrNull(raw: unknown): CheckoutFxMode | null {
   return (Object.values(CheckoutFxMode) as string[]).includes(raw as string)
     ? (raw as CheckoutFxMode)
-    : CHECKOUT_FX_MODE_DEFAULT;
+    : null;
 }
 
 /**
@@ -147,23 +141,26 @@ export class FiscalSetupDto {
   pricesIncludeTax: boolean;
 
   /**
-   * BXW-007 U1: Business Profile operation mode — POS canon vocabulary.
-   * REQUIRED: the POS contract must never guess, and an unknown value must
-   * be rejected at the boundary, never defaulted into persistence.
+   * BXW-007 U1 rev 2: Business Profile operation mode — POS canon vocabulary.
+   * OPTIONAL: absence asserts nothing and leaves the persisted parameter
+   * untouched (D-16/D-21 spirit); an explicit null is the clear sentinel; an
+   * invalid value is still rejected at the boundary.
    */
+  @IsOptional()
   @IsEnum(TenantOperationMode, {
     message: 'operationMode must be either FOODPARK_QSR, RESTAURANT or HYBRID',
   })
-  operationMode: TenantOperationMode;
+  operationMode?: TenantOperationMode | null;
 
   /**
-   * BXW-007 U1: checkout FX source — POS canon vocabulary. REQUIRED for the
-   * same reason as operationMode.
+   * BXW-007 U1 rev 2: checkout FX source — same optionality contract as
+   * operationMode.
    */
+  @IsOptional()
   @IsEnum(CheckoutFxMode, {
     message: 'checkoutFxMode must be either COMMERCIAL or BCN_OFFICIAL',
   })
-  checkoutFxMode: CheckoutFxMode;
+  checkoutFxMode?: CheckoutFxMode | null;
 
   @IsOptional()
   @IsString()
@@ -218,10 +215,10 @@ export interface FiscalSetupResponse {
   taxRateIva: number;
   pricesIncludeTax: boolean;
   commercialFxSpread: number;
-  /** BXW-007 U1: POS canon operation mode carried through sync. */
-  operationMode: TenantOperationMode;
-  /** BXW-007 U1: POS canon checkout FX source carried through sync. */
-  checkoutFxMode: CheckoutFxMode;
+  /** BXW-007 U1 rev 2: null = the tenant never configured it (required key, nullable value). */
+  operationMode: TenantOperationMode | null;
+  /** BXW-007 U1 rev 2: null = the tenant never configured it (required key, nullable value). */
+  checkoutFxMode: CheckoutFxMode | null;
   /** D-21 (#554): null means no active authorization (or tombstoned/cleared). */
   dgiAuthorizationCode: string | null;
   dgiAuthorizationIssuedAt: string | null;

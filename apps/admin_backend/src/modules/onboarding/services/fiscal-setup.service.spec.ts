@@ -138,9 +138,10 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       taxRateIva: 0.15,
       pricesIncludeTax: true,
       commercialFxSpread: 0.5,
-        // BXW-007 U1: unconfigured params read as the POS defaults.
-        operationMode: TenantOperationMode.FOODPARK_QSR,
-        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+        // BXW-007 U1 rev 2: unconfigured params read as null (absence must
+        // look like absence, never rebased to a default).
+        operationMode: null,
+        checkoutFxMode: null,
       // D-21 (#554): the response must expose the authorization fields so the
       // dashboard can prefill the form and render its expiry banner.
       dgiAuthorizationCode: null,
@@ -202,8 +203,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         taxRateIva: 0.0,
         pricesIncludeTax: true,
         commercialFxSpread: 0.5,
-        operationMode: TenantOperationMode.FOODPARK_QSR,
-        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+        operationMode: null,
+        checkoutFxMode: null,
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,
@@ -868,7 +869,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       );
     });
 
-    it('exposes the stored operationMode/checkoutFxMode in the GET response', async () => {
+    it('reads the stored operationMode/checkoutFxMode in the GET response', async () => {
       configureActiveRows([
         modeParamRow('OPERATION_MODE', TenantOperationMode.RESTAURANT),
         modeParamRow('CHECKOUT_FX_MODE', CheckoutFxMode.BCN_OFFICIAL),
@@ -881,17 +882,50 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       expect(result.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
     });
 
-    it('falls back to the POS defaults when stored values are missing, non-string or not members (never trust the DB string)', async () => {
+    it('reads missing or corrupt stored values as null (absence must look like absence, never rebased to a default)', async () => {
+      // No rows at all: the tenant never configured the modes.
+      configureActiveRows([]);
+      tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
+      const unconfigured = await service.getFiscalSetup(tenantId);
+      expect(unconfigured.operationMode).toBeNull();
+      expect(unconfigured.checkoutFxMode).toBeNull();
+
+      // Corrupt rows: non-member and non-string values read as null too.
       configureActiveRows([
         modeParamRow('OPERATION_MODE', 'BOGUS_MODE'),
         modeParamRow('CHECKOUT_FX_MODE', 123),
       ]);
-
       tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
-      const result = await service.getFiscalSetup(tenantId);
+      const corrupted = await service.getFiscalSetup(tenantId);
+      expect(corrupted.operationMode).toBeNull();
+      expect(corrupted.checkoutFxMode).toBeNull();
+    });
 
-      expect(result.operationMode).toBe(TenantOperationMode.FOODPARK_QSR);
-      expect(result.checkoutFxMode).toBe(CheckoutFxMode.COMMERCIAL);
+    it('leaves the persisted mode params untouched when the POST omits the keys', async () => {
+      const prior = [
+        modeParamRow('OPERATION_MODE', TenantOperationMode.RESTAURANT),
+        modeParamRow('CHECKOUT_FX_MODE', CheckoutFxMode.BCN_OFFICIAL),
+      ];
+      configureActiveRows(prior);
+
+      // Rev 2: no operationMode/checkoutFxMode keys — the web asserts nothing.
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CUOTA_FIJA,
+        businessName: 'Cafetín Las Palmeras',
+        ruc: 'J0310000055555',
+        commercialFxSpread: 0.5,
+        pricesIncludeTax: true,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      // No new rows for either key.
+      expect(savedRowsFor('OPERATION_MODE')).toHaveLength(0);
+      expect(savedRowsFor('CHECKOUT_FX_MODE')).toHaveLength(0);
+
+      // The prior rows are intact: still the governing version 1 rows.
+      expect(result.operationMode).toBe(TenantOperationMode.RESTAURANT);
+      expect(result.checkoutFxMode).toBe(CheckoutFxMode.BCN_OFFICIAL);
     });
 
     it('returns the just-saved values in the POST response', async () => {

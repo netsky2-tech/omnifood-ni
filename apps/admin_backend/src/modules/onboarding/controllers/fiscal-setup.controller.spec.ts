@@ -47,8 +47,10 @@ describe('FiscalSetupController (Unit)', () => {
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,
-        operationMode: TenantOperationMode.FOODPARK_QSR,
-        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+        // BXW-007 U1 rev 2: unset modes read as null (required key, nullable
+        // value) — the controller is a passthrough of the service contract.
+        operationMode: null,
+        checkoutFxMode: null,
       };
 
       service.getFiscalSetup.mockResolvedValueOnce(mockResponse);
@@ -103,8 +105,8 @@ describe('FiscalSetupController (Unit)', () => {
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,
-        operationMode: TenantOperationMode.FOODPARK_QSR,
-        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+        operationMode: null,
+        checkoutFxMode: null,
       };
 
       service.configureFiscalSetup.mockResolvedValueOnce(mockResponse);

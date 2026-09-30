@@ -435,13 +435,45 @@ describe('FiscalSetup (Integration & E2E)', () => {
       taxRateIva: 0.0,
       pricesIncludeTax: true,
       commercialFxSpread: 0.5,
-      // BXW-007 U1: unconfigured params read as the POS defaults.
-      operationMode: TenantOperationMode.FOODPARK_QSR,
-      checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+      // BXW-007 U1 rev 2: unconfigured params read as null (never rebased
+      // to a default).
+      operationMode: null,
+      checkoutFxMode: null,
       dgiAuthorizationCode: null,
       dgiAuthorizationIssuedAt: null,
       dgiAuthorizationExpiresAt: null,
     });
+  });
+
+  it('returns 201 and leaves the mode params untouched when the keys are omitted (rev 2 absence contract)', async () => {
+    const token = signToken({ tenant_id: 'tenant-A' });
+
+    // The web asserts nothing about the modes: the two keys are absent.
+    const payload = buildFiscalPayload({ businessName: 'Café Sin Modos' });
+    delete payload.operationMode;
+    delete payload.checkoutFxMode;
+
+    await request(app.getHttpServer())
+      .post(API_PREFIX)
+      .set('Authorization', `Bearer ${token}`)
+      .send(payload)
+      .expect(201);
+
+    // Absence writes NOTHING for either key (no default, no tombstone).
+    expect(
+      dbSysParams.filter((p) => p.paramKey === 'OPERATION_MODE'),
+    ).toHaveLength(0);
+    expect(
+      dbSysParams.filter((p) => p.paramKey === 'CHECKOUT_FX_MODE'),
+    ).toHaveLength(0);
+
+    // And a subsequent GET reads absence as null, not as a default.
+    const read = await request(app.getHttpServer())
+      .get(API_PREFIX)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect((read.body as FiscalSetupResponse).operationMode).toBeNull();
+    expect((read.body as FiscalSetupResponse).checkoutFxMode).toBeNull();
   });
 
   it('returns 201 and configures CUOTA_FIJA updating Tenant and sys parameters', async () => {

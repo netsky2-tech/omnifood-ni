@@ -17,10 +17,10 @@ export interface EffectiveFiscalPayload {
   ruc: string | null;
   taxRate: number;
   tenantId: string;
-  /** BXW-007 U1: POS canon operation mode — rides the fingerprint. */
-  operationMode: TenantOperationMode;
-  /** BXW-007 U1: POS canon checkout FX source — rides the fingerprint. */
-  checkoutFxMode: CheckoutFxMode;
+  /** BXW-007 U1 rev 2: null = the tenant never configured it — rides the fingerprint as null. */
+  operationMode: TenantOperationMode | null;
+  /** BXW-007 U1 rev 2: null = the tenant never configured it — rides the fingerprint as null. */
+  checkoutFxMode: CheckoutFxMode | null;
   /** D-21 (#554): null when no DGI authorization is configured. */
   dgiAuthorizationCode: string | null;
   dgiAuthorizationIssuedAt: string | null;
@@ -35,10 +35,10 @@ export interface FiscalConfigSnapshot {
   taxRate: number;
   pricesIncludeTax: boolean;
   commercialFxSpread?: number;
-  /** BXW-007 U1: POS canon operation mode (optional so existing builders keep compiling). */
-  operationMode?: TenantOperationMode;
-  /** BXW-007 U1: POS canon checkout FX source (optional so existing builders keep compiling). */
-  checkoutFxMode?: CheckoutFxMode;
+  /** BXW-007 U1 rev 2: null = never configured (optional so existing builders keep compiling). */
+  operationMode?: TenantOperationMode | null;
+  /** BXW-007 U1 rev 2: null = never configured (optional so existing builders keep compiling). */
+  checkoutFxMode?: CheckoutFxMode | null;
   /** D-21 (#554): null when no DGI authorization is configured. */
   dgiAuthorizationCode?: string | null;
   dgiAuthorizationIssuedAt?: string | null;

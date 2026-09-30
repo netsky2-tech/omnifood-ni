@@ -17,8 +17,8 @@ import {
   runInTenantTransaction,
 } from '../../../core/database/tenant-transaction';
 import {
-  coerceCheckoutFxMode,
-  coerceTenantOperationMode,
+  readCheckoutFxModeOrNull,
+  readTenantOperationModeOrNull,
 } from '../dto/fiscal-setup.dto';
 import {
   FiscalRegime,
@@ -119,13 +119,14 @@ export class FiscalConfigVersionService {
     const commercialFxSpread =
       typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
 
-    // BXW-007 U1: never trust the stored DB string — the enum-whitelist
-    // coercion falls back to the POS defaults for a missing, non-string or
-    // non-member value, and both fields ride the fingerprinted payload.
-    const operationMode = coerceTenantOperationMode(
+    // BXW-007 U1 rev 2: absence must read as absence (D-16/D-21 spirit) —
+    // both fields ride the fingerprinted payload as null when the tenant
+    // never configured them, keeping "never configured" distinguishable
+    // from "configured with the POS default".
+    const operationMode = readTenantOperationModeOrNull(
       paramMap.get(FISCAL_PARAM_KEYS.OPERATION_MODE),
     );
-    const checkoutFxMode = coerceCheckoutFxMode(
+    const checkoutFxMode = readCheckoutFxModeOrNull(
       paramMap.get(FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE),
     );
 
