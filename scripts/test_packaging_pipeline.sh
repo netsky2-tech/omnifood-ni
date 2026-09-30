@@ -5,7 +5,7 @@
 #
 # Running only the cheap tests (no Flutter / Android SDK required):
 #   SKIP_END_TO_END_BUILD=1 scripts/test_packaging_pipeline.sh
-# This runs Tests 1-3 and 6-11 and skips the end-to-end build Tests 4-5,
+# This runs Tests 1-3 and 6-23 and skips the end-to-end build Tests 4-5,
 # which require a full Flutter toolchain and Android SDK.
 # ==============================================================================
 
@@ -49,9 +49,9 @@ echo "✅ [Test 3 Passed] build_pos_apk.sh argument parser functions cleanly."
 if [ "${SKIP_END_TO_END_BUILD:-0}" = "1" ]; then
     echo "⏩ [Test 4] Skipped (SKIP_END_TO_END_BUILD=1; end-to-end build requires Flutter + Android SDK)."
 else
-echo "🔍 [Test 4] Executing build_pos_apk.sh with --split-per-abi --skip-tests..."
+echo "🔍 [Test 4] Executing build_pos_apk.sh with --split-per-abi --skip-tests --allow-debug-signing..."
 rm -rf "${TEST_OUT_DIR}"
-"${SCRIPT_DIR}/build_pos_apk.sh" --split-per-abi --skip-tests --out-dir "${TEST_OUT_DIR}"
+"${SCRIPT_DIR}/build_pos_apk.sh" --split-per-abi --skip-tests --allow-debug-signing --out-dir "${TEST_OUT_DIR}"
 fi
 
 # Test 5: Verify Artifacts, Checksums & Manifest — requires Test 4 artifacts
@@ -446,6 +446,79 @@ if ! grep -q '"test_concurrency": "${TEST_CONCURRENCY_BINDING}"' "${SCRIPT_DIR}/
     exit 1
 fi
 echo "✅ [Test 19 Passed] release_manifest.json records the resolved test concurrency or flutter-default."
+
+# -----------------------------------------------------------------------------
+# Cheap release-signing tests (20-23): no Flutter / Android SDK required.
+# There is no release keystore in the repository, so the fail-closed gate and
+# the plan-mode signing report are exercised with the failing flutter shim,
+# proving the gate fires before the toolchain is ever invoked.
+# -----------------------------------------------------------------------------
+
+# Test 20: a real build without a keystore and without the opt-in fails closed
+# with exit code 2 and an actionable message, before the Flutter toolchain runs.
+echo "🔍 [Test 20] Verifying a real build without a keystore fails closed (exit 2)..."
+FAILCLOSED_RC=0
+FAILCLOSED_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --split-per-abi --skip-tests 2>&1)" || FAILCLOSED_RC=$?
+if [ "${FAILCLOSED_RC}" -ne 2 ]; then
+    echo "❌ FAILED: real build without a keystore exited with code ${FAILCLOSED_RC} (expected 2). Output:" >&2
+    echo "${FAILCLOSED_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+printf '%s\n' "${FAILCLOSED_OUTPUT}" | grep -q -- "--allow-debug-signing" || { echo "❌ FAILED: fail-closed message must name the --allow-debug-signing remedy"; printf '%s\n' "${FAILCLOSED_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+printf '%s\n' "${FAILCLOSED_OUTPUT}" | grep -q "provision_release_keystore.sh" || { echo "❌ FAILED: fail-closed message must name the keystore-provisioning remedy"; printf '%s\n' "${FAILCLOSED_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+if printf '%s\n' "${FAILCLOSED_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+    echo "❌ FAILED: fail-closed gate ran after the flutter toolchain was invoked" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 20 Passed] Real build without a keystore fails closed with exit 2 before any Flutter step."
+
+# Test 21: bare --plan still exits 0 without a keystore and reports that a
+# release build would fail closed (plan mode is side-effect-free).
+echo "🔍 [Test 21] Verifying bare --plan reports the fail-closed signing mode..."
+PLANSGN_RC=0
+PLANSGN_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan 2>&1)" || PLANSGN_RC=$?
+if [ "${PLANSGN_RC}" -ne 0 ]; then
+    echo "❌ FAILED: bare --plan exited with code ${PLANSGN_RC} (expected 0, plan mode is side-effect-free). Output:" >&2
+    echo "${PLANSGN_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+printf '%s\n' "${PLANSGN_OUTPUT}" | grep -q "Release signing:" || { echo "❌ FAILED: bare --plan output does not report the release signing mode"; printf '%s\n' "${PLANSGN_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+printf '%s\n' "${PLANSGN_OUTPUT}" | grep -q "fail closed" || { echo "❌ FAILED: bare --plan must report that a release build would fail closed without a keystore"; printf '%s\n' "${PLANSGN_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+if printf '%s\n' "${PLANSGN_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+    echo "❌ FAILED: bare --plan invoked the flutter toolchain" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 21 Passed] Bare --plan exits 0 and reports the fail-closed release signing mode."
+
+# Test 22: --allow-debug-signing is accepted and the plan reports the explicit
+# debug-signing opt-in as the resolved signing mode.
+echo "🔍 [Test 22] Verifying --allow-debug-signing is accepted and reported in --plan..."
+OPTIN_RC=0
+OPTIN_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --allow-debug-signing 2>&1)" || OPTIN_RC=$?
+if [ "${OPTIN_RC}" -ne 0 ]; then
+    echo "❌ FAILED: --plan --allow-debug-signing exited with code ${OPTIN_RC} (expected 0). Output:" >&2
+    echo "${OPTIN_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+printf '%s\n' "${OPTIN_OUTPUT}" | grep -q "Release signing:" || { echo "❌ FAILED: --plan --allow-debug-signing output does not report the release signing mode"; printf '%s\n' "${OPTIN_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+printf '%s\n' "${OPTIN_OUTPUT}" | grep -q "debug-signed" || { echo "❌ FAILED: --plan --allow-debug-signing must report the explicit debug-signing opt-in"; printf '%s\n' "${OPTIN_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+if printf '%s\n' "${OPTIN_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+    echo "❌ FAILED: --plan --allow-debug-signing invoked the flutter toolchain" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 22 Passed] --allow-debug-signing is accepted and reported as the signing mode."
+
+# Test 23: --help documents the --allow-debug-signing flag.
+echo "🔍 [Test 23] Verifying --help documents --allow-debug-signing..."
+HELP_OUTPUT="$("${SCRIPT_DIR}/build_pos_apk.sh" --help 2>&1)"
+printf '%s\n' "${HELP_OUTPUT}" | grep -q -- "--allow-debug-signing" || { echo "❌ FAILED: --help does not document --allow-debug-signing"; printf '%s\n' "${HELP_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+echo "✅ [Test 23 Passed] --help documents --allow-debug-signing."
 
 rm -rf "${SHIM_DIR}"
 

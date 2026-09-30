@@ -24,6 +24,35 @@ API_URL=""
 TEST_CONCURRENCY=""
 PILOT_MODE=false
 PLAN_ONLY=false
+ALLOW_DEBUG_SIGNING=false
+
+# Release signing resolution. A keystore is "ready" only when key.properties
+# exists AND the storeFile it names exists; relative storeFile paths resolve
+# against the Android app module dir, matching Gradle's file() semantics.
+KEYSTORE_PROPERTIES_FILE="${POS_APP_DIR}/android/key.properties"
+APP_MODULE_DIR="${POS_APP_DIR}/android/app"
+RELEASE_SIGNING_READY=false
+RELEASE_SIGNING_MODE="fail-closed (no release keystore found; a release build would fail closed)"
+resolve_release_signing_mode() {
+    if [ -f "${KEYSTORE_PROPERTIES_FILE}" ]; then
+        local store_file=""
+        store_file="$(grep -E '^storeFile=' "${KEYSTORE_PROPERTIES_FILE}" | head -n1 | cut -d= -f2- | tr -d '\r')"
+        if [ -n "${store_file}" ]; then
+            local store_path
+            case "${store_file}" in
+                /*) store_path="${store_file}" ;;
+                *)  store_path="${APP_MODULE_DIR}/${store_file}" ;;
+            esac
+            if [ -f "${store_path}" ]; then
+                RELEASE_SIGNING_READY=true
+                RELEASE_SIGNING_MODE="${store_path}"
+            fi
+        fi
+    fi
+    if [ "${RELEASE_SIGNING_READY}" = false ] && [ "${ALLOW_DEBUG_SIGNING}" = true ]; then
+        RELEASE_SIGNING_MODE="explicit debug-signing opt-in (--allow-debug-signing): the artifact will be debug-signed"
+    fi
+}
 
 # Validate a --device-id candidate: trimmed, non-empty, no whitespace, max 64 chars.
 validate_device_id() {
@@ -140,6 +169,10 @@ while [[ $# -gt 0 ]]; do
             PILOT_MODE=true
             shift
             ;;
+        --allow-debug-signing)
+            ALLOW_DEBUG_SIGNING=true
+            shift
+            ;;
         --plan)
             PLAN_ONLY=true
             shift
@@ -157,6 +190,11 @@ while [[ $# -gt 0 ]]; do
             echo "                    no whitespace, non-empty host). REQUIRED for --pilot;"
             echo "                    fleet builds omit it and provision the terminal at runtime"
             echo "  --pilot           Pilot/single-terminal build; REQUIRES --device-id and --api-url"
+            echo "  --allow-debug-signing"
+            echo "                    Allow a release build without a release keystore to fall"
+            echo "                    back to the debug keystore (threaded to Gradle as the"
+            echo "                    allowDebugSigning project property). The artifact will be"
+            echo "                    DEBUG-SIGNED and must NOT be shipped as a release."
             echo "  --plan            Print resolved configuration and the exact flutter build apk"
             echo "                    command(s), then exit 0 without building (no Flutter/SDK needed)"
             echo "  --test-concurrency <n>"
@@ -216,6 +254,9 @@ if [ -n "${TEST_CONCURRENCY}" ]; then
     FLUTTER_TEST_CMD="flutter test --concurrency=${TEST_CONCURRENCY}"
 fi
 
+# Release signing mode (side-effect-free: reads the repository state only).
+resolve_release_signing_mode
+
 # Plan mode: print resolved configuration and exact build commands, then stop.
 # Must run before any side effect and must not require Flutter or the Android SDK.
 if [ "${PLAN_ONLY}" = true ]; then
@@ -240,6 +281,10 @@ if [ "${PLAN_ONLY}" = true ]; then
     if [ -z "${TEST_CONCURRENCY}" ]; then
         echo "   (no --test-concurrency given; 'flutter test' will use the Flutter default)"
     fi
+    echo "🔑 Release signing:     ${RELEASE_SIGNING_MODE}"
+    if [ "${RELEASE_SIGNING_READY}" = false ] && [ "${ALLOW_DEBUG_SIGNING}" = false ]; then
+        echo "   (a release build would fail closed: create the keystore or pass --allow-debug-signing)"
+    fi
     echo "📋 release_manifest.json would record terminal_identity: ${TERMINAL_ID_BINDING}"
     echo "📋 release_manifest.json would record api_url: ${API_URL_BINDING}"
     echo "📋 release_manifest.json would record test_concurrency: ${TEST_CONCURRENCY_BINDING}"
@@ -261,6 +306,25 @@ if [ "${PLAN_ONLY}" = true ]; then
     echo "=============================================================================="
     echo "Plan mode: no dependencies resolved, no tests, no codegen, no build executed."
     exit 0
+fi
+
+# Fail-closed gate: a release build without a keystore and without the explicit
+# opt-in must fail before ANY build step (including `flutter pub get`) runs.
+# Plan mode already exited above, so this gate never affects --plan.
+if [ "${RELEASE_SIGNING_READY}" = false ] && [ "${ALLOW_DEBUG_SIGNING}" = false ]; then
+    echo "ERROR: No release keystore found (${KEYSTORE_PROPERTIES_FILE} is absent or does not name a real storeFile)." >&2
+    echo "A release build would silently fall back to the debug keystore, producing an artifact that can never be updated in the field." >&2
+    echo "Two remedies:" >&2
+    echo "  1. Create the release keystore with the provisioning script (scripts/provision_release_keystore.sh)." >&2
+    echo "  2. Pass the explicit debug-signing opt-in (--allow-debug-signing)." >&2
+    exit 2
+fi
+
+# Gradle opt-in threading: exported ONLY for the actual `flutter build apk`
+# invocations below, and only when the flag was explicitly requested.
+GRADLE_SIGNING_ENV=()
+if [ "${ALLOW_DEBUG_SIGNING}" = true ]; then
+    GRADLE_SIGNING_ENV=("ORG_GRADLE_PROJECT_allowDebugSigning=true")
 fi
 
 echo "=============================================================================="
@@ -303,17 +367,21 @@ fi
 # 4. Building APKs
 echo "🏗️  [4/5] Building Release Candidate APK(s)..."
 
+if [ "${ALLOW_DEBUG_SIGNING}" = true ] && [ "${RELEASE_SIGNING_READY}" = false ]; then
+    echo "⚠️  WARNING: --allow-debug-signing is active. The artifact will be DEBUG-SIGNED and must NOT be shipped as a release."
+fi
+
 BUILD_OUTPUT_DIR="${POS_APP_DIR}/build/app/outputs/flutter-apk"
 
 if [ "${BUILD_MODE}" = "split" ] || [ "${BUILD_MODE}" = "both" ]; then
     echo "  -> Compiling Split-per-ABI APKs (armeabi-v7a, arm64-v8a, x86_64)..."
-    flutter build apk --release --split-per-abi ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
+    env ${GRADLE_SIGNING_ENV[@]+"${GRADLE_SIGNING_ENV[@]}"} flutter build apk --release --split-per-abi ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
     cp "${BUILD_OUTPUT_DIR}"/app-*-release.apk "${OUT_DIR}/" 2>/dev/null || true
 fi
 
 if [ "${BUILD_MODE}" = "universal" ] || [ "${BUILD_MODE}" = "both" ]; then
     echo "  -> Compiling Universal Release APK..."
-    flutter build apk --release ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
+    env ${GRADLE_SIGNING_ENV[@]+"${GRADLE_SIGNING_ENV[@]}"} flutter build apk --release ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
     cp "${BUILD_OUTPUT_DIR}/app-release.apk" "${OUT_DIR}/app-universal-release.apk" 2>/dev/null || true
 fi
 
