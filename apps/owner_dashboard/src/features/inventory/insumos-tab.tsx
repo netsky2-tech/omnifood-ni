@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateInsumo, useUpdateInsumo } from "@/features/recipes/use-recipes";
 import type { Insumo, CreateInsumoInput } from "@/features/recipes/types";
+import {
+  useCatalogValues,
+  useSeedCatalogDefaults,
+} from "@/features/catalog/use-catalog";
+import type { CatalogValue } from "@/features/catalog/types";
 import { api } from "@/lib/api";
 import { useTenantId } from "@/lib/tenant";
 import { useSafeSearchParams } from "@/lib/safe-search-params";
@@ -10,6 +15,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatCard } from "@/components/ui/stat-card";
 import { LoadingState } from "@/components/ui/loading-state";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -78,8 +91,9 @@ interface InsumoFormState {
 
 const DEFAULT_FORM: InsumoFormState = {
   name: "",
-  purchaseUom: "UN",
-  consumptionUom: "UN",
+  // §17.3/§40: no silent pre-filled defaults — UoM must be chosen explicitly.
+  purchaseUom: "",
+  consumptionUom: "",
   conversionFactor: "1",
   averageCost: "0",
   parLevel: "",
@@ -113,6 +127,52 @@ export function InsumosTab() {
   const allowCloseRef = useRef(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState<Insumo | null>(null);
+
+  // UoM comes from the single shared units-of-measure catalog (UOM pool,
+  // see admin_backend catalog-type.ts). Seeding populates it on first use.
+  const { data: uomCatalog } = useCatalogValues("UOM");
+  const seedCatalogDefaults = useSeedCatalogDefaults();
+  const uomOptions = useMemo(
+    () => (uomCatalog ?? []).filter((v) => v.is_active),
+    [uomCatalog],
+  );
+  const hasUomCatalog = uomOptions.length > 0;
+
+  /**
+   * Display value for a UoM select: mapped to the catalog code when one
+   * matches case-insensitively (stored insumos keep uppercase "LB" while the
+   * catalog seeds "lb"), otherwise the raw stored value is preserved as a
+   * fallback item — an edit never silently loses the stored unit.
+   */
+  const resolveUomValue = (raw: string): string => {
+    const value = raw.trim();
+    if (!value) return "";
+    const match = uomOptions.find(
+      (o) => o.code.toUpperCase() === value.toUpperCase(),
+    );
+    return match ? match.code : value;
+  };
+
+  const uomItemsFor = (raw: string): CatalogValue[] => {
+    const resolved = resolveUomValue(raw);
+    if (resolved && !uomOptions.some((o) => o.code === resolved)) {
+      return [
+        {
+          id: `__stored-${resolved}`,
+          tenant_id: "",
+          catalog_type: "UOM",
+          code: resolved,
+          name: resolved,
+          is_active: true,
+          sort_order: -1,
+          created_at: "",
+          updated_at: "",
+        },
+        ...uomOptions,
+      ];
+    }
+    return uomOptions;
+  };
 
   const isDirty = !formsEqual(form, initialForm);
   const saving = createInsumo.isPending || updateInsumo.isPending;
@@ -196,8 +256,10 @@ export function InsumosTab() {
     setEditingInsumo(insumo);
     const values: InsumoFormState = {
       name: insumo.name,
-      purchaseUom: insumo.purchaseUom || insumo.consumption_uom || "UN",
-      consumptionUom: insumo.consumptionUom || insumo.consumption_uom || "UN",
+      // Stored values without a catalog match still load raw; the select adds
+      // them as fallback items so editing never loses the stored unit.
+      purchaseUom: insumo.purchaseUom || insumo.consumption_uom || "",
+      consumptionUom: insumo.consumptionUom || insumo.consumption_uom || "",
       conversionFactor: String(insumo.conversionFactor ?? 1),
       averageCost: String(insumo.averageCost ?? 0),
       parLevel: insumo.parLevel != null ? String(insumo.parLevel) : "",
@@ -234,7 +296,9 @@ export function InsumosTab() {
       return;
     }
     if (!form.purchaseUom.trim() || !form.consumptionUom.trim()) {
-      setFormError("Las unidades de medida son obligatorias.");
+      setFormError(
+        "Selecciona la unidad de compra y la unidad de consumo del catálogo.",
+      );
       return;
     }
     const factor = Number(form.conversionFactor);
@@ -470,7 +534,9 @@ export function InsumosTab() {
                             </Badge>
                           )}
                           {!ins.is_active && (
-                            <Badge variant="destructive" className="text-[10px]">
+                            // §26/§27: INACTIVE is a neutral lifecycle state,
+                            // not an exception — secondary palette, not red.
+                            <Badge variant="secondary" className="text-[10px]">
                               Inactivo
                             </Badge>
                           )}
@@ -571,16 +637,16 @@ export function InsumosTab() {
             </DialogHeader>
 
             {formError && (
-              <div
+              <Alert
                 ref={errorRef}
                 tabIndex={-1}
-                role="alert"
+                variant="destructive"
                 data-testid="insumo-form-error"
-                className="p-3 text-xs bg-destructive/10 text-destructive rounded-md border border-destructive/20 flex items-start gap-2 focus-visible:outline-none"
+                className="text-xs focus-visible:outline-none"
               >
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>{formError}</span>
-              </div>
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
             )}
 
             <div className="space-y-3 text-sm">
@@ -602,26 +668,104 @@ export function InsumosTab() {
                   <Label htmlFor="purchase_uom" className="text-xs">
                     UoM Compra *
                   </Label>
-                  <Input
-                    id="purchase_uom"
-                    data-testid="insumo-form-purchase-uom"
-                    placeholder="Ej: LB, L, DOCENA, KG"
-                    value={form.purchaseUom}
-                    onChange={(e) => setForm({ ...form, purchaseUom: e.target.value })}
-                  />
+                  <Select
+                    value={resolveUomValue(form.purchaseUom)}
+                    onValueChange={(value) =>
+                      setForm({ ...form, purchaseUom: value })
+                    }
+                    disabled={!hasUomCatalog}
+                  >
+                    <SelectTrigger
+                      id="purchase_uom"
+                      data-testid="insumo-form-purchase-uom"
+                      className="text-xs h-9"
+                    >
+                      <SelectValue placeholder="Selecciona la unidad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uomItemsFor(form.purchaseUom).map((option) => (
+                        <SelectItem
+                          key={option.code}
+                          value={option.code}
+                          className="text-xs"
+                        >
+                          {option.name === option.code
+                            ? option.code
+                            : `${option.name} (${option.code})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="consumption_uom" className="text-xs">
                     UoM Consumo *
                   </Label>
-                  <Input
-                    id="consumption_uom"
-                    data-testid="insumo-form-consumption-uom"
-                    placeholder="Ej: G, ML, UN"
-                    value={form.consumptionUom}
-                    onChange={(e) => setForm({ ...form, consumptionUom: e.target.value })}
-                  />
+                  <Select
+                    value={resolveUomValue(form.consumptionUom)}
+                    onValueChange={(value) =>
+                      setForm({ ...form, consumptionUom: value })
+                    }
+                    disabled={!hasUomCatalog}
+                  >
+                    <SelectTrigger
+                      id="consumption_uom"
+                      data-testid="insumo-form-consumption-uom"
+                      className="text-xs h-9"
+                    >
+                      <SelectValue placeholder="Selecciona la unidad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uomItemsFor(form.consumptionUom).map((option) => (
+                        <SelectItem
+                          key={option.code}
+                          value={option.code}
+                          className="text-xs"
+                        >
+                          {option.name === option.code
+                            ? option.code
+                            : `${option.name} (${option.code})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+                {hasUomCatalog ? (
+                  <p className="col-span-2 text-[10px] text-muted-foreground">
+                    Las unidades provienen del catálogo compartido. ¿Falta una
+                    unidad? Agrégala en Catálogos.
+                  </p>
+                ) : (
+                  <div
+                    className="col-span-2 rounded-md border border-border bg-muted/30 p-3 space-y-2"
+                    data-testid="insumo-form-uom-empty"
+                  >
+                    <p className="text-[11px] text-muted-foreground">
+                      Aún no hay unidades de medida en tu catálogo. Siembra las
+                      unidades por defecto o agrégalas en Catálogos.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      data-testid="insumo-form-seed-uom-btn"
+                      disabled={seedCatalogDefaults.isPending}
+                      onClick={() =>
+                        seedCatalogDefaults.mutate(undefined, {
+                          onSuccess: (result) => {
+                            toast({
+                              title: "Unidades de medida sembradas",
+                              description: `Se agregaron ${result.inserted} unidades al catálogo.`,
+                            });
+                          },
+                        })
+                      }
+                    >
+                      Sembrar unidades por defecto
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

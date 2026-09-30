@@ -60,6 +60,17 @@ export interface FxRateResolver {
 
 export const FX_RATE_RESOLVER = Symbol('FX_RATE_RESOLVER');
 
+/**
+ * Message locale for user-reachable conflict/not-found errors raised while
+ * recording a purchase. The device sync path keeps the historical English
+ * contract messages (pinned by the e2e device-transport suite); the human
+ * manual-entry route (`POST /inventory/purchases/manual`) requests Spanish
+ * business copy that never exposes raw entity UUIDs (backoffice experience
+ * standard §22/§39.1). The duplicate-invoice domain rule itself keeps ONE
+ * source of truth here — only its message rendering is parameterized.
+ */
+export type PurchaseMessageLocale = 'en' | 'es';
+
 export interface PurchasePreview {
   invoiceDate: string;
   currency: Currency;
@@ -130,6 +141,61 @@ export class InventoryPurchaseService {
     });
   }
 
+  /**
+   * Owner-dashboard supplier catalog (SOHO purchases). Human oversight read
+   * of the ACTIVE suppliers for the tenant, riding one tenant-bound
+   * transaction so FORCE RLS authorizes the read via `app.tenant_id`.
+   *
+   * Known limitation (documented in the slice task): suppliers seeded on the
+   * POS (database_seeder.dart) stay POS-local — there is no POS→cloud
+   * supplier sync yet, so those rows do not appear here until the web-side
+   * supplier management creates cloud rows (separate sync work).
+   */
+  async listSuppliers(input: { tenantId: string }): Promise<Supplier[]> {
+    const tenantId = this.requireTenantId(input.tenantId);
+
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      manager.find(Supplier, {
+        where: { tenant_id: tenantId, is_active: true },
+        order: { name: 'ASC' },
+      }),
+    );
+  }
+
+  /**
+   * Human supplier creation from the owner dashboard. Tenant-bound write:
+   * the tenant always comes from the authenticated human session, and the
+   * insert runs inside a tenant-bound transaction so FORCE RLS authorizes
+   * it. Name is the only required field (mirrors the `Supplier` entity).
+   */
+  async createSupplier(input: {
+    tenantId: string;
+    name: string;
+    phone?: string;
+    contactPerson?: string;
+    creditTerms?: string;
+  }): Promise<Supplier> {
+    const tenantId = this.requireTenantId(input.tenantId);
+    const name = input.name?.trim();
+
+    if (!name) {
+      // Only reachable through the human `POST /inventory/suppliers` route.
+      throw new BadRequestException('El nombre del proveedor es obligatorio.');
+    }
+
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) => {
+      const supplier = manager.create(Supplier, {
+        tenant_id: tenantId,
+        name,
+        phone: input.phone?.trim() || null,
+        contact_person: input.contactPerson?.trim() || null,
+        credit_terms: input.creditTerms?.trim() || null,
+      });
+
+      return manager.save(Supplier, supplier);
+    });
+  }
+
   async previewPurchase(input: {
     id: string;
     tenantId: string;
@@ -176,9 +242,16 @@ export class InventoryPurchaseService {
     lotCode?: string;
     receivedDate?: string;
     expirationDate?: string;
+    /**
+     * Defaults to `'en'` (device sync contract). The human manual-entry
+     * controller passes `'es'` so conflict/not-found copy reaches the owner
+     * in business Spanish without raw UUIDs.
+     */
+    messageLocale?: PurchaseMessageLocale;
   }) {
     const tenantId = this.requireTenantId(input.tenantId);
     const invoiceNumber = this.requireInvoiceNumber(input.invoiceNumber);
+    const messagesInSpanish = input.messageLocale === 'es';
 
     try {
       return await this.dataSource.transaction(
@@ -194,7 +267,9 @@ export class InventoryPurchaseService {
             .getOne();
 
           if (!insumo) {
-            throw new NotFoundException(`Insumo ${input.insumoId} not found`);
+            throw messagesInSpanish
+              ? new NotFoundException('El insumo seleccionado no existe.')
+              : new NotFoundException(`Insumo ${input.insumoId} not found`);
           }
 
           const supplier = await manager.findOne(Supplier, {
@@ -205,9 +280,13 @@ export class InventoryPurchaseService {
           });
 
           if (!supplier) {
-            throw new NotFoundException(
-              `Supplier ${input.supplierId} not found`,
-            );
+            // Supplier identity beyond the raw UUID is not in scope here —
+            // say so in business language instead of exposing the id.
+            throw messagesInSpanish
+              ? new NotFoundException('El proveedor seleccionado no existe.')
+              : new NotFoundException(
+                  `Supplier ${input.supplierId} not found`,
+                );
           }
 
           const existingDocument = await manager.findOne(PurchaseDocument, {
@@ -219,9 +298,15 @@ export class InventoryPurchaseService {
           });
 
           if (existingDocument) {
-            throw new ConflictException(
-              `Purchase invoice ${invoiceNumber} is already registered for supplier ${input.supplierId}`,
-            );
+            // The supplier row is loaded above, so the Spanish message can
+            // name the supplier by NAME instead of leaking its UUID.
+            throw messagesInSpanish
+              ? new ConflictException(
+                  `Ya existe una compra registrada con la factura '${invoiceNumber}' para el proveedor '${supplier.name}'.`,
+                )
+              : new ConflictException(
+                  `Purchase invoice ${invoiceNumber} is already registered for supplier ${input.supplierId}`,
+                );
           }
 
           const preview = await this.buildPreview(input, insumo);
@@ -306,9 +391,16 @@ export class InventoryPurchaseService {
         (error.driverError as QueryFailedDriverError | undefined)?.code ===
           POSTGRES_UNIQUE_VIOLATION
       ) {
-        throw new ConflictException(
-          `Purchase invoice ${invoiceNumber} is already registered for supplier ${input.supplierId}`,
-        );
+        // Race loser of the supplier+invoice unique guard: the supplier row
+        // is out of scope here, so the Spanish message omits the supplier
+        // clause entirely rather than falling back to the raw UUID.
+        throw messagesInSpanish
+          ? new ConflictException(
+              `Ya existe una compra registrada con la factura '${invoiceNumber}'.`,
+            )
+          : new ConflictException(
+              `Purchase invoice ${invoiceNumber} is already registered for supplier ${input.supplierId}`,
+            );
       }
 
       throw error;

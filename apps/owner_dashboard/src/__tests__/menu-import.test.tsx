@@ -206,6 +206,11 @@ describe("MenuImportWizard", () => {
     expect(screen.getByTestId("menu-import-errors-table-body")).toHaveTextContent(
       "7",
     );
+    // Row-issues block is a destructive alert (§42.1): failure ≠ near-white.
+    expect(screen.getByTestId("menu-import-errors-block")).toHaveClass(
+      "bg-destructive/10",
+      "text-destructive",
+    );
     // Warnings render in their own table.
     expect(screen.getByTestId("menu-import-warnings-table-body")).toHaveTextContent(
       "VACÍA",
@@ -272,6 +277,13 @@ describe("MenuImportWizard", () => {
     expect(typeof committedPayload).toBe("string");
     expect(committedPayload?.length ?? 0).toBeGreaterThan(0);
 
+    // Success receipt uses the semantic success palette, not a near-white tint.
+    expect(screen.getByTestId("menu-import-receipt-alert")).toHaveClass(
+      "border-emerald-200",
+      "bg-emerald-50",
+      "text-emerald-700",
+    );
+
     expect(screen.getByTestId("menu-import-committed-categories")).toHaveTextContent("2");
     expect(screen.getByTestId("menu-import-committed-products-create")).toHaveTextContent("2");
   });
@@ -291,6 +303,10 @@ describe("MenuImportWizard", () => {
     });
 
     expect(screen.getByTestId("menu-import-client-error")).toBeInTheDocument();
+    expect(screen.getByTestId("menu-import-client-error")).toHaveClass(
+      "bg-destructive/10",
+      "text-destructive",
+    );
     expect(previewMenuImport).not.toHaveBeenCalled();
     expect(commitMenuImport).not.toHaveBeenCalled();
   });

@@ -36,6 +36,8 @@ import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 import type { SyncMovementsDto } from './dto/create-inventory-movement.dto';
 import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
+import { ManualPurchaseDto } from './dto/purchase-manual.dto';
+import { CreateSupplierDto } from './dto/supplier.dto';
 
 const handlerOf = (handlerName: string): unknown => {
   const handler = Object.getOwnPropertyDescriptor(
@@ -237,6 +239,138 @@ describe('InventoryMovementController device transport routes', () => {
         insumoId: undefined,
         limit: 50,
       });
+    });
+  });
+
+  describe('manual purchase + suppliers (SOHO purchases, human transport)', () => {
+    it('declares POST purchases/manual as human with OWNER/MANAGER and never the device transport', () => {
+      const handler = handlerOf('recordManualPurchase');
+
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        AuthGuard,
+      );
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        RolesGuard,
+      );
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+        UserRole.OWNER,
+        UserRole.MANAGER,
+      ]);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).not.toContain(
+        SyncTransportGuard,
+      );
+      expect(Reflect.getMetadata(SYNC_SCOPES_KEY, handler)).toBeUndefined();
+    });
+
+    it('declares GET suppliers as human with OWNER/MANAGER', () => {
+      const handler = handlerOf('listSuppliers');
+
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        AuthGuard,
+      );
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        RolesGuard,
+      );
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+        UserRole.OWNER,
+        UserRole.MANAGER,
+      ]);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).not.toContain(
+        SyncTransportGuard,
+      );
+    });
+
+    it('declares POST suppliers as human with OWNER/MANAGER', () => {
+      const handler = handlerOf('createSupplier');
+
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        AuthGuard,
+      );
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        RolesGuard,
+      );
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+        UserRole.OWNER,
+        UserRole.MANAGER,
+      ]);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).not.toContain(
+        SyncTransportGuard,
+      );
+    });
+
+    it('delegates the manual purchase to recordPurchase with a server-generated id and the bound tenant', async () => {
+      const recordPurchase = jest.fn().mockResolvedValue({});
+      (
+        controller as unknown as {
+          purchaseService: { recordPurchase: unknown };
+        }
+      ).purchaseService = { recordPurchase } as never;
+      const dto = Object.assign(new ManualPurchaseDto(), {
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'F-900',
+        quantity: 2,
+        unitCost: 50,
+        currency: 'NIO',
+        invoiceDate: '2026-09-30',
+        entryTimestamp: '2026-09-30T10:00:00.000Z',
+      });
+
+      await controller.recordManualPurchase(dto, 'tenant-A');
+
+      expect(recordPurchase).toHaveBeenCalledTimes(1);
+      const arg = recordPurchase.mock.calls[0][0];
+      expect(arg.tenantId).toBe('tenant-A');
+      // The human route generates the document id server-side; the form
+      // never carries a POS document id.
+      expect(typeof arg.id).toBe('string');
+      expect(arg.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+      expect(arg).toMatchObject({
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'F-900',
+        quantity: 2,
+        unitCost: 50,
+        currency: 'NIO',
+      });
+    });
+
+    it('delegates supplier creation with the bound tenant, never a body tenant', async () => {
+      const createSupplier = jest.fn().mockResolvedValue({ id: 'sup-9' });
+      (
+        controller as unknown as {
+          purchaseService: { createSupplier: unknown };
+        }
+      ).purchaseService = { createSupplier } as never;
+      const dto = Object.assign(new CreateSupplierDto(), {
+        name: 'Distribuidora Nica',
+        phone: '5555-1234',
+      });
+
+      await controller.createSupplier(dto, 'tenant-A');
+
+      expect(createSupplier).toHaveBeenCalledWith({
+        tenantId: 'tenant-A',
+        name: 'Distribuidora Nica',
+        phone: '5555-1234',
+        contactPerson: undefined,
+        creditTerms: undefined,
+      });
+    });
+
+    it('delegates the supplier list read with the bound tenant', async () => {
+      const listSuppliers = jest.fn().mockResolvedValue([]);
+      (
+        controller as unknown as {
+          purchaseService: { listSuppliers: unknown };
+        }
+      ).purchaseService = { listSuppliers } as never;
+
+      await controller.listSuppliers('tenant-A');
+
+      expect(listSuppliers).toHaveBeenCalledWith({ tenantId: 'tenant-A' });
     });
   });
 

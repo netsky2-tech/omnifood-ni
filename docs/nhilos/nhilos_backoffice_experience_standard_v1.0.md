@@ -804,6 +804,12 @@ Helper text exists when it prevents a likely mistake.
 
 Do not explain obvious fields just to fill vertical space.
 
+## 17.5 Governed fields
+
+When the system already maintains a catalog or registry for a value (units of measure, currencies, categories, suppliers), the form must offer the governed selector instead of free text.
+
+Free text for a governed value produces the vocabulary drift the catalog exists to prevent. If the catalog is empty, guide the user to populate it; do not fall back silently to free text.
+
 ---
 
 # 18. Form validation
@@ -1022,6 +1028,8 @@ Statuses must communicate business meaning.
 
 Do not create badge colors for decoration.
 
+A neutral lifecycle state is not an exception: `INACTIVE` styled with danger color misreports a quiet state as a problem.
+
 Each status requires:
 
 - text;
@@ -1042,6 +1050,12 @@ Live
 for the same underlying concept.
 
 Choose one domain-approved term.
+
+## 26.1 Alert variants
+
+Inline alerts and notifications follow the same discipline as badges: each alert carries a semantic variant — success, warning, danger, info — rendered with perceptible visual distinction (tint, border or icon), not default neutral styling.
+
+Match the variant to the message's business meaning, not to styling convenience. An alert whose state cannot be perceived does not communicate state.
 
 ---
 
@@ -1416,6 +1430,8 @@ A dangerous default is:
 
 Do not use “smart defaults” where the system cannot explain the inference.
 
+A default must not silently satisfy a required field: when the system pre-fills a required value, the user confirms by omission instead of deciding. Required governance fields should start empty — or demand explicit confirmation — so the decision remains the user's.
+
 ---
 
 # 41. Progressive disclosure
@@ -1609,6 +1625,7 @@ Audit:
 - date formats;
 - currencies;
 - status vocabulary;
+- catalog-governed fields;
 - toasts;
 - empty states;
 - destructive confirmations;
@@ -1972,6 +1989,7 @@ A module is **NHILOS Experience Ready** only when:
 ## Forms
 
 - [ ] Labels/requirements are clear.
+- [ ] Catalog-governed fields use the shared catalog, not free text.
 - [ ] Validation is actionable.
 - [ ] Server errors preserve work where possible.
 - [ ] Dirty-state loss is protected.
@@ -2104,6 +2122,7 @@ The audit agent must **not**:
 - add new capabilities merely to create a +1;
 - change domain rules under an experience justification;
 - declare PASS from documentation alone when implementation evidence is required;
+- declare a form or consistency PASS without checking whether a shared catalog exists for free-text entry fields;
 - remove important information merely to achieve minimalism;
 - use competitor behavior as authority over NHILOS product contracts.
 

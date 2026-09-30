@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import {
@@ -27,6 +27,7 @@ describe('InventoryPurchaseService', () => {
   const manager = {
     createQueryBuilder: jest.fn(),
     findOne: jest.fn(),
+    find: jest.fn(),
     query: jest.fn(),
     save: jest.fn(),
     create: jest.fn(),
@@ -646,6 +647,141 @@ describe('InventoryPurchaseService', () => {
     );
   });
 
+  it('reports duplicate invoices in Spanish business copy naming the supplier by NAME (never the UUID) on the human manual path', async () => {
+    manager.findOne.mockImplementation((entity: unknown) => {
+      if (entity === Supplier) {
+        return Promise.resolve(supplier);
+      }
+
+      if (entity === PurchaseDocument) {
+        return Promise.resolve({
+          id: 'purchase-doc-existing',
+          tenant_id: 'tenant-A',
+          supplier_id: 'sup-1',
+          invoice_number: 'INV-1005',
+        });
+      }
+
+      return Promise.resolve(null);
+    });
+
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-doc-5',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-1005',
+        quantity: 1,
+        unitCost: 2,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-05',
+        entryTimestamp: '2026-01-05T10:00:00.000Z',
+        messageLocale: 'es',
+      }),
+    ).rejects.toThrow(
+      "Ya existe una compra registrada con la factura 'INV-1005' para el proveedor 'Proveedor X'.",
+    );
+  });
+
+  it('reports the unique-violation race loser in Spanish without a supplier identity clause on the human manual path', async () => {
+    const duplicateInvoiceError = new QueryFailedError(
+      'INSERT INTO inventory_purchase_documents ...',
+      [],
+      Object.assign(new Error('duplicate invoice'), { code: '23505' }),
+    );
+
+    manager.save.mockImplementation((entity: unknown, payload: unknown) => {
+      if (entity === PurchaseDocument) {
+        return Promise.reject(duplicateInvoiceError);
+      }
+
+      return Promise.resolve(payload);
+    });
+
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-doc-race-1',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-RACE-1',
+        quantity: 1,
+        unitCost: 2,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-05',
+        entryTimestamp: '2026-01-05T10:00:00.000Z',
+        lotCode: 'L-1',
+        receivedDate: '2026-01-05',
+        expirationDate: '2026-02-05',
+        messageLocale: 'es',
+      }),
+    ).rejects.toThrow(
+      "Ya existe una compra registrada con la factura 'INV-RACE-1'.",
+    );
+  });
+
+  it('reports a missing supplier in Spanish business language without the raw UUID on the human manual path', async () => {
+    manager.findOne.mockImplementation((entity: unknown) => {
+      if (entity === Supplier) {
+        return Promise.resolve(null);
+      }
+
+      return Promise.resolve(null);
+    });
+
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-doc-6',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-missing',
+        invoiceNumber: 'INV-1006',
+        quantity: 1,
+        unitCost: 2,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-05',
+        entryTimestamp: '2026-01-05T10:00:00.000Z',
+        messageLocale: 'es',
+      }),
+    ).rejects.toThrow(NotFoundException);
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-doc-6',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-missing',
+        invoiceNumber: 'INV-1006',
+        quantity: 1,
+        unitCost: 2,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-05',
+        entryTimestamp: '2026-01-05T10:00:00.000Z',
+        messageLocale: 'es',
+      }),
+    ).rejects.toThrow('El proveedor seleccionado no existe.');
+  });
+
+  it('reports a missing insumo in Spanish business language without the raw UUID on the human manual path', async () => {
+    queryBuilder.getOne.mockResolvedValue(null);
+
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-doc-7',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-missing',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-1007',
+        quantity: 1,
+        unitCost: 2,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-05',
+        entryTimestamp: '2026-01-05T10:00:00.000Z',
+        messageLocale: 'es',
+      }),
+    ).rejects.toThrow('El insumo seleccionado no existe.');
+  });
+
   it('corrects a purchase append-only with a compensating movement while leaving the original records intact', async () => {
     const originalDocument: Partial<PurchaseDocument> = {
       id: 'purchase-doc-original-1',
@@ -1110,6 +1246,73 @@ describe('InventoryPurchaseService', () => {
       ).rejects.toThrow(BadRequestException);
       expect(transaction).not.toHaveBeenCalled();
       expect(manager.query).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('supplier management (SOHO purchases, web-side)', () => {
+    it('lists only active suppliers for the tenant inside a tenant-bound transaction', async () => {
+      manager.find.mockResolvedValue([
+        { id: 'sup-1', name: 'Proveedor X', is_active: true },
+      ]);
+
+      const result = await service.listSuppliers({ tenantId: 'tenant-A' });
+
+      expect(result).toHaveLength(1);
+      expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+        'tenant-A',
+      ]);
+      expect(manager.find).toHaveBeenCalledWith(Supplier, {
+        where: { tenant_id: 'tenant-A', is_active: true },
+        order: { name: 'ASC' },
+      });
+      // The pooled repository path must never serve this read.
+      expect(dataSource.getRepository).not.toHaveBeenCalled();
+    });
+
+    it('creates a supplier bound to the requesting tenant with only the name required', async () => {
+      manager.create = jest.fn(
+        (_entity: unknown, payload: Record<string, unknown>) => payload,
+      );
+      manager.save = jest.fn(
+        (_entity: unknown, payload: Record<string, unknown>) => ({
+          ...payload,
+          id: 'sup-9',
+        }),
+      );
+
+      const result = await service.createSupplier({
+        tenantId: 'tenant-A',
+        name: '  Distribuidora Nica  ',
+        phone: ' 5555-1234 ',
+      });
+
+      expect(result).toMatchObject({
+        id: 'sup-9',
+        tenant_id: 'tenant-A',
+        name: 'Distribuidora Nica',
+        phone: '5555-1234',
+        contact_person: null,
+        credit_terms: null,
+      });
+      expect(manager.save).toHaveBeenCalledWith(
+        Supplier,
+        expect.objectContaining({ tenant_id: 'tenant-A' }),
+      );
+    });
+
+    it('rejects a blank supplier name before any transaction', async () => {
+      await expect(
+        service.createSupplier({ tenantId: 'tenant-A', name: '   ' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(transaction).not.toHaveBeenCalled();
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a blank tenant id before borrowing a connection', async () => {
+      await expect(
+        service.createSupplier({ tenantId: '  ', name: 'Proveedor' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(transaction).not.toHaveBeenCalled();
     });
   });
 });

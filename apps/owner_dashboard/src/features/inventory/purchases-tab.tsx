@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
 import { usePurchases } from "./use-inventory-reports";
+import { PurchasesForm } from "./purchases-form";
 import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { StatCard } from "@/components/ui/stat-card";
 import { LoadingState } from "@/components/ui/loading-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
-import { Search, ShoppingCart, X } from "lucide-react";
+import { Search, ShoppingCart, X, Plus, AlertTriangle } from "lucide-react";
 
 /** Newest-row cap requested from the backend (server accepts up to 500). */
 const TRUNCATION_LIMIT = 200;
@@ -43,14 +45,17 @@ interface PurchasesTabProps {
 }
 
 /**
- * Purchase history oversight for the office (SOHO readiness).
+ * Purchase history + manual web entry for the office (SOHO purchases).
  *
- * Authoring stays on the POS (device transport writes via
- * `POST /inventory/purchases`); this tab gives the owner visibility from the
- * dashboard: history, supplier, unit cost, CPP projection and filters.
+ * The owner registers received/known purchases from the web (founder
+ * decision 2026-09-30 — NO purchase-order lifecycle); physical receiving
+ * stays on the POS (device transport writes via `POST /inventory/purchases`).
+ * This tab gives visibility: history, supplier, unit cost, CPP projection,
+ * filters — plus the manual "Registrar compra" flow.
  */
 export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
   const [searchParams, setSearchParams] = useSafeSearchParams();
+  const [formOpen, setFormOpen] = useState(false);
   const [search, setSearch] = useState(
     () => searchParams.get("q_compras") ?? "",
   );
@@ -115,11 +120,15 @@ export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
 
   if (error) {
     return (
-      <EmptyState
-        icon={ShoppingCart}
-        title="No se pudo cargar el historial de compras"
-        message="Verifique su conexión e intente de nuevo."
-        action={
+      <Alert
+        variant="destructive"
+        data-testid="purchases-error-alert"
+        className="items-start"
+      >
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>No se pudo cargar el historial de compras</AlertTitle>
+        <AlertDescription>Verifique su conexión e intente de nuevo.</AlertDescription>
+        <div className="pl-0 pt-1">
           <Button
             variant="outline"
             size="sm"
@@ -128,23 +137,39 @@ export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
           >
             Reintentar
           </Button>
-        }
-      />
+        </div>
+      </Alert>
     );
   }
 
   if (!data || data.length === 0) {
     return (
-      <EmptyState
-        icon={ShoppingCart}
-        title="Sin compras registradas en este rango"
-        message="Las compras se registran desde el POS (Inventario → Compras) y aparecen aquí para revisión."
-      />
+      <div className="space-y-6" data-testid="purchases-tab-container">
+        <div className="flex justify-end">
+          <Button data-testid="purchases-register-btn" onClick={() => setFormOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Registrar compra
+          </Button>
+        </div>
+        <EmptyState
+          icon={ShoppingCart}
+          title="Sin compras registradas en este rango"
+          message="Registra tu primera compra con el botón 'Registrar compra'; también pueden llegar desde el POS."
+        />
+        <PurchasesForm open={formOpen} onOpenChange={setFormOpen} />
+      </div>
     );
   }
 
   return (
     <div className="space-y-6" data-testid="purchases-tab-container">
+      <div className="flex justify-end">
+        <Button data-testid="purchases-register-btn" onClick={() => setFormOpen(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Registrar compra
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard
           label="Documentos de Compra"
@@ -165,13 +190,14 @@ export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
       </div>
 
       {isTruncated && (
-        <p
-          data-testid="purchases-truncation-notice"
-          className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-300"
-        >
-          Mostrando las {TRUNCATION_LIMIT} compras más recientes; puede haber más
-          en el rango. El total refleja solo las compras mostradas.
-        </p>
+        <Alert variant="warning" data-testid="purchases-truncation-notice">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Historial recortado</AlertTitle>
+          <AlertDescription>
+            Mostrando las {TRUNCATION_LIMIT} compras más recientes; puede haber más
+            en el rango. El total refleja solo las compras mostradas.
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="relative max-w-md">
@@ -267,8 +293,8 @@ export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
 
       <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
         <p>
-          El registro de nuevas compras se realiza desde el POS; aquí solo se
-          muestra el historial para revisión.
+          Puedes registrar compras aquí; la recepción física de mercadería
+          sigue gestionándose en el POS.
         </p>
         {/* Plain metadata (§35): this is the newest purchase's timestamp, not a
             sync-completeness read, so it must not wear freshness-state styling. */}
@@ -278,6 +304,8 @@ export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
           </p>
         )}
       </div>
+
+      <PurchasesForm open={formOpen} onOpenChange={setFormOpen} />
     </div>
   );
 }
