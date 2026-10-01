@@ -15,15 +15,24 @@ import {
   useAlerts,
 } from "./use-inventory-reports";
 import { InsumosTab } from "./insumos-tab";
+import { SuppliersTab } from "./suppliers-tab";
 import { PurchasesTab } from "./purchases-tab";
 import type { MovementType, AlertSeverity, KardexFilters } from "./types";
 
-type TabId = "valuation" | "insumos" | "purchases" | "cogs" | "kardex" | "alerts";
+type TabId =
+  | "valuation"
+  | "insumos"
+  | "suppliers"
+  | "purchases"
+  | "cogs"
+  | "kardex"
+  | "alerts";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "valuation", label: "Valoración" },
   { id: "insumos", label: "Insumos" },
   { id: "purchases", label: "Compras" },
+  { id: "suppliers", label: "Proveedores" },
   { id: "cogs", label: "COGS / Margen" },
   { id: "kardex", label: "Kardex" },
   { id: "alerts", label: "Alertas" },
@@ -529,6 +538,7 @@ export function InventoryPage() {
       >
         {activeTab === "valuation" && <ValuationTab />}
         {activeTab === "insumos" && <InsumosTab />}
+        {activeTab === "suppliers" && <SuppliersTab />}
         {activeTab === "purchases" && (
           <PurchasesTab startDate={range.startDate} endDate={range.endDate} />
         )}

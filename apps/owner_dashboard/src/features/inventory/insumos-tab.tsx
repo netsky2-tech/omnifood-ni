@@ -103,6 +103,52 @@ const DEFAULT_FORM: InsumoFormState = {
 };
 
 const FACTOR_ERROR = "El factor de conversión debe ser mayor que 0.";
+const FACTOR_PRESETS_HINT =
+  "Selecciona las unidades para ver factores comunes.";
+
+/**
+ * Common conversion-factor presets (founder, 2026-09-30): a fast path next
+ * to the numeric input, derived from the purchase→consumption UoM pair.
+ *
+ * Only pairs with repo-evidenced factors are offered: KG↔G and L↔ML 1000
+ * (industry template seeds: CreateIndustryTemplatesAndDefaults.ts — 'KG','G',
+ * 1000 / 'L','ML', 1000), LB→G 454 (seed-soho-catalog.ts: libra→gramos,
+ * conversionFactor 454) and DOCENA→UN 12 (seed-soho-catalog.ts: docena→
+ * unidades, conversionFactor 12). No guessed factors for pairs the data does
+ * not support (e.g. LB→OZ, CAJA→UN with inconsistent seed factors).
+ */
+const FACTOR_PRESET_UOM_ALIASES: Record<string, string> = {
+  KGS: "KG",
+  KILO: "KG",
+  KILOGRAMO: "KG",
+  GRAMOS: "G",
+  LIBRAS: "LB",
+  LITROS: "L",
+  ML: "ML",
+  MILILITROS: "ML",
+  DOCENA: "DOCENA",
+  DOCENAS: "DOCENA",
+  UNIDADES: "UN",
+};
+
+const normalizeFactorUom = (raw: string): string => {
+  const value = raw.trim().toUpperCase();
+  return FACTOR_PRESET_UOM_ALIASES[value] ?? value;
+};
+
+const FACTOR_PRESETS: ReadonlyArray<{
+  purchaseUom: string;
+  consumptionUom: string;
+  factor: number;
+  testId: string;
+}> = [
+  { purchaseUom: "KG", consumptionUom: "G", factor: 1000, testId: "insumo-form-factor-preset-kg-g" },
+  { purchaseUom: "G", consumptionUom: "KG", factor: 0.001, testId: "insumo-form-factor-preset-g-kg" },
+  { purchaseUom: "LB", consumptionUom: "G", factor: 454, testId: "insumo-form-factor-preset-lb-g" },
+  { purchaseUom: "L", consumptionUom: "ML", factor: 1000, testId: "insumo-form-factor-preset-l-ml" },
+  { purchaseUom: "ML", consumptionUom: "L", factor: 0.001, testId: "insumo-form-factor-preset-ml-l" },
+  { purchaseUom: "DOCENA", consumptionUom: "UN", factor: 12, testId: "insumo-form-factor-preset-docena-un" },
+];
 
 function formsEqual(a: InsumoFormState, b: InsumoFormState): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -285,6 +331,28 @@ export function InsumosTab() {
     } else {
       setFactorError(null);
     }
+  };
+
+  // Recognized purchase→consumption pair → the common presets for it. Unknown
+  // or blank pairs render the hint instead of a dead-end control (§33.2).
+  const factorPresets = useMemo(() => {
+    const purchaseUom = normalizeFactorUom(form.purchaseUom);
+    const consumptionUom = normalizeFactorUom(form.consumptionUom);
+    if (!purchaseUom || !consumptionUom) return null;
+    return FACTOR_PRESETS.filter(
+      (p) =>
+        p.purchaseUom === purchaseUom && p.consumptionUom === consumptionUom,
+    );
+  }, [form.purchaseUom, form.consumptionUom]);
+
+  // §40: a preset FILLS the numeric input — the user still sees and edits the
+  // value; nothing is applied silently and blur/submit validation is intact.
+  const applyFactorPreset = (factor: number) => {
+    setForm((prev) => ({
+      ...prev,
+      conversionFactor: String(factor),
+    }));
+    setFactorError(null);
   };
 
   const submitForm = async (mode: "close" | "createAnother") => {
@@ -795,6 +863,33 @@ export function InsumosTab() {
                       {factorError}
                     </p>
                   )}
+                  <div
+                    data-testid="insumo-form-factor-presets"
+                    className="flex flex-wrap items-center gap-1.5"
+                  >
+                    {factorPresets && factorPresets.length > 0 ? (
+                      <>
+                        <span className="text-[10px] text-muted-foreground">
+                          Factores comunes:
+                        </span>
+                        {factorPresets.map((preset) => (
+                          <button
+                            key={preset.testId}
+                            type="button"
+                            data-testid={preset.testId}
+                            onClick={() => applyFactorPreset(preset.factor)}
+                            className="inline-flex items-center rounded-md border border-border bg-background px-2 py-0.5 text-[10px] text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer"
+                          >
+                            1 {preset.purchaseUom} = {preset.factor} {preset.consumptionUom}
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">
+                        {FACTOR_PRESETS_HINT}
+                      </p>
+                    )}
+                  </div>
                   <p className="text-[10px] text-muted-foreground">
                     Ej: 1 L = 1000 ML (factor 1000)
                   </p>

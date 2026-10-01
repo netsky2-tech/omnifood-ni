@@ -621,6 +621,69 @@ describe("InsumosTab", () => {
     });
   });
 
+  // Conversion-factor presets (founder, 2026-09-30): a fast path alongside
+  // the numeric input, derived from the purchase→consumption UoM pair. Per
+  // §40, choosing a preset FILLS the input (reversible, user-edited), never
+  // silently applies; unknown/blank pairs show a hint instead of a dead-end
+  // disabled control (§33.2/AP-17).
+  it("offers a conversion preset that fills the factor input when the UoM pair is recognized", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    vi.mocked(useCreateInsumo).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateInsumo>);
+
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    // No UoM pair yet: hint, not a dead-end disabled control (§33.2/AP-17).
+    expect(screen.getByTestId("insumo-form-factor-presets")).toHaveTextContent(
+      /Selecciona las unidades para ver factores comunes/i,
+    );
+
+    await pickUom(user, "insumo-form-purchase-uom", "Libra (lb)");
+    await pickUom(user, "insumo-form-consumption-uom", "Gramo (g)");
+
+    // The recognized pair surfaces its preset; choosing it FILLS the input
+    // (still visible and editable — nothing is applied silently, §40).
+    const preset = await screen.findByTestId("insumo-form-factor-preset-lb-g");
+    await user.click(preset);
+    expect(
+      screen.getByTestId("insumo-form-conversion-factor"),
+    ).toHaveValue(454);
+
+    // The filled value is an ordinary editable value: submit parses it.
+    await user.type(screen.getByTestId("insumo-form-name"), "Queso Mozarella");
+    await user.click(screen.getByTestId("insumo-form-submit"));
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purchaseUom: "LB",
+          consumptionUom: "G",
+          conversionFactor: 454,
+        }),
+      );
+    });
+  });
+
+  it("shows the preset hint when the UoM pair has no known common factor", async () => {
+    const user = userEvent.setup();
+    await renderLoadedTab();
+
+    await user.click(screen.getByTestId("add-insumo-btn"));
+    await pickUom(user, "insumo-form-purchase-uom", "Libra (lb)");
+    await pickUom(user, "insumo-form-consumption-uom", "Unidad (un)");
+
+    // LB→UN has no justified common factor: hint, never a guessed value.
+    expect(screen.getByTestId("insumo-form-factor-presets")).toHaveTextContent(
+      /Selecciona las unidades para ver factores comunes/i,
+    );
+    expect(
+      screen.queryByTestId(/^insumo-form-factor-preset-/),
+    ).not.toBeInTheDocument();
+  });
+
   it("submits and keeps the dialog open with a reset form via 'Guardar y crear otro' (BX-020)", async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     vi.mocked(useCreateInsumo).mockReturnValue({

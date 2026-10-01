@@ -137,6 +137,30 @@ const officialModePurchasePayload = {
   fxRateMode: 'official' as const,
 };
 
+// Preview payload (POST /inventory/purchase): the PreviewPurchaseDto wall
+// forbids `id` (generated server-side at commit) and `fiscalAuthorizationCode`
+// (consumed only by the commit path), so the human preview requests below
+// carry exactly the fields the projection reads.
+const validPurchasePreviewPayload = {
+  insumoId: 'ins-1',
+  supplierId: 'sup-1',
+  invoiceNumber: 'INV-1001',
+  quantity: 2,
+  unitCost: 10,
+  currency: 'USD' as const,
+  invoiceDate: '2026-01-03',
+  entryTimestamp: '2026-01-03T08:15:00.000Z',
+  bcnRate: 36.5,
+};
+
+const officialModePurchasePreviewPayload = {
+  ...validPurchasePreviewPayload,
+  invoiceNumber: 'INV-2001',
+  invoiceDate: '2026-01-06',
+  entryTimestamp: '2026-01-06T08:15:00.000Z',
+  fxRateMode: 'official' as const,
+};
+
 const INVENTORY_API_PREFIX = '/api/inventory';
 
 // Device transport fixture (ST-03, issue #478): POST /inventory/purchases is
@@ -206,6 +230,7 @@ describe('Inventory purchase routes (integration)', () => {
   const manager = {
     createQueryBuilder: jest.fn(),
     findOne: jest.fn(),
+    find: jest.fn(),
     query: jest.fn(),
     save: jest.fn(),
     create: jest.fn(),
@@ -417,7 +442,7 @@ describe('Inventory purchase routes (integration)', () => {
   it('returns 401 for purchase preview when no bearer token is provided', async () => {
     await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchase`)
-      .send(validPurchasePayload)
+      .send(validPurchasePreviewPayload)
       .expect(401);
 
     expect(repositoryFindOne).not.toHaveBeenCalled();
@@ -526,7 +551,7 @@ describe('Inventory purchase routes (integration)', () => {
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
-      .send(validPurchasePayload)
+      .send(validPurchasePreviewPayload)
       .expect(401);
 
     const body = response.body as UnauthorizedResponseBody;
@@ -541,7 +566,7 @@ describe('Inventory purchase routes (integration)', () => {
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        ...validPurchasePayload,
+        ...validPurchasePreviewPayload,
         invoiceNumber: '   ',
       })
       .expect(400);
@@ -549,24 +574,44 @@ describe('Inventory purchase routes (integration)', () => {
     expect(repositoryFindOne).not.toHaveBeenCalled();
   });
 
-  it('returns 400 for purchase preview when fiscalAuthorizationCode is blank after trimming', async () => {
-    const token = signToken();
-
-    const response = await request(app.getHttpServer())
-      .post(`${INVENTORY_API_PREFIX}/purchase`)
-      .set('Authorization', `Bearer ${token}`)
+  // Re-pointed: the preview DTO no longer carries fiscalAuthorizationCode at
+  // all (it is consumed only by the commit path), so the blank-fiscal-code
+  // rule now lives on the device posting route (PurchaseDocumentDto) and is
+  // asserted there.
+  it('returns 400 for purchase posting when fiscalAuthorizationCode is blank after trimming', async () => {
+    await request(app.getHttpServer())
+      .post(`${INVENTORY_API_PREFIX}/purchases`)
+      .set('Authorization', deviceAuth())
       .send({
         ...validPurchasePayload,
         fiscalAuthorizationCode: '   ',
       })
       .expect(400);
 
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for purchase preview when the payload carries a client-supplied document id', async () => {
+    // PreviewPurchaseDto forbids `id`: the manual purchase document id is
+    // generated server-side at commit, so a posting-shaped payload must be
+    // rejected by the preview wall (forbidNonWhitelisted).
+    const token = signToken();
+
+    const response = await request(app.getHttpServer())
+      .post(`${INVENTORY_API_PREFIX}/purchase`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        ...validPurchasePreviewPayload,
+        id: 'purchase-doc-1',
+      })
+      .expect(400);
+
     const body = response.body as BadRequestResponseBody;
     expect(body.error).toBe('Bad Request');
     expect(body.message).toEqual(
-      expect.arrayContaining(['fiscalAuthorizationCode should not be empty']),
+      expect.arrayContaining(['property id should not exist']),
     );
-    expect(repositoryFindOne).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
   });
 
   it('accepts an authenticated manager purchase preview request and forwards tenant context', async () => {
@@ -575,7 +620,7 @@ describe('Inventory purchase routes (integration)', () => {
     const response = await request(app.getHttpServer())
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
-      .send(validPurchasePayload)
+      .send(validPurchasePreviewPayload)
       .expect(201);
 
     const body = response.body as PurchasePreviewResponseBody;
@@ -610,7 +655,7 @@ describe('Inventory purchase routes (integration)', () => {
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        ...officialModePurchasePayload,
+        ...officialModePurchasePreviewPayload,
         bcnRate: undefined,
       })
       .expect(201);
@@ -643,7 +688,7 @@ describe('Inventory purchase routes (integration)', () => {
       .post(`${INVENTORY_API_PREFIX}/purchase`)
       .set('Authorization', `Bearer ${token}`)
       .send({
-        ...officialModePurchasePayload,
+        ...officialModePurchasePreviewPayload,
         invoiceDate: '2026-01-08',
         entryTimestamp: '2026-01-08T08:15:00.000Z',
         bcnRate: undefined,
@@ -934,5 +979,110 @@ describe('Inventory purchase routes (integration)', () => {
       InventoryMovement,
       expect.objectContaining({ sourceDocumentType: 'PURCHASE_CORRECTION' }),
     );
+  });
+
+  it('returns 401 for GET /inventory/suppliers when no bearer token is provided', async () => {
+    await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/suppliers`)
+      .expect(401);
+  });
+
+  it('returns 200 with suppliers list for an authenticated manager', async () => {
+    const token = signToken();
+    const suppliers = [
+      { id: 'sup-1', name: 'Distribuidora A', is_active: true },
+    ];
+    manager.find.mockResolvedValue(suppliers);
+
+    const response = await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/suppliers`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(response.body).toEqual(suppliers);
+    expect(manager.find).toHaveBeenCalledWith(Supplier, {
+      where: { tenant_id: 'tenant-A', is_active: true },
+      order: { name: 'ASC' },
+    });
+  });
+
+  it('forwards includeInactive=true in GET /inventory/suppliers', async () => {
+    const token = signToken();
+    manager.find.mockResolvedValue([]);
+
+    await request(app.getHttpServer())
+      .get(`${INVENTORY_API_PREFIX}/suppliers?includeInactive=true`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    expect(manager.find).toHaveBeenCalledWith(Supplier, {
+      where: { tenant_id: 'tenant-A' },
+      order: { name: 'ASC' },
+    });
+  });
+
+  it('returns 403 for PUT /inventory/suppliers/:id when role is CASHIER', async () => {
+    const token = signToken({ role: UserRole.CASHIER });
+
+    await request(app.getHttpServer())
+      .put(`${INVENTORY_API_PREFIX}/suppliers/sup-1`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Nuevo Nombre' })
+      .expect(403);
+  });
+
+  it('returns 400 for PUT /inventory/suppliers/:id when name is null', async () => {
+    const token = signToken({ role: UserRole.OWNER });
+
+    await request(app.getHttpServer())
+      .put(`${INVENTORY_API_PREFIX}/suppliers/sup-1`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: null })
+      .expect(400);
+  });
+
+  it('returns 200 for PUT /inventory/suppliers/:id updating supplier details for an owner', async () => {
+    const token = signToken({ role: UserRole.OWNER });
+    const existing = {
+      id: 'sup-1',
+      tenant_id: 'tenant-A',
+      name: 'Proveedor Viejo',
+      phone: '1234',
+      is_active: true,
+    };
+
+    manager.findOne.mockImplementation((entity: unknown, options?: unknown) => {
+      if (entity === Supplier) {
+        const where = (options as { where?: Record<string, unknown> })?.where;
+        if (where?.id === 'sup-1' && where?.tenant_id === 'tenant-A') {
+          return Promise.resolve({ ...existing });
+        }
+        if (where?.name === 'Proveedor Nuevo') {
+          return Promise.resolve(null);
+        }
+      }
+      return Promise.resolve(null);
+    });
+
+    manager.save.mockImplementation((_entity: unknown, payload: Record<string, unknown>) =>
+      Promise.resolve(payload),
+    );
+
+    const response = await request(app.getHttpServer())
+      .put(`${INVENTORY_API_PREFIX}/suppliers/sup-1`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Proveedor Nuevo',
+        phone: '5555-4321',
+        isActive: false,
+      })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      id: 'sup-1',
+      name: 'Proveedor Nuevo',
+      phone: '5555-4321',
+      is_active: false,
+    });
   });
 });
