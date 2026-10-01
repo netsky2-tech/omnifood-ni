@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pos_app/data/services/api_base_url_service.dart';
 import 'package:provider/provider.dart';
 
 import 'terminal_identity_view_model.dart';
 
-/// Read-only screen that shows the terminal's canonical identity so the
-/// operator can register the same id in the owner dashboard.
+/// Screen showing the terminal's canonical identity (read-only) and the
+/// backend server URL configuration.
 ///
-/// No editing controls: this surface never writes to the DAO nor resolves a
-/// new device id (see [TerminalIdentityViewModel]).
+/// The identity cards never write to the DAO nor resolve a new device id (see
+/// [TerminalIdentityViewModel]). The server configuration card is the one
+/// write surface: it saves or clears the backend URL through
+/// [ApiBaseUrlService]. The URL is resolved once at startup, so a change
+/// applies on the NEXT app start — the card says so plainly and never implies
+/// a live change.
 class TerminalIdentityView extends StatelessWidget {
   const TerminalIdentityView({super.key});
 
@@ -55,6 +60,8 @@ class TerminalIdentityView extends StatelessWidget {
                 _buildStatusCard(context, viewModel),
                 const SizedBox(height: 16),
                 _buildPrinterProfileCard(context, viewModel),
+                const SizedBox(height: 16),
+                const _ServerConfigCard(),
                 const SizedBox(height: 24),
                 _buildBackOfficeNotice(context),
               ],
@@ -289,6 +296,201 @@ class TerminalIdentityView extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Operator-facing labels for the backend URL provenance. The label is
+/// derived from [ApiBaseUrlResolution.source], never guessed from the value.
+String _serverSourceLabel(ApiBaseUrlSource source) {
+  switch (source) {
+    case ApiBaseUrlSource.persistedConfig:
+      return 'Configuración guardada en este dispositivo';
+    case ApiBaseUrlSource.buildDefine:
+      return 'Definida al compilar la aplicación';
+    case ApiBaseUrlSource.developmentDefault:
+      return 'Valor por defecto de desarrollo';
+    case ApiBaseUrlSource.unconfigured:
+      return 'Sin servidor configurado';
+  }
+}
+
+/// Backend server configuration card: shows the effective URL and the source
+/// that produced it, lets the operator save a validated new URL or clear the
+/// persisted one, and states plainly that a change applies after restarting
+/// the app (startup resolution is a deliberate design decision).
+///
+/// TRANSPORT ONLY: saving or clearing here must never touch the sale path,
+/// the DGI numbering path, or any fiscal operation. Failures surface an
+/// error message; the view never crashes on a config read/write failure.
+class _ServerConfigCard extends StatefulWidget {
+  const _ServerConfigCard();
+
+  @override
+  State<_ServerConfigCard> createState() => _ServerConfigCardState();
+}
+
+class _ServerConfigCardState extends State<_ServerConfigCard> {
+  final TextEditingController _urlController = TextEditingController();
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save(TerminalIdentityViewModel viewModel) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await viewModel.saveServerUrl(_urlController.text);
+    if (!mounted) return;
+    if (viewModel.serverErrorMessage == null) {
+      _urlController.clear();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Servidor guardado. El cambio se aplicará después de reiniciar '
+            'la aplicación.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _clear(TerminalIdentityViewModel viewModel) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await viewModel.clearServerUrl();
+    if (!mounted) return;
+    if (viewModel.serverErrorMessage == null) {
+      _urlController.clear();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Configuración borrada. El cambio se aplicará después de '
+            'reiniciar la aplicación.',
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = context.watch<TerminalIdentityViewModel>();
+    final resolution = viewModel.serverResolution;
+    final unconfigured = resolution != null && !resolution.isConfigured;
+    final sourceLabel =
+        resolution == null ? null : _serverSourceLabel(resolution.source);
+    final canClear =
+        resolution?.source == ApiBaseUrlSource.persistedConfig;
+    final serverError = viewModel.serverErrorMessage;
+
+    return Card(
+      key: const Key('server_config_card'),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Servidor del Backend',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Dirección del servidor al que esta terminal envía sus ventas '
+              'para sincronizar.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            if (unconfigured) ...[
+              Text(
+                'Esta terminal no tiene un servidor configurado. Las ventas '
+                'siguen funcionando sin conexión, pero la sincronización no '
+                'está disponible.',
+                key: const Key('server_url_unconfigured_message'),
+                style: TextStyle(
+                  color: Colors.orange.shade800,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              const SizedBox(height: 8),
+            ] else if (resolution?.url != null) ...[
+              Row(
+                children: [
+                  const Icon(Icons.dns, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SelectableText(
+                      resolution!.url!,
+                      key: const Key('server_url_text'),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+            ],
+            if (sourceLabel != null)
+              Text(
+                sourceLabel,
+                key: const Key('server_url_source'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontStyle: FontStyle.italic,
+                    ),
+              ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('server_url_field'),
+              controller: _urlController,
+              decoration: const InputDecoration(
+                labelText: 'Nueva URL del servidor',
+                hintText: 'https://api.ejemplo.com/api',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'El cambio se aplicará después de reiniciar la aplicación.',
+              key: const Key('server_url_restart_notice'),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.amber.shade900,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            if (serverError != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(
+                  serverError,
+                  key: const Key('server_url_error'),
+                  style: TextStyle(color: Colors.red.shade700),
+                ),
+              ),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  key: const Key('save_server_url_button'),
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Guardar'),
+                  onPressed: () => _save(viewModel),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  key: const Key('clear_server_url_button'),
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Borrar configuración guardada'),
+                  onPressed:
+                      canClear ? () => _clear(viewModel) : null,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

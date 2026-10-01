@@ -569,6 +569,10 @@ void main() async {
           create: (_) => TerminalIdentityViewModel(
             configDao: database.localConfigDao,
             printerConfigService: PrinterConfigService(database.localConfigDao),
+            // Same build-time define the startup transport resolves, so the
+            // operator sees the provenance actually in force. Save/clear goes
+            // through the default ApiBaseUrlService over the same DAO.
+            buildTimeApiUrl: buildTimeApiUrl,
           ),
         ),
         ChangeNotifierProvider(
