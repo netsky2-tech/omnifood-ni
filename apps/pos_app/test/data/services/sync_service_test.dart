@@ -6293,6 +6293,63 @@ void main() {
     );
 
     test(
+      'getPendingOutboxCount excludes delivered sale-sync movements',
+      () async {
+        // Live-device defect: a sale deduction movement whose delivery is
+        // owned by the sale-sync pipeline (SALE_SYNC / CLOUD_ACKNOWLEDGED)
+        // is already delivered — the outbound inventory batch filter never
+        // sends it. The legacy sync-state table has no row for sale-sync
+        // movements, so the DAO query matches it via `sync_status IS NULL`
+        // and the badge counted it as pending. The badge must agree with
+        // what the outbound sync would actually send.
+        mockInventoryRepository.unsynced = [
+          movement(
+            'sale-deduction',
+            type: MovementType.sale,
+            deliveryOwner: 'SALE_SYNC',
+            deliveryState: 'CLOUD_ACKNOWLEDGED',
+            sourceDocumentType: 'SALE',
+          ),
+        ];
+
+        final count = await syncService.getPendingOutboxCount();
+
+        expect(count, 0);
+      },
+    );
+
+    test(
+      'getPendingOutboxCount still counts genuinely pending generic-inventory movements',
+      () async {
+        // The fix must not silence real work: a locally applied,
+        // generically-owned adjustment movement is still actionable
+        // outbound work and must keep counting.
+        mockInventoryRepository.unsynced = [
+          movement('pending-adjustment'),
+        ];
+
+        final count = await syncService.getPendingOutboxCount();
+
+        expect(count, 1);
+      },
+    );
+
+    test(
+      'getPendingOutboxCount excludes quarantined movements',
+      () async {
+        // Quarantined movements are deliberately held out of the outbound
+        // inventory batch, so they are not actionable pending work.
+        mockInventoryRepository.unsynced = [
+          movement('quarantined', deliveryState: 'QUARANTINED'),
+        ];
+
+        final count = await syncService.getPendingOutboxCount();
+
+        expect(count, 0);
+      },
+    );
+
+    test(
       'getPendingOutboxCount isolates a failing domain query and still counts the rest',
       () async {
         mockSalesRepository.unsyncedAggregates = [

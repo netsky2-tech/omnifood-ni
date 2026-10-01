@@ -382,17 +382,44 @@ class SyncService {
 
     try {
       final movements = await _inventoryRepository.getUnsyncedMovements();
-      // DSI-6 hold: credit-note restock movements share the credit-note
-      // transport block (same exclusion predicate as the outbound inventory
-      // batch filter) and must not keep the badge above zero either.
-      count += movements
-          .where((movement) => !_isCreditNoteRestockMovement(movement))
-          .length;
+      // Count only what the outbound inventory batch would actually send, so
+      // the badge and the sender cannot disagree about what is still pending.
+      // The raw DAO result is insufficient: sale-sync movements are delivered
+      // by the sale aggregate pipeline and have no row in the legacy
+      // `inventory_movement_sync_state` table, so the DAO's
+      // `sync_status IS NULL` branch matched already-delivered work and kept
+      // the badge above zero (live-device false positive).
+      count += movements.where(_isGenericInventoryOutboxMovement).length;
     } catch (e, st) {
       _logOutboxCountFailure('movements', e, st);
     }
 
     return count;
+  }
+
+  /// Whether a movement is actionable outbound work for the generic inventory
+  /// batch. Shared by [getPendingOutboxCount] and the outbound inventory sync
+  /// so the two cannot drift apart.
+  ///
+  /// Covers only the synchronously evaluable part of the outbound filter;
+  /// callers add their async-only conditions (production linkage, blocked
+  /// ids) on top.
+  ///
+  /// Sale movements are excluded deliberately: their delivery is owned by the
+  /// sale-sync aggregate, not by this batch. Credit-note restock movements
+  /// share the DSI-6 credit-note transport hold and are excluded for the same
+  /// reason — neither is actionable pending work.
+  bool _isGenericInventoryOutboxMovement(InventoryMovement movement) {
+    return movement.deliveryOwner == 'GENERIC_INVENTORY' &&
+        movement.deliveryState != 'QUARANTINED' &&
+        movement.deliveryState != 'CLOUD_ACKNOWLEDGED' &&
+        movement.type != MovementType.sale &&
+        movement.sourceDocumentType != 'SALE' &&
+        movement.sourceDocumentType != 'SALE_CANCEL' &&
+        movement.type != MovementType.purchase &&
+        !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
+        !(movement.reason?.startsWith('Anulación Factura:') ?? false) &&
+        !_isCreditNoteRestockMovement(movement);
   }
 
   /// #613 Unit B — best-effort read of the inert-recipe ingestion verdicts
@@ -1308,17 +1335,8 @@ class SyncService {
       final unsynced = allUnsynced
           .where(
             (movement) =>
-                movement.deliveryOwner == 'GENERIC_INVENTORY' &&
-                movement.deliveryState != 'QUARANTINED' &&
-                movement.deliveryState != 'CLOUD_ACKNOWLEDGED' &&
-                movement.type != MovementType.sale &&
-                movement.sourceDocumentType != 'SALE' &&
-                movement.sourceDocumentType != 'SALE_CANCEL' &&
-                movement.type != MovementType.purchase &&
-                !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
-                !(movement.reason?.startsWith('Anulación Factura:') ?? false) &&
+                _isGenericInventoryOutboxMovement(movement) &&
                 !_isProductionLinkedMovement(movement) &&
-                !_isCreditNoteRestockMovement(movement) &&
                 !blockedMovementIds.contains(movement.id),
           )
           .toList(growable: false);
