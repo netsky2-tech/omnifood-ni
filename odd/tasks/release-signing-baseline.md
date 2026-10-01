@@ -237,6 +237,34 @@ Status: complete — work-unit commit `0b50d6e9`.
 - [x] Register the MDM device-owner enrollment decision and the deferred `API_URL`
       runtime-provisioning decision in the same registry, each with its review trigger.
 
+### S0-05 — Close the two residuals independent verification found
+
+Status: complete — work-unit commit `81f6efa8` (198 lines, under budget).
+
+Added after the S0-02 verification, on the founder's decision to fix both rather than just
+record them.
+
+- [x] Sweep stale `.provision-stage.*` debris at startup, because the rotation cleanup trap
+      cannot catch SIGKILL. Confined to the keystore directory at depth 1, regular files
+      only, the exact six-character mktemp name, and files older than ten minutes, so it
+      cannot delete a concurrent run's staging file. It runs after the in-repo guard, so a
+      crafted keystore path cannot turn the cleanup into a deletion primitive against the
+      repository.
+- [x] Correct `scripts/key.properties.example`, which still showed two distinct
+      passwords — the documentation form of the defect fixed in S0-02.
+- [x] Correct the hygiene test: it asserted no tracked-file changes via `git status`, which
+      can never pass while the scripts under test are being modified. It now compares
+      content hashes of every tracked file, excluding bytecode, so a pre-existing
+      modification passes while a modification made by the suite fails with a readable
+      diff.
+
+Recorded minor observations, none blocking: the hygiene comment names `__pycache__/` while
+the pattern also drops any `*.pyc`, so the comment under-describes the exclusion by one
+clause; the check samples the whole repository at start and again about 23 seconds later,
+so a genuinely external writer during that window would also be reported; and the
+pre-verification revision used to establish no-regression was recovered from a session log
+rather than from git history, because S0-05's intermediate revisions were never committed.
+
 ## Evidence log
 
 ### Work units
@@ -248,8 +276,9 @@ Status: complete — work-unit commit `0b50d6e9`.
 | S0-02 | `c68ef17b` | Keystore provisioning tooling and its test (999 lines, authorized exception). |
 | S0-03 | `f4d1dbbb` | Custody and MDM enrollment runbook. |
 | S0-04 | `0b50d6e9` | Phase 0 decisions registered as DEC-4..DEC-6. |
+| S0-05 | `81f6efa8` | Staging sweep, single-password example, hygiene-test correction. |
 
-All five commits are local to `feat/release-signing-baseline`, branched from `22bfc376`
+All six commits are local to `feat/release-signing-baseline`, branched from `22bfc376`
 (`origin/main`). Nothing is pushed; the pull request and the merge remain the founder's
 decision.
 
@@ -279,12 +308,29 @@ decision.
    entry intact; a broken `git` plus symlinked invocation still refused; and a
    different-password keystore failing closed byte-identical.
 
+5. **S0-05 — 9 of 9 confirmed across three rounds.** The sweep was confirmed to remove
+   stale debris and to leave a fresh staging file strictly alone, to stay confined to one
+   directory, and to sit after the in-repo guard, so a crafted keystore path is refused
+   before the cleanup can run. The hygiene check's teeth were demonstrated in the real
+   suite rather than a sandbox: a `keytool` shim that modifies a tracked file makes it fail
+   with a readable diff, and the file was restored byte-identical. Critically, that was
+   shown for a tracked file under `apps/` as well as under `scripts/`, closing the coverage
+   narrowing an earlier round flagged. One round earlier, the writer could not
+   demonstrate those teeth at all and said so instead of substituting a sandbox result,
+   and an independent verifier then closed that gap.
+
 ### Known gaps carried forward
 
-- `scripts/key.properties.example` is a tracked file outside S0-02's edit surface and still
-  shows two distinct passwords. That is the exact shape of the defect fixed here, in
-  documentation form, and it can steer an operator into it. It should be corrected to the
-  single-password flow.
-- The S0-02 staging cleanup does not survive SIGKILL, as recorded under S0-02.
+Both residuals recorded when S0-02 closed are now closed in S0-05:
+`scripts/key.properties.example` documents the single-password flow, and stale staging
+debris is swept at startup.
+
+Still open:
+
 - No claim in this feature was validated against physical Android hardware. The runbook
   says so, and the enrollment dry run is the operator step that closes it.
+- The S0-01 guard still surfaces AGP's or keytool's message rather than the actionable one
+  on two paths: `:app:packageRelease`, and a `key.properties` that names a file which
+  exists but is not a keystore.
+- The hygiene check carries a theoretical false-positive surface and its exclusion comment
+  under-describes the rule by one clause, both recorded under S0-05.
