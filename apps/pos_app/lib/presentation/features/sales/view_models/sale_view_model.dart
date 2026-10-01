@@ -1220,7 +1220,62 @@ class SaleViewModel extends ChangeNotifier {
   Future<void> finalizeSale(List<PaymentMethod> methods) =>
       processSale(methods);
 
+  /// True while a sale attempt is in flight. UI layers must consult it so a
+  /// single interaction can never launch two sale attempts (go-live fix:
+  /// the operator may retry, but never silently or concurrently).
+  bool _isProcessingSale = false;
+  bool get isProcessingSale => _isProcessingSale;
+
+  /// Marker text from the data layer's prepared-product guard
+  /// (sales_repository_impl). Matched by content: the repository stays a
+  /// plain StateError and this view-model boundary is the only place the
+  /// operator-facing translation happens.
+  static const String _missingRecipeErrorMarker =
+      'cannot be sold without a published active recipe version';
+
+  static final RegExp _preparedProductIdPattern = RegExp(
+    r'Prepared product (\S+)',
+  );
+
+  /// Resolves the failing product's NAME from the cart when [error] is the
+  /// data layer's missing-recipe denial. Returns null when the error is not
+  /// that denial or the product can no longer be identified. The raw id is
+  /// extracted only to look the name up — it never reaches user-facing copy.
+  String? _missingRecipeProductNameFromCart(Object error) {
+    final text = error.toString();
+    if (!text.contains(_missingRecipeErrorMarker)) return null;
+    final match = _preparedProductIdPattern.firstMatch(text);
+    if (match == null) return null;
+    final productId = match.group(1);
+    for (final item in _cart) {
+      if (item.productId == productId) return item.productName;
+    }
+    return null;
+  }
+
   Future<void> processSale(
+    List<PaymentMethod> methods, {
+    List<Payment>? customPayments,
+    String? buzzerNumber,
+    String? customerName,
+  }) async {
+    if (_isProcessingSale) {
+      throw StateError('A sale attempt is already in progress');
+    }
+    _isProcessingSale = true;
+    try {
+      await _processSaleInternal(
+        methods,
+        customPayments: customPayments,
+        buzzerNumber: buzzerNumber,
+        customerName: customerName,
+      );
+    } finally {
+      _isProcessingSale = false;
+    }
+  }
+
+  Future<void> _processSaleInternal(
     List<PaymentMethod> methods, {
     List<Payment>? customPayments,
     String? buzzerNumber,
@@ -1608,7 +1663,22 @@ class SaleViewModel extends ChangeNotifier {
       if (e is FiscalSequenceUnconfiguredError) {
         _errorMessage = e.message;
       } else {
-        _errorMessage = 'Error al procesar la venta: $e';
+        // Go-live fix (NHILOS §4.1): user-facing copy never carries raw
+        // errors, UUIDs or English data-layer text. The repository's
+        // missing-recipe denial is translated to honest Spanish naming the
+        // product; anything unmapped gets a generic Spanish message. The
+        // raw error above goes to logs only.
+        final productName = _missingRecipeProductNameFromCart(e);
+        if (productName != null) {
+          _errorMessage =
+              'No se puede vender «$productName»: no tiene receta publicada. Avisá al encargado.';
+        } else if (e.toString().contains(_missingRecipeErrorMarker)) {
+          _errorMessage =
+              'No se puede completar la venta: hay un producto sin receta publicada. Avisá al encargado.';
+        } else {
+          _errorMessage =
+              'No se pudo procesar la venta. Intentá de nuevo; si el problema continúa, avisá al encargado.';
+        }
       }
       notifyListeners();
       rethrow;

@@ -20,6 +20,11 @@ class _MultiCurrencyCheckoutDialogState
   bool _isSplitMode = false;
   bool _isProcessing = false;
 
+  /// Operator-facing failure surfaced INLINE inside the dialog (NHILOS §4.1:
+  /// never hide a material side effect). Captured from the view model at
+  /// failure time because the SnackBar path is occluded by this dialog.
+  String? _inlineError;
+
   // Single Checkout State
   PaymentMethod _selectedMethod = PaymentMethod.cash;
   String _tenderCurrency = 'NIO';
@@ -270,9 +275,20 @@ class _MultiCurrencyCheckoutDialogState
         );
       }
     } catch (e) {
-      // Error is already displayed by SaleView via _errorMessage
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      // Go-live fix: keep the dialog open and show the failure INLINE at the
+      // point of action. The SnackBar path is occluded by this dialog, so it
+      // cannot be the only surface. The confirm button is re-enabled only
+      // AFTER the failure state has been painted, so a rapid second tap can
+      // never start a second attempt before the operator sees the error.
+      if (mounted) {
+        setState(() {
+          _inlineError = vm.errorMessage ??
+              'No se pudo procesar la venta. Intentá de nuevo.';
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _isProcessing = false);
+        });
+      }
     }
   }
 
@@ -311,10 +327,51 @@ class _MultiCurrencyCheckoutDialogState
         );
       }
     } catch (e) {
-      // Error is already displayed by SaleView via _errorMessage
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      // Same inline failure surface as the single-payment path.
+      if (mounted) {
+        setState(() {
+          _inlineError = vm.errorMessage ??
+              'No se pudo procesar la venta. Intentá de nuevo.';
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _isProcessing = false);
+        });
+      }
     }
+  }
+
+  /// Inline error region shown above the confirm button while the dialog
+  /// stays open. Empty (zero-size) while there is no failure to show.
+  Widget _buildInlineErrorSection() {
+    final message = _inlineError;
+    if (message == null) return const SizedBox.shrink();
+    return Container(
+      key: const Key('checkout_inline_error'),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.red.shade300),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.error_outline, size: 20, color: Colors.red.shade700),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.red.shade900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildBuzzerPagerSection(SaleViewModel viewModel) {
@@ -502,6 +559,10 @@ class _MultiCurrencyCheckoutDialogState
               ),
 
               const SizedBox(height: 12),
+
+              // Inline failure surface (go-live fix): visible at the point
+              // of action while the dialog remains open.
+              _buildInlineErrorSection(),
 
               // Footer Submit
               if (_isSplitMode)
