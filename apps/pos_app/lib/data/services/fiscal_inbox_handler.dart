@@ -93,6 +93,21 @@ class FiscalProjectionKeys {
   static const String dgiAuthorizationCode = 'dgi_authorization_code';
   static const String dgiAuthorizationIssuedAt = 'dgi_authorization_issued_at';
   static const String dgiAuthorizationExpiresAt = 'dgi_authorization_expires_at';
+
+  /// BXW-007 U3 (#734): business profile modes projected from the fiscal
+  /// snapshot. Conditional mirrors, same shape as the DGI authorization
+  /// fields above: non-blank in the snapshot -> written; absent/null -> the
+  /// local key is NOT written and NOT deleted (the POS form stays the
+  /// offline master for modes the office has not configured).
+  static const String operationMode = 'operation_mode';
+  static const String checkoutFxMode = 'checkout_fx_mode';
+
+  /// Comma-joined local key names the cloud currently asserts for the
+  /// business profile (deterministic order, no spaces, matched by token).
+  /// Written in the SAME fiscal projection transaction as the asserted
+  /// mirrors; removed when no field is asserted. Not a mandatory projection:
+  /// never validated by [FiscalInboxHandler.isProjectionComplete].
+  static const String businessProfileManagedKeys = 'business_profile_managed_keys';
 }
 
 final RegExp _fingerprintRegex = RegExp(r'^[a-zA-Z0-9_\-\.]{8,}$');
@@ -622,6 +637,42 @@ class FiscalInboxHandler {
         ));
       }
     });
+
+    // BXW-007 U3 (#734): conditional business profile mode mirrors, same
+    // shape as the DGI authorization mirrors above. Written only when the
+    // snapshot carries a non-blank value; never deleted when absent, so a
+    // locally-configured mode (POS form master) is preserved (R-1/R-2).
+    final businessProfileMirrors = <String, String>{
+      FiscalProjectionKeys.operationMode:
+          rawEnvelope['operationMode']?.toString().trim() ?? '',
+      FiscalProjectionKeys.checkoutFxMode:
+          rawEnvelope['checkoutFxMode']?.toString().trim() ?? '',
+    };
+    final assertedBusinessProfileKeys = <String>[];
+    businessProfileMirrors.forEach((key, value) {
+      if (value.isNotEmpty) {
+        projections.add(LocalConfigEntity(
+          key: key,
+          value: value,
+          description: 'Projected business profile mode from fiscal snapshot',
+        ));
+        assertedBusinessProfileKeys.add(key);
+      }
+    });
+
+    if (assertedBusinessProfileKeys.isEmpty) {
+      // R-3: no field asserted -> remove any stale marker so absence looks
+      // like absence. The local values themselves are never deleted.
+      keysToDelete.add(FiscalProjectionKeys.businessProfileManagedKeys);
+    } else {
+      assertedBusinessProfileKeys.sort();
+      projections.add(LocalConfigEntity(
+        key: FiscalProjectionKeys.businessProfileManagedKeys,
+        value: assertedBusinessProfileKeys.join(','),
+        description:
+            'Business profile keys cloud-managed by the latest fiscal snapshot',
+      ));
+    }
 
     final taxConfig = _buildTaxConfig(
       rawEnvelope: rawEnvelope,

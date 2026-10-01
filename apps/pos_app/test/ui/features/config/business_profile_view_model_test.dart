@@ -102,6 +102,7 @@ void main() {
 
     test('saveConfig persists commercial and official exchange rates and operation mode',
         () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
       when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
 
       await viewModel.saveConfig({
@@ -140,6 +141,7 @@ void main() {
       // locally from this screen (offline-first). The printed fiscal identity
       // follows the local value until the next fiscal resync. Do NOT "fix" this
       // by blocking the write without revisiting that decision.
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
       when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
 
       await viewModel.saveConfig({'ruc': 'J0310000999999'});
@@ -518,6 +520,132 @@ void main() {
           .toList();
       final byKey = {for (final e in written) e.key: e.value};
       expect(byKey['dgi_range_start'], '500');
+    });
+  });
+
+  group('BXW-007 U3 (#734): per-field cloud management via the managed-keys marker', () {
+    test('absent marker -> both flags false, both controls editable (fail-safe)', () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+
+      await viewModel.loadConfig();
+
+      expect(viewModel.isOperationModeCloudManaged, isFalse);
+      expect(viewModel.isCheckoutFxModeCloudManaged, isFalse);
+    });
+
+    test('marker naming only checkout_fx_mode -> FX locked, operation mode editable (per-field)', () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockConfigDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: 'checkout_fx_mode',
+              ));
+
+      await viewModel.loadConfig();
+
+      expect(viewModel.isCheckoutFxModeCloudManaged, isTrue);
+      expect(viewModel.isOperationModeCloudManaged, isFalse);
+    });
+
+    test('marker naming both fields -> both locked', () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockConfigDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: 'checkout_fx_mode,operation_mode',
+              ));
+
+      await viewModel.loadConfig();
+
+      expect(viewModel.isCheckoutFxModeCloudManaged, isTrue);
+      expect(viewModel.isOperationModeCloudManaged, isTrue);
+    });
+
+    test('unknown tokens and stray whitespace are ignored without throwing', () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockConfigDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: ' operation_mode , legacy_thing ',
+              ));
+
+      await viewModel.loadConfig();
+
+      expect(viewModel.isOperationModeCloudManaged, isTrue);
+      expect(viewModel.isCheckoutFxModeCloudManaged, isFalse);
+    });
+
+    test('a save with a cloud-managed field does not overwrite it', () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockConfigDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: 'operation_mode',
+              ));
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      await viewModel.loadConfig();
+
+      await viewModel.saveConfig({
+        'business_name': 'Café Managua',
+        'operation_mode': 'RESTAURANT',
+        'checkout_fx_mode': 'BCN_OFFICIAL',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final writtenKeys = written.map((e) => e.key).toSet();
+      // The office-asserted mode is never written by a form save...
+      expect(writtenKeys, isNot(contains('operation_mode')));
+      // ...while the fields the office never claimed persist as today.
+      expect(writtenKeys, contains('business_name'));
+      expect(writtenKeys, contains('checkout_fx_mode'));
+      // The in-memory state keeps the cloud value for the managed field.
+      expect(viewModel.config['operation_mode'], 'FOODPARK_QSR');
+      expect(viewModel.config['checkout_fx_mode'], 'BCN_OFFICIAL');
+      // The flag survives the save: the field is still cloud-managed.
+      expect(viewModel.isOperationModeCloudManaged, isTrue);
+    });
+
+    test(
+        'a projection committing AFTER loadConfig still protects the field: '
+        'saveConfig re-reads the marker instead of trusting the cached set',
+        () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      // loadConfig runs while the cloud asserts nothing -> empty cached set.
+      await viewModel.loadConfig();
+      expect(viewModel.isOperationModeCloudManaged, isFalse);
+
+      // A fiscal projection then commits the cloud value and the marker, but
+      // the view model is never reloaded: this is the race. Trusting the
+      // cached set would let the stale form overwrite the cloud value, and
+      // isProjectionComplete ignores these fields, so nothing would repair it.
+      when(() => mockConfigDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: 'operation_mode',
+              ));
+
+      await viewModel.saveConfig({
+        'business_name': 'Café Managua',
+        'operation_mode': 'FOODPARK_QSR',
+        'checkout_fx_mode': 'BCN_OFFICIAL',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      expect(
+        written.map((e) => e.key),
+        isNot(contains('operation_mode')),
+        reason: 'the stale form value must never overwrite the cloud value',
+      );
+      expect(viewModel.isOperationModeCloudManaged, isTrue);
     });
   });
 }

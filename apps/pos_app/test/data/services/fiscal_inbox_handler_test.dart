@@ -303,6 +303,188 @@ void main() {
       });
     });
 
+    group('BXW-007 U3 (#734): conditional business profile mode projection', () {
+      const bpTenant = 'tenant-bp-u3';
+      const bpFpRev1 =
+          'bbbb1111bbbb1111bbbb1111bbbb1111bbbb1111bbbb1111bbbb1111bbbb1111';
+      const bpFpRev2 =
+          'cccc2222cccc2222cccc2222cccc2222cccc2222cccc2222cccc2222cccc2222';
+
+      Map<String, dynamic> bpEnvelope({
+        int revision = 1,
+        String fingerprint = bpFpRev1,
+        Object? operationMode,
+        Object? checkoutFxMode,
+      }) {
+        final envelope = <String, dynamic>{
+          'tenantId': bpTenant,
+          'businessName': 'Cafetín Perfil U3',
+          'fiscalRegime': 'CUOTA_FIJA',
+          'taxRate': 0.0,
+          'pricesIncludeTax': true,
+          'configVersion': {
+            'revision': revision,
+            'fingerprint': fingerprint,
+          },
+        };
+        // Omitted entirely when null: a snapshot that does not carry the field
+        // arrives without the key, and the projection treats absent and null
+        // alike. Built with statements rather than collection-if elements so
+        // the file parses on the toolchain CI pins (see the PR notes).
+        if (operationMode != null) {
+          envelope['operationMode'] = operationMode;
+        }
+        if (checkoutFxMode != null) {
+          envelope['checkoutFxMode'] = checkoutFxMode;
+        }
+        return envelope;
+      }
+
+      test('projects both asserted modes and marks both as cloud-managed', () async {
+        final envelope = bpEnvelope(
+          operationMode: 'FOODPARK_QSR',
+          checkoutFxMode: 'BCN_OFFICIAL',
+        );
+
+        final outcome = await handler.handleFiscalEnvelope(envelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        final operationMode =
+            await database.localConfigDao.getConfigByKey('operation_mode');
+        expect(operationMode?.value, 'FOODPARK_QSR');
+        final checkoutFxMode =
+            await database.localConfigDao.getConfigByKey('checkout_fx_mode');
+        expect(checkoutFxMode?.value, 'BCN_OFFICIAL');
+
+        final marker = await database.localConfigDao
+            .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+        expect(marker?.value, 'checkout_fx_mode,operation_mode');
+      });
+
+      test('projects only the asserted field; the other stays absent and unmanaged (per-field authority, D-1)', () async {
+        final envelope = bpEnvelope(checkoutFxMode: 'COMMERCIAL');
+
+        final outcome = await handler.handleFiscalEnvelope(envelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        final checkoutFxMode =
+            await database.localConfigDao.getConfigByKey('checkout_fx_mode');
+        expect(checkoutFxMode?.value, 'COMMERCIAL');
+        expect(
+          await database.localConfigDao.getConfigByKey('operation_mode'),
+          isNull,
+          reason: 'Unasserted field must not be written',
+        );
+
+        final marker = await database.localConfigDao
+            .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+        expect(marker?.value, 'checkout_fx_mode');
+      });
+
+      test('snapshot without either field leaves pre-existing local values untouched and writes no marker', () async {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'operation_mode', value: 'RESTAURANT'),
+        );
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'checkout_fx_mode', value: 'COMMERCIAL'),
+        );
+
+        final outcome = await handler.handleFiscalEnvelope(bpEnvelope());
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        final operationMode =
+            await database.localConfigDao.getConfigByKey('operation_mode');
+        expect(operationMode?.value, 'RESTAURANT',
+            reason: 'Local master value must survive an unasserted snapshot');
+        final checkoutFxMode =
+            await database.localConfigDao.getConfigByKey('checkout_fx_mode');
+        expect(checkoutFxMode?.value, 'COMMERCIAL',
+            reason: 'Local master value must survive an unasserted snapshot');
+
+        expect(
+          await database.localConfigDao
+              .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys),
+          isNull,
+          reason: 'No asserted field -> absence looks like absence',
+        );
+      });
+
+      test('retraction: field null in a later revision leaves the marker and preserves the local value', () async {
+        final rev1 = bpEnvelope(
+          operationMode: 'FOODPARK_QSR',
+          checkoutFxMode: 'BCN_OFFICIAL',
+        );
+        await handler.handleFiscalEnvelope(rev1);
+
+        final rev2 = bpEnvelope(
+          revision: 2,
+          fingerprint: bpFpRev2,
+          // operationMode omitted (cloud tombstone -> null): control returns local
+          checkoutFxMode: 'BCN_OFFICIAL',
+        );
+        final outcome2 = await handler.handleFiscalEnvelope(rev2);
+        expect(outcome2.status, FiscalInboxStatus.applied);
+
+        final marker = await database.localConfigDao
+            .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+        expect(marker?.value, 'checkout_fx_mode',
+            reason: 'Retracted field must disappear from the marker');
+
+        final operationMode =
+            await database.localConfigDao.getConfigByKey('operation_mode');
+        expect(operationMode?.value, 'FOODPARK_QSR',
+            reason: 'Local value is preserved on retraction, never deleted');
+      });
+
+      test('atomicity: cloud-owned keys never exist without the marker in the same committed state', () async {
+        final envelope = bpEnvelope(
+          operationMode: 'HYBRID',
+          checkoutFxMode: 'COMMERCIAL',
+        );
+
+        final outcome = await handler.handleFiscalEnvelope(envelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        // Same post-commit read: key existence implies marker names it.
+        final operationMode =
+            await database.localConfigDao.getConfigByKey('operation_mode');
+        final checkoutFxMode =
+            await database.localConfigDao.getConfigByKey('checkout_fx_mode');
+        final marker = await database.localConfigDao
+            .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+
+        expect(operationMode, isNotNull);
+        expect(checkoutFxMode, isNotNull);
+        expect(marker, isNotNull);
+        final tokens =
+            marker!.value.split(',').map((token) => token.trim()).toSet();
+        expect(tokens, containsAll(['operation_mode', 'checkout_fx_mode']));
+      });
+
+      test('guard rails: projection version stays 1 and isProjectionComplete ignores managed keys', () async {
+        final envelope = bpEnvelope(
+          operationMode: 'FOODPARK_QSR',
+          checkoutFxMode: 'BCN_OFFICIAL',
+        );
+
+        final outcome = await handler.handleFiscalEnvelope(envelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        expect(FiscalProjectionKeys.currentVersion, 1);
+        final versionMarker = await database.localConfigDao
+            .getConfigByKey(FiscalProjectionKeys.fiscalProjectionVersion);
+        expect(versionMarker?.value, '1');
+
+        // Conditional fields are NOT completeness obligations: a terminal with
+        // cloud-managed modes and an otherwise complete projection is complete.
+        expect(await handler.isProjectionComplete(envelope, bpTenant), isTrue);
+
+        // And a replay of the same snapshot stays a true no-op (no repair loop).
+        final replay = await handler.handleFiscalEnvelope(envelope);
+        expect(replay.status, FiscalInboxStatus.idempotentNoOp);
+      });
+    });
+
     test('Q80-A fixture: preseeded snapshot without projections triggers projection repair on first replay and true idempotentNoOp on second replay', () async {
       const q80TenantId = 'dddb91ab-74de-4b06-aa8c-f38c6e053b5a';
       const q80Revision = 1;
