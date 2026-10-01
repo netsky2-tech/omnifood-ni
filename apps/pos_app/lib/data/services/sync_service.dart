@@ -22,6 +22,7 @@ import '../../domain/services/inventory/authority_hydration_status.dart';
 import '../database/app_database.dart';
 import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
+import '../models/inventory/authority_projection_entities.dart';
 import '../models/inventory/insumo_entity.dart';
 import '../models/inventory/recipe_entity.dart';
 import '../models/user_entity.dart';
@@ -3215,6 +3216,57 @@ class SyncService {
 
         if (insumoEntities.isNotEmpty) {
           await _database!.insumoDao.insertInsumos(insumoEntities);
+        }
+
+        // 3b. Direct-mapping authority insumo hydration. The authority
+        // projection is otherwise hydrated only from each recipe version's
+        // component closure (4b below), but a product can also carry a
+        // DIRECT insumo mapping (mappingVersionId + insumoId) with no
+        // published recipe. Without a row in authority_insumos, the
+        // checkout authority guard cannot resolve that mapping's insumo
+        // and fails closed for the entire cart. The top-level `insumos`
+        // delta already carries every field the AuthorityInsumoEntity
+        // shape needs, so mirror each well-formed row into the authority
+        // projection using the same insert-if-absent pattern as
+        // AuthorityHydrationService.hydrate. Standing invariant (Q80):
+        // hydration trouble must never fail the pull — catch, log, and
+        // keep the operational writes above intact.
+        try {
+          final authorityDao = _database!.authorityProjectionDao;
+          for (final raw in rawInsumos) {
+            if (raw is! Map) continue;
+            final map = Map<String, dynamic>.from(raw);
+            final tenantId = (map['tenantId'] as String?)?.trim() ?? '';
+            final id = (map['id'] as String?)?.trim() ?? '';
+            final name = (map['name'] as String?)?.trim() ?? '';
+            final uom =
+                ((map['consumptionUom'] ?? map['purchaseUom']) as String?)
+                    ?.trim() ??
+                '';
+            // Never fabricate a tenant, an identity, or a UOM: the
+            // authority row requires all three, so skip malformed rows.
+            if (tenantId.isEmpty || id.isEmpty || name.isEmpty || uom.isEmpty) {
+              continue;
+            }
+            final existing = await authorityDao.findInsumoById(tenantId, id);
+            if (existing == null) {
+              await authorityDao.insertInsumo(
+                AuthorityInsumoEntity(
+                  tenantId: tenantId,
+                  id: id,
+                  name: name,
+                  uom: uom,
+                ),
+              );
+            }
+          }
+        } catch (e, st) {
+          developer.log(
+            '[SYNC_PULL] authority_insumo_hydration_failed error=$e',
+            name: 'SyncService',
+            error: e,
+            stackTrace: st,
+          );
         }
 
         // 4. Recipes
