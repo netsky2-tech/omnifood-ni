@@ -271,6 +271,15 @@ async function withIsolatedRlsSchema(
           user_id uuid NOT NULL UNIQUE REFERENCES users(id),
           pin_hash varchar NULL
         );
+        -- G2a (issue #526 unit B5): minimal hand-built invoices fixture, the
+        -- same pattern as users above. The priming tripwire reads only
+        -- tenant_id and invoice_number; no invoice entity is synchronized
+        -- into this scratch schema.
+        CREATE TABLE IF NOT EXISTS invoices (
+          id uuid PRIMARY KEY,
+          tenant_id uuid NOT NULL,
+          invoice_number varchar(40) NOT NULL
+        );
       `);
 
       // Production RLS surface for this read path, via the real resolver:
@@ -297,7 +306,8 @@ async function withIsolatedRlsSchema(
                         "${schema}".fiscal_config_revisions,
                         "${schema}".tenants,
                         "${schema}".sys_parametros_config,
-                        "${schema}".v_sys_parametros_config_active
+                        "${schema}".v_sys_parametros_config_active,
+                        "${schema}".invoices
          TO "${roleName}"`,
     );
     await bootstrap.query(
@@ -392,6 +402,35 @@ async function seedStaffWithPin(
       [randomUUID(), userId, 'test-only-pin-hash-not-a-real-secret'],
     );
   }
+}
+
+/**
+ * Seeds one issued invoice whose folio carries `sequence` as the TRAILING
+ * digit run, in the production prefixed DGI format the dev DB actually
+ * holds (`001-001-01-00000005`), scoped to its tenant.
+ *
+ * The fixture must stay production-shaped: a folio's digits after the
+ * `001-001-01-` prefix must NOT be concatenated with the prefix digits by
+ * the cloud MAX read (the original digit-only fixture silently hid that
+ * defect — see issue #526 unit B5 verification).
+ *
+ * A `-DUP2`-style suffix seen once in the dev DB is NOT a format any code
+ * path emits (no writer in either app appends it); it is not seeded as a
+ * rule. The trailing-run extraction nonetheless handles such a folio
+ * exactly as the POS's own `_extractSequenceNumber` does (trailing `2`),
+ * so no special-casing is warranted.
+ */
+async function seedInvoice(
+  admin: DataSource,
+  schema: string,
+  tenantId: string,
+  sequence: number,
+): Promise<void> {
+  await admin.query(
+    `INSERT INTO "${schema}".invoices (id, tenant_id, invoice_number)
+     VALUES ($1, $2, $3)`,
+    [randomUUID(), tenantId, `001-001-01-${String(sequence).padStart(8, '0')}`],
+  );
 }
 
 /**
@@ -755,4 +794,127 @@ describe('TerminalPrimingService tenant isolation (db)', () => {
       );
     },
   );
+
+  describe('G2a fiscal sequence tripwire (issue #526 unit B5, real MAX)', () => {
+    async function seedTenantWithInvoices(
+      context: IsolatedRlsContext,
+      tenantId: string,
+      name: string,
+      ruc: string,
+      from: number,
+      to: number,
+    ): Promise<void> {
+      const { admin, schema } = context;
+      await seedTenant(admin, schema, tenantId, name, ruc);
+      for (let sequence = from; sequence <= to; sequence += 1) {
+        await seedInvoice(admin, schema, tenantId, sequence);
+      }
+    }
+
+    async function countInvoices(
+      context: IsolatedRlsContext,
+      schema: string,
+    ): Promise<number> {
+      const restricted = await context.openRestricted();
+      try {
+        const rows = await restricted.query(
+          `SELECT count(*)::int AS count FROM "${schema}".invoices`,
+        );
+        return rows[0].count as number;
+      } finally {
+        if (restricted.isInitialized) await restricted.destroy();
+      }
+    }
+
+    itDb(
+      'refuses a proposal at or below the tenant cloud max, ignores a foreign tenant with a higher max, and writes nothing',
+      async () => {
+        await withIsolatedRlsSchema(
+          `${SCHEMA_PREFIX}_tripwire`,
+          async (context) => {
+            const { schema } = context;
+            const tenantA = randomUUID();
+            const tenantB = randomUUID();
+            // Tenant A holds folios 1..5; foreign tenant B holds a HIGHER
+            // max (40..50) that must never influence A's boundary.
+            await seedTenantWithInvoices(
+              context,
+              tenantA,
+              'Tenant Alfa (test)',
+              'RUC-TEST-000000000001',
+              1,
+              5,
+            );
+            await seedTenantWithInvoices(
+              context,
+              tenantB,
+              'Tenant Bravo (test)',
+              'RUC-TEST-000000000002',
+              40,
+              50,
+            );
+            const countBefore = await countInvoices(context, schema);
+            expect(countBefore).toBe(16);
+
+            // Refusal at == N and at < N (AC-1): the conflict names the
+            // tenant's own cloud max (5), never the foreign tenant's (50).
+            for (const proposal of [5, 4]) {
+              const error: any = await context.withRestricted((restricted) =>
+                buildPrimingService(restricted)
+                  .getPrimingPayload(tenantA, proposal)
+                  .then(
+                    () => null,
+                    (e) => e,
+                  ),
+              );
+              expect(error.status).toBe(409);
+              expect(error.getResponse()).toMatchObject({
+                code: 'FISCAL_SEQUENCE_RECOVERY_REQUIRED',
+                highestSequenceNumber: 5,
+                proposedSequence: proposal,
+              });
+            }
+
+            // Pass-through at N + 1 still reports the tenant's own max.
+            const passing = await context.withRestricted((restricted) =>
+              buildPrimingService(restricted).getPrimingPayload(tenantA, 6),
+            );
+            expect(passing.highestSequenceNumber).toBe(5);
+            expect(passing.status).toBe('success');
+
+            // AC-3 backend half: the refusal path stops without correcting —
+            // the whole surface is read-only, so no row (including any
+            // dgi_current_number-like state) may change.
+            expect(await countInvoices(context, schema)).toBe(countBefore);
+          },
+        );
+      },
+    );
+
+    itDb(
+      'passes through when the tenant holds no cloud invoices (N == 0)',
+      async () => {
+        await withIsolatedRlsSchema(
+          `${SCHEMA_PREFIX}_empty_fiscal`,
+          async (context) => {
+            const { admin, schema } = context;
+            const tenantA = randomUUID();
+            await seedTenant(
+              admin,
+              schema,
+              tenantA,
+              'Tenant Alfa (test)',
+              'RUC-TEST-000000000001',
+            );
+
+            const payload = await context.withRestricted((restricted) =>
+              buildPrimingService(restricted).getPrimingPayload(tenantA, 1),
+            );
+            expect(payload.highestSequenceNumber).toBe(0);
+            expect(payload.status).toBe('success');
+          },
+        );
+      },
+    );
+  });
 });

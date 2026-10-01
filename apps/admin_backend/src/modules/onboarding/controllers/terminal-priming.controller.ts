@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Query,
   Req,
   UnauthorizedException,
   UseGuards,
@@ -9,6 +10,7 @@ import {
 import { Request } from 'express';
 import { TerminalPrimingService } from '../services/terminal-priming.service';
 import type { TerminalPrimingResponseDto } from '../services/terminal-priming.service';
+import { TerminalPrimingQueryDto } from '../dto/terminal-priming.dto';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { PermissionsGuard } from '../../identity/guards/permissions.guard';
@@ -52,11 +54,20 @@ export class TerminalPrimingController {
   @RequirePermissions(AppPermission.ONBOARDING_ACTIVATION_MANAGE)
   async getPrimingPayload(
     @Req() req: RequestWithUser,
+    @Query() query?: TerminalPrimingQueryDto,
   ): Promise<TerminalPrimingResponseDto> {
     const tenantId = req.user?.tenantId || req.user?.tenant_id;
     if (!tenantId) {
       throw new UnauthorizedException('Tenant context not found in request');
     }
-    return this.primingService.getPrimingPayload(tenantId);
+    // G2a (issue #526 unit B5): the proposed fiscal cursor is optional and
+    // backwards compatible — the POS today sends no params, and an absent
+    // proposal keeps the legacy behavior byte-identical. The validated
+    // (whitelisted) DTO is what reaches the service, so no unvetted query
+    // key can leak past the global ValidationPipe.
+    return this.primingService.getPrimingPayload(
+      tenantId,
+      query?.proposedSequence,
+    );
   }
 }

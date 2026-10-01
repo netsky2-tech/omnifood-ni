@@ -1,4 +1,8 @@
-import { UnauthorizedException } from '@nestjs/common';
+import {
+  UnauthorizedException,
+  ValidationPipe,
+  BadRequestException,
+} from '@nestjs/common';
 import {
   GUARDS_METADATA,
   INTERCEPTORS_METADATA,
@@ -11,6 +15,7 @@ import { PERMISSIONS_KEY } from '../../identity/decorators/permissions.decorator
 import { AppPermission } from '../../identity/security/permissions.enum';
 import { TerminalPrimingController } from './terminal-priming.controller';
 import { TerminalPrimingService } from '../services/terminal-priming.service';
+import { TerminalPrimingQueryDto } from '../dto/terminal-priming.dto';
 import {
   TerminalPrimingCatalogValueDto,
   TerminalPrimingProductDto,
@@ -155,7 +160,10 @@ describe('L1-10a: TerminalPrimingsController (Unit)', () => {
       const result = await controller.getPrimingPayload(req);
 
       expect(primingService.getPrimingPayload).toHaveBeenCalledTimes(1);
-      expect(primingService.getPrimingPayload).toHaveBeenCalledWith(tenantId);
+      expect(primingService.getPrimingPayload).toHaveBeenCalledWith(
+        tenantId,
+        undefined,
+      );
       expect(result).toEqual(primingPayload);
     });
 
@@ -169,7 +177,10 @@ describe('L1-10a: TerminalPrimingsController (Unit)', () => {
 
       await controller.getPrimingPayload(req);
 
-      expect(primingService.getPrimingPayload).toHaveBeenCalledWith(tenantId);
+      expect(primingService.getPrimingPayload).toHaveBeenCalledWith(
+        tenantId,
+        undefined,
+      );
     });
 
     it('rejects with UnauthorizedException when the human user has no tenant context', async () => {
@@ -192,6 +203,83 @@ describe('L1-10a: TerminalPrimingsController (Unit)', () => {
         UnauthorizedException,
       );
       expect(primingService.getPrimingPayload).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('G2a: optional proposedSequence query (issue #526 unit B5)', () => {
+    let controller: TerminalPrimingController;
+    let primingService: jest.Mocked<Partial<TerminalPrimingService>>;
+
+    beforeEach(() => {
+      primingService = {
+        getPrimingPayload: jest.fn().mockResolvedValue(primingPayload),
+      };
+      controller = new TerminalPrimingController(
+        primingService as unknown as TerminalPrimingService,
+      );
+    });
+
+    it('passes a present proposedSequence through to the service', async () => {
+      const req: any = { user: { tenant_id: tenantId } };
+
+      await controller.getPrimingPayload(req, { proposedSequence: 7 });
+
+      expect(primingService.getPrimingPayload).toHaveBeenCalledWith(
+        tenantId,
+        7,
+      );
+    });
+
+    it('keeps legacy delegation when no query param is sent', async () => {
+      const req: any = { user: { tenant_id: tenantId } };
+
+      await controller.getPrimingPayload(req);
+
+      expect(primingService.getPrimingPayload).toHaveBeenCalledWith(
+        tenantId,
+        undefined,
+      );
+    });
+
+    describe('TerminalPrimingQueryDto under the production ValidationPipe config', () => {
+      // Mirrors the global pipe in main.ts: whitelist, forbidNonWhitelisted,
+      // transform. Query strings arrive as strings; transform converts them
+      // through @Type(() => Number) before @IsInt runs.
+      const pipe = new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      });
+      const transformQuery = (raw: Record<string, unknown>) =>
+        pipe.transform(raw, {
+          type: 'query' as const,
+          metatype: TerminalPrimingQueryDto,
+        });
+
+      it('accepts and converts a positive integer string', async () => {
+        await expect(
+          transformQuery({ proposedSequence: '7' }),
+        ).resolves.toEqual({ proposedSequence: 7 });
+      });
+
+      it('accepts an absent proposedSequence (legacy callers stay valid)', async () => {
+        await expect(transformQuery({})).resolves.toEqual({});
+      });
+
+      it('rejects zero, negatives, non-integers and non-numbers', async () => {
+        await expect(transformQuery({ proposedSequence: '0' })).rejects.toThrow(
+          BadRequestException,
+        );
+        await expect(
+          transformQuery({ proposedSequence: '-2' }),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          transformQuery({ proposedSequence: '1.5' }),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          transformQuery({ proposedSequence: 'abc' }),
+        ).rejects.toThrow(BadRequestException);
+      });
     });
   });
 });
