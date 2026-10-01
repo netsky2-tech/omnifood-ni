@@ -1549,15 +1549,26 @@ class CartSummary extends StatelessWidget {
     );
   }
 
-  void _showCheckoutDialog(BuildContext context) {
+  Future<void> _showCheckoutDialog(BuildContext context) async {
+    // D-5: refresh the FX rates before every checkout. `loadExchangeRates()`
+    // otherwise only runs in the SaleViewModel constructors, so a rate change
+    // (business profile edit, or a synced fiscal config) would not reach an
+    // already-running terminal until the POS was restarted — wrong USD
+    // equivalents on the day of the change.
+    await context.read<SaleViewModel>().loadExchangeRates();
+    if (!context.mounted) return;
     showDialog(
       context: context,
       builder: (context) => const MultiCurrencyCheckoutDialog(),
     );
   }
 
-  void _showSplitBillDialog(BuildContext context) {
+  Future<void> _showSplitBillDialog(BuildContext context) async {
     final vm = context.read<SaleViewModel>();
+    // D-5: same refresh as the checkout — the split dialog prints the
+    // commercial rate and computes share equivalents from it.
+    await vm.loadExchangeRates();
+    if (!context.mounted) return;
     showDialog(
       context: context,
       builder: (context) => SplitBillDialog(
