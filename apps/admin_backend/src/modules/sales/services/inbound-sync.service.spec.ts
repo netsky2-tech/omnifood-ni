@@ -326,6 +326,8 @@ describe('InboundSyncService', () => {
       stock: 10.5,
       averageCost: 15,
       sellPrice: 45,
+      taxRate: 0.15,
+      isTaxExempt: false,
       isActive: true,
       isPerishable: true,
       warehouseId: 'wh-1',
@@ -387,9 +389,13 @@ describe('InboundSyncService', () => {
     expect(catalogQb.andWhere).not.toHaveBeenCalled();
   });
 
-  it('keeps persistence-only tax fields out of the inbound product contract', async () => {
-    // Scenario: POS device syncs a product with explicit fiscal fields.
-    // The backend must preserve tax_rate and is_tax_exempt exactly.
+  it('emits taxRate and isTaxExempt from the product entity columns in the inbound product contract', async () => {
+    // The POS reads `taxRate` / `isTaxExempt` from the inbound product delta
+    // (sync_service.dart) and its invoice fiscal calculator trusts them as
+    // the rate's source of truth. A Régimen General tenant whose products
+    // arrive with taxRate 0.0 files every sale as IVA-exempt, so the fields
+    // are part of the inbound contract and must be read from the entity
+    // columns, never from a hardcoded constant.
     const mockProducts = [
       {
         id: 'prod-taxable',
@@ -421,6 +427,23 @@ describe('InboundSyncService', () => {
         created_at: new Date('2026-08-01T00:00:00Z'),
         updated_at: new Date('2026-08-03T00:00:00Z'),
       } as unknown as Product,
+      {
+        // A product at its column defaults (tax_rate default 0.15,
+        // is_tax_exempt default false) must still emit usable values.
+        id: 'prod-defaults',
+        name: 'Refresco',
+        uom: 'UN',
+        stock: 20.0,
+        averageCost: 10.0,
+        sellPrice: 30.0,
+        is_active: true,
+        is_perishable: false,
+        warehouse_id: null,
+        tax_rate: 0.15,
+        is_tax_exempt: false,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-04T00:00:00Z'),
+      } as unknown as Product,
     ];
 
     productQb.getMany.mockResolvedValue(mockProducts);
@@ -432,17 +455,27 @@ describe('InboundSyncService', () => {
       buildDefaultBoundManager(),
     );
 
-    expect(response.deltas.products).toHaveLength(2);
+    expect(response.deltas.products).toHaveLength(3);
 
     const taxable = response.deltas.products.find(
       (p) => p.id === 'prod-taxable',
     );
     const exempt = response.deltas.products.find((p) => p.id === 'prod-exempt');
+    const atDefaults = response.deltas.products.find(
+      (p) => p.id === 'prod-defaults',
+    );
 
-    expect(taxable).not.toHaveProperty('taxRate');
-    expect(taxable).not.toHaveProperty('isTaxExempt');
-    expect(exempt).not.toHaveProperty('taxRate');
-    expect(exempt).not.toHaveProperty('isTaxExempt');
+    // Values must come from the entity columns: the fixture's two different
+    // pairs prove the mapper is not emitting constants.
+    expect(taxable?.taxRate).toBe(0.15);
+    expect(taxable?.isTaxExempt).toBe(false);
+    expect(exempt?.taxRate).toBe(0);
+    expect(exempt?.isTaxExempt).toBe(true);
+    // A row at its column defaults still emits defined, usable values.
+    expect(atDefaults?.taxRate).toBeDefined();
+    expect(atDefaults?.isTaxExempt).toBeDefined();
+    expect(atDefaults?.taxRate).toBe(0.15);
+    expect(atDefaults?.isTaxExempt).toBe(false);
   });
 
   it('includes par level and stock thresholds in the insumo delta (issue #521 S1)', async () => {
