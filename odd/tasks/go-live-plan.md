@@ -106,12 +106,56 @@ shipped in code. This file records what was **measured**, not what the plan clai
 
 ## Release / deploy lane (coordinate with the release-signing session)
 
-- **`main` still silently debug-signs release APKs** (`build.gradle.kts:51-52` fallback) and the root
-  `.gitignore` lacks keystore rules; the fix lives on unmerged `feat/release-signing-baseline`
-  (`48cf3334`, `3c4b6334`). Any APK cut from `main` today is unrecoverable in the field.
-- `HUMAN_AUTHORIZATION_RECOVERY_PEPPER` must be set before the next backend deploy (`#732`).
-- Staging cutover §12 gate is unchecked; **no production cutover plan exists** (the runbook excludes
-  production explicitly) — the pilot's target environment is an open owner decision.
+- **Signing: CLOSED on `main`.** The fail-closed gate merged as PR #750
+  (`feat/release-signing-baseline`). Verified against `origin/main` at `8e376dda`,
+  not inferred from the branch: `build.gradle.kts` now gates release signing on
+  keystore readiness (`key.properties` must exist and its `storeFile` must
+  resolve) and falls back to debug signing **only** under an explicit
+  `ORG_GRADLE_PROJECT_allowDebugSigning=true` opt-in; the root `.gitignore` carries
+  `*.jks`, `*.keystore`, `*.p12` and `key.properties`; and
+  `docs/operations/release-signing-runbook.md` plus
+  `scripts/provision_release_keystore.sh` are present. The earlier text of this
+  section described an APK cut from `main` as unrecoverable in the field; that was
+  true of the pre-#750 tree and is no longer.
+- **The keystore artifact still does not exist.** The tooling is merged, the key is
+  not: there is no `~/.omnifood/`, no `key.properties`, and no `.jks` in any
+  worktree on this machine. Until one is provisioned, every release build either
+  fails closed or is debug-signed by explicit opt-in. Provisioning is an owner
+  action (two passphrases plus a backup location), not engineering, and the
+  runbook covers it.
+- `HUMAN_AUTHORIZATION_RECOVERY_PEPPER` (`#732`): **satisfied on staging.**
+  `HumanAuthorizationPepperStartupGuard` implements `OnApplicationBootstrap` and
+  throws at boot when the pepper is missing or shorter than
+  `MINIMUM_PEPPER_LENGTH` (32). Staging answers `200 {"status":"ok"}` on
+  `/api/v1/health`, so a process that requires the pepper at boot is running with
+  one. This is an inference from the boot guard plus a live response, not a read
+  of the deployed environment; confirm from the server env before treating it as
+  an audited fact.
+- **The pilot target environment remains an open owner decision**, and staging is
+  the only environment with a runbook — no production cutover plan exists (the
+  runbook excludes production explicitly), and the staging cutover §12 gate is
+  still unchecked.
+- **Backend URL is still compile-time on `main`.** `apps/pos_app/lib/main.dart` reads
+  `String.fromEnvironment('API_URL')` with the `http://127.0.0.1:3000/api` default.
+  PR #762 moves it to runtime provisioning but is open, so a fleet artifact built
+  from `main` today still resolves to itself. Pilot builds are unaffected: `--pilot`
+  already requires and bakes `--api-url`, failing closed without it — the gap is
+  fleet distribution and any OTA path, not the single-terminal pilot.
+
+### Code units still open
+
+- **G5** — `customer_point_transactions.units` int→decimal in both runtimes. The
+  only open code unit. Evaluated in this file as low-to-medium risk: drift is
+  ≤ 0.5 pt/tx and only on fractional points, which SOHO does not emit, so it can
+  run post-pilot.
+
+### Physical lane (unchanged, and it is what gates delivery)
+
+No Android device is attached to this machine (`adb devices` returns empty), so
+nothing on this branch or on `main` has on-hardware verification — including the
+new terminal server-config card, which sits below the fold in the widget-test
+viewport and was only exercised with `ensureVisible`. Hardware, a printed ticket,
+real RUC and the field runs listed above are still the delivery constraint.
 
 ## Evidence log
 
