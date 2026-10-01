@@ -210,6 +210,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# F1: normalize OUT_DIR to an absolute path ONCE, immediately after flag
+# parsing and before any `cd` can change the meaning of a relative path. A
+# relative --out-dir resolves against ROOT_DIR, matching where mkdir -p has
+# always created it, so the --plan report, the mkdir and the publish/copy
+# steps all reference the same directory. An absolute --out-dir is preserved
+# and the default (already absolute) behavior is unchanged. realpath -m is
+# the same resolution tool the keystore scripts depend on; fail closed with
+# the same guard pattern when it is unavailable.
+if command -v realpath >/dev/null 2>&1; then
+    OUT_DIR="$(cd "${ROOT_DIR}" && realpath -m -- "${OUT_DIR}")"
+else
+    echo "ERROR: realpath is not available; cannot safely resolve the output directory '${OUT_DIR}'." >&2
+    exit 1
+fi
+
 # Pilot builds fail closed without a baked terminal id: the installed app would
 # resolve to pos-local-<uuid> and could never match its activation attempt.
 if [ "${PILOT_MODE}" = true ] && [ -z "${DEVICE_ID}" ]; then
@@ -396,6 +411,14 @@ if [ "${BUILD_MODE}" = "universal" ] || [ "${BUILD_MODE}" = "both" ]; then
     echo "  -> Compiling Universal Release APK..."
     env ${GRADLE_SIGNING_ENV[@]+"${GRADLE_SIGNING_ENV[@]}"} flutter build apk --release ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
     cp "${BUILD_OUTPUT_DIR}/app-release.apk" "${OUT_DIR}/app-universal-release.apk" 2>/dev/null || true
+fi
+
+# F2: fail loudly when nothing was published. The cp steps above tolerate a
+# missing build output glob, but the pipeline must never report a release
+# candidate while delivering zero artifacts to ${OUT_DIR}.
+if ! compgen -G "${OUT_DIR}/*.apk" >/dev/null; then
+    echo "ERROR: no .apk artifacts were published to ${OUT_DIR} (expected at least one app-*-release.apk copied from ${BUILD_OUTPUT_DIR})." >&2
+    exit 1
 fi
 
 # 5. Checksum & Manifest Generation
