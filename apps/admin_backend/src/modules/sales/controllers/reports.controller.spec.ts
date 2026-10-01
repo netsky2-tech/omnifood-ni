@@ -73,6 +73,8 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
   let mockSalesExportService: {
     exportSalesBook: jest.Mock;
     exportZReports: jest.Mock;
+    getXReport: jest.Mock;
+    getZReport: jest.Mock;
   };
 
   beforeAll(async () => {
@@ -178,6 +180,75 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
     };
 
     mockSalesExportService = {
+      // G1 (issue #522 Finding 1): the X/Z handlers delegate to
+      // SalesExportService; the mocks below resolve the 200-expecting RBAC
+      // cases with a real response shape.
+      getXReport: jest.fn().mockResolvedValue({
+        generatedAt: '2026-08-26T18:00:00.000Z',
+        closesShift: false,
+        shifts: [
+          {
+            shiftId: 'shift-1',
+            terminalId: 'POS-01',
+            cashier: 'Juan',
+            openedAt: '2026-08-26T08:00:00.000Z',
+            status: 'OPEN',
+            closesShift: false,
+            initialFloatNio: 1000,
+            initialFloatUsd: 50,
+            cashMovements: {
+              CASH_IN: { nio: 0, usd: 0, count: 0 },
+              CASH_OUT: { nio: 0, usd: 0, count: 0 },
+              PETTY_CASH: { nio: 0, usd: 0, count: 0 },
+              SAFE_DROP: { nio: 0, usd: 0, count: 0 },
+            },
+            salesByMethod: {
+              cashNio: 0,
+              cardNio: 0,
+              qrNio: 0,
+              pointsNio: 0,
+              otherNio: 0,
+            },
+            expectedCashNio: 1000,
+            expectedCashUsd: 50,
+          },
+        ],
+      }),
+      getZReport: jest.fn().mockResolvedValue({
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        generatedAt: '2026-08-26T18:00:00.000Z',
+        totalRecords: 1,
+        records: [
+          {
+            shiftId: 'shift-1',
+            closedAt: '2026-08-26T17:00:00.000Z',
+            openedAt: '2026-08-26T08:00:00.000Z',
+            terminalId: 'POS-01',
+            zSequence: 14,
+            cashierName: 'Juan',
+            initialFloatNio: 1000,
+            initialFloatUsd: 50,
+            expectedCashNio: 6500,
+            expectedCashUsd: 120,
+            finalCountedNio: 6500,
+            finalCountedUsd: 120,
+            differenceNio: 0,
+            differenceUsd: 0,
+            status: 'CLOSED',
+            notes: null,
+            supervisorId: 'sup-1',
+            fiscalTotals: {
+              totalGrossNio: 1650,
+              totalTaxableNio: 1000,
+              totalExemptNio: 500,
+              totalTaxNio: 150,
+            },
+            blockedByUnreconciledPayments: false,
+            unreconciledPaymentCount: 0,
+          },
+        ],
+      }),
       exportSalesBook: jest
         .fn()
         .mockImplementation(
@@ -372,6 +443,55 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
       .get('/sales/reports/x')
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
       .expect(200);
+  });
+
+  // G1 (issue #522 Finding 1): /x and /z are real fiscal reports, not
+  // literal stubs — the 200 cases must resolve a real response shape and
+  // reach the service with the tenant id from TenantInterceptor.
+  it('serves the real Corte X reading to MANAGER with an explicit non-closing marker', async () => {
+    const jwtService = app.get(JwtService);
+    const response = await request(getHttpServer())
+      .get('/sales/reports/x?terminalId=POS-01')
+      .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .expect(200);
+
+    const body = response.body as {
+      status?: string;
+      closesShift: boolean;
+      shifts: unknown[];
+    };
+    expect(body.status).toBeUndefined();
+    expect(body.closesShift).toBe(false);
+    expect(body.shifts).toHaveLength(1);
+    expect(mockSalesExportService.getXReport).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.objectContaining({ terminalId: 'POS-01' }) as unknown,
+    );
+  });
+
+  it('serves the real Corte Z close view to OWNER with the Z row and fiscal totals', async () => {
+    const jwtService = app.get(JwtService);
+    const response = await request(getHttpServer())
+      .get('/sales/reports/z?startDate=2026-08-26&endDate=2026-08-26')
+      .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+      .expect(200);
+
+    const body = response.body as {
+      status?: string;
+      totalRecords: number;
+      records: Array<{ shiftId: string; zSequence: number | null }>;
+    };
+    expect(body.status).toBeUndefined();
+    expect(body.totalRecords).toBe(1);
+    expect(body.records[0].shiftId).toBe('shift-1');
+    expect(body.records[0].zSequence).toBe(14);
+    expect(mockSalesExportService.getZReport).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.objectContaining({
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+      }) as unknown,
+    );
   });
 
   it('returns 403 for CASHIER on dashboard endpoint', async () => {

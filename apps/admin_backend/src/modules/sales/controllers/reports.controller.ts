@@ -36,6 +36,10 @@ import {
   SequenceAuditQueryDto,
   VoidedInvoicesQueryDto,
   VoidedInvoicesReportDto,
+  XReportDto,
+  XReportQueryDto,
+  ZReportDto,
+  ZReportQueryDto,
 } from '../dto/fiscal-reports.dto';
 import {
   ExportSalesBookQueryDto,
@@ -176,15 +180,37 @@ export class ReportsController {
     return result.data;
   }
 
+  /**
+   * G1 (issue #522 Finding 1): real Corte X — partial reading of the
+   * tenant's OPEN shift(s), explicitly non-closing (`closesShift: false`).
+   * Tenant scoping rides TenantInterceptor + @GetTenantId; aggregation is
+   * keyed on the shift, never on a fiscal day (open question P8).
+   * DEC-03's manager-PIN-on-variance is a close-flow concern, not this
+   * report. RBAC: OWNER/MANAGER only (unchanged from the stub).
+   */
   @Get('x')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  getXReport() {
-    return { status: 'ok', report: 'X' };
+  async getXReport(
+    @GetTenantId() tenantId: string,
+    @Query() query: XReportQueryDto,
+  ): Promise<XReportDto> {
+    return this.salesExportService.getXReport(tenantId, query);
   }
 
+  /**
+   * G1 (issue #522 Finding 1): real Corte Z — definitive close view for
+   * CLOSED shifts in the date range, with the DEC-04 reconciliation
+   * blocker as a per-shift SIGNAL (reporting never hard-fails; the hard
+   * block belongs to CashShiftService.closeShiftWithZReport). Shares the
+   * single getZReportRows aggregation path with export/z-reports. RBAC:
+   * OWNER/MANAGER only (unchanged from the stub).
+   */
   @Get('z')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  getZReport() {
-    return { status: 'ok', report: 'Z' };
+  async getZReport(
+    @GetTenantId() tenantId: string,
+    @Query() query: ZReportQueryDto,
+  ): Promise<ZReportDto> {
+    return this.salesExportService.getZReport(tenantId, query);
   }
 }

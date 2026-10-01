@@ -43,11 +43,21 @@ shipped in code. This file records what was **measured**, not what the plan clai
 ## Work units
 
 ### G1 — `#522` Finding 1: real X and Z fiscal reports
-- Status: IN PROGRESS
-- Replace the two stubs with real, tenant-scoped, DGI-shaped reports reusing the existing fiscal
-  surface (`FiscalReportsService`, `SalesExportService.exportZReports`, `fiscal/*` endpoints) rather
-  than inventing a second aggregation path.
-- Must not silently change the RBAC contract (OWNER/MANAGER) that the archived wave-1 spec pinned.
+- Status: **IMPLEMENTED + VERIFIED (APPROVE, 0 blockers) — ready to ship** (branch
+  `fix/reports-xz-impl`).
+- Both stubs replaced by real, tenant-scoped aggregates in `SalesExportService`: `/x` = partial
+  reading of an OPEN shift (`closesShift: false`, never flips), `/z` = closed-shift close view with
+  per-shift fiscal totals + a **reconciliation blocker signal** (reports do not hard-fail; the hard
+  block belongs to the close action). `exportZReports` was refactored onto a shared
+  `getZReportRows` with its behavior preserved (verified hunk-by-hunk).
+- Rulings recorded in code: shift-keyed aggregation (no invented fiscal-day semantics), tenant
+  reads through `runInTenantTransaction` with an explicit `tenant_id`, repository `.find()` only,
+  DTOs all-optional, RBAC untouched.
+- Verification: **APPROVE, 0 blocking**; 4 should-fixes closed with mutation proofs — credit-note
+  netting now pinned in both X and Z, `terminalId` narrowing pinned, the e2e tenant-isolation test
+  given real teeth (foreign-tenant fixtures), and a **latent numeric bug fixed**: X's
+  `salesByMethod` net now mirrors the AG-08 conversion for USD change (`sales-reports.service.ts:145-159`).
+  Full suite 3,368 pass; `test:db` 294/294; e2e `--runInBand` 690/690; build + `npx eslint` clean.
 
 ### G2 — `#526`/B5a: refuse instead of advance, with the named state
 - Status: PENDING

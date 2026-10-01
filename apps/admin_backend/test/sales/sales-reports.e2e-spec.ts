@@ -20,6 +20,10 @@ import {
   CashShiftStatus,
 } from '../../src/modules/sales/entities/cash-shift.entity';
 import {
+  CashMovement,
+  CashMovementType,
+} from '../../src/modules/sales/entities/cash-movement.entity';
+import {
   User,
   UserRole,
 } from '../../src/modules/identity/entities/user.entity';
@@ -67,6 +71,11 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
   let mockShiftRepo: {
     find: jest.Mock;
   };
+  // G1 (issue #522 Finding 1): X-report cash-movement reads run through the
+  // bound transaction manager; the pooled token stays wired as tripwire.
+  let mockMovementRepo: {
+    find: jest.Mock;
+  };
   let mockUserRepo: {
     find: jest.Mock;
   };
@@ -111,6 +120,7 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
       total: 1150,
       totalUsd: 31.51,
       isCanceled: false,
+      shiftId: 'shift-e2e-1',
       created_at: new Date('2026-08-26T09:30:00.000Z'),
       items: [
         {
@@ -155,6 +165,7 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
       total: 500,
       totalUsd: 13.7,
       isCanceled: false,
+      shiftId: 'shift-e2e-1',
       created_at: new Date('2026-08-26T14:15:00.000Z'),
       items: [
         {
@@ -182,6 +193,9 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
           amountNio: 500,
           changeGiven: 0,
           changeCurrency: 'NIO',
+          // G1 (DEC-04): the unreconciled card voucher that must raise the
+          // Z report's reconciliation blocker signal WITHOUT failing it.
+          reconciliationStatus: 'PENDIENTE',
           createdAt: new Date(),
           invoice: {} as Invoice,
         },
@@ -227,6 +241,109 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
       difference_usd: 0,
       z_report_sequence: 1,
     },
+    // G1 (issue #522 Finding 1): an OPEN shift so the Corte X reading has
+    // a subject. Its opened_at sits far outside every seeded fiscal range,
+    // so unscoped legacy reads keep their pre-G1 fixture counts.
+    {
+      id: 'shift-e2e-open',
+      tenant_id: tenantId,
+      terminal_id: 'POS-02',
+      cashier_id: 'user-cashier-1',
+      cashier_name: 'Elena Morales',
+      opened_at: new Date('2027-01-10T08:00:00.000Z'),
+      closed_at: null,
+      status: CashShiftStatus.OPEN,
+      initial_float_nio: 500,
+      initial_float_usd: 25,
+      expected_cash_nio: 700,
+      expected_cash_usd: 25,
+      final_counted_nio: null,
+      final_counted_usd: null,
+      difference_nio: null,
+      difference_usd: null,
+      z_report_sequence: null,
+    },
+    // SF4 (tenant-isolation teeth): shifts belonging to a DIFFERENT tenant.
+    // They must never appear in /x or /z responses for the acting tenant;
+    // seeding them makes the tenant predicate observable (dropping it
+    // leaks these rows and fails the isolation test below).
+    {
+      id: 'shift-e2e-foreign-open',
+      tenant_id: 'tenant-e2e-rival',
+      terminal_id: 'POS-99',
+      cashier_id: 'user-rival-1',
+      cashier_name: 'Rival Cajero',
+      opened_at: new Date('2026-08-26T08:00:00.000Z'),
+      closed_at: null,
+      status: CashShiftStatus.OPEN,
+      initial_float_nio: 900,
+      initial_float_usd: 45,
+      expected_cash_nio: 900,
+      expected_cash_usd: 45,
+      final_counted_nio: null,
+      final_counted_usd: null,
+      difference_nio: null,
+      difference_usd: null,
+      z_report_sequence: null,
+    },
+    {
+      id: 'shift-e2e-foreign-closed',
+      tenant_id: 'tenant-e2e-rival',
+      terminal_id: 'POS-99',
+      cashier_id: 'user-rival-1',
+      cashier_name: 'Rival Cajero',
+      opened_at: new Date('2026-08-26T07:00:00.000Z'),
+      closed_at: new Date('2026-08-26T16:00:00.000Z'),
+      status: CashShiftStatus.CLOSED,
+      initial_float_nio: 900,
+      initial_float_usd: 45,
+      expected_cash_nio: 1900,
+      expected_cash_usd: 45,
+      final_counted_nio: 1900,
+      final_counted_usd: 45,
+      difference_nio: 0,
+      difference_usd: 0,
+      z_report_sequence: 99,
+    },
+  ];
+
+  const sampleMovements: Partial<CashMovement>[] = [
+    {
+      tenant_id: tenantId,
+      shift_id: 'shift-e2e-open',
+      terminal_id: 'POS-02',
+      type: CashMovementType.CASH_IN,
+      amount_nio: 500,
+      amount_usd: 0,
+      reason: 'Cambio inicial',
+    },
+    {
+      tenant_id: tenantId,
+      shift_id: 'shift-e2e-open',
+      terminal_id: 'POS-02',
+      type: CashMovementType.SAFE_DROP,
+      amount_nio: 200,
+      amount_usd: 0,
+      reason: 'Salva',
+    },
+    {
+      tenant_id: tenantId,
+      shift_id: 'shift-e2e-open',
+      terminal_id: 'POS-02',
+      type: CashMovementType.PETTY_CASH,
+      amount_nio: 100,
+      amount_usd: 0,
+      reason: 'Fondo caja chica',
+    },
+    {
+      tenant_id: tenantId,
+      shift_id: 'shift-e2e-open',
+      terminal_id: 'POS-02',
+      type: CashMovementType.CASH_OUT,
+      amount_nio: 200,
+      amount_usd: 0,
+      reason: 'Gasto operativo',
+    },
   ];
 
   beforeAll(async () => {
@@ -234,6 +351,7 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
     mockItemRepo = { find: jest.fn() };
     mockPaymentRepo = { find: jest.fn() };
     mockShiftRepo = { find: jest.fn() };
+    mockMovementRepo = { find: jest.fn() };
     mockUserRepo = { find: jest.fn() };
 
     transactionalManager = {
@@ -243,7 +361,9 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
           ? mockInvoiceRepo
           : entity === User
             ? mockUserRepo
-            : mockShiftRepo,
+            : entity === CashMovement
+              ? mockMovementRepo
+              : mockShiftRepo,
       ),
     };
     transactionalDataSource = {
@@ -254,18 +374,70 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
     };
 
     mockInvoiceRepo.find.mockImplementation(
-      (opts?: { where?: { isCanceled?: boolean } }) => {
+      (opts?: { where?: { isCanceled?: boolean; shiftId?: unknown } }) => {
         let result = sampleInvoices;
-        if (opts?.where && 'isCanceled' in opts.where) {
-          result = sampleInvoices.filter(
-            (i) => i.isCanceled === opts.where.isCanceled,
+        const where = opts?.where;
+        // G1: X/Z reads narrow by the invoice's shift (property `shiftId`,
+        // column shift_id). In() arrives as a FindOperator carrying the id
+        // array; plain equality arrives as a raw string.
+        if (where && 'shiftId' in where) {
+          const raw = where.shiftId;
+          const ids =
+            raw &&
+            typeof raw === 'object' &&
+            Array.isArray((raw as { value?: string[] }).value)
+              ? (raw as { value: string[] }).value
+              : [raw as string];
+          result = result.filter(
+            (i) => i.shiftId != null && ids.includes(i.shiftId),
+          );
+        }
+        if (where && 'isCanceled' in where) {
+          result = result.filter((i) => i.isCanceled === where.isCanceled);
+        }
+        return Promise.resolve(result);
+      },
+    );
+
+    mockShiftRepo.find.mockImplementation(
+      (opts?: {
+        where?: {
+          tenant_id?: string;
+          id?: string;
+          status?: CashShiftStatus;
+          opened_at?: { value?: [Date, Date] };
+        };
+      }) => {
+        let result = sampleShifts;
+        const where = opts?.where ?? {};
+        // SF4: the mock honors the tenant predicate so the isolation test
+        // below actually observes it (a dropped tenant_id leaks the
+        // foreign-tenant shifts seeded above).
+        if (where.tenant_id !== undefined) {
+          result = result.filter((s) => s.tenant_id === where.tenant_id);
+        }
+        if (where.id !== undefined) {
+          result = result.filter((s) => s.id === where.id);
+        }
+        if (where.status !== undefined) {
+          result = result.filter((s) => s.status === where.status);
+        }
+        // Between(start, end) arrives as a FindOperator with a [start, end]
+        // value pair; honor it so date-scoped reads keep their legacy counts.
+        const bounds = where.opened_at?.value;
+        if (Array.isArray(bounds) && bounds.length === 2) {
+          result = result.filter(
+            (s) =>
+              s.opened_at != null &&
+              new Date(s.opened_at) >= bounds[0] &&
+              new Date(s.opened_at) <= bounds[1],
           );
         }
         return Promise.resolve(result);
       },
     );
 
-    mockShiftRepo.find.mockResolvedValue(sampleShifts);
+    mockMovementRepo.find.mockResolvedValue(sampleMovements);
     mockUserRepo.find.mockResolvedValue(sampleUsers);
 
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -299,6 +471,10 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
         {
           provide: getRepositoryToken(CashShiftSession),
           useValue: mockShiftRepo,
+        },
+        {
+          provide: getRepositoryToken(CashMovement),
+          useValue: mockMovementRepo,
         },
         { provide: DataSource, useValue: transactionalDataSource },
         {
@@ -540,9 +716,12 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
     });
 
     it('exports Z-Reports in JSON, CSV, XLSX, and PDF formats', async () => {
-      // JSON
+      // JSON — scoped to August so the seeded OPEN shift (2027, added for
+      // the G1 X-report coverage) stays outside this export's assertion.
       const resJson = await request(app.getHttpServer())
-        .get('/sales/reports/export/z-reports?format=json')
+        .get(
+          '/sales/reports/export/z-reports?format=json&startDate=2026-08-26&endDate=2026-08-26',
+        )
         .set('Authorization', `Bearer ${getAuthToken(UserRole.MANAGER)}`)
         .expect(200);
 
@@ -572,6 +751,172 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
         .set('Authorization', `Bearer ${getAuthToken(UserRole.MANAGER)}`)
         .expect(200);
       expect(resPdf.headers['content-type']).toContain('application/pdf');
+    });
+  });
+
+  // G1 (issue #522 Finding 1): the /x and /z routes are real fiscal
+  // reports, not literal stubs (roadmap D3 :16, AC4 :102, AC5 :103,
+  // DEC-04 :28). RULINGS: aggregation keyed on the SHIFT (no fiscal-day
+  // concept, open question P8); X = partial OPEN-shift reading with an
+  // explicit closesShift:false and never closes anything; Z = definitive
+  // close view for CLOSED shifts with the DEC-04 reconciliation blocker as
+  // a signal, not a failure; DEC-03's manager-PIN-on-variance is a
+  // close-flow concern, out of G1 scope.
+  describe('G1: real fiscal Corte X and Corte Z reports', () => {
+    it('GET /sales/reports/x reads the open shift with movements, float, and expected cash — without closing it', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/sales/reports/x')
+        .set('Authorization', `Bearer ${getAuthToken(UserRole.MANAGER)}`)
+        .expect(200);
+
+      const body = res.body as {
+        status?: string;
+        closesShift: boolean;
+        generatedAt: string;
+        shifts: Array<{
+          shiftId: string;
+          terminalId: string;
+          cashier: string;
+          status: string;
+          closesShift: boolean;
+          initialFloatNio: number;
+          expectedCashNio: number;
+          cashMovements: Record<
+            string,
+            { nio: number; usd: number; count: number }
+          >;
+          salesByMethod: Record<string, number>;
+        }>;
+      };
+
+      // Not the literal stub, and explicitly non-closing.
+      expect(body.status).toBeUndefined();
+      expect(body.closesShift).toBe(false);
+      expect(body.shifts).toHaveLength(1);
+
+      const shift = body.shifts[0];
+      expect(shift.shiftId).toBe('shift-e2e-open');
+      expect(shift.terminalId).toBe('POS-02');
+      expect(shift.cashier).toBe('Elena Morales');
+      expect(shift.status).toBe('OPEN');
+      expect(shift.closesShift).toBe(false);
+      expect(shift.initialFloatNio).toBe(500);
+      expect(shift.expectedCashNio).toBe(700);
+      expect(shift.cashMovements.CASH_IN).toEqual({
+        nio: 500,
+        usd: 0,
+        count: 1,
+      });
+      expect(shift.cashMovements.SAFE_DROP).toEqual({
+        nio: 200,
+        usd: 0,
+        count: 1,
+      });
+      expect(shift.cashMovements.PETTY_CASH).toEqual({
+        nio: 100,
+        usd: 0,
+        count: 1,
+      });
+      expect(shift.cashMovements.CASH_OUT).toEqual({
+        nio: 200,
+        usd: 0,
+        count: 1,
+      });
+      // The open shift has no invoices: sales-by-method totals are honest zeros.
+      expect(shift.salesByMethod.cashNio).toBe(0);
+      expect(shift.salesByMethod.cardNio).toBe(0);
+    });
+
+    it('GET /sales/reports/x denies a shiftId that is not the tenant’s (empty, never leak)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/sales/reports/x?shiftId=shift-of-another-tenant')
+        .set('Authorization', `Bearer ${getAuthToken(UserRole.MANAGER)}`)
+        .expect(200);
+
+      const body = res.body as {
+        closesShift: boolean;
+        shifts: unknown[];
+      };
+      expect(body.closesShift).toBe(false);
+      expect(body.shifts).toEqual([]);
+    });
+
+    // SF4: tenant-isolation teeth. Foreign-tenant shifts ARE seeded (open
+    // and closed) and must never appear in /x or /z for the acting tenant.
+    // The pre-SF4 variant only proved "unknown shiftId ⇒ empty", which
+    // passed even with the tenant predicate dropped.
+    it('GET /sales/reports/x and /z never leak foreign-tenant shifts', async () => {
+      const xRes = await request(app.getHttpServer())
+        .get('/sales/reports/x')
+        .set('Authorization', `Bearer ${getAuthToken(UserRole.MANAGER)}`)
+        .expect(200);
+
+      const xBody = xRes.body as { shifts: Array<{ shiftId: string }> };
+      expect(xBody.shifts).toHaveLength(1);
+      expect(xBody.shifts[0].shiftId).toBe('shift-e2e-open');
+      expect(
+        xBody.shifts.some((s) => s.shiftId === 'shift-e2e-foreign-open'),
+      ).toBe(false);
+
+      const zRes = await request(app.getHttpServer())
+        .get('/sales/reports/z')
+        .set('Authorization', `Bearer ${getAuthToken(UserRole.OWNER)}`)
+        .expect(200);
+
+      const zBody = zRes.body as { records: Array<{ shiftId: string }> };
+      expect(
+        zBody.records.some((r) => r.shiftId === 'shift-e2e-foreign-closed'),
+      ).toBe(false);
+      expect(zBody.records.map((r) => r.shiftId)).toEqual(['shift-e2e-1']);
+    });
+
+    it('GET /sales/reports/z returns the closed shift with fiscal totals and the reconciliation blocker signal', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/sales/reports/z')
+        .set('Authorization', `Bearer ${getAuthToken(UserRole.OWNER)}`)
+        .expect(200);
+
+      const body = res.body as {
+        status?: string;
+        totalRecords: number;
+        records: Array<{
+          shiftId: string;
+          zSequence: number | null;
+          supervisorId: string | null;
+          status: string;
+          fiscalTotals: {
+            totalGrossNio: number;
+            totalTaxableNio: number;
+            totalExemptNio: number;
+            totalTaxNio: number;
+          };
+          blockedByUnreconciledPayments: boolean;
+          unreconciledPaymentCount: number;
+        }>;
+      };
+
+      expect(body.status).toBeUndefined();
+      // The OPEN shift is not Z material: definitive close view only.
+      expect(body.totalRecords).toBe(1);
+      const record = body.records[0];
+      expect(record.shiftId).toBe('shift-e2e-1');
+      expect(record.zSequence).toBe(1);
+      expect(record.status).toBe('CLOSED');
+
+      // Fiscal totals of the shift's invoices: 1150 + 500 gross (the voided
+      // 230 has no shift and would be excluded anyway), IVA 150, taxable
+      // 1000, exempt 500.
+      expect(record.fiscalTotals).toEqual({
+        totalGrossNio: 1650,
+        totalTaxableNio: 1000,
+        totalExemptNio: 500,
+        totalTaxNio: 150,
+      });
+
+      // DEC-04: the pending card voucher on inv-e2e-2 flags the blocker
+      // WITHOUT failing the report (reporting ≠ closing).
+      expect(record.blockedByUnreconciledPayments).toBe(true);
+      expect(record.unreconciledPaymentCount).toBe(1);
     });
   });
 });

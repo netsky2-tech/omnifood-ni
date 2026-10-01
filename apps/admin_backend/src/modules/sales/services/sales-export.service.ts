@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
   FindOptionsWhere,
+  In,
   LessThanOrEqual,
   MoreThanOrEqual,
   DataSource,
@@ -14,7 +15,11 @@ import PDFDocument = require('pdfkit');
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { FiscalSetupService } from '../../onboarding/services/fiscal-setup.service';
 import { Invoice } from '../entities/invoice.entity';
-import { CashShiftSession } from '../entities/cash-shift.entity';
+import {
+  CashShiftSession,
+  CashShiftStatus,
+} from '../entities/cash-shift.entity';
+import { CashMovement } from '../entities/cash-movement.entity';
 import {
   ExportFormat,
   ExportResult,
@@ -25,9 +30,47 @@ import {
   ZReportRowDto,
   ZReportsExportDto,
 } from '../dto/sales-export.dto';
+import {
+  XReportDto,
+  XReportQueryDto,
+  XReportShiftDto,
+  ZReportDto,
+  ZReportRecordDto,
+  ZReportQueryDto,
+} from '../dto/fiscal-reports.dto';
+
+/**
+ * G1 (issue #522 Finding 1): bounds for the shared Corte Z aggregation.
+ * RULING: aggregation is keyed on the SHIFT (cash_shift_sessions) — never
+ * on a "fiscal day" (the product has no fiscal-day concept, open question
+ * P8 in docs/operations/preguntas-contadora-round-2.md); a date range
+ * filters `opened_at` and an optional shiftId narrows to one shift.
+ */
+export interface ZReportRowBounds {
+  start?: Date;
+  end?: Date;
+  shiftId?: string;
+}
+
+/** Rows plus the underlying shift entities, so enriching layers (the Z
+ *  report's supervisor, status filtering) never re-read the shifts. */
+export interface ZReportRowsResult {
+  records: ZReportRowDto[];
+  shifts: CashShiftSession[];
+}
 
 const round2 = (value: number): number =>
   Number((Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2));
+
+/**
+ * DEC-04 card-voucher method set — mirrors the card-reconciliation SQL in
+ * sync-health (CARD/TARJETA/BAC/BANPRO), so the Z report's blocker signal
+ * counts exactly the payments that reconcile as card vouchers.
+ */
+const isCardPaymentMethod = (method?: string): boolean => {
+  const normalized = (method ?? '').trim().toUpperCase();
+  return ['CARD', 'TARJETA', 'BAC', 'BANPRO'].includes(normalized);
+};
 
 const escapeCsv = (
   field: string | number | boolean | null | undefined,
@@ -252,10 +295,7 @@ export class SalesExportService {
     }
 
     if (format === 'pdf') {
-      const buffer = await this.generateSalesBookPdf(
-        exportData,
-        ivaLabel,
-      );
+      const buffer = await this.generateSalesBookPdf(exportData, ivaLabel);
       return {
         format: 'pdf',
         filename: `libro-ventas-dgi-${datePrefix}.pdf`,
@@ -283,58 +323,11 @@ export class SalesExportService {
       query?.endDate,
     );
 
-    const whereClause: FindOptionsWhere<CashShiftSession> = {
-      tenant_id: tenantId,
-    };
-
-    if (start && end) {
-      whereClause.opened_at = Between(start, end);
-    } else if (start) {
-      whereClause.opened_at = MoreThanOrEqual(start);
-    } else if (end) {
-      whereClause.opened_at = LessThanOrEqual(end);
-    }
-
-    // The only cash-shift access in this service: one read-only logical unit
-    // inside its own tenant-bound transaction. The explicit tenant_id filter
-    // stays in the where clause — binding is additive, never a replacement.
-    // The invoice read in exportSalesBook is bound the same way (issue #581 WU1).
-    const shifts = await runInTenantTransaction(
-      this.dataSource,
-      tenantId,
-      (manager) =>
-        manager.getRepository(CashShiftSession).find({
-          where: whereClause,
-          order: { opened_at: 'ASC' },
-        }),
-    );
-
-    const records: ZReportRowDto[] = shifts.map((s) => ({
-      shiftId: s.id,
-      closedAt: s.closed_at ? new Date(s.closed_at).toISOString() : 'ABIERTO',
-      openedAt: new Date(s.opened_at).toISOString(),
-      terminalId: s.terminal_id,
-      zSequence: s.z_report_sequence ?? null,
-      cashierName: s.cashier_name,
-      initialFloatNio: round2(Number(s.initial_float_nio ?? 0)),
-      initialFloatUsd: round2(Number(s.initial_float_usd ?? 0)),
-      expectedCashNio: round2(Number(s.expected_cash_nio ?? 0)),
-      expectedCashUsd: round2(Number(s.expected_cash_usd ?? 0)),
-      finalCountedNio:
-        s.final_counted_nio != null
-          ? round2(Number(s.final_counted_nio))
-          : null,
-      finalCountedUsd:
-        s.final_counted_usd != null
-          ? round2(Number(s.final_counted_usd))
-          : null,
-      differenceNio:
-        s.difference_nio != null ? round2(Number(s.difference_nio)) : null,
-      differenceUsd:
-        s.difference_usd != null ? round2(Number(s.difference_usd)) : null,
-      status: s.status,
-      notes: s.notes ?? null,
-    }));
+    // G1 (issue #522 Finding 1): the shift read + row mapping moved into
+    // the shared getZReportRows aggregation so the export and the /z
+    // fiscal report can never drift apart. Behavior is byte-identical:
+    // same where clause, same ordering, same mapping.
+    const { records } = await this.getZReportRows(tenantId, { start, end });
 
     const exportData: ZReportsExportDto = {
       startDate: query?.startDate,
@@ -389,6 +382,413 @@ export class SalesExportService {
       contentType: 'application/json',
       data: exportData,
     };
+  }
+
+  /**
+   * G1 (issue #522 Finding 1): the ONE Corte Z aggregation path.
+   *
+   * Reads the tenant's cash shifts (date range over `opened_at`, optional
+   * shiftId) inside a tenant-bound transaction and maps them to the
+   * existing Z row shape. Both `exportZReports` and `getZReport` call
+   * this method — there is exactly one shift read + row mapping in the
+   * codebase, so the export and the fiscal report can never disagree.
+   */
+  async getZReportRows(
+    tenantId: string,
+    bounds?: ZReportRowBounds,
+  ): Promise<ZReportRowsResult> {
+    const whereClause: FindOptionsWhere<CashShiftSession> = {
+      tenant_id: tenantId,
+    };
+
+    if (bounds?.shiftId) {
+      whereClause.id = bounds.shiftId;
+    }
+
+    if (bounds?.start && bounds?.end) {
+      whereClause.opened_at = Between(bounds.start, bounds.end);
+    } else if (bounds?.start) {
+      whereClause.opened_at = MoreThanOrEqual(bounds.start);
+    } else if (bounds?.end) {
+      whereClause.opened_at = LessThanOrEqual(bounds.end);
+    }
+
+    // The only cash-shift access in this service: one read-only logical unit
+    // inside its own tenant-bound transaction. The explicit tenant_id filter
+    // stays in the where clause — binding is additive, never a replacement.
+    // The invoice read in exportSalesBook is bound the same way (issue #581 WU1).
+    const shifts = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      (manager) =>
+        manager.getRepository(CashShiftSession).find({
+          where: whereClause,
+          order: { opened_at: 'ASC' },
+        }),
+    );
+
+    const records: ZReportRowDto[] = shifts.map((s) => ({
+      shiftId: s.id,
+      closedAt: s.closed_at ? new Date(s.closed_at).toISOString() : 'ABIERTO',
+      openedAt: new Date(s.opened_at).toISOString(),
+      terminalId: s.terminal_id,
+      zSequence: s.z_report_sequence ?? null,
+      cashierName: s.cashier_name,
+      initialFloatNio: round2(Number(s.initial_float_nio ?? 0)),
+      initialFloatUsd: round2(Number(s.initial_float_usd ?? 0)),
+      expectedCashNio: round2(Number(s.expected_cash_nio ?? 0)),
+      expectedCashUsd: round2(Number(s.expected_cash_usd ?? 0)),
+      finalCountedNio:
+        s.final_counted_nio != null
+          ? round2(Number(s.final_counted_nio))
+          : null,
+      finalCountedUsd:
+        s.final_counted_usd != null
+          ? round2(Number(s.final_counted_usd))
+          : null,
+      differenceNio:
+        s.difference_nio != null ? round2(Number(s.difference_nio)) : null,
+      differenceUsd:
+        s.difference_usd != null ? round2(Number(s.difference_usd)) : null,
+      status: s.status,
+      notes: s.notes ?? null,
+    }));
+
+    return { records, shifts };
+  }
+
+  /**
+   * G1 (issue #522 Finding 1): Corte X — partial reading of an OPEN shift.
+   *
+   * RULINGS (sales_cash_roadmap.md D3 :16, AC4 :102; POS precedent
+   * x_report_dialog.dart / formatCorteXText "AUDITORIA INTERNA - NO
+   * FISCAL"):
+   *   - Aggregation is keyed on the SHIFT, never on a fiscal day (open
+   *     question P8, docs/operations/preguntas-contadora-round-2.md).
+   *   - X is a PARTIAL reading and NEVER closes the shift: the response
+   *     carries `closesShift: false` at the top level and per shift. The
+   *     close action (with its variance checks) lives in
+   *     CashShiftService.closeShiftWithZReport and is out of G1 scope.
+   *   - DEC-03's manager-PIN-on-variance (>C$100 / >$5 at Z) is a
+   *     CLOSE-flow concern, NOT part of this reporting endpoint.
+   *   - With no shiftId the tenant's OPEN shift(s) are returned,
+   *     optionally narrowed by terminalId; a shiftId that is not the
+   *     tenant's simply matches nothing (deny/empty — never leak).
+   *
+   * Every read runs inside ONE tenant-bound transaction; sales-by-method
+   * totals exclude canceled invoices and net over-tender change like the
+   * dashboard's AG-08 reporting net.
+   */
+  async getXReport(
+    tenantId: string,
+    query?: XReportQueryDto,
+  ): Promise<XReportDto> {
+    const whereClause: FindOptionsWhere<CashShiftSession> = {
+      tenant_id: tenantId,
+      status: CashShiftStatus.OPEN,
+    };
+    if (query?.shiftId) {
+      whereClause.id = query.shiftId;
+    }
+    if (query?.terminalId) {
+      whereClause.terminal_id = query.terminalId;
+    }
+
+    const { shifts, movements, invoices } = await runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const openShifts = await manager.getRepository(CashShiftSession).find({
+          where: whereClause,
+          order: { opened_at: 'ASC' },
+        });
+        if (openShifts.length === 0) {
+          return { shifts: openShifts, movements: [], invoices: [] };
+        }
+        const shiftIds = openShifts.map((s) => s.id);
+        const boundMovements = await manager.getRepository(CashMovement).find({
+          where: { tenant_id: tenantId, shift_id: In(shiftIds) },
+        });
+        const boundInvoices = await manager.getRepository(Invoice).find({
+          where: {
+            tenant_id: tenantId,
+            shiftId: In(shiftIds),
+            isCanceled: false,
+          },
+          relations: ['payments'],
+          order: { created_at: 'ASC' },
+        });
+        return {
+          shifts: openShifts,
+          movements: boundMovements,
+          invoices: boundInvoices,
+        };
+      },
+    );
+
+    const movementsByShift = new Map<string, CashMovement[]>();
+    for (const m of movements) {
+      const list = movementsByShift.get(m.shift_id) ?? [];
+      list.push(m);
+      movementsByShift.set(m.shift_id, list);
+    }
+    const invoicesByShift = new Map<string, Invoice[]>();
+    for (const inv of invoices) {
+      if (!inv.shiftId) continue;
+      const list = invoicesByShift.get(inv.shiftId) ?? [];
+      list.push(inv);
+      invoicesByShift.set(inv.shiftId, list);
+    }
+
+    const reportShifts: XReportShiftDto[] = shifts.map((s) => {
+      const cashMovements: XReportShiftDto['cashMovements'] = {
+        CASH_IN: { nio: 0, usd: 0, count: 0 },
+        CASH_OUT: { nio: 0, usd: 0, count: 0 },
+        PETTY_CASH: { nio: 0, usd: 0, count: 0 },
+        SAFE_DROP: { nio: 0, usd: 0, count: 0 },
+      };
+      for (const m of movementsByShift.get(s.id) ?? []) {
+        const bucket = cashMovements[m.type];
+        if (!bucket) continue;
+        bucket.nio = round2(bucket.nio + Number(m.amount_nio ?? 0));
+        bucket.usd = round2(bucket.usd + Number(m.amount_usd ?? 0));
+        bucket.count += 1;
+      }
+
+      const salesByMethod: XReportShiftDto['salesByMethod'] = {
+        cashNio: 0,
+        cardNio: 0,
+        qrNio: 0,
+        pointsNio: 0,
+        otherNio: 0,
+      };
+      for (const inv of invoicesByShift.get(s.id) ?? []) {
+        // In-memory guard alongside the isCanceled:false where clause:
+        // canceled invoices (DGI voids) contribute to no method bucket.
+        if (inv.isCanceled) continue;
+        for (const p of inv.payments ?? []) {
+          this.addPaymentToSalesByMethod(salesByMethod, p);
+        }
+      }
+
+      return {
+        shiftId: s.id,
+        terminalId: s.terminal_id,
+        cashier: s.cashier_name,
+        openedAt: new Date(s.opened_at).toISOString(),
+        status: s.status,
+        closesShift: false,
+        initialFloatNio: round2(Number(s.initial_float_nio ?? 0)),
+        initialFloatUsd: round2(Number(s.initial_float_usd ?? 0)),
+        cashMovements,
+        salesByMethod,
+        expectedCashNio: round2(Number(s.expected_cash_nio ?? 0)),
+        expectedCashUsd: round2(Number(s.expected_cash_usd ?? 0)),
+      };
+    });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      closesShift: false,
+      shifts: reportShifts,
+    };
+  }
+
+  /**
+   * G1 (issue #522 Finding 1): Corte Z — definitive close view for CLOSED
+   * shifts.
+   *
+   * RULINGS (sales_cash_roadmap.md D3 :16, AC5 :103, D4/DEC-04 :17/:28;
+   * POS precedent z_report_dialog.dart / formatCorteZText "CIERRE FISCAL
+   * (CORTE Z)", "SECUENCIA Z: #N"):
+   *   - Rows come from the ONE shared aggregation path (getZReportRows,
+   *     the same one export/z-reports uses); OPEN shifts in the range are
+   *     filtered out — Z is the close view.
+   *   - DEC-04: unreconciled card vouchers (invoice_payments
+   *     reconciliation_status = 'PENDIENTE', card methods only, canceled
+   *     invoices excluded) raise a per-shift BLOCKER SIGNAL
+   *     (blockedByUnreconciledPayments + count). Reporting NEVER hard-
+   *     fails here: the hard block belongs to the close action
+   *     (CashShiftService.closeShiftWithZReport), out of G1 scope.
+   *   - DEC-03's manager-PIN-on-variance is a CLOSE-flow concern, not G1.
+   */
+  async getZReport(
+    tenantId: string,
+    query?: ZReportQueryDto,
+  ): Promise<ZReportDto> {
+    const { start, end } = this.parseDateBounds(
+      query?.startDate,
+      query?.endDate,
+    );
+    const { records, shifts } = await this.getZReportRows(tenantId, {
+      start,
+      end,
+      shiftId: query?.shiftId,
+    });
+
+    const shiftById = new Map(shifts.map((s) => [s.id, s]));
+    const closedShifts = shifts.filter(
+      (s) => s.status === CashShiftStatus.CLOSED,
+    );
+    const closedShiftIds = closedShifts.map((s) => s.id);
+
+    const invoicesByShift = new Map<string, Invoice[]>();
+    if (closedShiftIds.length > 0) {
+      // One bound read for every closed shift's invoices (items for the
+      // taxable/exempt split, payments for the DEC-04 blocker signal).
+      const closedInvoices = await runInTenantTransaction(
+        this.dataSource,
+        tenantId,
+        (manager) =>
+          manager.getRepository(Invoice).find({
+            where: {
+              tenant_id: tenantId,
+              shiftId: In(closedShiftIds),
+            },
+            relations: ['items', 'payments'],
+            order: { created_at: 'ASC' },
+          }),
+      );
+      for (const inv of closedInvoices) {
+        if (!inv.shiftId) continue;
+        const list = invoicesByShift.get(inv.shiftId) ?? [];
+        list.push(inv);
+        invoicesByShift.set(inv.shiftId, list);
+      }
+    }
+
+    const zRecords: ZReportRecordDto[] = records.flatMap((row) => {
+      const shift = shiftById.get(row.shiftId);
+      if (!shift || shift.status !== CashShiftStatus.CLOSED) return [];
+
+      let totalGrossNio = 0;
+      let totalTaxableNio = 0;
+      let totalExemptNio = 0;
+      let totalTaxNio = 0;
+      let unreconciledPaymentCount = 0;
+
+      for (const inv of invoicesByShift.get(row.shiftId) ?? []) {
+        // DGI DT 09-2007: canceled invoices are fiscal voids, not sales —
+        // they must contribute to no fiscal total and their stale
+        // PENDING vouchers raise no blocker.
+        if (inv.isCanceled) continue;
+
+        totalGrossNio = round2(totalGrossNio + Number(inv.total ?? 0));
+        totalTaxNio = round2(totalTaxNio + Number(inv.totalTax ?? 0));
+
+        if (inv.items && inv.items.length > 0) {
+          for (const item of inv.items) {
+            const itemTaxRate = Number(
+              item.appliedTaxRate ?? item.originalTaxRate ?? 0,
+            );
+            const itemTaxAmount = Number(item.taxAmount ?? 0);
+            const itemDiscount = Number(item.discount ?? 0);
+            const itemBase = round2(
+              Number(item.quantity ?? 1) * Number(item.unitPrice ?? 0) -
+                itemDiscount,
+            );
+            if (itemTaxRate > 0 || itemTaxAmount > 0) {
+              totalTaxableNio = round2(totalTaxableNio + itemBase);
+            } else {
+              totalExemptNio = round2(totalExemptNio + itemBase);
+            }
+          }
+        } else {
+          const invTax = Number(inv.totalTax ?? 0);
+          const invSubtotal = Number(inv.subtotal ?? 0);
+          if (invTax > 0) {
+            totalTaxableNio = round2(totalTaxableNio + invSubtotal);
+          } else {
+            totalExemptNio = round2(totalExemptNio + invSubtotal);
+          }
+        }
+
+        for (const p of inv.payments ?? []) {
+          if (
+            isCardPaymentMethod(p.method) &&
+            p.reconciliationStatus === 'PENDIENTE'
+          ) {
+            unreconciledPaymentCount += 1;
+          }
+        }
+      }
+
+      return [
+        {
+          ...row,
+          supervisorId: shift.supervisor_id ?? null,
+          fiscalTotals: {
+            totalGrossNio,
+            totalTaxableNio,
+            totalExemptNio,
+            totalTaxNio,
+          },
+          blockedByUnreconciledPayments: unreconciledPaymentCount > 0,
+          unreconciledPaymentCount,
+        },
+      ];
+    });
+
+    return {
+      startDate: query?.startDate,
+      endDate: query?.endDate,
+      generatedAt: new Date().toISOString(),
+      totalRecords: zRecords.length,
+      records: zRecords,
+    };
+  }
+
+  /**
+   * AG-08 reporting net: tendered amounts include over-tender change which
+   * must not count as collected money. The net matches the dashboard's
+   * AG-08 net BY CONSTRUCTION (sales-reports.service.ts:145-159): change
+   * given in USD is converted with the payment's exchangeRate BEFORE
+   * subtracting — never a naive `amountNio - changeGiven`.
+   * Canceled invoices never reach this helper (their reads filter
+   * isCanceled), so their payments leak into no method bucket.
+   */
+  private addPaymentToSalesByMethod(
+    bucket: {
+      cashNio: number;
+      cardNio: number;
+      qrNio: number;
+      pointsNio: number;
+      otherNio: number;
+    },
+    payment: {
+      method?: string;
+      amountNio?: number;
+      changeGiven?: number;
+      changeCurrency?: string;
+      exchangeRate?: number;
+    },
+  ): void {
+    const method = (payment.method ?? '').trim().toUpperCase();
+    const amountNio = Number(payment.amountNio ?? 0);
+    // AG-08 net (sales-reports.service.ts:145-159): `changeGiven` defaults
+    // to 0; change in USD converts at the payment's exchangeRate.
+    const changeRaw = Number(payment.changeGiven ?? 0);
+    const changeCurrency = (payment.changeCurrency ?? 'NIO')
+      .trim()
+      .toUpperCase();
+    const changeNio =
+      changeRaw > 0
+        ? changeCurrency === 'USD'
+          ? round2(changeRaw * Number(payment.exchangeRate ?? 1.0))
+          : changeRaw
+        : 0;
+    const effectiveNio = round2(amountNio - changeNio);
+    if (method === 'CASH' || method === 'EFECTIVO') {
+      bucket.cashNio = round2(bucket.cashNio + effectiveNio);
+    } else if (isCardPaymentMethod(method)) {
+      bucket.cardNio = round2(bucket.cardNio + effectiveNio);
+    } else if (method === 'QR') {
+      bucket.qrNio = round2(bucket.qrNio + effectiveNio);
+    } else if (method === 'POINTS' || method === 'PUNTOS') {
+      bucket.pointsNio = round2(bucket.pointsNio + effectiveNio);
+    } else {
+      bucket.otherNio = round2(bucket.otherNio + effectiveNio);
+    }
   }
 
   private generateSalesBookCsv(
