@@ -5,6 +5,7 @@ import '../../../../../data/daos/fiscal_config_local_dao.dart';
 import '../../../../../data/daos/local_config_dao.dart';
 import '../../../../../data/models/fiscal_config_local_entity.dart';
 import '../../../../../data/models/local_config_entity.dart';
+import '../../../../../data/services/fiscal_inbox_handler.dart';
 import '../../../../../data/services/sync_service.dart';
 
 import '../../../../domain/models/config/tax_regime.dart';
@@ -61,6 +62,36 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'tax_regime': 'REGIMEN_GENERAL',
   };
   Map<String, String> get config => _config;
+
+  /// BXW-007 U3 (#734): local key names the cloud currently asserts for the
+  /// business profile, parsed from the managed-keys marker. The marker is
+  /// deliberately NOT part of the [_config] defaults map (loadConfig only
+  /// reads keys present there), so it is loaded separately and kept here.
+  /// An absent marker yields an empty set -> every field stays locally
+  /// editable (fail-safe, D-1).
+  Set<String> _cloudManagedKeys = const <String>{};
+
+  bool get isOperationModeCloudManaged =>
+      _cloudManagedKeys.contains(FiscalProjectionKeys.operationMode);
+
+  bool get isCheckoutFxModeCloudManaged =>
+      _cloudManagedKeys.contains(FiscalProjectionKeys.checkoutFxMode);
+
+  static const Set<String> _knownManagedProfileKeys = {
+    FiscalProjectionKeys.operationMode,
+    FiscalProjectionKeys.checkoutFxMode,
+  };
+
+  /// Parses the comma-joined marker. Trims whitespace around tokens and
+  /// ignores unknown tokens so legacy/future entries never break parsing.
+  static Set<String> _parseManagedKeys(String? raw) {
+    if (raw == null) return const <String>{};
+    return raw
+        .split(',')
+        .map((token) => token.trim())
+        .where(_knownManagedProfileKeys.contains)
+        .toSet();
+  }
 
   TaxRegime? get taxRegime => TaxRegime.fromString(_config['tax_regime']);
 
@@ -138,6 +169,13 @@ class BusinessProfileViewModel extends ChangeNotifier {
           }
         }
       }
+
+      // BXW-007 U3 (#734): the managed-keys marker is not in the defaults
+      // map, so it is read separately. loadConfig reruns on inbound sync,
+      // which refreshes the flags together with the rest of the config.
+      final markerEntity = await _configDao.getConfigByKey(
+          FiscalProjectionKeys.businessProfileManagedKeys);
+      _cloudManagedKeys = _parseManagedKeys(markerEntity?.value);
 
       final primaryConfigFound = primaryBusinessNameEntity != null;
       final rawPrimaryBusinessName = primaryBusinessNameEntity?.value;
@@ -233,6 +271,11 @@ class BusinessProfileViewModel extends ChangeNotifier {
           // D-21: the retired range-end key is dropped on write.
           continue;
         }
+        if (_cloudManagedKeys.contains(entry.key)) {
+          // BXW-007 U3 (#734): a form save must never overwrite a
+          // cloud-managed field — the office owns that value.
+          continue;
+        }
         if (_sequenceKeys.contains(entry.key) &&
             entry.value.trim().isEmpty) {
           // Blank sequence value = leave the persisted row untouched.
@@ -243,7 +286,13 @@ class BusinessProfileViewModel extends ChangeNotifier {
           value: entry.value,
         ));
       }
+      // Keep the cloud value for managed fields in memory: the form built
+      // newConfig from controllers, so its stale copies must not win.
+      final managedValues = <String, String>{
+        for (final key in _cloudManagedKeys) key: _config[key] ?? '',
+      };
       _config = Map.from(newConfig);
+      _config.addAll(managedValues);
     } finally {
       _isLoading = false;
       notifyListeners();

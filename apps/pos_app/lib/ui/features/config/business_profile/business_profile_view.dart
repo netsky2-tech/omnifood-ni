@@ -182,10 +182,18 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       key: const Key('checkout_fx_mode_dropdown'),
                       isExpanded: true,
                       value: viewModel.checkoutFxMode,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Tasa a Utilizar en Pantalla de Cobro (POS)',
-                        prefixIcon: Icon(Icons.price_change),
-                        helperText: 'Seleccione cuál de las dos tasas se aplicará para convertir cobros en USD y dar vuelto.',
+                        prefixIcon: Icon(viewModel.isCheckoutFxModeCloudManaged
+                            ? Icons.lock
+                            : Icons.price_change),
+                        // BXW-007 U3 (#734): honest classification — when the
+                        // office asserts this field, the terminal says so
+                        // instead of showing an editable control that never
+                        // persists the operator's choice.
+                        helperText: viewModel.isCheckoutFxModeCloudManaged
+                            ? 'Definido por la oficina: este valor se administra desde la configuración central y este terminal no puede modificarlo.'
+                            : 'Seleccione cuál de las dos tasas se aplicará para convertir cobros en USD y dar vuelto.',
                       ),
                       items: const [
                         DropdownMenuItem(
@@ -197,12 +205,14 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                           child: Text('Tasa Oficial BCN (Banco Central de Nicaragua)', overflow: TextOverflow.ellipsis),
                         ),
                       ],
-                      onChanged: (mode) {
-                        if (mode != null) {
-                          viewModel.setCheckoutFxMode(mode);
-                          _controllers['checkout_fx_mode']?.text = mode;
-                        }
-                      },
+                      onChanged: viewModel.isCheckoutFxModeCloudManaged
+                          ? null
+                          : (mode) {
+                              if (mode != null) {
+                                viewModel.setCheckoutFxMode(mode);
+                                _controllers['checkout_fx_mode']?.text = mode;
+                              }
+                            },
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -292,10 +302,16 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       key: const Key('operation_mode_dropdown'),
                       isExpanded: true,
                       value: viewModel.operationMode,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Modo de Operación POS',
-                        prefixIcon: Icon(Icons.storefront),
-                        helperText: 'Determina el flujo de atención: Cobro directo en barra (Food Park), Servicio de Mesas (Restaurante), o Híbrido.',
+                        prefixIcon: Icon(viewModel.isOperationModeCloudManaged
+                            ? Icons.lock
+                            : Icons.storefront),
+                        // BXW-007 U3 (#734): honest classification — see the
+                        // checkout FX dropdown above.
+                        helperText: viewModel.isOperationModeCloudManaged
+                            ? 'Definido por la oficina: este valor se administra desde la configuración central y este terminal no puede modificarlo.'
+                            : 'Determina el flujo de atención: Cobro directo en barra (Food Park), Servicio de Mesas (Restaurante), o Híbrido.',
                       ),
                       items: TenantOperationMode.values.map((mode) {
                         return DropdownMenuItem(
@@ -303,12 +319,14 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                           child: Text(mode.displayName, overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
-                      onChanged: (newMode) {
-                        if (newMode != null) {
-                          viewModel.setOperationMode(newMode);
-                          _controllers['operation_mode']?.text = newMode.code;
-                        }
-                      },
+                      onChanged: viewModel.isOperationModeCloudManaged
+                          ? null
+                          : (newMode) {
+                              if (newMode != null) {
+                                viewModel.setOperationMode(newMode);
+                                _controllers['operation_mode']?.text = newMode.code;
+                              }
+                            },
                     ),
 
                     const SizedBox(height: 32),

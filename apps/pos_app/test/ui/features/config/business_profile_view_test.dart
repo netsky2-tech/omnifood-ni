@@ -503,4 +503,111 @@ void main() {
     expect(byKey.containsKey('dgi_authorization_date'), isFalse);
     expect(byKey.containsKey('dgi_authorization_document'), isFalse);
   });
+
+  group('BXW-007 U3 (#734): cloud-managed dropdowns are locked and honestly labelled', () {
+    Future<void> pumpWithMarker(WidgetTester tester, String? marker) async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => marker == null
+              ? null
+              : LocalConfigEntity(
+                  key: 'business_profile_managed_keys',
+                  value: marker,
+                ));
+      await tester.pumpWidget(buildWidget());
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('absent marker -> both dropdowns stay editable (fail-safe)',
+        (tester) async {
+      await pumpWithMarker(tester, null);
+
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+                find.byKey(const Key('checkout_fx_mode_dropdown')))
+            .onChanged,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<TenantOperationMode>>(
+                find.byKey(const Key('operation_mode_dropdown')))
+            .onChanged,
+        isNotNull,
+      );
+      expect(find.textContaining('Definido por la oficina'), findsNothing);
+    });
+
+    testWidgets(
+        'only checkout_fx_mode managed -> FX dropdown locked and labelled, operation mode editable',
+        (tester) async {
+      await pumpWithMarker(tester, 'checkout_fx_mode');
+
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+                find.byKey(const Key('checkout_fx_mode_dropdown')))
+            .onChanged,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<TenantOperationMode>>(
+                find.byKey(const Key('operation_mode_dropdown')))
+            .onChanged,
+        isNotNull,
+      );
+      expect(find.textContaining('Definido por la oficina'), findsOneWidget);
+    });
+
+    testWidgets('both fields managed -> both dropdowns locked', (tester) async {
+      await pumpWithMarker(tester, 'checkout_fx_mode,operation_mode');
+
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+                find.byKey(const Key('checkout_fx_mode_dropdown')))
+            .onChanged,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<DropdownButtonFormField<TenantOperationMode>>(
+                find.byKey(const Key('operation_mode_dropdown')))
+            .onChanged,
+        isNull,
+      );
+      expect(find.textContaining('Definido por la oficina'), findsNWidgets(2));
+    });
+
+    testWidgets('a form save never persists a cloud-managed field',
+        (tester) async {
+      await pumpWithMarker(tester, 'checkout_fx_mode,operation_mode');
+      when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
+
+      Future<void> fill(String label, String text) async {
+        await tester.enterText(find.widgetWithText(TextFormField, label), text);
+        await tester.pumpAndSettle();
+      }
+
+      await fill('Nombre Comercial / Razón Social', 'Mi Restaurante');
+      await fill('RUC (Nicaragua)', 'A0011234567890');
+      await fill('Tipo de Cambio Comercial (POS / Atención al Cliente)', '36.50');
+      await fill('Tipo de Cambio Oficial BCN (Base Fiscal DGI)', '36.62');
+
+      await tester.ensureVisible(find.text('GUARDAR CONFIGURACIÓN'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('GUARDAR CONFIGURACIÓN'));
+      await tester.pumpAndSettle();
+
+      final saved = verify(() => mockDao.saveConfig(captureAny())).captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final byKey = {for (final e in saved) e.key: e.value};
+      expect(byKey.containsKey('operation_mode'), isFalse);
+      expect(byKey.containsKey('checkout_fx_mode'), isFalse);
+      expect(byKey['business_name'], 'Mi Restaurante');
+    });
+  });
 }
