@@ -2935,6 +2935,182 @@ void main() {
     );
 
     test(
+      'empty user delta heals pre-existing NULL/blank tenant_id rows from local_configs',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          // Terminal already activated: local_configs holds the tenant
+          // binding. Rows erased by a previous replace-upsert stay broken
+          // when the user delta is empty, so the heal step must restore
+          // them from the terminal binding.
+          await database.localConfigDao.saveConfig(
+            LocalConfigEntity(key: 'tenant_id', value: 'tenant-heal'),
+          );
+          await database.userDao.insertUsers([
+            UserEntity(
+              id: 'user-401',
+              name: 'Sofia Supervisora',
+              role: 'SUPERVISOR',
+              pinHash: 'pin-401',
+              isActive: true,
+              tenantId: null,
+            ),
+            UserEntity(
+              id: 'user-402',
+              name: 'Maxwell Blanco',
+              role: 'CASHIER',
+              pinHash: 'pin-402',
+              isActive: true,
+              tenantId: '   ',
+            ),
+          ]);
+
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-09-04T10:00:00.000Z',
+            'currentVersion': 1787745600004,
+            'deltas': {
+              // The whole point: zero user rows changed since the watermark,
+              // so the per-row cure in the delta loop never runs.
+              'users': <dynamic>[],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+          expect(result!.usersCount, 0);
+
+          final healedNull = await database.userDao.findUserById('user-401');
+          expect(healedNull, isNotNull);
+          expect(healedNull!.tenantId, 'tenant-heal');
+
+          final healedBlank = await database.userDao.findUserById('user-402');
+          expect(healedBlank, isNotNull);
+          expect(healedBlank!.tenantId, 'tenant-heal');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'empty user delta heal does not overwrite a non-NULL tenant_id',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          await database.localConfigDao.saveConfig(
+            LocalConfigEntity(key: 'tenant_id', value: 'tenant-binding'),
+          );
+          await database.userDao.insertUsers([
+            UserEntity(
+              id: 'user-403',
+              name: 'Barista Sano',
+              role: 'CASHIER',
+              pinHash: 'pin-403',
+              isActive: true,
+              tenantId: 'tenant-kept',
+            ),
+          ]);
+
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-09-04T11:00:00.000Z',
+            'currentVersion': 1787745600005,
+            'deltas': {
+              'users': <dynamic>[],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+
+          final savedUser = await database.userDao.findUserById('user-403');
+          expect(savedUser, isNotNull);
+          // The heal only touches broken rows; a healthy binding survives.
+          expect(savedUser!.tenantId, 'tenant-kept');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'empty user delta heal does nothing when the terminal binding is absent',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          // No local_configs['tenant_id']: an unbound terminal must stay
+          // untouched — a NULL row stays NULL (fail-visible), never
+          // invented.
+          await database.userDao.insertUsers([
+            UserEntity(
+              id: 'user-404',
+              name: 'Cajero Sin Binding',
+              role: 'CASHIER',
+              pinHash: 'pin-404',
+              isActive: true,
+              tenantId: null,
+            ),
+          ]);
+
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-09-04T12:00:00.000Z',
+            'currentVersion': 1787745600006,
+            'deltas': {
+              'users': <dynamic>[],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+
+          final savedUser = await database.userDao.findUserById('user-404');
+          expect(savedUser, isNotNull);
+          expect(savedUser!.tenantId, isNull);
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
       'projects inbound forensic alerts into the local inbox with insert-if-absent replay semantics',
       () async {
         final database = await $FloorAppDatabase

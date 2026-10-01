@@ -3460,6 +3460,43 @@ class SyncService {
           await _database!.securityProfileDao.insertProfiles(profileEntities);
         }
 
+        // Heal user rows whose tenant binding was already erased by a
+        // previous replace-upsert. The per-row cure above only runs for
+        // inbound delta rows, so when the user delta is empty the erased
+        // rows stay NULL. The backend filters user deltas with
+        // `user.tenant_id = :tenantId` (the terminal's tenant), so every
+        // user row this terminal can ever receive belongs to the terminal
+        // binding: any local NULL/blank tenant_id is unambiguously an
+        // erased value of the terminal's own tenant, never a cross-tenant
+        // row. An unbound terminal stays untouched (no binding, no write),
+        // and the statement is idempotent: once healed, the WHERE clause
+        // matches zero rows.
+        try {
+          final healTenantConfig = await _database!.localConfigDao
+              .getConfigByKey('tenant_id');
+          final healTenantId = healTenantConfig?.value;
+          if (healTenantId != null && healTenantId.trim().isNotEmpty) {
+            await _database!.database.execute(
+              "UPDATE users SET tenant_id = ? "
+              "WHERE tenant_id IS NULL OR TRIM(tenant_id) = ''",
+              [healTenantId],
+            );
+            developer.log(
+              '[SYNC_PULL] user_tenant_heal applied',
+              name: 'SyncService',
+            );
+          }
+        } catch (e, stackTrace) {
+          // Best-effort, exactly like the other auxiliary pull steps: a
+          // heal failure must never turn a healthy pull into a failed one.
+          developer.log(
+            '[SYNC_PULL] user_tenant_heal skipped',
+            name: 'SyncService',
+            error: e,
+            stackTrace: stackTrace,
+          );
+        }
+
         // 5b. Forensic alerts — one-way cloud-to-POS projection (ST-05).
         // Every row is applied insert-if-absent so a cloud replay can never
         // overwrite a locally acknowledged/resolved alert. Lifecycle state
