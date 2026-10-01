@@ -110,11 +110,11 @@ Rules the Dart side enforces, each traceable to a measured fact:
   - ✅ ABI resolution — `lib/core/platform/target_abi.dart` (F9, no new dependency)
   - ✅ Manifest contract + strict parser — `lib/domain/models/update/release_manifest.dart` (R4, R5, R6)
   - ✅ Upgrade resolver — `lib/domain/services/update/upgrade_resolver.dart` (R1, R2, R3)
-  - ⬜ Download + SHA-256 verification service — needs `path_provider` (F10)
-  - ⬜ `ReleaseInstaller` port + `SystemInstallerAdapter` — needs FileProvider + `REQUEST_INSTALL_PACKAGES` (F1, F2, F5)
-  - ⬜ Fiscal gate port (R7)
+  - ✅ Download + SHA-256 verification service — `lib/domain/services/update/release_downloader.dart` (R4, R5)
+  - ✅ `ReleaseInstaller` port + `SystemInstallerAdapter` — FileProvider + `REQUEST_INSTALL_PACKAGES` + `ApkInstallHandler.kt` (F1, F2, F5)
+  - ✅ Fiscal gate port + fail-closed adapter — `lib/domain/ports/fiscal_safety_gate_port.dart` (R7)
 - **Batch 2 — backend `releases` module.** Entity, migration, controller, service, tests, RLS decision.
-- **Batch 3 — signed URL issuance.** **Blocked on founder** for R2/S3 credentials.
+- **Batch 3 — signed URL issuance.** R2 bucket `nhilos-pos` connected and verified live.
 - **Batch 4 — operator UI.** "Update available" surface, notes, install-now / later, and the fiscal-gate
   explanation when install is refused.
 - **Batch 5 — Nyx silent-install spike.** Post-delivery.
@@ -144,6 +144,10 @@ Rules the Dart side enforces, each traceable to a measured fact:
 |---|---|---|
 | ABI resolution + release manifest contract | 28 tests green, analyzer clean. `Platform.version` resolves `android_arm64` with no new dependency; parser is hand-written (Freezed's generated `fromJson` is permissive and this is a safety boundary) and rejects unknown schema, non-lowercase-hex sha256, relative/`file://`/`javascript:` URLs, inverted version ranges | `c4afbde4` |
 | Upgrade resolver (R1–R3) | 17 tests green, analyzer clean. Ordering pinned by tests: wiring bug ≠ ABI mismatch, and direction is checked before the floor. `mandatory` never installs by itself | `d04729a3` |
+| Promoted path_provider to direct dependency | `pubspec.yaml` direct dependency `^2.1.5` (already locked in pubspec.lock) | `07e0af52` |
+| ReleaseDownloader (R4, R5) | 5 tests green, analyzer clean. Streaming SHA-256 + size verification. Instant deletion of corrupt or partial downloads | `dbb2395f` |
+| ReleaseInstallerPort + SystemInstallerAdapter + FileProvider + ApkInstallHandler | 6 tests green, Gradle `compileReleaseKotlin` 49s green. FileProvider content:// handoff via MethodChannel | `60f3be42` |
+| FiscalSafetyGatePort + FiscalSafetyGateAdapter (R7) | 6 tests green, analyzer clean. Guards against restarts with active cart, in-flight sales, or open cashier shift. Fails closed | `e20041fd` |
 
 ---
 
