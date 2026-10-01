@@ -765,6 +765,138 @@ EOF
     echo "✅ [Test 26 Passed] With --allow-debug-signing the MAY-be-debug-signed warning fires with key.properties absent AND present-but-broken, and the gate still defers."
 fi
 
+# -----------------------------------------------------------------------------
+# Cheap out-dir tests (27): no Flutter / Android SDK required. A flutter shim
+# that succeeds for 'pub get' and 'build apk' simulates the toolchain, so the
+# real publish (cp), checksum and manifest steps run for real. To keep the
+# simulation deterministic, the real build output directory is stashed aside
+# for the duration of the block and restored afterwards (trap-guarded), so no
+# real artifact is touched and each run starts from a known build state.
+# -----------------------------------------------------------------------------
+BUILD_APK_DIR="${POS_APP_DIR}/build/app/outputs/flutter-apk"
+TEST27_STASHED=0
+TEST27_CREATED_DIR=0
+TEST27_STASH_DIR="${SHIM_DIR}/test27-build-stash"
+restore_test27_build_dir() {
+    if [ "${TEST27_STASHED}" = "1" ]; then
+        rm -rf "${BUILD_APK_DIR}"
+        mv "${TEST27_STASH_DIR}" "${BUILD_APK_DIR}"
+        TEST27_STASHED=0
+    elif [ "${TEST27_CREATED_DIR}" = "1" ]; then
+        rm -rf "${BUILD_APK_DIR}"
+        TEST27_CREATED_DIR=0
+    fi
+}
+if [ -d "${BUILD_APK_DIR}" ]; then
+    mv "${BUILD_APK_DIR}" "${TEST27_STASH_DIR}"
+    TEST27_STASHED=1
+else
+    TEST27_CREATED_DIR=1
+fi
+# Chain the restore with the existing key.properties cleanup trap: both must
+# run on exit, whichever way the suite terminates.
+trap 'restore_test27_build_dir; cleanup_kp_gate' EXIT
+
+cat > "${SHIM_DIR}/flutter" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "pub" ] && [ "${2:-}" = "get" ]; then
+    exit 0
+fi
+if [ "${1:-}" = "build" ] && [ "${2:-}" = "apk" ]; then
+    if [ -n "${FAKE_APK_FILE:-}" ]; then
+        mkdir -p "$(dirname "${FAKE_APK_FILE}")"
+        printf 'fake apk produced by the test shim\n' > "${FAKE_APK_FILE}"
+    fi
+    exit 0
+fi
+echo "FLUTTER_SHIM_MUST_NOT_RUN" >&2
+exit 99
+EOF
+chmod +x "${SHIM_DIR}/flutter"
+
+# Test 27a (F1): a RELATIVE --out-dir must resolve to one absolute directory
+# rooted at the repository root, so the --plan report and the publish path
+# agree and artifacts land where the plan said they would.
+echo "🔍 [Test 27a] Verifying a relative --out-dir resolves against the repo root in plan and publish..."
+TEST27_REL_OUT="dist/test27-relative-out"
+TEST27_ABS_OUT="${ROOT_DIR}/${TEST27_REL_OUT}"
+rm -rf "${TEST27_ABS_OUT}" "${POS_APP_DIR}/${TEST27_REL_OUT}"
+
+TEST27_PLAN_RC=0
+TEST27_PLAN_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --out-dir "${TEST27_REL_OUT}" 2>&1)" || TEST27_PLAN_RC=$?
+if [ "${TEST27_PLAN_RC}" -ne 0 ]; then
+    echo "❌ FAILED: --plan with a relative --out-dir exited ${TEST27_PLAN_RC} (expected 0). Output:" >&2
+    printf '%s\n' "${TEST27_PLAN_OUTPUT}" >&2
+    restore_test27_build_dir
+    exit 1
+fi
+TEST27_PLAN_DIR="$(printf '%s\n' "${TEST27_PLAN_OUTPUT}" | grep 'Output Directory:' | sed -e 's/.*Output Directory:[[:space:]]*//' -e 's/[[:space:]]*$//')"
+if [ "${TEST27_PLAN_DIR}" != "${TEST27_ABS_OUT}" ]; then
+    echo "❌ FAILED: --plan must report the relative --out-dir resolved against the repo root; expected '${TEST27_ABS_OUT}', got '${TEST27_PLAN_DIR}'" >&2
+    restore_test27_build_dir
+    exit 1
+fi
+
+TEST27_BUILD_RC=0
+TEST27_BUILD_OUTPUT="$(FAKE_APK_FILE="${BUILD_APK_DIR}/app-release.apk" PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --universal --skip-tests --allow-debug-signing --out-dir "${TEST27_REL_OUT}" 2>&1)" || TEST27_BUILD_RC=$?
+if [ "${TEST27_BUILD_RC}" -ne 0 ]; then
+    echo "❌ FAILED: build run with a relative --out-dir exited ${TEST27_BUILD_RC} (expected 0 with a successful simulated build). Output:" >&2
+    printf '%s\n' "${TEST27_BUILD_OUTPUT}" >&2
+    restore_test27_build_dir
+    exit 1
+fi
+for TEST27_ARTIFACT in app-universal-release.apk SHA256SUMS.txt release_manifest.json; do
+    if [ ! -f "${TEST27_ABS_OUT}/${TEST27_ARTIFACT}" ]; then
+        echo "❌ FAILED: relative --out-dir publish did not land ${TEST27_ARTIFACT} in ${TEST27_ABS_OUT} (the plan reported that exact directory)" >&2
+        restore_test27_build_dir
+        exit 1
+    fi
+done
+if [ -e "${POS_APP_DIR}/${TEST27_REL_OUT}" ]; then
+    echo "❌ FAILED: artifacts were (partially) resolved against apps/pos_app instead of the repo root: ${POS_APP_DIR}/${TEST27_REL_OUT} exists" >&2
+    restore_test27_build_dir
+    exit 1
+fi
+rm -rf "${TEST27_ABS_OUT}"
+# Reset the simulated build state: the fake APK produced for 27a must not leak
+# into 27b, whose build legitimately produces nothing.
+rm -f "${BUILD_APK_DIR}/app-release.apk"
+echo "✅ [Test 27a Passed] Relative --out-dir resolves to the same repo-rooted absolute directory in --plan and in the publish path."
+
+# Test 27b (F2): when the build produces no APK, the publish lands nothing in
+# OUT_DIR and the pipeline must fail loudly instead of reporting success.
+echo "🔍 [Test 27b] Verifying a publish that lands zero APKs fails loudly..."
+TEST27B_OUT="${SHIM_DIR}/test27b-out"
+TEST27B_RC=0
+TEST27B_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --universal --skip-tests --allow-debug-signing --out-dir "${TEST27B_OUT}" 2>&1)" || TEST27B_RC=$?
+if [ "${TEST27B_RC}" -eq 0 ]; then
+    echo "❌ FAILED: a build that published zero .apk artifacts exited 0; the pipeline must never report success while delivering nothing. Output:" >&2
+    printf '%s\n' "${TEST27B_OUTPUT}" >&2
+    restore_test27_build_dir
+    exit 1
+fi
+if ! printf '%s\n' "${TEST27B_OUTPUT}" | grep -qF "${TEST27B_OUT}"; then
+    echo "❌ FAILED: the zero-artifact failure must name the output directory ${TEST27B_OUT}. Output:" >&2
+    printf '%s\n' "${TEST27B_OUTPUT}" >&2
+    restore_test27_build_dir
+    exit 1
+fi
+if ! printf '%s\n' "${TEST27B_OUTPUT}" | grep -q "no .apk artifacts were published"; then
+    echo "❌ FAILED: the zero-artifact failure must state what was expected (published .apk artifacts). Output:" >&2
+    printf '%s\n' "${TEST27B_OUTPUT}" >&2
+    restore_test27_build_dir
+    exit 1
+fi
+if printf '%s\n' "${TEST27B_OUTPUT}" | grep -q "Artifacts Generated Successfully"; then
+    echo "❌ FAILED: the zero-artifact run must not print the success banner. Output:" >&2
+    printf '%s\n' "${TEST27B_OUTPUT}" >&2
+    restore_test27_build_dir
+    exit 1
+fi
+echo "✅ [Test 27b Passed] A publish that lands zero APKs exits non-zero, names the output directory and states what was expected."
+
+restore_test27_build_dir
+
 rm -rf "${SHIM_DIR}"
 
 echo "=============================================================================="
