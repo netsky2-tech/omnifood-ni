@@ -1597,4 +1597,153 @@ void main() {
           reason: 'D-1: provisioning never overwrites or restarts a persisted sequence');
     });
   });
+
+  group('AC-3/AC-6 (#526 unit G2b): fiscal replay refusal — never a silent clamp', () {
+    const tenantId = 'tenant-founder-01';
+    const cashierId = 'cashier-g2b';
+    const verificationProductId = 'prod-pin-001';
+
+    Future<void> seedG2bScenario({required String attemptId}) async {
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+      );
+      await database.userDao.insertUsers([
+        UserEntity(
+          id: cashierId,
+          name: 'Cajero G2b',
+          role: 'CASHIER',
+          pinHash: '',
+          isActive: true,
+          tenantId: tenantId,
+        ),
+      ]);
+      await database.securityProfileDao.insertProfiles([
+        SecurityProfileEntity(
+          userId: cashierId,
+          pinHash: localAuth.hashPin('123456'),
+          isPinEnabled: true,
+          isTotpEnabled: false,
+        ),
+      ]);
+      await database.productDao.insertProducts([
+        ProductEntity(
+          id: verificationProductId,
+          name: 'Café de Prueba Activación',
+          sellPrice: 50.0,
+          averageCost: 15.0,
+          stock: 100.0,
+          uom: 'CUP',
+          barcode: 'PROD-ACT-G2B',
+          isActive: true,
+          isPrepared: false,
+          tenantId: tenantId,
+        ),
+      ]);
+      await database.activationAttemptLocalDao.saveAttempt(
+        ActivationAttemptLocalEntity(
+          attemptId: attemptId,
+          tenantId: tenantId,
+          candidateTerminalId: 'pos-terminal-founder-01',
+          localStatus: 'RUNNING',
+          requiredFiscalRevision: 1,
+          requiredFiscalFingerprint: 'fiscal-fp-123',
+          verificationProductId: verificationProductId,
+          assignedAt: '2026-09-04T12:00:00.000Z',
+          updatedAt: '2026-09-04T12:00:00.000Z',
+        ),
+      );
+    }
+
+    test('does NOT write dgi_current_number when the local cursor lags the '
+        'cloud highest (AC-3: stop instead of bumping)', () async {
+      // Lagging cursor (1) vs cloud highest (5): the OLD runner clamped the
+      // cursor to 6 here ("Advanced to match cloud highest sequence (D-6)"),
+      // fabricating the numbers 1..5. The backend tripwire
+      // (priming?proposedSequence) is the only authority that may refuse;
+      // the runner must not self-heal the cursor.
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_cloud_highest_sequence', value: '5'),
+      );
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: 'attempt-g2b-refusal',
+          cashierUserId: cashierId,
+        ),
+      );
+
+      expect(result.isSuccess, isFalse);
+      final cursor =
+          await database.localConfigDao.getConfigByKey('dgi_current_number');
+      expect(cursor!.value, '1',
+          reason: 'AC-3: on refusal the fiscal cursor is never written — '
+              'auto-bumping would fabricate missing numbers');
+    });
+
+    test('pass-through path unchanged: cursor at/above the cloud highest '
+        'sells normally and the cursor advances only by issuance', () async {
+      await seedG2bScenario(attemptId: 'attempt-g2b-pass');
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '6'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_cloud_highest_sequence', value: '5'),
+      );
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: 'attempt-g2b-pass',
+          cashierUserId: cashierId,
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+      final invoice =
+          await database.invoiceDao.getInvoiceById(result.verificationTicketId!);
+      expect(invoice!.number, '001-001-0100000006',
+          reason: 'the sale issues exactly the proposed cursor number');
+      final cursor =
+          await database.localConfigDao.getConfigByKey('dgi_current_number');
+      expect(cursor!.value, '7',
+          reason: 'the cursor advanced exactly once, by issuance — never by a '
+              'clamp');
+    });
+
+    test('fresh device (no local cursor) is not self-blocked: seeds above '
+        'the cloud highest and the sale succeeds', () async {
+      await seedG2bScenario(attemptId: 'attempt-g2b-fresh');
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_cloud_highest_sequence', value: '5'),
+      );
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: tenantId,
+          attemptId: 'attempt-g2b-fresh',
+          cashierUserId: cashierId,
+        ),
+      );
+
+      expect(result.isSuccess, isTrue);
+      final invoice =
+          await database.invoiceDao.getInvoiceById(result.verificationTicketId!);
+      expect(invoice!.number, '6',
+          reason: 'seeded at cloudHighest + 1 — a fresh terminal never '
+              'collides with an already-issued cloud invoice');
+      final cursor =
+          await database.localConfigDao.getConfigByKey('dgi_current_number');
+      expect(cursor!.value, '7');
+    });
+  });
 }

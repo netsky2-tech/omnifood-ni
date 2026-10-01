@@ -26,6 +26,38 @@ class FiscalSequenceUnconfiguredError implements Exception {
   String toString() => '$code: $message';
 }
 
+/// D-6/#526 (unit G2b): named fail-closed state for a fiscal sequence
+/// REPLAY refusal. When a terminal proposes its local fiscal cursor to the
+/// backend tripwire (`GET onboarding/terminals/priming?proposedSequence=`)
+/// and the cloud already issued that sequence (or cannot read its MAX), the
+/// backend answers HTTP 409 `FISCAL_SEQUENCE_RECOVERY_REQUIRED` and no
+/// number is corrected or renumbered. This is a RECOVERY state, semantically
+/// distinct from [FiscalSequenceUnconfiguredError]: the local cursor exists
+/// and is valid, but the authority refuses issuance from it until explicit
+/// recovery runs. The operator must stop selling and call support.
+class FiscalSequenceRecoveryRequiredError implements Exception {
+  final String code = 'FISCAL_SEQUENCE_RECOVERY_REQUIRED';
+  final String message;
+
+  /// The cloud's highest issued invoice sequence. Null when the backend
+  /// could not read its MAX (second refusal variant).
+  final int? highestSequenceNumber;
+
+  /// The sequence the terminal proposed. Null when no local cursor existed.
+  final int? proposedSequence;
+
+  const FiscalSequenceRecoveryRequiredError(
+    this.message, {
+    this.highestSequenceNumber,
+    this.proposedSequence,
+  });
+
+  @override
+  String toString() =>
+      '$code: $message (highestSequenceNumber: $highestSequenceNumber, '
+      'proposedSequence: $proposedSequence)';
+}
+
 abstract class DgiNumberingService {
   /// Provisions the series. [start] is the consecutivo inicial seed; it only
   /// takes effect when no cursor is persisted yet (D-1: never overwrite a

@@ -81,7 +81,20 @@ class ActivationPrimingService {
   /// application conflict raises the handler's named exceptions — both let
   /// the caller block activation instead of proceeding half-primed.
   Future<ActivationPrimingResult> primeTerminal() async {
-    final payload = await _primingPort.fetchPrimingPayload();
+    // D-6 / #526 unit B5: offer this terminal's local fiscal cursor to the
+    // backend replay tripwire BEFORE any local application. When the cloud
+    // already issued that sequence — or cannot read its own MAX — the port
+    // raises [FiscalSequenceRecoveryRequiredError] and the caller blocks
+    // activation with an operator-visible message. The cursor is never
+    // renumbered here: refusal is a stop, not a clamp. A fresh terminal with
+    // no cursor proposes nothing and cannot be self-blocked.
+    final cursorEntity =
+        await _database.localConfigDao.getConfigByKey('dgi_current_number');
+    final proposedSequence = int.tryParse(cursorEntity?.value ?? '');
+
+    final payload = await _primingPort.fetchPrimingPayload(
+      proposedSequence: proposedSequence,
+    );
 
     // 1. Products — faithful dedicated applier using the same entity and
     //    field mapping as the inbound projection in SyncService (including
