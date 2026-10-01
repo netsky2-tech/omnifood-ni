@@ -268,9 +268,9 @@ cobradas como impagas. **Corregir antes del viernes.**
 
 | # | Riesgo | Impacto | Estado |
 |---|---|---|---|
-| **R-1** | `taxRate`/`isTaxExempt` están **excluidos del contrato de sync** de productos; el POS guarda `0.0`. Bajo **Régimen General** toda línea queda clasificada exenta / 0% IVA | **DGI — producción de información fiscal incorrecta (§4.1)** | Sin corregir. Requiere confirmar el régimen del cliente |
-| **R-2** | `payment_status` queda `'pending'` en toda venta normal | el dashboard muestra cobrado como impago; se acumula a diario | Sin corregir |
-| **R-3** | Turno abierto con `sync_status='pending'` | el cloud no ve los turnos; afecta cortes y arqueos | Sin diagnosticar |
+| **R-1** | `taxRate`/`isTaxExempt` estaban excluidos del contrato de sync; el POS guardaba `0.0` mientras el cloud decía `0.15` | **DGI** bajo Régimen General: toda línea se declaraba exenta | **CORREGIDO** (`ee55ad9c`) — el backend emite ambos desde las columnas. Cuota Fija (el cliente del viernes) nunca estuvo afectado |
+| **R-2** | `payment_status` quedaba `'pending'` en toda venta normal | el dashboard mostraba cobrado como impago | **CORREGIDO** (`5fd5cb76`) — `saveSale` resuelve el estado con el mismo `SplitPaymentCalculator` que habilita COBRAR |
+| **R-3** | ~~Turno abierto con `sync_status='pending'`~~ **NO es un defecto — verificado** | El turno abierto **sí** llega al cloud (`status=OPEN`, terminal y cajero correctos, verificado en `cash_shift_sessions`). `sync_service` marca `synced` **solo a los cerrados** a propósito: un turno abierto sigue mutando (los movimientos alteran el esperado) y se re-empuja en cada ciclo. El `pending` local es el estado esperado, no un fallo | Cerrado — falsa alarma |
 | **R-4** | Mensaje de error de venta: UUID crudo, en inglés, **oculto bajo el carrito**, y COBRAR reintenta sin límite | ante un fallo el operador no sabe qué pasó y no puede reaccionar | Sin corregir — **§4.1 "hides a material side effect"** |
 | **R-5** | La fila de ejemplo de la plantilla crea un producto fantasma COMPOUND | ensucia el menú y agrega un insumo no pedido | Documentado en 0.7 |
 | **R-6** | Mapeos directos (`mappingVersionId` + `insumoId`) con insumo ausente lanzan `CheckoutAuthorityException` y tumban el checkout entero | **solo aparece al integrar insumos/recetas**, no el viernes | Latente, post go-live |
