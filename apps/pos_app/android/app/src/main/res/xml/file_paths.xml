@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Scope: only the releases subdirectory under internal or external app storage -->
+    <files-path name="internal_releases" path="releases/" />
+    <cache-path name="internal_cache_releases" path="releases/" />
+    <external-files-path name="external_releases" path="releases/" />
+    <external-cache-path name="external_cache_releases" path="releases/" />
+</paths>
