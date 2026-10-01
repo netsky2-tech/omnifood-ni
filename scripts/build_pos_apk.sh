@@ -181,7 +181,11 @@ while [[ $# -gt 0 ]]; do
             echo "  --api-url <url>   Backend base URL baked into the APK via"
             echo "                    --dart-define=API_URL (absolute http:// or https:// URL,"
             echo "                    no whitespace, non-empty host). REQUIRED for --pilot;"
-            echo "                    fleet builds omit it and provision the terminal at runtime"
+            echo "                    fleet builds omit it: the app resolves the backend at"
+            echo "                    runtime from the device's persisted api_base_url config,"
+            echo "                    falling back to this define. A fleet build with neither is"
+            echo "                    UNCONFIGURED (the app reports it as such; it never uses"
+            echo "                    localhost as a configured backend)"
             echo "  --pilot           Pilot/single-terminal build; REQUIRES --device-id and --api-url"
             echo "  --allow-debug-signing"
             echo "                    Allow a release build without a release keystore to fall"
@@ -232,7 +236,11 @@ if [ -n "${DEVICE_ID}" ]; then
 fi
 
 # Backend URL binding: only baked when explicitly provided. Fleet builds keep
-# 'provisioned-at-runtime' and must NOT bake an API_URL define.
+# 'provisioned-at-runtime' and must NOT bake an API_URL define: at startup the
+# app resolves the backend from the device's persisted api_base_url config
+# (local_configs), falling back to this define when present. If neither exists
+# the fleet artifact is UNCONFIGURED, not provisioned: the app reports an
+# explicit 'server not configured' state instead of silently using localhost.
 API_URL_BINDING="provisioned-at-runtime"
 if [ -n "${API_URL}" ]; then
     DART_DEFINE_ARGS+=("--dart-define=API_URL=${API_URL}")
@@ -270,7 +278,10 @@ if [ "${PLAN_ONLY}" = true ]; then
     fi
     echo "🌐 API URL:             ${API_URL_BINDING}"
     if [ -z "${API_URL}" ]; then
-        echo "   (fleet build: no API_URL dart-define is baked; backend is provisioned at runtime)"
+        echo "   (fleet build: no API_URL dart-define is baked; the app resolves the"
+        echo "    backend at runtime from the device's persisted api_base_url config,"
+        echo "    falling back to the define. With neither, the artifact is UNCONFIGURED,"
+        echo "    not provisioned)"
     fi
     echo "🧵 Test concurrency:    ${TEST_CONCURRENCY_BINDING}"
     if [ -z "${TEST_CONCURRENCY}" ]; then

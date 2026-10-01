@@ -1,7 +1,9 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/services/api_base_url_service.dart';
+import 'package:pos_app/main.dart';
 
 class _InMemoryLocalConfigDao implements LocalConfigDao {
   final Map<String, LocalConfigEntity> saved = <String, LocalConfigEntity>{};
@@ -234,6 +236,77 @@ void main() {
       expect(
         configDao.saved[ApiBaseUrlService.configKey]?.value,
         'http://192.168.1.50:3000/api',
+      );
+    });
+  });
+
+  group('Dio client wiring (main.dart)', () {
+    test(
+        'a persisted URL wins over the build define in the client construction',
+        () async {
+      final configDao = _InMemoryLocalConfigDao();
+      await configDao.saveConfig(
+        LocalConfigEntity(
+          key: ApiBaseUrlService.configKey,
+          value: 'https://persisted.example.com/api',
+        ),
+      );
+
+      final startup = await resolveStartupTransport(
+        configDao: configDao,
+        buildTimeApiUrl: 'https://define.example.com/api',
+      );
+      final clients = PosDioClients(baseUrl: startup.transportBaseUrl);
+
+      expect(startup.resolution.source, ApiBaseUrlSource.persistedConfig);
+      expect(clients.app.options.baseUrl, 'https://persisted.example.com/api');
+      expect(
+        clients.refresh.options.baseUrl,
+        'https://persisted.example.com/api',
+      );
+      expect(clients.claim.options.baseUrl, 'https://persisted.example.com/api');
+      expect(
+        clients.deviceSyncExchange.options.baseUrl,
+        'https://persisted.example.com/api',
+      );
+      expect(clients.sync.options.baseUrl, 'https://persisted.example.com/api');
+    });
+
+    test('claimDio stays bare: no interceptors may attach to it', () async {
+      final configDao = _InMemoryLocalConfigDao();
+      final startup = await resolveStartupTransport(
+        configDao: configDao,
+        buildTimeApiUrl: 'https://define.example.com/api',
+      );
+      final clients = PosDioClients(baseUrl: startup.transportBaseUrl);
+
+      // "Bare" means no interceptors beyond Dio's built-in defaults (which
+      // even a plain Dio() has): nothing may attach an Authorization header
+      // to the pre-auth link exchange.
+      final defaultDio = Dio();
+      expect(
+        clients.claim.interceptors.length,
+        defaultDio.interceptors.length,
+        reason: 'claimDio must carry only Dio\'s built-in default interceptors',
+      );
+    });
+
+    test(
+        'unconfigured release transport falls back to the development URL while reporting unconfigured',
+        () async {
+      final configDao = _InMemoryLocalConfigDao();
+
+      final startup = await resolveStartupTransport(
+        configDao: configDao,
+        buildTimeApiUrl: '',
+        isReleaseMode: true,
+      );
+
+      expect(startup.resolution.source, ApiBaseUrlSource.unconfigured);
+      expect(startup.resolution.isConfigured, isFalse);
+      expect(
+        startup.transportBaseUrl,
+        ApiBaseUrlService.developmentDefaultUrl,
       );
     });
   });
