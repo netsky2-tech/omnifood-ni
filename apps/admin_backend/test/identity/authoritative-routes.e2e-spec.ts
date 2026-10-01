@@ -238,7 +238,24 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
         { provide: SupervisorOverrideService, useValue: {} },
         { provide: SalesReportsService, useValue: {} },
         { provide: FiscalReportsService, useValue: {} },
-        { provide: SalesExportService, useValue: {} },
+        // G1 (issue #522 Finding 1): the /x and /z handlers now delegate to
+        // SalesExportService, so the 200-expecting authoritative-route cases
+        // need real resolvers behind the mocked service.
+        {
+          provide: SalesExportService,
+          useValue: {
+            getXReport: jest.fn().mockResolvedValue({
+              generatedAt: '2026-08-26T18:00:00.000Z',
+              closesShift: false,
+              shifts: [],
+            }),
+            getZReport: jest.fn().mockResolvedValue({
+              generatedAt: '2026-08-26T18:00:00.000Z',
+              totalRecords: 0,
+              records: [],
+            }),
+          },
+        },
         { provide: CurrentUserAuthorizationService, useValue: { authorize } },
         { provide: ConfigService, useValue: {} },
         { provide: IDENTITY_JWT_CONFIG, useValue: jwtConfig },
