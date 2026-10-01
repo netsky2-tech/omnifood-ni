@@ -266,6 +266,17 @@ class BusinessProfileViewModel extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
+      // BXW-007 U3 (#734): re-read the marker HERE instead of trusting the
+      // set cached by loadConfig. A fiscal projection can commit between
+      // loadConfig and this save; a stale set would then let the form write
+      // the operator's value over the cloud-asserted one, and because
+      // isProjectionComplete deliberately ignores these conditional fields
+      // nothing would repair the divergence afterwards (R-6).
+      final markerEntity = await _configDao.getConfigByKey(
+        FiscalProjectionKeys.businessProfileManagedKeys,
+      );
+      _cloudManagedKeys = _parseManagedKeys(markerEntity?.value);
+
       for (final entry in newConfig.entries) {
         if (entry.key == _retiredKey) {
           // D-21: the retired range-end key is dropped on write.
