@@ -33,13 +33,44 @@ class ApiBaseUrlResolution {
   bool get isConfigured => url != null;
 }
 
+/// Why a backend URL was rejected. A structured code, so an operator-facing
+/// surface can render its own localized copy without depending on the English
+/// message string that mirrors `validate_api_url` in `scripts/build_pos_apk.sh`.
+enum ApiBaseUrlValidationReason {
+  /// The value is null or empty.
+  empty,
+
+  /// The value contains whitespace anywhere.
+  whitespace,
+
+  /// Not an absolute `http(s)` URL with a non-empty host.
+  notAbsolute,
+}
+
+/// A validation rejection: the machine-readable [reason] plus the English
+/// [message] kept for the script-mirrored contract and for logs.
+class ApiBaseUrlValidationFailure {
+  const ApiBaseUrlValidationFailure(this.reason, this.message);
+
+  final ApiBaseUrlValidationReason reason;
+  final String message;
+}
+
 /// Thrown when an operator-supplied URL fails validation. The rule mirrors
 /// `validate_api_url` in `scripts/build_pos_apk.sh` exactly: an absolute
 /// `http://` or `https://` URL with a non-empty host and no whitespace.
+///
+/// [message] is the script-mirrored English text; UI layers should branch on
+/// [reason] instead of rendering English copy to a Spanish-only operator.
 class ApiBaseUrlValidationException implements Exception {
-  const ApiBaseUrlValidationException(this.message);
+  const ApiBaseUrlValidationException(this.message, [this.reason]);
 
   final String message;
+
+  /// The structured rejection reason, when the failure came from
+  /// [ApiBaseUrlService.validateApiUrl]. Null for callers that construct the
+  /// exception from a plain message.
+  final ApiBaseUrlValidationReason? reason;
 
   @override
   String toString() => message;
@@ -106,9 +137,9 @@ class ApiBaseUrlService {
   /// anywhere. Anything else throws [ApiBaseUrlValidationException] and
   /// persists nothing.
   Future<void> save(String url) async {
-    final error = validateApiUrl(url);
-    if (error != null) {
-      throw ApiBaseUrlValidationException(error);
+    final failure = validateApiUrl(url);
+    if (failure != null) {
+      throw ApiBaseUrlValidationException(failure.message, failure.reason);
     }
 
     await _configDao.saveConfig(
@@ -124,23 +155,32 @@ class ApiBaseUrlService {
   /// define or the documented defaults on the next resolution.
   Future<void> clear() => _configDao.deleteConfig(configKey);
 
-  /// Returns `null` when [raw] is a valid backend URL, otherwise a clear
-  /// rejection reason. Exact mirror of `validate_api_url` in
+  /// Returns `null` when [raw] is a valid backend URL, otherwise the reason
+  /// and a clear rejection message. Exact mirror of `validate_api_url` in
   /// `scripts/build_pos_apk.sh`: empty rejection, whitespace rejection, and a
   /// required non-empty host between the `http(s)://` scheme and the first `/`.
-  static String? validateApiUrl(String? raw) {
+  static ApiBaseUrlValidationFailure? validateApiUrl(String? raw) {
     if (raw == null || raw.isEmpty) {
-      return 'Invalid API URL: value is empty.';
+      return const ApiBaseUrlValidationFailure(
+        ApiBaseUrlValidationReason.empty,
+        'Invalid API URL: value is empty.',
+      );
     }
     if (raw.contains(RegExp(r'\s'))) {
-      return "Invalid API URL: '$raw' contains whitespace.";
+      return ApiBaseUrlValidationFailure(
+        ApiBaseUrlValidationReason.whitespace,
+        "Invalid API URL: '$raw' contains whitespace.",
+      );
     }
     final match = RegExp(r'^https?://([^/]*)').firstMatch(raw);
     final host = match?.group(1) ?? '';
     if (host.isEmpty) {
-      return "Invalid API URL: '$raw' must be an absolute http:// or https:// "
-          'URL with a non-empty host '
-          '(e.g. https://api-staging.example.com/api).';
+      return ApiBaseUrlValidationFailure(
+        ApiBaseUrlValidationReason.notAbsolute,
+        "Invalid API URL: '$raw' must be an absolute http:// or https:// "
+        'URL with a non-empty host '
+        '(e.g. https://api-staging.example.com/api).',
+      );
     }
     return null;
   }

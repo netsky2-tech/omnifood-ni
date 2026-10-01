@@ -240,6 +240,61 @@ void main() {
     });
   });
 
+  group('ApiBaseUrlService structured rejection reasons', () {
+    Future<ApiBaseUrlValidationReason> rejectionReason(String input) async {
+      final service =
+          ApiBaseUrlService(_InMemoryLocalConfigDao(), isReleaseMode: false);
+      try {
+        await service.save(input);
+      } on ApiBaseUrlValidationException catch (e) {
+        return e.reason!;
+      }
+      throw StateError('expected $input to be rejected');
+    }
+
+    test('empty value reports the empty reason', () async {
+      expect(await rejectionReason(''), ApiBaseUrlValidationReason.empty);
+    });
+
+    test('whitespace reports the whitespace reason', () async {
+      expect(
+        await rejectionReason('https://api.example.com/api /v1'),
+        ApiBaseUrlValidationReason.whitespace,
+      );
+    });
+
+    test('a relative URL reports the notAbsolute reason', () async {
+      expect(
+        await rejectionReason('api.example.com/api'),
+        ApiBaseUrlValidationReason.notAbsolute,
+      );
+    });
+
+    test('an empty host reports the notAbsolute reason', () async {
+      expect(
+        await rejectionReason('https:///api'),
+        ApiBaseUrlValidationReason.notAbsolute,
+      );
+    });
+
+    test('the English message is preserved for the script-mirrored contract',
+        () async {
+      final failure =
+          ApiBaseUrlService.validateApiUrl('api.example.com/api');
+
+      expect(failure, isNotNull);
+      expect(failure!.reason, ApiBaseUrlValidationReason.notAbsolute);
+      expect(failure.message, startsWith('Invalid API URL:'));
+    });
+
+    test('a valid URL produces no failure', () {
+      expect(
+        ApiBaseUrlService.validateApiUrl('https://api.example.com/api'),
+        isNull,
+      );
+    });
+  });
+
   group('Dio client wiring (main.dart)', () {
     test(
         'a persisted URL wins over the build define in the client construction',
