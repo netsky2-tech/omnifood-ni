@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
@@ -12,6 +13,7 @@ import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.da
 import 'data/database/app_database.dart';
 import 'data/database/migrations.dart';
 import 'data/database/database_seeder.dart';
+import 'data/daos/local_config_dao.dart';
 import 'data/network/cloud_auth_interceptor.dart';
 import 'data/network/device_sync_auth_interceptor.dart';
 import 'data/adapters/activation/dio_activation_priming_port.dart';
@@ -23,6 +25,7 @@ import 'data/services/activation_priming_service.dart';
 import 'data/services/activation_reconnect_sync_runner.dart';
 import 'data/services/activation_required_config_adapter.dart';
 import 'data/services/activation_session_service.dart';
+import 'data/services/api_base_url_service.dart';
 import 'data/security/app_private_device_sync_credential_store.dart';
 import 'data/security/dio_device_sync_exchange_port.dart';
 import 'data/security/flutter_secure_cloud_credential_store.dart';
@@ -117,19 +120,77 @@ import 'ui/features/sales/tables/table_layout_view_model.dart';
 import 'ui/features/kitchen/kitchen_display_view.dart';
 import 'ui/features/kitchen/kitchen_display_view_model.dart';
 
+/// The backend transport resolved once at startup: the resolution (with its
+/// provenance, for the operator-facing surface) plus the concrete base URL
+/// every Dio client is constructed with.
+typedef StartupTransport = ({
+  ApiBaseUrlResolution resolution,
+  String transportBaseUrl,
+});
+
+/// Resolves the backend transport from the runtime-provisioning sources:
+/// persisted `api_base_url` wins over the build-time `API_URL` define; a
+/// release build with neither reports [ApiBaseUrlSource.unconfigured] instead
+/// of pretending the localhost default is a configured backend.
+///
+/// The transport still receives a concrete URL (the development default) when
+/// unconfigured so the offline sale path is never blocked; the unconfigured
+/// state is surfaced to the operator, never hidden.
+@visibleForTesting
+Future<StartupTransport> resolveStartupTransport({
+  required LocalConfigDao configDao,
+  String buildTimeApiUrl = '',
+  bool isReleaseMode = kReleaseMode,
+}) async {
+  final resolution = await ApiBaseUrlService(
+    configDao,
+    isReleaseMode: isReleaseMode,
+  ).resolve(buildTimeApiUrl: buildTimeApiUrl);
+  return (
+    resolution: resolution,
+    transportBaseUrl:
+        resolution.url ?? ApiBaseUrlService.developmentDefaultUrl,
+  );
+}
+
+/// The POS transport Dio clients, built ONCE at startup from the resolved
+/// backend URL. The activation-sync port reuses [app]. A URL change applies
+/// on the next app start, not per request.
+@visibleForTesting
+class PosDioClients {
+  PosDioClients({required String baseUrl})
+      : app = Dio(productionTransportOptions(baseUrl)),
+        refresh = Dio(productionTransportOptions(baseUrl)),
+        claim = Dio(productionTransportOptions(baseUrl)),
+        deviceSyncExchange = Dio(productionTransportOptions(baseUrl)),
+        sync = Dio(productionTransportOptions(baseUrl));
+
+  /// Primary client. The activation-sync port (DioActivationSyncPort) also
+  /// rides on this instance.
+  final Dio app;
+  final Dio refresh;
+
+  /// Dedicated pre-auth client for the linking code claim (issue #556): bare
+  /// Dio with NO interceptors, so no Authorization header can ever be
+  /// attached to the pre-auth link exchange. It receives the resolved URL at
+  /// construction only.
+  final Dio claim;
+  final Dio deviceSyncExchange;
+  final Dio sync;
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   // Purge credentials left by pre-secure-store builds before any cloud auth
   // component can recover state. Failure is fail-closed and must not block POS.
   final legacyHumanCredentialCleaner = LegacyHumanCredentialFallbackCleaner();
   await legacyHumanCredentialCleaner.clean();
 
   // Configuration (Could be loaded from .env)
-  const String baseUrl = String.fromEnvironment(
-    'API_URL',
-    defaultValue: 'http://127.0.0.1:3000/api',
-  );
+  // Backend URL is resolved at RUNTIME below (persisted api_base_url →
+  // build-time API_URL define → development default) so ONE artifact can
+  // serve any environment. The define is only one of the resolution inputs.
+  const String buildTimeApiUrl = String.fromEnvironment('API_URL');
   const String provisionedDeviceId = String.fromEnvironment('DEVICE_ID');
 
   // Initialize Database
@@ -146,13 +207,30 @@ void main() async {
   // Fails closed on snapshot read/repair failure to prevent initializing fiscal-dependent consumers in corrupt state.
   await FiscalBootstrapRunner.fromDatabase(database).run();
 
+  // Resolve the backend transport ONCE at startup, never per request: a URL
+  // change applies on the next app start. Transport only — this must never
+  // gate the sale path, DGI numbering, or any fiscal operation.
+  final startupTransport = await resolveStartupTransport(
+    configDao: database.localConfigDao,
+    buildTimeApiUrl: buildTimeApiUrl,
+  );
+  final baseUrl = startupTransport.transportBaseUrl;
+  if (!startupTransport.resolution.isConfigured) {
+    debugPrint(
+      '[ApiUrl] Server not configured: no persisted api_base_url and no '
+      'API_URL define. Sync targets the development default until the '
+      'terminal is provisioned; sales are unaffected.',
+    );
+  }
+
   // Initialize Services & Repositories
   final terminalIdentityService = TerminalIdentityService(
     database.localConfigDao,
   );
   final deviceId = await terminalIdentityService
       .resolveDeviceId(buildTimeDeviceId: provisionedDeviceId);
-  final dio = Dio(productionTransportOptions(baseUrl));
+  final dioClients = PosDioClients(baseUrl: baseUrl);
+  final dio = dioClients.app;
   final localAuthService = LocalAuthService();
   final capabilityCache = TenantCapabilityCache(
     configDao: database.localConfigDao,
@@ -166,18 +244,19 @@ void main() async {
     commitId: () => const Uuid().v4(),
     barrierStore: barrierStore,
   );
-  final refreshDio = Dio(productionTransportOptions(baseUrl));
+  final refreshDio = dioClients.refresh;
 
   // Dedicated pre-auth client for the linking code claim (issue #556):
   // bare Dio with NO interceptors, so no Authorization header can ever be
-  // attached to the pre-auth link exchange.
-  final claimDio = Dio(productionTransportOptions(baseUrl));
+  // attached to the pre-auth link exchange. It receives the resolved URL at
+  // construction only.
+  final claimDio = dioClients.claim;
 
   // Tenant configuration store (slug write-through from provisioning, issue #556)
   final tenantConfigService = TenantConfigService(database.localConfigDao);
 
   // Dedicated Device Sync Infrastructure
-  final deviceSyncExchangeDio = Dio(productionTransportOptions(baseUrl));
+  final deviceSyncExchangeDio = dioClients.deviceSyncExchange;
   final deviceSyncStore = ResilientDeviceSyncCredentialStore(
     preferredStore: FlutterSecureDeviceSyncCredentialStore(),
     fallbackStore: AppPrivateDeviceSyncCredentialStore(database.localConfigDao),
@@ -190,7 +269,7 @@ void main() async {
     exchangePort: deviceSyncExchangePort,
     resolveDeviceId: () async => deviceId,
   );
-  final syncDio = Dio(productionTransportOptions(baseUrl));
+  final syncDio = dioClients.sync;
   syncDio.interceptors.add(
     DeviceSyncAuthInterceptor(
       coordinator: deviceSyncCoordinator,
@@ -490,6 +569,10 @@ void main() async {
           create: (_) => TerminalIdentityViewModel(
             configDao: database.localConfigDao,
             printerConfigService: PrinterConfigService(database.localConfigDao),
+            // Same build-time define the startup transport resolves, so the
+            // operator sees the provenance actually in force. Save/clear goes
+            // through the default ApiBaseUrlService over the same DAO.
+            buildTimeApiUrl: buildTimeApiUrl,
           ),
         ),
         ChangeNotifierProvider(
