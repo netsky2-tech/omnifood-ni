@@ -46,11 +46,33 @@ Consumidor aguas abajo a verificar: `presentation/features/sales/view_models/sal
 - Un guardado del formulario nunca sobreescribe un campo gestionado por la nube.
 
 ## Tasks
-- [ ] T1 Tests rojos: proyección condicional en el handler (afirma / ausente / retracción), marcador en la misma transacción, marcador borrado cuando no hay campos, `isProjectionComplete` intacto y `currentVersion` en 1.
-- [ ] T2 Implementar R-1..R-4 en `fiscal_inbox_handler.dart`.
-- [ ] T3 Tests + implementación de los flags por campo en el view model (R-5).
-- [ ] T4 Solo lectura por campo en la vista + R-6 (el guardado no pisa lo gestionado).
-- [ ] T5 Verificación: `flutter test`, `flutter analyze`, y confirmación de que `sale_view_model` sigue leyendo `checkout_fx_mode` correctamente.
+- [x] T1 Tests rojos: proyección condicional en el handler (afirma / ausente / retracción), marcador en la misma transacción, marcador borrado cuando no hay campos, `isProjectionComplete` intacto y `currentVersion` en 1. — 6 tests, commit `2fc53085`.
+- [x] T2 Implementar R-1..R-4 en `fiscal_inbox_handler.dart`. — `FiscalProjectionKeys.operationMode/checkoutFxMode/businessProfileManagedKeys`; el marcador entra en la misma lista `projections` que el resto (misma transacción). 43/43 en la suite del handler, 399/399 en `test/data/services/`.
+- [x] T3 Tests + implementación de los flags por campo en el view model (R-5). — `isOperationModeCloudManaged` / `isCheckoutFxModeCloudManaged`; el marcador se carga aparte porque no está en el mapa de defaults; parseo tolerante (trim + sólo claves conocidas).
+- [x] T4 Solo lectura por campo en la vista + R-6 (el guardado no pisa lo gestionado). — `onChanged: null` cuando el campo está gestionado, ícono de candado y texto honesto por campo.
+- [x] T5 Verificación — 116/116 en `test/ui/features/config/`, 399/399 en `test/data/services/`, `flutter analyze` del proyecto entero en exit 0 (es el gate de `pos-app-ci.yml`).
+
+## Verificación con mutación (por qué los tests valen)
+Los tests verdes no prueban que aten el comportamiento. Se rompió a propósito y se midió:
+- **Condicionalidad del handler**: hacer los mirrors incondicionales rompió 3 aserciones (marcador escrito cuando no corresponde, valor local pisado por `''`, marcador con un campo de más).
+- **Autoridad por campo**: acoplar `isCheckoutFxModeCloudManaged` a `isOperationModeCloudManaged` rompió el test «sólo `checkout_fx_mode` gestionado → FX bloqueado y modo operativo editable».
+- **Carrera del guardado**: quitar el re-read del marcador rompió el test de regresión con `Expected: not contains 'operation_mode'` — exactamente el bug que el revisor describió.
+
+## Estado de revisión y gap de RDD (2026-09-30)
+| candidato | árbol | receipt |
+|---|---|---|
+| T1+T2 handler | `cc2034a6` | `review-fe19fbdb8c6c7a81` approved/burned (280 líneas) |
+| T3+T4 + corrección | `26bbc5f9` | **sin receipt** — ver abajo |
+
+El linaje `review-330a9d5a501f5620` encontró un hallazgo **CRITICAL** real que sobrevivió al refuter:
+
+> **`R3-stale-managed-keys-race`**: el guardado de R-6 confiaba en `_cloudManagedKeys`, cargado sólo por `loadConfig`, y nunca releía el marcador dentro de `saveConfig`. Una proyección que commitea entre el load y el guardado dejaba que el formulario escribiera encima del valor afirmado por la oficina, y como `isProjectionComplete` ignora estas claves, **nada lo habría reparado después**.
+
+Corregido en `767f849e` (plan declarado 60 líneas de diff, 52 usadas): `saveConfig` relee el marcador antes de aplicar el guard, con test de regresión que falla sin el cambio.
+
+**El linaje quedó atascado en `correction_required`**: el slot de validación dirigida fue rechazado dos veces con `collectBinding is unknown, expired, or belongs to a different session route` — la sesión se cerró por accidente y la ruta de transporte se recreó, así que STATUS reofrece el binding pero `capture-validation` no lo acepta. El árbol corregido coincide exactamente con `correction_candidate_tree` (`26bbc5f9`) y sus paths son los dos esperados.
+
+Decisión explícita del usuario: **entregar sin receipt del candidato corregido**, dado que la corrección está aplicada y probada con test de regresión, pero no validada por el validador dirigido. Queda como deuda de verificación visible, no como silencio.
 
 ## Fuera de alcance
 - **BXW-010** (`FOOD_PARK` de fulfillment vs `FOODPARK_QSR` de business profile). Verificado: canales **disjuntos**. Fulfillment lo guarda como string libre sin validar, con default `LEGACY_COMPATIBILITY` (`fulfillment-rollout.service.ts:260`), mientras que el contrato fiscal **rechaza** `FOOD_PARK` como inválido (`fiscal-setup.dto.spec.ts:149`). Nunca se comparan ni convierten: es higiene de nombres, no un bug de datos.
