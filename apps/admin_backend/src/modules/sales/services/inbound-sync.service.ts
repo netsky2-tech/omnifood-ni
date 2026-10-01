@@ -906,6 +906,7 @@ export class InboundSyncService {
       name: u.name,
       email: u.email ?? null,
       role: u.role,
+      tenantId: u.tenant_id,
       isActive: u.is_active,
       createdAt: u.created_at,
       updatedAt: u.updated_at,

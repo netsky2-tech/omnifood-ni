@@ -31,9 +31,16 @@ class CheckoutInventoryPreparationService {
       throw const CheckoutAuthorityException();
     }
     if (tenantId.trim().isEmpty) {
-      // Legacy local users created before tenant-scoped inventory authority was
-      // introduced must remain able to sell offline. Their sales stay on the
-      // repository's legacy inventory path and never claim SALE_TIME_V1.
+      // A blank per-user tenant (e.g. staff rows whose users.tenant_id is NULL)
+      // must not by itself force the legacy path: the terminal binding is the
+      // authoritative tenant for the terminal's own inventory operations.
+      final binding = await _database.localConfigDao.getConfigByKey('tenant_id');
+      tenantId = binding?.value.trim() ?? '';
+    }
+    if (tenantId.isEmpty) {
+      // Genuinely unbound terminals (never activated, no authority data) must
+      // remain able to sell offline. Their sales stay on the repository's
+      // legacy inventory path and never claim SALE_TIME_V1.
       return PreparedSaleInventoryResult(invoice: invoice, items: items);
     }
 

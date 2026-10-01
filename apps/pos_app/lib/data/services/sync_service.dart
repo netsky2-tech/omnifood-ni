@@ -3407,11 +3407,27 @@ class SyncService {
         final userEntities = <UserEntity>[];
         final profileEntities = <SecurityProfileEntity>[];
 
+        // Terminal-local tenant binding (set at activation). Used only as the
+        // last-resort cure for user rows that would otherwise lose their
+        // tenant through the replace-upsert; never fabricated by this pull.
+        final localTenantConfig = await _database!.localConfigDao
+            .getConfigByKey('tenant_id');
+        final localTenantId = localTenantConfig?.value;
+
         for (final u in rawUsers) {
           final map = Map<String, dynamic>.from(u as Map);
           final userId = map['id'] as String;
           final secProfile = map['securityProfile'] as Map<String, dynamic>?;
           final pinHash = (secProfile?['pinHash'] as String?) ?? '';
+
+          // Tenant binding resolution for the replace-upsert: a column absent
+          // from the constructed entity is erased to NULL, so resolve in
+          // order: inbound delta -> existing row -> terminal-local binding.
+          // No default tenant is invented: a fabricated tenant would write
+          // cross-tenant data.
+          final existingUser = await _database!.userDao.findUserById(userId);
+          final deltaTenantId = map['tenantId'] as String?;
+          final tenantId = deltaTenantId ?? existingUser?.tenantId ?? localTenantId;
 
           userEntities.add(
             UserEntity(
@@ -3421,6 +3437,7 @@ class SyncService {
               pinHash: pinHash,
               isActive: map['isActive'] as bool? ?? true,
               email: map['email'] as String?,
+              tenantId: tenantId,
             ),
           );
 
@@ -3441,6 +3458,43 @@ class SyncService {
         }
         if (profileEntities.isNotEmpty) {
           await _database!.securityProfileDao.insertProfiles(profileEntities);
+        }
+
+        // Heal user rows whose tenant binding was already erased by a
+        // previous replace-upsert. The per-row cure above only runs for
+        // inbound delta rows, so when the user delta is empty the erased
+        // rows stay NULL. The backend filters user deltas with
+        // `user.tenant_id = :tenantId` (the terminal's tenant), so every
+        // user row this terminal can ever receive belongs to the terminal
+        // binding: any local NULL/blank tenant_id is unambiguously an
+        // erased value of the terminal's own tenant, never a cross-tenant
+        // row. An unbound terminal stays untouched (no binding, no write),
+        // and the statement is idempotent: once healed, the WHERE clause
+        // matches zero rows.
+        try {
+          final healTenantConfig = await _database!.localConfigDao
+              .getConfigByKey('tenant_id');
+          final healTenantId = healTenantConfig?.value;
+          if (healTenantId != null && healTenantId.trim().isNotEmpty) {
+            await _database!.database.execute(
+              "UPDATE users SET tenant_id = ? "
+              "WHERE tenant_id IS NULL OR TRIM(tenant_id) = ''",
+              [healTenantId],
+            );
+            developer.log(
+              '[SYNC_PULL] user_tenant_heal applied',
+              name: 'SyncService',
+            );
+          }
+        } catch (e, stackTrace) {
+          // Best-effort, exactly like the other auxiliary pull steps: a
+          // heal failure must never turn a healthy pull into a failed one.
+          developer.log(
+            '[SYNC_PULL] user_tenant_heal skipped',
+            name: 'SyncService',
+            error: e,
+            stackTrace: stackTrace,
+          );
         }
 
         // 5b. Forensic alerts — one-way cloud-to-POS projection (ST-05).

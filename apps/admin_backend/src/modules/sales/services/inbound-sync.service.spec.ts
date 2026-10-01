@@ -294,6 +294,7 @@ describe('InboundSyncService', () => {
         name: 'Cajero 1',
         email: 'cajero@omnifood.ni',
         role: UserRole.CASHIER,
+        tenant_id: 'tenant-abc',
         is_active: true,
         created_at: new Date('2026-08-01T00:00:00Z'),
         updated_at: new Date('2026-08-02T00:00:00Z'),
@@ -355,6 +356,9 @@ describe('InboundSyncService', () => {
       name: 'Cajero 1',
       email: 'cajero@omnifood.ni',
       role: UserRole.CASHIER,
+      // User deltas carry the row's own tenant binding so the POS never
+      // persists a tenant-less user via conflict-replace upserts.
+      tenantId: 'tenant-abc',
       isActive: true,
       createdAt: expect.any(Date) as Date,
       updatedAt: expect.any(Date) as Date,

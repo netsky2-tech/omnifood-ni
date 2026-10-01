@@ -53,6 +53,8 @@ export interface InboundSyncUserDto {
   name: string;
   email: string | null;
   role: string;
+  /** The row's own tenant binding; non-optional because the read is tenant-scoped. */
+  tenantId: string;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

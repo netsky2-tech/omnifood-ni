@@ -62,6 +62,28 @@ class FakePrinterConfigService extends PrinterConfigService {
   Stream<PrinterConfig> get onConfigChanged => const Stream.empty();
 }
 
+/// Taps [finder] and lets the real async work triggered by the submit run.
+///
+/// WHY THIS EXISTS — do NOT "simplify" this back into a bare
+/// `tap` + `pumpAndSettle`: since commit 92bffbbb the checkout submit path
+/// resolves a blank per-user tenant from the terminal binding
+/// (`localConfigDao.getConfigByKey('tenant_id')`) before choosing between the
+/// authority and legacy inventory paths. That is the first REAL sqflite-ffi
+/// I/O on the submit path, and real I/O does not progress under testWidgets'
+/// FakeAsync: the await never resolves while pumping, the dialog's
+/// CircularProgressIndicator never stops, and `pumpAndSettle` times out.
+/// `runAsync` lets the real event loop complete that bounded read and the
+/// mock/fake chain that follows it; the ordinary pumping afterwards settles
+/// the resulting UI frames. The wait is bounded on purpose (no unbounded
+/// waiting on I/O), and `pumpAndSettle` must stay outside `runAsync`.
+Future<void> tapAndSubmit(WidgetTester tester, Finder finder) async {
+  await tester.runAsync(() async {
+    await tester.tap(finder);
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+  });
+  await tester.pumpAndSettle();
+}
+
 void main() {
   late MockSalesRepository mockSalesRepo;
   late MockInventoryRepository mockInventoryRepo;
@@ -181,8 +203,7 @@ void main() {
       expect(find.textContaining('⚡ Cobro Rápido'), findsOneWidget);
 
       // 4. Click Fast-Checkout and submit
-      await tester.tap(find.text('COBRAR'));
-      await tester.pumpAndSettle();
+      await tapAndSubmit(tester, find.text('COBRAR'));
 
       // Verify saveSale called with Payment marked as PENDIENTE
       final captured = verify(
@@ -228,8 +249,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.text('COBRAR'));
-      await tester.tap(find.text('COBRAR'));
-      await tester.pumpAndSettle();
+      await tapAndSubmit(tester, find.text('COBRAR'));
 
       final captured = verify(
         mockSalesRepo.saveSale(
@@ -325,8 +345,7 @@ void main() {
       final finalizeBtn = find.text('FINALIZAR VENTA');
       expect(finalizeBtn, findsOneWidget);
       await tester.ensureVisible(finalizeBtn);
-      await tester.tap(finalizeBtn);
-      await tester.pumpAndSettle();
+      await tapAndSubmit(tester, finalizeBtn);
 
       final captured = verify(
         mockSalesRepo.saveSale(

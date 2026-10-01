@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
+import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/domain/models/config/printer_config.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
@@ -25,6 +27,19 @@ import 'package:pos_app/ui/features/sales/sale_view.dart';
 import 'package:provider/provider.dart';
 
 import 'sunmi_v2s_checkout_print_flow_e2e_test.mocks.dart';
+
+/// Checkout now resolves a blank per-user tenant from the terminal binding
+/// (`localConfigDao.getConfigByKey('tenant_id')`) before falling back to the
+/// legacy inventory path (commit 92bffbbb). The generated `MockAppDatabase`
+/// nice-mock returns a SmartFake `LocalConfigDao` whose unstubbed call
+/// throws, which aborts the sale path. This stub returns a real completed
+/// `Future<null>` — no terminal binding — preserving the pre-existing
+/// behaviour for this flow: a blank tenant resolves to the legacy inventory
+/// path, exactly as before that change. Do not remove this override.
+class _StubLocalConfigDao extends Mock implements LocalConfigDao {
+  @override
+  Future<LocalConfigEntity?> getConfigByKey(String key) async => null;
+}
 
 @GenerateNiceMocks([
   MockSpec<SalesRepository>(),
@@ -77,6 +92,9 @@ void main() {
     mockInventoryRepo = MockInventoryRepository();
     mockAuthRepo = MockAuthRepository();
     mockDb = MockAppDatabase();
+    // The sale path reads the terminal tenant binding (see _StubLocalConfigDao
+    // above); without this stub the generated SmartFake DAO throws.
+    when(mockDb.localConfigDao).thenReturn(_StubLocalConfigDao());
     mockConfigService = MockPrinterConfigService();
     mockPrinter = MockPrinterAdapter();
 
