@@ -886,5 +886,184 @@ void main() {
       );
       expect(controlledSaleButton.onPressed, isNotNull);
     });
+
+    testWidgets(
+        'names the lagging-cursor stop when the local consecutive is behind '
+        'the cloud maximum: the activation will refuse to sell until the '
+        'sequence is reconciled, and the phase stays executable',
+        (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '001-001-01',
+          currentNumber: '5',
+          cloudHighestSequence: '10',
+        ),
+      );
+
+      expect(
+          find.byKey(const Key('controlled_sale_fiscal_notice')),
+          findsOneWidget);
+      expect(find.text(irreversibleStatement), findsOneWidget);
+
+      final laggingWarning = tester.widget<Text>(
+        find.byKey(const Key('controlled_sale_fiscal_lagging_warning')),
+      );
+      // Names BOTH numbers: the local consecutive and the cloud maximum.
+      expect(laggingWarning.data, contains('consecutivo local'));
+      expect(laggingWarning.data, contains('(5)'));
+      expect(laggingWarning.data, contains('ya emitido en la nube (10)'));
+      // Unmistakable stop: refusal plus support, not a self-resolving
+      // warning.
+      expect(laggingWarning.data, contains('se negará a vender'));
+      expect(laggingWarning.data, contains('llame a soporte'));
+      // The raw runner status code never reaches operator copy.
+      expect(
+        find.textContaining('FISCAL_SEQUENCE_RECOVERY_REQUIRED'),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('controlled_sale_fiscal_generic_warning')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('controlled_sale_fiscal_unconfigured_warning')),
+        findsNothing,
+      );
+      // The folio line keeps rendering: it remains the only emitted-number
+      // claim of the notice.
+      expect(find.byKey(const Key('controlled_sale_folio')), findsOneWidget);
+
+      // Informational only: the refusal is the runner's decision, not the
+      // notice's — the phase stays executable so the operator can proceed
+      // and get the named refusal state if they choose to.
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'does not name a fiscal number when the cursor row is absent: it '
+        'reports the unconfigured consecutive instead of showing (0)',
+        (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '001-001-01',
+          // No currentNumber: the prefix row exists but the cursor does not.
+          cloudHighestSequence: '10',
+        ),
+      );
+
+      final laggingWarning = tester.widget<Text>(
+        find.byKey(const Key('controlled_sale_fiscal_lagging_warning')),
+      );
+      // The refusal still holds, and the operator is told what is actually
+      // wrong rather than being shown a consecutive of zero, which is not a
+      // real fiscal number.
+      expect(laggingWarning.data, contains('no tiene un consecutivo local'));
+      expect(laggingWarning.data, contains('se negará a vender'));
+      expect(laggingWarning.data, contains('número 10'));
+      expect(laggingWarning.data, isNot(contains('(0)')));
+    });
+
+    testWidgets(
+        'states the cloud continuation when the series is unconfigured and '
+        'the tenant already issued invoices in the cloud', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          cloudHighestSequence: '10',
+        ),
+      );
+
+      final unconfiguredWarning = tester.widget<Text>(
+        find.byKey(const Key('controlled_sale_fiscal_unconfigured_warning')),
+      );
+      expect(
+          unconfiguredWarning.data,
+          contains('La serie fiscal no está configurada'));
+      // Names the cloud maximum and states the continuation from it.
+      expect(
+        unconfiguredWarning.data,
+        contains('continuando desde el máximo ya emitido en la nube (10)'),
+      );
+      // The single emitted-number claim of this state: the provisioned
+      // series starts right after the cloud maximum.
+      expect(
+        unconfiguredWarning.data,
+        contains('esta venta emitirá el número 11'),
+      );
+      expect(
+        unconfiguredWarning.data,
+        contains('no usará el número inicial autorizado del cliente'),
+      );
+
+      expect(find.byKey(const Key('controlled_sale_folio')), findsNothing);
+      expect(
+          find.byKey(const Key('controlled_sale_fiscal_lagging_warning')),
+          findsNothing);
+
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'shows neither the lagging-cursor line nor the cloud-continuation '
+        'line for a fresh tenant with no cloud history', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(),
+      );
+
+      expect(
+          find.byKey(const Key('controlled_sale_fiscal_lagging_warning')),
+          findsNothing);
+      // The fresh-tenant bootstrap warning stays as-is: it must not claim a
+      // cloud continuation that does not exist.
+      expect(find.textContaining('ya emitido en la nube'), findsNothing);
+      expect(
+        find.byKey(const Key('controlled_sale_fiscal_unconfigured_warning')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'keeps the folio line the only emitted-number claim in the '
+        'lagging-cursor case, even when a persisted invoice is ahead of the '
+        'cloud maximum (D-18)', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '001-001-01',
+          currentNumber: '5',
+          lastInvoiceNumber: '001-001-01-00000012',
+          cloudHighestSequence: '10',
+        ),
+      );
+
+      // The folio line stays the single emitted-number claim: D-18 makes
+      // the persisted invoice (12) authoritative, so the next folio is 13 —
+      // not the cloud maximum + 1.
+      expect(
+        find.text('Folio que se emitirá: 001-001-0100000013'),
+        findsOneWidget,
+      );
+
+      final laggingWarning = tester.widget<Text>(
+        find.byKey(const Key('controlled_sale_fiscal_lagging_warning')),
+      );
+      // The lag text names the state (local 5 behind cloud 10) but never
+      // presents a number as the folio that will be emitted — otherwise it
+      // would compete with the folio line above.
+      expect(laggingWarning.data, contains('(5)'));
+      expect(laggingWarning.data, contains('ya emitido en la nube (10)'));
+      expect(laggingWarning.data, isNot(contains('Folio')));
+      expect(laggingWarning.data, isNot(contains('emitirá')));
+      expect(laggingWarning.data, isNot(contains('11')));
+    });
   });
 }

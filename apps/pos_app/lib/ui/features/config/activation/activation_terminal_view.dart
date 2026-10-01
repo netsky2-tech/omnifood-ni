@@ -573,7 +573,12 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
   /// consequence. Series configured → the concrete folio exactly as the DGI
   /// numbering service will emit it (prefix + zero-padded 8-digit number, or
   /// the plain consecutivo when the prefix is blank/absent, D-21). No series
-  /// yet → the bootstrap warning naming the authorized-start risk. Unreadable
+  /// yet → the bootstrap warning: it names the cloud continuation when the
+  /// tenant already issued invoices in the cloud, and the authorized-start
+  /// risk. Local cursor behind the cloud maximum → the lagging-cursor stop:
+  /// the runner refuses the sale until support reconciles the sequence, and
+  /// the notice says so before the operator triggers the phase (the folio
+  /// line stays the notice's only emitted-number claim, D-18). Unreadable
   /// configuration → a generic warning. In every state the phase remains
   /// executable, including fully offline.
   Widget _buildFiscalConsequenceNotice(BuildContext context) {
@@ -593,6 +598,9 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
     final configuredCurrent = snapshot == null
         ? null
         : int.tryParse(snapshot.currentNumber?.trim() ?? '');
+    final cloudHighest = snapshot == null
+        ? null
+        : int.tryParse(snapshot.cloudHighestSequence?.trim() ?? '');
 
     // Same precedence the DGI numbering service applies in
     // `_resolveNextSequence` (D-18): the last persisted invoice is
@@ -623,7 +631,9 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
     String? folioText;
     String? bootstrapWarning;
     String? genericWarning;
-    if (currentNumber != null && currentNumber >= 1) {
+    String? laggingWarning;
+    final showFolio = currentNumber != null && currentNumber >= 1;
+    if (showFolio) {
       // Same folio format the numbering service emits: the prefix is
       // optional (D-21) and the consecutivo is zero-padded only when a
       // prefix is present.
@@ -631,25 +641,66 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
           ? '$currentNumber'
           : '$prefix${currentNumber.toString().padLeft(8, '0')}';
       folioText = 'Folio que se emitirá: $folio';
-    } else if (snapshot != null && snapshot.prefix == null) {
-      // Bootstrap case: the activation provisions the series when the
-      // prefix row is absent, starting after the cloud's highest issued
-      // sequence (or at 1 for a fresh tenant).
-      final cloudHighest =
-          int.tryParse(snapshot.cloudHighestSequence?.trim() ?? '') ?? 0;
-      final bootstrapStart = cloudHighest > 0 ? cloudHighest + 1 : 1;
-      bootstrapWarning =
-          'La serie fiscal no está configurada. La activación aprovisionará '
-          'una serie inicial y esta venta emitirá el número $bootstrapStart. '
-          'Si la autorización DGI del cliente comienza en otro número, '
-          'configure primero la serie fiscal en Configuración del Negocio; '
-          'de lo contrario, la primera venta comercial no será el número '
-          'autorizado inicial.';
-    } else {
-      genericWarning =
-          'No se pudo determinar la serie fiscal local. Si la autorización '
-          'DGI del cliente comienza en otro número, verifique la serie '
-          'fiscal en Configuración del Negocio antes de continuar.';
+    }
+
+    // Exact mirror of the runner's lag check: with a local series row and a
+    // cloud maximum already issued, a local cursor below cloudHighest + 1
+    // makes the runner REFUSE the sale (it never self-heals — advancing the
+    // cursor would fabricate every number in between, the silent clamp DGI
+    // audits flag). The operator must read this stop before triggering the
+    // phase. An absent or unparseable cursor reads as 0, exactly like the
+    // runner's own parse. The text names the two state numbers but never an
+    // emitted folio: the folio line above stays the notice's only
+    // emitted-number claim, so the two lines can never disagree when a
+    // persisted invoice is ahead of the cloud maximum (D-18).
+    final cloudMax = cloudHighest ?? 0;
+    final hasLocalSeriesRow = snapshot != null && snapshot.prefix != null;
+    final isCursorLaggingCloud =
+        hasLocalSeriesRow && cloudMax > 0 && (configuredCurrent ?? 0) < cloudMax + 1;
+    if (isCursorLaggingCloud) {
+      // An absent cursor row is not the number zero: naming "(0)" would put a
+      // fiscal number in front of the operator that does not exist. Say the
+      // cursor is unconfigured instead, while keeping the same refusal.
+      laggingWarning = configuredCurrent == null
+          ? 'Esta terminal no tiene un consecutivo local configurado, y la '
+              'nube ya emitió hasta el número $cloudMax. La activación se '
+              'negará a vender hasta que la secuencia fiscal se reconcilie; '
+              'este estado no se corrige solo. Detenga la venta y llame a '
+              'soporte antes de continuar.'
+          : 'El consecutivo local de esta terminal ($configuredCurrent) '
+              'está por detrás del último número ya emitido en la nube '
+              '($cloudMax). La activación se negará a vender hasta que la '
+              'secuencia fiscal se reconcilie; este estado no se corrige '
+              'solo. Detenga la venta y llame a soporte antes de continuar.';
+    } else if (!showFolio) {
+      if (snapshot != null && snapshot.prefix == null) {
+        // Bootstrap case: the activation provisions the series when the
+        // prefix row is absent. With cloud history it continues from the
+        // cloud's highest issued sequence; a fresh tenant starts at 1.
+        if (cloudMax > 0) {
+          bootstrapWarning =
+              'La serie fiscal no está configurada. La activación '
+              'aprovisionará la serie continuando desde el máximo ya '
+              'emitido en la nube ($cloudMax), y esta venta emitirá el '
+              'número ${cloudMax + 1}. Si la autorización DGI del cliente '
+              'comienza en otro número, configure primero la serie fiscal '
+              'en Configuración del Negocio; de lo contrario, esta venta '
+              'no usará el número inicial autorizado del cliente.';
+        } else {
+          bootstrapWarning =
+              'La serie fiscal no está configurada. La activación '
+              'aprovisionará una serie inicial y esta venta emitirá el '
+              'número 1. Si la autorización DGI del cliente comienza en '
+              'otro número, configure primero la serie fiscal en '
+              'Configuración del Negocio; de lo contrario, la primera '
+              'venta comercial no será el número autorizado inicial.';
+        }
+      } else {
+        genericWarning =
+            'No se pudo determinar la serie fiscal local. Si la autorización '
+            'DGI del cliente comienza en otro número, verifique la serie '
+            'fiscal en Configuración del Negocio antes de continuar.';
+      }
     }
 
     return Container(
@@ -687,6 +738,19 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
                       fontWeight: FontWeight.bold,
                       fontFamily: 'monospace',
                       color: Colors.grey.shade900,
+                    ),
+                  ),
+                ],
+                if (laggingWarning != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    laggingWarning,
+                    key: const Key(
+                        'controlled_sale_fiscal_lagging_warning'),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red.shade800,
                     ),
                   ),
                 ],
