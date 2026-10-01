@@ -4,6 +4,14 @@
 # ==============================================================================
 # Builds optimized Release Candidate APKs with ProGuard/R8, computes SHA-256
 # checksums, verifies size constraints, and produces a structured release manifest.
+#
+# Release signing — division of responsibility: the pre-build gate in this
+# script performs ONE exact, cheap check — that apps/pos_app/android/key.properties
+# exists — so an absent keystore fails fast before the toolchain. The gate does
+# NOT parse key.properties and does NOT judge signing readiness. Gradle's
+# signing guard (apps/pos_app/android/app/build.gradle.kts) parses key.properties
+# authoritatively and fails closed with the same actionable message when the
+# storeFile is missing, blank, or a directory.
 # ==============================================================================
 
 set -euo pipefail
@@ -24,6 +32,20 @@ API_URL=""
 TEST_CONCURRENCY=""
 PILOT_MODE=false
 PLAN_ONLY=false
+ALLOW_DEBUG_SIGNING=false
+
+# Release signing gate input. The gate checks ONLY that this file exists; it
+# never reads or parses it. Gradle (build.gradle.kts) is the authoritative
+# reader and fails closed when the storeFile is missing, blank, or a directory.
+KEYSTORE_PROPERTIES_FILE="${POS_APP_DIR}/android/key.properties"
+RELEASE_SIGNING_MODE="no key.properties was found; a release build would fail closed"
+resolve_release_signing_mode() {
+    if [ -f "${KEYSTORE_PROPERTIES_FILE}" ]; then
+        RELEASE_SIGNING_MODE="key.properties is present; release readiness is decided by Gradle's signing guard"
+    elif [ "${ALLOW_DEBUG_SIGNING}" = true ]; then
+        RELEASE_SIGNING_MODE="explicit debug-signing opt-in (--allow-debug-signing): the artifact will be debug-signed"
+    fi
+}
 
 # Validate a --device-id candidate: trimmed, non-empty, no whitespace, max 64 chars.
 validate_device_id() {
@@ -140,6 +162,10 @@ while [[ $# -gt 0 ]]; do
             PILOT_MODE=true
             shift
             ;;
+        --allow-debug-signing)
+            ALLOW_DEBUG_SIGNING=true
+            shift
+            ;;
         --plan)
             PLAN_ONLY=true
             shift
@@ -157,6 +183,11 @@ while [[ $# -gt 0 ]]; do
             echo "                    no whitespace, non-empty host). REQUIRED for --pilot;"
             echo "                    fleet builds omit it and provision the terminal at runtime"
             echo "  --pilot           Pilot/single-terminal build; REQUIRES --device-id and --api-url"
+            echo "  --allow-debug-signing"
+            echo "                    Allow a release build without a release keystore to fall"
+            echo "                    back to the debug keystore (threaded to Gradle as the"
+            echo "                    allowDebugSigning project property). The artifact will be"
+            echo "                    DEBUG-SIGNED and must NOT be shipped as a release."
             echo "  --plan            Print resolved configuration and the exact flutter build apk"
             echo "                    command(s), then exit 0 without building (no Flutter/SDK needed)"
             echo "  --test-concurrency <n>"
@@ -216,6 +247,11 @@ if [ -n "${TEST_CONCURRENCY}" ]; then
     FLUTTER_TEST_CMD="flutter test --concurrency=${TEST_CONCURRENCY}"
 fi
 
+# Release signing mode resolution: reads repository state but MUTATES the
+# global RELEASE_SIGNING_MODE. Do not assume the call is side-effect-free,
+# and do not reorder it against code that depends on that global.
+resolve_release_signing_mode
+
 # Plan mode: print resolved configuration and exact build commands, then stop.
 # Must run before any side effect and must not require Flutter or the Android SDK.
 if [ "${PLAN_ONLY}" = true ]; then
@@ -240,6 +276,10 @@ if [ "${PLAN_ONLY}" = true ]; then
     if [ -z "${TEST_CONCURRENCY}" ]; then
         echo "   (no --test-concurrency given; 'flutter test' will use the Flutter default)"
     fi
+    echo "🔑 Release signing:     ${RELEASE_SIGNING_MODE}"
+    if [ ! -f "${KEYSTORE_PROPERTIES_FILE}" ] && [ "${ALLOW_DEBUG_SIGNING}" = false ]; then
+        echo "   (a release build would fail closed: create the keystore or pass --allow-debug-signing)"
+    fi
     echo "📋 release_manifest.json would record terminal_identity: ${TERMINAL_ID_BINDING}"
     echo "📋 release_manifest.json would record api_url: ${API_URL_BINDING}"
     echo "📋 release_manifest.json would record test_concurrency: ${TEST_CONCURRENCY_BINDING}"
@@ -261,6 +301,28 @@ if [ "${PLAN_ONLY}" = true ]; then
     echo "=============================================================================="
     echo "Plan mode: no dependencies resolved, no tests, no codegen, no build executed."
     exit 0
+fi
+
+# Fail-closed gate: a release build with no key.properties and without the
+# explicit opt-in must fail before ANY build step (including `flutter pub get`)
+# runs. This is the gate's ONLY check: it does not parse key.properties, and
+# readiness for a present file is enforced by Gradle's signing guard, which
+# fails closed with the same actionable message. Plan mode already exited
+# above, so this gate never affects --plan.
+if [ ! -f "${KEYSTORE_PROPERTIES_FILE}" ] && [ "${ALLOW_DEBUG_SIGNING}" = false ]; then
+    echo "ERROR: No release keystore found (${KEYSTORE_PROPERTIES_FILE} is absent or not a regular file)." >&2
+    echo "A release build would silently fall back to the debug keystore, producing an artifact that can never be updated in the field." >&2
+    echo "Two remedies:" >&2
+    echo "  1. Create the release keystore with the provisioning script (scripts/provision_release_keystore.sh)." >&2
+    echo "  2. Pass the explicit debug-signing opt-in (--allow-debug-signing)." >&2
+    exit 2
+fi
+
+# Gradle opt-in threading: exported ONLY for the actual `flutter build apk`
+# invocations below, and only when the flag was explicitly requested.
+GRADLE_SIGNING_ENV=()
+if [ "${ALLOW_DEBUG_SIGNING}" = true ]; then
+    GRADLE_SIGNING_ENV=("ORG_GRADLE_PROJECT_allowDebugSigning=true")
 fi
 
 echo "=============================================================================="
@@ -303,17 +365,25 @@ fi
 # 4. Building APKs
 echo "🏗️  [4/5] Building Release Candidate APK(s)..."
 
+# With --allow-debug-signing the gate cannot know whether Gradle will fall
+# back to the debug keystore (it no longer parses key.properties), so the
+# warning is unconditional and states what is actually known: the artifact
+# MAY be debug-signed, and readiness is Gradle's call.
+if [ "${ALLOW_DEBUG_SIGNING}" = true ]; then
+    echo "⚠️  WARNING: --allow-debug-signing is active. The artifact MAY be DEBUG-SIGNED (if no usable release keystore is found, Gradle falls back to the debug keystore) and must NOT be shipped as a release. Signing readiness is decided by Gradle's signing guard, not by this gate."
+fi
+
 BUILD_OUTPUT_DIR="${POS_APP_DIR}/build/app/outputs/flutter-apk"
 
 if [ "${BUILD_MODE}" = "split" ] || [ "${BUILD_MODE}" = "both" ]; then
     echo "  -> Compiling Split-per-ABI APKs (armeabi-v7a, arm64-v8a, x86_64)..."
-    flutter build apk --release --split-per-abi ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
+    env ${GRADLE_SIGNING_ENV[@]+"${GRADLE_SIGNING_ENV[@]}"} flutter build apk --release --split-per-abi ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
     cp "${BUILD_OUTPUT_DIR}"/app-*-release.apk "${OUT_DIR}/" 2>/dev/null || true
 fi
 
 if [ "${BUILD_MODE}" = "universal" ] || [ "${BUILD_MODE}" = "both" ]; then
     echo "  -> Compiling Universal Release APK..."
-    flutter build apk --release ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
+    env ${GRADLE_SIGNING_ENV[@]+"${GRADLE_SIGNING_ENV[@]}"} flutter build apk --release ${DART_DEFINE_ARGS[@]+"${DART_DEFINE_ARGS[@]}"}
     cp "${BUILD_OUTPUT_DIR}/app-release.apk" "${OUT_DIR}/app-universal-release.apk" 2>/dev/null || true
 fi
 

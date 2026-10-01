@@ -21,6 +21,13 @@
 .codegraph/
 .pi/
 
+# Release signing material must never be committed. Custody, backup and
+# provisioning rules live in docs/operations/release-signing-runbook.md.
+*.jks
+*.keystore
+*.p12
+key.properties
+
 # App specific ignores are handled within apps/
 # Node.js
 # No trailing slash on purpose: `node_modules/` matches only directories, and a
