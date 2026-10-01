@@ -142,7 +142,7 @@ Status: done
 
 ### S1-03 — Let an operator set it
 
-Status: in progress
+Status: done
 
 - [ ] Add a server URL field to the terminal configuration surface, validated with the same
       rule as the service.
@@ -152,6 +152,43 @@ Status: in progress
 - [ ] Widget tests for the field: valid accept, invalid reject, persisted value shown.
 
 ## Evidence log
+
+### S1-03 and the localization follow-up
+
+Commit `6b270c00` — structured rejection reason on the service. Commit
+`7b270c00`..`7b6a5473` — the operator card.
+
+The worker reported one risk honestly: rejection copy mixed Spanish framing
+around the service's English message, producing
+`No se pudo guardar la URL: Invalid API URL: value is empty.` That is a real
+defect on a Spanish-only screen, not a cosmetic preference. Rather than
+translating the service message — which would break the contract mirrored from
+`validate_api_url` in `scripts/build_pos_apk.sh` — the service now carries a
+machine-readable reason (`empty`, `whitespace`, `notAbsolute`) alongside the
+English message, and the view model renders Spanish from the reason. The
+English text stays for logs and for the script mirror.
+
+This follow-up was done with strict TDD observed:
+
+- **RED captured:** `00:01 +6 -1` after changing the widget assertion to require
+  Spanish copy and assert the English string does NOT leak.
+- **GREEN observed:** `00:02 +51: All tests passed!` once the reason codes and
+  Spanish mapping were in place.
+- Six new service tests pin the reason contract, including that the English
+  message is preserved.
+
+A note on the edit itself: one replacement initially corrupted
+`clearServerUrl` by overwriting its `catch` block with a method body. Caught by
+`flutter analyze` and the widget suite before commit, and repaired. Reported
+here because "the parent edited it" is not otherwise visible in the worker's
+handoff.
+
+### Verification observed (final, all four slices)
+
+- `flutter test` over the service, wiring, new widget card, and both pre-existing
+  identity suites — **51/51 passing**.
+- `flutter analyze` — **No issues found**, after every change above.
+- `git status --porcelain` clean; four commits on the branch, tree matches HEAD.
 
 ### Branch and delivery
 
@@ -211,3 +248,10 @@ failures are environmental and predate this change.
   remaining `main()` body is not.
 - No verification on physical Android hardware, consistent with the residual
   recorded for PR #750.
+- **No native review receipt for this branch.** The change is delivered on the
+  same footing as PR #750: tested and documented, but not reviewed by a closed
+  review authority. If a delivery gate requires a receipt, this does not
+  provide one.
+- The widget suite needed `ensureVisible` because the card sits below the fold
+  on a test viewport. No behavioral implication, but it means the card's layout
+  on the real Q80 screen is unverified.
