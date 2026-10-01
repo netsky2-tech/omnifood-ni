@@ -31,6 +31,7 @@ void main() {
     when(mockSaleViewModel.isLoading).thenReturn(false);
     when(mockSaleViewModel.supportsBuzzerPager).thenReturn(false);
     when(mockSaleViewModel.supportsTables).thenReturn(true);
+    when(mockSaleViewModel.errorMessage).thenReturn(null);
     when(mockSaleViewModel.buzzerNumber).thenReturn(null);
     when(mockSaleViewModel.customerName).thenReturn(null);
     when(mockSaleViewModel.tenantConfig).thenReturn(null);
@@ -210,6 +211,57 @@ void main() {
     processing.completeError(StateError('failed'));
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(submitButton).onPressed, isNotNull);
+  });
+
+  testWidgets('shows a failed sale inline inside the dialog and keeps it open', (tester) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    when(mockSaleViewModel.processSale(any, customPayments: anyNamed('customPayments')))
+        .thenThrow(StateError('Prepared product abc-123 cannot be sold without a published active recipe version.'));
+    when(mockSaleViewModel.errorMessage).thenReturn(
+      'No se puede vender «Café Especial»: no tiene receta publicada. Avisá al encargado.',
+    );
+
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'COBRAR'));
+    await tester.pumpAndSettle();
+
+    // The dialog stays open so the operator can read the failure at the
+    // point of action (NHILOS §4.1: never hide a material side effect).
+    expect(find.text('Cobro y Facturación'), findsOneWidget);
+    expect(find.byKey(const Key('checkout_inline_error')), findsOneWidget);
+    expect(find.textContaining('receta publicada'), findsOneWidget);
+    // Retry is possible, but only after the failure is visible.
+    expect(
+      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'COBRAR')).onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('two rapid confirm taps launch only one sale attempt', (tester) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    when(mockSaleViewModel.processSale(any, customPayments: anyNamed('customPayments')))
+        .thenAnswer((_) async => throw StateError('failed'));
+
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pumpAndSettle();
+
+    final submitButton = find.widgetWithText(FilledButton, 'COBRAR');
+    await tester.tap(submitButton);
+    await tester.tap(submitButton, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    verify(mockSaleViewModel.processSale(
+      [PaymentMethod.cash],
+      customPayments: anyNamed('customPayments'),
+    )).called(1);
   });
 
   testWidgets('renders buzzer and customer name inputs when supportsBuzzerPager is true', (tester) async {
