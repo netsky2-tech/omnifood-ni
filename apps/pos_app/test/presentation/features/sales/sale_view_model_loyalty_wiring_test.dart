@@ -39,6 +39,8 @@ import 'package:pos_app/domain/services/sales/loyalty_reward_interaction_service
 import 'package:pos_app/domain/services/sales/loyalty_evaluation_service.dart';
 import 'package:pos_app/domain/models/loyalty/customer_identification.dart';
 import 'package:pos_app/domain/models/loyalty/customer_code.dart';
+import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'sale_view_model_loyalty_wiring_test.mocks.dart';
 import 'dart:async';
@@ -48,6 +50,14 @@ import 'dart:async';
 class FakeLocalConfigDao extends Mock implements LocalConfigDao {
   @override
   Future<String?> getConfigValue(String? key) async => null;
+
+  /// Required by the DAO contract. Before checkout resolved a blank per-user
+  /// tenant from the terminal binding, this call did not exist on the sale
+  /// path; the fake returned Mockito's `null` and `await` blew up. Returning
+  /// a real Future<null> keeps the pre-existing behaviour: no binding means
+  /// the legacy inventory path, exactly as before that change.
+  @override
+  Future<LocalConfigEntity?> getConfigByKey(String key) async => null;
 }
 
 class FakeKitchenOrderDao extends Mock implements KitchenOrderDao {}
