@@ -66,6 +66,12 @@ void main() {
     );
   }
 
+  test('replaceProductOptions is generated as a positional transaction', () {
+    // B4a (go-live plan G4): variant/modifier replacement must run in ONE
+    // transaction and must keep AGENTS.md's positional-argument rule.
+    expectPositionalTransaction('replaceProductOptions');
+  });
+
   test('receiveCandidateEpoch is generated as a positional transaction', () {
     expectPositionalTransaction('receiveCandidateEpoch');
   });
