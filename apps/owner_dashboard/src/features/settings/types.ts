@@ -88,8 +88,8 @@ export const fiscalSetupSchema = z.object({
       message: RUC_ACCEPTED_FORMS_MESSAGE,
     }),
   commercialFxSpread: z
-    .number({ invalid_type_error: "El spread cambiario debe ser un número" })
-    .min(0, "El spread cambiario debe ser mayor o igual a 0"),
+    .number({ invalid_type_error: "El tipo de cambio comercial debe ser un número" })
+    .min(0, "El tipo de cambio comercial debe ser mayor o igual a 0"),
   // BXW-007 U2 (contract rev 2): OPTIONAL-UNTIL-SET. Absence (undefined,
   // null, or the "" sentinel of the "Sin definir" select option) is valid:
   // it means the tenant never configured the value in the cloud, and every

@@ -276,7 +276,7 @@ N/A — Settings does not display dates or timestamps to the user (date inputs a
 |---|---|---|---|---|---|
 | Regime = CUOTA_FIJA | ✅ Most common in Nicaragua | ✅ Safe default | ✅ Description explains | ✅ Can be changed | ✅ |
 | pricesIncludeTax = true | ✅ Common for retail | ✅ Safe | ✅ Switch label explains | ✅ Can be toggled | ✅ |
-| commercialFxSpread = 0.5 | ✅ Reasonable spread | ✅ Safe | ✅ Helper text explains | ✅ Can be changed | ✅ |
+| commercialFxSpread = 36.5 | ✅ Reasonable commercial rate (D-4: this field carries the commercial exchange rate, NOT a spread over BCN) | ✅ Safe | ✅ Helper text explains | ✅ Can be changed | ✅ |
 | prefixSku = template-based | ✅ Auto-suggested per template | ✅ Safe | ✅ Explanation text | ✅ Can be overridden | ✅ |
 | overrideExisting = false | ✅ Conservative default | ✅ Safe (no overwrite) | ✅ Checkbox label explains | ✅ Can be checked | ✅ |
 

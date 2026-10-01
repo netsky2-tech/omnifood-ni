@@ -52,7 +52,7 @@ export function FiscalSetupForm() {
       regime: FiscalRegime.CUOTA_FIJA,
       businessName: "",
       ruc: "",
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
       // BXW-007 U2 (rev 2): "" is the "Sin definir" sentinel — never
       // preselect a default, or any save would affirm a mode explicitly
       // and silently downgrade terminals set locally to another value.
@@ -86,7 +86,7 @@ export function FiscalSetupForm() {
         regime: initialData.regime ?? FiscalRegime.CUOTA_FIJA,
         businessName: initialData.businessName ?? "",
         ruc: initialData.ruc ?? "",
-        commercialFxSpread: initialData.commercialFxSpread ?? 0.5,
+        commercialFxSpread: initialData.commercialFxSpread ?? 36.5,
         // BXW-007 U2 (rev 2): null / missing / invalid member → "" (Sin
         // definir); a real value maps to itself. Never a default.
         operationMode: resolveTenantOperationMode(initialData.operationMode) ?? "",
@@ -274,22 +274,24 @@ export function FiscalSetupForm() {
               </p>
             </div>
 
-            {/* Commercial FX Spread */}
+            {/* Commercial FX rate (D-4: carries the commercial exchange rate used
+                at checkout, NOT a spread over BCN — see odd/tasks/soho-dia1-integral-test.md D-4). */}
             <div className="space-y-2">
-              <Label htmlFor="commercialFxSpread">Spread Cambiario Comercial (C$) *</Label>
+              <Label htmlFor="commercialFxSpread">Tipo de Cambio Comercial (C$) *</Label>
               <div className="relative">
                 <Input
                   id="commercialFxSpread"
                   type="number"
-                  step="0.05"
+                  step="0.0001"
                   min="0"
-                  placeholder="0.50"
+                  placeholder="36.5000"
                   {...register("commercialFxSpread", { valueAsNumber: true })}
                   aria-invalid={Boolean(errors.commercialFxSpread)}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Margen en Córdobas aplicado sobre la tasa oficial de cambio del BCN en cobros en divisas.
+                Tasa de cambio comercial en Córdobas usada en el cobro cuando el POS opera en modo Comercial.
+                El POS permite elegir entre esta tasa y la oficial del BCN en el perfil del negocio.
               </p>
               {errors.commercialFxSpread && (
                 <p className="text-xs text-destructive">{errors.commercialFxSpread.message}</p>
