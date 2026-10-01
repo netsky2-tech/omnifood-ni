@@ -159,10 +159,15 @@ void main() {
     );
   }
 
-  Widget buildWidget(ActivationSessionViewModel viewModel) {
+  Widget buildWidget(
+    ActivationSessionViewModel viewModel, {
+    ActivationFiscalSeriesLoader? loadFiscalSeries,
+  }) {
     return ChangeNotifierProvider<ActivationSessionViewModel>.value(
       value: viewModel,
-      child: const MaterialApp(home: ActivationTerminalView()),
+      child: MaterialApp(
+        home: ActivationTerminalView(loadFiscalSeries: loadFiscalSeries),
+      ),
     );
   }
 
@@ -171,13 +176,16 @@ void main() {
   Future<void> pumpThroughPhase1(
     WidgetTester tester, {
     String pin = '1234',
+    ActivationFiscalSeriesLoader? loadFiscalSeries,
   }) async {
     stubPreparationSuccess();
     stubPreOfflineChecks(
       isReadyForOffline: true,
       checks: {'TERMINAL_LINKED': _checkEntity('TERMINAL_LINKED', 'PASS')},
     );
-    await tester.pumpWidget(buildWidget(viewModel));
+    await tester.pumpWidget(
+      buildWidget(viewModel, loadFiscalSeries: loadFiscalSeries),
+    );
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('activation_pin_field')), pin);
@@ -578,6 +586,305 @@ void main() {
       expect(find.text('TERMINAL_PRIMING_PAYLOAD_MALFORMED'), findsNothing);
       expect(find.byKey(const Key('activation_terminal_id')), findsNothing);
       expect(find.byKey(const Key('activation_attempt_status')), findsNothing);
+    });
+  });
+
+  group('phase 2 fiscal consequence notice', () {
+    const irreversibleStatement =
+        'Esta fase emite una factura fiscal real que consume un número '
+        'consecutivo DGI de forma permanente: no puede deshacerse ni '
+        'reutilizarse.';
+
+    testWidgets(
+        'states the irreversible fiscal consequence and the concrete folio '
+        'when the series is configured, keeping the phase executable',
+        (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '001-001-01',
+          currentNumber: '3',
+        ),
+      );
+
+      expect(
+          find.byKey(const Key('controlled_sale_fiscal_notice')),
+          findsOneWidget);
+      expect(find.text(irreversibleStatement), findsOneWidget);
+      expect(find.byKey(const Key('controlled_sale_folio')), findsOneWidget);
+      // Prefix + zero-padded 8-digit consecutivo: the folio exactly as the
+      // DGI numbering service will emit it.
+      expect(
+        find.text('Folio que se emitirá: 001-001-0100000003'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('controlled_sale_fiscal_unconfigured_warning')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const Key('controlled_sale_fiscal_generic_warning')),
+        findsNothing,
+      );
+
+      // Informational only: the verification sale stays executable.
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'renders the folio as the plain consecutivo when the prefix is '
+        'legitimately blank', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '',
+          currentNumber: '7',
+        ),
+      );
+
+      expect(find.byKey(const Key('controlled_sale_folio')), findsOneWidget);
+      expect(
+        find.text('Folio que se emitirá: 7'),
+        findsOneWidget,
+      );
+      // No stub prefix: the D-21 pure numeric consecutive renders alone.
+      expect(find.textContaining('00000007'), findsNothing);
+
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'shows the bootstrap warning when no series is configured at all, '
+        'naming the authorized-start risk and keeping the phase executable',
+        (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(),
+      );
+
+      expect(find.text(irreversibleStatement), findsOneWidget);
+      expect(
+        find.byKey(const Key('controlled_sale_fiscal_unconfigured_warning')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'La serie fiscal no está configurada. La activación aprovisionará '
+          'una serie inicial y esta venta emitirá el número 1. Si la '
+          'autorización DGI del cliente comienza en otro número, configure '
+          'primero la serie fiscal en Configuración del Negocio; de lo '
+          'contrario, la primera venta comercial no será el número '
+          'autorizado inicial.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('controlled_sale_folio')), findsNothing);
+      expect(
+        find.byKey(const Key('controlled_sale_fiscal_generic_warning')),
+        findsNothing,
+      );
+
+      // The warning must never block the activation phase.
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'degrades to the generic warning when the config read throws, and '
+        'never breaks the screen or blocks the phase', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => throw Exception('config read failed'),
+      );
+
+      expect(
+          find.byKey(const Key('controlled_sale_fiscal_notice')),
+          findsOneWidget);
+      expect(find.text(irreversibleStatement), findsOneWidget);
+      expect(
+        find.byKey(const Key('controlled_sale_fiscal_generic_warning')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'No se pudo determinar la serie fiscal local. Si la autorización '
+          'DGI del cliente comienza en otro número, verifique la serie '
+          'fiscal en Configuración del Negocio antes de continuar.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('controlled_sale_folio')), findsNothing);
+      expect(
+        find.byKey(const Key('controlled_sale_fiscal_unconfigured_warning')),
+        findsNothing,
+      );
+
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'shows lastPersisted + 1 when the persisted invoice is AHEAD of the '
+        'configured cursor (D-18 lag), not the lagging cursor', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '001-001-01',
+          currentNumber: '5',
+          lastInvoiceNumber: '001-001-01-00000007',
+        ),
+      );
+
+      expect(find.byKey(const Key('controlled_sale_folio')), findsOneWidget);
+      // The cursor says 5 but the last persisted invoice is 7: the numbering
+      // service will emit 8. The notice must never show the stale cursor.
+      expect(
+        find.text('Folio que se emitirá: 001-001-0100000008'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('00000005'), findsNothing);
+
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'does not lower the shown folio when the persisted invoice is BEHIND '
+        'the configured cursor (the cursor wins)', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '001-001-01',
+          currentNumber: '10',
+          lastInvoiceNumber: '001-001-01-00000007',
+        ),
+      );
+
+      expect(find.byKey(const Key('controlled_sale_folio')), findsOneWidget);
+      expect(
+        find.text('Folio que se emitirá: 001-001-0100000010'),
+        findsOneWidget,
+      );
+
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'advances past the persisted invoice when its sequence EQUALS the '
+        'configured cursor, exactly like the numbering service', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '001-001-01',
+          currentNumber: '7',
+          lastInvoiceNumber: '001-001-01-00000007',
+        ),
+      );
+
+      expect(find.byKey(const Key('controlled_sale_folio')), findsOneWidget);
+      // `_resolveNextSequence` uses >= : an equal sequence is already
+      // consumed, so the next folio is lastSequence + 1.
+      expect(
+        find.text('Folio que se emitirá: 001-001-0100000008'),
+        findsOneWidget,
+      );
+
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'falls back to the configured cursor when there is no persisted '
+        'invoice', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '001-001-01',
+          currentNumber: '3',
+          lastInvoiceNumber: null,
+        ),
+      );
+
+      expect(find.byKey(const Key('controlled_sale_folio')), findsOneWidget);
+      expect(
+        find.text('Folio que se emitirá: 001-001-0100000003'),
+        findsOneWidget,
+      );
+
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'degrades to the configured cursor when the persisted invoice number '
+        'has no parseable trailing sequence, never crashing or showing a '
+        'bogus folio', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '001-001-01',
+          currentNumber: '3',
+          lastInvoiceNumber: 'FACTURA-SIN-CONSECUTIVO',
+        ),
+      );
+
+      expect(find.byKey(const Key('controlled_sale_folio')), findsOneWidget);
+      expect(
+        find.text('Folio que se emitirá: 001-001-0100000003'),
+        findsOneWidget,
+      );
+
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
+    });
+
+    testWidgets(
+        'keeps the plain-consecutivo format in the lag case when the prefix '
+        'is legitimately blank', (tester) async {
+      await pumpThroughPhase1(
+        tester,
+        loadFiscalSeries: () async => const ActivationFiscalSeriesSnapshot(
+          prefix: '',
+          currentNumber: '5',
+          lastInvoiceNumber: '7',
+        ),
+      );
+
+      expect(find.byKey(const Key('controlled_sale_folio')), findsOneWidget);
+      // Blank prefix (D-21): the folio is the plain decimal consecutive,
+      // with no padding and no prefix, even when the persisted invoice
+      // forces the sequence forward.
+      expect(
+        find.text('Folio que se emitirá: 8'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('00000008'), findsNothing);
+
+      final controlledSaleButton = tester.widget<ElevatedButton>(
+        find.byKey(const Key('run_controlled_sale_button')),
+      );
+      expect(controlledSaleButton.onPressed, isNotNull);
     });
   });
 }

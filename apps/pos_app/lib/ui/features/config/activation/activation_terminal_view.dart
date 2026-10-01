@@ -2,8 +2,45 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/localization/label_map.dart';
+import '../../../../data/database/app_database.dart';
 import '../../../../data/services/sync_service.dart';
 import 'activation_session_view_model.dart';
+
+/// Read-only snapshot of the tenant's local fiscal series configuration,
+/// as persisted in `local_configs`. Raw values exactly as stored: null means
+/// the config row is absent, a blank prefix is the legitimate D-21 pure
+/// numeric consecutive. The view derives the operator-facing consequence
+/// from this snapshot; it never writes configuration.
+class ActivationFiscalSeriesSnapshot {
+  /// Raw `dgi_prefix` value (null when the row is absent).
+  final String? prefix;
+
+  /// Raw `dgi_current_number` value (null when the row is absent).
+  final String? currentNumber;
+
+  /// Raw `dgi_cloud_highest_sequence` value (null when the row is absent).
+  final String? cloudHighestSequence;
+
+  /// Number of the last locally persisted invoice, exactly as stored (null
+  /// when no invoice exists). Mirrors what the DGI numbering service reads
+  /// through `_resolveNextSequence` (D-18): the persisted folio is
+  /// authoritative over a lagging config cursor, so the notice cannot show
+  /// the folio the service will actually emit without it.
+  final String? lastInvoiceNumber;
+
+  const ActivationFiscalSeriesSnapshot({
+    this.prefix,
+    this.currentNumber,
+    this.cloudHighestSequence,
+    this.lastInvoiceNumber,
+  });
+}
+
+/// Best-effort, read-only loader for the fiscal series snapshot. Failures
+/// are reported to the caller as thrown errors; the screen degrades to a
+/// generic warning and never blocks the phase.
+typedef ActivationFiscalSeriesLoader
+    = Future<ActivationFiscalSeriesSnapshot> Function();
 
 /// Guided terminal-activation screen: an operator completes activation from
 /// the terminal itself, phase by phase, driven entirely by the injected
@@ -11,7 +48,12 @@ import 'activation_session_view_model.dart';
 /// model exposes — it never recomputes checks, never fabricates statuses and
 /// never calls the session service directly.
 class ActivationTerminalView extends StatefulWidget {
-  const ActivationTerminalView({super.key});
+  /// Injectable read-only fiscal series loader (tests inject here; the
+  /// default reads the local `local_configs` table). Informational only:
+  /// a failing load degrades to a generic warning and never blocks a phase.
+  final ActivationFiscalSeriesLoader? loadFiscalSeries;
+
+  const ActivationTerminalView({super.key, this.loadFiscalSeries});
 
   @override
   State<ActivationTerminalView> createState() =>
@@ -25,6 +67,12 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
   /// Phase ordering, outcomes and refusals live in the view model and in the
   /// session; this flag never gates a phase action.
   bool _isPreparing = true;
+
+  /// Fiscal series snapshot for the phase 2 consequence notice. Null with
+  /// [_fiscalSeriesLoadFailed] false means still loading (render nothing);
+  /// null with the flag true means the read failed (generic warning).
+  ActivationFiscalSeriesSnapshot? _fiscalSeries;
+  bool _fiscalSeriesLoadFailed = false;
 
   @override
   void initState() {
@@ -41,9 +89,52 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
     final viewModel = context.read<ActivationSessionViewModel>();
     setState(() => _isPreparing = true);
     await viewModel.prepare();
+    await _loadFiscalSeries();
     if (mounted) {
       setState(() => _isPreparing = false);
     }
+  }
+
+  /// Best-effort read of the local fiscal series. Any failure degrades to
+  /// the generic warning; it never crashes the screen and never gates a
+  /// phase action.
+  Future<void> _loadFiscalSeries() async {
+    try {
+      final loader =
+          widget.loadFiscalSeries ?? _loadFiscalSeriesFromLocalConfig;
+      final snapshot = await loader();
+      if (!mounted) return;
+      setState(() {
+        _fiscalSeries = snapshot;
+        _fiscalSeriesLoadFailed = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _fiscalSeries = null;
+        _fiscalSeriesLoadFailed = true;
+      });
+    }
+  }
+
+  Future<ActivationFiscalSeriesSnapshot>
+      _loadFiscalSeriesFromLocalConfig() async {
+    final dao = context.read<AppDatabase>().localConfigDao;
+    final prefix = await dao.getConfigByKey('dgi_prefix');
+    final current = await dao.getConfigByKey('dgi_current_number');
+    final cloudHighest =
+        await dao.getConfigByKey('dgi_cloud_highest_sequence');
+    // D-18: the last persisted invoice is authoritative over a lagging
+    // `dgi_current_number` cursor (crash between print and cursor save),
+    // so the notice must carry it to derive the real next folio.
+    final lastInvoice =
+        await context.read<AppDatabase>().invoiceDao.getLastInvoice();
+    return ActivationFiscalSeriesSnapshot(
+      prefix: prefix?.value,
+      currentNumber: current?.value,
+      cloudHighestSequence: cloudHighest?.value,
+      lastInvoiceNumber: lastInvoice?.number,
+    );
   }
 
   @override
@@ -376,6 +467,13 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
   /// Phase 2: the controlled offline verification sale. This sale is
   /// recorded locally and does not need the connection; the reconnect phase
   /// follows it. No connectivity state is claimed or verified here.
+  ///
+  /// The sale also issues a REAL fiscal document that permanently consumes
+  /// one DGI consecutive number. The fiscal consequence notice below states
+  /// that irreversibility concretely before the operator triggers the phase:
+  /// which folio will be emitted, or the bootstrap warning when no series is
+  /// configured yet. The notice is informational only — it never blocks or
+  /// disables the phase, which must stay executable fully offline.
   Widget _buildControlledSaleCard(
     BuildContext context,
     ActivationSessionViewModel viewModel,
@@ -402,6 +500,7 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
+            _buildFiscalConsequenceNotice(context),
             if (result != null) ...[
               Text(
                 'Ticket de verificación',
@@ -466,6 +565,159 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// Informational, never-blocking notice of the phase 2 fiscal
+  /// consequence. Series configured → the concrete folio exactly as the DGI
+  /// numbering service will emit it (prefix + zero-padded 8-digit number, or
+  /// the plain consecutivo when the prefix is blank/absent, D-21). No series
+  /// yet → the bootstrap warning naming the authorized-start risk. Unreadable
+  /// configuration → a generic warning. In every state the phase remains
+  /// executable, including fully offline.
+  Widget _buildFiscalConsequenceNotice(BuildContext context) {
+    final snapshot = _fiscalSeries;
+    if (snapshot == null && !_fiscalSeriesLoadFailed) {
+      // Configuration still loading: render nothing rather than inventing
+      // a state the data has not confirmed.
+      return const SizedBox.shrink();
+    }
+
+    const irreversibleStatement =
+        'Esta fase emite una factura fiscal real que consume un número '
+        'consecutivo DGI de forma permanente: no puede deshacerse ni '
+        'reutilizarse.';
+
+    final prefix = snapshot?.prefix?.trim() ?? '';
+    final configuredCurrent = snapshot == null
+        ? null
+        : int.tryParse(snapshot.currentNumber?.trim() ?? '');
+
+    // Same precedence the DGI numbering service applies in
+    // `_resolveNextSequence` (D-18): the last persisted invoice is
+    // authoritative — when its extracted sequence is at or past the
+    // configured cursor, the next folio is `lastSequence + 1` (a crash
+    // between printing and the cursor save leaves the cursor lagging, and
+    // a number is never reused); otherwise the cursor wins. A missing
+    // invoice, or one whose number has no parseable trailing sequence,
+    // degrades to the cursor: the service's own parser yields 0 for it,
+    // which can never reach a valid cursor (>= 1).
+    // The sequence parser mirrors the service's private
+    // `_extractSequenceNumber` exactly: the trailing decimal run of the
+    // trimmed number, parsed as int, 0 when absent.
+    int? currentNumber;
+    if (configuredCurrent != null && configuredCurrent >= 1) {
+      currentNumber = configuredCurrent;
+      final lastInvoiceNumber = snapshot?.lastInvoiceNumber?.trim() ?? '';
+      if (lastInvoiceNumber.isNotEmpty) {
+        final match = RegExp(r'(\d+)$').firstMatch(lastInvoiceNumber);
+        final lastSequence =
+            match == null ? 0 : int.tryParse(match.group(1) ?? '') ?? 0;
+        if (lastSequence >= configuredCurrent) {
+          currentNumber = lastSequence + 1;
+        }
+      }
+    }
+
+    String? folioText;
+    String? bootstrapWarning;
+    String? genericWarning;
+    if (currentNumber != null && currentNumber >= 1) {
+      // Same folio format the numbering service emits: the prefix is
+      // optional (D-21) and the consecutivo is zero-padded only when a
+      // prefix is present.
+      final folio = prefix.isEmpty
+          ? '$currentNumber'
+          : '$prefix${currentNumber.toString().padLeft(8, '0')}';
+      folioText = 'Folio que se emitirá: $folio';
+    } else if (snapshot != null && snapshot.prefix == null) {
+      // Bootstrap case: the activation provisions the series when the
+      // prefix row is absent, starting after the cloud's highest issued
+      // sequence (or at 1 for a fresh tenant).
+      final cloudHighest =
+          int.tryParse(snapshot.cloudHighestSequence?.trim() ?? '') ?? 0;
+      final bootstrapStart = cloudHighest > 0 ? cloudHighest + 1 : 1;
+      bootstrapWarning =
+          'La serie fiscal no está configurada. La activación aprovisionará '
+          'una serie inicial y esta venta emitirá el número $bootstrapStart. '
+          'Si la autorización DGI del cliente comienza en otro número, '
+          'configure primero la serie fiscal en Configuración del Negocio; '
+          'de lo contrario, la primera venta comercial no será el número '
+          'autorizado inicial.';
+    } else {
+      genericWarning =
+          'No se pudo determinar la serie fiscal local. Si la autorización '
+          'DGI del cliente comienza en otro número, verifique la serie '
+          'fiscal en Configuración del Negocio antes de continuar.';
+    }
+
+    return Container(
+      key: const Key('controlled_sale_fiscal_notice'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.withOpacity(0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.amber),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  irreversibleStatement,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                if (folioText != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    folioText,
+                    key: const Key('controlled_sale_folio'),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
+                      color: Colors.grey.shade900,
+                    ),
+                  ),
+                ],
+                if (bootstrapWarning != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    bootstrapWarning,
+                    key: const Key(
+                        'controlled_sale_fiscal_unconfigured_warning'),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                ],
+                if (genericWarning != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    genericWarning,
+                    key: const Key(
+                        'controlled_sale_fiscal_generic_warning'),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
