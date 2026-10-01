@@ -48,7 +48,9 @@ adb-reachable on the shop LAN, `adb install -r <apk>` updates it in place with d
 
 ### B. Artifact hosting — object storage + signed URLs
 32 MB per terminal, needs **resumable** download. Backend issues the signed URL; it never proxies the APK.
-Blocked on credentials (F11).
+Bucket: Cloudflare R2 `nhilos-pos` (Account `5ee2be45b9936ad89ebe203c3b050ada`).
+S3 API Endpoint: `https://5ee2be45b9936ad89ebe203c3b050ada.r2.cloudflarestorage.com`.
+Awaiting R2 API Token credentials from founder (Access Key ID, Secret Access Key).
 
 ### C. Terminal update service (Flutter)
 check on startup + periodic → resolve against installed version → download to app-private external dir →
@@ -121,9 +123,13 @@ Rules the Dart side enforces, each traceable to a measured fact:
 
 ## Open questions
 
-- **Q1 — pubspec version vs Flutter's ABI offset.** pubspec says `1.0.0+1` yet arm64 installs report
-  `2001`. We must set the *base* versionCode deliberately and document that the per-ABI offset is
-  Flutter's, not ours, or every release-numbering decision downstream is built on sand.
+- **Q1 — pubspec version vs Flutter's ABI offset.** **DECIDED (founder 2026-10-01):** Standard Flutter pubspec syntax (`version: x.y.z+N`).
+  Flutter's Gradle plugin derives `versionCode` per ABI automatically:
+  - universal: `N`
+  - armeabi-v7a: `1000 + N` (e.g. 1001 for N=1, 1002 for N=2)
+  - arm64-v8a: `2000 + N` (e.g. 2001 for N=1, 2002 for N=2)
+  - x86_64: `4000 + N` (e.g. 4001 for N=1, 4002 for N=2)
+  Because our `upgrade_resolver` and release manifest are strictly keyed by `abi` (Rule R1), monotonicity holds per ABI: bumping pubspec `+1` -> `+2` advances arm64 from 2001 -> 2002 monotonically, preventing downgrade rejections.
 - **Q2 — is `app_releases` tenant-scoped?** Belief: no (one build serves all tenants), so it needs an
   explicit non-RLS statement in the migration + coverage allowlist. Must be confirmed, not assumed.
 - **Q3 — channel model for the pilot.** `pilot` vs `production` as the first two channels; who may publish.
