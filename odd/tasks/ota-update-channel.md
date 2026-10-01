@@ -105,6 +105,12 @@ Rules the Dart side enforces, each traceable to a measured fact:
   resolver, R1–R8, download + SHA-256 verify, `ReleaseInstaller` port + `SystemInstallerAdapter`,
   `REQUEST_INSTALL_PACKAGES` + FileProvider in the manifest. This is where a mistake bricks terminals,
   so it gets the most tests and needs no backend or bucket to prove.
+  - ✅ ABI resolution — `lib/core/platform/target_abi.dart` (F9, no new dependency)
+  - ✅ Manifest contract + strict parser — `lib/domain/models/update/release_manifest.dart` (R4, R5, R6)
+  - ✅ Upgrade resolver — `lib/domain/services/update/upgrade_resolver.dart` (R1, R2, R3)
+  - ⬜ Download + SHA-256 verification service — needs `path_provider` (F10)
+  - ⬜ `ReleaseInstaller` port + `SystemInstallerAdapter` — needs FileProvider + `REQUEST_INSTALL_PACKAGES` (F1, F2, F5)
+  - ⬜ Fiscal gate port (R7)
 - **Batch 2 — backend `releases` module.** Entity, migration, controller, service, tests, RLS decision.
 - **Batch 3 — signed URL issuance.** **Blocked on founder** for R2/S3 credentials.
 - **Batch 4 — operator UI.** "Update available" surface, notes, install-now / later, and the fiscal-gate
@@ -130,4 +136,25 @@ Rules the Dart side enforces, each traceable to a measured fact:
 
 | task | outcome | commit |
 |---|---|---|
-| (none yet) | | |
+| ABI resolution + release manifest contract | 28 tests green, analyzer clean. `Platform.version` resolves `android_arm64` with no new dependency; parser is hand-written (Freezed's generated `fromJson` is permissive and this is a safety boundary) and rejects unknown schema, non-lowercase-hex sha256, relative/`file://`/`javascript:` URLs, inverted version ranges | `c4afbde4` |
+| Upgrade resolver (R1–R3) | 17 tests green, analyzer clean. Ordering pinned by tests: wiring bug ≠ ABI mismatch, and direction is checked before the floor. `mandatory` never installs by itself | `d04729a3` |
+
+---
+
+## What is NOT built yet, stated plainly
+
+Batch 1 is roughly half done and **the remaining half is the part that touches Android**:
+
+- `path_provider` must be added to `pubspec.yaml` (F10) to have a writable,
+  FileProvider-exposable drop location. That is a dependency change with a
+  `pubspec.lock` diff, so it should be its own commit.
+- The install handoff needs native work: a `<provider>` entry in
+  `AndroidManifest.xml` (currently **zero** providers), a `file_paths.xml`,
+  `REQUEST_INSTALL_PACKAGES`, and a platform channel or plugin to fire the
+  `content://` intent. **F1 proved `file://` does not resolve**, so there is no
+  pure-Dart shortcut here.
+- `REQUEST_INSTALL_PACKAGES` is a runtime *Settings* grant (F5), not a dialog
+  the app can request. Provisioning a terminal must include one human step.
+- Nothing has been verified on the device for OTA yet. Everything measured on
+  hardware so far is in the facts table above; the resolver and parser are
+  host-tested only.
