@@ -56,6 +56,11 @@ export interface RollbackStatus {
 export interface ObservabilityDashboard {
   tenantId: string;
   currentRevision: number;
+  /**
+   * Free-form label taken from the tenant's latest topology revision — see
+   * `CreateTenantTopologyRevisionDto`. It is not the fiscal business-profile
+   * enum, and it is not validated.
+   */
   operationMode: string;
   totalFulfillments: number;
   channelsBreakdown: Record<string, number>;
@@ -257,6 +262,11 @@ export class FulfillmentRolloutService {
       return {
         tenantId,
         currentRevision: latestRev?.revision ?? 0,
+        // Free-form label from the topology document, never the fiscal
+        // business-profile enum: the two vocabularies are separate channels
+        // that are never compared or converted. A tenant without a topology
+        // revision is reported as the explicit compatibility state below,
+        // which is deliberate — the operating mode is never guessed.
         operationMode:
           (latestRev?.topology?.operationMode as string) ??
           (latestRev?.topology?.operation_mode as string) ??

@@ -53,13 +53,42 @@ If a catastrophic hardware failure occurs in a food park (e.g. kitchen thermal p
 Aggregates live fulfillment metrics:
 - `tenantId`: Tenant identity.
 - `currentRevision`: Active topology revision number.
-- `operationMode`: `FOOD_PARK`, `RESTAURANT`, or `HYBRID`.
+- `operationMode`: free-form label read from the tenant's latest topology revision
+  (`FOOD_PARK`, `RESTAURANT`, `HYBRID`, …). It is **not** validated and **not** a closed
+  list: whatever the owner authored in the topology is what appears here. A tenant
+  with no topology revision reports the explicit compatibility state
+  `LEGACY_COMPATIBILITY`, never an inferred operating mode. See
+  [Vocabulary boundary](#vocabulary-boundary-operationmode) below.
 - `totalFulfillments`: Total historical fulfillment transactions.
 - `channelsBreakdown`:
   - `PRINT_ONLY`: Thermal tickets and customer receipts.
   - `KDS_ONLY`: Kitchen display screens without paper tickets.
   - `KDS_AND_PRINT`: Synchronized KDS delivery and physical ticket printing.
 - `enforcementStatus`: `ACTIVE` or `ROLLED_BACK`.
+
+### Vocabulary boundary: `operationMode`
+
+Two different fields in this repository are called `operationMode` and they do **not**
+share a vocabulary. Their channels are disjoint — nothing compares, converts, or derives
+one from the other — so a value that is valid in one channel is not a promise about the
+other.
+
+| | Fulfillment topology (this runbook's field) | Fiscal business profile |
+|---|---|---|
+| Where it lives | `tenant_topology_revisions.topology` (jsonb) | fiscal config parameters, surfaced via the fiscal setup response |
+| Validation | **none** — the DTO checks only that the blob is a non-empty object | strict enum: `FOODPARK_QSR \| RESTAURANT \| HYBRID` |
+| `FOOD_PARK` | an ordinary free-form label | **rejected** as an unknown value |
+| Absent | `LEGACY_COMPATIBILITY` (explicit compatibility state) | `null` = never asserted by the office |
+| Authored by | the owner, explicitly, per topology revision | the owner, from the dashboard, or left unset |
+
+**Never infer one from the other.** A tenant that has no topology revision is in an
+explicit compatibility state; guessing its operating mode from the fiscal channel (or the
+reverse) reintroduces exactly the inferred defaults that were deliberately rejected during
+the configurable-fulfillment-topology work. Device count, operation mode, channel mode and
+roles are all owner-authored decisions.
+
+The fiscal contract's own test suite enforces the boundary: it asserts that `FOOD_PARK` is
+rejected as an unknown `operationMode` value (`apps/admin_backend/src/modules/onboarding/dto/fiscal-setup.dto.spec.ts`).
 
 ---
 
