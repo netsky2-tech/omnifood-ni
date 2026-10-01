@@ -89,6 +89,8 @@ import { DeviceSyncCredential } from '../../modules/identity/entities/device-syn
 import { DeviceSyncCredentialEvent } from '../../modules/identity/entities/device-sync-credential-event.entity';
 import { ForensicAlert } from '../../modules/inventory/entities/forensic-alert.entity';
 import { DeviceSyncModule } from '../../modules/identity/device-sync.module';
+import { AppRelease } from '../../modules/releases/entities/app-release.entity';
+import { ReleasesModule } from '../../modules/releases/releases.module';
 export const getRequiredConfigValue = (
   configService: ConfigService,
   key: string,
@@ -190,6 +192,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     DeviceSyncCredential,
     DeviceSyncCredentialEvent,
     ForensicAlert,
+    AppRelease,
   ],
   synchronize: false,
 });
@@ -219,6 +222,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     AuditModule,
     FulfillmentModule,
     DeviceSyncModule,
+    ReleasesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

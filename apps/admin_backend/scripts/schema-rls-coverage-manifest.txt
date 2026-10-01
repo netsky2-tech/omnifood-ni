@@ -151,6 +151,8 @@ shrinkage_details|parent-owned
 migrations|global
 # The tenant root: it IS the isolation boundary, so it cannot carry tenant_id.
 tenants|global
+# Platform software distribution: uniform APK binaries published per channel and ABI.
+app_releases|global
 # Platform template catalog shared by every tenant; the template_* family
 # hangs off it and carries no tenant data.
 industry_templates|global
