@@ -41,6 +41,9 @@
 #   - Fails closed (non-zero exit, clear message) when keytool is unavailable,
 #     when the target directory cannot be created, or when a required input is
 #     missing.
+#   - At startup, BEFORE any write, sweeps stale `.provision-stage.*` debris
+#     left in the keystore directory by a previous SIGKILLed run (the EXIT
+#     trap cannot catch SIGKILL). See the sweep block below for its guards.
 #
 # Exit codes: 0 success, 1 environment/input failure, 2 refusal (overwrite
 # guard, in-repository path).
@@ -180,6 +183,49 @@ esac
 if ! mkdir -p -- "${KS_DIR}" 2>/dev/null; then
   die 1 "cannot create the keystore directory '${KS_DIR}'. Check permissions and re-run."
 fi
+
+# --- startup sweep: residual staging files from an unclean previous run ------
+# The --force rotation stages the replacement keystore in a sibling file named
+# `.provision-stage.<six random characters>` (mktemp XXXXXX). The EXIT trap
+# removes it, but SIGKILL cannot be trapped, so an unclean kill inside the
+# swap window leaves that file behind: a full keystore copy, mode 600, holding
+# the same secret as the keystore beside it. It exposes nothing new — it is
+# stale debris — and this sweep removes it at startup, BEFORE any write.
+#
+# Guards, in order of importance:
+#   - Scope: ONLY the resolved keystore directory (KS_DIR), with -maxdepth 1.
+#     Never the repository, never a parent directory, never a glob that could
+#     cross directories.
+#   - Pattern: `.provision-stage.` followed by EXACTLY six characters — the
+#     exact mktemp staging name. Too tight to match a real keystore (a real
+#     one is a named *.jks/*.keystore/*.p12 file and never carries this
+#     prefix) and, with -maxdepth 1, unable to reach any other directory.
+#   - Regular files only (`-type f`): find does not follow symlinks by
+#     default, so a symlinked staging name does not match at all and is left
+#     alone — nothing in this sweep can dereference or delete through a link.
+#   - Age guard (concurrency): a live provisioning run creates its staging
+#     file and finishes the swap within seconds (keytool generation takes a
+#     few seconds at most), so a FRESH staging file may belong to a
+#     concurrent run and deleting it could destroy an in-flight rotation —
+#     worse than the debris being fixed here. Only files older than
+#     STALE_STAGE_MINUTES are treated as abandoned; anything younger is left
+#     strictly alone. If in doubt, the file is left in place and reported.
+STALE_STAGE_MINUTES=10
+sweep_stale_staging() {
+  local __stale __f
+  __stale="$(find "${KS_DIR}" -maxdepth 1 -type f \
+    -name '.provision-stage.??????' -mmin "+${STALE_STAGE_MINUTES}" -print 2>/dev/null || true)"
+  [ -n "${__stale}" ] || return 0
+  while IFS= read -r __f; do
+    [ -n "${__f}" ] || continue
+    if rm -f -- "${__f}"; then
+      echo "Sweep: removed residual staging file from a previous unclean run: ${__f}"
+    else
+      echo "Sweep: WARNING — could not remove '${__f}' (left in place; if you are sure no provisioning run is active, remove it manually)." >&2
+    fi
+  done <<< "${__stale}"
+}
+sweep_stale_staging
 
 if [ -z "${KEYPROPS_PATH}" ]; then
   KEYPROPS_PATH="${REPO_ROOT}/${DEFAULT_KEYPROPS_REL}"

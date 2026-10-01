@@ -26,6 +26,28 @@ TMP_BASE="$(mktemp -d)"
 cleanup() { rm -rf "${TMP_BASE}"; }
 trap cleanup EXIT INT TERM
 
+# Defined BEFORE the hash snapshot below: `fail` is invoked by the snapshot
+# setup, so it must exist by then (otherwise a snapshot failure would surface
+# as exit 127 instead of the intended message).
+fail() { echo "❌ FAILED: $*" >&2; exit 1; }
+
+# Content snapshot for the final hygiene test (Test 17): at suite start,
+# record the content hashes of EVERY tracked file in the repository — the
+# whole repo, because a suite writing anywhere into the repository is the
+# risk being guarded, not just writes under scripts/. Tracked build
+# artifacts (files under __pycache__/) are excluded: they are regenerated
+# byte-for-byte by unrelated tooling, and a hash diff there would make the
+# check fire for reasons unrelated to the suite. This snapshot captures the
+# working tree AS IT IS, so a pre-existing uncommitted modification does not
+# fail the hygiene check; only a change made BY the suite does. This replaces
+# an old `git status --porcelain` assertion that could never pass while the
+# scripts under test were being modified — a red signal unrelated to behavior.
+HASH_SNAPSHOT="${TMP_BASE}/tracked-hashes-at-start.txt"
+( cd "${ROOT_DIR}" && git ls-files -z \
+    | grep -zv -e '/__pycache__/' -e '\.pyc$' \
+    | xargs -0 -r sha256sum ) \
+  > "${HASH_SNAPSHOT}" || fail "test setup: could not snapshot tracked-file hashes"
+
 # Throwaway passwords: random per run, never reused, never printed. The
 # provisioning tool now takes ONE password (used as both store and key
 # password — PKCS12 cannot hold a distinct key password), so the suite has a
@@ -34,8 +56,6 @@ PW_STORE="St-$(head -c 16 /dev/urandom | base64 | tr -d '=+/')"
 # Distinct alias for every throwaway key, so nothing can collide with a real
 # upload alias on this machine.
 THROWAWAY_ALIAS="throwaway-$RANDOM-$RANDOM"
-
-fail() { echo "❌ FAILED: $*" >&2; exit 1; }
 
 # Runs the provisioning script with piped prompt answers:
 # password, password confirm, alias, dname.
@@ -510,10 +530,108 @@ printf '%s\n' "${KT12_LIST}" | grep -q "legacy" \
 echo "✅ [Test 12 Passed] A different-password keystore fails closed with cause and remedy, byte-identical."
 
 # -----------------------------------------------------------------------------
-# Test 13: repository hygiene — the suite leaves no keystore, no key.properties
-# and no tracked-file change anywhere in the repository.
+# Test 14 (S0-05): startup sweep — a STALE .provision-stage.<six> file (old
+# mtime) left by a SIGKILLed previous run must be removed by the next startup
+# (reported), while the keystore itself and every unrelated file in the same
+# directory stay byte-identical. The run used here dies at the overwrite
+# refusal (exit 2) BEFORE any prompt or keystore write, so this exercises
+# exactly the startup sweep and nothing else — no keytool, no staging.
 # -----------------------------------------------------------------------------
-echo "🔍 [Test 13] Verifying the repository is left clean..."
+echo "🔍 [Test 14] Verifying the startup sweep removes a stale staging file..."
+SB14="${TMP_BASE}/t14"; mkdir -p "${SB14}"
+KS14="${SB14}/existing.jks"
+printf 'sentinel-not-a-real-keystore\n' > "${KS14}"
+KS14_SUM1="$(sha256sum "${KS14}" | awk '{print $1}')"
+STALE14="${SB14}/.provision-stage.abc123"
+printf 'stale-staging-debris\n' > "${STALE14}"
+touch -d '30 minutes ago' "${STALE14}"
+BACKUP14="${SB14}/backup.jks"; printf 'backup-sentinel\n' > "${BACKUP14}"
+UNRELATED14="${SB14}/notes.txt"; printf 'unrelated\n' > "${UNRELATED14}"
+T14_RC=0
+T14_OUT="$(run_provision \
+  --keystore-path "${KS14}" \
+  --key-properties-path "${SB14}/key.properties" \
+  --alias "${THROWAWAY_ALIAS}" --validity-days 365 2>&1)" || T14_RC=$?
+if [ "${T14_RC}" -eq 0 ]; then
+  fail "the run against an existing keystore without --force should have been refused"
+fi
+[ ! -e "${STALE14}" ] || fail "the sweep did NOT remove the stale staging file ${STALE14}"
+printf '%s\n' "${T14_OUT}" | grep -qF "${STALE14}" \
+  || fail "the sweep must report what it removed. Output: ${T14_OUT}"
+KS14_SUM2="$(sha256sum "${KS14}" | awk '{print $1}')"
+[ "${KS14_SUM1}" = "${KS14_SUM2}" ] || fail "the sweep modified the keystore itself"
+[ -f "${BACKUP14}" ] || fail "the sweep removed a sibling .jks backup"
+[ "$(cat "${BACKUP14}")" = "backup-sentinel" ] || fail "the sweep modified a sibling .jks backup"
+[ -f "${UNRELATED14}" ] || fail "the sweep removed an unrelated file"
+echo "✅ [Test 14 Passed] Stale staging file swept and reported; keystore, backup and unrelated file untouched."
+
+# -----------------------------------------------------------------------------
+# Test 15 (S0-05): the concurrency guard — a FRESH .provision-stage.<six> file
+# (recent mtime) must NOT be removed. A provisioning run creates its staging
+# file and finishes the swap within seconds, so a fresh staging file may be an
+# in-flight rotation; deleting it would be worse than the debris being fixed.
+# Same die-at-overwrite-refusal path as Test 14: only the startup sweep runs.
+# -----------------------------------------------------------------------------
+echo "🔍 [Test 15] Verifying the sweep leaves a FRESH staging file alone..."
+SB15="${TMP_BASE}/t15"; mkdir -p "${SB15}"
+KS15="${SB15}/existing.jks"
+printf 'sentinel-not-a-real-keystore\n' > "${KS15}"
+KS15_SUM1="$(sha256sum "${KS15}" | awk '{print $1}')"
+FRESH15="${SB15}/.provision-stage.xyz789"
+printf 'in-flight-staging\n' > "${FRESH15}"
+T15_RC=0
+run_provision \
+  --keystore-path "${KS15}" \
+  --key-properties-path "${SB15}/key.properties" \
+  --alias "${THROWAWAY_ALIAS}" --validity-days 365 > /dev/null 2>&1 || T15_RC=$?
+if [ "${T15_RC}" -eq 0 ]; then
+  fail "the run against an existing keystore without --force should have been refused"
+fi
+[ -f "${FRESH15}" ] || fail "the sweep DELETED a fresh staging file (concurrency guard broken)"
+[ "$(cat "${FRESH15}")" = "in-flight-staging" ] || fail "the sweep modified a fresh staging file"
+KS15_SUM2="$(sha256sum "${KS15}" | awk '{print $1}')"
+[ "${KS15_SUM1}" = "${KS15_SUM2}" ] || fail "the sweep modified the keystore itself"
+echo "✅ [Test 15 Passed] A fresh staging file survives the sweep (concurrency guard holds)."
+
+# -----------------------------------------------------------------------------
+# Test 16 (S0-05): scripts/key.properties.example documents the
+# single-password flow — the two-distinct-placeholder-passwords shape was the
+# documentation form of the F1 defect (PKCS12 silently ignores a distinct key
+# password, breaking :app:packageRelease). The example must show ONE password
+# value for both entries, explain why, name the provisioning script and the
+# runbook, and its alias/storeFile placeholders must match what the script
+# actually writes by default.
+# -----------------------------------------------------------------------------
+echo "🔍 [Test 16] Verifying key.properties.example documents the single-password flow..."
+EXAMPLE16="${SCRIPT_DIR}/key.properties.example"
+[ -f "${EXAMPLE16}" ] || fail "key.properties.example is missing"
+EX_STOREPW="$(grep '^# storePassword=' "${EXAMPLE16}" | sed 's/^# storePassword=//')"
+EX_KEYPW="$(grep '^# keyPassword=' "${EXAMPLE16}" | sed 's/^# keyPassword=//')"
+[ -n "${EX_STOREPW}" ] || fail "example has no storePassword placeholder"
+[ -n "${EX_KEYPW}" ] || fail "example has no keyPassword placeholder"
+[ "${EX_STOREPW}" = "${EX_KEYPW}" ] \
+  || fail "example still shows TWO DISTINCT password placeholders (storePassword='${EX_STOREPW}' vs keyPassword='${EX_KEYPW}') — the documentation form of the F1 defect"
+grep -qi 'PKCS12' "${EXAMPLE16}" \
+  || fail "example must explain WHY one password (PKCS12 ignores a distinct key password)"
+grep -qF 'provision_release_keystore.sh' "${EXAMPLE16}" \
+  || fail "example must point at scripts/provision_release_keystore.sh as the intended path"
+grep -qF 'docs/operations/release-signing-runbook.md' "${EXAMPLE16}" \
+  || fail "example must point at the runbook"
+SCRIPT_ALIAS_DEFAULT="$(grep '^DEFAULT_ALIAS=' "${PROVISION}" | sed 's/^DEFAULT_ALIAS="\(.*\)"$/\1/')"
+[ -n "${SCRIPT_ALIAS_DEFAULT}" ] || fail "could not read DEFAULT_ALIAS from the provisioning script"
+grep -qF "keyAlias=${SCRIPT_ALIAS_DEFAULT}" "${EXAMPLE16}" \
+  || fail "example keyAlias placeholder must match the script's default alias (${SCRIPT_ALIAS_DEFAULT})"
+SCRIPT_KS_DEFAULT="$(grep '^DEFAULT_KEYSTORE_PATH=' "${PROVISION}" | sed 's/^DEFAULT_KEYSTORE_PATH="\(.*\)"$/\1/')"
+SCRIPT_KS_NAME="$(basename "${SCRIPT_KS_DEFAULT}")"
+grep -qF "${SCRIPT_KS_NAME}" "${EXAMPLE16}" \
+  || fail "example storeFile placeholder must match the script's default keystore name (${SCRIPT_KS_NAME})"
+echo "✅ [Test 16 Passed] Example shows one password for both entries, with the why, the script and the runbook; placeholders match the script defaults."
+
+# -----------------------------------------------------------------------------
+# Test 17: repository hygiene — the suite leaves no keystore, no key.properties
+# and modifies no tracked file anywhere in the repository.
+# -----------------------------------------------------------------------------
+echo "🔍 [Test 17] Verifying the repository is left clean..."
 LEFTOVER_JKS="$(find "${ROOT_DIR}" \( -name '*.jks' -o -name '*.keystore' -o -name '*.p12' \) -not -path '*/node_modules/*' 2>/dev/null || true)"
 if [ -n "${LEFTOVER_JKS}" ]; then
   fail "keystore material left in the repository: ${LEFTOVER_JKS}"
@@ -522,11 +640,22 @@ LEFTOVER_KP="$(find "${ROOT_DIR}" -name 'key.properties' 2>/dev/null || true)"
 if [ -n "${LEFTOVER_KP}" ]; then
   fail "key.properties left in the repository: ${LEFTOVER_KP}"
 fi
-TRACKED_CHANGES="$(git -C "${ROOT_DIR}" status --porcelain | grep -v '^??' || true)"
-if [ -n "${TRACKED_CHANGES}" ]; then
-  fail "tracked files were modified: ${TRACKED_CHANGES}"
+# Tracked-file integrity: recompute the content hashes of EVERY tracked file
+# in the repository (same build-artifact exclusion as the snapshot) and
+# compare against the snapshot taken at suite start. Pre-existing dirty
+# working-tree content is identical in both snapshots, so it passes; anything
+# the suite wrote into a tracked file shows up here.
+HASH_NOW="${TMP_BASE}/tracked-hashes-at-end.txt"
+( cd "${ROOT_DIR}" && git ls-files -z \
+    | grep -zv -e '/__pycache__/' -e '\.pyc$' \
+    | xargs -0 -r sha256sum ) \
+  > "${HASH_NOW}" || fail "could not recompute tracked-file hashes"
+HASH_DIFF="$(diff -u "${HASH_SNAPSHOT}" "${HASH_NOW}" || true)"
+if [ -n "${HASH_DIFF}" ]; then
+  fail "the suite modified tracked files:
+${HASH_DIFF}"
 fi
-echo "✅ [Test 13 Passed] No keystore, no key.properties, no secret and no tracked-file change in the repository."
+echo "✅ [Test 17 Passed] No keystore, no key.properties, no secret and no tracked-file change made by the suite."
 
 echo "=============================================================================="
 echo "🎉 ALL PROVISIONING TESTS PASSED CLEANLY!"
