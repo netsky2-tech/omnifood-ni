@@ -315,20 +315,30 @@ void main() {
         String fingerprint = bpFpRev1,
         Object? operationMode,
         Object? checkoutFxMode,
-      }) =>
-          {
-            'tenantId': bpTenant,
-            'businessName': 'Cafetín Perfil U3',
-            'fiscalRegime': 'CUOTA_FIJA',
-            'taxRate': 0.0,
-            'pricesIncludeTax': true,
-            'operationMode': ?operationMode,
-            'checkoutFxMode': ?checkoutFxMode,
-            'configVersion': {
-              'revision': revision,
-              'fingerprint': fingerprint,
-            },
-          };
+      }) {
+        final envelope = <String, dynamic>{
+          'tenantId': bpTenant,
+          'businessName': 'Cafetín Perfil U3',
+          'fiscalRegime': 'CUOTA_FIJA',
+          'taxRate': 0.0,
+          'pricesIncludeTax': true,
+          'configVersion': {
+            'revision': revision,
+            'fingerprint': fingerprint,
+          },
+        };
+        // Omitted entirely when null: a snapshot that does not carry the field
+        // arrives without the key, and the projection treats absent and null
+        // alike. Built with statements rather than collection-if elements so
+        // the file parses on the toolchain CI pins (see the PR notes).
+        if (operationMode != null) {
+          envelope['operationMode'] = operationMode;
+        }
+        if (checkoutFxMode != null) {
+          envelope['checkoutFxMode'] = checkoutFxMode;
+        }
+        return envelope;
+      }
 
       test('projects both asserted modes and marks both as cloud-managed', () async {
         final envelope = bpEnvelope(
