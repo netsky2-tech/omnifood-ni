@@ -113,6 +113,8 @@ void main() {
       tester.widget<ListTile>(find.widgetWithText(ListTile, 'Inventario BOH')).enabled,
       isFalse,
     );
+    expect(find.text('Identidad de la Terminal'), findsNothing);
+    expect(find.text('Activar Terminal'), findsNothing);
   });
 
   testWidgets('shows DGI reports item for manager role', (tester) async {
@@ -131,6 +133,8 @@ void main() {
 
     expect(find.text('Reportes DGI'), findsOneWidget);
     expect(find.text('Inventario BOH'), findsOneWidget);
+    expect(find.text('Identidad de la Terminal'), findsOneWidget);
+    expect(find.text('Activar Terminal'), findsOneWidget);
   });
 
   testWidgets('shows identity management and safe area for active users', (tester) async {
