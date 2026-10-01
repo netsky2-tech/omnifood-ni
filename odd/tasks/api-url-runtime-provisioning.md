@@ -117,7 +117,7 @@ the pre-auth `claimDio`, which is deliberately built as a bare Dio with no inter
 
 ### S1-01 — The resolver service
 
-Status: pending
+Status: done
 
 - [ ] Add a service resolving the backend URL as: persisted `api_base_url` → build-time
       `API_URL` define → development default.
@@ -130,7 +130,7 @@ Status: pending
 
 ### S1-02 — Wire the six Dio clients
 
-Status: pending
+Status: done
 
 - [ ] Resolve the URL once at startup and build every Dio client from it, replacing the
       compile-time constant.
@@ -142,7 +142,7 @@ Status: pending
 
 ### S1-03 — Let an operator set it
 
-Status: pending
+Status: in progress
 
 - [ ] Add a server URL field to the terminal configuration surface, validated with the same
       rule as the service.
@@ -153,4 +153,61 @@ Status: pending
 
 ## Evidence log
 
-Appended as work units close.
+### Branch and delivery
+
+Branched from `origin/main` at `8d8455f6` (after PR #750 merged). Rebased onto
+`origin/main` at `9cdbc026` after PR #749 landed; `git diff --name-only` showed
+zero overlap with the four files in this slice, and the rebase applied cleanly.
+
+Work-unit commits:
+
+- `ae12c1c3` — `feat(pos): resolve the backend URL at runtime, not only at compile time`
+  (S1-01: `ApiBaseUrlService` plus resolution, persistence and validation tests).
+  Committed with the wiring test group temporarily split out so the commit is
+  independently green: 16/16 passing on its own.
+- `e59512fa` — `feat(pos): build the Dio clients from the runtime-resolved backend URL`
+  (S1-02: startup resolution, `PosDioClients`, the `build_pos_apk.sh` fleet
+  corrections, and the wiring test group).
+
+### Verification observed
+
+- `flutter test test/data/services/api_base_url_service_test.dart` — **19/19
+  passing**, re-run after the rebase onto `9cdbc026`.
+- `flutter analyze` — **No issues found**, re-run after the rebase.
+- `flutter test test/integration/activation_offline_sale_e2e_test.dart` —
+  **passing**, so the offline sale lifecycle with real SQLite persistence still
+  survives a crash before reconnect.
+- Full suite `flutter test` — 2662 passing, 2 failing, both reclassified as
+  runner flakes (see below).
+
+### The full-suite failures are flakes, not regressions
+
+Two distinct classes, both proven by isolation:
+
+1. `Failed to load ...: Unable to connect to flutter_tester process:
+   WebSocketException: Invalid WebSocket upgrade request` — the test runner
+   failing to attach, under parallel load. Not an assertion.
+2. `LocalNetworkTerminalAdapter Socket Tests checkStatus reports transient
+   error when STATUS answer times out` — expects `TerminalStatus.error`, got
+   `TerminalStatus.offline`. A timing-sensitive hardware-socket test.
+
+Re-running both offending files plus the socket suite with
+`--concurrency=1` gives **21/21 passing**. The same files also failed to load
+once on a clean `origin/main` checkout with `WebSocketException`, so the
+failures are environmental and predate this change.
+
+### Honest limits of this evidence
+
+- The offline e2e test **does not exercise `main()`**: it builds its own
+  dependency graph. It proves nothing regressed there; it does not prove the
+  startup wiring is correct. That is covered by the `PosDioClients` tests, which
+  construct the real clients from the real resolution path.
+- **Strict TDD RED was not captured for S1-01/S1-02.** The delegated worker
+  completed the implementation and failed before reporting, so the RED output
+  was never recorded. GREEN is observed and attributed; the missing RED is a
+  process gap, not a passing check.
+- `main()` itself has no test coverage and never had. The extracted
+  `resolveStartupTransport` and `PosDioClients` are covered directly; the
+  remaining `main()` body is not.
+- No verification on physical Android hardware, consistent with the residual
+  recorded for PR #750.
