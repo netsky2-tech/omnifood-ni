@@ -259,7 +259,8 @@ esac
 KEYTOOL_LOG="$(mktemp)"
 KEYTOOL_LOG_OUT="$(mktemp)"
 STAGE_FILE=""
-trap 'rm -f "${KEYTOOL_LOG}" "${KEYTOOL_LOG_OUT}" ${STAGE_FILE:+"${STAGE_FILE}"}' EXIT
+KP_STAGE_FILE=""
+trap 'rm -f "${KEYTOOL_LOG}" "${KEYTOOL_LOG_OUT}" ${STAGE_FILE:+"${STAGE_FILE}"} ${KP_STAGE_FILE:+"${KP_STAGE_FILE}"}' EXIT
 
 # run_keytool: runs keytool, discards stdout on success, prints every stderr
 # line (warnings) to the operator, and on failure prints the full captured
@@ -349,18 +350,42 @@ confirm_secret STORE_PASSWORD STORE_PASSWORD_CONFIRM "keystore password"
 
 # --- --force over an existing keystore: open-check BEFORE any mutation -------
 # Provisioning does not rotate keystore passwords. Under --force, if the
-# existing keystore does not open with the provided password, the likely
-# cause is that it was created with a DIFFERENT password; the remedy is the
-# backup/secret manager, not a confusing keytool error halfway through
-# generation. Exit closed, keystore untouched.
+# existing file does not open with the provided password, the cause matters:
+#   - keytool reports 'keystore password was incorrect' → the file IS a
+#     keystore but was created with a DIFFERENT password; the remedy is the
+#     backup/secret manager.
+#   - anything else (unrecognized format, EOF, ...) → the file is NOT a
+#     usable keystore at all, e.g. a partial file from an interrupted run or
+#     a corrupted backup restored by mistake; the remedy is to compare it
+#     against backups and remove it, not to hunt for a different password.
+# Exit closed, keystore untouched, for both causes.
 secret_begin
 export KT_STORE_PASS="${STORE_PASSWORD}"
 if [ "${KS_PRE_EXISTED}" -eq 1 ]; then
-  if ! run_keytool -list -keystore "${KS_ABS}" -storepass:env KT_STORE_PASS; then
+  # keytool prints its 'keytool error: ...' line on STDOUT, not stderr, so
+  # both streams are captured and classified together. On success, stderr is
+  # still surfaced (keytool warnings must never be swallowed).
+  KS_OPEN_OUT="$(mktemp)"
+  KS_OPEN_ERR="$(mktemp)"
+  KS_OPEN_RC=0
+  keytool -list -keystore "${KS_ABS}" -storepass:env KT_STORE_PASS > "${KS_OPEN_OUT}" 2> "${KS_OPEN_ERR}" || KS_OPEN_RC=$?
+  if [ "${KS_OPEN_RC}" -ne 0 ]; then
+    KS_OPEN_ERR_TEXT="$(cat "${KS_OPEN_OUT}" "${KS_OPEN_ERR}")"
+    rm -f "${KS_OPEN_OUT}" "${KS_OPEN_ERR}"
+    if printf '%s\n' "${KS_OPEN_ERR_TEXT}" | grep -qi "keystore password was incorrect"; then
+      unset KT_STORE_PASS
+      secret_end
+      die 1 "the existing keystore '${KS_ABS}' could NOT be opened with the password you provided. Most likely it was created with a DIFFERENT password (this tool does not rotate keystore passwords). Remedy: recover the correct password from your secret manager or backups, or provision a new keystore under a different path. The existing keystore was left untouched."
+    fi
     unset KT_STORE_PASS
     secret_end
-    die 1 "the existing keystore '${KS_ABS}' could NOT be opened with the password you provided. Most likely it was created with a DIFFERENT password (this tool does not rotate keystore passwords). Remedy: recover the correct password from your secret manager or backups, or provision a new keystore under a different path. The existing keystore was left untouched."
+    die 1 "the existing file '${KS_ABS}' is NOT a usable keystore (keytool could not read it: it may be a partial or corrupt file, for example from an interrupted earlier run). Remedy: compare it against your backups; if it is not your release key, remove it and re-run this tool. The existing file was left untouched."
   fi
+  if [ -s "${KS_OPEN_ERR}" ]; then
+    echo "WARNING — keytool reported the following:" >&2
+    cat "${KS_OPEN_ERR}" >&2
+  fi
+  rm -f "${KS_OPEN_OUT}" "${KS_OPEN_ERR}"
 fi
 secret_end
 # Only prompt for alias/dname when they were not given explicitly on the
@@ -387,10 +412,23 @@ secret_begin
 # fails, the original remains byte-identical and keeps every entry, including
 # unrelated aliases. The file-level overwrite guard alone does NOT cover this
 # window: it cannot help once an overwrite has been requested.
-STAGE_FILE=""
+#
+# NEW keystores are staged too (R4-2): generating directly at KS_ABS meant a
+# SIGKILL during -genkeypair left a partial file at the live path, which the
+# next run refused to overwrite and --force misdiagnosed as a different
+# password. Staging both paths means ONE mechanism covers both, and the
+# startup sweep (which already removes stale .provision-stage.* files) covers
+# both debris cases.
+STAGE_FILE="$(mktemp "${KS_DIR}/.provision-stage.XXXXXX")"
 if [ "${KS_PRE_EXISTED}" -eq 1 ]; then
-  STAGE_FILE="$(mktemp "${KS_DIR}/.provision-stage.XXXXXX")"
   cp -- "${KS_ABS}" "${STAGE_FILE}"
+else
+  # keytool -genkeypair refuses to write into an existing (empty) file
+  # ('Keystore file exists, but is empty'), so the fresh path uses the
+  # race-free random NAME from mktemp but lets keytool create the file. The
+  # EXIT trap still cleans the name, and a SIGKILL mid-generation leaves the
+  # partial file at the STAGING path, where the startup sweep finds it.
+  rm -f -- "${STAGE_FILE}"
 fi
 
 # With --force over an existing keystore, remove the same-alias entry first
@@ -398,7 +436,7 @@ fi
 # stdin is not a TTY, which would make --force nondeterministic. Unrelated
 # aliases are untouched: only this alias is deleted, and the staged copy
 # carries every other entry over.
-if [ -n "${STAGE_FILE}" ] && ks_has_alias "${STAGE_FILE}" "${KEY_ALIAS}"; then
+if [ "${KS_PRE_EXISTED}" -eq 1 ] && ks_has_alias "${STAGE_FILE}" "${KEY_ALIAS}"; then
   if ! run_keytool -delete -keystore "${STAGE_FILE}" -alias "${KEY_ALIAS}" \
         -storepass:env KT_STORE_PASS; then
     unset KT_STORE_PASS
@@ -412,11 +450,10 @@ fi
 # design (a distinct key password is silently ignored there — see header).
 # A --force rotation reuses the existing store's own type (detected from its
 # content, not from keytool's default), so a legacy store keeps its format.
-GEN_TARGET="${KS_ABS}"
+# Both paths generate into STAGE_FILE (see the staging block above).
+GEN_TARGET="${STAGE_FILE}"
 GEN_EXTRA=()
-if [ -n "${STAGE_FILE}" ]; then
-  GEN_TARGET="${STAGE_FILE}"
-else
+if [ "${KS_PRE_EXISTED}" -eq 0 ]; then
   GEN_EXTRA=(-storetype PKCS12)
 fi
 
@@ -431,26 +468,27 @@ if ! run_keytool -genkeypair \
       -keypass:env KT_STORE_PASS; then
   unset KT_STORE_PASS
   secret_end
-  if [ -n "${STAGE_FILE}" ]; then
+  if [ "${KS_PRE_EXISTED}" -eq 1 ]; then
     die 1 "keytool failed to generate the key pair. The original keystore '${KS_ABS}' was left untouched (the staging copy was discarded)."
   fi
-  # Remove only an artifact we created; never delete a pre-existing keystore.
-  rm -f -- "${KS_ABS}"
-  die 1 "keytool failed to generate the key pair. The partial file was removed."
+  die 1 "keytool failed to generate the key pair. No keystore was created at '${KS_ABS}' (the staging copy was discarded)."
 fi
 
-# Verify the staged copy actually contains the expected entry BEFORE it
-# replaces the live keystore, then move it into place.
-if [ -n "${STAGE_FILE}" ]; then
-  if ! run_keytool -list -keystore "${STAGE_FILE}" -alias "${KEY_ALIAS}" \
-        -storepass:env KT_STORE_PASS; then
-    unset KT_STORE_PASS
-    secret_end
+# Verify the staged keystore actually contains the expected entry BEFORE it
+# is moved into place (or replaces the live keystore), then move it into
+# place. This is the point where a NEW keystore first exists at its live
+# path — and only as a whole, verified file.
+if ! run_keytool -list -keystore "${STAGE_FILE}" -alias "${KEY_ALIAS}" \
+      -storepass:env KT_STORE_PASS; then
+  unset KT_STORE_PASS
+  secret_end
+  if [ "${KS_PRE_EXISTED}" -eq 1 ]; then
     die 1 "the staged keystore copy does not contain the expected alias '${KEY_ALIAS}'. The original keystore '${KS_ABS}' was left untouched."
   fi
-  mv -f -- "${STAGE_FILE}" "${KS_ABS}"
-  STAGE_FILE=""
+  die 1 "the staged keystore copy does not contain the expected alias '${KEY_ALIAS}'. No keystore was created at '${KS_ABS}'."
 fi
+mv -f -- "${STAGE_FILE}" "${KS_ABS}"
+STAGE_FILE=""
 
 # Verify the keystore is actually usable with the chosen password before
 # declaring success.
@@ -464,16 +502,26 @@ if ! run_keytool -list -keystore "${KS_ABS}" -storepass:env KT_STORE_PASS; then
 fi
 
 # --- key.properties (the only place the password is ever written) -------------
+# Written ATOMICALLY (R4-3): staged into a same-directory temporary file with
+# restrictive mode, then moved into place — the same mechanism as the
+# keystore rotation. A direct in-place redirection truncates the existing
+# file the moment it opens it, so a disk-full or interrupted write would
+# destroy a previously working configuration. The staging file is cleaned up
+# on every exit path by the EXIT trap (KP_STAGE_FILE).
 # keyPassword is written because Gradle's signingConfig reads it; it is
 # deliberately the SAME value as storePassword (single-password design): the
 # keystore is PKCS12, which cannot hold a distinct key password, and two
 # plaintext values in one file protect nothing extra.
+KP_STAGE_FILE="$(mktemp "$(dirname "${KP_ABS}")/.keyprops-stage.XXXXXX")"
 {
   printf 'storePassword=%s\n' "${STORE_PASSWORD}"
   printf 'keyPassword=%s\n' "${STORE_PASSWORD}"
   printf 'keyAlias=%s\n' "${KEY_ALIAS}"
   printf 'storeFile=%s\n' "${KS_ABS}"
-} > "${KP_ABS}"
+} > "${KP_STAGE_FILE}"
+chmod 600 "${KP_STAGE_FILE}"
+mv -f -- "${KP_STAGE_FILE}" "${KP_ABS}"
+KP_STAGE_FILE=""
 
 unset KT_STORE_PASS STORE_PASSWORD STORE_PASSWORD_CONFIRM
 secret_end

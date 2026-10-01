@@ -5,8 +5,9 @@
 #
 # Running only the cheap tests (no Flutter / Android SDK required):
 #   SKIP_END_TO_END_BUILD=1 scripts/test_packaging_pipeline.sh
-# This runs Tests 1-3 and 6-23 and skips the end-to-end build Tests 4-5,
-# which require a full Flutter toolchain and Android SDK.
+# This runs Tests 1-3 and 6-26 and skips the end-to-end build Tests 4-5,
+# which require a full Flutter toolchain and Android SDK. Test 25 additionally
+# requires a configured Android project (gradlew + local.properties).
 # ==============================================================================
 
 set -euo pipefail
@@ -467,6 +468,10 @@ if [ "${FAILCLOSED_RC}" -ne 2 ]; then
 fi
 printf '%s\n' "${FAILCLOSED_OUTPUT}" | grep -q -- "--allow-debug-signing" || { echo "❌ FAILED: fail-closed message must name the --allow-debug-signing remedy"; printf '%s\n' "${FAILCLOSED_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
 printf '%s\n' "${FAILCLOSED_OUTPUT}" | grep -q "provision_release_keystore.sh" || { echo "❌ FAILED: fail-closed message must name the keystore-provisioning remedy"; printf '%s\n' "${FAILCLOSED_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+# The condition is [ ! -f ], which also fires when the path exists as a
+# directory or another non-regular file; the message must not claim the file
+# is merely absent.
+printf '%s\n' "${FAILCLOSED_OUTPUT}" | grep -q "is absent or not a regular file" || { echo "❌ FAILED: fail-closed message must match its [ ! -f ] condition (absent OR not a regular file)"; printf '%s\n' "${FAILCLOSED_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
 if printf '%s\n' "${FAILCLOSED_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
     echo "❌ FAILED: fail-closed gate ran after the flutter toolchain was invoked" >&2
     rm -rf "${SHIM_DIR}"
@@ -474,9 +479,11 @@ if printf '%s\n' "${FAILCLOSED_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; t
 fi
 echo "✅ [Test 20 Passed] Real build without a keystore fails closed with exit 2 before any Flutter step."
 
-# Test 21: bare --plan still exits 0 without a keystore and reports that a
-# release build would fail closed (plan mode is side-effect-free).
-echo "🔍 [Test 21] Verifying bare --plan reports the fail-closed signing mode..."
+# Test 21: bare --plan still exits 0 without a keystore and states only what
+# the gate can actually verify: that no key.properties was found and that a
+# release build would fail closed. It must NOT claim a parsed path or verdict
+# (plan mode is side-effect-free).
+echo "🔍 [Test 21] Verifying bare --plan reports the truthful no-key.properties state..."
 PLANSGN_RC=0
 PLANSGN_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan 2>&1)" || PLANSGN_RC=$?
 if [ "${PLANSGN_RC}" -ne 0 ]; then
@@ -485,14 +492,15 @@ if [ "${PLANSGN_RC}" -ne 0 ]; then
     rm -rf "${SHIM_DIR}"
     exit 1
 fi
-printf '%s\n' "${PLANSGN_OUTPUT}" | grep -q "Release signing:" || { echo "❌ FAILED: bare --plan output does not report the release signing mode"; printf '%s\n' "${PLANSGN_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+printf '%s\n' "${PLANSGN_OUTPUT}" | grep -q "Release signing:" || { echo "❌ FAILED: bare --plan output does not report the release signing state"; printf '%s\n' "${PLANSGN_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
+printf '%s\n' "${PLANSGN_OUTPUT}" | grep -q "no key.properties was found" || { echo "❌ FAILED: bare --plan must state only what the gate verifies: that no key.properties was found"; printf '%s\n' "${PLANSGN_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
 printf '%s\n' "${PLANSGN_OUTPUT}" | grep -q "fail closed" || { echo "❌ FAILED: bare --plan must report that a release build would fail closed without a keystore"; printf '%s\n' "${PLANSGN_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
 if printf '%s\n' "${PLANSGN_OUTPUT}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
     echo "❌ FAILED: bare --plan invoked the flutter toolchain" >&2
     rm -rf "${SHIM_DIR}"
     exit 1
 fi
-echo "✅ [Test 21 Passed] Bare --plan exits 0 and reports the fail-closed release signing mode."
+echo "✅ [Test 21 Passed] Bare --plan exits 0 and truthfully reports the no-key.properties fail-closed state."
 
 # Test 22: --allow-debug-signing is accepted and the plan reports the explicit
 # debug-signing opt-in as the resolved signing mode.
@@ -519,6 +527,243 @@ echo "🔍 [Test 23] Verifying --help documents --allow-debug-signing..."
 HELP_OUTPUT="$("${SCRIPT_DIR}/build_pos_apk.sh" --help 2>&1)"
 printf '%s\n' "${HELP_OUTPUT}" | grep -q -- "--allow-debug-signing" || { echo "❌ FAILED: --help does not document --allow-debug-signing"; printf '%s\n' "${HELP_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
 echo "✅ [Test 23 Passed] --help documents --allow-debug-signing."
+
+# -----------------------------------------------------------------------------
+# Cheap key.properties presence tests (24): no Flutter / Android SDK required.
+# The pre-build gate must NOT interpret key.properties at all: its only check
+# is that the file exists, and all readiness judgment is deferred to Gradle's
+# signing guard, which parses the file authoritatively and fails closed with
+# the actionable message. These tests place a key.properties at the real path
+# the gate sees (apps/pos_app/android/key.properties, git-ignored). That is
+# only safe when the file does not already exist; if it does, the tests are
+# skipped rather than risking an operator's real custody configuration.
+# -----------------------------------------------------------------------------
+KP_GATE_FILE="${POS_APP_DIR}/android/key.properties"
+KP_GATE_WROTE=0
+cleanup_kp_gate() {
+    if [ "${KP_GATE_WROTE}" = "1" ]; then
+        rm -f "${KP_GATE_FILE}"
+    fi
+}
+trap cleanup_kp_gate EXIT
+
+if [ -e "${KP_GATE_FILE}" ]; then
+    echo "⏩ [Tests 24, 25] Skipped (${KP_GATE_FILE} already exists; refusing to touch a real custody configuration)."
+else
+    KP_GATE_STORE="${SHIM_DIR}/kp-gate-throwaway.jks"
+    : > "${KP_GATE_STORE}"
+    KP_GATE_DIR="${SHIM_DIR}/kp-gate-dir"
+    mkdir -p "${KP_GATE_DIR}"
+
+    run_kp_gate_plan() {
+        PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan 2>&1
+    }
+
+    # With key.properties present, the gate must NOT judge readiness: --plan
+    # exits 0, states that Gradle's signing guard decides, and never claims a
+    # parsed path or a fail-closed verdict.
+    assert_kp_gate_defers_in_plan() {
+        local label="$1" content="$2" output rc
+        printf '%b' "${content}" > "${KP_GATE_FILE}"
+        KP_GATE_WROTE=1
+        rc=0
+        output="$(run_kp_gate_plan)" || rc=$?
+        if [ "${rc}" -ne 0 ]; then
+            echo "❌ FAILED: key.properties with ${label} made --plan exit ${rc} (the gate must not judge readiness; expected 0)" >&2
+            printf '%s\n' "${output}" >&2
+            exit 1
+        fi
+        if ! printf '%s\n' "${output}" | grep -q "key.properties is present"; then
+            echo "❌ FAILED: --plan with a present key.properties (${label}) must state that readiness is decided by Gradle's signing guard; --plan reported:" >&2
+            printf '%s\n' "${output}" | grep 'Release signing:' >&2
+            exit 1
+        fi
+        if printf '%s\n' "${output}" | grep -q "No release keystore found"; then
+            echo "❌ FAILED: --plan with a present key.properties (${label}) still judged readiness from the file contents" >&2
+            printf '%s\n' "${output}" >&2
+            exit 1
+        fi
+        if printf '%s\n' "${output}" | grep -q "would fail closed"; then
+            echo "❌ FAILED: --plan with a present key.properties (${label}) claimed a fail-closed verdict the gate cannot verify" >&2
+            printf '%s\n' "${output}" | grep 'Release signing:' >&2
+            exit 1
+        fi
+        if printf '%s\n' "${output}" | grep -qF "${KP_GATE_STORE}"; then
+            echo "❌ FAILED: --plan with a present key.properties (${label}) claimed a parsed storeFile path; the gate no longer parses" >&2
+            printf '%s\n' "${output}" | grep 'Release signing:' >&2
+            exit 1
+        fi
+        if printf '%s\n' "${output}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+            echo "❌ FAILED: --plan with a present key.properties (${label}) invoked the flutter toolchain" >&2
+            rm -rf "${SHIM_DIR}"
+            exit 1
+        fi
+    }
+
+    # Test 24: the gate defers for every key.properties content — including a
+    # blank storeFile, a directory-valued storeFile, and a valid-looking one.
+    echo "🔍 [Test 24] Verifying the gate does not interpret a present key.properties..."
+    assert_kp_gate_defers_in_plan "a blank storeFile" \
+        "storeFile =\n"
+    assert_kp_gate_defers_in_plan "a directory-valued storeFile" \
+        "storeFile = ${KP_GATE_DIR}\n"
+    assert_kp_gate_defers_in_plan "an existing-file storeFile" \
+        "storeFile = ${KP_GATE_STORE}\n"
+    echo "✅ [Test 24 Passed] With key.properties present the gate does not parse it: --plan defers readiness to Gradle's signing guard and claims no parsed path or verdict."
+    rm -f "${KP_GATE_FILE}"
+    KP_GATE_WROTE=0
+fi
+
+# -----------------------------------------------------------------------------
+# Test 25 (R4-1): the gate must DEFER on a present key.properties, and the
+# GRADLE-level readiness guard is what fails a release build closed for an
+# absent, blank-after-trim, and directory-valued storeFile, with the
+# actionable message. Deferral is proven with the failing flutter shim: the
+# gate must NOT abort before the build step when key.properties exists, even
+# when its storeFile is unusable. The fail-closed guarantee itself is proven
+# through a real ./gradlew :app:assembleRelease (no --dry-run: the
+# taskGraph.whenReady guard does not fire on a dry-run task graph). Requires
+# a configured Android project (local.properties / gradlew); otherwise it is
+# skipped. Like Test 24 it must not touch a pre-existing key.properties.
+# -----------------------------------------------------------------------------
+if [ -e "${KP_GATE_FILE}" ]; then
+    echo "⏩ [Test 25] Skipped (${KP_GATE_FILE} already exists)."
+elif [ ! -f "${POS_APP_DIR}/android/gradlew" ] || [ ! -f "${POS_APP_DIR}/android/local.properties" ]; then
+    echo "⏩ [Test 25] Skipped (Android project not configured: gradlew or local.properties missing)."
+else
+    echo "🔍 [Test 25] Verifying the gate defers and Gradle fails closed on blank and directory-valued storeFile..."
+
+    KP_GATE_GRADLE_STORE="${SHIM_DIR}/kp-gradle-throwaway.jks"
+    KP_GATE_GRADLE_DIR="${SHIM_DIR}/kp-gradle-dir"
+    mkdir -p "${KP_GATE_GRADLE_DIR}"
+
+    write_kp_gate_properties() {
+        local store_value="$1"
+        printf 'storePassword=sentinel\nkeyPassword=sentinel\nkeyAlias=sentinel\nstoreFile=%s\n' \
+            "${store_value}" > "${KP_GATE_FILE}"
+        KP_GATE_WROTE=1
+    }
+
+    # Deferral: with key.properties present (even with an unusable storeFile),
+    # the gate must NOT abort before the toolchain. The failing flutter shim
+    # proves the run reached the build step: the gate deferred.
+    assert_gate_defers_to_toolchain() {
+        local label="$1" store_value="$2" output rc
+        write_kp_gate_properties "${store_value}"
+        rc=0
+        output="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --split-per-abi --skip-tests 2>&1)" || rc=$?
+        if printf '%s\n' "${output}" | grep -q "No release keystore found"; then
+            echo "❌ FAILED: the gate aborted early on a present key.properties with ${label} storeFile; it must defer to Gradle's signing guard. Output:" >&2
+            printf '%s\n' "${output}" >&2
+            exit 1
+        fi
+        if [ "${rc}" -eq 2 ]; then
+            echo "❌ FAILED: the gate exited 2 on a present key.properties with ${label} storeFile; it must defer to Gradle's signing guard. Output:" >&2
+            printf '%s\n' "${output}" >&2
+            exit 1
+        fi
+        if ! printf '%s\n' "${output}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+            echo "❌ FAILED: the gate did not defer past the build step for ${label} storeFile (the flutter shim was never reached; exit ${rc}). Output:" >&2
+            printf '%s\n' "${output}" >&2
+            exit 1
+        fi
+    }
+
+    assert_gate_defers_to_toolchain "a blank" ""
+    assert_gate_defers_to_toolchain "a directory-valued" "${KP_GATE_GRADLE_DIR}"
+    echo "✅ [Test 25a Passed] A present key.properties (blank or directory-valued storeFile) is NOT aborted by the gate; it defers to Gradle."
+
+    # Fail-closed guarantee, exercised for real: Gradle parses key.properties
+    # authoritatively and refuses the release build with the actionable message.
+    assert_gradle_guard_fails_closed() {
+        local label="$1" store_value="$2" output rc
+        write_kp_gate_properties "${store_value}"
+        rc=0
+        output="$( ( cd "${POS_APP_DIR}/android" && env -u ORG_GRADLE_PROJECT_allowDebugSigning ./gradlew :app:assembleRelease ) 2>&1 )" || rc=$?
+        if [ "${rc}" -eq 0 ]; then
+            echo "❌ FAILED: Gradle release build with ${label} storeFile SUCCEEDED (guard did not fire)" >&2
+            exit 1
+        fi
+        if ! printf '%s\n' "${output}" | grep -q "Release signing is not configured"; then
+            echo "❌ FAILED: Gradle release build with ${label} storeFile failed without the actionable fail-closed message (exit ${rc}). Output tail:" >&2
+            printf '%s\n' "${output}" | tail -15 >&2
+            exit 1
+        fi
+    }
+
+    assert_gradle_guard_fails_closed "blank" ""
+    assert_gradle_guard_fails_closed "directory-valued" "${KP_GATE_GRADLE_DIR}"
+    echo "✅ [Test 25b Passed] Blank and directory-valued storeFile fail closed with the actionable Gradle message."
+    rm -f "${KP_GATE_FILE}"
+    KP_GATE_WROTE=0
+fi
+
+# -----------------------------------------------------------------------------
+# Test 26 (F4): with --allow-debug-signing, the loud pre-build warning that the
+# artifact MAY be debug-signed must fire in BOTH key.properties states —
+# absent, and present with a blank storeFile. The gate no longer parses
+# key.properties, so it cannot know whether Gradle's debug-keystore fallback
+# will trigger; the warning must not depend on that judgment and the script
+# must not re-parse the file to decide it.
+# It uses a pub-get-succeeding flutter shim: the gate defers past dependency
+# resolution (reaching the build step), the warning prints before the build,
+# and the shim fails loudly on the `flutter build apk` call.
+# -----------------------------------------------------------------------------
+if [ -e "${KP_GATE_FILE}" ]; then
+    echo "⏩ [Test 26] Skipped (${KP_GATE_FILE} already exists; refusing to touch a real custody configuration)."
+else
+    echo "🔍 [Test 26] Verifying the --allow-debug-signing warning fires with key.properties absent AND present-but-broken..."
+
+    PUBGET_SHIM_DIR="${SHIM_DIR}/pubget-shim"
+    mkdir -p "${PUBGET_SHIM_DIR}"
+    cat > "${PUBGET_SHIM_DIR}/flutter" <<'EOF'
+#!/usr/bin/env bash
+if [ "${1:-}" = "pub" ] && [ "${2:-}" = "get" ]; then
+    exit 0
+fi
+echo "FLUTTER_SHIM_MUST_NOT_RUN" >&2
+exit 99
+EOF
+    chmod +x "${PUBGET_SHIM_DIR}/flutter"
+
+    run_optin_with_pubget_shim() {
+        PATH="${PUBGET_SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --split-per-abi --skip-tests --allow-debug-signing --out-dir "${SHIM_DIR}/test26-out" 2>&1
+    }
+
+    assert_debug_signing_warning() {
+        local label="$1" output rc
+        rc=0
+        output="$(run_optin_with_pubget_shim)" || rc=$?
+        if ! printf '%s\n' "${output}" | grep -q "WARNING: --allow-debug-signing is active"; then
+            echo "❌ FAILED: with --allow-debug-signing and ${label}, the loud debug-signing warning did not fire. Output:" >&2
+            printf '%s\n' "${output}" >&2
+            exit 1
+        fi
+        if ! printf '%s\n' "${output}" | grep -q "MAY be DEBUG-SIGNED"; then
+            echo "❌ FAILED: the --allow-debug-signing warning (${label}) must say the artifact MAY be debug-signed; the gate cannot predict Gradle's fallback and must not claim certainty" >&2
+            printf '%s\n' "${output}" >&2
+            exit 1
+        fi
+        if [ "${rc}" -ne 99 ] || ! printf '%s\n' "${output}" | grep -q "FLUTTER_SHIM_MUST_NOT_RUN"; then
+            echo "❌ FAILED: with ${label}, expected the shimmed 'flutter build apk' call to be reached after the warning (shim exit 99); got exit ${rc}. Output:" >&2
+            printf '%s\n' "${output}" >&2
+            exit 1
+        fi
+    }
+
+    # State A: key.properties absent (this block only runs when it is absent).
+    assert_debug_signing_warning "key.properties absent"
+
+    # State B: key.properties present with a blank storeFile — the gate must
+    # still defer (no parsing) and the warning must still fire.
+    printf 'storeFile =\n' > "${KP_GATE_FILE}"
+    KP_GATE_WROTE=1
+    assert_debug_signing_warning "a present key.properties with a blank storeFile"
+    rm -f "${KP_GATE_FILE}"
+    KP_GATE_WROTE=0
+
+    echo "✅ [Test 26 Passed] With --allow-debug-signing the MAY-be-debug-signed warning fires with key.properties absent AND present-but-broken, and the gate still defers."
+fi
 
 rm -rf "${SHIM_DIR}"
 

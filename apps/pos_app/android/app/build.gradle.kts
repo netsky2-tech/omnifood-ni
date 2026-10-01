@@ -14,11 +14,19 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
-// Release keystore readiness: key.properties must exist AND name a real
-// storeFile. Anything else is treated as "no keystore" so a broken
-// key.properties fails closed instead of degrading silently.
-val releaseStoreFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
-val releaseSigningReady = releaseStoreFile != null && releaseStoreFile.exists()
+// Release keystore readiness: key.properties must exist AND its storeFile
+// must be a non-blank value naming a regular file. Absent, blank-after-trim,
+// and directory-valued storeFile entries are all treated as "no keystore" so
+// a broken key.properties fails closed instead of degrading silently (an
+// empty value would otherwise resolve to this directory, which exists, and a
+// directory-valued one would pass an existence-only check and fail late with
+// a cryptic signing error). Relative paths resolve against this app module
+// directory, matching Gradle's file() semantics. This is a path-shape check
+// only: it does NOT validate that the file is a usable keystore or that any
+// key inside it opens — key validity is still not checked here.
+val rawStoreFile = keystoreProperties.getProperty("storeFile")?.trim()
+val releaseStoreFile = rawStoreFile?.takeIf { it.isNotEmpty() }?.let { file(it) }
+val releaseSigningReady = releaseStoreFile != null && releaseStoreFile.isFile
 
 // Explicit debug-signing opt-in, read as a Gradle project property so the
 // environment variable ORG_GRADLE_PROJECT_allowDebugSigning maps onto it

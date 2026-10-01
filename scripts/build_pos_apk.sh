@@ -4,6 +4,14 @@
 # ==============================================================================
 # Builds optimized Release Candidate APKs with ProGuard/R8, computes SHA-256
 # checksums, verifies size constraints, and produces a structured release manifest.
+#
+# Release signing — division of responsibility: the pre-build gate in this
+# script performs ONE exact, cheap check — that apps/pos_app/android/key.properties
+# exists — so an absent keystore fails fast before the toolchain. The gate does
+# NOT parse key.properties and does NOT judge signing readiness. Gradle's
+# signing guard (apps/pos_app/android/app/build.gradle.kts) parses key.properties
+# authoritatively and fails closed with the same actionable message when the
+# storeFile is missing, blank, or a directory.
 # ==============================================================================
 
 set -euo pipefail
@@ -26,30 +34,15 @@ PILOT_MODE=false
 PLAN_ONLY=false
 ALLOW_DEBUG_SIGNING=false
 
-# Release signing resolution. A keystore is "ready" only when key.properties
-# exists AND the storeFile it names exists; relative storeFile paths resolve
-# against the Android app module dir, matching Gradle's file() semantics.
+# Release signing gate input. The gate checks ONLY that this file exists; it
+# never reads or parses it. Gradle (build.gradle.kts) is the authoritative
+# reader and fails closed when the storeFile is missing, blank, or a directory.
 KEYSTORE_PROPERTIES_FILE="${POS_APP_DIR}/android/key.properties"
-APP_MODULE_DIR="${POS_APP_DIR}/android/app"
-RELEASE_SIGNING_READY=false
-RELEASE_SIGNING_MODE="fail-closed (no release keystore found; a release build would fail closed)"
+RELEASE_SIGNING_MODE="no key.properties was found; a release build would fail closed"
 resolve_release_signing_mode() {
     if [ -f "${KEYSTORE_PROPERTIES_FILE}" ]; then
-        local store_file=""
-        store_file="$(grep -E '^storeFile=' "${KEYSTORE_PROPERTIES_FILE}" | head -n1 | cut -d= -f2- | tr -d '\r')"
-        if [ -n "${store_file}" ]; then
-            local store_path
-            case "${store_file}" in
-                /*) store_path="${store_file}" ;;
-                *)  store_path="${APP_MODULE_DIR}/${store_file}" ;;
-            esac
-            if [ -f "${store_path}" ]; then
-                RELEASE_SIGNING_READY=true
-                RELEASE_SIGNING_MODE="${store_path}"
-            fi
-        fi
-    fi
-    if [ "${RELEASE_SIGNING_READY}" = false ] && [ "${ALLOW_DEBUG_SIGNING}" = true ]; then
+        RELEASE_SIGNING_MODE="key.properties is present; release readiness is decided by Gradle's signing guard"
+    elif [ "${ALLOW_DEBUG_SIGNING}" = true ]; then
         RELEASE_SIGNING_MODE="explicit debug-signing opt-in (--allow-debug-signing): the artifact will be debug-signed"
     fi
 }
@@ -254,7 +247,9 @@ if [ -n "${TEST_CONCURRENCY}" ]; then
     FLUTTER_TEST_CMD="flutter test --concurrency=${TEST_CONCURRENCY}"
 fi
 
-# Release signing mode (side-effect-free: reads the repository state only).
+# Release signing mode resolution: reads repository state but MUTATES the
+# global RELEASE_SIGNING_MODE. Do not assume the call is side-effect-free,
+# and do not reorder it against code that depends on that global.
 resolve_release_signing_mode
 
 # Plan mode: print resolved configuration and exact build commands, then stop.
@@ -282,7 +277,7 @@ if [ "${PLAN_ONLY}" = true ]; then
         echo "   (no --test-concurrency given; 'flutter test' will use the Flutter default)"
     fi
     echo "🔑 Release signing:     ${RELEASE_SIGNING_MODE}"
-    if [ "${RELEASE_SIGNING_READY}" = false ] && [ "${ALLOW_DEBUG_SIGNING}" = false ]; then
+    if [ ! -f "${KEYSTORE_PROPERTIES_FILE}" ] && [ "${ALLOW_DEBUG_SIGNING}" = false ]; then
         echo "   (a release build would fail closed: create the keystore or pass --allow-debug-signing)"
     fi
     echo "📋 release_manifest.json would record terminal_identity: ${TERMINAL_ID_BINDING}"
@@ -308,11 +303,14 @@ if [ "${PLAN_ONLY}" = true ]; then
     exit 0
 fi
 
-# Fail-closed gate: a release build without a keystore and without the explicit
-# opt-in must fail before ANY build step (including `flutter pub get`) runs.
-# Plan mode already exited above, so this gate never affects --plan.
-if [ "${RELEASE_SIGNING_READY}" = false ] && [ "${ALLOW_DEBUG_SIGNING}" = false ]; then
-    echo "ERROR: No release keystore found (${KEYSTORE_PROPERTIES_FILE} is absent or does not name a real storeFile)." >&2
+# Fail-closed gate: a release build with no key.properties and without the
+# explicit opt-in must fail before ANY build step (including `flutter pub get`)
+# runs. This is the gate's ONLY check: it does not parse key.properties, and
+# readiness for a present file is enforced by Gradle's signing guard, which
+# fails closed with the same actionable message. Plan mode already exited
+# above, so this gate never affects --plan.
+if [ ! -f "${KEYSTORE_PROPERTIES_FILE}" ] && [ "${ALLOW_DEBUG_SIGNING}" = false ]; then
+    echo "ERROR: No release keystore found (${KEYSTORE_PROPERTIES_FILE} is absent or not a regular file)." >&2
     echo "A release build would silently fall back to the debug keystore, producing an artifact that can never be updated in the field." >&2
     echo "Two remedies:" >&2
     echo "  1. Create the release keystore with the provisioning script (scripts/provision_release_keystore.sh)." >&2
@@ -367,8 +365,12 @@ fi
 # 4. Building APKs
 echo "🏗️  [4/5] Building Release Candidate APK(s)..."
 
-if [ "${ALLOW_DEBUG_SIGNING}" = true ] && [ "${RELEASE_SIGNING_READY}" = false ]; then
-    echo "⚠️  WARNING: --allow-debug-signing is active. The artifact will be DEBUG-SIGNED and must NOT be shipped as a release."
+# With --allow-debug-signing the gate cannot know whether Gradle will fall
+# back to the debug keystore (it no longer parses key.properties), so the
+# warning is unconditional and states what is actually known: the artifact
+# MAY be debug-signed, and readiness is Gradle's call.
+if [ "${ALLOW_DEBUG_SIGNING}" = true ]; then
+    echo "⚠️  WARNING: --allow-debug-signing is active. The artifact MAY be DEBUG-SIGNED (if no usable release keystore is found, Gradle falls back to the debug keystore) and must NOT be shipped as a release. Signing readiness is decided by Gradle's signing guard, not by this gate."
 fi
 
 BUILD_OUTPUT_DIR="${POS_APP_DIR}/build/app/outputs/flutter-apk"

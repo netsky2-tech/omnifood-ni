@@ -75,6 +75,7 @@ if [ ! -x "${PROVISION}" ]; then
 fi
 
 REAL_KEYTOOL="$(command -v keytool)" || fail "real keytool is required by this suite"
+REAL_MV="$(command -v mv)" || fail "real mv is required by this suite"
 
 # -----------------------------------------------------------------------------
 # Test 1: --help documents the operator-facing flags.
@@ -656,6 +657,138 @@ if [ -n "${HASH_DIFF}" ]; then
 ${HASH_DIFF}"
 fi
 echo "✅ [Test 17 Passed] No keystore, no key.properties, no secret and no tracked-file change made by the suite."
+
+# -----------------------------------------------------------------------------
+# Test 18 (R4-2): a NEW keystore must be generated into a .provision-stage.*
+# staging file, never directly at the live path — a SIGKILL during
+# -genkeypair otherwise leaves a partial file at the keystore path that the
+# next run refuses to overwrite and that --force misdiagnoses. Verified via
+# an argv-recording wrapper around the real keytool: the first -keystore
+# argument of the run (the fresh path's first keytool call is the generation)
+# must be a .provision-stage.* path and must NOT be the live keystore path.
+# The generated keystore must still end up at the live path and open.
+# -----------------------------------------------------------------------------
+echo "🔍 [Test 18] Verifying NEW-keystore generation is staged (.provision-stage.*)..."
+SB18="${TMP_BASE}/t18"; mkdir -p "${SB18}"
+ARGV_LOG18="${TMP_BASE}/argv18.log"
+ARGVSHIM18="${TMP_BASE}/t18-shim"; mkdir "${ARGVSHIM18}"
+cat > "${ARGVSHIM18}/keytool" <<EOF
+#!/usr/bin/env bash
+printf '%s\0' "\$@" >> "${ARGV_LOG18}"
+exec "${REAL_KEYTOOL}" "\$@"
+EOF
+chmod +x "${ARGVSHIM18}/keytool"
+
+T18_RC=0
+PATH="${ARGVSHIM18}:${PATH}" run_provision \
+  --keystore-path "${SB18}/fresh.jks" \
+  --key-properties-path "${SB18}/key.properties" \
+  --alias "${THROWAWAY_ALIAS}" --validity-days 365 > /dev/null 2>&1 \
+  || T18_RC=$?
+if [ "${T18_RC}" -ne 0 ]; then
+  fail "provisioning run under the argv-recording shim failed"
+fi
+[ -s "${ARGV_LOG18}" ] || fail "the argv recording shim captured no keytool invocation"
+FIRST_KS_TARGET="$(tr '\0' '\n' < "${ARGV_LOG18}" | grep -A1 -m1 -e '^-keystore$' | sed -n '2p')"
+[ -n "${FIRST_KS_TARGET}" ] || fail "no -keystore argument found in the recorded keytool argv"
+case "${FIRST_KS_TARGET}" in
+  *.provision-stage.*) : ;;
+  *) fail "the first keytool -keystore target was '${FIRST_KS_TARGET}', not a .provision-stage.* staging file (NEW-keystore generation is unstaged — a SIGKILL would leave a partial file at the live path)" ;;
+esac
+if [ "${FIRST_KS_TARGET}" = "${SB18}/fresh.jks" ]; then
+  fail "NEW-keystore generation targeted the live keystore path directly (unstaged)"
+fi
+[ -f "${SB18}/fresh.jks" ] || fail "the generated keystore did not end up at the live path"
+KT18_LIST="$(KT_STORE_PASS="${PW_STORE}" "${REAL_KEYTOOL}" -list \
+  -keystore "${SB18}/fresh.jks" -storepass:env KT_STORE_PASS 2>&1)" \
+  || fail "the generated keystore does not open with the chosen password"
+printf '%s\n' "${KT18_LIST}" | grep -q -- "${THROWAWAY_ALIAS}" \
+  || fail "the generated keystore does not contain the requested alias"
+echo "✅ [Test 18 Passed] NEW-keystore generation is staged and the verified keystore lands at the live path."
+
+# -----------------------------------------------------------------------------
+# Test 19 (R4-2): --force against an existing file that is NOT a keystore at
+# all (partial or corrupt) must fail closed with a message naming THAT cause
+# and its remedy (remove the partial file / check backups) — not the
+# misleading 'different password' message. Test 12 still covers the genuine
+# different-password case.
+# -----------------------------------------------------------------------------
+echo "🔍 [Test 19] Verifying --force against a non-keystore file names the real cause..."
+SB19="${TMP_BASE}/t19"; mkdir -p "${SB19}"
+KS19="${SB19}/partial.jks"
+printf 'partial-corrupt-not-a-keystore\n' > "${KS19}"
+KS19_SUM1="$(sha256sum "${KS19}" | awk '{print $1}')"
+T19_RC=0
+T19_OUT="$(run_provision --force \
+  --keystore-path "${KS19}" \
+  --key-properties-path "${SB19}/key.properties" \
+  --alias "${THROWAWAY_ALIAS}" --validity-days 365 2>&1)" || T19_RC=$?
+if [ "${T19_RC}" -eq 0 ]; then
+  fail "--force over a non-keystore file was accepted"
+fi
+printf '%s\n' "${T19_OUT}" | grep -qi "not a.*keystore" \
+  || fail "the failure message must name the real cause (the file is not a usable keystore), not a different password. Output: ${T19_OUT}"
+if printf '%s\n' "${T19_OUT}" | grep -qi "DIFFERENT password"; then
+  fail "the failure message must NOT claim a different password for a file that is not a keystore at all. Output: ${T19_OUT}"
+fi
+printf '%s\n' "${T19_OUT}" | grep -qi "backup" \
+  || fail "the failure message must name the remedy (verify against backups / remove). Output: ${T19_OUT}"
+KS19_SUM2="$(sha256sum "${KS19}" | awk '{print $1}')"
+[ "${KS19_SUM1}" = "${KS19_SUM2}" ] || fail "the existing file was modified by the refused run"
+echo "✅ [Test 19 Passed] A partial/corrupt file is distinguished from a different password, with the right remedy, byte-identical."
+
+# -----------------------------------------------------------------------------
+# Test 20 (R4-3): key.properties must be written ATOMICALLY (staged into a
+# sibling temporary file, then moved into place), like the keystore rotation.
+# A direct in-place redirection truncates the existing file on a disk-full or
+# interrupted write, destroying a previously working configuration.
+# Mechanism: an mv shim that SIGKILLs the provisioning script exactly when it
+# moves the new key.properties into place. After such an interruption the
+# PREVIOUS key.properties must be byte-identical (untruncated) and the staged
+# replacement must be visible as debris in the same directory. Under the old
+# in-place redirect there is no mv at all: the run completes and overwrites
+# the file (RED).
+# -----------------------------------------------------------------------------
+echo "🔍 [Test 20] Verifying key.properties is written atomically (staged + moved)..."
+SB20="${TMP_BASE}/t20"; mkdir -p "${SB20}"
+KP20="${SB20}/key.properties"
+KP20_ABS="$(realpath -m -- "${KP20}")"
+printf 'storePassword=PREVIOUS-WORKING-SENTINEL\n' > "${KP20}"
+KP20_SUM1="$(sha256sum "${KP20}" | awk '{print $1}')"
+MVSHIM20="${TMP_BASE}/t20-shim"; mkdir "${MVSHIM20}"
+cat > "${MVSHIM20}/mv" <<EOF
+#!/usr/bin/env bash
+dest=""
+for a in "\$@"; do dest="\$a"; done
+if [ "\${dest}" = "${KP20_ABS}" ]; then
+  echo "MV_SHIM: simulating an interruption exactly at the key.properties move" >&2
+  kill -9 "\$PPID"
+  sleep 10
+fi
+exec "${REAL_MV}" "\$@"
+EOF
+chmod +x "${MVSHIM20}/mv"
+
+T20_RC=0
+PATH="${MVSHIM20}:${PATH}" run_provision --force \
+  --keystore-path "${SB20}/fresh.jks" \
+  --key-properties-path "${KP20}" \
+  --alias "${THROWAWAY_ALIAS}" --validity-days 365 > /dev/null 2>&1 \
+  || T20_RC=$?
+if [ "${T20_RC}" -eq 0 ]; then
+  fail "the provisioning run completed although the key.properties move was interrupted (key.properties is NOT written atomically)"
+fi
+KP20_SUM2="$(sha256sum "${KP20}" | awk '{print $1}')"
+[ "${KP20_SUM1}" = "${KP20_SUM2}" ] \
+  || fail "the interrupted write damaged the existing key.properties (not atomic: it was truncated/replaced mid-write)"
+printf 'storePassword=PREVIOUS-WORKING-SENTINEL\n' | diff -q - "${KP20}" >/dev/null \
+  || fail "the existing key.properties content was lost by the interrupted write"
+KP20_DEBRIS="$(find "${SB20}" -maxdepth 1 -type f -name '.keyprops-stage.*' -print 2>/dev/null || true)"
+[ -n "${KP20_DEBRIS}" ] \
+  || fail "no staged key.properties debris found: the write did not go through a same-directory staging file"
+[ -f "${SB20}/fresh.jks" ] \
+  || fail "the keystore was not in place yet: the interruption did not happen at the key.properties window"
+echo "✅ [Test 20 Passed] The interrupted key.properties write left the previous file byte-identical; the replacement was staged."
 
 echo "=============================================================================="
 echo "🎉 ALL PROVISIONING TESTS PASSED CLEANLY!"

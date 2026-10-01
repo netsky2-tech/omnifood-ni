@@ -64,6 +64,8 @@ These are not recommendations. The key is the artifact whose loss cannot be repa
 
 `apps/pos_app/android/app/build.gradle.kts` fails closed: a `release` build with no keystore (no `key.properties` naming a real `storeFile`) and no opt-in exits with an error naming the two remedies — create the keystore with `scripts/provision_release_keystore.sh`, or pass the explicit opt-in. The packaging script `scripts/build_pos_apk.sh` threads this as `--allow-debug-signing` (a Gradle project property) and warns loudly when it is used.
 
+Division of responsibility, stated plainly: the packaging script's pre-build gate performs only one exact, cheap check — that `apps/pos_app/android/key.properties` **exists** — so an absent keystore fails fast before the toolchain. The gate does **not** parse `key.properties` and does **not** validate readiness; Gradle's signing guard is the authoritative check and fails closed with the same actionable message when the `storeFile` is missing, blank, or a directory.
+
 The opt-in exists so the packaging pipeline can build and test **without** a release keystore (that is how `scripts/test_packaging_pipeline.sh` runs). It produces a **debug-signed** artifact.
 
 **A debug-signed artifact must never be shipped.** Debug signing uses the machine's debug keystore, which is not custody-controlled and differs between machines and CI environments. Anything debug-signed can never be updated in place by a release-signed build — shipping it to a terminal would waste that terminal the same way a lost key does.

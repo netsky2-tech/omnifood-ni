@@ -265,6 +265,48 @@ so a genuinely external writer during that window would also be reported; and th
 pre-verification revision used to establish no-regression was recovered from a session log
 rather than from git history, because S0-05's intermediate revisions were never committed.
 
+### S0-06 — Correction cycle for six native review findings
+
+Status: complete — work-unit commit recorded in the Evidence log.
+
+The native review opened on this branch admitted three of four lenses (risk, resilience,
+readability) and reported six findings, all `causal_disposition: introduced`, none BLOCKER
+or CRITICAL. All six are corrected here.
+
+- [x] R2-001 — the pre-build gate rejected a valid `key.properties` (`storeFile = /path`,
+      and later `storeFile /path`), aborting a build Gradle accepted — proven with a real
+      `BUILD SUCCESSFUL`. Resolved systemically rather than by patching a third time.
+- [x] R4-1 — an empty or directory-valued `storeFile` passed the Gradle guard's
+      existence-only check, skipping the actionable message. Blank-after-trim and
+      non-regular files are now treated as "no keystore".
+- [x] R4-2 — a SIGKILL during generation of a NEW keystore left a partial file at the live
+      path. Both the new and the rotation path now stage to `.provision-stage.*` and move
+      into place only after verification, so one mechanism and one sweep cover both.
+- [x] R4-3 — `key.properties` was written by direct in-place redirection, so an interrupted
+      write could truncate a working configuration. Now staged and moved into place.
+- [x] R2-002 — the Gradle comment overstated what the guard checks. It now states that this
+      is a path-shape check and that key validity is not verified.
+- [x] R2-003 — a call-site comment called a mutating function side-effect-free. Corrected.
+
+Root cause of R2-001, and the reason it took three rounds: the gate reimplemented
+`java.util.Properties` in `awk` to decide readiness, which is divergent by construction.
+Three successive rounds each found a different divergence — the whitespace-only separator,
+a bare key line, and backslash escapes; the last let the gate report READY on a path Gradle
+never uses. The parser was therefore REMOVED. The gate now performs one exact check,
+whether `key.properties` exists, and Gradle is the sole authority on readiness; Gradle
+already fails closed with the same actionable message. This deletes the divergence class,
+shrinks the script, and restores the honest invariant that the gate never claims a
+readiness it cannot verify.
+
+Two incoherences the removal introduced were also closed: the debug-signing warning had
+kept a condition requiring the file to be ABSENT, so it now fires unconditionally with the
+opt-in, because the gate can no longer predict whether Gradle will fall back; and the
+early-abort message now matches its `[ ! -f ]` condition instead of saying only "is absent".
+
+Trade accepted deliberately by the founder: with a present-but-broken `key.properties` the
+failure now arrives after toolchain startup instead of immediately — same message, later. No
+artifact-level guarantee was relaxed.
+
 ## Evidence log
 
 ### Work units
@@ -277,8 +319,9 @@ rather than from git history, because S0-05's intermediate revisions were never 
 | S0-03 | `f4d1dbbb` | Custody and MDM enrollment runbook. |
 | S0-04 | `0b50d6e9` | Phase 0 decisions registered as DEC-4..DEC-6. |
 | S0-05 | `81f6efa8` | Staging sweep, single-password example, hygiene-test correction. |
+| S0-06 | this commit | Six native review findings corrected; the gate's property parser removed. |
 
-All six commits are local to `feat/release-signing-baseline`, branched from `22bfc376`
+All seven commits are local to `feat/release-signing-baseline`, branched from `22bfc376`
 (`origin/main`). Nothing is pushed; the pull request and the merge remain the founder's
 decision.
 
@@ -319,18 +362,42 @@ decision.
    demonstrate those teeth at all and said so instead of substituting a sandbox result,
    and an independent verifier then closed that gap.
 
+6. **S0-06 — the native review found what three verification rounds did not.** Three of
+   four lenses admitted (risk, resilience, readability); `review-reliability` produced no
+   output on two consecutive attempts (`reviewer-empty-output`, `stopReason: length`, no
+   mutation), so the review could not close. The admitted lenses reported six findings, all
+   introduced by this candidate. Every fix was then verified behaviorally, and twice a fix
+   was found incomplete: R2-001's first correction still rejected the whitespace-only
+   separator form, proven by a real `BUILD SUCCESSFUL` against a gate exit 2, and the
+   parser's own comment claimed an invariant a counterexample refuted. The final round
+   confirmed 9 of 9, including mutation proofs that each new assertion can actually fail.
+
 ### Known gaps carried forward
 
-Both residuals recorded when S0-02 closed are now closed in S0-05:
-`scripts/key.properties.example` documents the single-password flow, and stale staging
-debris is swept at startup.
+Both residuals recorded when S0-02 closed are now closed in S0-05, and the six review
+findings are corrected in S0-06.
 
-Still open:
+Still open, all low severity, none able to produce a debug-signed or wrongly-signed
+artifact:
 
 - No claim in this feature was validated against physical Android hardware. The runbook
   says so, and the enrollment dry run is the operator step that closes it.
-- The S0-01 guard still surfaces AGP's or keytool's message rather than the actionable one
-  on two paths: `:app:packageRelease`, and a `key.properties` that names a file which
-  exists but is not a keystore.
-- The hygiene check carries a theoretical false-positive surface and its exclusion comment
-  under-describes the rule by one clause, both recorded under S0-05.
+- The fail-closed guarantee now rests on a single layer, Gradle's signing guard. Test 25b
+  pins it, but a future removal of that guard without touching the gate would let a
+  present-but-broken `key.properties` stop failing closed.
+- A DIRECTORY at the `key.properties` path (pathological) makes `keystoreProperties.load`
+  throw a raw `Is a directory` error before the signing guard can produce the actionable
+  message, including on the opt-in path where the fallback is intended to work.
+- The loud debug-signing warning lives only in `scripts/build_pos_apk.sh` and is written to
+  stdout; a direct `flutter build` bypasses it, and a CI capturing only stderr would miss
+  it. Gradle emits its own equivalent warning on that path.
+- `:app:packageRelease` invoked directly, and a `storeFile` naming a file that exists but
+  is not a keystore, still surface AGP's or keytool's message rather than the actionable
+  one. The guard's notion of a usable keystore remains path shape, not key validity.
+- Test 25a's deferral proof trips at `flutter pub get` rather than the build step its
+  failure text names; the assertion still distinguishes a gate abort from a deferral, but
+  the message overstates the granularity.
+- The provisioning script's Test 17 compares tracked-file hashes repository-wide, so a
+  genuinely external writer during the ~23 second run would also be reported.
+- The three `.pyc` files tracked under `scripts/finance/__pycache__/` are a pre-existing
+  repository issue, out of scope here; they are excluded from the hygiene hash set.
