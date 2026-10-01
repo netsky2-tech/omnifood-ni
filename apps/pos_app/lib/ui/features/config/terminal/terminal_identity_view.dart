@@ -471,7 +471,16 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
                   style: TextStyle(color: Colors.red.shade700),
                 ),
               ),
-            Row(
+            // Wrap, not Row: on the real terminal width (Q80 is 800x1280 px at
+            // 240 dpi, i.e. 533 logical) the two labels together are ~190 px
+            // wider than the viewport. A Row overflowed and pushed "Borrar
+            // configuración guardada" off-screen, which also made "Guardar"
+            // unhittable, so an operator could not persist a server URL at all.
+            // Wrapping lets the actions flow onto a second line and keeps both
+            // reachable at any width.
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
               children: [
                 ElevatedButton.icon(
                   key: const Key('save_server_url_button'),
@@ -479,7 +488,6 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
                   label: const Text('Guardar'),
                   onPressed: () => _save(viewModel),
                 ),
-                const SizedBox(width: 12),
                 OutlinedButton.icon(
                   key: const Key('clear_server_url_button'),
                   icon: const Icon(Icons.delete_outline),
