@@ -39,6 +39,9 @@
 !/dist/proposals/OE-001OM-propuesta-SOHO.pdf
 **/npm-debug.log*
 **/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
 **/coverage/
 
 # Flutter / Dart
