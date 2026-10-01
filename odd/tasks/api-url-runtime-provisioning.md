@@ -190,6 +190,64 @@ handoff.
 - `flutter analyze` — **No issues found**, after every change above.
 - `git status --porcelain` clean; four commits on the branch, tree matches HEAD.
 
+### Re-rebased onto `8e376dda`, and the PR supersession
+
+After other sessions landed 27 commits on `main` (`9cdbc026` → `8e376dda`), the
+branch was rebased again. Overlap check: 8 files on this feature against 57 files
+touched by those 27 commits — **zero intersection**, and the rebase applied
+cleanly with no manual resolution.
+
+Verified independently that this feature is still required and not duplicated:
+`origin/main` still resolves the backend URL at compile time
+(`main.dart:129-132`, `String.fromEnvironment('API_URL')` with the localhost
+default), and `git grep` for `api_base_url` / `ApiBaseUrlService` in `origin/main`
+returns nothing. No other session solved this.
+
+**PR supersession.** Updating PR #755 to the rebased history required a
+force-push that rewrites published history. The local safety policy declined it
+twice — including after the founder said "procede" in conversation, because the
+policy is enforced at the tool layer and a chat approval is not its authorization
+mechanism. Rather than work around it, the goal was met non-destructively:
+the rebased commits were pushed to `feat/api-url-runtime-provisioning-v2` as
+**PR #762**, and #755 was closed with a comment recording the tested commit
+(`c6a751a3`) and the reason. The old remote branch
+`feat/api-url-runtime-provisioning` remains behind — GitHub could not delete it
+because this worktree has it checked out. Harmless, but it is dangling.
+
+### Verification observed (post-rebase onto `8e376dda`, all re-run)
+
+Not inherited from the earlier run — every number below was measured against the
+rebased tree in the same session.
+
+- Slice + both pre-existing identity suites: **51/51 passing**.
+- `flutter analyze`: **No issues found**.
+- Full POS suite on this branch: **2764 passing, 3 failing**.
+- Full POS suite on plain `origin/main` as a **baseline control**, same session:
+  **2727 passing, 2 failing**. The failures predate this branch, so this feature
+  adds 37 tests and regresses nothing.
+- Backend `jest` on `main`: **3402 passing, 8 skipped**. Measured as a control
+  for the founder's revalidation request; this branch touches no backend code.
+- All POS failures re-run with `--concurrency=1`: **31/31 passing**.
+
+The load failures name a **different file each run** —
+`auth_repository_production_composition`, `sunmi_v2s_responsive_sale_view` and
+`customer_identification` on this branch, `sync_service_reconnect` on plain
+`main`. That rotation, with `Unable to connect to flutter_tester process:
+WebSocketException` as the cause, is the signature of runner contention. The
+fourth is the timing-sensitive `LocalNetworkTerminalAdapter checkStatus` socket
+test. Neither class is attributable to this change.
+
+### Corrections issued to the founder during this revalidation
+
+- The PR was reported as **#751**; it is **#755** (now #762), and it was still
+  open. #751 is a different, already-merged PR from another session.
+- G4 (`saveProductOptions` transaction) was recommended as the next task and had
+  already been delivered by another session in **#760**. Caught only because the
+  founder asked for a full revalidation.
+- The claim that the runtime URL blocked the single-terminal pilot was wrong:
+  `--pilot` already requires and bakes `--api-url`, failing closed without it.
+  What this feature unblocks is fleet distribution and the OTA path.
+
 ### Branch and delivery
 
 Branched from `origin/main` at `8d8455f6` (after PR #750 merged). Rebased onto
