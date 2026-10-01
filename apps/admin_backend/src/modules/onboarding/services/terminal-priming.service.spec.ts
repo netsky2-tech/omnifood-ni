@@ -30,6 +30,11 @@ function buildEnvelope(overrides: {
           stock: 100,
           averageCost: 12.5,
           sellPrice: 25,
+          // Part of the inbound product contract since the fiscal-gap fix:
+          // the POS reads these to resolve the line's IVA treatment, so any
+          // InboundSyncProductDto fixture must carry them.
+          taxRate: 0.15,
+          isTaxExempt: false,
           isActive: true,
           isPerishable: false,
           warehouseId: null,

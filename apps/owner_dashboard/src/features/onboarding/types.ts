@@ -265,6 +265,11 @@ export interface LinkingCodeResponse {
   status: LinkingCodeStatus;
   /** Bound device id once the POS claimed the code; null while ACTIVE. */
   deviceId: string | null;
+  /** Latest activation attempt status for the bound device, or null when the code
+   * is unclaimed or its device never started an attempt. Mirrors the backend
+   * `LinkingCodeResponseDto.lastAttemptStatus` field added to fix H-3 (ghost
+   * terminal re-offering in Setup Center). */
+  lastAttemptStatus: ActivationAttemptStatus | null;
   expiresAt: string;
   /** Set when the code transitioned to CLAIMED; null otherwise. */
   claimedAt: string | null;

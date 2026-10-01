@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/models/user.dart';
 import '../../../domain/services/config/tenant_config_service.dart';
+import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../features/inventory/boh/boh_permissions.dart';
 
 class AppDrawer extends StatefulWidget {
@@ -55,6 +56,31 @@ class _AppDrawerState extends State<AppDrawer> {
           _currentUser!.role == UserRole.manager);
 
   bool get _canAccessBohShell => canAccessAnyBoh(_currentUser?.role);
+
+  /// Operator handover: keeps the device/tenant session alive and only rotates
+  /// the staff operator via the PIN lock screen. Blocked while the outgoing
+  /// operator still has an open cash shift.
+  void _handleOperatorSwitch() {
+    final activeSession = context.read<SaleViewModel>().activeSession;
+    final navigator = Navigator.of(context);
+
+    if (activeSession != null) {
+      final messenger = ScaffoldMessenger.of(context);
+      navigator.pop();
+      navigator.pushNamed('/sales/cash');
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Hay una caja abierta. Cierra la caja antes de cambiar de operador.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    navigator.pop();
+    navigator.pushNamed('/lock');
+  }
 
   String _getRoleLabel(UserRole? role) {
     switch (role) {
@@ -282,6 +308,11 @@ class _AppDrawerState extends State<AppDrawer> {
 
             // Footer / Logout
             const Divider(),
+            ListTile(
+              leading: const Icon(Icons.swap_horiz),
+              title: const Text('Cambiar operador'),
+              onTap: _handleOperatorSwitch,
+            ),
             ListTile(
               leading: Icon(Icons.logout, color: colorScheme.error),
               title: Text(

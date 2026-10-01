@@ -717,7 +717,8 @@ void main() {
   });
 
   group('#613 Unit B — getInertRecipeVerdictReport (surfacing read model)', () {
-    Future<void> insertProduct(String id, String name) {
+    Future<void> insertProduct(String id, String name,
+        {String productType = 'SIMPLE'}) {
       return database.productDao.insertProducts([
         ProductEntity(
           id: id,
@@ -726,7 +727,7 @@ void main() {
           stock: 0,
           averageCost: 0,
           sellPrice: 0,
-          productType: 'SIMPLE',
+          productType: productType,
         ),
       ]);
     }
@@ -780,6 +781,45 @@ void main() {
       expect(report, isNotNull);
       expect(report!.verdictCount, 2);
       expect(report.productNames, ['Pizza']);
+    });
+
+    test(
+        'excludes verdicts whose product is now COMPOUND (resolved locally)',
+        () async {
+      // Operator flipped the product to COMPOUND in Catálogo; the append-only
+      // verdict row remains, but the badge must stop reporting it.
+      await insertProduct('prod-pizza', 'Pizza',
+          productType: 'COMPOUND');
+      await insertVerdict('rv-1', 'prod-pizza');
+
+      final report = await syncService.getInertRecipeVerdictReport();
+
+      expect(report, isNull);
+    });
+
+    test(
+        'counts only still-SIMPLE products when compound resolutions exist',
+        () async {
+      await insertProduct('prod-pizza', 'Pizza',
+          productType: 'COMPOUND');
+      await insertProduct('prod-jugo', 'Jugo Natural');
+      await insertVerdict('rv-1', 'prod-pizza');
+      await insertVerdict('rv-2', 'prod-jugo');
+
+      final report = await syncService.getInertRecipeVerdictReport();
+
+      expect(report, isNotNull);
+      expect(report!.verdictCount, 1);
+      expect(report.productNames, ['Jugo Natural']);
+    });
+
+    test('treats PREPARED as resolved like any non-SIMPLE type', () async {
+      await insertProduct('prod-tamal', 'Tamal', productType: 'PREPARED');
+      await insertVerdict('rv-1', 'prod-tamal');
+
+      final report = await syncService.getInertRecipeVerdictReport();
+
+      expect(report, isNull);
     });
 
     test('returns null when there are no verdicts (render nothing)',

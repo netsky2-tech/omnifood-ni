@@ -24,6 +24,7 @@ import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
+import 'package:pos_app/domain/services/sales/split_payment_calculator.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
@@ -115,6 +116,25 @@ class SalesRepositoryImpl implements SalesRepository {
     this.onFulfillmentCheckoutContextReady,
   });
 
+  /// Payment-status rule for persisted sales, delegated to
+  /// [SplitPaymentCalculator] (the checkout dialog's own calculator, so
+  /// charge eligibility and persisted status can never diverge):
+  /// fully paid → paid, some money collected → partial, nothing → pending.
+  static PaymentStatus _resolvePaymentStatus({
+    required double total,
+    required List<Payment> payments,
+    required double commercialRate,
+  }) {
+    final calculator = SplitPaymentCalculator(
+      totalNio: total,
+      commercialRate: commercialRate,
+      payments: payments,
+    );
+    if (calculator.isFullyPaid) return PaymentStatus.paid;
+    if (calculator.totalPaidNio > 0) return PaymentStatus.partial;
+    return PaymentStatus.pending;
+  }
+
   @override
   Future<void> saveSale({
     required Invoice invoice,
@@ -156,6 +176,16 @@ class SalesRepositoryImpl implements SalesRepository {
         invoice: sourceInvoice,
         items: resolvedItems,
         payments: payments,
+      ),
+      // Persist the REAL payment status instead of the model default:
+      // resolve it from the actual payments with the same
+      // SplitPaymentCalculator rule the checkout dialog uses to decide
+      // isFullyPaid — one rule decides both whether the operator may charge
+      // and what gets stored (cash change is not unpaid balance).
+      paymentStatus: _resolvePaymentStatus(
+        total: sourceInvoice.total,
+        payments: payments,
+        commercialRate: sourceInvoice.commercialRate,
       ),
     );
 

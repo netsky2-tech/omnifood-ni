@@ -516,6 +516,11 @@ export class InboundSyncService {
         stock: Number(p.stock),
         averageCost: Number(p.averageCost),
         sellPrice: Number(p.sellPrice),
+        // Fiscal fields flow from the entity columns to the POS; its fiscal
+        // calculator uses the emitted rate as source of truth (Régimen
+        // General must not see POS-defaulted 0.0 rates).
+        taxRate: Number(p.tax_rate),
+        isTaxExempt: p.is_tax_exempt,
         isActive: p.is_active,
         isPerishable: p.is_perishable,
         warehouseId: p.warehouse_id ?? null,

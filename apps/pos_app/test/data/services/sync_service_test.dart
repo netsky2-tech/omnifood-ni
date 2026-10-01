@@ -13,6 +13,7 @@ import 'package:pos_app/data/models/human_authorization/error_codes.dart';
 import 'package:pos_app/data/models/human_authorization/ohac_acknowledgement_request.dart';
 import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
 import 'package:pos_app/data/models/human_authorization/staff_policy_epoch_v1.dart';
+import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
@@ -28,6 +29,7 @@ import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
 import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart';
 import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart';
+import 'package:pos_app/domain/usecases/inventory/checkout_inventory_preparation_service.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
@@ -2762,6 +2764,398 @@ void main() {
         }
       },
     );
+
+    group('direct-mapping authority insumo hydration (top-level insumos delta)', () {
+      test(
+        'top-level insumos delta rows also land in authority_insumos',
+        () async {
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              dio,
+              database: database,
+            );
+
+            capturedGets['/v1/sync/inbound/deltas'] = {
+              'status': 'success',
+              'serverTime': '2026-09-04T10:00:00.000Z',
+              'currentVersion': 1787745600010,
+              'deltas': {
+                'insumos': [
+                  {
+                    'tenantId': 'tenant-direct',
+                    'id': 'ins-direct-1',
+                    'name': 'Base Directa',
+                    'consumptionUom': 'G',
+                    'stock': 100.0,
+                    'averageCost': 0.5,
+                    'isActive': true,
+                  },
+                ],
+              },
+            };
+
+            final result = await syncServiceWithDb.pullInboundDeltas();
+
+            expect(result, isNotNull);
+            expect(result!.insumosCount, 1);
+
+            // The authority projection must resolve the insumo so a product
+            // carrying a DIRECT mapping (mappingVersionId + insumoId) can
+            // pass the checkout authority guard.
+            final authorityInsumo = await database.authorityProjectionDao
+                .findInsumoById('tenant-direct', 'ins-direct-1');
+            expect(authorityInsumo, isNotNull);
+            expect(authorityInsumo!.tenantId, 'tenant-direct');
+            expect(authorityInsumo.id, 'ins-direct-1');
+            expect(authorityInsumo.name, 'Base Directa');
+            expect(authorityInsumo.uom, 'G');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'authority insumo uom falls back to purchaseUom when consumptionUom is absent',
+        () async {
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              dio,
+              database: database,
+            );
+
+            capturedGets['/v1/sync/inbound/deltas'] = {
+              'status': 'success',
+              'serverTime': '2026-09-04T10:05:00.000Z',
+              'currentVersion': 1787745600011,
+              'deltas': {
+                'insumos': [
+                  {
+                    'tenantId': 'tenant-fallback',
+                    'id': 'ins-fallback-1',
+                    'name': 'Leche Entera',
+                    // No consumptionUom configured on the backend row.
+                    'purchaseUom': 'L',
+                    'stock': 3.5,
+                    'isActive': true,
+                  },
+                ],
+              },
+            };
+
+            final result = await syncServiceWithDb.pullInboundDeltas();
+
+            expect(result, isNotNull);
+
+            final authorityInsumo = await database.authorityProjectionDao
+                .findInsumoById('tenant-fallback', 'ins-fallback-1');
+            expect(authorityInsumo, isNotNull);
+            expect(authorityInsumo!.uom, 'L');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'insumo rows missing tenantId, name or any uom are skipped without failing the pull',
+        () async {
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              dio,
+              database: database,
+            );
+
+            capturedGets['/v1/sync/inbound/deltas'] = {
+              'status': 'success',
+              'serverTime': '2026-09-04T10:10:00.000Z',
+              'currentVersion': 1787745600012,
+              'deltas': {
+                'insumos': [
+                  {
+                    // Missing tenantId entirely: never fabricate a tenant.
+                    'id': 'ins-bad-tenant',
+                    'name': 'Sin Tenant',
+                    'consumptionUom': 'G',
+                  },
+                  {
+                    'tenantId': 'tenant-skip',
+                    'id': 'ins-bad-name',
+                    // Empty name: no anonymous authority insumos.
+                    'name': '',
+                    'consumptionUom': 'G',
+                  },
+                  {
+                    'tenantId': 'tenant-skip',
+                    'id': 'ins-bad-uom',
+                    'name': 'Sin UOM',
+                    // No consumptionUom and no purchaseUom at all: the
+                    // authority row requires a UOM.
+                  },
+                  {
+                    'tenantId': 'tenant-skip',
+                    'id': 'ins-good',
+                    'name': 'Bueno',
+                    'consumptionUom': 'G',
+                  },
+                ],
+              },
+            };
+
+            final result = await syncServiceWithDb.pullInboundDeltas();
+
+            // The pull itself must stay healthy.
+            expect(result, isNotNull);
+            expect(result!.insumosCount, 4);
+
+            final badTenant = await database.authorityProjectionDao
+                .findInsumoById('', 'ins-bad-tenant');
+            expect(badTenant, isNull);
+
+            final badName = await database.authorityProjectionDao
+                .findInsumoById('tenant-skip', 'ins-bad-name');
+            expect(badName, isNull);
+
+            final badUom = await database.authorityProjectionDao
+                .findInsumoById('tenant-skip', 'ins-bad-uom');
+            expect(badUom, isNull);
+
+            // The well-formed row in the same payload still lands.
+            final good = await database.authorityProjectionDao
+                .findInsumoById('tenant-skip', 'ins-good');
+            expect(good, isNotNull);
+            expect(good!.name, 'Bueno');
+            expect(good.uom, 'G');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        're-pulling the same insumos payload does not duplicate or throw',
+        () async {
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              dio,
+              database: database,
+            );
+
+            capturedGets['/v1/sync/inbound/deltas'] = {
+              'status': 'success',
+              'serverTime': '2026-09-04T10:15:00.000Z',
+              'currentVersion': 1787745600013,
+              'deltas': {
+                'insumos': [
+                  {
+                    'tenantId': 'tenant-idem',
+                    'id': 'ins-idem-1',
+                    'name': 'Idempotente',
+                    'consumptionUom': 'KG',
+                  },
+                ],
+              },
+            };
+
+            final first = await syncServiceWithDb.pullInboundDeltas();
+            expect(first, isNotNull);
+
+            // A re-pull of the same payload (watermark advances on the
+            // terminal, backend payload unchanged) must be a no-op for the
+            // authority projection: insert-if-absent, never a duplicate.
+            final second = await syncServiceWithDb.pullInboundDeltas();
+            expect(second, isNotNull);
+
+            final count = await database.authorityProjectionDao
+                .countInsumosByTenant('tenant-idem');
+            expect(count, 1);
+
+            final authorityInsumo = await database.authorityProjectionDao
+                .findInsumoById('tenant-idem', 'ins-idem-1');
+            expect(authorityInsumo, isNotNull);
+            expect(authorityInsumo!.name, 'Idempotente');
+            expect(authorityInsumo.uom, 'KG');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'an existing authority_insumos row is left as-is by the insumos delta',
+        () async {
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            // Pre-existing authority row (e.g. from recipe component
+            // hydration): the delta must not overwrite it.
+            await database.authorityProjectionDao.insertInsumo(
+              const AuthorityInsumoEntity(
+                tenantId: 'tenant-keep',
+                id: 'ins-keep-1',
+                name: 'Nombre Original',
+                uom: 'KG',
+              ),
+            );
+
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              dio,
+              database: database,
+            );
+
+            capturedGets['/v1/sync/inbound/deltas'] = {
+              'status': 'success',
+              'serverTime': '2026-09-04T10:20:00.000Z',
+              'currentVersion': 1787745600014,
+              'deltas': {
+                'insumos': [
+                  {
+                    'tenantId': 'tenant-keep',
+                    'id': 'ins-keep-1',
+                    'name': 'Nombre Delta',
+                    'consumptionUom': 'UNIDAD',
+                  },
+                ],
+              },
+            };
+
+            final result = await syncServiceWithDb.pullInboundDeltas();
+            expect(result, isNotNull);
+
+            final authorityInsumo = await database.authorityProjectionDao
+                .findInsumoById('tenant-keep', 'ins-keep-1');
+            expect(authorityInsumo, isNotNull);
+            expect(authorityInsumo!.name, 'Nombre Original');
+            expect(authorityInsumo.uom, 'KG');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'after the pull, a COMPOUND product with a direct mapping and no published recipe no longer fails checkout authority',
+        () async {
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            final syncServiceWithDb = SyncService(
+              mockAuditRepository,
+              mockSalesRepository,
+              mockInventoryRepository,
+              dio,
+              database: database,
+            );
+
+            capturedGets['/v1/sync/inbound/deltas'] = {
+              'status': 'success',
+              'serverTime': '2026-09-04T10:25:00.000Z',
+              'currentVersion': 1787745600015,
+              'deltas': {
+                'products': [
+                  {
+                    'id': 'prod-direct',
+                    'name': 'Combo Directo',
+                    'uom': 'UND',
+                    'stock': 10.0,
+                    'sellPrice': 55.0,
+                    'productType': 'COMPOUND',
+                    'mappingVersionId': 'mv-direct-1',
+                    'insumoId': 'ins-direct-e2e',
+                    'isActive': true,
+                    'createdAt': '2026-09-04T09:00:00.000Z',
+                  },
+                ],
+                'insumos': [
+                  {
+                    'tenantId': 'tenant-e2e',
+                    'id': 'ins-direct-e2e',
+                    'name': 'Base Directa E2E',
+                    'consumptionUom': 'G',
+                  },
+                ],
+                // No recipeVersions key at all: no published recipe for the
+                // product. The direct mapping alone must be resolvable.
+              },
+            };
+
+            final result = await syncServiceWithDb.pullInboundDeltas();
+            expect(result, isNotNull);
+
+            final preparation = CheckoutInventoryPreparationService(database);
+            final invoice = Invoice(
+              id: 'inv-e2e-direct',
+              number: '001-001-01-00000001',
+              createdAt: DateTime.parse('2026-09-04T10:30:00.000Z'),
+              userId: 'user-e2e',
+              subtotal: 55.0,
+              totalTax: 0.0,
+              total: 55.0,
+            );
+            final item = InvoiceItem(
+              id: 'item-e2e-direct',
+              invoiceId: 'inv-e2e-direct',
+              productId: 'prod-direct',
+              productName: 'Combo Directo',
+              quantity: 1,
+              unitPrice: 55.0,
+              originalTaxRate: 0.0,
+              appliedTaxRate: 0.0,
+              taxAmount: 0.0,
+              total: 55.0,
+            );
+
+            final prepared = await preparation.prepare(
+              invoice: invoice,
+              items: [item],
+              offlineUserId: 'user-e2e',
+              tenantId: 'tenant-e2e',
+              terminalId: 'pos-terminal-e2e',
+            );
+
+            expect(prepared.items.first.inventorySnapshotVersion,
+                'SALE_TIME_V1');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+    });
 
     test(
       'user delta with tenantId stores the inbound tenant id on the user row',
@@ -6289,6 +6683,63 @@ void main() {
         // CN restock movements are deliberately held out of the outbound
         // inventory batch (DSI-6): the badge must not count them.
         expect(count, 1);
+      },
+    );
+
+    test(
+      'getPendingOutboxCount excludes delivered sale-sync movements',
+      () async {
+        // Live-device defect: a sale deduction movement whose delivery is
+        // owned by the sale-sync pipeline (SALE_SYNC / CLOUD_ACKNOWLEDGED)
+        // is already delivered — the outbound inventory batch filter never
+        // sends it. The legacy sync-state table has no row for sale-sync
+        // movements, so the DAO query matches it via `sync_status IS NULL`
+        // and the badge counted it as pending. The badge must agree with
+        // what the outbound sync would actually send.
+        mockInventoryRepository.unsynced = [
+          movement(
+            'sale-deduction',
+            type: MovementType.sale,
+            deliveryOwner: 'SALE_SYNC',
+            deliveryState: 'CLOUD_ACKNOWLEDGED',
+            sourceDocumentType: 'SALE',
+          ),
+        ];
+
+        final count = await syncService.getPendingOutboxCount();
+
+        expect(count, 0);
+      },
+    );
+
+    test(
+      'getPendingOutboxCount still counts genuinely pending generic-inventory movements',
+      () async {
+        // The fix must not silence real work: a locally applied,
+        // generically-owned adjustment movement is still actionable
+        // outbound work and must keep counting.
+        mockInventoryRepository.unsynced = [
+          movement('pending-adjustment'),
+        ];
+
+        final count = await syncService.getPendingOutboxCount();
+
+        expect(count, 1);
+      },
+    );
+
+    test(
+      'getPendingOutboxCount excludes quarantined movements',
+      () async {
+        // Quarantined movements are deliberately held out of the outbound
+        // inventory batch, so they are not actionable pending work.
+        mockInventoryRepository.unsynced = [
+          movement('quarantined', deliveryState: 'QUARANTINED'),
+        ];
+
+        final count = await syncService.getPendingOutboxCount();
+
+        expect(count, 0);
       },
     );
 

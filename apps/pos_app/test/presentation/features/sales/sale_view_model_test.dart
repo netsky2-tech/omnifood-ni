@@ -34,6 +34,7 @@ import 'package:pos_app/data/daos/sales/tax_config_dao.dart';
 import 'package:pos_app/data/models/sales/tax_config_entity.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/services/sales/invoice_fiscal_calculator.dart';
+import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:pos_app/domain/services/sales/tip_engine.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
@@ -1339,6 +1340,173 @@ void main() {
         },
       );
     });
+  });
+
+  group('processSale operator-facing failure mapping (go-live fixes)', () {
+    const cashier = User(
+      id: 'user-cashier-golive',
+      name: 'Cajero GoLive',
+      role: UserRole.cashier,
+      isActive: true,
+    );
+
+    const Product noRecipeProduct = Product(
+      id: '7b0d5f2e-1c3a-4d5e-9f80-a1b2c3d4e5f6',
+      name: 'Nachos Supremos',
+      uom: 'UNIT',
+      stock: 10,
+      averageCost: 40.0,
+      sellPrice: 100.0,
+      sku: 'NACH-01',
+    );
+
+    void stubSaveSaleToThrow(Object error) {
+      when(
+        mockSalesRepo.saveSale(
+          invoice: anyNamed('invoice'),
+          items: anyNamed('items'),
+          payments: anyNamed('payments'),
+        ),
+      ).thenThrow(error);
+    }
+
+    setUp(() {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer((_) async => cashier);
+    });
+
+    test(
+      'maps the missing-recipe StateError to a Spanish message naming the product without the UUID',
+      () async {
+        viewModel.addToCart(noRecipeProduct);
+        const rawUuid = '7b0d5f2e-1c3a-4d5e-9f80-a1b2c3d4e5f6';
+        stubSaveSaleToThrow(
+          StateError(
+            'Prepared product $rawUuid cannot be sold without a published active recipe version.',
+          ),
+        );
+
+        await expectLater(
+          viewModel.processSale([PaymentMethod.cash]),
+          throwsA(isA<StateError>()),
+        );
+
+        final message = viewModel.errorMessage!;
+        expect(message, contains('Nachos Supremos'));
+        expect(message, isNot(contains(rawUuid)));
+        // The raw English data-layer text and the old generic wrapper
+        // must never reach the operator.
+        expect(message, isNot(contains('cannot be sold')));
+        expect(message, isNot(contains('Error al procesar la venta')));
+        expect(message, contains('receta publicada'));
+      },
+    );
+
+    test(
+      'missing-recipe error whose product is not in the cart falls back to a generic Spanish message',
+      () async {
+        viewModel.addToCart(noRecipeProduct);
+        stubSaveSaleToThrow(
+          StateError(
+            'Prepared product cart-unknown-id-9f80 cannot be sold without a published active recipe version.',
+          ),
+        );
+
+        await expectLater(
+          viewModel.processSale([PaymentMethod.cash]),
+          throwsA(isA<StateError>()),
+        );
+
+        final message = viewModel.errorMessage!;
+        expect(message, contains('receta publicada'));
+        expect(message, isNot(contains('cart-unknown-id-9f80')));
+        expect(message, isNot(contains('cannot be sold')));
+      },
+    );
+
+    test(
+      'unmapped errors get a generic Spanish message and never leak the raw error',
+      () async {
+        viewModel.addToCart(noRecipeProduct);
+        stubSaveSaleToThrow(
+          Exception('Internal BOM explosion for node 42: engine panic'),
+        );
+
+        await expectLater(
+          viewModel.processSale([PaymentMethod.cash]),
+          throwsA(isA<Exception>()),
+        );
+
+        final message = viewModel.errorMessage!;
+        expect(message, isNot(contains('BOM explosion')));
+        expect(message, isNot(contains('engine panic')));
+        expect(message, isNot(contains('Error al procesar la venta')));
+        expect(message.length, greaterThan(10));
+      },
+    );
+
+    test(
+      'FiscalSequenceUnconfiguredError keeps its own directive message',
+      () async {
+        viewModel.addToCart(noRecipeProduct);
+        stubSaveSaleToThrow(
+          const FiscalSequenceUnconfiguredError(
+            'Configure el consecutivo inicial DGI antes de facturar.',
+          ),
+        );
+
+        await expectLater(
+          viewModel.processSale([PaymentMethod.cash]),
+          throwsA(isA<FiscalSequenceUnconfiguredError>()),
+        );
+
+        expect(
+          viewModel.errorMessage,
+          'Configure el consecutivo inicial DGI antes de facturar.',
+        );
+      },
+    );
+
+    test(
+      'a second processSale cannot start while a sale is in flight',
+      () async {
+        viewModel.addToCart(noRecipeProduct);
+        final saveGate = Completer<void>();
+        when(
+          mockSalesRepo.saveSale(
+            invoice: anyNamed('invoice'),
+            items: anyNamed('items'),
+            payments: anyNamed('payments'),
+          ),
+        ).thenAnswer((_) => saveGate.future);
+
+        final first = viewModel.processSale([PaymentMethod.cash]);
+        expect(viewModel.isProcessingSale, isTrue);
+
+        // A second call while the first attempt is in flight is rejected.
+        await expectLater(
+          viewModel.processSale([PaymentMethod.cash]),
+          throwsA(isA<StateError>()),
+        );
+
+        saveGate.completeError(
+          StateError(
+            'Prepared product 7b0d5f2e-1c3a-4d5e-9f80-a1b2c3d4e5f6 cannot be sold without a published active recipe version.',
+          ),
+        );
+        await expectLater(first, throwsA(isA<StateError>()));
+
+        // Exactly ONE sale attempt was launched in total: the rejected
+        // second call never reached the repository.
+        expect(viewModel.isProcessingSale, isFalse);
+        verify(
+          mockSalesRepo.saveSale(
+            invoice: anyNamed('invoice'),
+            items: anyNamed('items'),
+            payments: anyNamed('payments'),
+          ),
+        ).called(1);
+      },
+    );
   });
 }
 

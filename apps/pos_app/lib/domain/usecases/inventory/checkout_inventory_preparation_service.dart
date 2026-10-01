@@ -47,11 +47,18 @@ class CheckoutInventoryPreparationService {
     final authorityDao = _database.authorityProjectionDao;
     final nowIso = invoice.createdAt.toUtc().toIso8601String();
 
-    final authorityProducts = <AuthorityProduct>[];
-    final authorityInsumos = <AuthorityInsumo>[];
-    final authorityMappings = <AuthorityMapping>[];
-    final authorityRecipes = <AuthorityRecipe>[];
-    final authorityComponents = <AuthorityComponent>[];
+    // Identity-keyed accumulation: the authority validator rejects any
+    // repeated fact id, and the same product/recipe/component/insumo can
+    // legitimately appear in several cart lines (the cart only merges lines
+    // when product, variant AND modifiers all match, and two products can
+    // share a recipe insumo). Facts are therefore collapsed by the same
+    // identity the validator uses (fact.id) while every distinct fact is
+    // kept.
+    final authorityProductsById = <String, AuthorityProduct>{};
+    final authorityInsumosById = <String, AuthorityInsumo>{};
+    final authorityMappingsById = <String, AuthorityMapping>{};
+    final authorityRecipesById = <String, AuthorityRecipe>{};
+    final authorityComponentsById = <String, AuthorityComponent>{};
 
     for (final item in items) {
       // 1. Product & mapping
@@ -65,8 +72,9 @@ class CheckoutInventoryPreparationService {
         _ => AuthorityInventoryKind.simple,
       };
 
-      authorityProducts.add(
-        AuthorityProduct(
+      authorityProductsById.putIfAbsent(
+        item.productId,
+        () => AuthorityProduct(
           id: item.productId,
           tenantId: tenantId,
           inventoryKind: kind,
@@ -75,14 +83,36 @@ class CheckoutInventoryPreparationService {
 
       if (productEntity?.mappingVersionId != null &&
           productEntity?.insumoId != null) {
-        authorityMappings.add(
-          AuthorityMapping(
-            id: productEntity!.mappingVersionId!,
+        authorityMappingsById.putIfAbsent(
+          productEntity!.mappingVersionId!,
+          () => AuthorityMapping(
+            id: productEntity.mappingVersionId!,
             tenantId: tenantId,
             productId: item.productId,
             insumoId: productEntity.insumoId!,
           ),
         );
+
+        // Direct-mapping insumo resolution. The authority projection is
+        // hydrated from recipe component closures, but a product with a
+        // DIRECT mapping (mappingVersionId + insumoId) and no published
+        // recipe contributes a mapping whose insumo must still resolve,
+        // or the authority guard fails closed for the entire cart. Resolve
+        // it here when the projection carries it; a genuinely dangling
+        // mapping is left untouched so the guard keeps failing closed.
+        final directInsumoId = productEntity.insumoId!;
+        if (!authorityInsumosById.containsKey(directInsumoId)) {
+          final directInsumo = await authorityDao.findInsumoById(
+            tenantId,
+            directInsumoId,
+          );
+          if (directInsumo != null) {
+            authorityInsumosById[directInsumo.id] = AuthorityInsumo(
+              id: directInsumo.id,
+              tenantId: tenantId,
+            );
+          }
+        }
       }
 
       // 2. Active published recipe version
@@ -94,8 +124,9 @@ class CheckoutInventoryPreparationService {
 
       if (activeVersions.isNotEmpty) {
         final active = activeVersions.first;
-        authorityRecipes.add(
-          AuthorityRecipe(
+        authorityRecipesById.putIfAbsent(
+          active.id,
+          () => AuthorityRecipe(
             id: active.id,
             tenantId: tenantId,
             productId: item.productId,
@@ -110,8 +141,9 @@ class CheckoutInventoryPreparationService {
         );
 
         for (final c in components) {
-          authorityComponents.add(
-            AuthorityComponent(
+          authorityComponentsById.putIfAbsent(
+            c.id,
+            () => AuthorityComponent(
               id: c.id,
               tenantId: tenantId,
               recipeId: active.id,
@@ -125,8 +157,9 @@ class CheckoutInventoryPreparationService {
             c.insumoId,
           );
           if (insumo != null) {
-            authorityInsumos.add(
-              AuthorityInsumo(id: insumo.id, tenantId: tenantId),
+            authorityInsumosById.putIfAbsent(
+              insumo.id,
+              () => AuthorityInsumo(id: insumo.id, tenantId: tenantId),
             );
           }
         }
@@ -140,11 +173,11 @@ class CheckoutInventoryPreparationService {
         offlineTenantId: tenantId,
         provisionedTenantId: tenantId,
       ),
-      products: authorityProducts,
-      insumos: authorityInsumos,
-      mappings: authorityMappings,
-      recipes: authorityRecipes,
-      components: authorityComponents,
+      products: authorityProductsById.values.toList(),
+      insumos: authorityInsumosById.values.toList(),
+      mappings: authorityMappingsById.values.toList(),
+      recipes: authorityRecipesById.values.toList(),
+      components: authorityComponentsById.values.toList(),
     );
 
     final planner = SaleInventoryOutcomePlanner();

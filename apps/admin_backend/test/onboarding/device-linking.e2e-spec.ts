@@ -224,6 +224,11 @@ describe('DeviceLinking linking-codes listing (E2E)', () => {
         expiresAt: '2026-01-01T00:15:00.000Z',
         claimedAt: '2026-01-01T00:05:00.000Z',
         createdAt: '2026-01-01T00:03:00.000Z',
+        // H-3: the listing exposes the last activation attempt's status so the
+        // Setup Center can stop re-offering activation for an already-activated
+        // terminal. These fixtures seed no attempt, hence null. Kept explicit so
+        // this exact-shape assertion still fails if the response shape drifts.
+        lastAttemptStatus: null,
       },
       {
         id: 'code-older',
@@ -232,6 +237,7 @@ describe('DeviceLinking linking-codes listing (E2E)', () => {
         expiresAt: '2026-01-01T00:10:00.000Z',
         claimedAt: null,
         createdAt: '2026-01-01T00:01:00.000Z',
+        lastAttemptStatus: null,
       },
     ]);
     for (const item of response.body) {

@@ -22,6 +22,7 @@ import '../../domain/services/inventory/authority_hydration_status.dart';
 import '../database/app_database.dart';
 import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
+import '../models/inventory/authority_projection_entities.dart';
 import '../models/inventory/insumo_entity.dart';
 import '../models/inventory/recipe_entity.dart';
 import '../models/user_entity.dart';
@@ -382,17 +383,44 @@ class SyncService {
 
     try {
       final movements = await _inventoryRepository.getUnsyncedMovements();
-      // DSI-6 hold: credit-note restock movements share the credit-note
-      // transport block (same exclusion predicate as the outbound inventory
-      // batch filter) and must not keep the badge above zero either.
-      count += movements
-          .where((movement) => !_isCreditNoteRestockMovement(movement))
-          .length;
+      // Count only what the outbound inventory batch would actually send, so
+      // the badge and the sender cannot disagree about what is still pending.
+      // The raw DAO result is insufficient: sale-sync movements are delivered
+      // by the sale aggregate pipeline and have no row in the legacy
+      // `inventory_movement_sync_state` table, so the DAO's
+      // `sync_status IS NULL` branch matched already-delivered work and kept
+      // the badge above zero (live-device false positive).
+      count += movements.where(_isGenericInventoryOutboxMovement).length;
     } catch (e, st) {
       _logOutboxCountFailure('movements', e, st);
     }
 
     return count;
+  }
+
+  /// Whether a movement is actionable outbound work for the generic inventory
+  /// batch. Shared by [getPendingOutboxCount] and the outbound inventory sync
+  /// so the two cannot drift apart.
+  ///
+  /// Covers only the synchronously evaluable part of the outbound filter;
+  /// callers add their async-only conditions (production linkage, blocked
+  /// ids) on top.
+  ///
+  /// Sale movements are excluded deliberately: their delivery is owned by the
+  /// sale-sync aggregate, not by this batch. Credit-note restock movements
+  /// share the DSI-6 credit-note transport hold and are excluded for the same
+  /// reason — neither is actionable pending work.
+  bool _isGenericInventoryOutboxMovement(InventoryMovement movement) {
+    return movement.deliveryOwner == 'GENERIC_INVENTORY' &&
+        movement.deliveryState != 'QUARANTINED' &&
+        movement.deliveryState != 'CLOUD_ACKNOWLEDGED' &&
+        movement.type != MovementType.sale &&
+        movement.sourceDocumentType != 'SALE' &&
+        movement.sourceDocumentType != 'SALE_CANCEL' &&
+        movement.type != MovementType.purchase &&
+        !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
+        !(movement.reason?.startsWith('Anulación Factura:') ?? false) &&
+        !_isCreditNoteRestockMovement(movement);
   }
 
   /// #613 Unit B — best-effort read of the inert-recipe ingestion verdicts
@@ -407,15 +435,24 @@ class SyncService {
     try {
       final database = _database;
       if (database == null) return null;
-      final count =
-          await database.authorityIngestionVerdictDao.countVerdicts() ?? 0;
-      if (count <= 0) return null;
+      // Only verdicts that are still UNRESOLVED surface here: the verdict
+      // table is append-only (audit material), so a stale verdict for a
+      // product the operator has since fixed (product no longer missing, no
+      // longer recorded SIMPLE) must not keep the badge above zero. Unknown
+      // products (p.id IS NULL) always stay reported. Cloud telemetry
+      // (AuthorityIngestionVerdicts.inertCountKey in local_configs) keeps
+      // counting raw historical rows; this is the operator-facing read
+      // model only (#613).
       final rows = await database.database.rawQuery(
         'SELECT v.product_id AS product_id, p.name AS product_name '
         'FROM authority_ingestion_verdicts v '
         'LEFT JOIN products p ON p.id = v.product_id '
+        'WHERE p.id IS NULL OR p.product_type = ? '
         'ORDER BY p.name',
+        const [AuthorityInertRecipe.inertProductType],
       );
+      final count = rows.length;
+      if (count <= 0) return null;
       final names = <String>{};
       for (final row in rows) {
         final name = row['product_name'];
@@ -1299,17 +1336,8 @@ class SyncService {
       final unsynced = allUnsynced
           .where(
             (movement) =>
-                movement.deliveryOwner == 'GENERIC_INVENTORY' &&
-                movement.deliveryState != 'QUARANTINED' &&
-                movement.deliveryState != 'CLOUD_ACKNOWLEDGED' &&
-                movement.type != MovementType.sale &&
-                movement.sourceDocumentType != 'SALE' &&
-                movement.sourceDocumentType != 'SALE_CANCEL' &&
-                movement.type != MovementType.purchase &&
-                !(movement.reason?.startsWith('COUNT_SESSION:') ?? false) &&
-                !(movement.reason?.startsWith('Anulación Factura:') ?? false) &&
+                _isGenericInventoryOutboxMovement(movement) &&
                 !_isProductionLinkedMovement(movement) &&
-                !_isCreditNoteRestockMovement(movement) &&
                 !blockedMovementIds.contains(movement.id),
           )
           .toList(growable: false);
@@ -3188,6 +3216,57 @@ class SyncService {
 
         if (insumoEntities.isNotEmpty) {
           await _database!.insumoDao.insertInsumos(insumoEntities);
+        }
+
+        // 3b. Direct-mapping authority insumo hydration. The authority
+        // projection is otherwise hydrated only from each recipe version's
+        // component closure (4b below), but a product can also carry a
+        // DIRECT insumo mapping (mappingVersionId + insumoId) with no
+        // published recipe. Without a row in authority_insumos, the
+        // checkout authority guard cannot resolve that mapping's insumo
+        // and fails closed for the entire cart. The top-level `insumos`
+        // delta already carries every field the AuthorityInsumoEntity
+        // shape needs, so mirror each well-formed row into the authority
+        // projection using the same insert-if-absent pattern as
+        // AuthorityHydrationService.hydrate. Standing invariant (Q80):
+        // hydration trouble must never fail the pull — catch, log, and
+        // keep the operational writes above intact.
+        try {
+          final authorityDao = _database!.authorityProjectionDao;
+          for (final raw in rawInsumos) {
+            if (raw is! Map) continue;
+            final map = Map<String, dynamic>.from(raw);
+            final tenantId = (map['tenantId'] as String?)?.trim() ?? '';
+            final id = (map['id'] as String?)?.trim() ?? '';
+            final name = (map['name'] as String?)?.trim() ?? '';
+            final uom =
+                ((map['consumptionUom'] ?? map['purchaseUom']) as String?)
+                    ?.trim() ??
+                '';
+            // Never fabricate a tenant, an identity, or a UOM: the
+            // authority row requires all three, so skip malformed rows.
+            if (tenantId.isEmpty || id.isEmpty || name.isEmpty || uom.isEmpty) {
+              continue;
+            }
+            final existing = await authorityDao.findInsumoById(tenantId, id);
+            if (existing == null) {
+              await authorityDao.insertInsumo(
+                AuthorityInsumoEntity(
+                  tenantId: tenantId,
+                  id: id,
+                  name: name,
+                  uom: uom,
+                ),
+              );
+            }
+          }
+        } catch (e, st) {
+          developer.log(
+            '[SYNC_PULL] authority_insumo_hydration_failed error=$e',
+            name: 'SyncService',
+            error: e,
+            stackTrace: st,
+          );
         }
 
         // 4. Recipes

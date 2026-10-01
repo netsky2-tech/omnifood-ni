@@ -2428,4 +2428,191 @@ void main() {
       expectColumnsPreserved(before, after, {'sync_status'});
     });
   });
+
+  group('saveSale persists the real payment status', () {
+    // The sale path used to persist the Invoice model default
+    // (PaymentStatus.pending) for every sale, even fully settled ones,
+    // because nothing stamped the resolved status at persistence time.
+    // The persisted status must be computed from the actual payments with
+    // the SAME SplitPaymentCalculator rule the checkout dialog uses to
+    // enable the confirm button (change on cash is not unpaid balance).
+    Invoice buildInvoice({String id = 'status-sale'}) => Invoice(
+          id: id,
+          number: 'draft',
+          createdAt: DateTime.parse('2026-07-13T10:00:00Z'),
+          userId: 'cashier-1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          syncStatus: SyncStatus.pending,
+          type: InvoiceType.regular,
+        );
+
+    const items = [
+      InvoiceItem(
+        id: 'status-line-1',
+        invoiceId: 'status-sale',
+        productId: 'prod-1',
+        productName: 'Product 1',
+        quantity: 1,
+        unitPrice: 100,
+        taxAmount: 15,
+        total: 115,
+        originalTaxRate: 15,
+        appliedTaxRate: 15,
+      ),
+    ];
+
+    void stubHappyPath(String number) {
+      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => number);
+      when(
+        mockInventoryRepository.getProductById('prod-1'),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).thenAnswer((_) async {});
+      when(mockNumberingService.incrementNumber()).thenAnswer((_) async {});
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+    }
+
+    Future<InvoiceEntity> saveAndCapturePersistedInvoice({
+      required String invoiceId,
+      required List<Payment> payments,
+    }) async {
+      await repository.saveSale(
+        invoice: buildInvoice(id: invoiceId),
+        items: items,
+        payments: payments,
+      );
+
+      final captured = verify(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          captureAny,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).captured;
+      return captured.single as InvoiceEntity;
+    }
+
+    test('a sale paid exactly by one cash payment persists paid', () async {
+      stubHappyPath('F001-000201');
+
+      final persisted = await saveAndCapturePersistedInvoice(
+        invoiceId: 'status-cash-exact',
+        payments: [
+          const Payment(
+            id: 'pay-cash-1',
+            invoiceId: 'status-cash-exact',
+            method: PaymentMethod.cash,
+            amount: 115,
+            amountNio: 115,
+            changeGiven: 0,
+          ),
+        ],
+      );
+
+      expect(persisted.paymentStatus, 'paid');
+    });
+
+    test('a split tender (cash + card) summing to the total persists paid',
+        () async {
+      stubHappyPath('F001-000202');
+
+      final persisted = await saveAndCapturePersistedInvoice(
+        invoiceId: 'status-split',
+        payments: const [
+          Payment(
+            id: 'pay-cash-2',
+            invoiceId: 'status-split',
+            method: PaymentMethod.cash,
+            amount: 60,
+            amountNio: 60,
+            changeGiven: 0,
+          ),
+          Payment(
+            id: 'pay-card-2',
+            invoiceId: 'status-split',
+            method: PaymentMethod.card,
+            amount: 55,
+            amountNio: 55,
+          ),
+        ],
+      );
+
+      expect(persisted.paymentStatus, 'paid');
+    });
+
+    test('cash over the total with change given persists paid (change is '
+        'not unpaid balance)', () async {
+      stubHappyPath('F001-000203');
+
+      final persisted = await saveAndCapturePersistedInvoice(
+        invoiceId: 'status-cash-change',
+        payments: [
+          const Payment(
+            id: 'pay-cash-3',
+            invoiceId: 'status-cash-change',
+            method: PaymentMethod.cash,
+            amount: 200,
+            amountNio: 200,
+            changeGiven: 85,
+          ),
+        ],
+      );
+
+      // 200 tendered - 85 change = 115 paid, exactly the total.
+      expect(persisted.paymentStatus, 'paid');
+    });
+
+    test('a payment covering only part of the total persists partial',
+        () async {
+      stubHappyPath('F001-000204');
+
+      final persisted = await saveAndCapturePersistedInvoice(
+        invoiceId: 'status-partial',
+        payments: const [
+          Payment(
+            id: 'pay-card-4',
+            invoiceId: 'status-partial',
+            method: PaymentMethod.card,
+            amount: 50,
+            amountNio: 50,
+          ),
+        ],
+      );
+
+      expect(persisted.paymentStatus, 'partial');
+    });
+
+    test('no payments at all persists pending', () async {
+      stubHappyPath('F001-000205');
+
+      final persisted = await saveAndCapturePersistedInvoice(
+        invoiceId: 'status-no-payments',
+        payments: const [],
+      );
+
+      expect(persisted.paymentStatus, 'pending');
+    });
+  });
 }
