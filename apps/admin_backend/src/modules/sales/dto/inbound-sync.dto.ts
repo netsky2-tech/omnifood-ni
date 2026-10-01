@@ -68,6 +68,14 @@ export interface InboundSyncProductDto {
   stock: number;
   averageCost: number;
   sellPrice: number;
+  /**
+   * Product fiscal fields, part of the inbound contract: the POS's invoice
+   * fiscal calculator trusts the emitted rate as its source of truth, so a
+   * Régimen General tenant must never receive an omitted (POS-defaulted 0.0)
+   * rate. Non-optional: the row always carries them.
+   */
+  taxRate: number;
+  isTaxExempt: boolean;
   isActive: boolean;
   isPerishable: boolean;
   warehouseId?: string | null;
