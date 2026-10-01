@@ -36,6 +36,26 @@ sobre lo que pasó?**
 
 **Promesa: el negocio existe, tiene menú y su numeración fiscal es real.**
 
+### Menú real del cliente — VALIDADO
+
+| | |
+|---|---|
+| Fuente | `Menú SOHO.pdf` (2 páginas) |
+| Resultado del preview | `categories: 7`, `productsToCreate: 56`, `productsToUpdate: 2`, **`recipesToCreate: 0`**, **`insumosToCreate: []`**, **`errors: []`**, **`warnings: []`** |
+| Total | **58 productos, todos SIMPLE** |
+| Artefacto | `Menu_SOHO_import_listo.xlsx` (58 filas, 0 con insumo, fila de ejemplo borrada de las 8 hojas) |
+
+Composición: CAFÉ CALIENTE 16 · CAFÉ HELADO 11 · BEBIDAS 12 · BATIDOS 4 · POSTRES 4 · DESAYUNOS 5 · COMIDA 6.
+
+Decisiones confirmadas por el cliente:
+- **Cuota Fija, no aplica IVA** (Art. 244 Ley 822). El precio listado en el menú es el precio final; el PDF dice "los precios no incluyen IVA" pero bajo este régimen no se recauda IVA, así que no se agrega nada.
+- Los **tamaños son productos separados** (`Cappuccino 12oz` / `Cappuccino 8oz`): el import del menú no soporta variantes. 58 ítems donde el cliente ve ~30.
+- Los precios reconstruidos de la extracción del PDF (Latte 125/100, Flat White 135/125, Mocca 140/110, Matcha Latte 140/120) fueron **revisados y confirmados** por el cliente.
+
+Los 2 productos `productsToUpdate` son `Espresso Doble` y `Latte 12oz`, que quedaron **COMPOUND** en el tenant de pruebas por la corrección de recetas inertes de hoy. El import hace actualización de precio únicamente y **nunca toca el tipo**, así que siguen COMPOUND ahí. En el tenant limpio del cliente los 58 se crean SIMPLE.
+
+**Criterio de control:** si el preview en el tenant del cliente no da `56 a crear / 2 a actualizar / 0 recetas / 0 insumos / 0 errores`, **parar** e investigar antes de commitear.
+
 | # | Check | Evidencia esperada | Estado |
 |---|---|---|---|
 | 0.1 | Tenant provisionado (`npm run provision`) con nombre, RUC y slug correctos | fila en `tenants`, `is_active=true` | |
