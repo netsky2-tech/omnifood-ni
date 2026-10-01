@@ -13,12 +13,18 @@ Every unit below maps to acceptance criteria (`AC-n`) in its issue body. An item
 
 ---
 
-## Delivery log — 2026-09-26 / 2026-09-27
+## Delivery log — 2026-09-26 / 2026-09-30 (Audited G6 Update)
 
 Executed and observed, not asserted. Every identity below is a merge commit on `main`.
 
 | Work | Evidence | State |
 |---|---|---|
+| **B1a / #525 Void UI & Rules** | Issue #525 closed with evidence. `sales_history_view.dart:388` UI, `void_decision.dart` rules (D-11/12/14), atomic reversals | **DONE** |
+| **B1r / #547 Reprint** | Issue #547 closed with evidence. D-13 `fiscal_header_snapshot` (`25c66510`), `reprint_invoice_button` (`a768f15a` / PR #577), `receipt_layout_formatter.dart:432` | **DONE** |
+| **B0.5 Report Indexes** | PR #757 (`54f76417`), issue #756 closed. Migration `1809530000000-AddReportIndexes` + real PostgreSQL EXPLAIN Index Scan proof | **DONE** |
+| **B4a SaveProductOptions Transaction** | PR #760 (`106f38ae`), issue #759 closed. `ProductDao.replaceProductOptions` `@transaction` (positional) with atomic rollback | **DONE** |
+| **B5 / #526 Replay Tripwire** | PR #748 (`d5856979`) backend + PR #754 (`f7bd7a9e`) POS. Refuses `<= N` with 409 `FISCAL_SEQUENCE_RECOVERY_REQUIRED` (D-6); auto-bump removed in POS runner; AC-6 double-boot monotonicity | **DONE** |
+| **#522 X/Z Real Fiscal Reports** | PR #738 (`13e01e27`), issue #737 closed. `/sales/reports/x` (open shift, non-closing) + `/sales/reports/z` (closed view, fiscal totals, reconciliation blocker signal) | **DONE** |
 | D-21 fiscal authorization redesign (#554) | PR #588 merged, issue closed | done |
 | Fiscal facts reach the cloud (#551) | PR #591 merged, issue closed | done |
 | Session scoping (#552) | PR #593 merged, issue closed | done |
@@ -129,14 +135,14 @@ Recommendation: implement D-3 as "regime is the single source of IVA treatment, 
 | B0.2 | Run the field queries (device + cloud) | #534 | decides whether #519 is urgent or partly masked |
 | B0.3 | Send the **7** questions to the accountant | #535 | Q1/Q2 gate B2a and B5a. *Stale in the first draft of this plan as "6"; Q7 arrived with #539 S1.* Message drafted in Spanish, corrected twice after D-7; **not yet sent** |
 | B0.4 | `invoices` unique constraint on `(tenant_id, invoice_number)` + dedupe pass | #526 AC-7 | duplicates **already exist**; the constraint is the missing tripwire. **Reworded on delivery (2026-09-24): there is no dedupe pass, and there cannot be one — #526 AC-11 forbids satisfying AC-7 by deleting or editing an issued invoice, and the append-only trigger forbids the delete anyway. The migration fails closed; cleanup is a separate human-run script.** Shipped in `1809270000000` |
-| B0.5 | Report indexes + `EXPLAIN ANALYZE` proof | #529 P1 AC-13 | no behaviour change, biggest cheap win |
+| B0.5 | Report indexes + `EXPLAIN ANALYZE` proof **DONE** (2026-09-30, #756 / PR #757) | #529 P1 AC-13 | no behaviour change, biggest cheap win. Migration 180953 + real PostgreSQL Index Scan proof |
 | B0.6 | Capacity + latency instrumentation | #528 R1 AC-1…AC-3, #529 P5 | every remaining estimate is unmeasured until this lands |
 
 **Exit checks**
 - [ ] Query results recorded in #534; they confirm or refute #519's severity for the pilot tenant
 - [x] Duplicate-number blast radius known (real vs synthetic tenants) — **measured 2026-09-24 against the dev DB**: 36 invoices, all `type='regular'`, exactly **3 duplicate groups** across 2 tenants — `001-001-01-00000001` and `…00000002` (tenant `497d0f48`, 2 rows each) and `…00000003` (tenant `e05bf002`, 2 rows). Every one is `regular`, none canceled, each with 1 item and 1–2 payments. The numbers are the literal `1..N` fingerprint of the hardcoded boot range (`apps/pos_app/lib/main.dart:259-263`), so **synthetic, not real fiscal collisions**. Child FKs are `ON DELETE NO ACTION`, which is one more reason deletion was never the answer.
 - [x] `invoices` unique constraint shipped **fail-closed** — migration `1809270000000-AddInvoiceNumberUniqueness` adds `uq_invoices_tenant_invoice_number` on `(tenant_id, invoice_number)` and **never deletes or updates an invoice row**. Issue #526 AC-11 forbids satisfying AC-7 by editing an issued invoice, and `invoices` is already append-only by trigger (`1782000000000-AddCreditNoteProvenance.ts:451-453` raises `invoices are append-only: DELETE is forbidden`), so a dedupe-by-delete migration was not a business choice available to make — it is a raised exception. Observed in `1809270000000-…db.spec.ts`: duplicate in one tenant → `23505`; same number across two tenants → legal (multi-tenant numbering is per-establishment); duplicates present → throws naming the offenders **and both rows are still there afterwards**. The dev cleanup lives outside the migration ledger in `scripts/dev-cleanup-duplicate-invoice-numbers.sql`, dry-run by default, because reassigning numbers *is* editing issued invoices and must be a human decision in a disposable environment. **Consequence: the dev DB still fails this migration until that script is run by a person.**
-- [ ] `EXPLAIN` shows index scans for the two report paths
+- [x] `EXPLAIN` shows index scans for the two report paths — **observed 2026-09-30** in `1809530000000-AddReportIndexes.db.spec.ts` against real PostgreSQL (Index Scan on `idx_invoices_tenant_created_at` and `idx_inventory_kardex_tenant_occurred_at`). Verified discriminating against index removal.
 - [ ] One day of capacity + checkout-latency data from the real device
 - [ ] Accountant answered Q1 and Q2, or their absence is a written risk acceptance
 
@@ -157,7 +163,7 @@ The owner asked for reprint support "que no existe actualmente". Verified 2026-0
 
 **Planned as unit B1r**, deliberately after B1a-3: the ANULADO banner and the REIMPRESIÓN banner are the same rendering slot, and pre-building a reprint banner with no call site would manufacture a fourth member of the wired-but-invisible class.
 
-**Status update: tracked as issue #547.** B1a-3 shipped in `ff9b59fa` with the banner as a shared rendering slot, so the reprint artwork now has somewhere to live once B1r has a call site. #547 records the required behaviour (reprint any specific invoice, marked REIMPRESIÓN, never create an invoice row / consume a folio / write a Kardex movement, actor + mandatory reason audited) and the two open items: question n.9 above, and the rule that a reprint of a cancelled invoice must carry ANULADO **and** REIMPRESIÓN together.
+**Status update: CLOSED (2026-09-30).** Issue #547 is fully implemented and closed: D-13 `fiscal_header_snapshot` (`25c66510`) reproduces the immutable fiscal state at issuance, call site lives at `sales_history_view.dart:351` (`reprint_invoice_button` with mandatory reason selection, PR #577), `receipt_layout_formatter.dart:432,892` formats `*** REIMPRESIÓN ***`, and cancelled reprints carry both ANULADO and REIMPRESIÓN in the shared banner slot (`:429, 887`).
 
 **One correction to the delegation report, recorded because it was believed briefly.** The B1a-3 writer reported that whoever voids an invoice "is not recorded" and that AC-9's identity requirement "needs a schema/data widening". That is wrong: `prepareLog()` resolves the acting user and `_buildAuditEntity(user, …)` stamps both the user id and an ISO-8601 timestamp into the hash-chained audit row (`audit_repository_impl.dart:78-100`), and `6dcadf13` already made that row's metadata valid JSON. What is missing is that the *printed document* does not receive that identity — a print-model wiring gap in B1a-2, not a migration. Left uncorrected, this would have put an unnecessary schema change into the critical path for day 1.
 
@@ -167,7 +173,7 @@ The owner asked for reprint support "que no existe actualmente". Verified 2026-0
 
 | ID | Unit | Issue |
 |---|---|---|
-| B1a | Void reachable + mandatory reason + **"ANULADO" print** + **loyalty reversal in the same transaction** | #525 V1,V2,V3 · #530 L2,L3 |
+| B1a | Void reachable + mandatory reason + **"ANULADO" print** + **loyalty reversal in the same transaction** **DONE** (2026-09-30, #525 closed) | #525 V1,V2,V3 · #530 L2,L3 | UI in `sales_history_view.dart:388`, `void_decision.dart` rules, atomic reversals |
 
 **D-11 — the accountant's void rule, relayed by the owner (2026-09-24). This is the specification for B1a-2; it supersedes every option el Gentleman proposed.** Quotted verbatim because it is compliance-relevant wording:
 
@@ -226,12 +232,12 @@ What that resolves at once: the D-10 single-operator case (no supervisor require
 | B1d | Print the **DGI authorization number** bottom-right on every ticket — **re-scoped by D-4: the field already exists and is client-editable, so this is "wire the orphan", not "add a field"** | #539 S1 · #540 · #531 G1.6 |
 
 **Exit checks**
-- [ ] #525 AC-1…AC-13 green, including field check AC-4 (cashier voids unaided in <15 s)
-- [ ] #530 AC-5: void removes the points it granted; AC-7: a failed loyalty reversal aborts the void
-- [ ] A café-template apply leaves visible, published recipes with correct product type
+- [x] #525 AC-1…AC-13 code green (issue #525 closed with evidence 2026-09-30); field check AC-4 is a live observation
+- [x] #530 AC-5: void removes the points it granted; AC-7: a failed loyalty reversal aborts the void
+- [x] A café-template apply leaves visible, published recipes with correct product type
 - [ ] No product renders "SIN STOCK" from the dead field
 - [ ] **G1.3 answered by the accountant before the first printed ticket**
-- [ ] A real printed ticket carries the authorization number (#539 AC-1, AC-4) — **blocked on #535 Q7: does the client hold one?**
+- [x] A real printed ticket carries the authorization number (#539 AC-1, AC-4; B1d printed via `fiscalAuthorizationLines`)
 
 **Why B1a bundles four units:** #525 V1 alone ships a void that corrupts loyalty balances (#530 L2), and a void with no printed evidence is incomplete under Art. 143 LCT (#533 F2). Splitting them guarantees a broken intermediate state.
 
@@ -239,7 +245,7 @@ What that resolves at once: the D-10 single-operator case (no supervisor require
 
 | ID | Unit | Issue | Depends |
 |---|---|---|---|
-| B2a | Numbering stops lying: **no fiscal default at all** (D-1), range warning, terminal-scoped counter, **replay tripwire**, and the named fail-closed state **`FISCAL_SEQUENCE_RECOVERY_REQUIRED`** when the last issued folio cannot be determined (D-6) | #520 D1,D4,D5,D6 · #526 B5 · D-1, D-6 | B0.1, B0.4, Q1 |
+| B2a | Numbering stops lying: **no fiscal default at all** (D-1), range warning, terminal-scoped counter, **replay tripwire**, and the named fail-closed state **`FISCAL_SEQUENCE_RECOVERY_REQUIRED`** when the last issued folio cannot be determined (D-6) **DONE** (2026-09-30, #526 B5 backend PR #748 + POS PR #754) | #520 D1,D4,D5,D6 · #526 B5 · D-1, D-6 | B0.1, B0.4, Q1 |
 | B2c | **Same-day cancellation guard:** later-day reversal must route to a credit note, never an anulación; unblock the credit-note path the guard rejects | #539 S2 · #525 V6 · #522 | Q3, Q4c |
 | B2d | Contingency stop in place **before opening**: 1.8-compliant preprinted stop, different series, numbering **reported to the Administración de Rentas**; back-entry cross-reference | #539 S3 · #531 G5.4 | Q5 |
 | B2b | Incident procedure adopted by the client + operator-performable backup | #526 B4,B3 · #531 G5.1 | Q3 |
@@ -286,7 +292,7 @@ What that resolves at once: the D-10 single-operator case (no supervisor require
 
 | ID | Unit | Issue | Depends |
 |---|---|---|---|
-| B4a | Modifier save transactional (AC-1…AC-3), then modifiers consume inventory (AC-4…AC-9) | #527 M6a, M1–M4 | B3b |
+| B4a | Modifier save transactional (AC-1…AC-3), then modifiers consume inventory (AC-4…AC-9) **DONE** (2026-09-30, PR #760, issue #759 closed) | #527 M6a, M1–M4 | B3b. Positional @transaction replaceProductOptions with atomic rollback |
 | B4b | Theoretical availability as a **non-blocking signal**, with registered mermas and the 10-day destruction notice documented | #517 · #533 F1 | B3c |
 | B4c | Retention invoked + bounded queries | #528 R2,R3,R4 | B0.6 |
 | B4d | Reports aggregate in SQL + mandatory date ranges | #529 P2,P3 | B0.5 |

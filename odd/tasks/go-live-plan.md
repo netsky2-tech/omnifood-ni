@@ -43,8 +43,7 @@ shipped in code. This file records what was **measured**, not what the plan clai
 ## Work units
 
 ### G1 — `#522` Finding 1: real X and Z fiscal reports
-- Status: **IMPLEMENTED + VERIFIED (APPROVE, 0 blockers) — ready to ship** (branch
-  `fix/reports-xz-impl`).
+- Status: **DONE** — PR #738 (`13e01e27`), issue #737 closed.
 - Both stubs replaced by real, tenant-scoped aggregates in `SalesExportService`: `/x` = partial
   reading of an OPEN shift (`closesShift: false`, never flips), `/z` = closed-shift close view with
   per-shift fiscal totals + a **reconciliation blocker signal** (reports do not hard-fail; the hard
@@ -60,25 +59,43 @@ shipped in code. This file records what was **measured**, not what the plan clai
   Full suite 3,368 pass; `test:db` 294/294; e2e `--runInBand` 690/690; build + `npx eslint` clean.
 
 ### G2 — `#526`/B5a: refuse instead of advance, with the named state
-- Status: PENDING
-- Operator-visible refusal semantics at activation when the local cursor cannot be trusted, plus
-  D-6's named state (`FISCAL_SEQUENCE_RECOVERY_REQUIRED` or a documented substitute agreed by the owner).
+- Status: **DONE** — delivered in two chained units:
+  - **G2a (backend)**: PR #748 (`d5856979`), issue #747 closed. Optional `proposedSequence` on
+    `GET /onboarding/terminals/priming`. Tripwire refuses `<= N` with 409
+    `FISCAL_SEQUENCE_RECOVERY_REQUIRED` naming the conflicting number. Extracts trailing digit run
+    (fixing prefix concatenation bug), fails closed on unreadable MAX.
+  - **G2b (POS)**: PR #754 (`f7bd7a9e`), issue #753 closed. Removed auto-bump write in
+    `ActivationControlledSaleRunner` (stops with named state, leaving `dgi_current_number` untouched
+    per AC-3). Proposes cursor at priming. Surfaces operator-visible Spanish blocker naming the
+    conflicting number (AC-2). Pinned AC-6 double-boot monotonicity.
 
 ### G3 — B0.5: report indexes + EXPLAIN evidence
-- Status: PENDING
-- Additive migration for the two report indexes + recorded `EXPLAIN` proof.
+- Status: **DONE** — PR #757 (`54f76417`), issue #756 closed.
+- Additive migration `1809530000000-AddReportIndexes` adds `idx_invoices_tenant_created_at` on
+  `invoices(tenant_id, created_at)` and `idx_inventory_kardex_tenant_occurred_at` on
+  `inventory_kardex(tenant_id, occurred_at)`.
+- Real PostgreSQL `EXPLAIN (FORMAT JSON)` test with `enable_seqscan = off` proves the planner
+  uses Index Scan on production report query shapes; verified discriminating against index removal.
+- Clean DDL-only; full DB suite passes (299/299).
 
 ### G4 — B4a: `saveProductOptions` in one transaction
-- Status: PENDING
-- Positional `@transaction` (Floor constraint, §13 pattern already used by OHAC).
+- Status: **DONE** — PR #760 (`106f38ae`), issue #759 closed.
+- Added `ProductDao.replaceProductOptions` with `@transaction` (positional arguments only per
+  AGENTS.md / design §13 constraint).
+- `InventoryRepositoryImpl.saveProductOptions` delegates to the new method, eliminating loose,
+  uncoordinated delete/insert calls. Rollback test proves that an insertion failure preserves
+  previous options instead of silently emptying the product.
 
 ### G5 — `units` int→decimal (loyalty ledger, both runtimes)
-- Status: PENDING
-- POS Floor migration + backend TypeORM migration + entity/contract updates.
+- Status: PENDING / EVALUATED
+- Evaluated as low-medium risk (drift <=0.5 pt/tx only on fractional points, which SOHO does not emit).
+  Can be safely run or deferred post-pilot.
 
 ### G6 — Acts: close what is done, refresh the plan
-- Status: PENDING
-- `#525`, `#547` closed with evidence; the execution plan annotated as a stale snapshot pointing here.
+- Status: **DONE** (this entry).
+- Issue #525 closed with evidence (UI in `sales_history_view.dart:388`, `void_decision.dart`, atomic reversals).
+- Issue #547 closed with evidence (D-13 `fiscal_header_snapshot` in `25c66510`, call site in `sales_history_view.dart:351`, `*** REIMPRESIÓN ***` in `receipt_layout_formatter.dart`).
+- Execution plan updated to reflect real delivered state.
 
 ## Owner / physical lanes (not code — recorded so they are not lost)
 
