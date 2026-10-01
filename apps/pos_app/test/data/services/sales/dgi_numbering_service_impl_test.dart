@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
@@ -11,6 +13,7 @@ import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine.dart';
 import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// D-21 (and B2a D-16/D-18/D-1 heritage): there is NO range for
@@ -274,6 +277,80 @@ void main() {
         persisted!.value,
         reason: 'D-1: provisioning never overwrites a persisted sequence',
       );
+    });
+  });
+
+  group('AC-6 (#526): fiscal cursor is unchanged and monotonic across a double boot', () {
+    test('two boots never write the cursor and numbering continues '
+        'monotonically across the boot boundary', () async {
+      final tempDir =
+          await Directory.systemTemp.createTemp('pos_dgi_double_boot_');
+      final dbPath = p.join(tempDir.path, 'dgi_cursor_boots.db');
+      try {
+        // Boot 1: provision once and issue folio 1.
+        final db1 = await $FloorAppDatabase.databaseBuilder(dbPath).build();
+        final service1 =
+            DgiNumberingServiceImpl(db1.localConfigDao, db1.invoiceDao);
+        await service1.initializeRange(prefix: '001-001-01-', start: 1);
+        expect(await service1.getNextNumber(), '001-001-01-00000001');
+        await service1.incrementNumber();
+        expect(
+          (await db1.localConfigDao.getConfigByKey('dgi_current_number'))!.value,
+          '2',
+        );
+        await db1.close();
+
+        // Boot 2: a fresh boot over the same persisted database. D-1: the
+        // boot itself must not write the cursor — the persisted value must
+        // be byte-identical before and after any read.
+        final db2 = await $FloorAppDatabase.databaseBuilder(dbPath).build();
+        expect(
+          (await db2.localConfigDao.getConfigByKey('dgi_current_number'))!.value,
+          '2',
+          reason: 'the cursor survives the boot boundary byte-identically '
+              '(D-1: boot never writes)',
+        );
+        final service2 =
+            DgiNumberingServiceImpl(db2.localConfigDao, db2.invoiceDao);
+        expect(
+          await service2.getNextNumber(),
+          '001-001-01-00000002',
+          reason: 'AC-6: numbering continues monotonically across the boot '
+              'boundary — never below the last issued folio',
+        );
+        expect(
+          (await db2.localConfigDao.getConfigByKey('dgi_current_number'))!.value,
+          '2',
+          reason: 'reads never rewrite the cursor (D-1)',
+        );
+        await service2.incrementNumber();
+        expect(
+          (await db2.localConfigDao.getConfigByKey('dgi_current_number'))!.value,
+          '3',
+        );
+        await db2.close();
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+  });
+
+  group('D-6 (#526 G2b): FISCAL_SEQUENCE_RECOVERY_REQUIRED is a distinct first-class state', () {
+    test('the recovery state is its own type/code, never an Unconfigured alias',
+        () {
+      const recovery = FiscalSequenceRecoveryRequiredError(
+        'the cloud already holds invoice sequence 5',
+        highestSequenceNumber: 5,
+        proposedSequence: 5,
+      );
+      expect(recovery.code, 'FISCAL_SEQUENCE_RECOVERY_REQUIRED');
+      expect(recovery.highestSequenceNumber, 5);
+      expect(recovery.proposedSequence, 5);
+      expect(recovery, isNot(isA<FiscalSequenceUnconfiguredError>()));
+
+      const unconfigured = FiscalSequenceUnconfiguredError('no cursor');
+      expect(unconfigured.code, 'FISCAL_SEQUENCE_UNCONFIGURED');
+      expect(unconfigured, isNot(isA<FiscalSequenceRecoveryRequiredError>()));
     });
   });
 

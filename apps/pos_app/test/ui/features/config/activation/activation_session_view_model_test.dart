@@ -13,6 +13,8 @@ import 'package:pos_app/data/services/activation_session_service.dart';
 import 'package:pos_app/data/services/fiscal_inbox_handler.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
+import 'package:pos_app/core/localization/label_map.dart';
 import 'package:pos_app/ui/features/config/activation/activation_session_view_model.dart';
 
 class _MockActivationSessionService extends Mock
@@ -529,6 +531,66 @@ void main() {
         viewModel.isPhaseLoading(ActivationSessionPhase.preOfflineChecks),
         isFalse,
       );
+    });
+  });
+
+  group('AC-2 (#526 unit G2b): fiscal sequence replay refusal surfaces the '
+      'named Spanish blocker', () {
+    test('the 409 refusal surfaces the FISCAL_SEQUENCE_RECOVERY_REQUIRED '
+        'blocker naming the conflicting number, never the raw backend text',
+        () async {
+      when(() => primingService.primeTerminal()).thenThrow(
+        const FiscalSequenceRecoveryRequiredError(
+          'Fiscal sequence recovery required: the cloud already holds invoice '
+          'sequence 5 for this tenant, so a terminal proposing sequence 5 '
+          'cannot sell. No number was corrected or renumbered; explicit '
+          'recovery is required.',
+          highestSequenceNumber: 5,
+          proposedSequence: 5,
+        ),
+      );
+
+      await viewModel.prepare();
+
+      expect(viewModel.isPrepared, isFalse);
+      expect(viewModel.attempt, isNull);
+      expect(viewModel.blockerCode, 'FISCAL_SEQUENCE_RECOVERY_REQUIRED');
+      expect(viewModel.blockerMessage, contains('5'));
+      expect(viewModel.blockerMessage, contains('No venda'));
+      expect(viewModel.blockerMessage, contains('soporte'));
+      // The raw backend exception text must never reach the operator.
+      expect(viewModel.blockerMessage,
+          isNot(contains('Fiscal sequence recovery required')));
+      // The code has an operator-facing Spanish label in the label family.
+      expect(
+        localize('FISCAL_SEQUENCE_RECOVERY_REQUIRED', kActivationBlockerLabels),
+        isNot('FISCAL_SEQUENCE_RECOVERY_REQUIRED'),
+      );
+      // The activation lifecycle is blocked: prepare() never runs.
+      verifyNever(() => sessionService.prepare(tenantId: 'tenant-1'));
+      await expectLater(
+        viewModel.runPreOfflineChecks(authorizedUserPin: '4321'),
+        throwsStateError,
+      );
+    });
+
+    test('the null-MAX variant stays operator-actionable without inventing '
+        'a number', () async {
+      when(() => primingService.primeTerminal()).thenThrow(
+        const FiscalSequenceRecoveryRequiredError(
+          'Fiscal sequence recovery required: the cloud MAX could not be read.',
+          proposedSequence: 3,
+        ),
+      );
+
+      await viewModel.prepare();
+
+      expect(viewModel.isPrepared, isFalse);
+      expect(viewModel.blockerCode, 'FISCAL_SEQUENCE_RECOVERY_REQUIRED');
+      expect(viewModel.blockerMessage, contains('No venda'));
+      expect(viewModel.blockerMessage, contains('soporte'));
+      expect(viewModel.blockerMessage, isNot(contains('número 3')),
+          reason: 'no number may be fabricated when the MAX is unreadable');
     });
   });
 }

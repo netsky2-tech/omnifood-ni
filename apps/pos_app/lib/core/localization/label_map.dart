@@ -35,6 +35,8 @@ library;
 /// - `lib/data/adapters/activation/dio_activation_priming_port.dart`
 ///   (TERMINAL_PRIMING_PAYLOAD_MALFORMED).
 const Map<String, String> kActivationBlockerLabels = <String, String>{
+  'FISCAL_SEQUENCE_RECOVERY_REQUIRED':
+      'La secuencia fiscal de este terminal requiere reconciliación con la nube.',
   'NO_ACTIVE_ATTEMPT': 'No hay un intento de activación en curso.',
   'TERMINAL_MISMATCH': 'La terminal registrada no corresponde a este dispositivo.',
   'TENANT_MISMATCH': 'El intento de activación pertenece a otro comercio.',

@@ -9,6 +9,7 @@ import 'package:pos_app/data/ports/activation_priming_port.dart';
 import 'package:pos_app/data/services/activation_priming_service.dart';
 import 'package:pos_app/data/services/activation_required_config_adapter.dart';
 import 'package:pos_app/data/services/fiscal_inbox_handler.dart';
+import 'package:pos_app/domain/services/sales/dgi_numbering_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Fake priming port handing the service a pre-built payload (or a thrown
@@ -18,8 +19,18 @@ class _FakePrimingPort extends ActivationPrimingPort {
   TerminalPrimingPayload? payload;
   Object? thrown;
 
+  /// Records the cursor the service proposed, so tests can pin that the
+  /// terminal offers its local fiscal cursor to the backend tripwire (D-6 /
+  /// #526 unit B5) and that a fresh terminal proposes nothing.
+  int? lastProposedSequence;
+  int fetchCallCount = 0;
+
   @override
-  Future<TerminalPrimingPayload> fetchPrimingPayload() async {
+  Future<TerminalPrimingPayload> fetchPrimingPayload({
+    int? proposedSequence,
+  }) async {
+    fetchCallCount++;
+    lastProposedSequence = proposedSequence;
     final error = thrown;
     if (error != null) throw error;
     return payload!;
@@ -110,6 +121,57 @@ void main() {
 
   tearDown(() async {
     await database.close();
+  });
+
+  group('D-6 / #526 unit B5: the terminal proposes its fiscal cursor', () {
+    test('a configured cursor is offered to the backend tripwire', () async {
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '6'),
+      );
+      primingPort.payload = payload();
+
+      await service.primeTerminal();
+
+      expect(primingPort.lastProposedSequence, 6,
+          reason: 'the local cursor is what the cloud compares against its MAX; '
+              'omitting it would leave the tripwire unable to refuse');
+    });
+
+    test('a fresh device proposes nothing and is never self-blocked', () async {
+      primingPort.payload = payload();
+
+      await service.primeTerminal();
+
+      expect(primingPort.lastProposedSequence, isNull,
+          reason: 'no local cursor means nothing to compare; the request must '
+              'stay the legacy one so a fresh terminal cannot block itself');
+    });
+
+    test('a refused proposal propagates the named recovery state and applies '
+        'nothing locally', () async {
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '3'),
+      );
+      primingPort.thrown = const FiscalSequenceRecoveryRequiredError(
+        'Fiscal sequence recovery required: the cloud already holds invoice '
+        'sequence 5 for this tenant.',
+        highestSequenceNumber: 5,
+        proposedSequence: 3,
+      );
+
+      await expectLater(
+        service.primeTerminal(),
+        throwsA(isA<FiscalSequenceRecoveryRequiredError>()),
+      );
+
+      expect(primingPort.lastProposedSequence, 3);
+      final cursor =
+          await database.localConfigDao.getConfigByKey('dgi_current_number');
+      expect(cursor!.value, '3',
+          reason: 'AC-3: a refusal never renumbers the cursor');
+      expect(await database.productDao.findAllActiveProducts(), isEmpty,
+          reason: 'a refused priming must not half-apply the catalog');
+    });
   });
 
   group('L1-10b — ActivationPrimingService.primeTerminal', () {

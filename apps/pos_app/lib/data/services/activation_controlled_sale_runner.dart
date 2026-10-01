@@ -126,20 +126,27 @@ class ActivationControlledSaleRunner {
         _database.invoiceDao,
       ).initializeRange(prefix: '', start: minRequiredStart);
     } else if (cloudHighest > 0) {
-      // D-6 invariant: the local sequence cursor must NEVER lag behind
-      // the cloud's highest issued invoice. Advance it if it falls behind
-      // (e.g. after a re-attempt on an existing local database).
+      // AC-3 (#526 unit B5): the local cursor must never lag the cloud's
+      // highest issued invoice — but this runner must NOT self-heal it. The
+      // previous behavior advanced the cursor to `cloudHighest + 1`, which
+      // fabricates every number in between: exactly the silent clamp a DGI
+      // audit flags, and precisely what D-6 forbids. Issuance from a lagging
+      // cursor is refused by the backend replay tripwire, which is the only
+      // authority that may refuse; offline, the honest answer is to STOP,
+      // leave the cursor untouched, and surface the named recovery state so
+      // the operator stops selling and calls support.
       final currentConfig = await _database.localConfigDao
           .getConfigByKey('dgi_current_number');
       final currentNum = int.tryParse(currentConfig?.value ?? '') ?? 0;
       if (currentNum < minRequiredStart) {
-        await _database.localConfigDao.saveConfig(
-          LocalConfigEntity(
-            key: 'dgi_current_number',
-            value: minRequiredStart.toString(),
-            description:
-                'Advanced to match cloud highest sequence (D-6).',
-          ),
+        return const ControlledSaleResult(
+          isSuccess: false,
+          attemptStatus: 'FISCAL_SEQUENCE_RECOVERY_REQUIRED',
+          errors: [
+            'FISCAL_SEQUENCE_RECOVERY_REQUIRED: el consecutivo local está por '
+                'detrás del último folio emitido en la nube. No venda: llame a '
+                'soporte para reconciliar la secuencia fiscal.',
+          ],
         );
       }
     }

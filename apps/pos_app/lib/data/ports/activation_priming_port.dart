@@ -187,7 +187,14 @@ abstract class ActivationPrimingPort {
   /// propagate (so the caller can block activation on an unreachable
   /// backend) and a malformed or partial payload raises
   /// [TerminalPrimingPayloadException] instead of being applied partially.
-  Future<TerminalPrimingPayload> fetchPrimingPayload() {
+  ///
+  /// [proposedSequence] is the terminal's local fiscal cursor, offered to the
+  /// backend's replay tripwire (design D-6 / #526 unit B5). When the cloud
+  /// already issued that sequence the request fails closed with
+  /// [FiscalSequenceRecoveryRequiredError] and the caller MUST stop instead of
+  /// renumbering. A fresh device with no cursor passes null, which sends no
+  /// query parameter and cannot be self-blocked.
+  Future<TerminalPrimingPayload> fetchPrimingPayload({int? proposedSequence}) {
     throw UnimplementedError();
   }
 }

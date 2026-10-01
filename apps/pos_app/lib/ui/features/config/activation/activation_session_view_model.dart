@@ -9,6 +9,7 @@ import '../../../../data/services/activation_session_service.dart';
 import '../../../../data/ports/activation_priming_port.dart';
 import '../../../../domain/models/user.dart';
 import '../../../../domain/repositories/auth_repository.dart';
+import '../../../../domain/services/sales/dgi_numbering_service.dart';
 
 /// The guided activation phases a screen can drive, in execution order.
 enum ActivationSessionPhase { preOfflineChecks, controlledOfflineSale, reconnectSync }
@@ -205,6 +206,25 @@ class ActivationSessionViewModel extends ChangeNotifier {
 
     try {
       await _primingService.primeTerminal();
+    } on FiscalSequenceRecoveryRequiredError catch (error) {
+      // AC-2 (#526 unit B5): the backend replay tripwire refused this
+      // terminal's fiscal cursor. This is a named recovery state, not a
+      // transport failure: the operator must stop selling and call support.
+      // The raw backend text is deliberately NOT forwarded — the operator
+      // gets a Spanish, actionable message that names the conflicting number
+      // when the backend could determine it, and never fabricates a number
+      // when it could not.
+      _blockerCode = error.code;
+      final conflicting = error.highestSequenceNumber;
+      _blockerMessage = conflicting == null
+          ? 'No se pudo verificar la secuencia fiscal de este terminal: la nube '
+              'no pudo determinar el último folio emitido. No venda: llame a '
+              'soporte para reconciliar la secuencia antes de continuar.'
+          : 'El consecutivo de este terminal está por detrás del último folio '
+              'emitido en la nube (número $conflicting). No venda: llame a '
+              'soporte para reconciliar la secuencia fiscal antes de continuar.';
+      notifyListeners();
+      return;
     } on TerminalPrimingPayloadException catch (error) {
       _blockerCode = error.code;
       _blockerMessage =
