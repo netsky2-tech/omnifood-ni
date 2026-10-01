@@ -108,6 +108,12 @@ guard does not cover the paths where it will naturally be placed.
 - Delivery strategy: work-unit commits on `feat/release-signing-baseline`, branched from
   `origin/main` (the checkout was detached at `origin/main` when this feature opened).
 - Review budget: approximately 400 authored changed lines per work unit.
+- **Authorized size exception.** S0-02 ships whole at 999 measured authored lines (466
+  production + 533 test), above the budget. The repository's own precedent
+  (`odd/tasks/terminal-enrollment-path.md`) records exceptions explicitly and allows them
+  where splitting would leave a work unit unable to demonstrate what it claims; that
+  applies exactly here, because the test is the only artifact that proves the F1
+  correction. The founder authorized the exception. Counts recorded rather than hidden.
 - Verification runners:
   - Packaging pipeline: `scripts/test_packaging_pipeline.sh` (the existing suite for
     `build_pos_apk.sh`; it covers plan mode, argument validation, and a real split-per-abi
@@ -128,39 +134,100 @@ guard does not cover the paths where it will naturally be placed.
 
 ### S0-01 — Secret hygiene and fail-closed release signing
 
-Status: pending
+Status: complete — work-unit commits `3c4b6334` (feature doc) and `48cf3334`
+(implementation). Independently verified: 8 of 8 claims confirmed, no refutations.
 
 Closes both defects above.
 
-- [ ] Add root `.gitignore` rules covering `*.jks`, `*.keystore`, `*.p12`, and
+- [x] Add root `.gitignore` rules covering `*.jks`, `*.keystore`, `*.p12`, and
       `key.properties` at any depth, with a comment pointing at the runbook.
-- [ ] Verify with `git check-ignore -v` that the three currently-committable paths listed
+- [x] Verify with `git check-ignore -v` that the three currently-committable paths listed
       in Problem are now ignored, and that no tracked file is newly ignored.
-- [ ] Make the `release` signing path fail closed when `key.properties` is absent and no
+- [x] Make the `release` signing path fail closed when `key.properties` is absent and no
       opt-in is present, with a message naming exactly the two remedies.
-- [ ] Keep `debug` and non-release Android paths working without a release keystore.
-- [ ] Add `--allow-debug-signing` to `scripts/build_pos_apk.sh`, threaded to Gradle as a
+- [x] Keep `debug` and non-release Android paths working without a release keystore.
+- [x] Add `--allow-debug-signing` to `scripts/build_pos_apk.sh`, threaded to Gradle as a
       project property, and have the script warn loudly when it is used.
-- [ ] Update `scripts/test_packaging_pipeline.sh` to pass the opt-in for its real build,
+- [x] Update `scripts/test_packaging_pipeline.sh` to pass the opt-in for its real build,
       and add a negative check asserting the fail-closed message.
 
-### S0-02 — Keystore provisioning tooling and custody runbook
+Deviation from the brief, justified and accepted: the guard uses a
+`gradle.taskGraph.whenReady` hook rather than `androidComponents.beforeVariants`, because
+both the `signingConfigs` block and `beforeVariants` run during every configuration,
+including Android Studio sync and debug builds, which must keep working without a release
+keystore.
 
-Status: pending
+Recorded residual: `gradlew :app:packageRelease`, and a `key.properties` naming a file that
+exists but is not a keystore, still fail closed but surface AGP's or keytool's message
+instead of the actionable one. The guard's notion of a usable keystore is path existence,
+not key validity. No path produces a release artifact signed with the debug key without
+the explicit opt-in.
 
-- [ ] Add `scripts/provision_release_keystore.sh`: interactive, prompts for passwords with
-      echo disabled, writes the keystore outside the repository and emits
-      `apps/pos_app/android/key.properties` (git-ignored). Passwords never appear in argv,
-      in shell history, or in the generated file's contents beyond the properties file
-      itself.
-- [ ] Add `docs/operations/release-signing-runbook.md`: generation, custody outside the
+### S0-02 — Keystore provisioning tooling and its test
+
+Status: complete — work-unit commit recorded in the Evidence log. Shipped whole under the
+authorized size exception recorded in Delivery and verification.
+
+- [x] Add `scripts/provision_release_keystore.sh`: interactive, prompts with echo disabled,
+      writes the keystore outside the repository and emits
+      `apps/pos_app/android/key.properties` (git-ignored).
+- [x] Passwords never appear in argv, in a process listing, or under `bash -x`. Verified
+      with an argv-recording wrapper around the real keytool and a full trace; the
+      mechanism is keytool's protected-argument form (`-storepass:env`).
+- [x] Refuse to overwrite an existing keystore or `key.properties` without an explicit
+      force flag, leaving the existing file byte-identical (hash-compared, not eyeballed).
+- [x] Refuse a keystore path inside the repository, and make that refusal hold by resolving
+      both sides physically, so a broken `git` plus a symlinked invocation path cannot
+      defeat it.
+- [x] Fail closed when keytool is unavailable or non-functional, when the target directory
+      cannot be created, or when a required input is missing.
+- [x] Add `scripts/test_provision_keystore.sh`: temp-dir isolation, throwaway credentials,
+      cleanup on every exit path, and no secret left behind.
+- [x] **Correction found by verification and fixed:** the original two-password design was
+      broken. keytool defaults to PKCS12, which ignores `-keypass`, so the generated
+      `keyPassword` could not open the private key and a real release build failed at
+      `:app:packageRelease` with `Get Key failed: Given final block not properly padded`.
+      Replaced with one password used for both, `-storetype PKCS12` pinned on new stores,
+      and keytool warnings surfaced instead of read and deleted.
+- [x] **Correction found by verification and fixed:** forced rotation deleted the alias
+      before regenerating, so a failed `-genkeypair` left the keystore with zero entries
+      and the release key lost. Now stages into a same-directory temporary file and swaps
+      only after the copy is verified whole, preserving unrelated aliases.
+- [x] **Correction found by verification and fixed:** `--force` against an existing
+      keystore protected by a different password now fails closed with cause and remedy
+      instead of a cryptic keytool error, leaving the keystore byte-identical.
+- [x] **Correction found by verification and fixed:** the suite asserted that `keyPassword`
+      appeared in `key.properties` but never proved the private key could be opened with
+      it — the blind spot that hid the defect above. It now proves the key opens, and a
+      mutation check confirms the test fails against a tampered `keyPassword`.
+
+Known residual recorded rather than hidden: the staging cleanup trap handles EXIT and
+SIGTERM but not SIGKILL, so an unclean kill inside the swap window can leave a
+`.provision-stage.*` file holding a full keystore copy (mode 600) in the custody directory.
+It holds the same secret as the keystore beside it, so it exposes nothing new; it is stale
+debris. A startup sweep of `.provision-stage.*` would close it.
+
+### S0-03 — Custody and MDM enrollment runbook
+
+Status: complete — work-unit commit recorded in the Evidence log.
+
+- [x] Add `docs/operations/release-signing-runbook.md`: generation, custody outside the
       repository, two encrypted backups in distinct locations, password stored separately
-      from the key, MDM device-owner enrollment window and its irreversibility, and the
-      recovery limits when no physical access exists.
-- [ ] Record explicitly in the runbook that a factory reset is required for enrollment and
-      that device-owner cannot be granted remotely afterwards.
+      from the key, and the recovery limits when no physical access exists.
+- [x] Record explicitly that a factory reset is required for enrollment and that
+      device-owner cannot be granted remotely afterwards.
+- [x] State the platform claims with a validate-on-the-real-device caveat, since platform
+      behavior varies by Android version.
+- [x] Note that `adb shell dpm remove-active-admin` fails for a production device owner, so
+      the status is effectively permanent until a factory reset.
+- [x] Note the Android 14+ `android:updateOwnership` nuance.
+- [x] **Add the architectural consequence**: device-owner privilege belongs to the MDM's
+      agent, not to `com.nhilos.pos_app`. The POS application therefore cannot silently
+      self-update; silent installs must be driven through the MDM, or the update falls back
+      to the operator-prompt path. This is a Phase 2 design constraint, recorded here so it
+      is not discovered later.
 
-### S0-03 — Register the Phase 0 decisions
+### S0-04 — Register the Phase 0 decisions
 
 Status: pending
 
@@ -172,4 +239,38 @@ Status: pending
 
 ## Evidence log
 
-Appended as work units close.
+### Verification rounds
+
+1. **S0-01 — 8 of 8 confirmed, no refutations.** Independent verification reproduced the
+   fail-closed guard, the debug path staying healthy, the pre-toolchain script gate
+   (exit 2, Flutter shim never invoked), plan mode still exiting 0, and the opt-in scoped to
+   the build invocations only.
+2. **S0-02 round 1 — one claim REFUTED.** The claim that a script-generated
+   `key.properties` drives a successful release build was refuted: with distinct store and
+   key passwords the release build failed at `:app:packageRelease`. That refutation is what
+   exposed the PKCS12 defect, the forced-rotation data-loss window, and the fact that the
+   suite's own test could not have caught either. Recorded here because the refutation was
+   the most valuable step of the whole work unit, not a setback.
+3. **Fix cycle — the writer timed out with zero evidence.** It stalled 4 minutes on an
+   interactive `read` (it ran the provisioning script without feeding stdin) and was
+   killed. It produced no RED, no GREEN, and no build. Its only artifact was a 442-byte
+   `run.log` containing that failed attempt; the log held no secret and was deleted. Nothing
+   from that cycle was taken on trust.
+4. **S0-02 round 2 — 9 of 9 confirmed.** Established from scratch by an independent
+   verifier: the full 13-test suite green; a mutation check proving the keyPassword
+   regression test actually fails against a tampered value; a real
+   `flutter build apk --release` with no opt-in succeeding and the APK signed by the
+   throwaway release certificate (`94c39704…`) rather than the debug certificate
+   (`91d0bd80…`); the failed-rotation path leaving the keystore byte-identical with every
+   entry intact; a broken `git` plus symlinked invocation still refused; and a
+   different-password keystore failing closed byte-identical.
+
+### Known gaps carried forward
+
+- `scripts/key.properties.example` is a tracked file outside S0-02's edit surface and still
+  shows two distinct passwords. That is the exact shape of the defect fixed here, in
+  documentation form, and it can steer an operator into it. It should be corrected to the
+  single-password flow.
+- The S0-02 staging cleanup does not survive SIGKILL, as recorded under S0-02.
+- No claim in this feature was validated against physical Android hardware. The runbook
+  says so, and the enrollment dry run is the operator step that closes it.
