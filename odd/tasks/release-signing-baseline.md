@@ -165,8 +165,8 @@ the explicit opt-in.
 
 ### S0-02 — Keystore provisioning tooling and its test
 
-Status: complete — work-unit commit recorded in the Evidence log. Shipped whole under the
-authorized size exception recorded in Delivery and verification.
+Status: complete — work-unit commit `c68ef17b`. Shipped whole under the authorized size
+  exception recorded in Delivery and verification.
 
 - [x] Add `scripts/provision_release_keystore.sh`: interactive, prompts with echo disabled,
       writes the keystore outside the repository and emits
@@ -209,7 +209,7 @@ debris. A startup sweep of `.provision-stage.*` would close it.
 
 ### S0-03 — Custody and MDM enrollment runbook
 
-Status: complete — work-unit commit recorded in the Evidence log.
+Status: complete — work-unit commit `f4d1dbbb`.
 
 - [x] Add `docs/operations/release-signing-runbook.md`: generation, custody outside the
       repository, two encrypted backups in distinct locations, password stored separately
@@ -229,15 +229,29 @@ Status: complete — work-unit commit recorded in the Evidence log.
 
 ### S0-04 — Register the Phase 0 decisions
 
-Status: pending
+Status: complete — work-unit commit `0b50d6e9`.
 
-- [ ] Add the keystore custody decision to `odd/tasks/go-live-decisions.md`, following the
+- [x] Add the keystore custody decision to `odd/tasks/go-live-decisions.md`, following the
       file's existing `DEC-N` format (fecha, decisión, rationale, consecuencia conocida,
       anclas de evidencia, revisar antes de/si). Spanish, matching that file's convention.
-- [ ] Register the MDM device-owner enrollment decision and the deferred `API_URL`
+- [x] Register the MDM device-owner enrollment decision and the deferred `API_URL`
       runtime-provisioning decision in the same registry, each with its review trigger.
 
 ## Evidence log
+
+### Work units
+
+| Slice | Commit | Scope |
+|---|---|---|
+| — | `3c4b6334` | Feature doc opened with the Phase 0 work units. |
+| S0-01 | `48cf3334` | Root ignore rules and fail-closed release signing. |
+| S0-02 | `c68ef17b` | Keystore provisioning tooling and its test (999 lines, authorized exception). |
+| S0-03 | `f4d1dbbb` | Custody and MDM enrollment runbook. |
+| S0-04 | `0b50d6e9` | Phase 0 decisions registered as DEC-4..DEC-6. |
+
+All five commits are local to `feat/release-signing-baseline`, branched from `22bfc376`
+(`origin/main`). Nothing is pushed; the pull request and the merge remain the founder's
+decision.
 
 ### Verification rounds
 
