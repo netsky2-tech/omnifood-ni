@@ -54,4 +54,30 @@ abstract class ProductDao {
 
   @Query('DELETE FROM product_modifiers WHERE product_id = :productId')
   Future<void> deleteModifiersByProductId(String productId);
+
+  /// Atomically replaces variants and modifiers for a product.
+  ///
+  /// All four statements (two deletes and two inserts) run inside a single
+  /// transaction; if any insert throws (constraint, disk full, invalid
+  /// data) the whole operation rolls back and the product's previous
+  /// options survive instead of being silently emptied (B4a, go-live plan G4).
+  ///
+  /// Positional arguments are MANDATORY for Floor `@transaction` methods in
+  /// this project (AGENTS.md, design §13); named arguments break code
+  /// generation in `.g.dart` files.
+  @transaction
+  Future<void> replaceProductOptions(
+    String productId,
+    List<ProductVariantEntity> variants,
+    List<ProductModifierEntity> modifiers,
+  ) async {
+    await deleteVariantsByProductId(productId);
+    await deleteModifiersByProductId(productId);
+    if (variants.isNotEmpty) {
+      await insertVariants(variants);
+    }
+    if (modifiers.isNotEmpty) {
+      await insertModifiers(modifiers);
+    }
+  }
 }

@@ -1473,6 +1473,25 @@ class _$ProductDao extends ProductDao {
     await _productModifierEntityInsertionAdapter.insertList(
         modifiers, OnConflictStrategy.replace);
   }
+
+  @override
+  Future<void> replaceProductOptions(
+    String productId,
+    List<ProductVariantEntity> variants,
+    List<ProductModifierEntity> modifiers,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceProductOptions(productId, variants, modifiers);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.productDao
+            .replaceProductOptions(productId, variants, modifiers);
+      });
+    }
+  }
 }
 
 class _$RecipeDao extends RecipeDao {

@@ -165,24 +165,20 @@ class InventoryRepositoryImpl
     required List<ProductVariant> variants,
     required List<Modifier> modifiers,
   }) async {
-    await _database.productDao.deleteVariantsByProductId(productId);
-    await _database.productDao.deleteModifiersByProductId(productId);
-
-    if (variants.isNotEmpty) {
-      await _database.productDao.insertVariants(
-        variants
-            .map((v) => InventoryMapper.toVariantEntity(productId, v))
-            .toList(),
-      );
-    }
-
-    if (modifiers.isNotEmpty) {
-      await _database.productDao.insertModifiers(
-        modifiers
-            .map((m) => InventoryMapper.toModifierEntity(productId, m))
-            .toList(),
-      );
-    }
+    // B4a (go-live plan G4): the four operations (delete variants, delete
+    // modifiers, insert variants, insert modifiers) must run inside ONE
+    // transaction. Running the deletes uncoordinated means a failed insert
+    // (constraint, disk full, invalid data) silently empties the product's
+    // existing options on a single terminal.
+    await _database.productDao.replaceProductOptions(
+      productId,
+      variants
+          .map((v) => InventoryMapper.toVariantEntity(productId, v))
+          .toList(),
+      modifiers
+          .map((m) => InventoryMapper.toModifierEntity(productId, m))
+          .toList(),
+    );
   }
 
   @override
