@@ -155,8 +155,8 @@ Status: done
 
 ### S1-03 and the localization follow-up
 
-Commit `6b270c00` — structured rejection reason on the service. Commit
-`7b270c00`..`7b6a5473` — the operator card.
+Commit `bd9c4dc6` — structured rejection reason on the service. Commit
+`f56f89ac` — the operator card.
 
 The worker reported one risk honestly: rejection copy mixed Spanish framing
 around the service's English message, producing
@@ -254,15 +254,33 @@ Branched from `origin/main` at `8d8455f6` (after PR #750 merged). Rebased onto
 `origin/main` at `9cdbc026` after PR #749 landed; `git diff --name-only` showed
 zero overlap with the four files in this slice, and the rebase applied cleanly.
 
-Work-unit commits:
+Work-unit commits (final hashes after the second rebase onto `8e376dda`):
 
-- `ae12c1c3` — `feat(pos): resolve the backend URL at runtime, not only at compile time`
+- `047bce4b` — `feat(pos): resolve the backend URL at runtime, not only at compile time`
   (S1-01: `ApiBaseUrlService` plus resolution, persistence and validation tests).
   Committed with the wiring test group temporarily split out so the commit is
   independently green: 16/16 passing on its own.
-- `e59512fa` — `feat(pos): build the Dio clients from the runtime-resolved backend URL`
+- `632eaa84` — `feat(pos): build the Dio clients from the runtime-resolved backend URL`
   (S1-02: startup resolution, `PosDioClients`, the `build_pos_apk.sh` fleet
   corrections, and the wiring test group).
+
+The branch was rebased twice, so every commit here has an earlier identity. The
+pre-rebase hashes are **not** recoverable from `main` once merged; they are listed
+only so the evidence below can be attributed to a commit:
+
+| Pre-rebase (dead) | Final |
+| --- | --- |
+| `ae12c1c3` | `047bce4b` |
+| `e59512fa` | `632eaa84` |
+| `d091a87e` | `6b583be5` |
+| `6b270c00` | `bd9c4dc6` |
+| `7b6a5473` | `f56f89ac` |
+| `c6a751a3` | `c6a751a3` (unchanged by the second rebase) |
+
+One hash cited in an earlier draft of this section, `7b270c00`, never existed: it
+was written from memory as the lower bound of a commit range during the S1-03
+handoff and was never checked with `git rev-parse`. Recorded here because a
+citation that was never valid is worse than one that was merely superseded.
 
 ### Verification observed
 
