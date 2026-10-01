@@ -113,8 +113,8 @@ Rules the Dart side enforces, each traceable to a measured fact:
   - ✅ Download + SHA-256 verification service — `lib/domain/services/update/release_downloader.dart` (R4, R5)
   - ✅ `ReleaseInstaller` port + `SystemInstallerAdapter` — FileProvider + `REQUEST_INSTALL_PACKAGES` + `ApkInstallHandler.kt` (F1, F2, F5)
   - ✅ Fiscal gate port + fail-closed adapter — `lib/domain/ports/fiscal_safety_gate_port.dart` (R7)
-- **Batch 2 — backend `releases` module.** Entity, migration, controller, service, tests, RLS decision.
-- **Batch 3 — signed URL issuance.** R2 bucket `nhilos-pos` connected and verified live.
+- **Batch 2 — backend `releases` module.** ✅ Entity `AppRelease`, migration `1809540000000-CreateAppReleases`, controller, service, tests, RLS decision (`app_releases|global`). Commit `09a6826c`.
+- **Batch 3 — signed URL issuance.** ✅ R2 storage service with zero-dependency AWS SigV4 (`R2StorageService`), authenticates against Cloudflare R2 bucket `nhilos-pos`. Included in commit `09a6826c`.
 - **Batch 4 — operator UI.** "Update available" surface, notes, install-now / later, and the fiscal-gate
   explanation when install is refused.
 - **Batch 5 — Nyx silent-install spike.** Post-delivery.
