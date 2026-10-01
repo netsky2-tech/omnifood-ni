@@ -4,6 +4,7 @@ import 'package:pos_app/data/services/api_base_url_service.dart';
 import 'package:provider/provider.dart';
 
 import 'terminal_identity_view_model.dart';
+import 'widgets/ota_update_card.dart';
 
 /// Screen showing the terminal's canonical identity (read-only) and the
 /// backend server URL configuration.
@@ -62,6 +63,10 @@ class TerminalIdentityView extends StatelessWidget {
                 _buildPrinterProfileCard(context, viewModel),
                 const SizedBox(height: 16),
                 const _ServerConfigCard(),
+                if (viewModel.otaCoordinator != null) ...[
+                  const SizedBox(height: 16),
+                  OtaUpdateCard(coordinator: viewModel.otaCoordinator!),
+                ],
                 const SizedBox(height: 24),
                 _buildBackOfficeNotice(context),
               ],
