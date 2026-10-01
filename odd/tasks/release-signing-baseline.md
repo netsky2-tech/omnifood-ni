@@ -372,6 +372,45 @@ decision.
    parser's own comment claimed an invariant a counterexample refuted. The final round
    confirmed 9 of 9, including mutation proofs that each new assertion can actually fail.
 
+### Review disposition
+
+The native review on this feature was ABANDONED by founder decision, and the corrected
+candidate is left UNREVIEWED. Recorded in full here because no closed receipt exists.
+
+- Lineage `review-bfeac653696afdde` admitted three of four lenses: `review-risk` (0
+  findings), `review-resilience` (3 WARNING), `review-readability` (1 WARNING, 2
+  SUGGESTION). The required `review-reliability` lens produced no output on two consecutive
+  attempts — `reviewer-empty-output`, `stopReason: length`, ~204s each, with
+  `mutation_performed: false` both times — against a 1877-line review target. That is a
+  model output-length limit, not a property of the code, and it is why the review could not
+  close.
+- The six findings it did produce were all corrected (S0-06), and every correction was
+  verified behaviorally by independent rounds, including mutation proofs that each new
+  assertion can actually fail.
+- The lineage could not be used to review those corrections: it stayed frozen on the
+  pre-correction candidate tree (`249cf4f3…`) even after the fixes were committed, and
+  neither `complete-fix` nor `review/complete-fix` is an accepted `advance` transition. The
+  advertised repair operations report `status: unsupported` with all counts zero.
+- Abandonment committed with the founder's explicit approval of the exact eight-line
+  `gentle-ai.review-abandon-authorization/v2` binding. Audit record: `reason=operator_disposition`,
+  `actor=pi`, discarded work = the three admitted lens results with `findings_present=true`,
+  quarantined at
+  `.git/gentle-ai/review-transactions/quarantine/review-bfeac653696afdde-2763430141`.
+- Consequence, stated plainly: **this branch carries no approved review receipt.** If the
+  delivery gate requires one, that is not satisfied. What the branch does carry is the
+  review's own six findings plus independent behavioral verification of every correction —
+  evidence the review itself does not produce.
+- The corrected candidate is a fresh unreviewed target (`b29dc311…`, tree `c7106eae…`,
+  proposed lineage `review-94fe384e89bc815d`). Starting it is a separate decision, and
+  re-running all four lenses would very likely hit the same output-length limit on
+  `review-reliability`.
+
+Process note worth keeping: the abandonment took four attempts because
+`--maintainer-authorization` is an eight-line LF-joined binding, while the provider's error
+text renders it concatenated onto one line. `gentle-ai review abandon --help` documents
+this and prints the template; the values must be read from `entries[]` in
+`gentle-ai review status`, never inferred.
+
 ### Known gaps carried forward
 
 Both residuals recorded when S0-02 closed are now closed in S0-05, and the six review
