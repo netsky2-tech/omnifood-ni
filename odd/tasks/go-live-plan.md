@@ -86,10 +86,78 @@ shipped in code. This file records what was **measured**, not what the plan clai
   uncoordinated delete/insert calls. Rollback test proves that an insertion failure preserves
   previous options instead of silently emptying the product.
 
-### G5 — `units` int→decimal (loyalty ledger, both runtimes)
-- Status: PENDING / EVALUATED
-- Evaluated as low-medium risk (drift <=0.5 pt/tx only on fractional points, which SOHO does not emit).
-  Can be safely run or deferred post-pilot.
+### G5 — loyalty point drift: the diagnosis in this file was wrong
+- Status: **DEFERRED post-pilot — conclusion unchanged, reason replaced.**
+- **The integer column is not the truncation point.** No code path derives
+  `units` from an item quantity, and the POS never writes `units` at all: it
+  stays NULL locally (`loyalty_service.dart` has zero occurrences of `units`).
+  The truncation is on the wire, at
+  `apps/pos_app/lib/data/services/sync_service.dart:950`:
+
+  ```dart
+  'units': tx.units ?? tx.points.round(),   // tx.points is a double
+  ```
+
+  Cloud ingestion then derives `points: dto.units ?? 0`
+  (`loyalty-ledger.service.ts:163`). Widening the column **does not touch that
+  `.round()`**, so option B as originally scoped fixes nothing by itself.
+- **The earlier claim "SOHO does not emit fractional points" is false as
+  stated.** The POS earn rate is a hard-coded default,
+  `earnRate = 0.1` (`loyalty_service.dart:37`) applied as
+  `netAmount * earnRate` (`:44`), with no config override anywhere in `lib/`. So
+  fractional points are the normal case, not the exception: any subtotal that is
+  not a multiple of 10 produces them.
+- **Why it is nevertheless inert today, which is the real reason to defer.**
+  Loyalty is not capability-gated. The only gate is whether the cashier
+  identifies a customer (`sale_view_model.dart:1435`,
+  `if (_selectedCustomer != null)`). Nothing in the SOHO scope does: the
+  requirements document (`docs/client-onboarding/SOHO_REQUISITOS_PUESTA_EN_MARCHA.md`)
+  mentions loyalty, points or customer QR **zero times**, and no SOHO seed
+  creates customers. So the drift is unreachable by absence of use, **not**
+  because the arithmetic is integral.
+- **Why the distinction is load-bearing, not pedantic.** The previous wording
+  implies the hazard is closed by configuration. It is not: it is closed by
+  nobody using loyalty. The first tenant that identifies a customer at sale
+  inherits a live ≤0.5 pt/tx ledger drift with no feature flag to warn them and
+  no failing test to catch it. Any future enablement of loyalty must reopen this
+  unit.
+- **Option B (widen `units` in both runtimes) must not run near a go-live.**
+  SQLite has no `ALTER TABLE … TYPE`, so it is a table rebuild; Floor has no
+  downgrade path (strictly ascending migrations, `version: 60` today), so a
+  device migrated to 61 and later opened by an APK built at 60 cannot open its
+  own database — ledger and invoices at risk. On Postgres, `ALTER COLUMN
+  int→numeric` takes `ACCESS EXCLUSIVE` and rewrites rows at TypeORM startup.
+  And `balance_units` is **in scope, not out**: it is `integer` and fed from
+  `Number(SUM(tx.units))` in four places (`loyalty-ledger.service.ts:249→268`,
+  `:309→328`, `customers.service.ts:198→216/227`,
+  `legacy-classification.service.ts:85→104/116`), so widening `units` alone
+  still collapses at the projection. Reverting is lossy once any fractional row
+  lands.
+- **Option A (add an optional decimal `points` to the sync contract, no
+  migration) is sound with holes and is not "the G5 fix".** It persists the exact
+  value — `customer_point_transactions.points` is already `numeric(12,2)` in the
+  entity, the create migration and all eight db-spec fixtures, and `SUM(points)`
+  feeds `customers.points_balance`. But as naively scoped it does not work and
+  leaves real defects:
+  - `toLedgerDto` (`loyalty-sync-ingestion.service.ts:78-105`) does not forward
+    `points`, and `AppendLoyaltyTxDto` has no `points` member — both must change.
+  - `forbidNonWhitelisted: true` (`main.ts:49-51`) means **new APK against an
+    old backend gets HTTP 400 on the whole loyalty batch**: backend deploys
+    first, always.
+  - Dedup compares `units` only (`loyalty-ledger.service.ts:131-132`), so rows
+    already synced while rounded are **never corrected**; replay returns the
+    existing row and the POS has already marked them synced.
+  - `balance_units` stays integer, and redemption still gates on it
+    (`redemption.service.ts:123`), so the fix improves the global balance while
+    **introducing** a same-account divergence between `SUM(points)` and
+    `balance_units`.
+  - `numeric(12,2)` leaves a ≤0.005/tx residual, so "removes the drift"
+    overstates it.
+- **Evidence limit.** All of the above is a static trace at `4820f460` by a
+  read-only explorer and verifier. No test, migration or request was executed;
+  the 400-on-unknown-field and the residual rounding are inferred from the pipe
+  config and column types. SOHO loyalty non-use is inferred from absence in the
+  requirements doc and the seeds, not from a configuration record that says so.
 
 ### G6 — Acts: close what is done, refresh the plan
 - Status: **DONE** (this entry).
@@ -144,10 +212,14 @@ shipped in code. This file records what was **measured**, not what the plan clai
 
 ### Code units still open
 
-- **G5** — `customer_point_transactions.units` int→decimal in both runtimes. The
-  only open code unit. Evaluated in this file as low-to-medium risk: drift is
-  ≤ 0.5 pt/tx and only on fractional points, which SOHO does not emit, so it can
-  run post-pilot.
+- **G5** — loyalty point drift. The only open code unit, and its description in
+  this file was wrong: the truncation is the `points.round()` on the sync push
+  (`sync_service.dart:950`), not the integer `units` column, and the rate is
+  hard-coded to `0.1`, so fractional points are the norm rather than the
+  exception. It is deferred because **nothing in the SOHO scope identifies a
+  customer at sale**, not because the arithmetic is integral — see the G5 entry
+  above for the full re-diagnosis and for why enabling loyalty reopens it. Do
+  not run the type widening near a go-live.
 
 ### Physical lane (unchanged, and it is what gates delivery)
 
