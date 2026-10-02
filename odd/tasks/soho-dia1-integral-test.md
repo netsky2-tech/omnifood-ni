@@ -122,7 +122,15 @@ The tablet was bound to tenant `SOHO` (`e05bf002-b1d3-45f2-a46a-3592e1cc1431`), 
 
 **D-8 diagnostics also verified**: the second void attempt on the already-cancelled invoice showed the new actionable message **"La factura ya está anulada."** instead of the old generic one. The original void failure never reproduced on the fixed builds.
 
-**Residue**: invoice #3 was voided before this fix, so its local record still carries the stale `sale:` key and stays stuck in the outbox; only voids performed from `versionCode 2003` on get re-keyed. A one-shot repair for already-voided-but-unsynced invoices is not implemented.
+**Residue**: invoice #3 was voided before this fix, so its local record carried the stale `sale:` key and stayed stuck in the outbox until the lazy re-key below landed.
+
+### D-10 residue — REPAIRED AND VERIFIED (commit `569a9429`)
+
+`getUnsyncedAggregates` now re-keys a locally cancelled invoice whose idempotency key is not void-scoped, allocating a fresh source sequence the first time it is offered for sync (idempotent: the second pass skips). Device verification (APK `versionCode 2004`): after a forced sync, cloud invoice **#3** reads `is_canceled = t` with `void_reason = ERROR_DE_CAPTURA`, so the pre-fix cancellation finally landed and the outbox drains. Covered by a repository test that seeds a cancelled invoice carrying `sale:term-1:inv-stale-void`.
+
+### D-12 (new, operator-reported) — the invoice preview showed stale state; FIXED AND VERIFIED (commit `ba2f3d9d`)
+
+Operator: "si ya está anulada, no debería dejar darle nuevamente a anular, y se debería reflejar en el preview". The detail screen rendered the `Invoice` captured when the row was tapped, so a cancelled invoice kept showing `EMITIR NOTA DE CRÉDITO` / `ANULAR FACTURA` and no ANULADA badge — inviting a second void the repository then refused (that refusal is exactly what produced the "already voided" message seen on device). Fix: `InvoiceDetailsPanel` now renders the PERSISTED invoice via `SalesHistoryViewModel.invoiceById`, and the refusal path reloads the list because a refusal can mean the invoice is already cancelled. Device verification: invoice #4's preview shows the red **ANULADA** badge and only `REIMPRIMIR`.
 9. **D-9 (SEVERE — drawer expectation ignores cash sales) — FIXED (commit `12861a97`), device verification pending**: the `Corte X` "Resumen de Flujo de Gaveta en Tiempo Real" and the `Control de Caja y Turnos` card both reported **Esperado en Gaveta = C$1000.00**, i.e. the initial float unchanged, after two cash sales totalling C$200 (invoice #2: 200 received − 75 change = 125; invoice #4: 75). The cloud agreed (`cash_shift_sessions.expected_cash_nio = 1000.0000`). Root cause: only the Z close used `effectiveExpectedNio/Usd` (base + net cash sales, from the #529 work); the cards and `XReportDialog` printed the raw `shift.expectedNio/Usd`, which carry only the float plus manual movements. Fix: both now display/pass the effective expectation. `flutter test test/ui/features/cash/` + the blind-count integration test pass (28/28).
 
 ### Blocked / pending
