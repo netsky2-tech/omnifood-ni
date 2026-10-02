@@ -1503,6 +1503,12 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockSyncService extends _i1.Mock implements _i10.SyncService {
+  // Hand-patched (build_runner is frozen in this worktree): D-18 added
+  // `isAuditStreamDegraded` to SyncService after these mocks were generated.
+  // Without this override the synthesized noSuchMethod forwarder returns null
+  // and every test that builds the cloud-sync badge dies on the bool cast.
+  @override
+  bool get isAuditStreamDegraded => false;
   @override
   _i19.Stream<_i10.InboundSyncResult> get onInboundSync => (super.noSuchMethod(
         Invocation.getter(#onInboundSync),

@@ -310,7 +310,7 @@ void main() {
     });
 
     testWidgets(
-        'denial keeps the dialog open with the guard message and does not reload',
+        'denial keeps the dialog open with the guard message and reloads the persisted invoice',
         (tester) async {
       arrangeUser(UserRole.cashier);
       // The invoice belongs to another cashier: deniedOwnInvoice.
@@ -331,7 +331,10 @@ void main() {
           findsOneWidget);
       verifyNever(mockSalesRepo.voidInvoice(any, any,
           reasonDetail: anyNamed('reasonDetail')));
-      verifyNever(mockInvoiceDao.getAllInvoices());
+      // ba2f3d9d made a refusal reload the list on purpose: a refusal can
+      // mean the invoice is already cancelled elsewhere, so the persisted
+      // state must come back. The reload is part of the contract now.
+      verify(mockInvoiceDao.getAllInvoices()).called(greaterThanOrEqualTo(1));
       // The typed reason is preserved: the selection is still active.
       // The typed reason survives the denial: the radio selection is still
       // the OTRO code. (Generic widgets need the type argument in find.)
