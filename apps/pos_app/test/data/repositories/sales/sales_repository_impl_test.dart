@@ -2393,7 +2393,8 @@ void main() {
       expect(await schemaColumns(), seededRow.keys.toSet());
     });
 
-    test('voidInvoice preserves all 31 columns it must not change', () async {
+    test('voidInvoice preserves all 31 columns except its document identity',
+        () async {
       final before = (await readRow())!;
 
       await preservationRepository.voidInvoice(
@@ -2406,10 +2407,20 @@ void main() {
       expect(after!['is_canceled'], 1);
       expect(after['void_reason'], 'Cambio de posición del pedido');
       expect(after['sync_status'], 'pending');
+      // 65dabe6b: the void travels as its OWN outbound document — a fresh
+      // source sequence and a void-scoped idempotency key — because the
+      // backend stores a payload hash per key and per (device, sequence)
+      // and rejects the cancellation with CRITICAL_*_PAYLOAD_MISMATCH if
+      // the original identity arrives with new content. Those two columns
+      // are the cancellation's document identity, not invoice data; every
+      // other column (amounts, fiscal fields, rates, tips, sequences of
+      // fact) must stay byte-identical.
       expectColumnsPreserved(before, after, {
         'is_canceled',
         'void_reason',
         'sync_status',
+        'source_sequence',
+        'idempotency_key',
       });
     });
 
