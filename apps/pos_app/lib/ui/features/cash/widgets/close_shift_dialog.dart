@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../design_system/responsive_layout.dart';
 import '../cash_shift_view_model.dart';
 import 'z_report_dialog.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
@@ -100,6 +101,11 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // D-20: on handheld widths the two money fields must NOT share a row —
+    // a cramped half-width field truncates the label tail, which is exactly
+    // the currency marker the operator needs to see. Same isHandheld switch
+    // used by MultiCurrencyCheckoutDialog and the search dialog in sale_view.
+    final isHandheld = ResponsiveBreakpoints.isHandheld(context);
     return AlertDialog(
       title: const Row(
         children: [
@@ -110,7 +116,7 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
       ),
       content: SingleChildScrollView(
         child: SizedBox(
-          width: 480,
+          width: isHandheld ? double.infinity : 480,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,39 +166,25 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      key: const Key('close_shift_nio_counted_input'),
-                      controller: _nioCountedController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Total Contado (C\$)',
-                        prefixText: 'C\$ ',
-                        hintText: '0.00',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('close_shift_usd_counted_input'),
-                      controller: _usdCountedController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Total Contado (\$ USD)',
-                        prefixText: '\$ ',
-                        hintText: '0.00',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              // D-20: short, symbol-FIRST labels ('C$ contado' / 'USD contado')
+              // so the currency marker survives any truncation. Fields stack
+              // on handheld widths instead of sharing a cramped row.
+              if (isHandheld)
+                Column(
+                  children: [
+                    _countedField(_nioCountedController, isNio: true),
+                    const SizedBox(height: 12),
+                    _countedField(_usdCountedController, isNio: false),
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(child: _countedField(_nioCountedController, isNio: true)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _countedField(_usdCountedController, isNio: false)),
+                  ],
+                ),
               const SizedBox(height: 16),
               TextField(
                 key: const Key('close_shift_notes_input'),
@@ -232,6 +224,24 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
               : const Text('Cerrar Turno (Corte Z)'),
         ),
       ],
+    );
+  }
+
+  // D-16 contract preserved: controllers start EMPTY, '0.00' is only a hint,
+  // and validators/keyboard types are unchanged. Only the label wording and
+  // the layout wrapper changed (D-20).
+  Widget _countedField(TextEditingController controller, {required bool isNio}) {
+    return TextField(
+      key: Key(isNio ? 'close_shift_nio_counted_input' : 'close_shift_usd_counted_input'),
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: isNio ? 'C\$ contado' : 'USD contado',
+        prefixText: isNio ? 'C\$ ' : '\$ ',
+        hintText: '0.00',
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
     );
   }
 }

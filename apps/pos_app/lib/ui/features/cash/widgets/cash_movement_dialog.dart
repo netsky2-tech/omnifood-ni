@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../design_system/responsive_layout.dart';
 import '../cash_shift_view_model.dart';
 
 class CashMovementDialog extends StatefulWidget {
@@ -82,6 +83,10 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // D-20: handheld widths stack the two money fields so the currency marker
+    // in the label can never be truncated by a cramped half-width field.
+    // Same isHandheld switch used by MultiCurrencyCheckoutDialog.
+    final isHandheld = ResponsiveBreakpoints.isHandheld(context);
     return AlertDialog(
       title: const Row(
         children: [
@@ -92,7 +97,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
       ),
       content: SingleChildScrollView(
         child: SizedBox(
-          width: 440,
+          width: isHandheld ? double.infinity : 440,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -155,39 +160,24 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                 },
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      key: const Key('cash_movement_nio_input'),
-                      controller: _nioController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Monto en Córdobas (C\$)',
-                        prefixText: 'C\$ ',
-                        hintText: '0.00',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('cash_movement_usd_input'),
-                      controller: _usdController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Monto en Dólares (\$ USD)',
-                        prefixText: '\$ ',
-                        hintText: '0.00',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              // D-20: short, symbol-FIRST labels so the currency marker
+              // survives any truncation; stacked on handheld widths.
+              if (isHandheld)
+                Column(
+                  children: [
+                    _amountField(_nioController, isNio: true),
+                    const SizedBox(height: 12),
+                    _amountField(_usdController, isNio: false),
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(child: _amountField(_nioController, isNio: true)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _amountField(_usdController, isNio: false)),
+                  ],
+                ),
               const SizedBox(height: 16),
               TextField(
                 key: const Key('cash_movement_reason_input'),
@@ -227,6 +217,23 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
               : const Text('Guardar Movimiento'),
         ),
       ],
+    );
+  }
+
+  // D-16 contract preserved: controllers start EMPTY, '0.00' is only a hint.
+  // Only the label wording and the layout wrapper changed (D-20).
+  Widget _amountField(TextEditingController controller, {required bool isNio}) {
+    return TextField(
+      key: Key(isNio ? 'cash_movement_nio_input' : 'cash_movement_usd_input'),
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: isNio ? 'Monto C\$' : 'Monto USD',
+        prefixText: isNio ? 'C\$ ' : '\$ ',
+        hintText: '0.00',
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
     );
   }
 }

@@ -132,7 +132,9 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
                 controller: _nioController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
-                  labelText: 'Fondo Inicial (C\$)',
+                  // D-20: symbol-first short label so the currency marker
+                  // survives truncation on narrow handhelds.
+                  labelText: 'Fondo C\$',
                   prefixText: 'C\$ ',
                   border: OutlineInputBorder(),
                   isDense: true,
@@ -162,7 +164,9 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
                 controller: _usdController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
-                  labelText: 'Fondo Inicial (\$ USD)',
+                  // D-20: symbol-first short label so the currency marker
+                  // survives truncation on narrow handhelds.
+                  labelText: 'Fondo USD',
                   prefixText: '\$ ',
                   border: OutlineInputBorder(),
                   isDense: true,
