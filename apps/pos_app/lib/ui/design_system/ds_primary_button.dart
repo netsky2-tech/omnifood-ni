@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'nhilos_tokens.dart';
+
 class DsPrimaryButton extends StatelessWidget {
   const DsPrimaryButton({
     super.key,
@@ -24,8 +26,8 @@ class DsPrimaryButton extends StatelessWidget {
         elevation: 0,
         minimumSize: const Size(0, 48),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
+        shape: const RoundedRectangleBorder(
+          borderRadius: NhilosRadii.buttonRadius,
         ),
         textStyle: const TextStyle(
           fontWeight: FontWeight.w700,

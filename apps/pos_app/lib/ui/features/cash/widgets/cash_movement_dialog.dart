@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../cash_shift_view_model.dart';
+import '../../../design_system/nhilos_tokens.dart';
 
 class CashMovementDialog extends StatefulWidget {
   const CashMovementDialog({super.key});
@@ -80,9 +81,12 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      shape: const RoundedRectangleBorder(
+        borderRadius: NhilosRadii.modalRadius,
+      ),
       title: const Row(
         children: [
-          Icon(Icons.swap_vert, color: Colors.indigo),
+          Icon(Icons.swap_vert, color: NhilosColors.brandPrimary),
           SizedBox(width: 8),
           Expanded(child: Text('Nuevo Movimiento de Caja')),
         ],
@@ -98,18 +102,20 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: NhilosColors.dangerLight,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
+                    border: Border.all(color: NhilosColors.dangerBorder),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      const Icon(Icons.error_outline,
+                          color: NhilosColors.danger, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _error!,
-                          style: const TextStyle(color: Colors.red, fontSize: 13),
+                          style: const TextStyle(
+                              color: NhilosColors.danger, fontSize: 13),
                         ),
                       ),
                     ],
@@ -207,8 +213,11 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
         ElevatedButton(
           onPressed: _submitting ? null : _submit,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.indigo,
+            backgroundColor: NhilosColors.brandPrimary,
             foregroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: NhilosRadii.buttonRadius,
+            ),
           ),
           child: _submitting
               ? const SizedBox(

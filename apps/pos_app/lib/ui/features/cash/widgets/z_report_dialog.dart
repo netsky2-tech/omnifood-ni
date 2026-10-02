@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/sales/cashier_session_entity.dart';
+import '../../../design_system/nhilos_tokens.dart';
 
 class ZReportDialog extends StatelessWidget {
   final CashierSessionEntity shift;
@@ -27,9 +28,12 @@ class ZReportDialog extends StatelessWidget {
         : 'Z-PENDIENTE';
 
     return AlertDialog(
+      shape: const RoundedRectangleBorder(
+        borderRadius: NhilosRadii.modalRadius,
+      ),
       title: Row(
         children: [
-          const Icon(Icons.receipt_long, color: Colors.indigo),
+          const Icon(Icons.receipt_long, color: NhilosColors.brandPrimary),
           const SizedBox(width: 8),
           Expanded(child: Text('Reporte Fiscal Corte $zSeq')),
         ],
@@ -44,9 +48,9 @@ class ZReportDialog extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.indigo.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.indigo.shade200),
+                  color: NhilosColors.neutralGray,
+                  borderRadius: NhilosRadii.buttonRadius,
+                  border: Border.all(color: NhilosColors.border),
                 ),
                 child: Column(
                   children: [
@@ -67,10 +71,10 @@ class ZReportDialog extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Table(
-                border: TableBorder.all(color: Colors.grey.shade300),
+                border: TableBorder.all(color: NhilosColors.border),
                 children: [
                   TableRow(
-                    decoration: BoxDecoration(color: Colors.grey.shade100),
+                    decoration: const BoxDecoration(color: NhilosColors.neutralGray),
                     children: const [
                       Padding(
                         padding: EdgeInsets.all(6.0),
@@ -137,7 +141,9 @@ class ZReportDialog extends StatelessWidget {
                   TableRow(
                     decoration: BoxDecoration(
                       color: (diffNio != 0 || diffUsd != 0)
-                          ? (diffNio < 0 || diffUsd < 0 ? Colors.red.shade50 : Colors.green.shade50)
+                          ? (diffNio < 0 || diffUsd < 0
+                              ? NhilosColors.dangerLight
+                              : NhilosColors.successLight)
                           : Colors.transparent,
                     ),
                     children: [
@@ -153,10 +159,10 @@ class ZReportDialog extends StatelessWidget {
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: diffNio == 0
-                                ? Colors.black87
+                                ? NhilosColors.textPrimary
                                 : diffNio > 0
-                                    ? Colors.green.shade800
-                                    : Colors.red.shade800,
+                                    ? NhilosColors.success
+                                    : NhilosColors.danger,
                           ),
                         ),
                       ),
@@ -168,10 +174,10 @@ class ZReportDialog extends StatelessWidget {
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: diffUsd == 0
-                                ? Colors.black87
+                                ? NhilosColors.textPrimary
                                 : diffUsd > 0
-                                    ? Colors.green.shade800
-                                    : Colors.red.shade800,
+                                    ? NhilosColors.success
+                                    : NhilosColors.danger,
                           ),
                         ),
                       ),
@@ -196,8 +202,11 @@ class ZReportDialog extends StatelessWidget {
           icon: const Icon(Icons.check),
           label: const Text('Entendido / Cerrar Reporte'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.indigo,
+            backgroundColor: NhilosColors.brandPrimary,
             foregroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: NhilosRadii.buttonRadius,
+            ),
           ),
         ),
       ],
@@ -210,12 +219,15 @@ class ZReportDialog extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12, color: NhilosColors.textSecondary)),
           Text(
             value,
             style: TextStyle(
               fontSize: 12,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],

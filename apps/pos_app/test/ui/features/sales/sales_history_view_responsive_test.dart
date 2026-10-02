@@ -45,6 +45,9 @@ class _FakeSalesHistoryViewModel extends ChangeNotifier implements SalesHistoryV
   Future<List<InvoiceItem>> getInvoiceItems(String invoiceId) async => _testItems;
 
   @override
+  InvoiceRowContext? getRowContext(String invoiceId) => null;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

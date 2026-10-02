@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../card_voucher_reconciliation_view_model.dart';
 import '../../../../data/models/sales/payment_entity.dart';
+import '../../../design_system/nhilos_tokens.dart';
 
 class CardVoucherReconciliationDialog extends StatefulWidget {
   const CardVoucherReconciliationDialog({super.key});
@@ -57,7 +58,7 @@ class _CardVoucherReconciliationDialogState
           children: [
             const Text(
               'Si el voucher físico del datáfono se extravió o dañó, se requiere justificación y autorización de un supervisor para emitir el Corte Z.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(fontSize: 12, color: NhilosColors.textMuted),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -154,7 +155,8 @@ class _CardVoucherReconciliationDialogState
               const SizedBox(height: 4),
               Text(
                 'Digite los códigos de autorización de los comprobantes emitidos por los datáfonos físicos antes de emitir el Corte Z.',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                style: TextStyle(
+                    fontSize: 12, color: NhilosColors.textSecondary),
               ),
               const Divider(height: 20),
 
@@ -164,13 +166,14 @@ class _CardVoucherReconciliationDialogState
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: NhilosColors.dangerLight,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.red.shade200),
+                    border: Border.all(color: NhilosColors.dangerBorder),
                   ),
                   child: Text(
                     viewModel.errorMessage!,
-                    style: TextStyle(color: Colors.red.shade800, fontSize: 12),
+                    style: TextStyle(
+                        color: NhilosColors.danger, fontSize: 12),
                   ),
                 ),
 
@@ -208,7 +211,8 @@ class _CardVoucherReconciliationDialogState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle, color: Colors.green.shade600, size: 56),
+            Icon(Icons.check_circle,
+                color: NhilosColors.success, size: 56),
             const SizedBox(height: 12),
             const Text(
               '¡Todos los vouchers han sido conciliados!',
@@ -218,7 +222,8 @@ class _CardVoucherReconciliationDialogState
             const SizedBox(height: 6),
             Text(
               'No hay transacciones con tarjeta pendientes. La caja está lista para emitir el Corte Z Fiscal.',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              style: TextStyle(
+                  fontSize: 13, color: NhilosColors.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -257,7 +262,7 @@ class _CardVoucherReconciliationDialogState
                         visualDensity: VisualDensity.compact,
                         label: Text(payment.bankPos ?? 'BAC',
                             style: const TextStyle(fontWeight: FontWeight.bold)),
-                        backgroundColor: Colors.indigo.shade50,
+                        backgroundColor: NhilosColors.neutralGray,
                       ),
                       Chip(
                         visualDensity: VisualDensity.compact,
@@ -276,7 +281,8 @@ class _CardVoucherReconciliationDialogState
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blueAccent,
+                    color: NhilosColors.brandPrimary,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
@@ -338,9 +344,11 @@ class _CardVoucherReconciliationDialogState
               children: [
                 TextButton.icon(
                   key: Key('btn_override_${payment.id}'),
-                  icon: const Icon(Icons.warning_amber, size: 16, color: Colors.amber),
+                  icon: const Icon(Icons.warning_amber,
+                      size: 16, color: NhilosColors.warning),
                   label: const Text('Extraviado (Override)',
-                      style: TextStyle(color: Colors.amber, fontSize: 12)),
+                      style: TextStyle(
+                          color: NhilosColors.warning, fontSize: 12)),
                   onPressed: () => _showOverrideDialog(context, payment),
                 ),
                 FilledButton.icon(

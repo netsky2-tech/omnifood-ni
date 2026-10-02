@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'nhilos_tokens.dart';
+
 class DsKpiCard extends StatelessWidget {
   const DsKpiCard({
     super.key,
@@ -25,8 +27,8 @@ class DsKpiCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: colorScheme.surface,
-          border: Border.all(color: const Color(0xFF767777), width: 1),
-          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: colorScheme.outlineVariant, width: 1),
+          borderRadius: NhilosRadii.cardRadius,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
