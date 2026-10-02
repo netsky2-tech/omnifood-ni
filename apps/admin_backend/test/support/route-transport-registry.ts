@@ -374,6 +374,17 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
     reason:
       'device sync token exchange (POS DeviceSyncExchangePort); authenticated by the renewal credential in the body, no human session',
   },
+  // OTA release discovery (PR #767): the POS updater asks for the latest
+  // manifest possibly before any credential exists, so no session guard can
+  // apply. Classification is deliberate (founder rule: no unauthenticated
+  // surface without a declaration); integrity comes from the release signing
+  // baseline, not from a session.
+  {
+    controller: 'ReleasesController',
+    transport: 'public',
+    reason:
+      'OTA release manifest discovery (GET /v1/releases/latest); intentionally unauthenticated, integrity protected by the release signing baseline',
+  },
   // D-18 part 2: the POS is the only client of POST /identity/audit and it
   // pushes under a device-sync JWT (offline-PIN kiosk sessions have no cloud
   // user session). The push route moves to device transport; the read and

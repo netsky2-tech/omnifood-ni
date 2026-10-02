@@ -33,6 +33,17 @@ import { HumanAuthorizationRecoveryTokenController } from './human-authorization
 import { RecoveryTokenService } from './human-authorization/services/recovery-token.service';
 import { HumanAuthorizationMetricsService } from './human-authorization/services/human-authorization-metrics.service';
 import { OhacTenantTransaction } from './human-authorization/rls/ohac-tenant-transaction';
+// D-18: AuditController's device push route is guarded by SyncTransportGuard,
+// which needs DEVICE_SYNC_JWT_CONFIG. The token lives in
+// DeviceSyncJwtConfigModule (config only - no TypeORM graph, so the identity
+// e2e's fake DataSource keeps working). The guard is provided HERE so Nest
+// can resolve it at boot; the identity e2e never caught the missing provider
+// because it overrides the guard. Safety: the guard verifies with the
+// CONFIG's secret passed explicitly to verifyAsync, so the JwtService it
+// injects (IdentityModule's, human-secret defaults) is only a utility - the
+// device secret always comes from DEVICE_SYNC_JWT_CONFIG.
+import { DeviceSyncJwtConfigModule } from './config/device-sync-jwt.config';
+import { SyncTransportGuard } from './guards/sync-transport.guard';
 
 @Module({
   imports: [
@@ -57,6 +68,7 @@ import { OhacTenantTransaction } from './human-authorization/rls/ohac-tenant-tra
       }),
     }),
     IdentityJwtConfigModule,
+    DeviceSyncJwtConfigModule,
   ],
   controllers: [
     AuthController,
@@ -77,6 +89,8 @@ import { OhacTenantTransaction } from './human-authorization/rls/ohac-tenant-tra
     AuthoritativeCurrentUserGuard,
     RolesGuard,
     PermissionsGuard,
+    // D-18: resolve the device transport guard for the audit push route.
+    SyncTransportGuard,
     CurrentUserAuthorizationService,
     TenantCapabilityService,
     // OHAC recovery lifecycle (design §9): the human routes live here where
