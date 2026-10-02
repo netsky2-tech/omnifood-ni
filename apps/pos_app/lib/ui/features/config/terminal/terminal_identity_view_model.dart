@@ -5,6 +5,7 @@ import '../../../../data/services/api_base_url_service.dart';
 import '../../../../data/services/terminal_identity_service.dart';
 import '../../../../domain/models/config/printer_config.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
+import '../../../../domain/services/update/ota_update_coordinator.dart';
 
 /// View model for the terminal configuration surface: the canonical identity
 /// (read-only) and the backend server URL configuration (the single write
@@ -28,12 +29,14 @@ class TerminalIdentityViewModel extends ChangeNotifier {
     required LocalConfigDao configDao,
     required PrinterConfigService printerConfigService,
     ApiBaseUrlService? apiBaseUrlService,
+    OtaUpdateCoordinator? otaCoordinator,
     String buildTimeDeviceId = const String.fromEnvironment('DEVICE_ID'),
     String buildTimeApiUrl = const String.fromEnvironment('API_URL'),
   })  : _configDao = configDao,
         _printerConfigService = printerConfigService,
         _apiBaseUrlService =
             apiBaseUrlService ?? ApiBaseUrlService(configDao),
+        _otaCoordinator = otaCoordinator,
         _buildTimeDeviceId = buildTimeDeviceId.trim(),
         _buildTimeApiUrl = buildTimeApiUrl {
     load();
@@ -42,8 +45,11 @@ class TerminalIdentityViewModel extends ChangeNotifier {
   final LocalConfigDao _configDao;
   final PrinterConfigService _printerConfigService;
   final ApiBaseUrlService _apiBaseUrlService;
+  final OtaUpdateCoordinator? _otaCoordinator;
   final String _buildTimeDeviceId;
   final String _buildTimeApiUrl;
+
+  OtaUpdateCoordinator? get otaCoordinator => _otaCoordinator;
 
   String? _terminalId;
 

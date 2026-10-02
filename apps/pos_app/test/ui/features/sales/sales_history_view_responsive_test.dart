@@ -64,6 +64,9 @@ class _FakeSalesHistoryViewModel extends ChangeNotifier implements SalesHistoryV
       'Operador no disponible';
 
   @override
+  InvoiceRowContext? getRowContext(String invoiceId) => null;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 

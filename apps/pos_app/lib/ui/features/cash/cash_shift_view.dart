@@ -9,6 +9,7 @@ import 'widgets/close_shift_dialog.dart';
 import 'widgets/z_report_dialog.dart';
 import 'widgets/x_report_dialog.dart';
 import 'widgets/card_voucher_reconciliation_dialog.dart';
+import '../../design_system/nhilos_tokens.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../../core/localization/display_name_resolver.dart';
 import '../../../../core/localization/label_map.dart';
@@ -77,7 +78,7 @@ class _CashShiftViewState extends State<CashShiftView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Control de Caja y Turnos'),
-        backgroundColor: Colors.indigo,
+        backgroundColor: NhilosColors.brandNavy,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -102,7 +103,7 @@ class _CashShiftViewState extends State<CashShiftView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.lock_clock, size: 72, color: Colors.grey.shade400),
+            Icon(Icons.lock_clock, size: 72, color: NhilosColors.textMuted),
             const SizedBox(height: 16),
             const Text(
               'No hay turno de caja abierto',
@@ -112,7 +113,7 @@ class _CashShiftViewState extends State<CashShiftView> {
             const Text(
               'Para procesar ventas y registrar movimientos, debes abrir un turno con el fondo inicial.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(color: NhilosColors.textSecondary),
             ),
             const SizedBox(height: 24),
             Wrap(
@@ -131,10 +132,13 @@ class _CashShiftViewState extends State<CashShiftView> {
                   icon: const Icon(Icons.point_of_sale),
                   label: const Text('Abrir Turno de Caja'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
+                    backgroundColor: NhilosColors.brandPrimary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     textStyle: const TextStyle(fontSize: 16),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: NhilosRadii.buttonRadius,
+                    ),
                   ),
                 ),
                 if (vm.lastClosedShift != null)
@@ -154,9 +158,13 @@ class _CashShiftViewState extends State<CashShiftView> {
                     icon: const Icon(Icons.receipt_long),
                     label: const Text('Ver Último Corte Z'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.indigo,
+                      foregroundColor: NhilosColors.brandPrimary,
+                      side: const BorderSide(color: NhilosColors.border),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                       textStyle: const TextStyle(fontSize: 16),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                      ),
                     ),
                   ),
               ],
@@ -200,13 +208,13 @@ class _CashShiftViewState extends State<CashShiftView> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.green.shade100,
+                              color: NhilosColors.successLight,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: const Text(
                               'Turno Activo',
                               style: TextStyle(
-                                color: Colors.green,
+                                color: NhilosColors.success,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -224,7 +232,8 @@ class _CashShiftViewState extends State<CashShiftView> {
                       ),
                       Text(
                         'Apertura: $formattedDate',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                        style: const TextStyle(
+                            color: NhilosColors.textSecondary, fontSize: 13),
                       ),
                     ],
                   ),
@@ -244,7 +253,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                               title: 'Fondo Inicial (C\$)',
                               value: _formatNio(shift.openingBalanceNio),
                               icon: Icons.account_balance_wallet,
-                              color: Colors.blue.shade700,
+                              color: NhilosColors.brandPrimary,
                             ),
                           ),
                           SizedBox(
@@ -253,7 +262,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                               title: 'Fondo Inicial (\$ USD)',
                               value: _formatUsd(shift.openingBalanceUsd),
                               icon: Icons.attach_money,
-                              color: Colors.teal.shade700,
+                              color: NhilosColors.brandNavy,
                             ),
                           ),
                           SizedBox(
@@ -266,7 +275,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                               title: 'Esperado en Gaveta (C\$)',
                               value: _formatNio(vm.effectiveExpectedNio),
                               icon: Icons.payments,
-                              color: Colors.indigo.shade700,
+                              color: NhilosColors.brandPrimary,
                             ),
                           ),
                           SizedBox(
@@ -275,7 +284,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                               title: 'Esperado en Gaveta (\$ USD)',
                               value: _formatUsd(vm.effectiveExpectedUsd),
                               icon: Icons.monetization_on,
-                              color: Colors.purple.shade700,
+                              color: NhilosColors.brandNavy,
                             ),
                           ),
                         ],
@@ -292,14 +301,14 @@ class _CashShiftViewState extends State<CashShiftView> {
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.amber.shade50,
+                color: NhilosColors.warningLight,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade400, width: 1.5),
+                border: Border.all(color: NhilosColors.warningBorder, width: 1.5),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: Colors.amber.shade900, size: 28),
+                  const Icon(Icons.warning_amber_rounded,
+                      color: NhilosColors.warning, size: 28),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -307,16 +316,16 @@ class _CashShiftViewState extends State<CashShiftView> {
                       children: [
                         Text(
                           '⚠️ ${vm.pendingVouchersCount} voucher${vm.pendingVouchersCount > 1 ? 's' : ''} de tarjeta pendiente${vm.pendingVouchersCount > 1 ? 's' : ''} de conciliar',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.amber.shade900,
+                            color: NhilosColors.warning,
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
+                        const Text(
                           'Debe ingresar los códigos de autorización bancarios antes de emitir el Corte Z.',
                           style: TextStyle(
-                              fontSize: 12, color: Colors.amber.shade900),
+                              fontSize: 12, color: NhilosColors.warning),
                         ),
                       ],
                     ),
@@ -327,7 +336,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                     icon: const Icon(Icons.receipt_long, size: 16),
                     label: const Text('Conciliar Vouchers'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.amber.shade800,
+                      backgroundColor: NhilosColors.warning,
                       foregroundColor: Colors.white,
                     ),
                   ),
@@ -360,8 +369,8 @@ class _CashShiftViewState extends State<CashShiftView> {
                           : 'Vouchers'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: vm.hasPendingVouchers
-                            ? Colors.amber.shade900
-                            : Colors.indigo,
+                            ? NhilosColors.warning
+                            : NhilosColors.brandPrimary,
                       ),
                     ),
                   OutlinedButton.icon(
@@ -381,7 +390,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                     icon: const Icon(Icons.assessment_outlined),
                     label: const Text('Lectura Parcial (Corte X)'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.indigo,
+                      foregroundColor: NhilosColors.brandPrimary,
                     ),
                   ),
                   ElevatedButton.icon(
@@ -395,8 +404,11 @@ class _CashShiftViewState extends State<CashShiftView> {
                     icon: const Icon(Icons.add),
                     label: const Text('Registrar Movimiento'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
+                      backgroundColor: NhilosColors.brandPrimary,
                       foregroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                      ),
                     ),
                   ),
                   ElevatedButton.icon(
@@ -438,7 +450,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                     icon: const Icon(Icons.lock),
                     label: const Text('Cerrar Turno (Corte Z)'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
+                      backgroundColor: NhilosColors.danger,
                       foregroundColor: Colors.white,
                     ),
                   ),
@@ -456,7 +468,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                 child: Center(
                   child: Text(
                     'No hay movimientos de efectivo registrados en este turno.',
-                    style: TextStyle(color: Colors.grey.shade600),
+                    style: TextStyle(color: NhilosColors.textSecondary),
                   ),
                 ),
               ),
@@ -480,11 +492,13 @@ class _CashShiftViewState extends State<CashShiftView> {
                         return ListTile(
                           leading: CircleAvatar(
                             backgroundColor: isCredit
-                                ? Colors.green.shade100
-                                : Colors.red.shade100,
+                                ? NhilosColors.successLight
+                                : NhilosColors.dangerLight,
                             child: Icon(
                               isCredit ? Icons.arrow_downward : Icons.arrow_upward,
-                              color: isCredit ? Colors.green : Colors.red,
+                              color: isCredit
+                                  ? NhilosColors.success
+                                  : NhilosColors.danger,
                             ),
                           ),
                           title: Text(
@@ -503,8 +517,8 @@ class _CashShiftViewState extends State<CashShiftView> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: isCredit
-                                        ? Colors.green.shade800
-                                        : Colors.red.shade800,
+                                        ? NhilosColors.success
+                                        : NhilosColors.danger,
                                   ),
                                 ),
                               if (mov.amountUsd > 0)
@@ -513,8 +527,8 @@ class _CashShiftViewState extends State<CashShiftView> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: isCredit
-                                        ? Colors.green.shade800
-                                        : Colors.red.shade800,
+                                        ? NhilosColors.success
+                                        : NhilosColors.danger,
                                   ),
                                 ),
                             ],
@@ -586,6 +600,7 @@ class _CashShiftViewState extends State<CashShiftView> {
               fontSize: 15,
               fontWeight: FontWeight.bold,
               color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],

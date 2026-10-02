@@ -4,6 +4,7 @@ import 'package:pos_app/data/services/api_base_url_service.dart';
 import 'package:provider/provider.dart';
 
 import 'terminal_identity_view_model.dart';
+import 'widgets/ota_update_card.dart';
 
 /// Screen showing the terminal's canonical identity (read-only) and the
 /// backend server URL configuration.
@@ -62,6 +63,10 @@ class TerminalIdentityView extends StatelessWidget {
                 _buildPrinterProfileCard(context, viewModel),
                 const SizedBox(height: 16),
                 const _ServerConfigCard(),
+                if (viewModel.otaCoordinator != null) ...[
+                  const SizedBox(height: 16),
+                  OtaUpdateCard(coordinator: viewModel.otaCoordinator!),
+                ],
                 const SizedBox(height: 24),
                 _buildBackOfficeNotice(context),
               ],
@@ -444,6 +449,29 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
                     ),
               ),
             const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                ActionChip(
+                  key: const Key('preset_production_chip'),
+                  avatar: const Icon(Icons.cloud_done, size: 16, color: Colors.green),
+                  label: const Text('Producción'),
+                  onPressed: () {
+                    _urlController.text = 'https://api.nhilospos.com/api';
+                  },
+                ),
+                ActionChip(
+                  key: const Key('preset_staging_chip'),
+                  avatar: const Icon(Icons.science, size: 16, color: Colors.orange),
+                  label: const Text('Staging'),
+                  onPressed: () {
+                    _urlController.text = 'https://api-staging.nhilospos.com/api';
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             TextField(
               key: const Key('server_url_field'),
               controller: _urlController,

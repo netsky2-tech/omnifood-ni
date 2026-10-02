@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../design_system/nhilos_tokens.dart';
 
+/// Keypad "clean slate" matching NHILOS POS Experience Standard v1.0 (§18.2, §42.1)
+/// Neutral white numeric keys, slate gray for delete and clear, zero brown or alarm red.
 class PinPad extends StatelessWidget {
   final Function(String) onKeyPressed;
   final VoidCallback onDelete;
@@ -16,14 +20,14 @@ class PinPad extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final spacing = constraints.maxHeight.isFinite && constraints.maxHeight < 320 ? 8.0 : 16.0;
+        final spacing = constraints.maxHeight.isFinite && constraints.maxHeight < 320 ? 8.0 : 12.0;
         final double aspectRatio;
         if (constraints.maxHeight.isFinite) {
           final cellWidth = (constraints.maxWidth - 2 * spacing) / 3;
           final cellHeight = (constraints.maxHeight - 3 * spacing) / 4;
           aspectRatio = (cellWidth / cellHeight).clamp(0.5, 2.5);
         } else {
-          aspectRatio = 1.5;
+          aspectRatio = 1.4;
         }
 
         final fontSize = constraints.maxHeight.isFinite && constraints.maxHeight < 280 ? 18.0 : 22.0;
@@ -40,14 +44,46 @@ class PinPad extends StatelessWidget {
           itemCount: 12,
           itemBuilder: (context, index) {
             if (index == 9) {
-              return _buildButton(context, 'C', onClear, color: const Color(0xFFBA1A1A), fontSize: fontSize);
+              return _buildSpecialButton(
+                context,
+                'C',
+                () {
+                  HapticFeedback.lightImpact();
+                  onClear();
+                },
+                fontSize: fontSize,
+              );
             } else if (index == 10) {
-              return _buildButton(context, '0', () => onKeyPressed('0'), fontSize: fontSize);
+              return _buildNumberButton(
+                context,
+                '0',
+                () {
+                  HapticFeedback.lightImpact();
+                  onKeyPressed('0');
+                },
+                fontSize: fontSize,
+              );
             } else if (index == 11) {
-              return _buildButton(context, '⌫', onDelete, color: const Color(0xFF79573F), fontSize: fontSize);
+              return _buildSpecialButton(
+                context,
+                '⌫',
+                () {
+                  HapticFeedback.lightImpact();
+                  onDelete();
+                },
+                fontSize: fontSize,
+              );
             } else {
               final number = (index + 1).toString();
-              return _buildButton(context, number, () => onKeyPressed(number), fontSize: fontSize);
+              return _buildNumberButton(
+                context,
+                number,
+                () {
+                  HapticFeedback.lightImpact();
+                  onKeyPressed(number);
+                },
+                fontSize: fontSize,
+              );
             }
           },
         );
@@ -55,24 +91,23 @@ class PinPad extends StatelessWidget {
     );
   }
 
-  Widget _buildButton(
+  Widget _buildNumberButton(
     BuildContext context,
     String text,
     VoidCallback onPressed, {
-    Color? color,
     double fontSize = 22,
   }) {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
         elevation: 0,
-        backgroundColor: color ?? Colors.white,
-        foregroundColor: color != null ? Colors.white : const Color(0xFF1A1C1C),
-        minimumSize: const Size.fromHeight(44), // hit-area-min
+        backgroundColor: NhilosColors.surface,
+        foregroundColor: NhilosColors.textPrimary,
+        minimumSize: const Size.fromHeight(48), // hit-area-min per §18.3
         padding: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
+        shape: const RoundedRectangleBorder(
+          borderRadius: NhilosRadii.buttonRadius,
           side: BorderSide(
-            color: color ?? const Color(0xFF767777),
+            color: NhilosColors.border,
             width: 1,
           ),
         ),
@@ -80,7 +115,43 @@ class PinPad extends StatelessWidget {
       onPressed: onPressed,
       child: Text(
         text,
-        style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w700),
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpecialButton(
+    BuildContext context,
+    String text,
+    VoidCallback onPressed, {
+    double fontSize = 22,
+  }) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        elevation: 0,
+        backgroundColor: NhilosColors.neutralGray, // Slate 100 per §18.2
+        foregroundColor: NhilosColors.neutralGrayDark, // Slate 600
+        minimumSize: const Size.fromHeight(48),
+        padding: EdgeInsets.zero,
+        shape: const RoundedRectangleBorder(
+          borderRadius: NhilosRadii.buttonRadius,
+          side: BorderSide(
+            color: NhilosColors.border,
+            width: 1,
+          ),
+        ),
+      ),
+      onPressed: onPressed,
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

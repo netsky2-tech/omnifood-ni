@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/localization/display_name_resolver.dart';
 import '../../../../data/models/sales/cashier_session_entity.dart';
 import '../../../../data/models/sales/cash_movement_entity.dart';
+import '../../../design_system/nhilos_tokens.dart';
 
 class XReportDialog extends StatelessWidget {
   final CashierSessionEntity shift;
@@ -54,9 +55,12 @@ class XReportDialog extends StatelessWidget {
     }
 
     return AlertDialog(
+      shape: const RoundedRectangleBorder(
+        borderRadius: NhilosRadii.modalRadius,
+      ),
       title: const Row(
         children: [
-          Icon(Icons.assessment_outlined, color: Colors.indigo),
+          Icon(Icons.assessment_outlined, color: NhilosColors.brandPrimary),
           SizedBox(width: 8),
           Expanded(child: Text('Lectura Parcial (Corte X)')),
         ],
@@ -71,9 +75,9 @@ class XReportDialog extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.shade200),
+                  color: NhilosColors.neutralGray,
+                  borderRadius: NhilosRadii.buttonRadius,
+                  border: Border.all(color: NhilosColors.border),
                 ),
                 child: Column(
                   children: [
@@ -83,7 +87,7 @@ class XReportDialog extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade600,
+                            color: NhilosColors.brandPrimary,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
@@ -97,7 +101,8 @@ class XReportDialog extends StatelessWidget {
                         ),
                         Text(
                           nowStr,
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                          style: const TextStyle(
+                              fontSize: 11, color: NhilosColors.textSecondary),
                         ),
                       ],
                     ),
@@ -116,10 +121,10 @@ class XReportDialog extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Table(
-                border: TableBorder.all(color: Colors.grey.shade300),
+                border: TableBorder.all(color: NhilosColors.border),
                 children: [
                   TableRow(
-                    decoration: BoxDecoration(color: Colors.grey.shade100),
+                    decoration: const BoxDecoration(color: NhilosColors.neutralGray),
                     children: const [
                       Padding(
                         padding: EdgeInsets.all(6.0),
@@ -159,11 +164,15 @@ class XReportDialog extends StatelessWidget {
                       ),
                       Padding(
                         padding: const EdgeInsets.all(6.0),
-                        child: Text(_formatNio(totalInNio), style: const TextStyle(fontSize: 12, color: Colors.green)),
+                        child: Text(_formatNio(totalInNio),
+                            style: const TextStyle(
+                                fontSize: 12, color: NhilosColors.success)),
                       ),
                       Padding(
                         padding: const EdgeInsets.all(6.0),
-                        child: Text(_formatUsd(totalInUsd), style: const TextStyle(fontSize: 12, color: Colors.green)),
+                        child: Text(_formatUsd(totalInUsd),
+                            style: const TextStyle(
+                                fontSize: 12, color: NhilosColors.success)),
                       ),
                     ],
                   ),
@@ -175,16 +184,20 @@ class XReportDialog extends StatelessWidget {
                       ),
                       Padding(
                         padding: const EdgeInsets.all(6.0),
-                        child: Text(_formatNio(totalOutNio), style: const TextStyle(fontSize: 12, color: Colors.red)),
+                        child: Text(_formatNio(totalOutNio),
+                            style: const TextStyle(
+                                fontSize: 12, color: NhilosColors.danger)),
                       ),
                       Padding(
                         padding: const EdgeInsets.all(6.0),
-                        child: Text(_formatUsd(totalOutUsd), style: const TextStyle(fontSize: 12, color: Colors.red)),
+                        child: Text(_formatUsd(totalOutUsd),
+                            style: const TextStyle(
+                                fontSize: 12, color: NhilosColors.danger)),
                       ),
                     ],
                   ),
                   TableRow(
-                    decoration: BoxDecoration(color: Colors.indigo.shade50),
+                    decoration: const BoxDecoration(color: NhilosColors.neutralGray),
                     children: [
                       const Padding(
                         padding: EdgeInsets.all(6.0),
@@ -194,10 +207,11 @@ class XReportDialog extends StatelessWidget {
                         padding: const EdgeInsets.all(6.0),
                         child: Text(
                           _formatNio(effectiveExpectedNio),
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: Colors.indigo.shade900,
+                            color: NhilosColors.textPrimary,
+                            fontFeatures: [FontFeature.tabularFigures()],
                           ),
                         ),
                       ),
@@ -205,10 +219,11 @@ class XReportDialog extends StatelessWidget {
                         padding: const EdgeInsets.all(6.0),
                         child: Text(
                           _formatUsd(effectiveExpectedUsd),
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
-                            color: Colors.indigo.shade900,
+                            color: NhilosColors.textPrimary,
+                            fontFeatures: [FontFeature.tabularFigures()],
                           ),
                         ),
                       ),
@@ -219,7 +234,11 @@ class XReportDialog extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 'Nota: La lectura X es informativa y no cierra el turno de caja.',
-                style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                  color: NhilosColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -229,8 +248,11 @@ class XReportDialog extends StatelessWidget {
         ElevatedButton(
           onPressed: () => Navigator.of(context).pop(),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.indigo,
+            backgroundColor: NhilosColors.brandPrimary,
             foregroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: NhilosRadii.buttonRadius,
+            ),
           ),
           child: const Text('Cerrar Lectura'),
         ),
@@ -244,7 +266,9 @@ class XReportDialog extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12, color: NhilosColors.textSecondary)),
           Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),

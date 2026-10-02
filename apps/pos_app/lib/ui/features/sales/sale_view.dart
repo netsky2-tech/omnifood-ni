@@ -16,6 +16,7 @@ import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
+import 'widgets/product_card_thumbnail.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/tip_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
@@ -915,7 +916,7 @@ class ProductGrid extends StatelessWidget {
           child: Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: NhilosRadii.cardRadius,
               side: BorderSide(
                 color: promo != null
                     ? Colors.deepOrange
@@ -931,8 +932,9 @@ class ProductGrid extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Icon(
-                        Icons.fastfood,
+                      ProductCardThumbnail(
+                        category: product.category,
+                        productName: product.name,
                         size: isHandheld ? 32 : 40,
                         color: promo != null ? Colors.deepOrange : colorScheme.primary,
                       ),
@@ -954,10 +956,12 @@ class ProductGrid extends StatelessWidget {
                       Text(
                         'C\$ ${product.sellPrice.toStringAsFixed(2)}',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: promo != null ? Colors.deepOrange : colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: isHandheld ? 13 : 15,
+                        style: NhilosTextStyles.tabular(
+                          base: TextStyle(
+                            color: promo != null ? Colors.deepOrange : colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: isHandheld ? 13 : 15,
+                          ),
                         ),
                       ),
                     ],
@@ -969,9 +973,9 @@ class ProductGrid extends StatelessWidget {
                     right: 4,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: Colors.deepOrange,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: NhilosRadii.badgeRadius,
                       ),
                       child: Text(
                         promo.type == PromotionType.buyXGetYFree
@@ -1273,6 +1277,7 @@ class MobileFloatingCartBar extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                     color: colorScheme.onPrimaryContainer,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
                 Text(
@@ -1425,15 +1430,24 @@ class CartSummary extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Subtotal'),
-            Text('C\$ ${((viewModel.subtotal) + (viewModel.totalDiscounts)).toStringAsFixed(2)}'),
+            Text(
+              'C\$ ${((viewModel.subtotal) + (viewModel.totalDiscounts)).toStringAsFixed(2)}',
+              style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+            ),
           ],
         ),
         if (viewModel.totalDiscounts > 0)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Descuentos (Promos)', style: TextStyle(color: Colors.green)),
-              Text('-C\$ ${(viewModel.totalDiscounts).toStringAsFixed(2)}', style: const TextStyle(color: Colors.green)),
+              const Text('Descuentos (Promos)', style: TextStyle(color: NhilosColors.success)),
+              Text(
+                '-C\$ ${(viewModel.totalDiscounts).toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: NhilosColors.success,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
             ],
           ),
         if (viewModel.tipAmount > 0)
@@ -1450,7 +1464,10 @@ class CartSummary extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('IVA'),
-              Text('C\$ ${(viewModel.totalTax).toStringAsFixed(2)}'),
+              Text(
+                'C\$ ${(viewModel.totalTax).toStringAsFixed(2)}',
+                style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+              ),
             ],
           ),
         const Divider(),
@@ -1467,6 +1484,7 @@ class CartSummary extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     fontSize: ResponsiveBreakpoints.isHandheld(context) ? 20 : 24,
                     color: colorScheme.primary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ),

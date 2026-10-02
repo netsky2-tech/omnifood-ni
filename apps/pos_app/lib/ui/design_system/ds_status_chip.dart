@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'nhilos_tokens.dart';
 
 enum DsChipTone { neutral, primary, warning, success, danger }
 
@@ -15,32 +16,32 @@ class DsStatusChip extends StatelessWidget {
   final IconData? icon;
 
   Color _backgroundFor(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     switch (tone) {
       case DsChipTone.primary:
-        return colorScheme.primary;
+        return NhilosColors.brandTealLight;
       case DsChipTone.warning:
-        return const Color(0xFF866249);
+        return NhilosColors.warningLight;
       case DsChipTone.success:
-        return const Color(0xFF41646A);
+        return NhilosColors.successLight;
       case DsChipTone.danger:
-        return colorScheme.errorContainer;
+        return NhilosColors.dangerLight;
       case DsChipTone.neutral:
-        return const Color(0xFFE3E2E2);
+        return NhilosColors.neutralGray;
     }
   }
 
   Color _foregroundFor(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     switch (tone) {
       case DsChipTone.primary:
+        return NhilosColors.brandPrimary;
       case DsChipTone.warning:
+        return NhilosColors.warning;
       case DsChipTone.success:
-        return Colors.white;
+        return NhilosColors.success;
       case DsChipTone.danger:
-        return colorScheme.onErrorContainer;
+        return NhilosColors.danger;
       case DsChipTone.neutral:
-        return colorScheme.onSurface;
+        return NhilosColors.neutralGrayDark;
     }
   }
 
@@ -52,7 +53,7 @@ class DsStatusChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: NhilosRadii.chipRadius,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -77,15 +77,13 @@ import { forwardRef } from '@nestjs/common';
     ]),
   ],
   controllers: [
-    InvoicesController,
+    CashShiftController,
+    CashShiftSyncController,
     AdminInvoicesController,
+    ReportsController,
     SyncBatchController,
     InboundSyncController,
-    ReportsController,
-    CashShiftController,
-    // Batch 5 slice 5c (finding H3): POS-pushed cash shift sessions and
-    // cash movements, on the device transport (see the registry entry).
-    CashShiftSyncController,
+    InvoicesController,
   ],
   providers: [
     InvoicesService,
