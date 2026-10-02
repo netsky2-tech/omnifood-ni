@@ -239,11 +239,18 @@ class InvoiceDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // D-12: render the PERSISTED invoice, never the snapshot taken when the
+    // row was tapped. Otherwise a cancelled invoice kept showing
+    // `EMITIR NOTA DE CRÉDITO` / `ANULAR FACTURA` (and no ANULADA badge),
+    // inviting a second void that the repository then refused.
+    final live =
+        context.watch<SalesHistoryViewModel>().invoiceById(invoice.id) ??
+            invoice;
     return Scaffold(
       appBar: AppBar(
         title: Text('Factura ${invoice.number}'),
       ),
-      body: InvoiceDetailsPanel(invoice: invoice),
+      body: InvoiceDetailsPanel(invoice: live),
     );
   }
 }
@@ -576,6 +583,13 @@ class InvoiceDetailsPanel extends StatelessWidget {
                             ),
                           ),
                         );
+                        // D-12: a refusal can mean the invoice is ALREADY
+                        // cancelled (another terminal, or an earlier attempt
+                        // that did commit). Re-read so the preview stops
+                        // offering an action that can only fail again.
+                        await context
+                            .read<SalesHistoryViewModel>()
+                            .loadInvoices();
                       }
                     },
               child: const Text('ANULAR'),

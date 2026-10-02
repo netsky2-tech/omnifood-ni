@@ -42,6 +42,19 @@ class SalesHistoryViewModel extends ChangeNotifier {
     return _invoices.where((i) => i.number.toLowerCase().contains(q)).toList();
   }
 
+  /// D-12: the freshest persisted snapshot for [id], or null when the row is
+  /// not in the loaded list. Detail surfaces render this instead of the
+  /// snapshot captured when the row was tapped, so a void (from this terminal
+  /// or another) flips the preview to ANULADA and withdraws the void action
+  /// immediately instead of offering ANULAR on an invoice that is already
+  /// cancelled.
+  Invoice? invoiceById(String id) {
+    for (final invoice in _invoices) {
+      if (invoice.id == id) return invoice;
+    }
+    return null;
+  }
+
   Future<List<InvoiceItem>> getInvoiceItems(String invoiceId) async {
     final entities = await _database.invoiceItemDao.getItemsByInvoiceId(invoiceId);
     return entities.map(SalesMapper.toItemDomain).toList();
