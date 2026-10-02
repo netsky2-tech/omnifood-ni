@@ -59,4 +59,5 @@
 - [x] Task 3: PX-002 Neutralize Chromatic Dispersion & Clean Slate Keypad (§18.2, §42.1, §41) — Evidence: commit `5c02a701`
 - [x] Task 4: PX-003 Rich Contextual Rows in Sales History (§12.2) — Evidence: commit `bbbfe949`
 - [x] Task 5: PX-004 Tabular Numbers (§34.1) & PX-005 Haptic Feedback on Sale (§49) — Evidence: commit `80b13148`
-- [x] Task 6: Comprehensive Verification & Acceptance Tests — Evidence: 43/43 tests passing, flutter analyze 0 issues, 0 forbidden hex colors in pos_app
+- [x] Task 6: Comprehensive Verification & Acceptance Tests — Evidence: 76/76 tests passing, flutter analyze 0 issues, 0 forbidden hex colors in pos_app, verified by independent subagent gentle-ai-verify (PASS verdict)
+- [x] Remediation & Re-verify — Evidence: commits `0d63aaaa`, `c5a1f7f8` (Sunmi V2s layout fix, complete palette tokenization across pos_06, pos_14 and all cash dialogs, 76/76 tests passing, PASS verdict)
