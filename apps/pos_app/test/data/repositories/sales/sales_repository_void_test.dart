@@ -354,6 +354,46 @@ void main() {
     });
   });
 
+  group('D-10 residue: a pre-fix cancellation is re-keyed on the way out', () {
+    test('a cancelled invoice still carrying its sale: key gets a void-scoped '
+        'key and a fresh sequence when offered for sync', () async {
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'shift-1',
+          userId: 'cashier-1',
+          terminalId: 'term-1',
+          openedAt: 1700000000000,
+          isClosed: false,
+        ),
+      );
+      await database.invoiceDao.insertInvoice(
+        InvoiceEntity(
+          id: 'inv-stale-void',
+          number: '001-001-01-00000101',
+          createdAt: DateTime(2026, 9, 24).millisecondsSinceEpoch,
+          userId: 'cashier-1',
+          subtotal: 100,
+          totalTax: 0,
+          total: 100,
+          isCanceled: true,
+          syncStatus: 'pending',
+          paymentStatus: 'paid',
+          type: 'regular',
+          terminalId: 'term-1',
+          sourceSequence: 7,
+          idempotencyKey: 'sale:term-1:inv-stale-void',
+        ),
+      );
+
+      await repository.getUnsyncedAggregates();
+
+      final row = await invoiceRow('inv-stale-void');
+      expect(row!['is_canceled'], 1);
+      expect(row['idempotency_key'], 'void:term-1:inv-stale-void');
+      expect(row['source_sequence'], isNot(7));
+    });
+  });
+
   group('loyalty rollback: a failed void touches nothing', () {
     test('forced failure after the reversal writes leaves the invoice '
         'NOT canceled and the points untouched', () async {

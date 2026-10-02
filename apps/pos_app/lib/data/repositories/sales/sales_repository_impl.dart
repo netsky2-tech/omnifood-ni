@@ -505,9 +505,19 @@ class SalesRepositoryImpl implements SalesRepository {
   @override
   Future<List<Map<String, dynamic>>> getUnsyncedAggregates() async {
     final invoices = await getUnsyncedInvoices();
+    // D-10 residue: invoices voided BEFORE the cancellation-as-new-document
+    // fix still carry the original `sale:` idempotency key and its already
+    // consumed source sequence, so the backend rejects every retry with
+    // CRITICAL_PAYLOAD_MISMATCH and the outbox never drains. Re-key them once
+    // here, lazily, the first time they are offered for sync.
+    var effectiveInvoices = invoices;
+    if (invoices.any(_needsVoidSyncIdentity)) {
+      await _repairVoidedInvoiceSyncIdentity(invoices);
+      effectiveInvoices = await getUnsyncedInvoices();
+    }
     final List<Map<String, dynamic>> aggregates = [];
 
-    for (final invoice in invoices) {
+    for (final invoice in effectiveInvoices) {
       final items = await itemDao.getItemsByInvoiceId(invoice.id);
       final payments = await paymentDao.getPaymentsByInvoiceId(invoice.id);
 
@@ -520,6 +530,36 @@ class SalesRepositoryImpl implements SalesRepository {
       );
     }
     return aggregates;
+  }
+
+  /// D-10 residue: true when a locally cancelled invoice has not yet been
+  /// re-keyed for outbound delivery (its key is not void-scoped).
+  bool _needsVoidSyncIdentity(Invoice invoice) {
+    if (!invoice.isCanceled) return false;
+    final key = invoice.idempotencyKey;
+    return key == null || !key.startsWith('void:');
+  }
+
+  /// Re-keys locally cancelled invoices that predate the D-10 fix so their
+  /// cancellation can finally reach the cloud. Idempotent: a second pass sees
+  /// the void-scoped key and skips.
+  Future<void> _repairVoidedInvoiceSyncIdentity(
+    List<Invoice> invoices,
+  ) async {
+    for (final invoice in invoices) {
+      if (!_needsVoidSyncIdentity(invoice)) continue;
+      final entity = SalesMapper.toInvoiceEntity(invoice);
+      final terminalId = entity.terminalId ?? 'pos-${entity.userId}';
+      await invoiceDao.updateInvoice(
+        _copyInvoiceEntity(
+          entity,
+          sourceSequence:
+              (await transactionDao.getNextInvoiceSourceSequence(terminalId)) ??
+                  (entity.sourceSequence ?? 0) + 1,
+          idempotencyKey: 'void:$terminalId:${entity.id}',
+        ),
+      );
+    }
   }
 
   @override
