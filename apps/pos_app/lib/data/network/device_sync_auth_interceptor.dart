@@ -41,6 +41,10 @@ class DeviceSyncAuthInterceptor extends Interceptor {
     'sales/shifts/sync',
     'sales/invoices/sync',
     'loyalty/point-transactions/sync',
+    // D-18: the forensic audit stream push (POST /identity/audit) is device
+    // transport on the backend; in an offline-PIN kiosk session there is no
+    // cloud user JWT, so the push must ride the device credential.
+    'identity/audit',
   ];
 
   static String _normalizePath(String path) {

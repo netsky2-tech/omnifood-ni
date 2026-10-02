@@ -9,6 +9,7 @@ import {
   Request,
   BadRequestException,
   ConflictException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
@@ -27,9 +28,10 @@ import {
 } from '../dto/audit-query.dto';
 import { AuditTrailService } from '../services/audit-trail.service';
 import { AuditVerificationService } from '../services/audit-verification.service';
+import { SyncTransportGuard } from '../guards/sync-transport.guard';
+import { RequireSyncScopes } from '../decorators/sync-scopes.decorator';
 
 @Controller('identity/audit')
-@UseGuards(AuthGuard)
 @UseInterceptors(TenantInterceptor)
 export class AuditController {
   constructor(
@@ -41,7 +43,7 @@ export class AuditController {
   ) {}
 
   @Get('overrides')
-  @UseGuards(RolesGuard)
+  @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async getOverrides(
     @GetTenantId() tenantId: string,
@@ -51,7 +53,7 @@ export class AuditController {
   }
 
   @Get('drawer-opens')
-  @UseGuards(RolesGuard)
+  @UseGuards(AuthGuard, RolesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async getDrawerOpens(
     @GetTenantId() tenantId: string,
@@ -60,7 +62,11 @@ export class AuditController {
     return this.auditTrailService.queryDrawerOpens(query, tenantId || '');
   }
 
+  // Human transport: manual backoffice drawer-open entry. The POS has no
+  // HTTP caller for this route (its drawer-opens stream rides the forensic
+  // audit push below), so the strict identity JWT stays the gate.
   @Post('drawer-opens')
+  @UseGuards(AuthGuard)
   async recordDrawerOpen(
     @GetTenantId() tenantId: string,
     @Body() dto: RecordManualDrawerOpenDto,
@@ -73,13 +79,35 @@ export class AuditController {
     );
   }
 
+  // Device sync transport (D-18 part 2): the audit stream is pushed by the
+  // POS background sync pass, which runs under a device-sync JWT. In an
+  // offline-PIN kiosk session (after CERRAR SESIÓN + PIN unlock) there is no
+  // cloud user session, so the former class-level AuthGuard (strict identity
+  // access JWT) rejected these pushes with 401 and the rows never reached the
+  // cloud. Per-log attribution is preserved: every payload row carries its
+  // authoring user_id (POS _payload), and the forensic continuity streams key
+  // on (tenant, device, user) — not on the transport principal.
   @Post()
+  @UseGuards(SyncTransportGuard)
+  @RequireSyncScopes('sync:push')
   async pushLogs(
     @GetTenantId() tenantId: string,
     @Body() dto: PushAuditLogsDto,
-    @Request() req: { user: { sub: string } },
+    @Request()
+    req: {
+      user?: { sub: string } | null;
+      devicePrincipal?: { deviceId: string };
+    },
   ) {
-    const requesterUserId = req.user.sub;
+    const requesterUserId =
+      req.devicePrincipal?.deviceId ?? req.user?.sub ?? '';
+    if (!requesterUserId) {
+      // Unreachable behind SyncTransportGuard (which always attaches the
+      // device principal); fail closed rather than persist unattributed rows.
+      throw new UnauthorizedException(
+        'Audit push requires an authenticated device or user principal',
+      );
+    }
     const logsToSave: Array<Record<string, unknown>> = [];
     for (const log of dto.logs) {
       const logActorUserId = log.user_id ?? requesterUserId;
@@ -96,7 +124,6 @@ export class AuditController {
     }
 
     this.verificationService.verifyBatch(dto.logs, requesterUserId);
-
     for (const log of dto.logs) {
       const logActorUserId = log.user_id ?? requesterUserId;
       const resolvedAction = log.action ?? log.tipo_accion;

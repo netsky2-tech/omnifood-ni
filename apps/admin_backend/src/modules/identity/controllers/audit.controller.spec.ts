@@ -5,6 +5,7 @@ import { DataSource, QueryFailedError } from 'typeorm';
 import { AuditLog } from '../entities/audit-log.entity';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AuthGuard } from '../guards/auth.guard';
+import { SyncTransportGuard } from '../guards/sync-transport.guard';
 import { AuditVerificationService } from '../services/audit-verification.service';
 import { AuditMetricsService } from '../services/audit-metrics.service';
 import type { PushAuditLogsDto } from '../dto/identity.dto';
@@ -109,6 +110,13 @@ describe('AuditController', () => {
       ],
     })
       .overrideGuard(AuthGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
+      // D-18 part 2: the audit push route now declares SyncTransportGuard,
+      // whose JwtService/DEVICE_SYNC_JWT_CONFIG dependencies are not provided
+      // in this unit-test module. These tests exercise pushLogs behavior
+      // directly, so the device transport guard is stubbed (its metadata
+      // contract is covered in test/identity/audit-transport.e2e-spec.ts).
+      .overrideGuard(SyncTransportGuard)
       .useValue({ canActivate: jest.fn(() => true) })
       .compile();
 

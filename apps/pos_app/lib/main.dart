@@ -315,10 +315,18 @@ void main() async {
     ),
   );
 
+  // D-18 part 2: the audit stream rides the DEVICE client (syncDio +
+  // DeviceSyncAuthInterceptor). The human client (dio + CloudAuthInterceptor)
+  // pre-send-rejects when logout() cleared the cached user credential — e.g.
+  // after CERRAR SESIÓN + offline-PIN unlock — so audit rows pushed on it can
+  // never reach POST /identity/audit, which is now device transport on the
+  // backend. Both repository call sites are POST /identity/audit; there are
+  // no RolesGuard-only GETs in this repository, so no per-call client split
+  // is needed.
   final auditRepository = AuditRepositoryImpl(
     database.auditDao,
     authRepository,
-    dio,
+    syncDio,
     deviceId,
     capabilityCache: capabilityCache,
     forensicAlertDao: database.forensicAlertDao,

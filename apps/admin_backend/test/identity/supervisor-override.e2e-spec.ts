@@ -22,6 +22,7 @@ import { AuditLog } from '../../src/modules/identity/entities/audit-log.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { AuditIntegrityAlert } from '../../src/modules/identity/entities/audit-integrity-alert.entity';
 import { TenantCapabilityEvent } from '../../src/modules/identity/entities/tenant-capability-event.entity';
+import { SyncTransportGuard } from '../../src/modules/identity/guards/sync-transport.guard';
 import { AppPermission } from '../../src/modules/identity/security/permissions.enum';
 import { generateTotp } from '../../src/modules/identity/security/totp.util';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
@@ -196,6 +197,12 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
       .useValue({})
       .overrideProvider(getRepositoryToken(TenantCapabilityEvent))
       .useValue({})
+      // D-18 part 2: the audit push route now declares SyncTransportGuard,
+      // whose DEVICE_SYNC_JWT_CONFIG dependency lives outside this fixture's
+      // IdentityModule imports. These specs exercise human JWT flows only, so
+      // the device transport guard is stubbed.
+      .overrideGuard(SyncTransportGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = moduleFixture.createNestApplication();

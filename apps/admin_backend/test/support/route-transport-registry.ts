@@ -374,7 +374,23 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
     reason:
       'device sync token exchange (POS DeviceSyncExchangePort); authenticated by the renewal credential in the body, no human session',
   },
-  { controller: 'AuditController', transport: 'human' },
+  // D-18 part 2: the POS is the only client of POST /identity/audit and it
+  // pushes under a device-sync JWT (offline-PIN kiosk sessions have no cloud
+  // user session). The push route moves to device transport; the read and
+  // manual drawer-open routes stay human (OWNER/MANAGER backoffice surfaces).
+  {
+    controller: 'AuditController',
+    transport: 'human',
+    overrides: [
+      {
+        httpMethod: 'POST',
+        handlerPath: '/',
+        transport: 'device',
+        reason:
+          'audit stream push from the POS background sync pass under a device-sync JWT; per-log user_id preserves human attribution (D-18)',
+      },
+    ],
+  },
   // OHAC recovery tokens (design §9): issuance/revocation by an active
   // OWNER/MANAGER human session; the device-side redeem route inherits the
   // InboundSyncController device classification.

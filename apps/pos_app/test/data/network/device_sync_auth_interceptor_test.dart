@@ -180,6 +180,30 @@ void main() {
     );
 
     test(
+      'attaches device token to the audit stream push POST /identity/audit (D-18)',
+      () async {
+        // The audit stream rides the device client: in an offline-PIN kiosk
+        // session there is no cloud user JWT, so POST /identity/audit (device
+        // transport on the backend) must be explicitly allowlisted here.
+        when(
+          () => coordinator.getAccessToken(),
+        ).thenAnswer((_) async => 'device.access.jwt');
+
+        final options = RequestOptions(
+          path: '/identity/audit',
+          baseUrl: 'https://api.test',
+        );
+        final handler = _TestRequestHandler();
+
+        await interceptor.onRequest(options, handler);
+
+        expect(handler.isNextCalled, isTrue);
+        expect(options.headers['Authorization'], 'Bearer device.access.jwt');
+        verify(() => coordinator.getAccessToken()).called(1);
+      },
+    );
+
+    test(
       'NEVER attaches device token to admin/onboarding/human endpoints',
       () async {
         final paths = [
