@@ -284,7 +284,7 @@ describe("FiscalSetupForm — Business Profile selects (BXW-007 U2, rev 2)", () 
 
     // Edit ONLY the spread: the selects stay on 'Sin definir'. Any key in
     // the payload here would affirm a mode and downgrade local terminals.
-    fireEvent.change(screen.getByLabelText(/Spread Cambiario Comercial/i), {
+    fireEvent.change(screen.getByLabelText(/Tipo de Cambio Comercial/i), {
       target: { value: "0.75" },
     });
 

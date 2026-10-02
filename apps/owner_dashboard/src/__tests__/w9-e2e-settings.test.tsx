@@ -302,7 +302,7 @@ describe("W9 E2E — Complete Fiscal Setup, Industry Templates & Bulk Import Lif
     const businessNameInput = screen.getByLabelText(/Nombre Comercial/i);
     const rucInput = screen.getByLabelText(/RUC/i);
     const regimeSelect = screen.getByLabelText(/Régimen Fiscal/i);
-    const fxSpreadInput = screen.getByLabelText(/Spread Cambiario Comercial/i);
+    const fxSpreadInput = screen.getByLabelText(/Tipo de Cambio Comercial/i);
     const saveBtn = screen.getByTestId("save-fiscal-setup-button");
 
     // Change to Regimen General with RUC and custom FX Spread
