@@ -12,8 +12,12 @@ class OpenShiftDialog extends StatefulWidget {
 }
 
 class _OpenShiftDialogState extends State<OpenShiftDialog> {
-  final _nioController = TextEditingController(text: '0.00');
-  final _usdController = TextEditingController(text: '0.00');
+  // D-16 residue: these controllers must start EMPTY. A seeded '0.00' makes
+  // the soft keyboard append at the cursor, so typing 1000 produced
+  // '0.001000' and the shift opened with a float of 0.001. The 0.00 is only
+  // a hint now (same contract as the movement and blind-count dialogs).
+  final _nioController = TextEditingController();
+  final _usdController = TextEditingController();
   final _notesController = TextEditingController();
   bool _submitting = false;
   String? _error;
@@ -135,6 +139,7 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
                   // D-20: symbol-first short label so the currency marker
                   // survives truncation on narrow handhelds.
                   labelText: 'Fondo C\$',
+                  hintText: '0.00',
                   prefixText: 'C\$ ',
                   border: OutlineInputBorder(),
                   isDense: true,
@@ -167,6 +172,7 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
                   // D-20: symbol-first short label so the currency marker
                   // survives truncation on narrow handhelds.
                   labelText: 'Fondo USD',
+                  hintText: '0.00',
                   prefixText: '\$ ',
                   border: OutlineInputBorder(),
                   isDense: true,

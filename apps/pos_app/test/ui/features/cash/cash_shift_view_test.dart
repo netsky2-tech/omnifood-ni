@@ -167,6 +167,45 @@ void main() {
       verify(() => mockSessionDao.insertSession(any())).called(1);
     });
 
+    testWidgets(
+        'D-16 residue: open-shift money fields start empty so keyboard appends do not concatenate (D-16)',
+        (tester) async {
+      when(() => mockSessionDao.getActiveSessionForUserAndTerminal(
+          'user-cajero-1', 'term-main')).thenAnswer((_) async => null);
+      when(() => mockSessionDao.insertSession(any())).thenAnswer((_) async {});
+
+      await viewModel.init();
+      await tester.pumpWidget(buildApp(const OpenShiftDialog()));
+      await tester.pump();
+
+      final nioField = tester.widget<TextField>(
+          find.byKey(const Key('open_shift_nio_input')));
+      final usdField = tester.widget<TextField>(
+          find.byKey(const Key('open_shift_usd_input')));
+
+      // Root cause contract: a seeded '0.00' makes the soft keyboard append,
+      // so typing 1000 produced '0.001000' and the shift opened with a float
+      // of 0.001 instead of 1000 (the D-16 defect class, same cause).
+      expect(nioField.controller!.text, isEmpty,
+          reason: 'the NIO float field must not be seeded with 0.00');
+      expect(usdField.controller!.text, isEmpty,
+          reason: 'the USD float field must not be seeded with 0.00');
+
+      // Faithful reproduction of the soft keyboard: it appends at the cursor.
+      // ignore: avoid_dynamic_calls
+      nioField.controller!.text = '${nioField.controller!.text}1000';
+      usdField.controller!.text = '${usdField.controller!.text}80';
+      await tester.pump();
+
+      await tester.tap(find.text('Confirmar Apertura'));
+      await tester.pump();
+
+      expect(viewModel.hasActiveShift, isTrue);
+      expect(viewModel.activeShift!.openingBalanceNio, 1000.0,
+          reason: 'appending 1000 to an empty field must open with C\$1000');
+      expect(viewModel.activeShift!.openingBalanceUsd, 80.0);
+    });
+
     testWidgets('CashMovementDialog allows entering amounts and recording movement',
         (tester) async {
       final activeSession = CashierSessionEntity(
