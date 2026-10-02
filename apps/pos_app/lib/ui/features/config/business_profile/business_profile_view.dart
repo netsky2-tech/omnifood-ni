@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/utils/nicaragua_fiscal_validator.dart';
 import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
 import 'business_profile_view_model.dart';
@@ -125,9 +126,14 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       decoration: const InputDecoration(labelText: 'RUC (Nicaragua)', hintText: 'J0310000000000'),
                       validator: (v) {
                         if (v == null || v.isEmpty) return 'Requerido';
-                        // Basic Nicaraguan RUC validation (natural or legal)
-                        if (!RegExp(r'^[A-Z][0-9]{13}$').hasMatch(v)) {
-                          return 'Formato de RUC inválido (Letra + 13 dígitos)';
+                        // Nicaragua issues two RUC shapes: juridical
+                        // (J + 13 digits) and natural person (13 digits +
+                        // check letter, e.g. 0011112930059D). Delegate to the
+                        // shared validator instead of duplicating the rule:
+                        // a juridical-only inline regex silently blocked every
+                        // cuota fija taxpayer from saving this form.
+                        if (!NicaraguaFiscalValidator.isValidRuc(v)) {
+                          return 'RUC inválido (J + 13 dígitos, o cédula 13 dígitos + letra)';
                         }
                         return null;
                       },

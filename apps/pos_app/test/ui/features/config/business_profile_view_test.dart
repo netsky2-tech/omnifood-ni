@@ -170,7 +170,7 @@ void main() {
       }
 
       await fill('Nombre Comercial / Razón Social', 'Mi Restaurante');
-      await fill('RUC (Nicaragua)', 'A0011234567890');
+      await fill('RUC (Nicaragua)', 'J0310000000000');
       await fill('Tipo de Cambio Comercial (POS / Atención al Cliente)', '36.50');
       await fill('Tipo de Cambio Oficial BCN (Base Fiscal DGI)', '36.62');
     }
@@ -485,7 +485,7 @@ void main() {
     }
 
     await fillField('Nombre Comercial / Razón Social', 'Mi Restaurante');
-    await fillField('RUC (Nicaragua)', 'A0011234567890');
+    await fillField('RUC (Nicaragua)', 'J0310000000000');
     await fillField(
         'Tipo de Cambio Comercial (POS / Atención al Cliente)', '36.50');
     await fillField(
@@ -592,7 +592,7 @@ void main() {
       }
 
       await fill('Nombre Comercial / Razón Social', 'Mi Restaurante');
-      await fill('RUC (Nicaragua)', 'A0011234567890');
+      await fill('RUC (Nicaragua)', 'J0310000000000');
       await fill('Tipo de Cambio Comercial (POS / Atención al Cliente)', '36.50');
       await fill('Tipo de Cambio Oficial BCN (Base Fiscal DGI)', '36.62');
 
@@ -674,7 +674,7 @@ void main() {
         // controller still carries a value ('36.50') that a stale save would
         // happily write — the marker skip is what protects it.
         await fill('Nombre Comercial / Razón Social', 'Mi Restaurante');
-        await fill('RUC (Nicaragua)', 'A0011234567890');
+        await fill('RUC (Nicaragua)', 'J0310000000000');
         await fill('Tipo de Cambio Oficial BCN (Base Fiscal DGI)', '36.62');
 
         await tester.ensureVisible(find.text('GUARDAR CONFIGURACIÓN'));
@@ -690,6 +690,37 @@ void main() {
             reason: 'the managed rate must be skipped by the existing cloud-managed save guard');
         expect(byKey['business_name'], 'Mi Restaurante');
       });
+    });
+  });
+
+  group('RUC field validation', () {
+    testWidgets(
+        'accepts a natural-person cedula RUC (cuota fija) and still rejects malformed input',
+        (tester) async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+
+      await tester.pumpWidget(buildWidget());
+      await tester.pumpAndSettle();
+
+      final rucField = tester.widget<TextFormField>(
+        find.widgetWithText(TextFormField, 'RUC (Nicaragua)'),
+      );
+      final validate = rucField.validator;
+      expect(validate, isNotNull,
+          reason: 'the RUC field must validate its format');
+
+      // Cuota Fija natural person: 13 digits + check letter (the SOHO case).
+      expect(validate!('0011112930059D'), isNull,
+          reason: 'a natural-person RUC must be accepted, not only juridical ones');
+      // Juridical person: J + 13 digits must keep working.
+      expect(validate('J0310000000000'), isNull);
+      // The shared validator cleans case, so lowercase must work as well.
+      expect(validate('j0310000000000'), isNull);
+      // Empty stays required.
+      expect(validate(''), isNotNull);
+      // Malformed values must still be rejected.
+      expect(validate('12345'), isNotNull);
+      expect(validate('X0310000000000'), isNotNull);
     });
   });
 }
