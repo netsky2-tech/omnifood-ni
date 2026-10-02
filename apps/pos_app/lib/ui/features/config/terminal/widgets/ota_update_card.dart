@@ -8,7 +8,7 @@ import 'package:pos_app/domain/services/update/ota_update_coordinator.dart';
 ///
 /// Designed to lay out cleanly within the Q80 logical width (533 px) and
 /// strictly honors the [FiscalSafetyGatePort] (Rule R7).
-class OtaUpdateCard extends StatelessWidget {
+class OtaUpdateCard extends StatefulWidget {
   const OtaUpdateCard({
     super.key,
     required this.coordinator,
@@ -17,11 +17,37 @@ class OtaUpdateCard extends StatelessWidget {
   final OtaUpdateCoordinator coordinator;
 
   @override
+  State<OtaUpdateCard> createState() => _OtaUpdateCardState();
+}
+
+class _OtaUpdateCardState extends State<OtaUpdateCard>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        widget.coordinator.state is OtaPermissionRequired) {
+      widget.coordinator.resumeInstallAfterPermission();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: coordinator,
+      listenable: widget.coordinator,
       builder: (context, _) {
-        final state = coordinator.state;
+        final state = widget.coordinator.state;
         final theme = Theme.of(context);
 
         return Card(
@@ -230,7 +256,7 @@ class OtaUpdateCard extends StatelessWidget {
               icon: const Icon(Icons.download_for_offline),
               label: const Text('Descargar e Instalar'),
               onPressed: canInstall
-                  ? () => coordinator.downloadAndInstall(manifest)
+                  ? () => widget.coordinator.downloadAndInstall(manifest)
                   : null,
             ),
           ],
@@ -340,10 +366,22 @@ class OtaUpdateCard extends StatelessWidget {
                 style: TextStyle(color: Colors.red.shade900, fontSize: 13),
               ),
               const SizedBox(height: 10),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.settings),
-                label: const Text('Abrir Ajustes de Seguridad'),
-                onPressed: coordinator.openInstallSettings,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.settings),
+                    label: const Text('Abrir Ajustes de Seguridad'),
+                    onPressed: widget.coordinator.openInstallSettings,
+                  ),
+                  ElevatedButton.icon(
+                    key: const Key('ota_continue_install_button'),
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text('Continuar con la instalación'),
+                    onPressed: widget.coordinator.resumeInstallAfterPermission,
+                  ),
+                ],
               ),
             ],
           ),
@@ -421,7 +459,7 @@ class OtaUpdateCard extends StatelessWidget {
             )
           : const Icon(Icons.refresh),
       label: Text(buttonLabel),
-      onPressed: isLoading ? null : () => coordinator.checkForUpdate(),
+      onPressed: isLoading ? null : () => widget.coordinator.checkForUpdate(),
     );
   }
 }

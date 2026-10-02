@@ -65,7 +65,8 @@ class OtaHandoffDispatched extends OtaUpdateState {
 }
 
 class OtaPermissionRequired extends OtaUpdateState {
-  const OtaPermissionRequired();
+  const OtaPermissionRequired({this.pendingArtifact});
+  final VerifiedReleaseArtifact? pendingArtifact;
 }
 
 class OtaFailed extends OtaUpdateState {
@@ -296,7 +297,7 @@ class OtaUpdateCoordinator extends ChangeNotifier {
           case InstallHandoffDispatched():
             _setState(const OtaHandoffDispatched());
           case InstallPermissionRequired():
-            _setState(const OtaPermissionRequired());
+            _setState(OtaPermissionRequired(pendingArtifact: downloadResult));
           case InstallFileNotFound(:final filePath):
             _setState(OtaFailed(
               message: 'El archivo descargado no se encontró en $filePath.',
@@ -314,5 +315,36 @@ class OtaUpdateCoordinator extends ChangeNotifier {
   /// Opens system settings to grant package install permissions.
   Future<void> openInstallSettings() async {
     await _releaseInstaller.openInstallPermissionSettings();
+  }
+
+  /// Automatically or manually resumes the installation handoff once the
+  /// operator has granted the REQUEST_INSTALL_PACKAGES permission in Settings.
+  Future<void> resumeInstallAfterPermission() async {
+    final currentState = _state;
+    if (currentState is! OtaPermissionRequired) return;
+
+    final canInstall = await _releaseInstaller.canRequestPackageInstalls();
+    if (!canInstall) return;
+
+    final pending = currentState.pendingArtifact;
+    if (pending != null && pending.file.existsSync()) {
+      _setState(OtaReadyToInstall(pending));
+      final handoffResult =
+          await _releaseInstaller.installRelease(pending.file);
+      if (handoffResult is InstallHandoffDispatched) {
+        _setState(const OtaHandoffDispatched());
+      } else if (handoffResult is InstallPermissionRequired) {
+        _setState(OtaPermissionRequired(pendingArtifact: pending));
+      } else if (handoffResult is InstallHandoffFailed) {
+        _setState(OtaFailed(
+          message:
+              'El instalador del sistema rechazó la solicitud: ${handoffResult.reason}',
+          reasonCode: handoffResult.errorCode ?? 'INSTALL_FAILED',
+        ));
+      }
+    } else {
+      // Artifact was cleared or missing; reset to initial so the user can re-check
+      _setState(const OtaInitial());
+    }
   }
 }
