@@ -349,4 +349,44 @@ void main() {
       expect(json['tipEligibleBaseNio'], 100.0);
     });
   });
+
+  group('SalesMapper — fx-rate fiscal snapshot travels to the cloud (D-6)', () {
+    // Values as frozen at checkout (sale_view_model.dart): the commercial
+    // rate actually applied to the USD conversion, NOT the entity default.
+    final baseInvoice = Invoice(
+      id: 'inv-fx',
+      number: '001-001-01-00000003',
+      createdAt: DateTime(2026, 6, 23),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+    );
+
+    Invoice invoiceWithFxFacts() => baseInvoice.copyWith(
+          bcnOfficialRate: 36.6243,
+          commercialRate: 36.6243,
+          totalUsd: 3.14,
+        );
+
+    test('toSyncJson emits bcnOfficialRate/commercialRate/totalUsd with real values', () {
+      final json = SalesMapper.toSyncJson(invoiceWithFxFacts(), const [], const []);
+
+      expect(json['bcnOfficialRate'], 36.6243);
+      expect(json['commercialRate'], 36.6243);
+      expect(json['totalUsd'], 3.14);
+    });
+
+    test('toSyncJson always emits the fx fields (non-nullable domain defaults, no conditionals)', () {
+      // Even a legacy invoice without explicit values carries the domain
+      // defaults; the payload must never omit the keys or the backend
+      // silently writes its 36.5/0.0 column defaults (the D-6 defect).
+      final json = SalesMapper.toSyncJson(baseInvoice, const [], const []);
+
+      expect(json.keys, containsAll(['bcnOfficialRate', 'commercialRate', 'totalUsd']));
+      expect(json['bcnOfficialRate'], isNotNull);
+      expect(json['commercialRate'], isNotNull);
+      expect(json['totalUsd'], isNotNull);
+    });
+  });
 }

@@ -282,6 +282,42 @@ describe('InvoicesService', () => {
       );
     });
 
+    it('persists the fx-rate fiscal snapshot as sent, not the column defaults (D-6)', async () => {
+      // D-6 regression guard: a payload carrying the checkout-applied
+      // commercial rate must reach the upsert verbatim. If the ingestion
+      // ever drops these keys (or the DTO whitelist strips them), TypeORM
+      // falls back to the entity column defaults (36.5000 / 0.0) and the
+      // cloud silently stores the wrong conversion rate.
+      const tenantId = 'tenant-1';
+      const dto: SyncInvoiceDto = {
+        id: 'inv-fx-1',
+        number: '001-001-01-00000003',
+        createdAt: new Date().toISOString(),
+        userId: 'user-1',
+        subtotal: 115,
+        totalTax: 15,
+        total: 115,
+        paymentStatus: 'PAID',
+        bcnOfficialRate: 36.6243,
+        commercialRate: 36.6243,
+        totalUsd: 3.14,
+        items: [],
+        payments: [],
+      };
+
+      await service.syncInvoices(tenantId, [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'inv-fx-1',
+          bcnOfficialRate: 36.6243,
+          commercialRate: 36.6243,
+          totalUsd: 3.14,
+        }),
+        ['id'],
+      );
+    });
+
     it('persists per-line recipeVersionId in InvoiceItem and does not drop it', async () => {
       const tenantId = 'tenant-1';
       recipeService.getSnapshot.mockResolvedValue({

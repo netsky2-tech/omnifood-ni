@@ -136,3 +136,47 @@ describe('SyncInvoiceDto tip fields (Batch 7 Slice 1, PRD §21 / AD-10)', () => 
     expect(errors).toEqual([]);
   });
 });
+
+describe('SyncInvoiceDto fx-rate fiscal fields (D-6)', () => {
+  const basePayload = {
+    id: 'inv-1',
+    number: '001',
+    createdAt: new Date().toISOString(),
+    userId: 'user-1',
+    subtotal: 100,
+    totalTax: 15,
+    total: 115,
+    paymentStatus: 'PAID',
+    items: [],
+    payments: [],
+  };
+
+  const validate = (payload: Record<string, unknown>) => {
+    const dto = plainToInstance(SyncInvoiceDto, payload);
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidUnknownValues: false,
+    });
+    return { dto, errors };
+  };
+
+  it('accepts the three fx fields with real checkout values and keeps them after whitelist stripping', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      bcnOfficialRate: 36.6243,
+      commercialRate: 36.6243,
+      totalUsd: 3.14,
+    });
+
+    expect(errors).toEqual([]);
+    expect(dto.bcnOfficialRate).toBe(36.6243);
+    expect(dto.commercialRate).toBe(36.6243);
+    expect(dto.totalUsd).toBe(3.14);
+  });
+
+  it('leaves the fx fields optional so legacy payloads still validate', () => {
+    const { errors } = validate(basePayload);
+
+    expect(errors).toEqual([]);
+  });
+});

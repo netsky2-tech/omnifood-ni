@@ -551,6 +551,14 @@ class SalesMapper {
       'subtotal': invoice.subtotal,
       'totalTax': invoice.totalTax,
       'total': invoice.total,
+      // D-6: the fx-rate fiscal snapshot travels as issued so the cloud
+      // mirrors the conversion actually applied at checkout. Non-nullable
+      // domain fields (invoice.dart defaults) — always emitted, never
+      // omitted, or the backend silently writes its 36.5/0.0 column
+      // defaults and credit-note re-derivations propagate the wrong rate.
+      'bcnOfficialRate': invoice.bcnOfficialRate,
+      'commercialRate': invoice.commercialRate,
+      'totalUsd': invoice.totalUsd,
       'isCanceled': invoice.isCanceled,
       'voidReason': invoice.voidReason,
       'syncStatus': invoice.syncStatus.name,
