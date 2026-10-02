@@ -574,9 +574,17 @@ void main() async {
           create: (_) {
             final apiBaseUrlService =
                 ApiBaseUrlService(database.localConfigDao);
+            // Clean Dio instance with NO auth interceptors and generous timeouts
+            // for downloading large APK binaries from external object storage (R2).
+            final downloadDio = Dio(
+              BaseOptions(
+                connectTimeout: const Duration(seconds: 30),
+                receiveTimeout: const Duration(minutes: 5),
+              ),
+            );
             final otaCoordinator = OtaUpdateCoordinator(
               apiBaseUrlService: apiBaseUrlService,
-              releaseDownloader: ReleaseDownloader(dio: dio),
+              releaseDownloader: ReleaseDownloader(dio: downloadDio),
               releaseInstaller: SystemInstallerAdapter(),
               fiscalSafetyGate: FiscalSafetyGateAdapter(
                 checkOpenShift: () async {
