@@ -275,11 +275,11 @@ Create a Pages project connected to the same GitHub repository. Settings:
 
 | Setting | Value |
 | --- | --- |
-| Production branch | the staging branch (`chore/staging-deployment` or its merge target — operator choice, **[unverified]**) |
+| Production branch | `main` — **verified 2026-10-02**: merging commit `2e03e423` to `main` updated the live CSP on `soho.nhilospos.com` within ~40 seconds |
 | Root directory (advanced) | `apps/owner_dashboard` |
 | Build command | `pnpm install --frozen-lockfile && pnpm --filter owner_dashboard build` |
 | Build output directory | `dist` (relative to the root directory) |
-| `VITE_API_URL` | `https://api-staging.nhilospos.com` (origin only — no path, no `/api` suffix; `src/lib/api-base-url.ts` validates and fails fast) |
+| `VITE_API_URL` | `https://api.nhilospos.com` (origin only — no path, no `/api` suffix; `src/lib/api-base-url.ts` validates and fails fast). Repointed from `https://api-staging.nhilospos.com` on 2026-10-02 in the gated step recorded in §14.3 |
 | `NODE_VERSION` | pin to the repo-supported Node major if the Pages default drifts |
 
 `VITE_*` values are baked at build time; changing them requires a redeploy.
@@ -290,12 +290,14 @@ byte-identically to `dist`):
 - `_redirects` — `/* /index.html 200`: SPA fallback so `/login` and deep
   links survive a page reload.
 - `_headers` — security headers for every response, including a CSP whose
-  `connect-src` allows `'self'` and `https://api-staging.nhilospos.com`.
+  `connect-src` allows `'self'`, `https://api.nhilospos.com`, and the retained
+  alias `https://api-staging.nhilospos.com`.
 
 **Preview-branch caution:** every preview deployment bakes the same
-project-level `VITE_API_URL`, so **every preview host talks to the staging
-API**. Do not treat preview hosts as trusted origins, and disable automatic
-previews for branches not meant to deploy.
+project-level `VITE_API_URL`. Since the 2026-10-02 repoint that value is the
+**official origin**, so **every preview host now talks to the live production
+API** rather than to staging. Do not treat preview hosts as trusted origins,
+and disable automatic previews for branches not meant to deploy.
 
 ## 7. DNS
 
@@ -680,3 +682,30 @@ are recorded here because no operator-facing artifact carried them.
    the transport fails at the next start without naming the port as the
    cause. (The `WRONG_VERSION_NUMBER` exception belongs to mode 1, the
    scheme case — not to this one.)
+
+### 14.3 Executed repoint and its verification
+
+Recorded because §6's tables describe the deployed configuration, and they
+changed.
+
+The order cannot be inverted: the CSP must permit the new origin before the
+bundle targets it, or the browser blocks `connect-src`.
+
+1. The widened CSP shipped first (`apps/owner_dashboard/public/_headers`,
+   allowing both origins) and was confirmed live —
+   `connect-src 'self' https://api.nhilospos.com https://api-staging.nhilospos.com`
+   on `https://soho.nhilospos.com`, within ~40 seconds of the merge to `main`.
+   That propagation is also what **verified the Pages production branch is
+   `main`**, which §6 previously recorded as `[unverified]`.
+2. `VITE_API_URL` was then set to the official origin (origin only, no `/api`)
+   and the project rebuilt. The build re-read the variable: the deployed bundle
+   carries `api.nhilospos.com` and no `api-staging` string
+   (`/assets/tenant-B8kzKfbT.js`, identical on `soho.nhilospos.com` and on the
+   project's `*.pages.dev` production host, which bypasses domain caches).
+3. CORS was confirmed from the dashboard origin to the official origin:
+   `OPTIONS /api/identity/login` returns `204` with
+   `access-control-allow-origin: https://soho.nhilospos.com`.
+
+Rollback: set `VITE_API_URL` back to the alias and redeploy. The alias stays
+alive and the CSP already permits it, so the rollback needs no second CSP
+deploy.
