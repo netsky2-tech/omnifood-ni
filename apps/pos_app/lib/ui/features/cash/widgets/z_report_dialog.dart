@@ -1,11 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/localization/display_name_resolver.dart';
 import '../../../../data/models/sales/cashier_session_entity.dart';
 
 class ZReportDialog extends StatelessWidget {
   final CashierSessionEntity shift;
 
-  const ZReportDialog({super.key, required this.shift});
+  /// D-14: resolved person names (see XReportDialog). When absent, the
+  /// honest fallback label renders — never the raw user id.
+  final String? cashierName;
+  final String? supervisorName;
+
+  const ZReportDialog({
+    super.key,
+    required this.shift,
+    this.cashierName,
+    this.supervisorName,
+  });
 
   String _formatNio(double amount) => 'C\$ ${amount.toStringAsFixed(2)}';
   String _formatUsd(double amount) => '\$ ${amount.toStringAsFixed(2)}';
@@ -52,11 +63,15 @@ class ZReportDialog extends StatelessWidget {
                   children: [
                     _buildRow('Correlativo Fiscal DGI', zSeq, isBold: true),
                     _buildRow('Terminal POS', shift.terminalId),
-                    _buildRow('Cajero ID', shift.userId),
+                    // D-14: a person's name where the id used to be shown.
+                    _buildRow('Cajero', cashierName ?? kUnresolvedUserNameLabel),
                     _buildRow('Fecha Apertura', openedStr),
                     _buildRow('Fecha Cierre', closedStr),
                     if (shift.supervisorId != null)
-                      _buildRow('Supervisor Autoriza', shift.supervisorId!),
+                      _buildRow(
+                          'Supervisor',
+                          supervisorName ??
+                              kUnresolvedSupervisorNameLabel),
                   ],
                 ),
               ),

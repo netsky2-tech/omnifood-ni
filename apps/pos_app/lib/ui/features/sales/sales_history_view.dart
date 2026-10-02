@@ -294,7 +294,9 @@ class InvoiceDetailsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text('Fecha: ${DateFormat('dd/MM/yyyy HH:mm').format(invoice.createdAt)}'),
-          Text('Usuario: ${invoice.userId}'),
+          // D-14: the operator's name, resolved from the view model's
+          // id→name map — never the device-observed UUID.
+          Text('Usuario: ${viewModel.userNameFor(invoice.userId)}'),
           const Divider(height: 24),
           
           Expanded(

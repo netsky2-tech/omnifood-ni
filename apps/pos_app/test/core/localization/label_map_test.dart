@@ -190,5 +190,18 @@ void main() {
       expect(localize('NETWORK_ERROR', kActivationBackendVerdictLabels),
           'Error de red');
     });
+
+    test('cash movement types cover every code with a Spanish label (D-14)', () {
+      const codes = ['CASH_IN', 'PETTY_CASH', 'SAFE_DROP', 'CASH_OUT'];
+      for (final code in codes) {
+        expect(localize(code, kCashMovementTypeLabels), isNot(equals(code)),
+            reason:
+                'kCashMovementTypeLabels is missing a Spanish label for "\$code"');
+      }
+      expect(localize('CASH_IN', kCashMovementTypeLabels), 'Ingreso Menudo');
+      expect(localize('PETTY_CASH', kCashMovementTypeLabels), 'Gasto Menor');
+      expect(localize('SAFE_DROP', kCashMovementTypeLabels), 'Retiro a Bóveda');
+      expect(localize('CASH_OUT', kCashMovementTypeLabels), 'Egreso Efectivo');
+    });
   });
 }

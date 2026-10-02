@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/localization/display_name_resolver.dart';
 import '../../../../data/models/sales/cashier_session_entity.dart';
 import '../../../../data/models/sales/cash_movement_entity.dart';
 
@@ -14,12 +15,18 @@ class XReportDialog extends StatelessWidget {
   final double effectiveExpectedNio;
   final double effectiveExpectedUsd;
 
+  /// D-14: the cashier's resolved display name. The caller (CashShiftView,
+  /// via the view model's id→name map) resolves it; when absent the dialog
+  /// renders the honest fallback label, never the raw user id.
+  final String? cashierName;
+
   const XReportDialog({
     super.key,
     required this.shift,
     required this.movements,
     required this.effectiveExpectedNio,
     required this.effectiveExpectedUsd,
+    this.cashierName,
   });
 
   String _formatNio(double amount) => 'C\$ ${amount.toStringAsFixed(2)}';
@@ -96,7 +103,8 @@ class XReportDialog extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     _buildRow('Terminal POS', shift.terminalId),
-                    _buildRow('Cajero ID', shift.userId),
+                    // D-14: a person's name where the id used to be shown.
+                    _buildRow('Cajero', cashierName ?? kUnresolvedUserNameLabel),
                     _buildRow('Fecha/Hora Apertura', openedStr),
                   ],
                 ),

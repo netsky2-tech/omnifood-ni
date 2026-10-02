@@ -6,6 +6,7 @@ import {
   CashShiftStatus,
 } from '../entities/cash-shift.entity';
 import { CashMovement } from '../entities/cash-movement.entity';
+import { User } from '../../identity/entities/user.entity';
 import type {
   CashMovementSyncItemDto,
   CashShiftSessionSyncItemDto,
@@ -89,13 +90,20 @@ export class CashShiftSyncIngestionService {
       async (manager: EntityManager) => {
         const shiftsRepo = manager.getRepository(CashShiftSession);
         const movementsRepo = manager.getRepository(CashMovement);
+        // D-3/D-14: belt-and-braces name resolution. A device that cannot
+        // resolve the cashier id against its local users table omits
+        // `cashierName`; the backend resolves it here, scoped to the caller
+        // tenant, so the cloud `cashier_name` column carries a person's
+        // name whenever one exists. A failing lookup degrades to the
+        // historical id fallback without breaking ingestion.
+        const userMap = await this.loadTenantUserNames(manager, tenantId);
         const results: CashShiftSyncResultItem[] = [];
         let processed = 0;
         let failed = 0;
 
         for (const record of batch.sessions) {
           try {
-            await this.upsertSession(tenantId, record, shiftsRepo);
+            await this.upsertSession(tenantId, record, shiftsRepo, userMap);
             processed += 1;
             results.push({ idempotencyKey: record.id, status: 'ACCEPTED' });
           } catch (error: unknown) {
@@ -127,10 +135,37 @@ export class CashShiftSyncIngestionService {
     );
   }
 
+  /**
+   * D-3: resolves the tenant's user ids to display names once per batch.
+   * Mirrors the resolve-then-fallback pattern in sales-reports.service.ts /
+   * fiscal-reports.service.ts. A lookup failure is logged and degraded to
+   * an empty map — ingestion never fails because the users table is
+   * unavailable.
+   */
+  private async loadTenantUserNames(
+    manager: EntityManager,
+    tenantId: string,
+  ): Promise<Map<string, string>> {
+    try {
+      const users = await manager.getRepository(User).find({
+        where: { tenant_id: tenantId },
+      });
+      return new Map(users.map((u) => [u.id, u.name]));
+    } catch (error: unknown) {
+      this.logger.warn(
+        `[CASH-SHIFT-SYNC] tenant=${tenantId} users lookup failed; ` +
+          `falling back to the cashier id for cashier_name: ` +
+          `${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+      return new Map<string, string>();
+    }
+  }
+
   private async upsertSession(
     tenantId: string,
     record: CashShiftSessionSyncItemDto,
     shiftsRepo: Repository<CashShiftSession>,
+    userMap: Map<string, string>,
   ): Promise<void> {
     const existing = await shiftsRepo.findOne({
       where: { id: record.id },
@@ -143,11 +178,11 @@ export class CashShiftSyncIngestionService {
       }
       await shiftsRepo.update(
         { id: existing.id, tenant_id: tenantId },
-        this.toSessionValues(tenantId, record),
+        this.toSessionValues(tenantId, record, userMap),
       );
       return;
     }
-    await shiftsRepo.insert(this.toSessionValues(tenantId, record));
+    await shiftsRepo.insert(this.toSessionValues(tenantId, record, userMap));
   }
 
   private async insertMovementOnce(
@@ -182,20 +217,27 @@ export class CashShiftSyncIngestionService {
   }
 
   /**
-   * Maps the POS payload onto the `cash_shift_sessions` columns. A missing
-   * `cashierName` falls back to the cashier id so the NOT NULL column stays
-   * satisfied (terminal session rows carry only the user id).
+   * Maps the POS payload onto the `cash_shift_sessions` columns. The
+   * cashier name resolution chain (D-3): the payload's `cashierName` wins
+   * verbatim; otherwise the cashier id is resolved against the tenant's
+   * users table; only when the user is unknown does the historical id
+   * fallback keep the NOT NULL column satisfied — and it never overwrites
+   * a resolved person name with a UUID.
    */
   private toSessionValues(
     tenantId: string,
     record: CashShiftSessionSyncItemDto,
+    userMap: Map<string, string>,
   ): Partial<CashShiftSession> {
     return {
       id: record.id,
       tenant_id: tenantId,
       terminal_id: record.terminalId,
       cashier_id: record.cashierId,
-      cashier_name: record.cashierName?.trim() || record.cashierId,
+      cashier_name:
+        record.cashierName?.trim() ||
+        userMap.get(record.cashierId) ||
+        record.cashierId,
       opened_at: new Date(record.openedAt),
       closed_at: record.closedAt ? new Date(record.closedAt) : null,
       status: this.toSessionStatus(record),

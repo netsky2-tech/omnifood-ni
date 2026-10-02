@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/localization/label_map.dart';
 import '../../../design_system/responsive_layout.dart';
 import '../cash_shift_view_model.dart';
 
@@ -133,22 +134,33 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
-                items: const [
+                // D-14: displayed text is the localized Spanish label; the
+                // `value:` codes are the persistence contract and stay
+                // EXACTLY as they were.
+                items: [
                   DropdownMenuItem(
                     value: 'CASH_IN',
-                    child: Text('🟢 Ingreso Menudo (CASH_IN)', overflow: TextOverflow.ellipsis),
+                    child: Text(
+                        '🟢 ${localize('CASH_IN', kCashMovementTypeLabels)}',
+                        overflow: TextOverflow.ellipsis),
                   ),
                   DropdownMenuItem(
                     value: 'PETTY_CASH',
-                    child: Text('🔴 Gasto Menor (PETTY_CASH)', overflow: TextOverflow.ellipsis),
+                    child: Text(
+                        '🔴 ${localize('PETTY_CASH', kCashMovementTypeLabels)}',
+                        overflow: TextOverflow.ellipsis),
                   ),
                   DropdownMenuItem(
                     value: 'SAFE_DROP',
-                    child: Text('🟡 Retiro a Bóveda (SAFE_DROP)', overflow: TextOverflow.ellipsis),
+                    child: Text(
+                        '🟡 ${localize('SAFE_DROP', kCashMovementTypeLabels)}',
+                        overflow: TextOverflow.ellipsis),
                   ),
                   DropdownMenuItem(
                     value: 'CASH_OUT',
-                    child: Text('🔴 Egreso Efectivo (CASH_OUT)', overflow: TextOverflow.ellipsis),
+                    child: Text(
+                        '🔴 ${localize('CASH_OUT', kCashMovementTypeLabels)}',
+                        overflow: TextOverflow.ellipsis),
                   ),
                 ],
                 onChanged: (val) {

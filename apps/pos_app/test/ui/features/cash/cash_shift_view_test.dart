@@ -138,6 +138,47 @@ void main() {
       expect(find.textContaining('C\$ 500.00'), findsWidgets);
     });
 
+    testWidgets('D-14: movement history row shows the localized type, never the raw code',
+        (tester) async {
+      final activeSession = CashierSessionEntity(
+        id: 'shift-1',
+        userId: 'user-cajero-1',
+        terminalId: 'term-main',
+        openedAt: 1716000000000,
+        tipoModelo: 'CAJA_CENTRAL',
+        openingBalanceNio: 1500.0,
+        openingBalanceUsd: 50.0,
+        expectedNio: 2000.0,
+        expectedUsd: 50.0,
+        isClosed: false,
+        syncStatus: 'pending',
+      );
+
+      final movement = CashMovementEntity(
+        id: 'mov-1',
+        shiftId: 'shift-1',
+        terminalId: 'term-main',
+        type: 'CASH_IN',
+        amountNio: 500.0,
+        amountUsd: 0.0,
+        reason: 'Ingreso de cambio menudo',
+        timestamp: 1716001000000,
+        syncStatus: 'pending',
+      );
+
+      when(() => mockSessionDao.getActiveSessionForUserAndTerminal(
+          'user-cajero-1', 'term-main')).thenAnswer((_) async => activeSession);
+      when(() => mockMovementDao.getMovementsByShiftId('shift-1'))
+          .thenAnswer((_) async => [movement]);
+
+      await viewModel.init();
+      await tester.pumpWidget(buildApp(const CashShiftView()));
+      await tester.pump();
+
+      expect(find.textContaining('Tipo: Ingreso Menudo'), findsOneWidget);
+      expect(find.textContaining('Tipo: CASH_IN'), findsNothing);
+    });
+
     testWidgets('OpenShiftDialog allows entering float and opening shift',
         (tester) async {
       when(() => mockSessionDao.getActiveSessionForUserAndTerminal(
@@ -332,7 +373,12 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: ZReportDialog(shift: closedSession),
+            body: ZReportDialog(
+              shift: closedSession,
+              // D-14: person names, resolved by the caller.
+              cashierName: 'María Pérez',
+              supervisorName: 'Luis Rojas',
+            ),
           ),
         ),
       );
@@ -342,8 +388,11 @@ void main() {
       expect(find.text('Z-0005'), findsOneWidget);
       expect(find.text('Terminal POS'), findsOneWidget);
       expect(find.text('term-main'), findsOneWidget);
-      expect(find.text('user-cajero-1'), findsOneWidget);
-      expect(find.text('sup-01'), findsOneWidget);
+      // D-14: operator rows show person names, never raw user ids.
+      expect(find.text('María Pérez'), findsOneWidget);
+      expect(find.text('Luis Rojas'), findsOneWidget);
+      expect(find.text('user-cajero-1'), findsNothing);
+      expect(find.text('sup-01'), findsNothing);
       expect(find.text('Fondo Inicial'), findsOneWidget);
       expect(find.text('Saldo Esperado'), findsOneWidget);
       expect(find.text('Conteo Ciego'), findsOneWidget);

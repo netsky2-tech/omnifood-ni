@@ -7364,6 +7364,78 @@ void main() {
       expect(movements.single['timestamp'], '2026-01-01T12:05:00.000Z');
     });
 
+    test('cash shift payload carries the resolved cashier name (D-3/D-14)', () async {
+      final database = await buildDbWithPendingCashData(
+        sessions: [shiftSession('shift-9a')],
+        movements: [cashMovement('cmv-9a', shiftId: 'shift-9a')],
+      );
+      // D-14: the local users table is the historical attribution source —
+      // the sync pass resolves the cashier id against it before pushing.
+      await database.userDao.insertUsers([
+        UserEntity(
+          id: 'user-1',
+          name: 'María Pérez',
+          role: 'cashier',
+          pinHash: 'pin',
+          isActive: true,
+        ),
+      ]);
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      final sessions = cashShiftPostSessions()
+          .where((s) => s['id'] == 'shift-9a')
+          .toList(growable: false);
+      expect(sessions, hasLength(1));
+      expect(sessions.single['cashierId'], 'user-1');
+      expect(sessions.single['cashierName'], 'María Pérez');
+    });
+
+    test('cash shift payload omits cashierName when the user cannot be resolved locally (D-3)', () async {
+      final database = await buildDbWithPendingCashData(
+        sessions: [
+          // A user id no local row (and no mocked staff payload) can resolve.
+          CashierSessionEntity(
+            id: 'shift-9b',
+            userId: 'ghost-user-9b',
+            terminalId: 'term-1',
+            openedAt:
+                DateTime.parse('2026-01-01T12:00:00Z').millisecondsSinceEpoch,
+            openingBalanceNio: 5000,
+            expectedNio: 5000,
+            syncStatus: 'pending',
+          ),
+        ],
+        movements: [cashMovement('cmv-9b', shiftId: 'shift-9b')],
+      );
+      // No local row for 'ghost-user-9b': the id cannot be resolved on this
+      // terminal. The payload must OMIT the key (never persist the UUID),
+      // letting the backend resolve against the tenant users table.
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      final sessions = cashShiftPostSessions()
+          .where((s) => s['id'] == 'shift-9b')
+          .toList(growable: false);
+      expect(sessions, hasLength(1));
+      expect(sessions.single['cashierId'], 'ghost-user-9b');
+      expect(sessions.single.containsKey('cashierName'), isFalse);
+    });
+
     test('successful push marks closed sessions and movements synced; open sessions stay pending', () async {
       final database = await buildDbWithPendingCashData(
         sessions: [

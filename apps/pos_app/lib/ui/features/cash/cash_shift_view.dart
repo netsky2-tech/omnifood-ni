@@ -10,6 +10,9 @@ import 'widgets/z_report_dialog.dart';
 import 'widgets/x_report_dialog.dart';
 import 'widgets/card_voucher_reconciliation_dialog.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
+import '../../../../core/localization/display_name_resolver.dart';
+import '../../../../core/localization/label_map.dart';
+import '../../../data/database/app_database.dart';
 
 class CashShiftView extends StatefulWidget {
   const CashShiftView({super.key});
@@ -22,11 +25,18 @@ class _CashShiftViewState extends State<CashShiftView> {
   String _formatNio(double amount) => 'C\$ ${amount.toStringAsFixed(2)}';
   String _formatUsd(double amount) => '\$ ${amount.toStringAsFixed(2)}';
 
+  /// D-14: id→person-name map, built once per view load from the local
+  /// users table (findAllUsers keeps INACTIVE users for historical
+  /// attribution). Empty when the database is unavailable (isolated test
+  /// harnesses); rows then render the honest fallback, never the raw id.
+  Map<String, String> _usersById = const {};
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        _loadUsers();
         final cashVm = context.read<CashShiftViewModel>();
         try {
           final saleVm = context.read<SaleViewModel>();
@@ -40,6 +50,25 @@ class _CashShiftViewState extends State<CashShiftView> {
       }
     });
   }
+
+  Future<void> _loadUsers() async {
+    try {
+      final database = context.read<AppDatabase>();
+      final users = await database.userDao.findAllUsers();
+      if (mounted) {
+        setState(() {
+          _usersById = {for (final u in users) u.id: u.name};
+        });
+      }
+    } catch (_) {
+      // Fail honest: without a resolvable name the reports show the
+      // fallback label, never the raw id.
+      _usersById = const {};
+    }
+  }
+
+  /// D-14: a person's name where an id used to be shown.
+  String _userName(String? userId) => resolveUserName(userId, _usersById);
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +141,15 @@ class _CashShiftViewState extends State<CashShiftView> {
                   OutlinedButton.icon(
                     onPressed: () => showDialog<void>(
                       context: context,
-                      builder: (_) => ZReportDialog(shift: vm.lastClosedShift!),
+                      builder: (_) => ZReportDialog(
+                        shift: vm.lastClosedShift!,
+                        // D-14: person names, resolved from the id→name map
+                        // built once per view load.
+                        cashierName: _userName(vm.lastClosedShift!.userId),
+                        supervisorName: vm.lastClosedShift!.supervisorId == null
+                            ? null
+                            : _userName(vm.lastClosedShift!.supervisorId),
+                      ),
                     ),
                     icon: const Icon(Icons.receipt_long),
                     label: const Text('Ver Último Corte Z'),
@@ -333,6 +370,8 @@ class _CashShiftViewState extends State<CashShiftView> {
                       builder: (_) => XReportDialog(
                         shift: shift,
                         movements: vm.movements,
+                        // D-14: person name, resolved from the id→name map.
+                        cashierName: _userName(shift.userId),
                         // D-9: the X must report the same expectation the
                         // blind count and the Z close use.
                         effectiveExpectedNio: vm.effectiveExpectedNio,
@@ -452,7 +491,8 @@ class _CashShiftViewState extends State<CashShiftView> {
                             mov.reason,
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          subtitle: Text('Tipo: ${mov.type} • Hora: $timeStr'),
+                          subtitle:
+                              Text('Tipo: ${localize(mov.type, kCashMovementTypeLabels)} • Hora: $timeStr'),
                           trailing: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.end,

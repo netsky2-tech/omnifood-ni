@@ -13,8 +13,11 @@ import 'sale_view_security_flows_test.mocks.dart';
 class _FakeSalesHistoryViewModel extends ChangeNotifier implements SalesHistoryViewModel {
   final List<Invoice> _testInvoices;
   final List<InvoiceItem> _testItems;
+  final Map<String, String> _userNames;
 
-  _FakeSalesHistoryViewModel(this._testInvoices, this._testItems);
+  _FakeSalesHistoryViewModel(this._testInvoices, this._testItems,
+      {Map<String, String> userNames = const {}})
+      : _userNames = userNames;
 
   String _searchQuery = '';
   @override
@@ -43,6 +46,22 @@ class _FakeSalesHistoryViewModel extends ChangeNotifier implements SalesHistoryV
 
   @override
   Future<List<InvoiceItem>> getInvoiceItems(String invoiceId) async => _testItems;
+
+  /// D-12: the detail screen re-reads the freshest snapshot via this member.
+  @override
+  Invoice? invoiceById(String id) {
+    for (final invoice in _testInvoices) {
+      if (invoice.id == id) return invoice;
+    }
+    return null;
+  }
+
+  /// D-14: mirrors the real view model's contract — resolves a stored user
+  /// id to a person's name or the honest fallback, never the raw id.
+  @override
+  String userNameFor(String? userId) =>
+      (userId != null && userId.isNotEmpty ? _userNames[userId] : null) ??
+      'Operador no disponible';
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -159,6 +178,53 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Historial de Ventas'), findsOneWidget);
+    });
+  });
+
+  group('SalesHistoryView operator attribution (D-14)', () {
+    testWidgets('invoice detail shows the resolved operator name and never a raw user id',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final vm = _FakeSalesHistoryViewModel(
+        sampleInvoices,
+        sampleItems,
+        userNames: {'cashier-1': 'Ana Pérez'},
+      );
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('001-001-01-00000001'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Usuario: Ana Pérez'), findsOneWidget);
+      // The operator's rule: never a device-observed UUID where a person's
+      // name belongs.
+      expect(
+        find.textContaining(
+            RegExp('[0-9a-f]{8}-[0-9a-f]{4}', caseSensitive: false)),
+        findsNothing,
+      );
+      expect(find.textContaining('cashier-1'), findsNothing);
+    });
+
+    testWidgets('invoice detail shows the honest fallback when the user cannot be resolved',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final vm = _FakeSalesHistoryViewModel(sampleInvoices, sampleItems);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('001-001-01-00000001'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Usuario: Operador no disponible'), findsOneWidget);
+      expect(find.textContaining('cashier-1'), findsNothing);
     });
   });
 

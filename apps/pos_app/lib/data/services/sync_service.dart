@@ -1100,6 +1100,20 @@ class SyncService {
     final movementBatch =
         pendingMovements.take(_batchEnvelopeLimit).toList(growable: false);
 
+    // D-3/D-14: resolve the cashier id against the local users table before
+    // pushing so the cloud `cashier_name` column carries a person's name.
+    // findAllUsers keeps INACTIVE users for historical attribution. When the
+    // id cannot be resolved the key is OMITTED (never the UUID): the backend
+    // then resolves against the tenant users table and only falls back to
+    // the id as a last resort.
+    Map<String, String> userNamesById = const {};
+    try {
+      final users = await database.userDao.findAllUsers();
+      userNamesById = {for (final u in users) u.id: u.name};
+    } catch (_) {
+      userNamesById = const {};
+    }
+
     developer.log(
       'Cash shift sync: posting ${sessionBatch.length} sessions and '
       '${movementBatch.length} movements',
@@ -1109,7 +1123,8 @@ class SyncService {
       '/sales/shifts/sync',
       data: {
         'sessions': sessionBatch
-            .map(_buildCashShiftSessionPayload)
+            .map((session) =>
+                _buildCashShiftSessionPayload(session, userNamesById))
             .toList(growable: false),
         'movements': movementBatch
             .map(_buildCashMovementPayload)
@@ -1135,15 +1150,23 @@ class SyncService {
   }
 
   /// Maps a local shift session row onto the cloud ingestion contract
-  /// (CashShiftSessionSyncItemDto). Terminal rows carry no cashier name, so
-  /// the backend falls back to the cashier id for its NOT NULL column.
+  /// (CashShiftSessionSyncItemDto). D-3/D-14: when the cashier id resolves
+  /// against the local users table, the resolved person name is sent as
+  /// `cashierName`; when it does not, the key is omitted and the backend
+  /// resolves server-side (its last resort remains the cashier id, so the
+  /// NOT NULL column is still satisfied — a UUID never originates here when
+  /// a name exists).
   Map<String, Object?> _buildCashShiftSessionPayload(
     CashierSessionEntity session,
+    Map<String, String> userNamesById,
   ) {
+    final cashierName = userNamesById[session.userId];
     return {
       'id': session.id,
       'terminalId': session.terminalId,
       'cashierId': session.userId,
+      if (cashierName != null && cashierName.trim().isNotEmpty)
+        'cashierName': cashierName.trim(),
       'openedAt': DateTime.fromMillisecondsSinceEpoch(
         session.openedAt,
         isUtc: true,

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'dgi_report_view_model.dart';
 import '../../../design_system/design_system.dart';
@@ -83,11 +84,12 @@ class _DgiReportViewState extends State<DgiReportView> {
                       ),
                       hint: const Text('Seleccione una sesión'),
                       items: viewModel.sessions.map((session) {
-                        final status = session.isClosed ? 'Cerrada' : 'ACTIVA';
+                        // D-14: human session label — dd/MM HH:mm + cashier
+                        // name + status — never the session id.
                         return DropdownMenuItem<String>(
                           value: session.id,
                           child: Text(
-                            'Sesión ${session.id.substring(0, 8)} ($status)',
+                            viewModel.sessionLabel(session),
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -155,11 +157,12 @@ class _DgiReportViewState extends State<DgiReportView> {
                           final isSelected = viewModel.selectedSession?.id == session.id;
                           return ListTile(
                             title: Text(
-                              'Sesión: ${session.id.substring(0, 8)}',
+                              // D-14: human label — never the session id.
+                              viewModel.sessionLabel(session),
                               style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
                             ),
                             subtitle: Text(
-                              'Abierta: ${session.openedAt}\n${session.isClosed ? "Cerrada: ${session.closedAt}" : "ACTIVA"}',
+                              'Abierta: ${DateFormat('dd/MM/yyyy HH:mm').format(session.openedAt)}\n${session.isClosed && session.closedAt != null ? "Cerrada: ${DateFormat('dd/MM/yyyy HH:mm').format(session.closedAt!)}" : "ACTIVA"}',
                             ),
                             isThreeLine: true,
                             selected: isSelected,

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../../core/localization/display_name_resolver.dart';
 import '../../../../domain/models/sales/invoice.dart';
 import '../../../../domain/models/sales/invoice_item.dart';
 import '../../../../domain/models/sales/payment.dart';
@@ -25,11 +26,33 @@ class SalesHistoryViewModel extends ChangeNotifier {
     try {
       final entities = await _database.invoiceDao.getAllInvoices();
       _invoices = entities.map(SalesMapper.toInvoiceDomain).toList();
+      // D-14: build the id→name map once per view load. findAllUsers()
+      // (not the active-only query) on purpose: historical attribution must
+      // survive a user later being deactivated or deleted.
+      _userNamesById = await loadUserNameMap();
+    } catch (_) {
+      // Fail honest: an unresolved id renders the fallback label, never
+      // the raw UUID.
+      _userNamesById = const {};
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
+
+  Map<String, String> _userNamesById = const {};
+
+  /// D-14: overridable seam so fakes can supply names without a database.
+  @protected
+  Future<Map<String, String>> loadUserNameMap() async {
+    final users = await _database.userDao.findAllUsers();
+    return {for (final u in users) u.id: u.name};
+  }
+
+  /// Resolves a stored user id to the person's display name (or the honest
+  /// fallback). The view must render this, never the raw id.
+  String userNameFor(String? userId) =>
+      resolveUserName(userId, _userNamesById);
 
   void setSearchQuery(String query) {
     _searchQuery = query;

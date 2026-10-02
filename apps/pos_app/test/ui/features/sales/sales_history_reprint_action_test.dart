@@ -265,6 +265,14 @@ class _FakeSalesHistoryViewModel extends ChangeNotifier
   Future<List<InvoiceItem>> getInvoiceItems(String invoiceId) async =>
       _testItems;
 
+  /// D-14: the detail panel resolves operator ids through this member.
+  @override
+  String userNameFor(String? userId) => 'Operador no disponible';
+
+  /// D-12: the detail screen re-reads the freshest snapshot via this member.
+  @override
+  Invoice? invoiceById(String id) => null;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

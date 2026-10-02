@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/localization/display_name_resolver.dart';
 import '../../../design_system/design_system.dart';
 import '../../../../domain/models/audit_log.dart';
+import '../../../../domain/repositories/auth_repository.dart';
 import 'audit_log_view_model.dart';
 
 class AuditLogView extends StatefulWidget {
@@ -17,6 +19,12 @@ class _AuditLogViewState extends State<AuditLogView> {
   final TextEditingController _searchController = TextEditingController();
   final DateFormat _dateFormat = DateFormat('dd/MM/yyyy HH:mm:ss');
 
+  /// D-14: id→person-name map, built once per view load from the identity
+  /// source (getAllUsers includes INACTIVE users — kept on purpose for
+  /// historical attribution). Empty when the provider is unavailable; rows
+  /// then render the honest fallback label, never the raw id.
+  Map<String, String> _usersById = const {};
+
   @override
   void initState() {
     super.initState();
@@ -25,9 +33,28 @@ class _AuditLogViewState extends State<AuditLogView> {
         _searchController.clear();
         context.read<AuditLogViewModel>().setSearchQuery('');
         context.read<AuditLogViewModel>().loadLogs();
+        _loadUsers();
       }
     });
   }
+
+  Future<void> _loadUsers() async {
+    try {
+      final users = await context.read<AuthRepository>().getAllUsers();
+      if (mounted) {
+        setState(() {
+          _usersById = {for (final u in users) u.id: u.name};
+        });
+      }
+    } catch (_) {
+      // Isolated mounts/tests without the identity provider: keep the
+      // honest fallback; never render the raw id.
+      _usersById = const {};
+    }
+  }
+
+  /// D-14: a person's name where an id used to be shown.
+  String _userName(String userId) => resolveUserName(userId, _usersById);
 
   @override
   void dispose() {
@@ -198,7 +225,7 @@ class _AuditLogViewState extends State<AuditLogView> {
                                     subtitle: Padding(
                                       padding: const EdgeInsets.only(top: 4),
                                       child: Text(
-                                        'Usuario: ${log.userId} • ${_formatDate(log.timestamp)}',
+                                        'Usuario: ${_userName(log.userId)} • ${_formatDate(log.timestamp)}',
                                         style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -289,7 +316,9 @@ class _AuditLogViewState extends State<AuditLogView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _DetailItem(label: 'Fecha y hora', value: _formatDate(log.timestamp)),
-                _DetailItem(label: 'Usuario', value: log.userId.toString()),
+                _DetailItem(label: 'Usuario', value: _userName(log.userId)),
+                // Device identity, not person identity: the operator rule
+                // (D-14) is about people, so the device id stays verbatim.
                 _DetailItem(label: 'Dispositivo', value: log.deviceId.toString()),
                 const SizedBox(height: 12),
                 const Text('METADATOS REGISTRADOS:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),

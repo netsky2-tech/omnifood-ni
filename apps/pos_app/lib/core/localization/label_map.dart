@@ -183,6 +183,21 @@ const Map<String, String> kPaymentMethodLabels = <String, String>{
   'points': 'Puntos',
 };
 
+/// Cash movement type codes (`CashMovementEntity.type`, also the dropdown
+/// `value:` persistence contract in CashMovementDialog).
+///
+/// Source: `lib/data/models/sales/cash_movement_entity.dart` and the
+/// movement ingestion DTO — CASH_IN, PETTY_CASH, SAFE_DROP, CASH_OUT.
+/// D-14/#12: the codes stay on the wire and as dropdown values; only the
+/// displayed text is localized, so the parenthesised code suffix
+/// ("Ingreso Menudo (CASH_IN)") never renders again.
+const Map<String, String> kCashMovementTypeLabels = <String, String>{
+  'CASH_IN': 'Ingreso Menudo',
+  'PETTY_CASH': 'Gasto Menor',
+  'SAFE_DROP': 'Retiro a Bóveda',
+  'CASH_OUT': 'Egreso Efectivo',
+};
+
 /// User role labels ([UserRole] enum `name` values).
 ///
 /// Source: `lib/domain/models/user.dart`.
@@ -390,6 +405,7 @@ const Map<String, Map<String, String>> kAllLabelMaps = <String,
   'kActivationCheckCodeLabels': kActivationCheckCodeLabels,
   'kActivationEvidenceRefLabels': kActivationEvidenceRefLabels,
   'kPaymentMethodLabels': kPaymentMethodLabels,
+  'kCashMovementTypeLabels': kCashMovementTypeLabels,
   'kUserRoleLabels': kUserRoleLabels,
   'kCountSessionStatusLabels': kCountSessionStatusLabels,
   'kForensicSeverityLabels': kForensicSeverityLabels,

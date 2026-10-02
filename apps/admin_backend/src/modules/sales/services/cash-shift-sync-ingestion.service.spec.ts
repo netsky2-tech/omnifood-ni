@@ -2,6 +2,7 @@ import { DataSource } from 'typeorm';
 import { CashShiftSyncIngestionService } from './cash-shift-sync-ingestion.service';
 import { CashShiftSession } from '../entities/cash-shift.entity';
 import { CashMovement } from '../entities/cash-movement.entity';
+import { User } from '../../identity/entities/user.entity';
 import type {
   CashMovementSyncItemDto,
   CashShiftSessionSyncItemDto,
@@ -21,12 +22,17 @@ function repoStub(): RepoStub {
   };
 }
 
-function makeDataSource(shifts: unknown, movements: unknown): DataSource {
+function makeDataSource(
+  shifts: unknown,
+  movements: unknown,
+  users: unknown = { find: jest.fn().mockResolvedValue([]) },
+): DataSource {
   const manager = {
     query: jest.fn().mockResolvedValue(undefined),
     getRepository: (entity: unknown) => {
       if (entity === CashShiftSession) return shifts;
       if (entity === CashMovement) return movements;
+      if (entity === User) return users;
       return undefined;
     },
   };
@@ -289,5 +295,97 @@ describe('CashShiftSyncIngestionService', () => {
     // session is inserted.
     expect(shifts.insert).toHaveBeenCalledTimes(1);
     expect(shifts.insert.mock.calls[0][0].id).toBe('shift-good');
+  });
+
+  it('persists a provided cashierName verbatim (D-3: person name, never the id)', async () => {
+    const shifts = repoStub();
+    const service = new CashShiftSyncIngestionService(
+      makeDataSource(shifts, repoStub()),
+      shifts as never,
+      repoStub() as never,
+    );
+
+    await service.ingestCashShiftBatch('tenant-1', {
+      sessions: [posSession({ cashierName: '  María Pérez  ' })],
+      movements: [],
+    });
+
+    expect(shifts.insert.mock.calls[0][0]).toMatchObject({
+      cashier_id: 'user-1',
+      cashier_name: 'María Pérez',
+    });
+  });
+
+  it('resolves cashier_name from the tenant users table when the payload omits it (D-3)', async () => {
+    const shifts = repoStub();
+    const users = {
+      find: jest
+        .fn()
+        .mockResolvedValue([{ id: 'user-1', name: 'María Pérez' }]),
+    };
+    const service = new CashShiftSyncIngestionService(
+      makeDataSource(shifts, repoStub(), users),
+      shifts as never,
+      repoStub() as never,
+    );
+
+    const result = await service.ingestCashShiftBatch('tenant-1', {
+      sessions: [posSession()],
+      movements: [],
+    });
+
+    expect(result.failed).toBe(0);
+    // Resolution is tenant-scoped.
+    expect(users.find).toHaveBeenCalledWith({ where: { tenant_id: 'tenant-1' } });
+    // A device that cannot resolve the name never persists its UUID.
+    expect(shifts.insert.mock.calls[0][0]).toMatchObject({
+      cashier_id: 'user-1',
+      cashier_name: 'María Pérez',
+    });
+  });
+
+  it('resolves through the users table even when a buggy device sends an empty cashierName', async () => {
+    const shifts = repoStub();
+    const users = {
+      find: jest
+        .fn()
+        .mockResolvedValue([{ id: 'user-1', name: 'María Pérez' }]),
+    };
+    const service = new CashShiftSyncIngestionService(
+      makeDataSource(shifts, repoStub(), users),
+      shifts as never,
+      repoStub() as never,
+    );
+
+    await service.ingestCashShiftBatch('tenant-1', {
+      sessions: [posSession({ cashierName: '   ' })],
+      movements: [],
+    });
+
+    expect(shifts.insert.mock.calls[0][0].cashier_name).toBe('María Pérez');
+  });
+
+  it('falls back to the cashier id when the user is unknown and a failing users lookup never breaks ingestion', async () => {
+    const shifts = repoStub();
+    const users = {
+      find: jest.fn().mockRejectedValue(new Error('users table unavailable')),
+    };
+    const service = new CashShiftSyncIngestionService(
+      makeDataSource(shifts, repoStub(), users),
+      shifts as never,
+      repoStub() as never,
+    );
+
+    const result = await service.ingestCashShiftBatch('tenant-1', {
+      sessions: [posSession()],
+      movements: [],
+    });
+
+    expect(result.processed).toBe(1);
+    expect(result.failed).toBe(0);
+    expect(shifts.insert.mock.calls[0][0]).toMatchObject({
+      cashier_id: 'user-1',
+      cashier_name: 'user-1',
+    });
   });
 });
