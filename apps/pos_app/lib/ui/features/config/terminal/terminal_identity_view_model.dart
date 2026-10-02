@@ -200,7 +200,7 @@ class TerminalIdentityViewModel extends ChangeNotifier {
           ApiBaseUrlValidationReason.notAbsolute =>
             'No es una URL válida. Use una dirección completa que empiece por '
             'http:// o https:// y tenga un servidor definido '
-            '(por ejemplo: https://api-staging.example.com/api).',
+            '(por ejemplo: https://api.nhilospos.com/api).',
           null => 'No se pudo guardar la URL: el servidor no es válido.',
         };
 }

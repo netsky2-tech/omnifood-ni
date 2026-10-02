@@ -18,7 +18,13 @@ repository. `.env` files are never committed and never copied.
   `dist/data-source.js` via the TypeORM CLI, then `node dist/main`.
 - Bind: `0.0.0.0:${PORT}` (Railway injects `PORT`)
 - Health check: `GET /api/v1/health` (path configured in `railway.json`)
-- Public API origin (staging): `https://api-staging.nhilospos.com`
+- Public API origin (official): `https://api.nhilospos.com`
+- Retained alias (must stay alive): `https://api-staging.nhilospos.com`.
+  Provisioned POS terminals persist their backend URL in
+  `local_configs.api_base_url`, and `ApiBaseUrlService.resolve()` gives a
+  persisted value precedence over the compiled `API_URL` define, so the old
+  host cannot be retired without stranding already-provisioned terminals
+  (Android has no rollback). The official host is ADDED, never substituted.
 
 ## Required variables
 

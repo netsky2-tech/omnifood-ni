@@ -191,7 +191,7 @@ class ApiBaseUrlService {
         ApiBaseUrlValidationReason.notAbsolute,
         "Invalid API URL: '$raw' must be an absolute http:// or https:// "
         'URL with a non-empty host '
-        '(e.g. https://api-staging.example.com/api).',
+        '(e.g. https://api.nhilospos.com/api).',
       );
     }
     return null;

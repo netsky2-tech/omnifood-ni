@@ -635,3 +635,48 @@ staging PostgreSQL (Task 6 carried them here); the pooled-connection probe
   than 400; no `.db.spec.ts` covers the RLS migration; `tenant_id` columns
   have no non-empty CHECK constraint; the sale observer has no production
   caller yet.
+
+## 14. Official hostname rename and retained alias (`api.nhilospos.com`)
+
+This section records two things only: the hostname rename, and two
+field-reproduced URL-entry failure modes, recorded here because no
+operator-facing artifact carried them. It changes no step in sections
+1–13.
+
+### 14.1 Official origin and the alias rule
+
+- **Official API origin:** `https://api.nhilospos.com` (effective API base
+  `https://api.nhilospos.com/api`).
+- **`api-staging.nhilospos.com` is a retained alias and must stay alive.**
+  Provisioned POS terminals persist their backend URL in
+  `local_configs.api_base_url`, and `ApiBaseUrlService.resolve()` gives a
+  persisted value precedence over the compiled `API_URL` define (order:
+  persistedConfig > buildDefine > debug-only localhost default). Retiring
+  the old host would strand already-provisioned terminals, and Android has
+  no rollback. The new host is ADDED, never substituted — the dashboard CSP
+  `connect-src` allows both hosts, guarded by
+  `apps/owner_dashboard/src/__tests__/public-headers-connect-src.test.ts`.
+
+### 14.2 Field-reproduced URL-entry failure modes
+
+Both were reproduced on provisioned hardware during terminal URL entry and
+are recorded here because no operator-facing artifact carried them.
+
+1. **Gboard autocorrects `http` → `https`; validation cannot catch it.**
+   The URL field's validation (mirror of `validate_api_url`, regex
+   `^https?://([^/]*)`) is case-sensitive but accepts BOTH lowercase
+   schemes — `http://` and `https://` — so a keyboard-corrected scheme
+   passes validation and is persisted with no warning. The harm is that the
+   persisted value differs from the operator's intent, and the failure
+   surfaces later as an opaque TLS error: the app performs a TLS handshake
+   against a plaintext endpoint and reports
+   `HandshakeException: WRONG_VERSION_NUMBER`. Blaming a validation rule is
+   wrong here — validation is not where this can be caught.
+2. **A URL with no explicit port passes validation, then fails at the next
+   app start.** Validation has no port requirement — it checks only empty,
+   whitespace, and a required non-empty host — so a URL without an explicit
+   port is accepted and persisted. The effective port then falls back to
+   the scheme's default (80/443) instead of the backend's real port, and
+   the transport fails at the next start without naming the port as the
+   cause. (The `WRONG_VERSION_NUMBER` exception belongs to mode 1, the
+   scheme case — not to this one.)

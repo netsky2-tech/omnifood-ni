@@ -15,6 +15,26 @@ environment. It contains no secrets. Scope: the staging deployment of
 Backend dependency: the staging API must allow CORS for
 `https://soho.nhilospos.com` (backend Task 1).
 
+## API hostname: official origin and retained alias
+
+- **Official API origin:** `https://api.nhilospos.com` (effective API base
+  `https://api.nhilospos.com/api`).
+- **Retained alias:** `https://api-staging.nhilospos.com` must stay alive and
+  documented. Provisioned POS terminals persist their backend URL in
+  `local_configs.api_base_url`, and `ApiBaseUrlService.resolve()` gives a
+  persisted value precedence over the compiled `API_URL` define — so retiring
+  the old host would strand already-provisioned terminals, and Android has no
+  rollback. The new host is ADDED, never substituted.
+- The dashboard CSP `connect-src` in `public/_headers` therefore allows BOTH
+  hosts; a focused test
+  (`src/__tests__/public-headers-connect-src.test.ts`) guards against a
+  future edit silently dropping the alias.
+- The deploy-target and environment-variable tables in this document still
+  record the currently deployed `VITE_API_URL` value
+  (`https://api-staging.nhilospos.com`); the deployed value changes to the
+  official origin only in the gated dashboard repoint step, not as part of
+  these build settings.
+
 ## Cloudflare Pages build settings
 
 | Setting | Value |
@@ -60,7 +80,8 @@ possible by design.
 - `public/_redirects` — `/* /index.html 200`: required so client-side routes
   (for example `/login`, deep links) resolve to the app on page reload.
 - `public/_headers` — conservative security headers for all deployed
-  responses. The CSP `connect-src` permits `'self'` and
+  responses. The CSP `connect-src` permits `'self'`, the official origin
+  `https://api.nhilospos.com`, and the retained alias
   `https://api-staging.nhilospos.com`; styles/fonts permit Google Fonts
   because `index.html` loads Inter from `fonts.googleapis.com`.
 

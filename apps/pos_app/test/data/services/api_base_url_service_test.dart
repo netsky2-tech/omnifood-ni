@@ -287,6 +287,16 @@ void main() {
       expect(failure.message, startsWith('Invalid API URL:'));
     });
 
+    test('the notAbsolute example names the official API host, not a staging host',
+        () async {
+      final failure =
+          ApiBaseUrlService.validateApiUrl('api.example.com/api');
+
+      expect(failure, isNotNull);
+      expect(failure!.message, contains('https://api.nhilospos.com/api'));
+      expect(failure.message, isNot(contains('api-staging')));
+    });
+
     test('a valid URL produces no failure', () {
       expect(
         ApiBaseUrlService.validateApiUrl('https://api.example.com/api'),
