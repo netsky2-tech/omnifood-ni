@@ -83,6 +83,8 @@ void main() {
     when(mockViewModel.filteredProducts).thenReturn(testProducts);
     when(mockViewModel.cart).thenReturn(testCartItems);
     when(mockViewModel.total).thenReturn(115.0);
+    when(mockViewModel.grandTotalWithTip).thenReturn(115.0);
+    when(mockViewModel.tipAmount).thenReturn(0.0);
     when(mockViewModel.subtotal).thenReturn(100.0);
     when(mockViewModel.totalTax).thenReturn(15.0);
     when(mockViewModel.totalDiscounts).thenReturn(0.0);

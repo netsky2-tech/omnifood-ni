@@ -1223,6 +1223,11 @@ class SaleViewModel extends ChangeNotifier {
     _lastPostPaidFeedback = null;
     _currentEvaluation = null;
     clearReward();
+    // D-7: a voluntary tip belongs to ONE ticket only. It must never leak
+    // into the next sale (clearCart runs after every successful checkout).
+    _tipType = TipType.none;
+    _customTipPercentage = 0.0;
+    _fixedTipAmount = 0.0;
     notifyListeners();
   }
 
@@ -1310,6 +1315,10 @@ class SaleViewModel extends ChangeNotifier {
     }
 
     final invoiceId = const Uuid().v4();
+    // D-7: the money actually collected must equal what the operator
+    // confirmed — fiscal total + voluntary tip. The tip stays OUT of the
+    // taxable total below (DGI INV-16.1); it is charged ON TOP of it.
+    final grandTotalNio = grandTotalWithTip;
     final totalUsd = _commercialRate > 0
         ? ((total / _commercialRate) * 100).round() / 100
         : 0.0;
@@ -1389,10 +1398,10 @@ class SaleViewModel extends ChangeNotifier {
                   id: const Uuid().v4(),
                   invoiceId: invoiceId,
                   method: m,
-                  amount: total / methods.length,
+                  amount: grandTotalNio / methods.length,
                   currency: 'NIO',
                   exchangeRate: _commercialRate,
-                  amountNio: total / methods.length,
+                  amountNio: grandTotalNio / methods.length,
                   changeGiven: 0.0,
                   changeCurrency: 'NIO',
                 ),

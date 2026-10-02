@@ -66,6 +66,8 @@ void main() {
     when(mockViewModel.canManageCashDrawer).thenReturn(true);
     when(mockViewModel.currentUserRole).thenReturn(UserRole.cashier);
     when(mockViewModel.total).thenReturn(0.0);
+    when(mockViewModel.grandTotalWithTip).thenReturn(0.0);
+    when(mockViewModel.tipAmount).thenReturn(0.0);
     when(mockViewModel.subtotal).thenReturn(0.0);
     when(mockViewModel.totalTax).thenReturn(0.0);
     when(mockViewModel.totalDiscounts).thenReturn(0.0);

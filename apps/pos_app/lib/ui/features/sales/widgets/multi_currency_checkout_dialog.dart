@@ -63,12 +63,15 @@ class _MultiCurrencyCheckoutDialogState
       bcnOfficialRate: vm.bcnOfficialRate,
     );
     _splitCalculator = SplitPaymentCalculator(
-      totalNio: vm.total,
+      // D-7: the collected total is the operator-confirmed grand total
+      // (fiscal total + voluntary tip when applied), never the fiscal
+      // total alone.
+      totalNio: vm.grandTotalWithTip,
       commercialRate: vm.activeCheckoutRate,
     );
 
-    _tenderAmountController.text = vm.total.toStringAsFixed(2);
-    _splitAmountController.text = vm.total.toStringAsFixed(2);
+    _tenderAmountController.text = vm.grandTotalWithTip.toStringAsFixed(2);
+    _splitAmountController.text = vm.grandTotalWithTip.toStringAsFixed(2);
     if (vm.buzzerNumber != null && vm.buzzerNumber!.isNotEmpty) {
       _buzzerController.text = vm.buzzerNumber!;
     }
@@ -95,10 +98,10 @@ class _MultiCurrencyCheckoutDialogState
     setState(() {
       _tenderCurrency = newCurrency;
       if (newCurrency == 'USD') {
-        final totalUsd = _singleCalculator.calculateTotalUsd(vm.total);
+        final totalUsd = _singleCalculator.calculateTotalUsd(vm.grandTotalWithTip);
         _tenderAmountController.text = totalUsd.toStringAsFixed(2);
       } else {
-        _tenderAmountController.text = vm.total.toStringAsFixed(2);
+        _tenderAmountController.text = vm.grandTotalWithTip.toStringAsFixed(2);
       }
     });
   }
@@ -179,7 +182,7 @@ class _MultiCurrencyCheckoutDialogState
         double.tryParse(_tenderAmountController.text.trim()) ?? 0.0;
 
     final breakdown = _singleCalculator.calculateTender(
-      totalNio: vm.total,
+      totalNio: vm.grandTotalWithTip,
       tenderAmount: tenderAmount,
       tenderCurrency: _tenderCurrency,
       changeCurrencyPreference: _changeCurrencyPreference,
@@ -477,7 +480,10 @@ class _MultiCurrencyCheckoutDialogState
     final viewModel = context.watch<SaleViewModel>();
     final colorScheme = Theme.of(context).colorScheme;
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
-    final totalNio = viewModel.total;
+    // D-7: charge the operator-confirmed grand total (fiscal total +
+    // voluntary tip). The tip never enters the taxable base (INV-16.1);
+    // it is charged ON TOP of it.
+    final totalNio = viewModel.grandTotalWithTip;
     final totalUsd = _singleCalculator.calculateTotalUsd(totalNio);
 
     return Dialog(
@@ -905,6 +911,32 @@ class _MultiCurrencyCheckoutDialogState
               ),
             ],
           ),
+          // D-7: surface the voluntary tip on the checkout header so the
+          // operator confirms exactly what will be charged.
+          if (viewModel.tipAmount > 0) ...[
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Flexible(
+                  child: Text(
+                    'Propina voluntaria:',
+                    style: TextStyle(fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'C\$ ${viewModel.tipAmount.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

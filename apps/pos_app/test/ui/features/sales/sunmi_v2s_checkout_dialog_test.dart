@@ -17,6 +17,8 @@ void main() {
   setUp(() {
     mockSaleViewModel = MockSaleViewModel();
     when(mockSaleViewModel.total).thenReturn(365.00);
+    when(mockSaleViewModel.grandTotalWithTip).thenReturn(365.00);
+    when(mockSaleViewModel.tipAmount).thenReturn(0.0);
     when(mockSaleViewModel.subtotal).thenReturn(365.00);
     when(mockSaleViewModel.totalTax).thenReturn(0.00);
     when(mockSaleViewModel.commercialRate).thenReturn(36.50);

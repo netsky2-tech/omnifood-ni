@@ -17,6 +17,7 @@ import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
+import 'widgets/tip_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'tables/table_layout_view.dart';
@@ -1267,7 +1268,7 @@ class MobileFloatingCartBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Total: C\$ ${viewModel.total.toStringAsFixed(2)}',
+                  'Total: C\$ ${(viewModel.tipAmount > 0 ? viewModel.grandTotalWithTip : viewModel.total).toStringAsFixed(2)}',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
@@ -1435,6 +1436,15 @@ class CartSummary extends StatelessWidget {
               Text('-C\$ ${(viewModel.totalDiscounts).toStringAsFixed(2)}', style: const TextStyle(color: Colors.green)),
             ],
           ),
+        if (viewModel.tipAmount > 0)
+          Row(
+            key: const Key('cart_tip_row'),
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Propina'),
+              Text('C\$ ${viewModel.tipAmount.toStringAsFixed(2)}'),
+            ],
+          ),
         if (viewModel.totalTax > 0 || viewModel.companyTaxRegime?.isRegimenGeneral == true)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1452,7 +1462,7 @@ class CartSummary extends StatelessWidget {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  'C\$ ${(viewModel.total).toStringAsFixed(2)}',
+                  'C\$ ${(viewModel.tipAmount > 0 ? viewModel.grandTotalWithTip : viewModel.total).toStringAsFixed(2)}',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: ResponsiveBreakpoints.isHandheld(context) ? 20 : 24,
@@ -1524,6 +1534,41 @@ class CartSummary extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 8),
+        // D-7: direct tip entry on the checkout — available whenever the
+        // cart is not empty, NEVER behind the isSplitBillAllowed gate.
+        if (viewModel.cart.isNotEmpty) ...[
+          if (viewModel.tipAmount > 0)
+            SizedBox(
+              width: double.infinity,
+              child: InputChip(
+                key: const Key('btn_tip_cart'),
+                avatar: const Icon(
+                  Icons.volunteer_activism,
+                  size: 16,
+                  color: Colors.teal,
+                ),
+                label: Text(
+                  'PROPINA: C\$ ${viewModel.tipAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                backgroundColor: Colors.teal.shade50,
+                onDeleted: () => viewModel.clearTip(),
+                deleteIconColor: Colors.red.shade700,
+                onPressed: () => _showTipDialog(context),
+              ),
+            )
+          else
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('btn_tip_cart'),
+                icon: const Icon(Icons.volunteer_activism, size: 18),
+                onPressed: () => _showTipDialog(context),
+                label: const Text('PROPINA'),
+              ),
+            ),
+          const SizedBox(height: 6),
+        ],
         if ((viewModel.businessModeEvaluator != null && viewModel.businessModeEvaluator.isSplitBillAllowed) && viewModel.cart.isNotEmpty) ...[
           SizedBox(
             width: double.infinity,
@@ -1594,6 +1639,12 @@ class CartSummary extends StatelessWidget {
       context: context,
       builder: (context) => const MultiCurrencyCheckoutDialog(),
     );
+  }
+
+  /// D-7: direct tip entry on the checkout (independent of the gated
+  /// DIVIDIR CUENTA flow).
+  Future<void> _showTipDialog(BuildContext context) async {
+    await TipDialog.show(context);
   }
 
   Future<void> _showSplitBillDialog(BuildContext context) async {
@@ -1738,7 +1789,10 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
   @override
   void initState() {
     super.initState();
-    final total = context.read<SaleViewModel>().total;
+    final vm = context.read<SaleViewModel>();
+    // D-7: the legacy multi-payment dialog charges what the operator
+    // confirmed — grandTotalWithTip when a tip is applied.
+    final total = vm.tipAmount > 0 ? vm.grandTotalWithTip : vm.total;
     _payments[PaymentMethod.cash] = total;
     
     for (var method in _payments.keys) {
@@ -1757,7 +1811,9 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<SaleViewModel>();
-    final total = viewModel.total;
+    final total = viewModel.tipAmount > 0
+        ? viewModel.grandTotalWithTip
+        : viewModel.total;
     final paid = _payments.values.fold(0.0, (sum, val) => sum + val);
     final remaining = total - paid;
     final colorScheme = Theme.of(context).colorScheme;
