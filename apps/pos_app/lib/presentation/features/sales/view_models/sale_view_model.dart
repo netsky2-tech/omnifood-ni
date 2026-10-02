@@ -2161,16 +2161,54 @@ class SaleViewModel extends ChangeNotifier {
 
       _errorMessage = null;
       return true;
-    } on StateError {
-      _errorMessage = 'No se pudo anular la factura.';
+    } on StateError catch (e, st) {
+      // D-8: never swallow the cause. The operator gets an actionable,
+      // non-technical message; the log keeps the domain error for diagnosis.
+      // The invoice is left untouched by the rollback, so every message below
+      // stays truthful about that.
+      developer.log(
+        'voidInvoice StateError: ${e.message}',
+        name: 'SaleViewModel',
+        level: 1000, // SEVERE
+        error: e,
+        stackTrace: st,
+      );
+      _errorMessage = _voidFailureMessage(e);
       return false;
-    } catch (e) {
-      _errorMessage = 'No se pudo anular la factura.';
+    } catch (e, st) {
+      developer.log(
+        'voidInvoice failed: $e',
+        name: 'SaleViewModel',
+        level: 1000, // SEVERE
+        error: e,
+        stackTrace: st,
+      );
+      _errorMessage = _voidFailureMessage(e);
       return false;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// D-8: maps a void failure to the operator-facing message. The raw domain
+  /// error is NOT shown verbatim (NHILOS: no internals to the operator) but it
+  /// is logged by the caller. Every branch states that the invoice was left
+  /// intact, which is true because the whole void is one atomic unit.
+  String _voidFailureMessage(Object error) {
+    final raw = error is StateError ? error.message : error.toString();
+    if (raw.contains('already canceled')) {
+      return 'La factura ya está anulada.';
+    }
+    if (raw.contains('requires an original movement') ||
+        raw.contains('Recipe version') ||
+        raw.contains('Insufficient stock') ||
+        raw.contains('missing locally') ||
+        raw.contains('no recipe to record')) {
+      return 'No se pudo anular por un problema de inventario. '
+          'La factura no se modificó.';
+    }
+    return 'No se pudo anular la factura. La factura no se modificó.';
   }
 
   @override

@@ -303,8 +303,8 @@ void main() {
       expect(vm.lastVoidPrintSucceeded, isFalse);
     });
 
-    test('repository StateError (double void) surfaces the honest generic '
-        'message', () async {
+    test('repository StateError (double void) surfaces the honest action '
+        'message and leaves the invoice untouched', () async {
       arrangeAuthenticatedCashier();
       when(mockInvoiceDao.getInvoiceById('inv-void-target')).thenAnswer(
         (_) async =>
@@ -320,7 +320,34 @@ void main() {
       final ok = await vm.voidInvoice('inv-void-target', 'OTRO');
 
       expect(ok, isFalse);
-      expect(vm.errorMessage, 'No se pudo anular la factura.');
+      // D-8: the operator learns the invoice is already voided instead of a
+      // generic failure; the raw domain error is logged, not shown.
+      expect(vm.errorMessage, 'La factura ya está anulada.');
+    });
+
+    test('inventory-provenance failure is named and the invoice is intact '
+        '(D-8)', () async {
+      arrangeAuthenticatedCashier();
+      when(mockInvoiceDao.getInvoiceById('inv-void-target')).thenAnswer(
+        (_) async =>
+            invoiceEntity(localIssueDate: localDay(DateTime.now())),
+      );
+      when(mockSalesRepo.voidInvoice(any, any,
+              reasonDetail: anyNamed('reasonDetail')))
+          .thenThrow(StateError(
+              'Cancellation reversal requires an original movement.'));
+      final vm = buildViewModel();
+      await Future<void>.delayed(Duration.zero);
+      await vm.loadCompanyTaxRegime();
+
+      final ok = await vm.voidInvoice('inv-void-target', 'OTRO');
+
+      expect(ok, isFalse);
+      expect(
+        vm.errorMessage,
+        'No se pudo anular por un problema de inventario. '
+        'La factura no se modificó.',
+      );
     });
 
     test('canVoidInvoice resolves through SalesPermission, not role labels',
