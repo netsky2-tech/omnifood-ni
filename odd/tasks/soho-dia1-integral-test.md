@@ -203,6 +203,35 @@ Cause: the audit stream posts to `POST /identity/audit`, whose controller is `@U
 **A/B proof**: same terminal, no code change — with Karla's PIN-only session the badge was red and forced sync failed; after an **online owner login** the badge immediately showed `Nube Sincronizada al 100%` with a fresh `Último Sync Exitoso`.
 
 Fix direction: audit logging must not depend on a per-user cloud session (ship it on the device credential, or queue it without failing the pass), and the badge must separate "audit stream delayed" from "business documents pending".
+
+### Fase 14 (reportes y cierre del día) — PASS except 14.2 correctness (D-19)
+
+| Check | Result | Evidence |
+|---|---|---|
+| 14.1 sales history of the day | PASS | `Historial de Ventas` lists invoices 1–7 with number, date and total |
+| 14.2 sales by payment method | **FAILED (D-19)** | the Z report's breakdown exists but its cash line is wrong — see D-19 |
+| 14.3 fiscal report, no numbering gaps | PASS | cloud numbering is contiguous **1,2,3,4,5,6,7** across two operators; two Z reports are **Z-0001** and **Z-0002** (sequential) |
+| 14.4 day close with declared differences | PASS | Z-0001: expected 1125, counted 1100, **variance −25**; Z-0002: expected 805, counted 800, **variance −5** |
+| 14.5 all shifts of the day closed and synced | PASS | cloud shows **both** `cash_shift_sessions` = `CLOSED` with their variances and `z_report_sequence` 1 and 2 |
+| 14.6 next day opens with continued numbering | **NOT EXERCISABLE (same day)** | partial evidence only: numbering continued across operators, shifts and Z reports without reset |
+
+### D-19 (new, §4.1 — the Z/DGI report overstates cash collected)
+
+`Reportes DGI → Arqueo de Caja (Reporte Z)` for the closed shift `2806196f` printed: `Ventas Brutas C$125.00`, `NO RECAUDA IVA C$0.00`, `Ventas Netas C$125.00`, and a payment breakdown of **`Efectivo C$200.00`**, Tarjeta 0, QR 0.
+
+The truth in the cloud for that shift:
+
+| Quantity | Value |
+|---|---|
+| gross sales (non-voided) | 125.00 |
+| cash **received** (non-voided) | 200.00 |
+| cash **change given** | 75.00 |
+| cash **net collected** | **125.00** |
+| voided invoices | 2 / 225.00 |
+
+So the breakdown sums `payments.amount` and ignores `change_given`. Two consequences: it **contradicts its own `Ventas Brutas`** (200 ≠ 125) and it **contradicts the shift's own drawer arithmetic** — the Z close recorded `expected_cash = 1125` = float 1000 + **net** 125 + 100 − 100, while the report claims 200 of cash. A cashier or auditor reconciling the report against the drawer would find a phantom C$75 difference. The voided-audit figures (2 / 225) are correct, so the defect is isolated to the cash line.
+
+**D-14 instance here too**: the session picker and the Z header show raw UUIDs (`Sesión 4f50fb03 (ACTIVA)`, `Cajero ID 13200a55-60ca-…`).
 9. **D-9 (SEVERE — drawer expectation ignores cash sales) — FIXED (commit `12861a97`), device verification pending**: the `Corte X` "Resumen de Flujo de Gaveta en Tiempo Real" and the `Control de Caja y Turnos` card both reported **Esperado en Gaveta = C$1000.00**, i.e. the initial float unchanged, after two cash sales totalling C$200 (invoice #2: 200 received − 75 change = 125; invoice #4: 75). The cloud agreed (`cash_shift_sessions.expected_cash_nio = 1000.0000`). Root cause: only the Z close used `effectiveExpectedNio/Usd` (base + net cash sales, from the #529 work); the cards and `XReportDialog` printed the raw `shift.expectedNio/Usd`, which carry only the float plus manual movements. Fix: both now display/pass the effective expectation. `flutter test test/ui/features/cash/` + the blind-count integration test pass (28/28).
 
 ### Blocked / pending
