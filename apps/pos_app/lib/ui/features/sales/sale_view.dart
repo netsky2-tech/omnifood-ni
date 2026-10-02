@@ -1243,6 +1243,7 @@ class MobileFloatingCartBar extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                     color: colorScheme.onPrimaryContainer,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
                 Text(
@@ -1395,15 +1396,24 @@ class CartSummary extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Subtotal'),
-            Text('C\$ ${((viewModel.subtotal) + (viewModel.totalDiscounts)).toStringAsFixed(2)}'),
+            Text(
+              'C\$ ${((viewModel.subtotal) + (viewModel.totalDiscounts)).toStringAsFixed(2)}',
+              style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+            ),
           ],
         ),
         if (viewModel.totalDiscounts > 0)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Descuentos (Promos)', style: TextStyle(color: Colors.green)),
-              Text('-C\$ ${(viewModel.totalDiscounts).toStringAsFixed(2)}', style: const TextStyle(color: Colors.green)),
+              const Text('Descuentos (Promos)', style: TextStyle(color: NhilosColors.success)),
+              Text(
+                '-C\$ ${(viewModel.totalDiscounts).toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: NhilosColors.success,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
             ],
           ),
         if (viewModel.totalTax > 0 || viewModel.companyTaxRegime?.isRegimenGeneral == true)
@@ -1411,7 +1421,10 @@ class CartSummary extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('IVA'),
-              Text('C\$ ${(viewModel.totalTax).toStringAsFixed(2)}'),
+              Text(
+                'C\$ ${(viewModel.totalTax).toStringAsFixed(2)}',
+                style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+              ),
             ],
           ),
         const Divider(),
@@ -1428,6 +1441,7 @@ class CartSummary extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     fontSize: ResponsiveBreakpoints.isHandheld(context) ? 20 : 24,
                     color: colorScheme.primary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ),

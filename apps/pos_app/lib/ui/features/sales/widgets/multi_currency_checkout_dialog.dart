@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
@@ -264,12 +265,13 @@ class _MultiCurrencyCheckoutDialogState
         buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
         customerName: customerNameText.isNotEmpty ? customerNameText : null,
       );
+      HapticFeedback.mediumImpact();
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('¡Venta cobrada con éxito!'),
-            backgroundColor: Colors.green,
+            content: Text('Venta procesada con éxito'),
+            backgroundColor: NhilosColors.success,
             duration: Duration(seconds: 2),
           ),
         );
@@ -316,12 +318,13 @@ class _MultiCurrencyCheckoutDialogState
         buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
         customerName: customerNameText.isNotEmpty ? customerNameText : null,
       );
+      HapticFeedback.mediumImpact();
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('¡Venta dividida cobrada con éxito!'),
-            backgroundColor: Colors.green,
+            content: Text('Venta procesada con éxito'),
+            backgroundColor: NhilosColors.success,
             duration: Duration(seconds: 2),
           ),
         );
@@ -738,7 +741,7 @@ class _MultiCurrencyCheckoutDialogState
                     ),
                     const SizedBox(width: 8),
                     Text('C\$ ${totalNio.toStringAsFixed(2)}',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontFeatures: [FontFeature.tabularFigures()])),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -754,9 +757,10 @@ class _MultiCurrencyCheckoutDialogState
                     ),
                     const SizedBox(width: 8),
                     Text('C\$ ${_splitCalculator.totalPaidNio.toStringAsFixed(2)}',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.green.shade700,
+                          color: NhilosColors.success,
+                          fontFeatures: [FontFeature.tabularFigures()],
                         )),
                   ],
                 ),
@@ -1092,7 +1096,10 @@ class _MultiCurrencyCheckoutDialogState
             : 'C\$ ${denom.toStringAsFixed(0)}';
         return ActionChip(
           visualDensity: VisualDensity.compact,
-          label: Text(label),
+          label: Text(
+            label,
+            style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+          ),
           onPressed: () {
             _tenderAmountController.text = denom.toStringAsFixed(2);
             setState(() {});
@@ -1107,13 +1114,13 @@ class _MultiCurrencyCheckoutDialogState
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: breakdown.isSufficient
-            ? Colors.green.shade50
-            : Colors.amber.shade50,
-        borderRadius: BorderRadius.circular(8),
+            ? NhilosColors.successLight
+            : NhilosColors.warningLight,
+        borderRadius: NhilosRadii.buttonRadius,
         border: Border.all(
           color: breakdown.isSufficient
-              ? Colors.green.shade300
-              : Colors.amber.shade400,
+              ? NhilosColors.successBorder
+              : NhilosColors.warningBorder,
         ),
       ),
       child: Column(
@@ -1130,11 +1137,12 @@ class _MultiCurrencyCheckoutDialogState
                           : 'Vuelto: C\$ ${breakdown.effectiveChange.toStringAsFixed(2)}')
                       : 'Faltan C\$ ${breakdown.remainingNio.toStringAsFixed(2)}',
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                     color: breakdown.isSufficient
-                        ? Colors.green.shade800
-                        : Colors.red.shade800,
+                        ? NhilosColors.success
+                        : NhilosColors.danger,
                   ),
                 ),
               ),
