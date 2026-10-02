@@ -31,9 +31,10 @@ now) only three commits appear — the two from PR #771 (the CSP change) and
 
 ## Tasks
 
-- [ ] T1 Fix the two stale test selectors — commit: —
-- [ ] T2 Record the flipped `VITE_API_URL` in the deploy documents — commit: —
-- [ ] T3 Verify the dashboard suite is green and the CSP is unchanged — commit: —
+- [x] T1 Fix the two stale test selectors — commit: `b5de52f2`
+- [x] T2 Record the flipped `VITE_API_URL` in the deploy documents — commit: `1ef1cb23`
+- [x] T3 Verify the dashboard suite is green — 95 files, 1346 passed, 4 skipped
+- [ ] T4 Retire the four stale `spread` strings the relabel left behind — commit: —
 
 ## Measured facts available for T2
 
@@ -49,12 +50,22 @@ now) only three commits appear — the two from PR #771 (the CSP change) and
 
 ## Out of scope, reported but not changed
 
-- The two remaining `spread` prose spots in `fiscal-setup-form.tsx` (the card
-  description and the `checkoutFxMode` helper). The domain still carries a
-  `SPREAD_PLUS_10` checkout-FX mode, so "spread" may still be the correct domain term
-  in places; rewriting user-facing fiscal copy on a guess is worse than flagging it.
 - Admin Backend CI lint (14 errors) — already tracked by approved issue #234.
 - The a11y spec's load sensitivity, which did not reproduce in CI.
+
+## Correction: an earlier revision of this document was wrong
+
+An earlier revision claimed the domain still carried a `SPREAD_PLUS_10` checkout-FX
+mode, and used that claim to leave four user-visible `spread` strings untouched. That
+was false. `CheckoutFxMode` has exactly two members — `COMMERCIAL` and `BCN_OFFICIAL`
+(`src/features/settings/types.ts:37-42`) — and `SPREAD_PLUS_10` appears **only** in
+`src/__tests__/fiscal-business-profile.test.tsx`, where it is a deliberate non-member
+value that exercises `resolveCheckoutFxMode` resolving to `null`. There is no live
+spread mode.
+
+The owner confirmed that the field is consumed as the commercial exchange rate, so the
+four strings are stale copy left by `5342aef8`'s incomplete rename, not a legitimate
+domain term. T4 retires them.
 
 ## Constraints
 
