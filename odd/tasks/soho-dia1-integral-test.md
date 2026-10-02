@@ -150,7 +150,18 @@ Several surfaces print a raw UUID where a person's name belongs: the invoice det
 
 ### D-16 (new, operator-reported) — money fields seeded `0.00`, so digits concatenate
 
-The cash-movement and blind-count amount fields were built with `TextEditingController(text: '0.00')`, so the operator's digits **appended**: typing `100` in the movement dialog produced `C$ 0.00100` and typing `1100` in the blind count produced `C$ 0.001100`. On money that is a silent data-entry error, and in the blind count it corrupts the very discrepancy the count exists to prove. **FIXED (commit pending): controllers start empty and `0.00` is only a `hintText`.** Cash widget tests 27/27.
+The cash-movement and blind-count amount fields were built with `TextEditingController(text: '0.00')`, so the operator's digits **appended**: typing `100` in the movement dialog produced `C$ 0.00100` and typing `1100` in the blind count produced `C$ 0.001100`. On money that is a silent data-entry error, and in the blind count it corrupts the very discrepancy the count exists to prove. **FIXED (commit pending): controllers start empty and `0.00` is only a `hintText`.** Cash widget tests 27/27. **Device verification (APK `versionCode 2005`)**: the blind-count field took `1100` cleanly as `C$ 1100`.
+
+### Fase 9 (Corte X / Corte Z) — PASS except 9.5
+
+- 9.1 PASS: `Lectura Parcial (Corte X)` is read-only and says so.
+- 9.3/9.4 PASS: the blind count is entered "sin consultar el sistema" and the variance is computed afterwards — the dialog showed `Saldo Esperado C$1125.00`, `Conteo Ciego C$1100.00`, `Diferencia C$ -25.00`.
+- 9.5 **FAILED** — see D-15: no threshold, no authorization.
+- 9.6 PASS: `Reporte Fiscal Corte Z-0001` with `Correlativo Fiscal DGI: Z-0001`, apertura/cierre timestamps and the NIO/USD variance table.
+- 9.7 PASS: the Z stayed blocked while vouchers were pending and unblocked once reconciled.
+- 9.9 PASS: the report carries both C$ and USD columns.
+- **Cloud (after a forced sync)**: `cash_shift_sessions` → `status=CLOSED`, `expected_cash_nio=1125.0000`, `final_counted_nio=1100.0000`, `difference_nio=-25.0000`, `z_report_sequence=1`, `closed_at=20:30:51`. The close-AND-reopen-on-the-same-key pattern that broke D-10 does NOT affect shifts: the shift ingestion uses an upsert keyed by id with no payload-hash guard, so the OPEN→CLOSED transition lands normally.
+- D-14 repeats here: the Z report's `Cajero ID` prints the raw UUID.
 9. **D-9 (SEVERE — drawer expectation ignores cash sales) — FIXED (commit `12861a97`), device verification pending**: the `Corte X` "Resumen de Flujo de Gaveta en Tiempo Real" and the `Control de Caja y Turnos` card both reported **Esperado en Gaveta = C$1000.00**, i.e. the initial float unchanged, after two cash sales totalling C$200 (invoice #2: 200 received − 75 change = 125; invoice #4: 75). The cloud agreed (`cash_shift_sessions.expected_cash_nio = 1000.0000`). Root cause: only the Z close used `effectiveExpectedNio/Usd` (base + net cash sales, from the #529 work); the cards and `XReportDialog` printed the raw `shift.expectedNio/Usd`, which carry only the float plus manual movements. Fix: both now display/pass the effective expectation. `flutter test test/ui/features/cash/` + the blind-count integration test pass (28/28).
 
 ### Blocked / pending
