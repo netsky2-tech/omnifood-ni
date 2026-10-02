@@ -58,6 +58,7 @@ import 'ui/features/auth/viewmodels/link_terminal_viewmodel.dart';
 import 'ui/features/auth/views/link_terminal_view.dart';
 import 'ui/features/auth/startup_route_resolver.dart';
 import 'ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
+import 'ui/design_system/design_system.dart';
 import 'ui/features/inventory/items/insumo_view_model.dart';
 import 'ui/features/inventory/purchases/purchase_view_model.dart';
 import 'ui/features/inventory/shrinkage/shrinkage_view_model.dart';
@@ -722,24 +723,26 @@ class MyApp extends StatelessWidget {
           useMaterial3: true,
           colorScheme: const ColorScheme(
             brightness: Brightness.light,
-            primary: Color(0xFF3F6167), // Muted Teal
+            primary: NhilosColors.brandPrimary, // Deep Teal (#1E3A40)
             onPrimary: Colors.white,
-            primaryContainer: Color(0xFF577A80),
-            onPrimaryContainer: Color(0xFFF7FEFF),
-            secondary: Color(0xFF546163), // Cool Gray
+            primaryContainer: NhilosColors.brandNavy, // Navy (#0F292E)
+            onPrimaryContainer: Colors.white,
+            secondary: NhilosColors.textSecondary, // Slate 500 (#64748B)
             onSecondary: Colors.white,
-            tertiary: Color(0xFF79573F), // Warm Brown
+            tertiary: NhilosColors.brandNavy,
             onTertiary: Colors.white,
-            error: Color(0xFFBA1A1A),
+            error: NhilosColors.danger, // Red 600 (#DC2626)
             onError: Colors.white,
-            surface: Color(0xFFFAF9F9),
-            onSurface: Color(0xFF1A1C1C),
-            surfaceContainerHighest: Color(0xFFE3E2E2),
-            onSurfaceVariant: Color(0xFF414849),
-            outline: Color(0xFF71787A),
-            outlineVariant: Color(0xFFC1C8C9),
+            errorContainer: NhilosColors.dangerLight,
+            onErrorContainer: NhilosColors.danger,
+            surface: NhilosColors.surface, // Pure White
+            onSurface: NhilosColors.textPrimary, // Slate 900 (#0F172A)
+            surfaceContainerHighest: NhilosColors.neutralGray, // Slate 100 (#F1F5F9)
+            onSurfaceVariant: NhilosColors.textSecondary, // Slate 500
+            outline: NhilosColors.borderStrong, // Slate 300 (#CBD5E1)
+            outlineVariant: NhilosColors.border, // Slate 200 (#E2E8F0)
           ),
-          scaffoldBackgroundColor: const Color(0xFFFAF9F9),
+          scaffoldBackgroundColor: NhilosColors.background, // Slate 50 (#F8FAFC)
           fontFamily: 'Inter',
           textTheme: const TextTheme(
             headlineLarge: TextStyle(
@@ -747,22 +750,26 @@ class MyApp extends StatelessWidget {
               fontWeight: FontWeight.w700,
               letterSpacing: -0.64, // -0.02em
               height: 1.25, // 40px
+              color: NhilosColors.textPrimary,
             ),
             headlineMedium: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.24, // -0.01em
               height: 1.33, // 32px
+              color: NhilosColors.textPrimary,
             ),
             bodyLarge: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w400,
               height: 1.55, // 28px
+              color: NhilosColors.textPrimary,
             ),
             bodyMedium: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w400,
               height: 1.5, // 24px
+              color: NhilosColors.textPrimary,
             ),
             labelLarge: TextStyle(
               fontSize: 14,
@@ -773,40 +780,39 @@ class MyApp extends StatelessWidget {
           elevatedButtonTheme: ElevatedButtonThemeData(
             style: ElevatedButton.styleFrom(
               elevation: 0,
-              backgroundColor: const Color(0xFF3F6167),
+              backgroundColor: NhilosColors.brandPrimary,
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-                side: const BorderSide(color: Color(0xFF767777), width: 1),
+              shape: const RoundedRectangleBorder(
+                borderRadius: NhilosRadii.buttonRadius,
               ),
             ),
           ),
-          inputDecorationTheme: InputDecorationTheme(
+          inputDecorationTheme: const InputDecorationTheme(
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: const BorderSide(color: Color(0xFF767777), width: 1),
+              borderRadius: NhilosRadii.buttonRadius,
+              borderSide: BorderSide(color: NhilosColors.border, width: 1),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: const BorderSide(color: Color(0xFF767777), width: 1),
+              borderRadius: NhilosRadii.buttonRadius,
+              borderSide: BorderSide(color: NhilosColors.border, width: 1),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: const BorderSide(color: Color(0xFF3F6167), width: 2),
+              borderRadius: NhilosRadii.buttonRadius,
+              borderSide: BorderSide(color: NhilosColors.brandPrimary, width: 1.5),
             ),
-            contentPadding: const EdgeInsets.symmetric(
+            contentPadding: EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 12,
             ),
           ),
-          cardTheme: CardThemeData(
+          cardTheme: const CardThemeData(
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
-              side: const BorderSide(color: Color(0xFF767777), width: 1),
+              borderRadius: NhilosRadii.cardRadius,
+              side: BorderSide(color: NhilosColors.border, width: 1),
             ),
             color: Colors.white,
           ),
