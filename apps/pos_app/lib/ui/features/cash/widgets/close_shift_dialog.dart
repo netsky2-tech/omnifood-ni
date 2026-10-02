@@ -157,7 +157,8 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
                     Expanded(
                       child: Text(
                         'Arqueo Ciego: Cuenta el efectivo físico en gaveta e ingresa el monto total contado sin consultar el sistema.',
-                        style: TextStyle(fontSize: 12, color: Colors.black87),
+                        style: TextStyle(
+                            fontSize: 12, color: NhilosColors.textPrimary),
                       ),
                     ),
                   ],
