@@ -217,7 +217,7 @@ class _TipDialogState extends State<TipDialog> {
                         ),
                       ),
                       const Text(
-                        'Propina voluntaria DGI — no gravada (INV-16.1)',
+                        'Se suma al total a cobrar',
                         style: TextStyle(fontSize: 11, color: Colors.grey),
                       ),
                     ],
@@ -408,26 +408,29 @@ class _TipDialogState extends State<TipDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Actions.
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  key: const Key('tip_dialog_cancel'),
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('CANCELAR'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  key: const Key('tip_dialog_apply'),
-                  onPressed: _canApply ? _apply : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal.shade700,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('APLICAR PROPINA'),
-                ),
-              ],
+            // Actions are STACKED full-width, deliberately not a horizontal
+            // Row. Device-verified defect: on the Q80 (533dp logical) the
+            // end-aligned Row pushed 'APLICAR PROPINA' out of the dialog, so
+            // the primary action had no hit target and an operator could not
+            // apply a tip at all. The widget-test surface (800x600) never
+            // reproduced it, which is why this reached the device. The Column
+            // above is crossAxisAlignment.stretch, so both actions fill the
+            // available width and cannot be pushed off-screen at any width.
+            ElevatedButton(
+              key: const Key('tip_dialog_apply'),
+              onPressed: _canApply ? _apply : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade700,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(48),
+              ),
+              child: const Text('APLICAR PROPINA'),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              key: const Key('tip_dialog_cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('CANCELAR'),
             ),
           ],
         ),
