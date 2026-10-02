@@ -1117,16 +1117,23 @@ class BoxOpeningContent extends StatefulWidget {
 
 class _BoxOpeningContentState extends State<BoxOpeningContent> {
   late final TextEditingController controller;
+  late final TextEditingController usdController;
 
   @override
   void initState() {
     super.initState();
-    controller = TextEditingController(text: '0.00');
+    // D-16: controllers start EMPTY — '0.00' is only a hintText, so the
+    // operator types their own figure instead of appending to a seeded one.
+    controller = TextEditingController();
+    // D-21: the USD initial float rides next to the NIO float, mirroring
+    // open_shift_dialog.dart so the session opens with both currencies.
+    usdController = TextEditingController();
   }
 
   @override
   void dispose() {
     controller.dispose();
+    usdController.dispose();
     super.dispose();
   }
 
@@ -1156,12 +1163,16 @@ class _BoxOpeningContentState extends State<BoxOpeningContent> {
                 Text('APERTURA DE CAJA', style: TextStyle(fontSize: isHandheld ? 20 : 24, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
                 TextField(
+                  key: const Key('box_opening_nio_input'),
                   controller: controller,
                   decoration: const InputDecoration(
-                    labelText: 'Fondo de Caja Inicial',
+                    // D-20: symbol-first short label so the currency marker
+                    // survives truncation on narrow handhelds.
+                    labelText: 'Fondo C\$',
+                    hintText: '0.00',
                     prefixText: 'C\$ ',
                   ),
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: isHandheld ? 18 : 20),
                   onTap: () {
@@ -1169,11 +1180,33 @@ class _BoxOpeningContentState extends State<BoxOpeningContent> {
                   },
                 ),
                 SizedBox(height: isHandheld ? 16 : 24),
+                TextField(
+                  key: const Key('box_opening_usd_input'),
+                  controller: usdController,
+                  decoration: const InputDecoration(
+                    // D-20: symbol-first short label (matches
+                    // open_shift_dialog.dart's USD field convention).
+                    labelText: 'Fondo USD',
+                    hintText: '0.00',
+                    prefixText: '\$ ',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: isHandheld ? 18 : 20),
+                  onTap: () {
+                    usdController.selection = TextSelection(baseOffset: 0, extentOffset: usdController.text.length);
+                  },
+                ),
+                SizedBox(height: isHandheld ? 16 : 24),
                 ElevatedButton(
                   onPressed: viewModel.currentUserRole != null && viewModel.currentUserRole != UserRole.waiter
                       ? () async {
                           final balance = double.tryParse(controller.text) ?? 0.0;
-                          await context.read<SaleViewModel>().openSession(balance);
+                          final balanceUsd = double.tryParse(usdController.text) ?? 0.0;
+                          await context.read<SaleViewModel>().openSession(
+                            balance,
+                            balanceUsd: balanceUsd,
+                          );
                           if (context.mounted) {
                             try {
                               context.read<CashShiftViewModel>().init();

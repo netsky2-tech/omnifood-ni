@@ -7364,6 +7364,47 @@ void main() {
       expect(movements.single['timestamp'], '2026-01-01T12:05:00.000Z');
     });
 
+    test('shift opened with a USD float syncs initialFloatUsd (D-21)', () async {
+      // Row shaped exactly as SaleViewModel.openSession(1000, balanceUsd: 80)
+      // persists it (openingBalanceUsd/expectedUsd both set).
+      final database = await buildDbWithPendingCashData(
+        sessions: [
+          CashierSessionEntity(
+            id: 'shift-usd-1',
+            userId: 'user-1',
+            terminalId: 'term-1',
+            openedAt:
+                DateTime.parse('2026-01-01T12:00:00Z').millisecondsSinceEpoch,
+            tipoModelo: 'CAJA_CENTRAL',
+            openingBalanceNio: 1000,
+            openingBalanceUsd: 80,
+            expectedNio: 1000,
+            expectedUsd: 80,
+            isClosed: false,
+            syncStatus: 'pending',
+          ),
+        ],
+      );
+      final service = SyncService(
+        mockAuditRepository,
+        mockSalesRepository,
+        mockInventoryRepository,
+        dio,
+        database: database,
+      );
+
+      await service.triggerManualSync();
+
+      final sessions = cashShiftPostSessions()
+          .where((s) => s['id'] == 'shift-usd-1')
+          .toList(growable: false);
+      expect(sessions, hasLength(1));
+      expect(sessions.single['initialFloatNio'], 1000);
+      expect(sessions.single['initialFloatUsd'], 80);
+      expect(sessions.single['expectedCashNio'], 1000);
+      expect(sessions.single['expectedCashUsd'], 80);
+    });
+
     test('cash shift payload carries the resolved cashier name (D-3/D-14)', () async {
       final database = await buildDbWithPendingCashData(
         sessions: [shiftSession('shift-9a')],

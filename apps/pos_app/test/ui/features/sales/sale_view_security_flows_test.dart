@@ -365,7 +365,9 @@ void main() {
     await tester.tap(find.text('ABRIR CAJA'));
     await tester.pump();
 
-    verify(mockViewModel.openSession(0)).called(1);
+    // D-21: the box-opening screen now sends both floats; empty fields
+    // parse to 0.0 for each currency.
+    verify(mockViewModel.openSession(0, balanceUsd: 0.0)).called(1);
   });
 
 }

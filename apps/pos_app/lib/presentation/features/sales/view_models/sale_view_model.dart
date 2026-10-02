@@ -1032,6 +1032,10 @@ class SaleViewModel extends ChangeNotifier {
 
   Future<void> openSession(
     double balance, {
+    // D-21: the box-opening screen collects the initial float in BOTH
+    // currencies, mirroring CashShiftViewModel.openShift. Optional with a
+    // 0.0 default so existing callers and tests compile unchanged.
+    double balanceUsd = 0.0,
     CashSessionModel tipoModelo = CashSessionModel.cajaCentral,
   }) async {
     final user = await _authRepository.getCurrentUser();
@@ -1060,7 +1064,12 @@ class SaleViewModel extends ChangeNotifier {
       tipoModelo: tipoModelo,
       openingBalance: balance,
       openingBalanceNio: balance,
+      openingBalanceUsd: balanceUsd,
       expectedNio: balance,
+      // D-21: same semantics as CashShiftViewModel.openShift — the shift's
+      // base expectedUsd is the opening USD float; the close flow adds the
+      // USD cash sales on top via effectiveExpectedUsd.
+      expectedUsd: balanceUsd,
       totalExpected: balance,
     );
     await _database.cashierSessionDao.insertSession(

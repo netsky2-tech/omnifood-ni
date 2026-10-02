@@ -285,6 +285,30 @@ void main() {
     expect(captured.tipoModelo, 'CARTERA_MESERO');
   });
 
+  test('openSession persists the USD float alongside the NIO float (D-21)', () async {
+    when(mockAuthRepo.getCurrentUser()).thenAnswer(
+      (_) async => const User(
+        id: 'u-1',
+        name: 'Cashier',
+        role: UserRole.cashier,
+        isActive: true,
+      ),
+    );
+    when(mockSessionDao.insertSession(any)).thenAnswer((_) async {});
+
+    await viewModel.openSession(1000, balanceUsd: 80);
+
+    final captured =
+        verify(mockSessionDao.insertSession(captureAny)).captured.single
+            as CashierSessionEntity;
+    expect(captured.openingBalanceUsd, 80.0);
+    expect(captured.expectedUsd, 80.0);
+    // NIO behavior must be untouched.
+    expect(captured.openingBalanceNio, 1000.0);
+    expect(captured.expectedNio, 1000.0);
+    expect(captured.totalExpected, 1000.0);
+  });
+
   test('openSession denies waiter role with generic message', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(

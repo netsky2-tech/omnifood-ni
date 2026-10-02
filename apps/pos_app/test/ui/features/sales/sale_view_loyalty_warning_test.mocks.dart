@@ -973,13 +973,14 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
   @override
   _i19.Future<void> openSession(
     double? balance, {
+    double? balanceUsd,
     _i21.CashSessionModel? tipoModelo = _i21.CashSessionModel.cajaCentral,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
           #openSession,
           [balance],
-          {#tipoModelo: tipoModelo},
+          {#balanceUsd: balanceUsd, #tipoModelo: tipoModelo},
         ),
         returnValue: _i19.Future<void>.value(),
         returnValueForMissingStub: _i19.Future<void>.value(),
