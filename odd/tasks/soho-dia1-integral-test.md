@@ -179,6 +179,30 @@ Evidence after retesting with a real second operator (**Karla Cajera**, CASHIER,
 
 - **D-17 (new, operator-facing UX)**: the operator-switch screen pre-selects the outgoing operator. `app_drawer._handleOperatorSwitch` routes to `/lock` and the lock screen auto-selects `viewModel.selectedUser`, so a handover opens the *outgoing* user's PIN pad. The incoming operator must be found by tapping the back arrow. Fix: the switch must land on `Seleccionar Usuario` (no pre-selection) — the incoming operator is by definition not the outgoing one.
 - Also re-confirmed: `cash_shift_sessions.cashier_name` still stores the UUID (D-3) and Karla's own shift shows `Esperado en Gaveta C$600` (500 float + 100 sale), i.e. the D-9 fix holds for a second operator.
+
+### Fase 13 (sincronización) — PASS except 13.7 caveat; **D-18 found**
+
+The offline run was executed for real: airplane mode was enabled on the tablet and **two cash sales were made with no network** (invoices **#6** C$125 and **#7** C$80, both stamped 21:43 local).
+
+| Check | Result | Evidence |
+|---|---|---|
+| 13.1 badge green in normal operation | PASS | `Nube Sincronizada al 100%` |
+| 13.2 outbox 0 | PASS | `Pendientes en Outbox: 0 documento(s)` |
+| 13.3 invoices arrive complete | PASS | #6: 1 item, payment 200 with `change_given 75` → net 125 = total; #7: 1 item, payment 80 = total; both `paid`; numbering **1..7 with no gaps** |
+| 13.4 freshness | PASS | `inventory_sync_receipts` → 9 rows `ACCEPTED` for the device, latest 21:51:39 |
+| 13.5 offline: keep selling, then everything uploads | PASS | the two airplane-mode sales reached the cloud after the network returned |
+| 13.6 badge not stuck at 1 | PASS | 0 pending after the run |
+| 13.7 sync starts without intervention after a device reboot | **PARTIAL** | after `adb reboot`, the app **does not start by itself** (launched manually); after the normal `Modo Operativo → PIN` login the sync ran **on its own** 33 s later (unlock 22:29:38 → `Último Sync Exitoso 22:30:13`) without pressing `Forzar Sincronización` |
+
+### D-18 (new, SEVERE for a kiosk) — a PIN-only session leaves the badge permanently red on an empty outbox
+
+Sequence observed: `CERRAR SESIÓN` (which clears the cached cloud user credential — `AuthRepositoryImpl.logout`) → a cashier unlocks with an **offline PIN** → the badge turns **RED** with `Error en última sincronización`, `Detalle de Error: Registros de auditoría`, `Pendientes en Outbox: 0 documento(s)`, and every `Forzar Sincronización` fails with `[CloudAuth] Reautenticación requerida: sesión cloud expirada o revocada.`
+
+Cause: the audit stream posts to `POST /identity/audit`, whose controller is `@UseGuards(AuthGuard)` — it needs a **live user JWT**, which an offline PIN unlock does not create. The business documents keep flowing (device sync credential is untouched: invoices #6/#7 landed while in that state), but the audit domain fails on every pass, and because `triggerManualSync()` folds it into `domainErrors`, the whole terminal looks broken while its outbox is empty — an operator cannot tell audit-sync trouble from business-sync trouble.
+
+**A/B proof**: same terminal, no code change — with Karla's PIN-only session the badge was red and forced sync failed; after an **online owner login** the badge immediately showed `Nube Sincronizada al 100%` with a fresh `Último Sync Exitoso`.
+
+Fix direction: audit logging must not depend on a per-user cloud session (ship it on the device credential, or queue it without failing the pass), and the badge must separate "audit stream delayed" from "business documents pending".
 9. **D-9 (SEVERE — drawer expectation ignores cash sales) — FIXED (commit `12861a97`), device verification pending**: the `Corte X` "Resumen de Flujo de Gaveta en Tiempo Real" and the `Control de Caja y Turnos` card both reported **Esperado en Gaveta = C$1000.00**, i.e. the initial float unchanged, after two cash sales totalling C$200 (invoice #2: 200 received − 75 change = 125; invoice #4: 75). The cloud agreed (`cash_shift_sessions.expected_cash_nio = 1000.0000`). Root cause: only the Z close used `effectiveExpectedNio/Usd` (base + net cash sales, from the #529 work); the cards and `XReportDialog` printed the raw `shift.expectedNio/Usd`, which carry only the float plus manual movements. Fix: both now display/pass the effective expectation. `flutter test test/ui/features/cash/` + the blind-count integration test pass (28/28).
 
 ### Blocked / pending
