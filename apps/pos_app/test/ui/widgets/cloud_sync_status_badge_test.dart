@@ -60,8 +60,18 @@ class MockSalesRepo implements SalesRepository {
 
 class MockInventoryRepo implements InventoryRepository {
   List<InventoryMovement> unsynced = [];
+
+  /// When set, [getUnsyncedMovements] throws this object to simulate an
+  /// inventory movements domain sync failure (drives
+  /// `domainErrors.add('Movimientos de stock')`).
+  Object? movementsError;
+
   @override
-  Future<List<InventoryMovement>> getUnsyncedMovements() async => unsynced;
+  Future<List<InventoryMovement>> getUnsyncedMovements() async {
+    final error = movementsError;
+    if (error != null) throw error;
+    return unsynced;
+  }
   @override
   Future<List<Purchase>> getUnsyncedPurchases() async => [];
   @override
@@ -225,13 +235,17 @@ void main() {
         'error detail dialog renders composed sync error summaries verbatim (pass-through)',
         (tester) async {
       connectivityService.setOnlineStateForTest(true);
-      // Two failing domains produce a composed summary with no single-code
-      // key: the raw diagnostic detail must stay visible (D2/D6).
+      // Multiple failing BUSINESS domains produce a composed summary with
+      // no single-code key: the raw diagnostic detail must stay visible
+      // (D2/D6). D-18: the audit stream is recorded separately and never
+      // composes into lastSyncError, even when it fails in the same pass.
       auditRepo.syncError = Exception('audit down');
       salesRepo.fetchError = Exception('sales down');
+      inventoryRepo.movementsError = Exception('movements down');
 
       await syncService.triggerManualSync();
-      expect(syncService.lastSyncError, 'AuditLogs; Sales');
+      expect(syncService.lastSyncError, 'Sales; Movimientos de stock');
+      expect(syncService.isAuditStreamDegraded, isTrue);
 
       await tester.pumpWidget(buildTestWidget());
       await tester.pump();
@@ -240,7 +254,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Detalle de Error:'), findsOneWidget);
-      expect(find.text('AuditLogs; Sales'), findsOneWidget);
+      expect(find.text('Sales; Movimientos de stock'), findsOneWidget);
       expect(find.text('Registros de auditoría'), findsNothing);
     });
   });

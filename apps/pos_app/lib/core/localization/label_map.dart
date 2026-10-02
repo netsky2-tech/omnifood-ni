@@ -311,10 +311,15 @@ const Map<String, String> kForensicMovementTypeLabels = <String, String>{
 ///   prefix is dropped; the Spanish tail is preserved from the source. If
 ///   the source literal drifts, the map entry becomes inert (pass-through),
 ///   never wrong.
-/// - `AuditLogs`, `Sales`, `Fulfillment`: English domain tokens added to
+/// - `Sales`, `Fulfillment`: English domain tokens added to
 ///   `domainErrors`. The other domain tokens (`Recetas`, `Compras`,
 ///   `Producción`, `Conteos físicos`, `Kardex`, `Movimientos de stock`,
 ///   `Catálogo`) are already Spanish and intentionally unmapped.
+/// - `AuditLogs` is legacy/inert since D-18: the audit stream is recorded
+///   separately from the business domains and never joins `domainErrors`
+///   anymore, so this entry can no longer be reached through
+///   `lastSyncError`. Kept for the pass-through convention (entries become
+///   inert, never wrong) and for historical diagnostics.
 ///
 /// Composition semantics: `lastSyncError` may join several tokens with
 /// `; ` (e.g. `AUTH_BLOCKED: …; Sales`) or carry an arbitrary exception
@@ -346,6 +351,26 @@ const Map<String, String> kAuthorityInertRecipeLabels = <String, String>{
       'Estas recetas no se aplicaron porque su producto está registrado como de tipo simple. Revise el tipo de producto en Catálogo.',
 };
 
+/// Audit-degraded surfacing (D-18).
+///
+/// Source: `lib/data/services/sync_service.dart` — the audit-log stream is
+/// locally durable (`audit_logs.is_synced = 0` until the backend ACKs) and
+/// never fails the sync pass anymore. When only the audit stream is
+/// degraded (e.g. a PIN-only session whose audit push is rejected before
+/// send), the badge shows the dedicated amber `CloudSyncStatus.auditDegraded`
+/// state instead of the error red. `{count}` is a display placeholder the
+/// badge substitutes, it is not a backend code.
+const Map<String, String> kAuditDegradedLabels = <String, String>{
+  'AUDIT_SYNC_PENDING_ROW': 'Registros de auditoría pendientes:',
+  'AUDIT_SYNC_PENDING_VALUE_ONE': '1 registro',
+  'AUDIT_SYNC_PENDING_VALUE_MANY': '{count} registro(s)',
+  'AUDIT_SYNC_DEGRADED_STATUS': 'Auditoría local pendiente de envío',
+  'AUDIT_SYNC_DEGRADED_TOOLTIP':
+      'Auditoría pendiente de sincronizar — {count} registro(s)',
+  'AUDIT_SYNC_DEGRADED_DETAIL':
+      'Los registros de auditoría se enviaron a la nube más tarde de lo habitual, pero están guardados de forma segura en este terminal. Facturas y turnos se sincronizan normalmente.',
+};
+
 /// Backend finalize verdict statuses (`backendFinalizeResult.status`).
 ///
 /// Source: `lib/data/ports/activation_sync_port.dart` — the verdict statuses
@@ -375,6 +400,7 @@ const Map<String, Map<String, String>> kAllLabelMaps = <String,
   'kReprintReasonLabels': kReprintReasonLabels,
   'kSyncErrorLabels': kSyncErrorLabels,
   'kAuthorityInertRecipeLabels': kAuthorityInertRecipeLabels,
+  'kAuditDegradedLabels': kAuditDegradedLabels,
   'kActivationBackendVerdictLabels': kActivationBackendVerdictLabels,
 };
 

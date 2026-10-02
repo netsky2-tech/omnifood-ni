@@ -57,7 +57,7 @@ const Map<String, String> syncRole = {
 
 typedef SyncRole = String;
 
-enum CloudSyncStatus { idle, syncing, offline, error, success }
+enum CloudSyncStatus { idle, syncing, offline, error, success, auditDegraded }
 
 /// #613 Unit B — informational read model for the inert-recipe ingestion
 /// verdicts, rendered by the cloud sync badge's detail dialog.
@@ -224,6 +224,27 @@ class SyncService {
   bool get isAuthBlocked => _authBlocked;
   String? get syncBlockedReason => _syncBlockedReason;
   bool get isCloudAuthRequired => _authBlocked;
+
+  /// D-18: the audit stream is recorded separately from the business
+  /// domains so a locally durable audit backlog (or a PIN-only pre-send
+  /// rejection like `CloudAuthUnavailableException`) surfaces as a degraded
+  /// signal instead of a sync error. Reset at the start of every sync pass.
+  bool _auditStreamDegraded = false;
+
+  /// D-18: human-readable name of the last audit `AuditSyncStatus` (or
+  /// `retryable` as the seeded fallback when the audit repository throws
+  /// before returning). Null before the first audit domain run of a pass.
+  String? _lastAuditOutcome;
+
+  /// True when the last completed pass left the audit stream not fully
+  /// synced (degraded outcome) or with rows still pending. Never implies a
+  /// business failure; drives the amber `CloudSyncStatus.auditDegraded`
+  /// state instead of `CloudSyncStatus.error`.
+  bool get isAuditStreamDegraded => _auditStreamDegraded;
+
+  /// Last audit outcome as an `AuditSyncStatus.name` string, for
+  /// diagnostics; never part of [lastSyncError].
+  String? get lastAuditOutcome => _lastAuditOutcome;
 
   SyncService(
     this._auditRepository,
@@ -398,6 +419,30 @@ class SyncService {
     return count;
   }
 
+  /// D-18: number of audit rows still pending cloud ACK on this terminal,
+  /// for the sync badge's `Registros de auditoría pendientes` row and the
+  /// audit-degraded honesty check. The count runs directly against
+  /// `audit_logs` with the same read-only rawQuery pattern as
+  /// [getInertRecipeVerdictReport] instead of adding a generated Floor DAO
+  /// query, so the audit DAO's generated implementation in
+  /// `app_database.g.dart` stays untouched. Fault-isolated: a failed read
+  /// returns 0 and never throws, mirroring [getPendingOutboxCount].
+  Future<int> getPendingAuditCount() async {
+    final database = _database;
+    if (database == null) return 0;
+    try {
+      final rows = await database.database.rawQuery(
+        'SELECT COUNT(*) AS pending FROM audit_logs WHERE is_synced = 0',
+      );
+      if (rows.isEmpty) return 0;
+      final count = rows.first['pending'];
+      return count is int ? count : int.tryParse('$count') ?? 0;
+    } catch (e, st) {
+      _logOutboxCountFailure('audit logs', e, st);
+      return 0;
+    }
+  }
+
   /// Whether a movement is actionable outbound work for the generic inventory
   /// batch. Shared by [getPendingOutboxCount] and the outbound inventory sync
   /// so the two cannot drift apart.
@@ -486,6 +531,9 @@ class SyncService {
     _isSyncing = true;
     _authBlocked = false;
     _syncBlockedReason = null;
+    // D-18: audit degradation is recomputed from scratch on every pass.
+    _auditStreamDegraded = false;
+    _lastAuditOutcome = null;
     _updateStatus(CloudSyncStatus.syncing);
     developer.log('[SYNC_MANUAL] triggered=true', name: 'SyncService');
 
@@ -497,12 +545,24 @@ class SyncService {
         name: 'SyncService',
       );
 
+      // D-18: the audit stream is locally durable (rows persist with
+      // `is_synced = 0` until the backend ACKs) and MUST NOT fail the sync
+      // pass. On a PIN-only session the audit push is rejected before send
+      // (`CloudAuthUnavailableException`), which is not an HTTP 401 and
+      // must not flip the badge red while business documents keep syncing.
+      // Record the outcome separately instead: it is never added to
+      // [domainErrors] and only degrades the pass to the dedicated
+      // `CloudSyncStatus.auditDegraded` state (amber), handled in the
+      // success branch below.
+      var hasFailure = false;
       var auditOutcome = const AuditSyncOutcome.retryable(failedStreams: 1);
-      var hasFailure = !await _runDomain('audit', () async {
+      await _runDomain('audit', () async {
         auditOutcome = await _auditRepository.syncLogs();
       });
-      hasFailure |= auditOutcome.status != AuditSyncStatus.complete;
-      if (hasFailure) domainErrors.add('AuditLogs');
+      _lastAuditOutcome = auditOutcome.status.name;
+      if (auditOutcome.status != AuditSyncStatus.complete) {
+        _auditStreamDegraded = true;
+      }
 
       // 1a. Sync recipe versions first so backend has recipe data
       // before sales validation runs (validateInvoiceRecipeVersions).
@@ -616,6 +676,22 @@ class SyncService {
         _consecutiveFailures = 0;
         _lastSyncTime = DateTime.now();
         _lastSyncError = null;
+        // D-18 honesty: when only the audit stream degraded, the pass is
+        // not an error, but it is not "Nube Sincronizada al 100%" either
+        // while audit rows remain pending on this terminal. Surface the
+        // dedicated degraded state (amber in the badge) and report the run
+        // as partial; never the green success path.
+        final pendingAudit = await getPendingAuditCount();
+        if (_auditStreamDegraded || pendingAudit > 0) {
+          _auditStreamDegraded = true;
+          _updateStatus(CloudSyncStatus.auditDegraded);
+          developer.log(
+            '[SYNC_MANUAL] completed=true reason=audit_degraded '
+            'pendingAudit=$pendingAudit outcome=$_lastAuditOutcome',
+            name: 'SyncService',
+          );
+          return const SyncRunOutcome.partial();
+        }
         _updateStatus(CloudSyncStatus.success);
         _updateStatus(CloudSyncStatus.idle);
         developer.log(

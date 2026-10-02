@@ -19,6 +19,7 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
   StreamSubscription<bool>? _connectivitySub;
   Timer? _refreshTimer;
   int _pendingCount = 0;
+  int _pendingAuditCount = 0;
   late AnimationController _rotationController;
 
   @override
@@ -70,9 +71,20 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
     try {
       final syncService = context.read<SyncService>();
       final count = await syncService.getPendingOutboxCount();
+      // D-18: audit rows are counted separately from the outbox so the
+      // degraded audit state can be surfaced without lying about pending
+      // business documents. Fault-isolated like the outbox read.
+      int auditCount = _pendingAuditCount;
+      try {
+        auditCount = await syncService.getPendingAuditCount();
+      } catch (_) {
+        // Keep the previous read on failure: a failed audit count must not
+        // clear an already-visible degraded signal.
+      }
       if (mounted) {
         setState(() {
           _pendingCount = count;
+          _pendingAuditCount = auditCount;
         });
       }
     } catch (_) {}
@@ -118,6 +130,17 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
       status = CloudSyncStatus.idle;
     }
 
+    // D-18: audit degradation is a dedicated amber state, never the error
+    // red and never the fully-synced green while audit rows are pending.
+    final bool auditDegraded =
+        status == CloudSyncStatus.auditDegraded ||
+        (syncService?.isAuditStreamDegraded ?? false);
+    // When the audit stream is the only thing pending, show its count on
+    // the badge instead of the (zero) business outbox count.
+    final int badgeCount = auditDegraded && _pendingCount == 0
+        ? _pendingAuditCount
+        : _pendingCount;
+
     Color iconColor;
     IconData iconData;
     String tooltip;
@@ -134,6 +157,15 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
       iconColor = Colors.redAccent;
       iconData = Icons.sync_problem;
       tooltip = 'Error en sincronización - $_pendingCount pendientes';
+    } else if (auditDegraded) {
+      // D-18: audit-degraded pass — locally durable audit rows will reach
+      // the cloud on a later pass; business documents are unaffected.
+      iconColor = Colors.amber.shade700;
+      iconData = Icons.cloud_upload;
+      tooltip = localize(
+        'AUDIT_SYNC_DEGRADED_TOOLTIP',
+        kAuditDegradedLabels,
+      ).replaceFirst('{count}', '$_pendingAuditCount');
     } else if (_pendingCount > 0) {
       iconColor = Colors.amber.shade700;
       iconData = Icons.cloud_upload;
@@ -160,7 +192,7 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
         clipBehavior: Clip.none,
         children: [
           iconWidget,
-          if (_pendingCount > 0)
+          if (badgeCount > 0)
             Positioned(
               right: -4,
               top: -4,
@@ -175,7 +207,7 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
                   minHeight: 16,
                 ),
                 child: Text(
-                  _pendingCount > 99 ? '99+' : '$_pendingCount',
+                  badgeCount > 99 ? '99+' : '$badgeCount',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 9,
@@ -203,6 +235,12 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
             : 'Ninguna';
         final status = syncService?.status ?? CloudSyncStatus.idle;
         final lastError = syncService?.lastSyncError;
+        // D-18: the dialog must tell the truth about the audit stream even
+        // when it is not an error: degraded passes render the amber status
+        // label, the pending-audit row, and an explanatory note.
+        final bool auditDegraded =
+            status == CloudSyncStatus.auditDegraded ||
+            (syncService?.isAuditStreamDegraded ?? false);
 
         String statusLabel;
         Color statusColor;
@@ -215,6 +253,12 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
         } else if (status == CloudSyncStatus.error) {
           statusLabel = 'Error en última sincronización';
           statusColor = Colors.red;
+        } else if (auditDegraded) {
+          statusLabel = localize(
+            'AUDIT_SYNC_DEGRADED_STATUS',
+            kAuditDegradedLabels,
+          );
+          statusColor = Colors.amber.shade800;
         } else if (_pendingCount > 0) {
           statusLabel = '$_pendingCount cambios locales pendientes';
           statusColor = Colors.amber.shade800;
@@ -265,6 +309,42 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
               _buildDetailRow('Conectividad:', isOnline ? 'En Línea (Online)' : 'Desconectado (Offline)'),
               const SizedBox(height: 8),
               _buildDetailRow('Pendientes en Outbox:', '$_pendingCount documento(s)'),
+              const SizedBox(height: 8),
+              // D-18: the audit stream truth lives next to the outbox row,
+              // never inside the error detail box (audit is not a failure).
+              _buildDetailRow(
+                localize('AUDIT_SYNC_PENDING_ROW', kAuditDegradedLabels),
+                _pendingAuditCount == 1
+                    ? localize(
+                        'AUDIT_SYNC_PENDING_VALUE_ONE',
+                        kAuditDegradedLabels,
+                      )
+                    : localize(
+                        'AUDIT_SYNC_PENDING_VALUE_MANY',
+                        kAuditDegradedLabels,
+                      ).replaceFirst('{count}', '$_pendingAuditCount'),
+              ),
+              if (auditDegraded) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    localize(
+                      'AUDIT_SYNC_DEGRADED_DETAIL',
+                      kAuditDegradedLabels,
+                    ),
+                    style: TextStyle(
+                      color: Colors.amber.shade900,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               _buildDetailRow('Último Sync Exitoso:', lastSyncStr),
               if (lastError != null && lastError.isNotEmpty) ...[
