@@ -12,7 +12,12 @@ Everything below was executed and verified on the tablet on 2026-10-01/02. This 
 
 ## 1. One-line status
 
-Fases 0–14 have been **exercised end to end on the real device** (with the gaps listed in §5). **Six defects were fixed, committed and device-verified. Thirteen are still open**, two of them §4.1-severe (D-18 badge, D-19 Z report). The operator's plan: fix the open defects, then **re-run every phase from zero** to certify the system as operable.
+Fases 0–14 have been **exercised end to end on the real device** (gaps in §5), and a second run was
+**executed against STAGING as the production environment** on 2026-10-02 (see §7): **8 checks PASS
+with DB evidence, 7 phases not exercised, and one real delivery blocker open (R-11: the audit stream
+never reaches production)**. The verified defect sweep stays committed on this branch. Next step:
+**provision a CLEAN SOHO tenant in staging** (`npm run provision`), configure the DGI fiscal series,
+import the real menu, and re-run every phase from zero.
 
 ## 2. How to resume the environment
 
@@ -195,6 +200,79 @@ Do **not** re-fix these; verify them only in the re-run.
 2. Build + install (bump `versionCode`), then **re-execute Fases 0→14 in order** from a clean start: log out → owner login → open shift → cash sale with change → card → split → credit note (8.3) → reprint → void → X → movements (all four types) → vouchers → switch operator → offline window → Z → reports → close.
 3. **Declare unproven checks as unproven.** Every check without observed evidence stays red — that is the plan's honesty criterion.
 4. Only after the full green run is the system `ready to operate`.
+
+## 7. Staging run (2026-10-02) and the re-provisioning plan
+
+### What was verified against staging
+
+Tenant `b94b8536-e3b6-4db5-9d82-d887006756d1` (SOHO, slug `soho`), terminal
+`pos-local-dc8b3c14-67dc-4f27-bd37-4d8e5a1bf017`, APK `1.0.1+2010` baked with
+`--api-url https://api-staging.nhilospos.com/api`. **The staging catalog is DUMMY** — it comes from
+`npm run seed:soho-catalog` (source: `odd/plans/soho-integration-test-plan.md`): 5 COMPOUND products
+with DRAFT recipes, **not** the real 58-product menu.
+
+PASS with DB evidence: cold start; activation (`device_linking_codes` CLAIMED → `ACCEPTED`,
+`policyVersion: SALE_TIME_V1`); open shift with two currencies (1000 NIO / 50 USD); cash sale with
+change (500−380=120); **USD change** (C$105 ÷ 36.70 = 2.86, `change_currency=USD`); tip (`total`
+fiscal 70 + `tip_amount_nio` 7, `total_usd` 1.91, change 23 = 70+7); void (`is_canceled=t`, fiscal
+number never reused); **X does not close the shift**; **Z with difference** (−77 NIO / −7.14 USD,
+no PIN, no threshold).
+
+The multi-currency close reconciles exactly, which is what validates D-19's change-netting:
+`1000 + 77 + 200 = 1277` NIO (the USD-change sale keeps its full 200 in the drawer) and
+`50 − 2.86 = 47.14` USD. A voided sale does not enter the expected cash.
+
+Full per-check table: `docs/plans/sales/prueba_integral_dia_1_soho.md` →
+`# Corrida de validación contra staging — 2026-10-02`.
+
+### Open blocker
+
+**R-11 — the audit stream never reaches production.** Our terminal: `audit_logs` = **0 rows** while
+holding 7 pending locally + 1 outbox; every terminal in the tenant has **exactly ONE** historical row;
+the tenant's last row is **2026-09-29 22:54**; `audit_integrity_alerts` = 0 (the forensic chain
+reports no gap, yet the rows never arrive). The amber badge is honest, but **`Forzar Sincronización`
+does not drain the queue**. Endpoint is `POST /identity/audit` behind `SyncTransportGuard`.
+**No root cause yet** — treat as a delivery blocker until proven otherwise.
+
+### Rules learned that change the provisioning plan
+
+1. **The importer creates recipes as DRAFT by design** (`publication_state: DRAFT`) and classifies a
+   product COMPOUND *only* when the workbook declares ingredient rows. The sales pipeline requires
+   `PUBLISHED`, so a DRAFT recipe yields `MISSING_PUBLISHED_RECIPE` → `APPLIED_INVENTORY_PENDING` for
+   the **whole** sale, with `acknowledgedMovementCorrelationIds = []`. Leave `insumo/cantidad/unidad`
+   **empty** in every row (checks 0.6–0.10) or the tenant ships selling without inventory.
+2. **Re-importing a corrected menu does NOT fix an existing product.** The import matches by name and
+   applies **price only** (`// Price-only update: never touch name, recipe, or type`), and existing
+   recipes are skipped as `VERSION_ALREADY_EXISTS`. The supported correction path is **Catálogo → tipo
+   de producto** in the portal (`PATCH /products/:id`).
+3. **A new tenant is the clean path** — there is no bulk catalog reset. `provision.ts` creates the
+   tenant + its initial owner; the fiscal series must then be configured (check 0.3) or
+   `FiscalSequenceUnconfiguredError` blocks ALL invoicing.
+4. **The sync-freshness panel cannot be trusted as a health signal** (R-10, new): it measures
+   `inventory_sync_receipts` and only advances on *terminal* outcomes. Every receipt in the tenant has
+   been `APPLIED_INVENTORY_PENDING` since the last terminal one (`Q802024120001`, 2026-09-23 02:06Z =
+   **22 sept 20:06 local** — exactly the "hasta" the panel shows), so it reported "Sincronización
+   demorada" for 10 days while sales synced to the second. It blames the network for an inventory cause.
+
+### Plan
+
+| # | Step | Gate |
+|---|---|---|
+| 1 | Provision a clean tenant in staging (`npm run provision`): SOHO name, RUC, owner, password, 6-digit PIN | row in `tenants`, `is_active=true`, owner login works |
+| 2 | Configure the **DGI fiscal series** (prefix + starting consecutive) in the portal | `initializeRange()` executed; 0.3 |
+| 3 | Import `Menu_SOHO_import_listo.xlsx` via Configuración → Importar menú | preview **exactly** `56 create / 2 update / 0 recipes / 0 insumos / 0 errors` — otherwise STOP |
+| 4 | Confirm 58 products SIMPLE, price > 0, `is_active=true` | no COMPOUND, no recipes |
+| 5 | Generate the activation code, activate the terminal, open the shift | `device_linking_codes` CLAIMED, `cash_shift_sessions` OPEN |
+| 6 | Re-run Fases 1–14 from zero **including the 7 never-exercised phases** (6, 7, 8.3, 10, 11, 12, 14) | per-check evidence in the report doc |
+| 7 | Resolve R-11 before declaring the release gate met | `audit_logs` rows for the tenant's terminal |
+
+**Owner-provided prerequisite (not in the repo):** `Menu_SOHO_import_listo.xlsx`, which lives on the
+operator's machine.
+
+Still open from the earlier sweep (`docs/plans/sales/prueba_integral_dia_1_soho.md`): **R-4** (sale error
+message hidden under the cart) and **R-9** (duplicate cart lines can abort the whole checkout).
+
+---
 
 ## Why a clean tenant
 

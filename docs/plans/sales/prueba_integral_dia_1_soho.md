@@ -284,6 +284,95 @@ cobradas como impagas. **Corregir antes del viernes.**
 
 ---
 
+# Corrida de validación contra staging — 2026-10-02
+
+Corrida ejecutada **contra staging como entorno productivo**, no contra el backend local, sobre
+una terminal real (Q80) y datos sembrados de prueba. Decisión del responsable: validar en el
+entorno donde va a operar el local, no en un backend de desarrollo.
+
+| | |
+|---|---|
+| Tenant | `b94b8536-e3b6-4db5-9d82-d887006756d1` (SOHO, RUC `J0000000000000`, slug `soho`) |
+| Terminal | `pos-local-dc8b3c14-67dc-4f27-bd37-4d8e5a1bf017` |
+| Artefacto | APK `1.0.1+2010`, horneado con `--api-url https://api-staging.nhilospos.com/api` |
+| Datos | **dummy**, sembrados por `npm run seed:soho-catalog` (fuente: `odd/plans/soho-integration-test-plan.md`) |
+
+## Resultados por check (sólo lo observado)
+
+| # | Check | Evidencia observada | Estado |
+|---|---|---|---|
+| 1.1 | Arranque en frío sin crash | lanzamiento limpio tras `pm clear`, sin pantalla en blanco | **PASS** |
+| 3.x | Activación de terminal | `device_linking_codes` CLAIMED (20:22:08Z → 20:22:22Z); `status: ACCEPTED`, `policyVersion: SALE_TIME_V1`; factura de verificación `10010100000007` | **PASS** |
+| 4.x | Apertura de caja, dos monedas | `initial_float_nio=1000.0000`, `initial_float_usd=50.0000`, `status=OPEN`, terminal correcta | **PASS** |
+| 5.x | Venta simple, efectivo y vuelto | `10010100000008`: total 120.00, recibido 500.00, `change_given=380.00` (500−380=120) | **PASS** |
+| 5.4 | Vuelto en USD | `10010100000010`: total 95.00, recibido 200.00 NIO, `change_given=2.86`, `change_currency=USD`, `exchange_rate=36.7000` (105 ÷ 36.70 = 2.861) | **PASS** |
+| 5.x | Propina en el checkout | `10010100000009`: `total=70.00` (fiscal, sin propina), `tip_amount_nio=7.00`, `tip_percentage=10.00`, `total_usd=1.91`; pago 100.00 con vuelto 23.00 (100−23 = 70+7) | **PASS** |
+| 8.x | Anulación de factura | `10010100000008` → `is_canceled=t`; la numeración siguió avanzando (…09, …10) sin reutilizar el número | **PASS** |
+| 9.x | Corte X no cierra el turno | tras emitir X, el turno siguió `status=OPEN` | **PASS** |
+| 9.x | Corte Z con diferencia | `status=CLOSED`; `expected_cash_nio=1277.00` vs `final_counted_nio=1200.00` → `difference_nio=-77.00`; `expected_cash_usd=47.14` vs `final_counted_usd=40.00` → `difference_usd=-7.14`; `z_report_sequence=1`; cerró **sin PIN ni umbral** | **PASS** |
+| 13.x | Sync de negocio | facturas, turnos y activación llegan a staging | **PASS** |
+| 13.x | Sync de auditoría | `audit_logs` de la terminal = **0 filas**; último registro del tenant 2026-09-29 22:54 | **ROJO** |
+
+**Verificación aritmética del cierre multi-moneda** (lo que valida el neteo de vuelto de D-19):
+`1000 (fondo) + 77 (venta 09: 100−23) + 200 (venta 10 completa, porque su vuelto salió en dólares) = 1277` ✔
+`50 (fondo USD) − 2.86 (vuelto entregado en USD) = 47.14` ✔
+La venta anulada (500/380) **no** entra al esperado. El efectivo esperado está neto de vuelto, en cada moneda.
+
+## Checks no ejercitados
+
+Fases **6** (tarjeta), **7** (pago dividido), **8.3** (nota de crédito), **10** (movimientos de caja),
+**11** (conciliación de vouchers), **12** (cambio de operador) y **14** (reportes del día) **no se
+ejecutaron** en esta corrida. La Fase 0 completa (tenant provisionado limpio) tampoco: se corrió
+sobre el tenant sembrado con datos dummy.
+
+## Hallazgos nuevos de esta corrida
+
+| # | Hallazgo | Evidencia | Impacto |
+|---|---|---|---|
+| **R-10** | El panel de sincronización atribuye a la red lo que es un bloqueo de inventario | `inventory_sync_receipts` de **todos** los terminales del tenant en `APPLIED_INVENTORY_PENDING`; último receipt en estado terminal: `Q802024120001`, 2026-09-23 02:06Z (= **22 sept 20:06 local**, exactamente el "hasta" que muestra el panel). La frescura (`freshness-derivation.ts`) sólo avanza con outcomes terminales | **§4.1** — manda al operador a buscar un problema inexistente y esconde la causa real por 10 días |
+| **R-11** | El stream de auditoría no replica a producción | `audit_logs` de la terminal = 0 filas; cada terminal del tenant tiene **exactamente 1** fila histórica; último del tenant 2026-09-29 22:54; la terminal acumula **7 pendientes + 1 outbox**; `audit_integrity_alerts` = 0 (la cadena forense no reporta hueco, pero tampoco sube). El badge es honesto; "Forzar Sincronización" no drena | **Bloqueador de entrega** — sin causa raíz |
+| **R-12** | Timestamps fiscales inconsistentes entre tablas | `invoices.created_at` guarda **hora local** sin normalizar (venta 14:27 local → `14:27Z`) mientras `cash_shift_sessions.opened_at/closed_at` guarda **UTC real** (`20:26Z`/`20:59Z`). La factura parece anterior al turno que la precede | **DGI/reportes** — ensucia cualquier filtro por fecha |
+| **R-13** | No hay detección ni aviso de ventas con inventario no aplicado, ni replay automático | 10 días de ventas de toda la flota en `APPLIED_INVENTORY_PENDING` sin una sola alerta al dueño. Sólo existe remediación **manual**: `POST /inventory/remediations/sale-inventory` | **§4.1** — el sistema vendió 10 días sin descontar inventario y nadie se enteró |
+
+### Nota sobre R-8 (no es hallazgo nuevo)
+
+R-8 ya estaba documentado como cerrado ("diseñado, se remedia al publicar la receta"). Esta corrida
+**no lo contradice**, pero agrega el mecanismo completo y verificable:
+
+1. `menu-import.service.ts` crea las recetas con `publication_state: DRAFT` **por diseño**, y
+   clasifica el producto `COMPOUND` cuando el Excel trae al menos una fila de ingredientes.
+2. El pipeline de ventas (`sale-inventory-outcome.service.ts`) **exige `PUBLISHED`**: sin receta
+   publicada la disposición es `PENDING_RECIPE` → `APPLIED_INVENTORY_PENDING` para **toda** la venta,
+   con `acknowledgedMovementCorrelationIds = []`.
+3. Consecuencia: la cola local de movimientos nunca se acusa y el watermark de frescura no avanza.
+
+Lo que **sí** falta cerrar es que nada en el flujo le dice al dueño que debe publicar las recetas, y
+que el panel reporta el síntoma como problema de red (R-10).
+
+### Trampa del re-import de menú (verificada en código)
+
+`menu-import.service.ts` matchea productos por nombre y, si el producto ya existe, aplica
+**sólo precio**:
+
+```
+// Price-only update: never touch name, recipe, or type.
+await manager.save(Product, { ...existing, sellPrice: roundPrice(group.price) });
+```
+
+Y las recetas existentes se saltean con `VERSION_ALREADY_EXISTS`. Por lo tanto **re-importar el
+menú corregido no cambia el tipo de ningún producto existente y no lo reporta como problema**.
+El camino soportado para corregir el tipo es **Catálogo → tipo de producto** en el portal
+(`PATCH /products/:id`, con confirmación explícita de cambio destructivo porque desvincula la
+receta). En un tenant limpio no aplica: los 58 se crean SIMPLE de entrada.
+
+## Veredicto de esta corrida
+
+**La puerta de salida NO se considera habilitada.** Faltan las Fases 6, 7, 8.3, 10, 11, 12 y 14,
+y hay un bloqueador real abierto (R-11: la auditoría no llega a producción). El resto de lo
+ejercitado pasó con evidencia en base, incluido el neteo multi-moneda del cierre.
+
+---
+
 # Riesgos abiertos ordenados por impacto en el día 1
 
 | # | Riesgo | Impacto | Estado |
