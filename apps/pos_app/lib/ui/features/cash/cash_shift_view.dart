@@ -9,6 +9,7 @@ import 'widgets/close_shift_dialog.dart';
 import 'widgets/z_report_dialog.dart';
 import 'widgets/x_report_dialog.dart';
 import 'widgets/card_voucher_reconciliation_dialog.dart';
+import '../../design_system/nhilos_tokens.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 
 class CashShiftView extends StatefulWidget {
@@ -48,7 +49,7 @@ class _CashShiftViewState extends State<CashShiftView> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Control de Caja y Turnos'),
-        backgroundColor: Colors.indigo,
+        backgroundColor: NhilosColors.brandNavy,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -102,10 +103,13 @@ class _CashShiftViewState extends State<CashShiftView> {
                   icon: const Icon(Icons.point_of_sale),
                   label: const Text('Abrir Turno de Caja'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
+                    backgroundColor: NhilosColors.brandPrimary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                     textStyle: const TextStyle(fontSize: 16),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: NhilosRadii.buttonRadius,
+                    ),
                   ),
                 ),
                 if (vm.lastClosedShift != null)
@@ -117,9 +121,13 @@ class _CashShiftViewState extends State<CashShiftView> {
                     icon: const Icon(Icons.receipt_long),
                     label: const Text('Ver Último Corte Z'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.indigo,
+                      foregroundColor: NhilosColors.brandPrimary,
+                      side: const BorderSide(color: NhilosColors.border),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                       textStyle: const TextStyle(fontSize: 16),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                      ),
                     ),
                   ),
               ],
@@ -225,7 +233,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                               title: 'Esperado en Gaveta (C\$)',
                               value: _formatNio(shift.expectedNio),
                               icon: Icons.payments,
-                              color: Colors.indigo.shade700,
+                              color: NhilosColors.brandPrimary,
                             ),
                           ),
                           SizedBox(
@@ -234,7 +242,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                               title: 'Esperado en Gaveta (\$ USD)',
                               value: _formatUsd(shift.expectedUsd),
                               icon: Icons.monetization_on,
-                              color: Colors.purple.shade700,
+                              color: NhilosColors.brandNavy,
                             ),
                           ),
                         ],
@@ -319,8 +327,8 @@ class _CashShiftViewState extends State<CashShiftView> {
                           : 'Vouchers'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: vm.hasPendingVouchers
-                            ? Colors.amber.shade900
-                            : Colors.indigo,
+                            ? NhilosColors.warning
+                            : NhilosColors.brandPrimary,
                       ),
                     ),
                   OutlinedButton.icon(
@@ -334,7 +342,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                     icon: const Icon(Icons.assessment_outlined),
                     label: const Text('Lectura Parcial (Corte X)'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.indigo,
+                      foregroundColor: NhilosColors.brandPrimary,
                     ),
                   ),
                   ElevatedButton.icon(
@@ -348,8 +356,11 @@ class _CashShiftViewState extends State<CashShiftView> {
                     icon: const Icon(Icons.add),
                     label: const Text('Registrar Movimiento'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
+                      backgroundColor: NhilosColors.brandPrimary,
                       foregroundColor: Colors.white,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                      ),
                     ),
                   ),
                   ElevatedButton.icon(
@@ -538,6 +549,7 @@ class _CashShiftViewState extends State<CashShiftView> {
               fontSize: 15,
               fontWeight: FontWeight.bold,
               color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],

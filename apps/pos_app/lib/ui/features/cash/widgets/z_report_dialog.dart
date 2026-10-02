@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../../data/models/sales/cashier_session_entity.dart';
+import '../../../design_system/nhilos_tokens.dart';
 
 class ZReportDialog extends StatelessWidget {
   final CashierSessionEntity shift;
@@ -27,9 +28,12 @@ class ZReportDialog extends StatelessWidget {
         : 'Z-PENDIENTE';
 
     return AlertDialog(
+      shape: const RoundedRectangleBorder(
+        borderRadius: NhilosRadii.modalRadius,
+      ),
       title: Row(
         children: [
-          const Icon(Icons.receipt_long, color: Colors.indigo),
+          const Icon(Icons.receipt_long, color: NhilosColors.brandPrimary),
           const SizedBox(width: 8),
           Expanded(child: Text('Reporte Fiscal Corte $zSeq')),
         ],
@@ -44,9 +48,9 @@ class ZReportDialog extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.indigo.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.indigo.shade200),
+                  color: NhilosColors.neutralGray,
+                  borderRadius: NhilosRadii.buttonRadius,
+                  border: Border.all(color: NhilosColors.border),
                 ),
                 child: Column(
                   children: [
@@ -196,8 +200,11 @@ class ZReportDialog extends StatelessWidget {
           icon: const Icon(Icons.check),
           label: const Text('Entendido / Cerrar Reporte'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.indigo,
+            backgroundColor: NhilosColors.brandPrimary,
             foregroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: NhilosRadii.buttonRadius,
+            ),
           ),
         ),
       ],
@@ -216,6 +223,7 @@ class ZReportDialog extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],

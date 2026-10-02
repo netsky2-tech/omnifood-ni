@@ -55,7 +55,7 @@
 ## Tasks
 
 - [x] Task 1: Design Tokens & Theme Alignment (§42.1, §42.7) — Evidence: commit `87e8dfb5`
-- [ ] Task 2: PX-001 Elimination of "Síndrome de la Hamburguesa" (§12.6)
+- [x] Task 2: PX-001 Elimination of "Síndrome de la Hamburguesa" (§12.6) — Evidence: commit `7f75bfa0`
 - [ ] Task 3: PX-002 Neutralize Chromatic Dispersion & Clean Slate Keypad (§18.2, §42.1, §41)
 - [ ] Task 4: PX-003 Rich Contextual Rows in Sales History (§12.2)
 - [ ] Task 5: PX-004 Tabular Numbers (§34.1) & PX-005 Haptic Feedback on Sale (§49)

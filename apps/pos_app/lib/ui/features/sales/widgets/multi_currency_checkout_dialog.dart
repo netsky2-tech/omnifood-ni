@@ -381,92 +381,115 @@ class _MultiCurrencyCheckoutDialogState
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Card(
-        elevation: 0,
-        color: Colors.amber.shade50,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(
+      child: Container(
+        decoration: BoxDecoration(
+          color: NhilosColors.neutralGray,
+          borderRadius: NhilosRadii.buttonRadius,
+          border: Border.all(
             color: _buzzerValidationMessage != null
-                ? Colors.red.shade400
-                : Colors.amber.shade300,
+                ? NhilosColors.dangerBorder
+                : NhilosColors.border,
+            width: 1,
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.notifications_active,
-                    size: 18,
-                    color: Colors.amber.shade900,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      isRequired
-                          ? 'BUZZER / PAGER DE ENTREGA (REQUERIDO)'
-                          : 'BUZZER / PAGER DE ENTREGA (OPCIONAL)',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.amber.shade900,
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.notifications_none_outlined,
+                  size: 18,
+                  color: NhilosColors.neutralGrayDark,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Text(
+                        isRequired
+                            ? 'BUZZER / PAGER DE ENTREGA (REQUERIDO)'
+                            : 'BUZZER / PAGER DE ENTREGA (OPCIONAL)',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: NhilosColors.textPrimary,
+                        ),
                       ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      key: const Key('checkout_buzzer_input'),
-                      controller: _buzzerController,
-                      decoration: InputDecoration(
-                        labelText: isRequired ? 'Nº Buzzer *' : 'Nº Buzzer',
-                        hintText: 'Ej: 15',
-                        isDense: true,
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: const OutlineInputBorder(),
-                        errorText: _buzzerValidationMessage,
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    key: const Key('checkout_buzzer_input'),
+                    controller: _buzzerController,
+                    decoration: InputDecoration(
+                      labelText: isRequired ? 'Nº Buzzer *' : 'Nº Buzzer',
+                      hintText: 'Ej: 15',
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: const OutlineInputBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                        borderSide: BorderSide(color: NhilosColors.border),
                       ),
-                      keyboardType: TextInputType.number,
-                      onChanged: (val) {
-                        viewModel.setBuzzerNumber(val.trim());
-                        if (_buzzerValidationMessage != null) {
-                          setState(() => _buzzerValidationMessage = null);
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: TextField(
-                      key: const Key('checkout_customer_name_input'),
-                      controller: _customerNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre Cliente',
-                        hintText: 'Ej: Juan',
-                        isDense: true,
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(),
+                      enabledBorder: const OutlineInputBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                        borderSide: BorderSide(color: NhilosColors.border),
                       ),
-                      onChanged: (val) => viewModel.setCustomerName(val.trim()),
+                      focusedBorder: const OutlineInputBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                        borderSide: BorderSide(color: NhilosColors.brandPrimary, width: 1.5),
+                      ),
+                      errorText: _buzzerValidationMessage,
                     ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (val) {
+                      viewModel.setBuzzerNumber(val.trim());
+                      if (_buzzerValidationMessage != null) {
+                        setState(() => _buzzerValidationMessage = null);
+                      }
+                    },
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    key: const Key('checkout_customer_name_input'),
+                    controller: _customerNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre Cliente',
+                      hintText: 'Ej: Juan',
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                        borderSide: BorderSide(color: NhilosColors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                        borderSide: BorderSide(color: NhilosColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: NhilosRadii.buttonRadius,
+                        borderSide: BorderSide(color: NhilosColors.brandPrimary, width: 1.5),
+                      ),
+                    ),
+                    onChanged: (val) => viewModel.setCustomerName(val.trim()),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

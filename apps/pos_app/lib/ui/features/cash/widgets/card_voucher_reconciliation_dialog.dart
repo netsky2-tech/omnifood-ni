@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../card_voucher_reconciliation_view_model.dart';
 import '../../../../data/models/sales/payment_entity.dart';
+import '../../../design_system/nhilos_tokens.dart';
 
 class CardVoucherReconciliationDialog extends StatefulWidget {
   const CardVoucherReconciliationDialog({super.key});
@@ -257,7 +258,7 @@ class _CardVoucherReconciliationDialogState
                         visualDensity: VisualDensity.compact,
                         label: Text(payment.bankPos ?? 'BAC',
                             style: const TextStyle(fontWeight: FontWeight.bold)),
-                        backgroundColor: Colors.indigo.shade50,
+                        backgroundColor: NhilosColors.neutralGray,
                       ),
                       Chip(
                         visualDensity: VisualDensity.compact,
@@ -276,7 +277,8 @@ class _CardVoucherReconciliationDialogState
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blueAccent,
+                    color: NhilosColors.brandPrimary,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
               ],

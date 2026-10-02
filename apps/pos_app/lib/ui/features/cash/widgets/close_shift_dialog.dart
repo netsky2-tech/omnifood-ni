@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../cash_shift_view_model.dart';
 import 'z_report_dialog.dart';
+import '../../../design_system/nhilos_tokens.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
 
 class CloseShiftDialog extends StatefulWidget {
@@ -98,9 +99,12 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      shape: const RoundedRectangleBorder(
+        borderRadius: NhilosRadii.modalRadius,
+      ),
       title: const Row(
         children: [
-          Icon(Icons.point_of_sale_outlined, color: Colors.indigo),
+          Icon(Icons.point_of_sale_outlined, color: NhilosColors.brandPrimary),
           SizedBox(width: 8),
           Expanded(child: Text('Arqueo Ciego y Cierre de Turno')),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../cash_shift_view_model.dart';
 import '../../../../domain/models/user.dart';
+import '../../../design_system/nhilos_tokens.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
 
 class OpenShiftDialog extends StatefulWidget {
@@ -85,9 +86,12 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      shape: const RoundedRectangleBorder(
+        borderRadius: NhilosRadii.modalRadius,
+      ),
       title: const Row(
         children: [
-          Icon(Icons.point_of_sale, color: Colors.indigo),
+          Icon(Icons.point_of_sale, color: NhilosColors.brandPrimary),
           SizedBox(width: 8),
           Expanded(child: Text('Apertura de Turno de Caja')),
         ],
@@ -210,8 +214,11 @@ class _OpenShiftDialogState extends State<OpenShiftDialog> {
               ? null
               : _submit,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.indigo,
+            backgroundColor: NhilosColors.brandPrimary,
             foregroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: NhilosRadii.buttonRadius,
+            ),
           ),
           child: _submitting
               ? const SizedBox(

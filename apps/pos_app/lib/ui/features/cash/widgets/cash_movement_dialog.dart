@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../cash_shift_view_model.dart';
+import '../../../design_system/nhilos_tokens.dart';
 
 class CashMovementDialog extends StatefulWidget {
   const CashMovementDialog({super.key});
@@ -80,9 +81,12 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      shape: const RoundedRectangleBorder(
+        borderRadius: NhilosRadii.modalRadius,
+      ),
       title: const Row(
         children: [
-          Icon(Icons.swap_vert, color: Colors.indigo),
+          Icon(Icons.swap_vert, color: NhilosColors.brandPrimary),
           SizedBox(width: 8),
           Expanded(child: Text('Nuevo Movimiento de Caja')),
         ],
@@ -207,8 +211,11 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
         ElevatedButton(
           onPressed: _submitting ? null : _submit,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.indigo,
+            backgroundColor: NhilosColors.brandPrimary,
             foregroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: NhilosRadii.buttonRadius,
+            ),
           ),
           child: _submitting
               ? const SizedBox(
