@@ -7,10 +7,19 @@ class XReportDialog extends StatelessWidget {
   final CashierSessionEntity shift;
   final List<CashMovementEntity> movements;
 
+  /// D-9: opening float + manual movements + this shift's net cash sales, as
+  /// computed by `CashShiftViewModel.effectiveExpectedNio/Usd`. The raw
+  /// `shift.expectedNio/Usd` only carries the float and the manual movements,
+  /// so reporting it made the X understate the drawer by every cash sale.
+  final double effectiveExpectedNio;
+  final double effectiveExpectedUsd;
+
   const XReportDialog({
     super.key,
     required this.shift,
     required this.movements,
+    required this.effectiveExpectedNio,
+    required this.effectiveExpectedUsd,
   });
 
   String _formatNio(double amount) => 'C\$ ${amount.toStringAsFixed(2)}';
@@ -176,7 +185,7 @@ class XReportDialog extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.all(6.0),
                         child: Text(
-                          _formatNio(shift.expectedNio),
+                          _formatNio(effectiveExpectedNio),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -187,7 +196,7 @@ class XReportDialog extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.all(6.0),
                         child: Text(
-                          _formatUsd(shift.expectedUsd),
+                          _formatUsd(effectiveExpectedUsd),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,

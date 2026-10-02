@@ -222,8 +222,12 @@ class _CashShiftViewState extends State<CashShiftView> {
                           SizedBox(
                             width: itemWidth,
                             child: _buildMetricTile(
+                              // D-9: the drawer expectation is the persisted base
+                              // plus this shift's net cash sales. Showing the raw
+                              // `shift.expectedNio` understated the drawer by every
+                              // cash sale and made a blind count look short.
                               title: 'Esperado en Gaveta (C\$)',
-                              value: _formatNio(shift.expectedNio),
+                              value: _formatNio(vm.effectiveExpectedNio),
                               icon: Icons.payments,
                               color: Colors.indigo.shade700,
                             ),
@@ -232,7 +236,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                             width: itemWidth,
                             child: _buildMetricTile(
                               title: 'Esperado en Gaveta (\$ USD)',
-                              value: _formatUsd(shift.expectedUsd),
+                              value: _formatUsd(vm.effectiveExpectedUsd),
                               icon: Icons.monetization_on,
                               color: Colors.purple.shade700,
                             ),
@@ -329,6 +333,10 @@ class _CashShiftViewState extends State<CashShiftView> {
                       builder: (_) => XReportDialog(
                         shift: shift,
                         movements: vm.movements,
+                        // D-9: the X must report the same expectation the
+                        // blind count and the Z close use.
+                        effectiveExpectedNio: vm.effectiveExpectedNio,
+                        effectiveExpectedUsd: vm.effectiveExpectedUsd,
                       ),
                     ),
                     icon: const Icon(Icons.assessment_outlined),
