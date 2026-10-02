@@ -649,6 +649,15 @@ class FiscalInboxHandler {
           rawEnvelope['checkoutFxMode']?.toString().trim() ?? '',
     };
     final assertedBusinessProfileKeys = <String>[];
+    // D-11: when the snapshot asserts commercialFxSpread, the office (owner
+    // dashboard POST /onboarding/fiscal-setup) is the authoritative writer of
+    // the commercial exchange rate too, so the rate key rides the SAME marker
+    // in the SAME transaction (R-3): marker and value can never diverge. When
+    // the snapshot does not carry it, the key is NOT asserted and the POS
+    // field stays locally editable (fail-safe).
+    if (fxSpread != null) {
+      assertedBusinessProfileKeys.add(FiscalProjectionKeys.commercialExchangeRate);
+    }
     businessProfileMirrors.forEach((key, value) {
       if (value.isNotEmpty) {
         projections.add(LocalConfigEntity(

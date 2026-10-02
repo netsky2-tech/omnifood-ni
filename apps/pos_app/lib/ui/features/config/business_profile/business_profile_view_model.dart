@@ -77,9 +77,17 @@ class BusinessProfileViewModel extends ChangeNotifier {
   bool get isCheckoutFxModeCloudManaged =>
       _cloudManagedKeys.contains(FiscalProjectionKeys.checkoutFxMode);
 
+  /// D-11: the commercial exchange rate is office-authored via the fiscal
+  /// snapshot's commercialFxSpread. When the marker names it, the POS field
+  /// is read-only and form saves never overwrite it — the web is master,
+  /// per field.
+  bool get isCommercialRateCloudManaged =>
+      _cloudManagedKeys.contains(FiscalProjectionKeys.commercialExchangeRate);
+
   static const Set<String> _knownManagedProfileKeys = {
     FiscalProjectionKeys.operationMode,
     FiscalProjectionKeys.checkoutFxMode,
+    FiscalProjectionKeys.commercialExchangeRate,
   };
 
   /// Parses the comma-joined marker. Trims whitespace around tokens and

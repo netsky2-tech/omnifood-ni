@@ -647,5 +647,101 @@ void main() {
       );
       expect(viewModel.isOperationModeCloudManaged, isTrue);
     });
+
+    test('marker naming only the commercial rate -> rate locked, modes editable (per-field)', () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockConfigDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: 'commercial_exchange_rate',
+              ));
+
+      await viewModel.loadConfig();
+
+      expect(viewModel.isCommercialRateCloudManaged, isTrue);
+      expect(viewModel.isCheckoutFxModeCloudManaged, isFalse);
+      expect(viewModel.isOperationModeCloudManaged, isFalse);
+    });
+
+    test('marker naming all three fields -> all three locked', () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockConfigDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: 'checkout_fx_mode,operation_mode,commercial_exchange_rate',
+              ));
+
+      await viewModel.loadConfig();
+
+      expect(viewModel.isCommercialRateCloudManaged, isTrue);
+      expect(viewModel.isCheckoutFxModeCloudManaged, isTrue);
+      expect(viewModel.isOperationModeCloudManaged, isTrue);
+    });
+
+    test('a save never overwrites a cloud-managed commercial rate', () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockConfigDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: 'commercial_exchange_rate',
+              ));
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      await viewModel.loadConfig();
+      final cloudRate = viewModel.config['commercial_exchange_rate'];
+
+      await viewModel.saveConfig({
+        'business_name': 'Café Managua',
+        'commercial_exchange_rate': '99.99',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      final writtenKeys = written.map((e) => e.key).toSet();
+      // The office-asserted rate is never written by a form save...
+      expect(writtenKeys, isNot(contains('commercial_exchange_rate')));
+      // ...while fields the office never claimed persist as today.
+      expect(writtenKeys, contains('business_name'));
+      // The in-memory state keeps the cloud value for the managed field.
+      expect(viewModel.config['commercial_exchange_rate'], cloudRate);
+      expect(viewModel.config['commercial_exchange_rate'], isNot('99.99'));
+      // The flag survives the save: the field is still cloud-managed.
+      expect(viewModel.isCommercialRateCloudManaged, isTrue);
+    });
+
+    test(
+        'a projection committing AFTER loadConfig still protects the rate: '
+        'saveConfig re-reads the marker instead of trusting the cached set',
+        () async {
+      when(() => mockConfigDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
+
+      await viewModel.loadConfig();
+      expect(viewModel.isCommercialRateCloudManaged, isFalse);
+
+      when(() => mockConfigDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: 'commercial_exchange_rate',
+              ));
+
+      await viewModel.saveConfig({
+        'business_name': 'Café Managua',
+        'commercial_exchange_rate': '99.99',
+      });
+
+      final written = verify(() => mockConfigDao.saveConfig(captureAny()))
+          .captured
+          .whereType<LocalConfigEntity>()
+          .toList();
+      expect(
+        written.map((e) => e.key),
+        isNot(contains('commercial_exchange_rate')),
+        reason: 'the stale form value must never overwrite the cloud value',
+      );
+      expect(viewModel.isCommercialRateCloudManaged, isTrue);
+    });
   });
 }

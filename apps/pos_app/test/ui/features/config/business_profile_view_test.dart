@@ -609,5 +609,87 @@ void main() {
       expect(byKey.containsKey('checkout_fx_mode'), isFalse);
       expect(byKey['business_name'], 'Mi Restaurante');
     });
+
+    group('D-11: the commercial rate field is honest about office authority', () {
+      testWidgets(
+          'marker naming the rate -> rate field locked with lock icon and Definido por la oficina helper',
+          (tester) async {
+        await pumpWithMarker(tester, 'commercial_exchange_rate');
+
+        final field = tester.widget<TextField>(find.descendant(
+          of: find.byKey(const Key('commercial_exchange_rate_field')),
+          matching: find.byType(TextField),
+        ).first);
+        expect(field.readOnly, isTrue,
+            reason: 'the office owns the rate; the terminal must not pretend it is editable');
+        expect(field.decoration?.prefixIcon, isA<Icon>().having((i) => i.icon, 'icon', Icons.lock));
+        expect(
+          find.textContaining('Definido por la oficina'),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets(
+          'marker naming all three fields -> rate locked alongside the dropdowns',
+          (tester) async {
+        await pumpWithMarker(
+            tester, 'checkout_fx_mode,operation_mode,commercial_exchange_rate');
+
+        expect(
+          tester
+              .widget<TextField>(find.descendant(
+                of: find.byKey(const Key('commercial_exchange_rate_field')),
+                matching: find.byType(TextField),
+              ).first)
+              .readOnly,
+          isTrue,
+        );
+        expect(find.textContaining('Definido por la oficina'), findsNWidgets(3));
+      });
+
+      testWidgets('marker absent -> rate field stays editable (fail-safe)',
+          (tester) async {
+        await pumpWithMarker(tester, null);
+
+        final field = tester.widget<TextField>(find.descendant(
+          of: find.byKey(const Key('commercial_exchange_rate_field')),
+          matching: find.byType(TextField),
+        ).first);
+        expect(field.readOnly, isFalse);
+        expect(find.textContaining('Definido por la oficina'), findsNothing);
+      });
+
+      testWidgets(
+          'a form save never persists the office-owned rate (skip comes for free via the managed-keys marker)',
+          (tester) async {
+        await pumpWithMarker(tester, 'commercial_exchange_rate');
+        when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
+
+        Future<void> fill(String label, String text) async {
+          await tester.enterText(find.widgetWithText(TextFormField, label), text);
+          await tester.pumpAndSettle();
+        }
+
+        // The managed rate field is read-only: it is never typed into. Its
+        // controller still carries a value ('36.50') that a stale save would
+        // happily write — the marker skip is what protects it.
+        await fill('Nombre Comercial / Razón Social', 'Mi Restaurante');
+        await fill('RUC (Nicaragua)', 'A0011234567890');
+        await fill('Tipo de Cambio Oficial BCN (Base Fiscal DGI)', '36.62');
+
+        await tester.ensureVisible(find.text('GUARDAR CONFIGURACIÓN'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('GUARDAR CONFIGURACIÓN'));
+        await tester.pumpAndSettle();
+
+        final saved = verify(() => mockDao.saveConfig(captureAny())).captured
+            .whereType<LocalConfigEntity>()
+            .toList();
+        final byKey = {for (final e in saved) e.key: e.value};
+        expect(byKey.containsKey('commercial_exchange_rate'), isFalse,
+            reason: 'the managed rate must be skipped by the existing cloud-managed save guard');
+        expect(byKey['business_name'], 'Mi Restaurante');
+      });
+    });
   });
 }

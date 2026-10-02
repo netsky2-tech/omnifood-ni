@@ -216,12 +216,22 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
+                      key: const Key('commercial_exchange_rate_field'),
                       controller: _controllers['commercial_exchange_rate'],
-                      decoration: const InputDecoration(
+                      // D-11: when the office asserts the rate via the fiscal
+                      // snapshot, the field is read-only and honestly labelled
+                      // (same pattern as the checkout-FX dropdown above,
+                      // BXW-007 R-5/R-6) instead of silently reverting edits.
+                      readOnly: viewModel.isCommercialRateCloudManaged,
+                      decoration: InputDecoration(
                         labelText: 'Tipo de Cambio Comercial (POS / Atención al Cliente)',
                         hintText: '36.50',
-                        prefixIcon: Icon(Icons.currency_exchange),
-                        helperText: 'Tasa utilizada para precios al público, cobro en USD y cálculo de vuelto en córdobas.',
+                        prefixIcon: Icon(viewModel.isCommercialRateCloudManaged
+                            ? Icons.lock
+                            : Icons.currency_exchange),
+                        helperText: viewModel.isCommercialRateCloudManaged
+                            ? 'Definido por la oficina: este valor se administra desde la configuración central y este terminal no puede modificarlo.'
+                            : 'Tasa utilizada para precios al público, cobro en USD y cálculo de vuelto en córdobas.',
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       validator: (v) {

@@ -315,6 +315,7 @@ void main() {
         String fingerprint = bpFpRev1,
         Object? operationMode,
         Object? checkoutFxMode,
+        Object? commercialFxSpread,
       }) {
         final envelope = <String, dynamic>{
           'tenantId': bpTenant,
@@ -336,6 +337,9 @@ void main() {
         }
         if (checkoutFxMode != null) {
           envelope['checkoutFxMode'] = checkoutFxMode;
+        }
+        if (commercialFxSpread != null) {
+          envelope['commercialFxSpread'] = commercialFxSpread;
         }
         return envelope;
       }
@@ -482,6 +486,82 @@ void main() {
         // And a replay of the same snapshot stays a true no-op (no repair loop).
         final replay = await handler.handleFiscalEnvelope(envelope);
         expect(replay.status, FiscalInboxStatus.idempotentNoOp);
+      });
+
+      group('D-11: the commercial exchange rate rides the managed-keys marker', () {
+        test('snapshot asserting commercialFxSpread marks the rate cloud-managed in the SAME committed state (R-3)', () async {
+          final envelope = bpEnvelope(
+            operationMode: 'FOODPARK_QSR',
+            commercialFxSpread: 45.0,
+          );
+
+          final outcome = await handler.handleFiscalEnvelope(envelope);
+          expect(outcome.status, FiscalInboxStatus.applied);
+
+          final rate = await database.localConfigDao
+              .getConfigByKey('commercial_exchange_rate');
+          expect(rate?.value, '45.0');
+
+          final marker = await database.localConfigDao
+              .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+          expect(marker, isNotNull);
+          final tokens =
+              marker!.value.split(',').map((token) => token.trim()).toSet();
+          expect(tokens, contains('commercial_exchange_rate'),
+              reason: 'the marker must ride with the value so the POS locks the field');
+          expect(tokens, contains('operation_mode'));
+        });
+
+        test('retracted commercialFxSpread removes the rate from the marker atomically', () async {
+          await handler.handleFiscalEnvelope(bpEnvelope(
+            commercialFxSpread: 45.0,
+          ));
+
+          final outcome2 = await handler.handleFiscalEnvelope(bpEnvelope(
+            revision: 2,
+            fingerprint: bpFpRev2,
+            checkoutFxMode: 'COMMERCIAL',
+          ));
+          expect(outcome2.status, FiscalInboxStatus.applied);
+
+          final marker = await database.localConfigDao
+              .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+          final tokens =
+              marker!.value.split(',').map((token) => token.trim()).toSet();
+          expect(tokens, isNot(contains('commercial_exchange_rate')),
+              reason: 'retraction must un-assert the rate so the field stays editable');
+          expect(
+            await database.localConfigDao
+                .getConfigByKey('commercial_exchange_rate'),
+            isNull,
+          );
+        });
+
+        test('fail-safe: snapshot without commercialFxSpread never asserts the rate', () async {
+          final outcome = await handler.handleFiscalEnvelope(
+            bpEnvelope(operationMode: 'FOODPARK_QSR'),
+          );
+          expect(outcome.status, FiscalInboxStatus.applied);
+
+          final marker = await database.localConfigDao
+              .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+          expect(marker?.value, 'operation_mode');
+        });
+
+        test('completeness semantics unchanged: managed rate projection is complete and replays as a true no-op', () async {
+          final envelope = bpEnvelope(
+            operationMode: 'FOODPARK_QSR',
+            checkoutFxMode: 'COMMERCIAL',
+            commercialFxSpread: 45.0,
+          );
+
+          final outcome = await handler.handleFiscalEnvelope(envelope);
+          expect(outcome.status, FiscalInboxStatus.applied);
+
+          expect(await handler.isProjectionComplete(envelope, bpTenant), isTrue);
+          final replay = await handler.handleFiscalEnvelope(envelope);
+          expect(replay.status, FiscalInboxStatus.idempotentNoOp);
+        });
       });
     });
 
