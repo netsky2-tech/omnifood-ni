@@ -541,6 +541,8 @@ class SalesRepositoryImpl implements SalesRepository {
     bool? isCanceled,
     String? voidReason,
     String? syncStatus,
+    int? sourceSequence,
+    String? idempotencyKey,
   }) {
     return InvoiceEntity(
       id: entity.id,
@@ -564,8 +566,8 @@ class SalesRepositoryImpl implements SalesRepository {
       authorizedByUserId: entity.authorizedByUserId,
       authorizedByRole: entity.authorizedByRole,
       terminalId: entity.terminalId,
-      sourceSequence: entity.sourceSequence,
-      idempotencyKey: entity.idempotencyKey,
+      sourceSequence: sourceSequence ?? entity.sourceSequence,
+      idempotencyKey: idempotencyKey ?? entity.idempotencyKey,
       payloadHash: entity.payloadHash,
       inventoryPolicyVersion: entity.inventoryPolicyVersion,
       inventoryOutcome: entity.inventoryOutcome,
@@ -856,6 +858,20 @@ class SalesRepositoryImpl implements SalesRepository {
       isCanceled: true,
       voidReason: effectiveReason,
       syncStatus: 'pending',
+      // D-10: the cancellation is a NEW outbound document. Re-delivering the
+      // original record under its original idempotency key (or source
+      // sequence) with a mutated payload is rejected by the backend as
+      // CRITICAL_PAYLOAD_MISMATCH / CRITICAL_SEQUENCE_PAYLOAD_MISMATCH with
+      // retryable:false, so the void stayed local forever and the cloud kept
+      // the invoice active. Allocate a fresh sequence and a void-scoped key
+      // for the cancellation envelope (mirrors the sale path's allocation).
+      sourceSequence:
+          (await transactionDao.getNextInvoiceSourceSequence(
+                entity.terminalId ?? 'pos-${entity.userId}',
+              )) ??
+              (entity.sourceSequence ?? 0) + 1,
+      idempotencyKey:
+          'void:${entity.terminalId ?? 'pos-${entity.userId}'}:${entity.id}',
     );
 
     // Persist EVERYTHING in a single Floor @transaction:

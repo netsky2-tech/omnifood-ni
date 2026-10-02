@@ -332,6 +332,26 @@ void main() {
       final row = await invoiceRow();
       expect(row!['void_reason'], 'ERROR_DE_CAPTURA');
     });
+
+    test('D-10: the cancellation is a fresh outbound document — new '
+        'idempotency key and new source sequence', () async {
+      await seedInvoice();
+      final before = await invoiceRow();
+
+      await repository.voidInvoice('inv-void-1', 'ERROR_DE_CAPTURA');
+
+      final after = await invoiceRow();
+      expect(after!['is_canceled'], 1);
+      // Re-sending the original record under its original key (or sequence)
+      // with a mutated payload is what the backend answers with
+      // CRITICAL_PAYLOAD_MISMATCH / retryable:false, which left the void
+      // local forever. The cancellation must therefore travel as a NEW
+      // document on both axes.
+      expect(after['idempotency_key'], isNot(before!['idempotency_key']));
+      expect(after['idempotency_key'], startsWith('void:'));
+      expect(after['source_sequence'], isNot(before['source_sequence']));
+      expect(after['source_sequence'], isNotNull);
+    });
   });
 
   group('loyalty rollback: a failed void touches nothing', () {
