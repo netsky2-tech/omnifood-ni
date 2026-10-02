@@ -60,6 +60,8 @@ dependencies:
   # OHAC pull negotiation (design §11.5 decision 30): the POS reads its own
   # package version at runtime and sends it verbatim as the negotiated build.
   package_info_plus: ^9.0.0
+  # OTA release downloads: target directory resolution for FileProvider handoff.
+  path_provider: ^2.1.5
 dependency_overrides:
   analyzer: 6.4.1
 

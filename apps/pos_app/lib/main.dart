@@ -17,6 +17,7 @@ import 'data/daos/local_config_dao.dart';
 import 'data/network/cloud_auth_interceptor.dart';
 import 'data/network/device_sync_auth_interceptor.dart';
 import 'data/adapters/activation/dio_activation_priming_port.dart';
+import 'package:path_provider/path_provider.dart';
 import 'data/adapters/activation/dio_activation_sync_port.dart';
 import 'data/services/activation_attempt_discovery_service.dart';
 import 'data/services/activation_controlled_sale_runner.dart';
@@ -48,6 +49,10 @@ import 'data/services/local_auth_service.dart';
 import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
 import 'data/services/terminal_identity_service.dart';
+import 'data/services/platform/system_installer_adapter.dart';
+import 'data/services/update/fiscal_safety_gate_adapter.dart';
+import 'domain/services/update/ota_update_coordinator.dart';
+import 'domain/services/update/release_downloader.dart';
 import 'ui/features/auth/viewmodels/login_viewmodel.dart';
 import 'ui/features/auth/viewmodels/link_terminal_viewmodel.dart';
 import 'ui/features/auth/views/link_terminal_view.dart';
@@ -566,14 +571,33 @@ void main() async {
           ),
         ),
         ChangeNotifierProvider(
-          create: (_) => TerminalIdentityViewModel(
-            configDao: database.localConfigDao,
-            printerConfigService: PrinterConfigService(database.localConfigDao),
-            // Same build-time define the startup transport resolves, so the
-            // operator sees the provenance actually in force. Save/clear goes
-            // through the default ApiBaseUrlService over the same DAO.
-            buildTimeApiUrl: buildTimeApiUrl,
-          ),
+          create: (_) {
+            final apiBaseUrlService =
+                ApiBaseUrlService(database.localConfigDao);
+            final otaCoordinator = OtaUpdateCoordinator(
+              apiBaseUrlService: apiBaseUrlService,
+              releaseDownloader: ReleaseDownloader(dio: dio),
+              releaseInstaller: SystemInstallerAdapter(),
+              fiscalSafetyGate: FiscalSafetyGateAdapter(
+                checkOpenShift: () async {
+                  final sessions =
+                      await database.cashierSessionDao.getAllSessions();
+                  return sessions.any((s) => !s.isClosed);
+                },
+              ),
+              dio: dio,
+              getStorageDirectory: getApplicationSupportDirectory,
+            );
+
+            return TerminalIdentityViewModel(
+              configDao: database.localConfigDao,
+              printerConfigService:
+                  PrinterConfigService(database.localConfigDao),
+              apiBaseUrlService: apiBaseUrlService,
+              otaCoordinator: otaCoordinator,
+              buildTimeApiUrl: buildTimeApiUrl,
+            );
+          },
         ),
         ChangeNotifierProvider(
           create: (_) => ActivationSessionViewModel(

@@ -26,6 +26,18 @@ enum ApiBaseUrlSource {
 class ApiBaseUrlResolution {
   const ApiBaseUrlResolution._(this.url, this.source);
 
+  const ApiBaseUrlResolution.persisted(String url)
+      : this._(url, ApiBaseUrlSource.persistedConfig);
+
+  const ApiBaseUrlResolution.unconfigured()
+      : this._(null, ApiBaseUrlSource.unconfigured);
+
+  const ApiBaseUrlResolution.buildDefine(String url)
+      : this._(url, ApiBaseUrlSource.buildDefine);
+
+  const ApiBaseUrlResolution.developmentDefault(String url)
+      : this._(url, ApiBaseUrlSource.developmentDefault);
+
   /// Effective URL, or `null` when [ApiBaseUrlSource.unconfigured].
   final String? url;
   final ApiBaseUrlSource source;
