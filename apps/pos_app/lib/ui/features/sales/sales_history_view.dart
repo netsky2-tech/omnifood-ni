@@ -171,61 +171,135 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
       itemBuilder: (context, index) {
         final invoice = viewModel.filteredInvoices[index];
         final isSelected = !isHandheld && _selectedInvoice?.id == invoice.id;
-        return ListTile(
-          title: Row(
-            children: [
-              Flexible(
-                child: Text(
-                  invoice.number,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (invoice.isCanceled) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: colorScheme.error,
-                    borderRadius: BorderRadius.circular(4),
+        final rowCtx = viewModel.getRowContext(invoice.id);
+        final timeStr = DateFormat('HH:mm').format(invoice.createdAt);
+        final dateStr = DateFormat('dd/MM/yyyy').format(invoice.createdAt);
+        final cashierText = rowCtx != null && rowCtx.cashierName.isNotEmpty
+            ? '$timeStr · ${rowCtx.cashierName}'
+            : '$dateStr $timeStr';
+        final itemsSummary = rowCtx?.itemsSummary ?? '';
+        final paymentMethod = rowCtx?.paymentMethodSummary ?? '';
+
+        return Container(
+          color: invoice.isCanceled
+              ? NhilosColors.dangerLight.withOpacity(0.5)
+              : (isSelected ? colorScheme.primaryContainer.withValues(alpha: 0.15) : null),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    invoice.number,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: NhilosColors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  child: const Text(
-                    'ANULADA',
-                    style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
                 ),
+                if (invoice.isCanceled) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: const BoxDecoration(
+                      color: NhilosColors.dangerLight,
+                      borderRadius: NhilosRadii.badgeRadius,
+                      border: Border.fromBorderSide(BorderSide(color: NhilosColors.dangerBorder)),
+                    ),
+                    child: const Text(
+                      'ANULADA',
+                      style: TextStyle(
+                        color: NhilosColors.danger,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
-          subtitle: Text(DateFormat('dd/MM/yyyy HH:mm').format(invoice.createdAt)),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'C\$ ${invoice.total.toStringAsFixed(2)}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
-                  color: invoice.isCanceled ? colorScheme.error : colorScheme.primary,
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 3),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      cashierText,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: NhilosColors.textSecondary,
+                      ),
+                    ),
+                    if (paymentMethod.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: NhilosColors.neutralGray,
+                          borderRadius: NhilosRadii.badgeRadius,
+                          border: Border.all(color: NhilosColors.border),
+                        ),
+                        child: Text(
+                          paymentMethod,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: NhilosColors.neutralGrayDark,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-              if (isHandheld) const Icon(Icons.chevron_right, size: 20),
-            ],
-          ),
-          selected: isSelected,
-          selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
-          onTap: () {
-            if (isHandheld) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => InvoiceDetailScreen(invoice: invoice),
+                if (itemsSummary.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    itemsSummary,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: NhilosColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'C\$ ${invoice.total.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    color: invoice.isCanceled ? NhilosColors.danger : colorScheme.primary,
+                  ),
                 ),
-              );
-            } else {
-              setState(() => _selectedInvoice = invoice);
-            }
-          },
+                if (isHandheld) const Icon(Icons.chevron_right, size: 20),
+              ],
+            ),
+            selected: isSelected,
+            selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.15),
+            onTap: () {
+              if (isHandheld) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InvoiceDetailScreen(invoice: invoice),
+                  ),
+                );
+              } else {
+                setState(() => _selectedInvoice = invoice);
+              }
+            },
+          ),
         );
       },
     );
