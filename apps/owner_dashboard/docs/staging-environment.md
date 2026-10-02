@@ -9,8 +9,9 @@ environment. It contains no secrets. Scope: the staging deployment of
 | Concern | Value |
 | --- | --- |
 | Dashboard hostname (production branch) | `https://soho.nhilospos.com` |
-| API origin (`VITE_API_URL`) | `https://api-staging.nhilospos.com` |
-| Effective API base used by the app | `https://api-staging.nhilospos.com/api` (appended by `src/lib/api-base-url.ts`, exactly once) |
+| API origin (`VITE_API_URL`) | `https://api.nhilospos.com` |
+| Effective API base used by the app | `https://api.nhilospos.com/api` (appended by `src/lib/api-base-url.ts`, exactly once) |
+| Retained alias (still reachable) | `https://api-staging.nhilospos.com` |
 
 Backend dependency: the staging API must allow CORS for
 `https://soho.nhilospos.com` (backend Task 1).
@@ -29,11 +30,12 @@ Backend dependency: the staging API must allow CORS for
   hosts; a focused test
   (`src/__tests__/public-headers-connect-src.test.ts`) guards against a
   future edit silently dropping the alias.
-- The deploy-target and environment-variable tables in this document still
-  record the currently deployed `VITE_API_URL` value
-  (`https://api-staging.nhilospos.com`); the deployed value changes to the
-  official origin only in the gated dashboard repoint step, not as part of
-  these build settings.
+- The repoint has been **executed and verified**: the deployed bundle carries
+  the official origin and no `api-staging` string (measured in
+  `/assets/tenant-B8kzKfbT.js`, identical on `soho.nhilospos.com` and on the
+  project's `*.pages.dev` production host). The tables in this document now
+  record the official origin as the deployed value; the alias is retained for
+  already-provisioned terminals, not as the dashboard's target.
 
 ## Cloudflare Pages build settings
 
@@ -69,7 +71,7 @@ Notes:
 
 | Variable | Value | Rules |
 | --- | --- | --- |
-| `VITE_API_URL` | `https://api-staging.nhilospos.com` | API **origin only**: absolute http(s), no path, no trailing path such as `/api`, no credentials, no query, no fragment. `src/lib/api-base-url.ts` validates this at runtime and fails fast with a message that never echoes the value. |
+| `VITE_API_URL` | `https://api.nhilospos.com` | API **origin only**: absolute http(s), no path, no trailing path such as `/api`, no credentials, no query, no fragment. `src/lib/api-base-url.ts` validates this at runtime and fails fast with a message that never echoes the value. Repointed from `https://api-staging.nhilospos.com` on 2026-10-02; the change required a redeploy, which was performed and verified by inspecting the served bundle. |
 
 `VITE_*` variables are baked into the bundle at build time. Changing the
 value requires a rebuild/redeploy to take effect; runtime overrides are not
@@ -88,9 +90,11 @@ possible by design.
 ## Preview branch caution
 
 - Any preview deployment of this Pages project bakes the same project-level
-  `VITE_API_URL`, so **every preview host talks to the staging API**. Do not
-  point preview deployments at production data, and do not raise preview
-  hosts to trusted origins anywhere.
+  `VITE_API_URL`, so **every preview host now talks to the OFFICIAL API**,
+  which serves the live data. Before the 2026-10-02 repoint this caution was
+  about staging data; it is now about production data. Never treat a preview
+  host as a trusted origin, and never use a preview deployment to exercise a
+  write path.
 - Restrict the Pages production branch to the staging branch; prefer
   branch-scoped environment variables if a future branch must target a
   different API, and disable automatic previews for branches that are not

@@ -174,7 +174,7 @@ export function FiscalSetupForm() {
               Configuración Fiscal & Régimen DGI
             </CardTitle>
             <CardDescription>
-              Definición de parámetros fiscales, tasa de IVA y spread cambiario comercial.
+              Definición de parámetros fiscales, tasa de IVA y tipo de cambio comercial.
             </CardDescription>
           </div>
           <Badge variant={selectedRegime === FiscalRegime.REGIMEN_GENERAL ? "default" : "secondary"}>
@@ -340,14 +340,14 @@ export function FiscalSetupForm() {
               >
                 <option value="">Sin definir (valor local de la terminal)</option>
                 <option value={CheckoutFxMode.COMMERCIAL}>
-                  Tasa Comercial (aplica el spread configurado)
+                  Tasa Comercial (aplica el tipo de cambio configurado)
                 </option>
                 <option value={CheckoutFxMode.BCN_OFFICIAL}>
-                  Tasa Oficial BCN (sin spread)
+                  Tasa Oficial BCN (ignora el tipo de cambio comercial)
                 </option>
               </select>
               <p className="text-xs text-muted-foreground">
-                Mientras esté Sin definir, cada terminal conserva su valor local. Al elegir Comercial aplica el spread cambiario configurado; Oficial BCN cobra con la tasa oficial sin spread. Se aplica a TODAS las terminales sincronizadas. Si guarda volviendo a Sin definir, cada terminal recupera su control local.
+                Mientras esté Sin definir, cada terminal conserva su valor local. Al elegir Comercial aplica el tipo de cambio comercial configurado; Oficial BCN cobra con la tasa oficial del BCN. Se aplica a TODAS las terminales sincronizadas. Si guarda volviendo a Sin definir, cada terminal recupera su control local.
               </p>
               {errors.checkoutFxMode && (
                 <p className="text-xs text-destructive">{errors.checkoutFxMode.message}</p>
