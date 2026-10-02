@@ -64,10 +64,13 @@ Do **not** re-fix these; verify them only in the re-run.
 | **D-12** invoice preview showed a stale snapshot | `ba2f3d9d` | invoice #4 preview shows red **ANULADA** badge and only `REIMPRIMIR` |
 | **D-16** money fields seeded `0.00` so digits concatenated | `dc9e06e8` | blind-count and movement fields accept `1100` / `100` cleanly (`C$ 800` entered as typed) |
 | **D-8 (half)** void failures were swallowed | `c9533c9f` | second void on a cancelled invoice now shows **"La factura ya está anulada."**; cause is logged at SEVERE — **the original failure never reproduced** |
+| **D-19** Z/DGI report summed tendered cash, ignoring change | `082cf0c8` | unit/TDD only so far — re-verify on device in the re-run: the Z must print `Efectivo` net of change and match `expected_cash` |
 
 ## 4. Open defects — sweep in this order (impact on day 1 first)
 
-### 🔴 D-19 — the Z/DGI report overstates cash collected (§4.1, report vs drawer)
+### 🔴 D-19 — the Z/DGI report overstates cash collected (§4.1, report vs drawer) — **FIXED IN CODE (commit `082cf0c8`), device verification pending in the re-run**
+
+> Fix: `paymentsByMethod` now nets cash (`amount - changeGiven`, clamped at 0) so the breakdown reconciles with `totalGross` and with the drawer's `expected_cash`. TDD: RED 3/3 → GREEN 9/9 → mutation fails 3/3; `flutter analyze` clean on both files. Root cause and observation below are the original diagnosis.
 
 - **Observed**: `Reportes DGI → Arqueo de Caja (Reporte Z)` for shift `2806196f` printed `Ventas Brutas C$125.00` but **`Efectivo C$200.00`**.
 - **Truth in the cloud**: gross 125.00, cash received 200.00, **change 75.00**, **net collected 125.00**; voids 2 / 225.00 (correct).
@@ -105,7 +108,9 @@ Do **not** re-fix these; verify them only in the re-run.
 - `app_drawer.dart:63-83` routes to `/lock`, and the lock screen auto-selects `viewModel.selectedUser`, so a handover lands on the **outgoing** operator's PIN pad; the incoming operator must find the back arrow to reach `Seleccionar Usuario`. Also reproducible right after an online login.
 - **Fix**: on switch, land on `Seleccionar Usuario` with **no pre-selection** (the incoming operator is by definition not the outgoing one).
 
-### D-15 — a blind-count discrepancy requires no authorization (needs an owner decision)
+### D-15 — a blind-count discrepancy requires no authorization — **RESOLVED: no threshold (owner, 2026-10-02)**
+
+**Owner decision**: keep closing with any difference, **without** a PIN or threshold; the requirement is that the difference is *recorded* (it already is: `difference_nio`, Z variance table, cloud `difference_nio`). So 9.5 is satisfied by **recording**, not by authorization. Implementation: nothing to gate — verify in the re-run that the difference is persisted and visible in Z + cloud, and note the plan's original "authorization" wording as intentionally relaxed by the owner.
 
 - `closeShiftWithBlindCount` accepts an optional `supervisorId`, but nothing computes a threshold or demands one; the dialog only has counted C$/USD, notes and the button. Fase 9.5 is unmet: you can close with **−C$25** unsupervised (observed).
 - Tension with the D-13 ruling (owner often absent). **Ask the owner** what the threshold should be before implementing.
@@ -121,7 +126,9 @@ Do **not** re-fix these; verify them only in the re-run.
 - `apps/admin_backend/src/modules/sales/entities/invoice.entity.ts` declares `commercial_rate ... default: 36.5`, and the POS **never sends `commercialRate`** in the sync payload (`sync_service.dart` has no reference), so every invoice stores `36.5000` even when charged at 36.62 (observed on invoice #3).
 - **Fix**: send the rate the POS actually applied (and decide whether historical invoices are left as-is — invoices are immutable fiscal records).
 
-### D-7 — tips are unreachable in SOHO's mode (needs a product decision)
+### D-7 — tips are unreachable in SOHO's mode — **RESOLVED: tip entry on the checkout (owner, 2026-10-02)**
+
+**Owner decision**: keep `DIVIDIR CUENTA` gated as-is (table service stays off for `FOODPARK_QSR`), and **add a tip entry directly on the checkout/cobro screen**, wiring it to the existing `TipEngine` and the existing `invoices.tip_amount_nio/usd`, `tip_percentage`, `tip_eligible_base_nio` columns. Original analysis:
 
 - `BusinessModeEvaluator.isSplitBillAllowed` and `isSuggestedTipPromptEnabled` derive from `canUseTableService` → `TenantConfig.supportsTables` → `operationMode.supportsTables`, and `TenantOperationMode.foodparkQsr.supportsTables == false`. The only tip UI lives in `SplitBillDialog` (`tip_chip_10`/`tip_chip_15`), reached by the cart's `DIVIDIR CUENTA` button which is gated on the same flag.
 - So a `FOODPARK_QSR` tenant **cannot charge a tip at all**, although `invoices` has `tip_amount_nio/usd`, `tip_percentage`, `tip_eligible_base_nio` and `TipEngine` is implemented.
