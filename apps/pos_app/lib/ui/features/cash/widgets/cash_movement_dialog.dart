@@ -19,7 +19,6 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
   final _nioController = TextEditingController();
   final _usdController = TextEditingController();
   final _reasonController = TextEditingController();
-  final _supervisorPinController = TextEditingController();
   bool _submitting = false;
   String? _error;
 
@@ -28,12 +27,8 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
     _nioController.dispose();
     _usdController.dispose();
     _reasonController.dispose();
-    _supervisorPinController.dispose();
     super.dispose();
   }
-
-  bool get _requiresSupervisor =>
-      _selectedType == 'PETTY_CASH' || _selectedType == 'SAFE_DROP';
 
   Future<void> _submit() async {
     final nio = double.tryParse(_nioController.text) ?? 0.0;
@@ -60,12 +55,24 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
     });
 
     final vm = context.read<CashShiftViewModel>();
+    // D-13: authorizedByUserId is ALWAYS null. There IS no authorization
+    // step here — the owner explicitly ruled out a PIN gate for this kiosk
+    // (in a food park the operator buys ice on the spot while the owner is
+    // absent), so nobody authorized the movement and the field — which means
+    // "who authorized" — must not carry a fabricated identity. The REAL
+    // operator attribution already exists through
+    // `shift_id -> cashier_sessions.user_id`: a movement can only be
+    // recorded on the active shift of the acting user. Fabricating a
+    // self-authorization id would trade one false identity for another.
+    // Policy note: PETTY_CASH/SAFE_DROP deliberately require NO
+    // authorization gate; authorization is a policy decision, never a
+    // stamped identity.
     final success = await vm.recordMovement(
       type: _selectedType,
       amountNio: nio,
       amountUsd: usd,
       reason: reason,
-      authorizedByUserId: _requiresSupervisor ? 'user-manager' : null,
+      authorizedByUserId: null,
     );
 
     if (mounted) {
