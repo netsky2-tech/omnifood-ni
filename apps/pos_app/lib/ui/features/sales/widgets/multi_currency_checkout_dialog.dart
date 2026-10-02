@@ -353,22 +353,22 @@ class _MultiCurrencyCheckoutDialogState
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.red.shade50,
+        color: NhilosColors.dangerLight,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.red.shade300),
+        border: Border.all(color: NhilosColors.dangerBorder),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline, size: 20, color: Colors.red.shade700),
+          const Icon(Icons.error_outline, size: 20, color: NhilosColors.danger),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.red.shade900,
+                color: NhilosColors.danger,
               ),
             ),
           ),
@@ -408,19 +408,16 @@ class _MultiCurrencyCheckoutDialogState
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Row(
-                    children: [
-                      Text(
-                        isRequired
-                            ? 'BUZZER / PAGER DE ENTREGA (REQUERIDO)'
-                            : 'BUZZER / PAGER DE ENTREGA (OPCIONAL)',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: NhilosColors.textPrimary,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    isRequired
+                        ? 'BUZZER / PAGER DE ENTREGA (REQUERIDO)'
+                        : 'BUZZER / PAGER DE ENTREGA (OPCIONAL)',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: NhilosColors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -609,7 +606,7 @@ class _MultiCurrencyCheckoutDialogState
                   label: const Text('FINALIZAR VENTA'),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: Colors.green.shade700,
+                    backgroundColor: NhilosColors.success,
                   ),
                 )
               else
@@ -723,11 +720,14 @@ class _MultiCurrencyCheckoutDialogState
         _buildBuzzerPagerSection(viewModel),
 
         // Split Summary Balance Card
-        Card(
-          color: Colors.blueGrey.shade50,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: NhilosColors.neutralGray,
+            borderRadius: NhilosRadii.buttonRadius,
+            border: Border.all(color: NhilosColors.border),
+          ),
+          child: Column(
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -777,14 +777,15 @@ class _MultiCurrencyCheckoutDialogState
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: _splitCalculator.isFullyPaid
-                            ? Colors.green.shade700
-                            : Colors.red.shade700,
+                            ? NhilosColors.success
+                            : NhilosColors.danger,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                     Text(
                       '(\$ ${_splitCalculator.remainingUsd.toStringAsFixed(2)} USD)',
-                      style: TextStyle(
-                        color: Colors.grey.shade700,
+                      style: const TextStyle(
+                        color: NhilosColors.textSecondary,
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
                       ),
@@ -793,7 +794,6 @@ class _MultiCurrencyCheckoutDialogState
                 ),
               ],
             ),
-          ),
         ),
         const SizedBox(height: 12),
 
@@ -872,7 +872,7 @@ class _MultiCurrencyCheckoutDialogState
                   p.method == PaymentMethod.cash
                       ? Icons.money
                       : (isCard ? Icons.credit_card : Icons.qr_code),
-                  color: Colors.blueGrey,
+                  color: NhilosColors.textSecondary,
                 ),
                 title: Text(
                   p.currency.toUpperCase() == 'NIO'
@@ -886,7 +886,7 @@ class _MultiCurrencyCheckoutDialogState
                         ? Text('Vuelto: ${p.changeCurrency.toUpperCase() == 'NIO' ? 'C\$' : '\$'} ${p.changeGiven.toStringAsFixed(2)}')
                         : null),
                 trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
+                  icon: const Icon(Icons.delete, color: NhilosColors.danger),
                   onPressed: () => _removeSplitPayment(p.id),
                 ),
               ),
@@ -905,9 +905,9 @@ class _MultiCurrencyCheckoutDialogState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: NhilosColors.neutralGray,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: NhilosColors.border),
       ),
       child: Column(
         children: [
@@ -927,7 +927,7 @@ class _MultiCurrencyCheckoutDialogState
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.blueAccent,
+                  color: NhilosColors.brandPrimary,
                 ),
               ),
             ],
@@ -939,17 +939,20 @@ class _MultiCurrencyCheckoutDialogState
               Flexible(
                 child: Text(
                   'Equivalente Comercial:',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: NhilosColors.textSecondary,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 '\$${totalUsd.toStringAsFixed(2)} USD',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Colors.green.shade800,
+                  color: NhilosColors.success,
                 ),
               ),
             ],
@@ -1071,6 +1074,11 @@ class _MultiCurrencyCheckoutDialogState
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       onChanged: (_) => setState(() {}),
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        fontFeatures: [FontFeature.tabularFigures()],
+      ),
       decoration: InputDecoration(
         labelText: 'Monto Recibido',
         prefixText: currency == 'USD' ? '\$ ' : 'C\$ ',
@@ -1137,7 +1145,7 @@ class _MultiCurrencyCheckoutDialogState
                           : 'Vuelto: C\$ ${breakdown.effectiveChange.toStringAsFixed(2)}')
                       : 'Faltan C\$ ${breakdown.remainingNio.toStringAsFixed(2)}',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                     fontFeatures: const [FontFeature.tabularFigures()],
                     color: breakdown.isSufficient
@@ -1153,7 +1161,8 @@ class _MultiCurrencyCheckoutDialogState
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'Equivalente en NIO: C\$ ${breakdown.changeNio.toStringAsFixed(2)}',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                style: const TextStyle(
+                    fontSize: 12, color: NhilosColors.textSecondary),
               ),
             ),
           if (breakdown.isSufficient && breakdown.changeCurrency == 'NIO')
@@ -1161,7 +1170,8 @@ class _MultiCurrencyCheckoutDialogState
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 'Equivalente en USD: \$${breakdown.changeUsd.toStringAsFixed(2)} USD',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                style: const TextStyle(
+                    fontSize: 12, color: NhilosColors.textSecondary),
               ),
             ),
         ],
@@ -1173,24 +1183,24 @@ class _MultiCurrencyCheckoutDialogState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.indigo.shade50,
+        color: NhilosColors.neutralGray,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.indigo.shade200),
+        border: Border.all(color: NhilosColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.contactless, color: Colors.indigo.shade700),
+              const Icon(Icons.contactless, color: NhilosColors.brandPrimary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Procese el cobro en el datáfono físico (BAC / BANPRO / LAFISE)',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
-                    color: Colors.indigo.shade900,
+                    color: NhilosColors.textPrimary,
                   ),
                 ),
               ),
@@ -1242,7 +1252,7 @@ class _MultiCurrencyCheckoutDialogState
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.indigo.shade100),
+              border: Border.all(color: NhilosColors.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1272,7 +1282,10 @@ class _MultiCurrencyCheckoutDialogState
                   _isFastCheckout
                       ? 'El voucher se guardará como PENDIENTE para conciliar al cierre de turno.'
                       : 'Ingrese los datos del voucher físico emitido por el datáfono.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: NhilosColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -1333,23 +1346,23 @@ class _MultiCurrencyCheckoutDialogState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.teal.shade50,
+        color: NhilosColors.neutralGray,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.teal.shade200),
+        border: Border.all(color: NhilosColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.qr_code_scanner, color: Colors.teal.shade700),
+              const Icon(Icons.qr_code_scanner, color: NhilosColors.brandPrimary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Pago por Transferencia / QR Bancario',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.teal.shade900,
+                    color: NhilosColors.textPrimary,
                   ),
                 ),
               ),

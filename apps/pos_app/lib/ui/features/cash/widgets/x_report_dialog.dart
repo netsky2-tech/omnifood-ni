@@ -71,7 +71,7 @@ class XReportDialog extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.blue.shade600,
+                            color: NhilosColors.brandPrimary,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
@@ -85,7 +85,8 @@ class XReportDialog extends StatelessWidget {
                         ),
                         Text(
                           nowStr,
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                          style: const TextStyle(
+                              fontSize: 11, color: NhilosColors.textSecondary),
                         ),
                       ],
                     ),
@@ -103,10 +104,10 @@ class XReportDialog extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Table(
-                border: TableBorder.all(color: Colors.grey.shade300),
+                border: TableBorder.all(color: NhilosColors.border),
                 children: [
                   TableRow(
-                    decoration: BoxDecoration(color: Colors.grey.shade100),
+                    decoration: const BoxDecoration(color: NhilosColors.neutralGray),
                     children: const [
                       Padding(
                         padding: EdgeInsets.all(6.0),
@@ -146,11 +147,15 @@ class XReportDialog extends StatelessWidget {
                       ),
                       Padding(
                         padding: const EdgeInsets.all(6.0),
-                        child: Text(_formatNio(totalInNio), style: const TextStyle(fontSize: 12, color: Colors.green)),
+                        child: Text(_formatNio(totalInNio),
+                            style: const TextStyle(
+                                fontSize: 12, color: NhilosColors.success)),
                       ),
                       Padding(
                         padding: const EdgeInsets.all(6.0),
-                        child: Text(_formatUsd(totalInUsd), style: const TextStyle(fontSize: 12, color: Colors.green)),
+                        child: Text(_formatUsd(totalInUsd),
+                            style: const TextStyle(
+                                fontSize: 12, color: NhilosColors.success)),
                       ),
                     ],
                   ),
@@ -162,11 +167,15 @@ class XReportDialog extends StatelessWidget {
                       ),
                       Padding(
                         padding: const EdgeInsets.all(6.0),
-                        child: Text(_formatNio(totalOutNio), style: const TextStyle(fontSize: 12, color: Colors.red)),
+                        child: Text(_formatNio(totalOutNio),
+                            style: const TextStyle(
+                                fontSize: 12, color: NhilosColors.danger)),
                       ),
                       Padding(
                         padding: const EdgeInsets.all(6.0),
-                        child: Text(_formatUsd(totalOutUsd), style: const TextStyle(fontSize: 12, color: Colors.red)),
+                        child: Text(_formatUsd(totalOutUsd),
+                            style: const TextStyle(
+                                fontSize: 12, color: NhilosColors.danger)),
                       ),
                     ],
                   ),
@@ -208,7 +217,11 @@ class XReportDialog extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 'Nota: La lectura X es informativa y no cierra el turno de caja.',
-                style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade600),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                  color: NhilosColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -236,7 +249,9 @@ class XReportDialog extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12, color: NhilosColors.textSecondary)),
           Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),

@@ -120,18 +120,20 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: NhilosColors.dangerLight,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
+                    border: Border.all(color: NhilosColors.dangerBorder),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      const Icon(Icons.error_outline,
+                          color: NhilosColors.danger, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _error!,
-                          style: const TextStyle(color: Colors.red, fontSize: 13),
+                          style: const TextStyle(
+                              color: NhilosColors.danger, fontSize: 13),
                         ),
                       ),
                     ],
@@ -142,14 +144,15 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
+                  color: NhilosColors.warningLight,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade300),
+                  border: Border.all(color: NhilosColors.warningBorder),
                 ),
                 child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.visibility_off, color: Colors.amber, size: 20),
+                    Icon(Icons.visibility_off,
+                        color: NhilosColors.warning, size: 20),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -216,7 +219,7 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
         ElevatedButton(
           onPressed: _submitting ? null : _submit,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: NhilosColors.danger,
             foregroundColor: Colors.white,
           ),
           child: _submitting
