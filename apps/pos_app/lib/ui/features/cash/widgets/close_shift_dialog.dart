@@ -54,14 +54,18 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
     }
 
     // Issue #529: re-query the net cash sales before evaluating variance,
-    // so sales recorded after the screen loaded are included and honest
-    // counts don't trip the supervisor override.
+    // so sales recorded after the screen loaded are included and the
+    // difference that gets RECORDED is honest.
     await vm.refreshSalesCash();
 
-    final diffNio = (countedNio - vm.effectiveExpectedNio).abs();
-    final diffUsd = (countedUsd - vm.effectiveExpectedUsd).abs();
-    final hasHighVariance = diffNio > 100.0 || diffUsd > 5.0;
-
+    // D-15 (owner decision, 2026-10-02): closing with any difference is
+    // allowed — no threshold, no PIN, no authorization. The requirement is
+    // that the difference is recorded (difference_nio / Z variance / cloud),
+    // which closeShiftWithBlindCount already does. The old
+    // `hasHighVariance > 100 C$ / 5 USD` branch only stamped the fabricated
+    // id 'supervisor-auth' — a nonexistent actor dressed as an
+    // authorization (same defect class as D-13). Nobody authorizes here,
+    // so supervisorId is always null and the shift carries no fake stamp.
     setState(() {
       _submitting = true;
       _error = null;
@@ -73,7 +77,7 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
       notes: _notesController.text.trim().isNotEmpty
           ? _notesController.text.trim()
           : null,
-      supervisorId: hasHighVariance ? 'supervisor-auth' : null,
+      supervisorId: null,
     );
 
     if (mounted) {
