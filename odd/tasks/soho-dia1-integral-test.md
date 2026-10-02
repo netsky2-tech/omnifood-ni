@@ -143,6 +143,14 @@ Operator: "si ya está anulada, no debería dejar darle nuevamente a anular, y s
 ### D-14 (new, operator-reported) — internal IDs leak to the operator instead of names
 
 Several surfaces print a raw UUID where a person's name belongs: the invoice detail header (`Usuario: 3d052da1-6b6f-4bfe-913a-84116606e297`), the `Corte X` (`Cajero ID`), and the cloud row (`cash_shift_sessions.cashier_name` stores the UUID — D-3). The operator's rule: the id is internal and must not be shown. Fix the display surfaces to resolve the name, and stop persisting the id into a `*_name` column. **Same class, also operator-reported**: the movement-type options print the raw enum in parentheses — `Ingreso Menudo (CASH_IN)`, `Gasto Menor (PETTY_CASH)`, `Retiro a Bóveda (SAFE_DROP)`, `Egreso Efectivo (CASH_OUT)` — where only the name belongs.
+
+### D-15 (new) — a blind-count discrepancy requires no authorization
+
+`Fase 9.5` asks that a discrepancy over a threshold require manager authorization. `closeShiftWithBlindCount` takes an optional `supervisorId` but nothing computes a threshold or demands it, and `Arqueo Ciego y Cierre de Turno` exposes only `Total Contado (C$)/($ USD)`, `Observaciones` and the close button — the operator can close with any difference, unsupervised. Note the tension with the operator's kiosk ruling on D-13 (the owner is often absent); the resolution belongs to the owner, but the plan's 9.5 is not met today.
+
+### D-16 (new, operator-reported) — money fields seeded `0.00`, so digits concatenate
+
+The cash-movement and blind-count amount fields were built with `TextEditingController(text: '0.00')`, so the operator's digits **appended**: typing `100` in the movement dialog produced `C$ 0.00100` and typing `1100` in the blind count produced `C$ 0.001100`. On money that is a silent data-entry error, and in the blind count it corrupts the very discrepancy the count exists to prove. **FIXED (commit pending): controllers start empty and `0.00` is only a `hintText`.** Cash widget tests 27/27.
 9. **D-9 (SEVERE — drawer expectation ignores cash sales) — FIXED (commit `12861a97`), device verification pending**: the `Corte X` "Resumen de Flujo de Gaveta en Tiempo Real" and the `Control de Caja y Turnos` card both reported **Esperado en Gaveta = C$1000.00**, i.e. the initial float unchanged, after two cash sales totalling C$200 (invoice #2: 200 received − 75 change = 125; invoice #4: 75). The cloud agreed (`cash_shift_sessions.expected_cash_nio = 1000.0000`). Root cause: only the Z close used `effectiveExpectedNio/Usd` (base + net cash sales, from the #529 work); the cards and `XReportDialog` printed the raw `shift.expectedNio/Usd`, which carry only the float plus manual movements. Fix: both now display/pass the effective expectation. `flutter test test/ui/features/cash/` + the blind-count integration test pass (28/28).
 
 ### Blocked / pending
