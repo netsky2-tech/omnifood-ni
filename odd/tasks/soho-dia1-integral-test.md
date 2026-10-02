@@ -163,14 +163,22 @@ The cash-movement and blind-count amount fields were built with `TextEditingCont
 - **Cloud (after a forced sync)**: `cash_shift_sessions` → `status=CLOSED`, `expected_cash_nio=1125.0000`, `final_counted_nio=1100.0000`, `difference_nio=-25.0000`, `z_report_sequence=1`, `closed_at=20:30:51`. The close-AND-reopen-on-the-same-key pattern that broke D-10 does NOT affect shifts: the shift ingestion uses an upsert keyed by id with no payload-hash guard, so the OPEN→CLOSED transition lands normally.
 - D-14 repeats here: the Z report's `Cajero ID` prints the raw UUID.
 
-### Fase 12 (operator switch) — PARTIAL
+### Fase 12 (operator switch) — COMPLETE (with D-17)
 
-- 12.1 PASS: `Cambiar operador` is reachable in the drawer.
-- 12.2 PASS **by code** (`_handleOperatorSwitch`): with an active session it pops, routes to `/sales/cash` and shows `Hay una caja abierta. Cierra la caja antes de cambiar de operador.` Not exercised on device because the shift was already closed.
-- 12.3 **PARTIAL / UX DEFECT**: with no active session the handler routes to `/lock`, but the lock screen **pre-selects the CURRENT operator**, so the switch lands on *that* user's PIN prompt instead of offering the incoming operator. The operator has to discover the back arrow to reach `Seleccionar Usuario`. A handover screen must show the USER LIST first — the incoming operator is by definition not the outgoing one.
-- 12.4 PASS: the sync badge stayed green throughout the switch flow.
-- 12.5/12.6 NOT COMPLETED: the incoming operator was never loaded, because of 12.3's pre-selection. A new cashier **`Karla Cajera` (CASHIER, pin 654321)** was created via `POST /api/identity/users` and **did sync to the device** — `Seleccionar Usuario` lists both `Maxwell Orozco (OWNER)` and `Karla Cajera (CASHIER)` — so the data side is ready; the flow to hand over is what needs fixing/retesting.
-- 12.7 PASS: `CERRAR SESIÓN` logs out to the login screen.
+Evidence after retesting with a real second operator (**Karla Cajera**, CASHIER, PIN 654321, synced to the device):
+
+| Check | Result | Evidence |
+|---|---|---|
+| 12.1 drawer entry | PASS | `Cambiar operador` present in the drawer |
+| 12.2 blocked while shift open | PASS | with Karla's shift open, tapping it routes to `Control de Caja y Turnos` and shows the snackbar **"Hay una caja abierta. Cierra la caja antes de cambiar de operador."** |
+| 12.3 only the incoming PIN | **DEFECT (D-17)** | with no open shift it routes to `/lock`, which **pre-selects the outgoing operator**; the handover lands on the outgoing PIN prompt instead of the user list |
+| 12.4 sync survives | PASS | badge green throughout the switch flow |
+| 12.5 incoming operator loads its own shift | PASS | Karla opened `cash_shift_sessions 4f50fb03` (float C$500, `cashier_id` = Karla); Maxwell's `2806196f` stayed CLOSED and untouched |
+| 12.6 no sale attributed to the wrong operator | PASS | invoice **#5** `user_id=13200a55…` (Karla) with `shift_id=4f50fb03`; invoices #2–4 keep Maxwell and `2806196f`. Drawer header shows `Karla Cajera / CAJERO` and the cashier correctly loses `Reportes DGI` / keeps `Inventario BOH` disabled |
+| 12.7 CERRAR SESIÓN | PASS | returns to the login screen |
+
+- **D-17 (new, operator-facing UX)**: the operator-switch screen pre-selects the outgoing operator. `app_drawer._handleOperatorSwitch` routes to `/lock` and the lock screen auto-selects `viewModel.selectedUser`, so a handover opens the *outgoing* user's PIN pad. The incoming operator must be found by tapping the back arrow. Fix: the switch must land on `Seleccionar Usuario` (no pre-selection) — the incoming operator is by definition not the outgoing one.
+- Also re-confirmed: `cash_shift_sessions.cashier_name` still stores the UUID (D-3) and Karla's own shift shows `Esperado en Gaveta C$600` (500 float + 100 sale), i.e. the D-9 fix holds for a second operator.
 9. **D-9 (SEVERE — drawer expectation ignores cash sales) — FIXED (commit `12861a97`), device verification pending**: the `Corte X` "Resumen de Flujo de Gaveta en Tiempo Real" and the `Control de Caja y Turnos` card both reported **Esperado en Gaveta = C$1000.00**, i.e. the initial float unchanged, after two cash sales totalling C$200 (invoice #2: 200 received − 75 change = 125; invoice #4: 75). The cloud agreed (`cash_shift_sessions.expected_cash_nio = 1000.0000`). Root cause: only the Z close used `effectiveExpectedNio/Usd` (base + net cash sales, from the #529 work); the cards and `XReportDialog` printed the raw `shift.expectedNio/Usd`, which carry only the float plus manual movements. Fix: both now display/pass the effective expectation. `flutter test test/ui/features/cash/` + the blind-count integration test pass (28/28).
 
 ### Blocked / pending
