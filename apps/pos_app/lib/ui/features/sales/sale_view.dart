@@ -16,6 +16,7 @@ import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
+import 'widgets/product_card_thumbnail.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
@@ -914,7 +915,7 @@ class ProductGrid extends StatelessWidget {
           child: Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: NhilosRadii.cardRadius,
               side: BorderSide(
                 color: promo != null
                     ? Colors.deepOrange
@@ -930,8 +931,9 @@ class ProductGrid extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Icon(
-                        Icons.fastfood,
+                      ProductCardThumbnail(
+                        category: product.category,
+                        productName: product.name,
                         size: isHandheld ? 32 : 40,
                         color: promo != null ? Colors.deepOrange : colorScheme.primary,
                       ),
@@ -953,10 +955,12 @@ class ProductGrid extends StatelessWidget {
                       Text(
                         'C\$ ${product.sellPrice.toStringAsFixed(2)}',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: promo != null ? Colors.deepOrange : colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: isHandheld ? 13 : 15,
+                        style: NhilosTextStyles.tabular(
+                          base: TextStyle(
+                            color: promo != null ? Colors.deepOrange : colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: isHandheld ? 13 : 15,
+                          ),
                         ),
                       ),
                     ],
@@ -968,9 +972,9 @@ class ProductGrid extends StatelessWidget {
                     right: 4,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: Colors.deepOrange,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: NhilosRadii.badgeRadius,
                       ),
                       child: Text(
                         promo.type == PromotionType.buyXGetYFree
