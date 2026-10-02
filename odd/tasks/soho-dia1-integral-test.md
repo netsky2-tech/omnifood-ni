@@ -4,6 +4,177 @@ Authority: `docs/plans/sales/prueba_integral_dia_1_soho.md` (plan), `docs/nhilos
 
 Goal: execute Fases 0–14 of the day-1 integral test on the physical tablet **against a clean client tenant** — real RUC, the validated 58-item menu, and a real DGI series — and record honest per-check evidence.
 
+---
+
+# HANDOFF — FRESH SESSION (READ THIS FIRST)
+
+Everything below was executed and verified on the tablet on 2026-10-01/02. This section is the authoritative resume point; the rest of the file is the chronological log of how each fact was obtained.
+
+## 1. One-line status
+
+Fases 0–14 have been **exercised end to end on the real device** (with the gaps listed in §5). **Six defects were fixed, committed and device-verified. Thirteen are still open**, two of them §4.1-severe (D-18 badge, D-19 Z report). The operator's plan: fix the open defects, then **re-run every phase from zero** to certify the system as operable.
+
+## 2. How to resume the environment
+
+| Item | Value / command |
+|---|---|
+| Branch | `fix/soho-commercial-fx-rate` — **24 commits over `main`** (`git log main..fix/soho-commercial-fx-rate`). All work belongs on this branch. |
+| Build worktree | `/home/octavio_morales/omnifood-ni-fx` (the branch is checked out here; the branch is NOT checked out in the main worktree, which stays on `main`). |
+| Main worktree | `/home/octavio_morales/omnifood-ni` — **shared with another session, leave it on `main`** with no local changes (untracked files under `docs/nhilos/` belong to the other session). |
+| Release build | `cd /home/octavio_morales/omnifood-ni-fx/apps/pos_app && flutter build apk --release` (~100 s). `android/key.properties` is already copied there (`~/.keys/nhilos-upload.jks`, alias `nhilos_pos`). |
+| Install | `adb -s <SERIAL> install -r build/app/outputs/flutter-apk/app-release.apk`. **Raise `pubspec.yaml version:` before every build** — the installed build is `1.0.0+2005` and the device rejects downgrades (`INSTALL_FAILED_VERSION_DOWNGRADE`). That bump is **local/uncommitted by design**; never commit it. |
+| Device | Q80 tablet (model `MIRAY`/`TPM4G_E9863`), app `com.nhilos.pos_app`, **release-signed build** (so `run-as` is unavailable: verify through UI + backend DB + logcat only). |
+| ADB endpoint | It changes with wireless debugging: `192.168.0.7:46605` → `192.168.0.7:35295`. **Recovery path after reboot/airplane mode: `adb-Q802024120001-6eCnRZ._adb-tls-connect._tcp`** (mDNS, survives reboot); otherwise ask the operator for the new port. |
+| ⚠ ADB trap | Airplane mode and reboot **kill the adb-over-TCP channel** (both network). Do the network-cut tests knowing you may lose control; the mDNS endpoint usually comes back. |
+| Reverse tunnel | **After every reconnect**: `adb reverse tcp:3000 tcp:3000`. The app's `API_URL` defaults to `http://127.0.0.1:3000/api` and the tablet cannot reach the host IP directly. |
+| Backend | Local `nest --watch` in the main worktree, `http://localhost:3000/api`, DB `omnifood`. `migrations:show/run` are **broken under pnpm** — run migrations by loading the DataSource directly: `npx ts-node -r tsconfig-paths/register -e "require('./src/data-source.ts').default"` then `initialize()/runMigrations()`. |
+| Device ↔ cloud proof | `adb reverse` OK ⇒ device talks to the local backend; also proven by `device_sync_credentials` row `8aa04518-880b-41ae-8700-5078ef188f14` (live, not revoked) existing in the local DB. |
+
+### Test fixtures already created (keep them; they are the re-run baseline)
+
+| Fixture | Value |
+|---|---|
+| Tenant | `SOHO` / `soho` / id `bc3bd4dd-92bb-4cfe-883e-cb5ec97bfe94`, RUC `J0000001203012`, regime `CUOTA_FIJA` (`taxRateIva=0`), `operationMode=FOODPARK_QSR`, `checkoutFxMode=COMMERCIAL`, commercial FX rate **36.6243** (fiscal config revision 4). |
+| Owner | `admin@soho.com` / password **`C0ntr4sen4`** / PIN **123456** (user `3d052da1-6b6f-4bfe-913a-84116606e297`, role OWNER). The operator originally gave `C0ntr4señ4`, but `adb shell input text` cannot type `ñ`, so it was changed. |
+| Cashier | `cajero@soho.com` "Karla Cajera" / PIN **654321** (user `13200a55-60ca-4fb9-861d-b063ae2b583f`, role CASHIER) — used for the operator-switch test. |
+| Products | 58 SIMPLE products imported from `Menu_SOHO_import_listo.xlsx` (at the operator's Downloads). Gate: preview `58/0/0/0/0`. |
+| Promotions | `2x1 Cappuccino 12oz - Dia del Cafe` (`buyXGetYFree`, `target_product_id=b1b05a9a-…`) — **works**; `10% Cafe Caliente` (`percentageDiscount`, `target_category_id=CAFÉ CALIENTE`) — **never applies** (see gaps). |
+| Old fixture | Pre-existing tenant renamed `SOHO Test Fixture`/`soho-test-fixture` and its owner email moved to `admin@soho-fixture.local` (reversible UPDATEs). |
+| Device | terminal id `pos-local-082cc471-24d5-4fde-99f0-efbef81e9b6d`, printer **simulated**, fiscal series now seeded (consecutivo actual 5 → next invoice **#8**), next Z would be **Z-0003**. |
+| Cloud state at handoff | invoices **1–7** (3 and 4 cancelled), shifts `2806196f` CLOSED/Z-0001 (diff −25) and `4f50fb03` CLOSED/Z-0002 (diff −5). Both operators logged out-ish states vary; the last operator unlocked was Karla. |
+
+### Gotchas discovered the hard way
+
+1. **Driving Flutter UI over adb**: opening the soft keyboard reflows `SingleChildScrollView`, so coordinates shift. **Screenshot before every tap.** A tap that lands one widget off silently does nothing — never treat "nothing happened" as a product defect until you have re-verified the coordinate (this produced one false defect report that the operator corrected).
+2. `adb shell input text` cannot type `ñ`, and it does not replace a field's content — it appends. Clear with `input keyevent 123` + repeated `67`, then type.
+3. Escape `keyevent 111` vs back `keyevent 4` behave differently in dialogs (ESC closed a dialog where back only hid the keyboard).
+4. `uiautomator dump` gives exact bounds for PIN pads/dropdowns — use it instead of eyeballing coordinates.
+5. Sync runs on a **5-minute timer**; after a data change either wait, restart the app, or press `Forzar Sincronización`. Also: the fiscal config syncs **after login**, so a rate change needs login → sync → (restart for the constructor-only loaders, unless the D-5 fix is present).
+
+## 3. Fixes already on the branch — committed AND device-verified
+
+Do **not** re-fix these; verify them only in the re-run.
+
+| Defect | Commit | Device proof |
+|---|---|---|
+| **D-4** FX field was labelled "spread" while the POS consumes a rate | `5342aef8` (+ docs) | label now `Tipo de Cambio Comercial (C$)`; checkout reads `TC Comercial: 36.62`, C$100 → `$2.73 USD` |
+| **D-5** FX changes did not reach an open checkout | `4f1b7b31` | rate changed in the backend → checkout opened **without restart** showed `TC Comercial: 40.00`, C$100 → `$3.13 USD` |
+| **D-9** drawer expectation ignored cash sales | `12861a97` | after C$200 of cash sales both `Control de Caja` and `Corte X` show **C$1200.00** (was 1000); verified again for a second operator (805 = 500 + 305) |
+| **D-10** a cancellation never reached the cloud | `65dabe6b` + `569a9429` (residue) | void now ships as a **new document** (`void:<terminal>:<invoiceId>` + fresh `sourceSequence`); cloud shows `#4 is_canceled=t`, receipt `void:…ACCEPTED`, and the pre-fix `#3` re-keyed and landed |
+| **D-12** invoice preview showed a stale snapshot | `ba2f3d9d` | invoice #4 preview shows red **ANULADA** badge and only `REIMPRIMIR` |
+| **D-16** money fields seeded `0.00` so digits concatenated | `dc9e06e8` | blind-count and movement fields accept `1100` / `100` cleanly (`C$ 800` entered as typed) |
+| **D-8 (half)** void failures were swallowed | `c9533c9f` | second void on a cancelled invoice now shows **"La factura ya está anulada."**; cause is logged at SEVERE — **the original failure never reproduced** |
+
+## 4. Open defects — sweep in this order (impact on day 1 first)
+
+### 🔴 D-19 — the Z/DGI report overstates cash collected (§4.1, report vs drawer)
+
+- **Observed**: `Reportes DGI → Arqueo de Caja (Reporte Z)` for shift `2806196f` printed `Ventas Brutas C$125.00` but **`Efectivo C$200.00`**.
+- **Truth in the cloud**: gross 125.00, cash received 200.00, **change 75.00**, **net collected 125.00**; voids 2 / 225.00 (correct).
+- **Root cause (code)**: `apps/pos_app/lib/ui/features/sales/reports/dgi_report_view_model.dart:69-84` — `paymentsByMethod` sums `p.amount` and never subtracts `p.changeGiven`. It contradicts its own `totalGross` (200 ≠ 125) **and** the shift's `expected_cash` (1125 = float 1000 + **net** 125 + 100 − 100), which nets it in `cash_shift_view_model._computeSalesCashTotals`.
+- **Fix**: net cash exactly like the shift close does (and make the breakdown sum reconcile with `totalGross`). The backend already nets correctly (`sales-reports.service.ts:145-159`) — mirror it.
+
+### 🔴 D-18 — PIN-only session leaves the badge permanently red on an empty outbox (§4.1, kiosk)
+
+- **Observed**: after `CERRAR SESIÓN` (which clears the cached cloud user credential in `AuthRepositoryImpl.logout`) and an **offline PIN unlock**, the badge is **RED**: `Error en última sincronización`, `Detalle de Error: Registros de auditoría`, `Pendientes en Outbox: 0 documento(s)`, and every `Forzar Sincronización` fails with `[CloudAuth] Reautenticación requerida: sesión cloud expirada o revocada` (`main.dart:312`).
+- **Root cause**: the audit stream posts to `POST /identity/audit`, whose controller is `@UseGuards(AuthGuard)` (`apps/admin_backend/src/modules/identity/controllers/audit.controller.ts:32`) — it needs a **live user JWT**, which an offline PIN unlock never creates. Folded into `domainErrors` by `sync_service.dart:497-505`, it makes the whole terminal look broken while the outbox is empty and business traffic (device credential) keeps working.
+- **A/B proof**: same terminal, no code change — Karla's PIN session → red; online owner login → `Nube Sincronizada al 100%`.
+- **Fix**: audit logging must not depend on a per-user cloud session (ship it on the device credential, or queue it without failing the pass) **and** the badge must separate "audit stream delayed" from "business documents pending".
+- **Also**: this is why the badge stayed red during the offline test — record it in the re-run.
+
+### D-14 — internal identifiers and enum codes leak to the operator (operator-reported)
+
+- Raw UUIDs where a person's name belongs: invoice detail `Usuario: 3d052da1-…` (`sales_history_view.dart`), `Cajero ID` in `x_report_dialog.dart:99` **and** `z_report_dialog.dart:55`, the printed `Sesión ID: ${id.substring(0,8)}` (`dgi_report_view_model.generatePrintString`), the session picker (`Sesión 4f50fb03 (ACTIVA)`), and cloud `cash_shift_sessions.cashier_name` storing the UUID (D-3).
+- Enum codes in option labels: `cash_movement_dialog.dart:129-145` → `Ingreso Menudo (CASH_IN)`, `Gasto Menor (PETTY_CASH)`, `Retiro a Bóveda (SAFE_DROP)`, `Egreso Efectivo (CASH_OUT)`; and movement rows in the history show `Tipo: CASH_IN`.
+- **Fix**: resolve the name everywhere (keep the id in the audit payload only) and drop the parenthesised codes from labels.
+
+### D-20 — currency labels truncate, so the operator can enter the wrong currency (operator-reported)
+
+- In the blind-count dialog the two fields render `Total Contado (C…` and `Total Contado ($…`; in the cash-movement dialog `Monto en Córdobas (C$)` / `Monto en Dólares ($ U…`. The **currency marker is exactly what gets cut off**, so both boxes read almost identically — entering `800` USD instead of NIO is an easy, consequential mistake (it corrupts the Z variance).
+- **Where**: `apps/pos_app/lib/ui/features/cash/widgets/close_shift_dialog.dart:165-186` and `…/widgets/cash_movement_dialog.dart:160-180` — a long `labelText` inside an `Expanded` in a two-column `Row`.
+- **Fix**: short explicit labels (`C$ contado` / `USD contado`, `Monto C$` / `Monto USD`), keep the currency symbol **first** so it survives truncation, and widen (put the fields in a column on narrow widths). Applies to the opening-float dialog too.
+
+### D-13 — a fabricated actor is stamped on movements (operator-corrected framing)
+
+- `cash_movement_dialog.dart:30` declares `_requiresSupervisor` for `PETTY_CASH`/`SAFE_DROP` only to pass `authorizedByUserId: 'user-manager'` (`:63`) — a **non-existent** user; `_supervisorPinController` (`:17`) is declared and never used.
+- **Do NOT "fix" it by adding a PIN gate**: the operator ruled that in a food-park kiosk the owner is often absent (the operator buys ice on the spot, or pays for products the owner sends over), so an owner-only gate would break the daily flow.
+- **Fix**: record the real operator (or `null`) and treat authorization as policy, never a hardcoded identity.
+
+### D-17 — operator switch pre-selects the outgoing operator (operator-reported)
+
+- `app_drawer.dart:63-83` routes to `/lock`, and the lock screen auto-selects `viewModel.selectedUser`, so a handover lands on the **outgoing** operator's PIN pad; the incoming operator must find the back arrow to reach `Seleccionar Usuario`. Also reproducible right after an online login.
+- **Fix**: on switch, land on `Seleccionar Usuario` with **no pre-selection** (the incoming operator is by definition not the outgoing one).
+
+### D-15 — a blind-count discrepancy requires no authorization (needs an owner decision)
+
+- `closeShiftWithBlindCount` accepts an optional `supervisorId`, but nothing computes a threshold or demands one; the dialog only has counted C$/USD, notes and the button. Fase 9.5 is unmet: you can close with **−C$25** unsupervised (observed).
+- Tension with the D-13 ruling (owner often absent). **Ask the owner** what the threshold should be before implementing.
+
+### D-11 — the local FX edit silently reverts
+
+- In `Configuración del Negocio`, `Tasa a Utilizar…` is visibly locked, but `Tipo de Cambio Comercial` **looks editable and is not authoritative**: setting `45.0000` and saving reverted to `36.6243` and the checkout kept `36.62` (either the save silently failed or the cloud-authoritative fiscal projection restored the key).
+- **Fix**: make it read-only like the field above, or make the save authoritative with a visible "guardado / sincronizado" confirmation.
+- Note: the operator changed the BCN field by pressing its refresh button — that was a bank-endpoint test, **not** a defect (withdrawn).
+
+### D-6 — the invoice records the wrong commercial rate (fiscal data)
+
+- `apps/admin_backend/src/modules/sales/entities/invoice.entity.ts` declares `commercial_rate ... default: 36.5`, and the POS **never sends `commercialRate`** in the sync payload (`sync_service.dart` has no reference), so every invoice stores `36.5000` even when charged at 36.62 (observed on invoice #3).
+- **Fix**: send the rate the POS actually applied (and decide whether historical invoices are left as-is — invoices are immutable fiscal records).
+
+### D-7 — tips are unreachable in SOHO's mode (needs a product decision)
+
+- `BusinessModeEvaluator.isSplitBillAllowed` and `isSuggestedTipPromptEnabled` derive from `canUseTableService` → `TenantConfig.supportsTables` → `operationMode.supportsTables`, and `TenantOperationMode.foodparkQsr.supportsTables == false`. The only tip UI lives in `SplitBillDialog` (`tip_chip_10`/`tip_chip_15`), reached by the cart's `DIVIDIR CUENTA` button which is gated on the same flag.
+- So a `FOODPARK_QSR` tenant **cannot charge a tip at all**, although `invoices` has `tip_amount_nio/usd`, `tip_percentage`, `tip_eligible_base_nio` and `TipEngine` is implemented.
+- **Fix options**: allow split/tips for QSR (a counter split is a normal transaction), or a separate tip entry on the checkout. **Operator decision needed.**
+
+### D-8 (residual) — the original void failure's root cause is still unnamed
+
+- Diagnostics are in place (`SaleViewModel._voidFailureMessage` + SEVERE log), but the failure seen twice on the pre-fix build never reproduced on `2002`…`2005`. If it recurs, **read the SEVERE log** — that is what the fix was for.
+
+### D-1 / D-2 — logging only (low priority)
+
+- `dio_activation_sync_port.dart:374` prints `[Bootstrap] REQUEST url=$reqUrl` where `$reqUrl` misses a slash (`…:3000/apionboarding/…`), while the FAIL line shows the correct URL → log-only.
+- `auth_repository_impl.dart:225` prints `Online login successful for ${user.email}` → renders `…for null` because the email field is not populated on that path → log-only.
+
+### Promotions redesign — separate issue (operator-confirmed)
+1. **Category-wide 2x1 is not expressible**: `promotions_engine.dart` matches `buyXGetYFree` only on `targetProductId`; `targetCategoryId` is ignored for that type. "2x1 on all hot coffees" cannot be built as one promotion.
+2. **`category` never reaches the device**: `fetchProductDeltas` in `apps/admin_backend/src/modules/sales/services/inbound-sync.service.ts` (~:510) returns no `category` field, so `Product.category` is null on the tablet and `PromotionsEngine`'s category match (`item.category?.toLowerCase() == targetCategoryId!.toLowerCase()`) can **never** be true — reproduced live (10% CAFÉ CALIENTE never applied while the per-product 2x1 did).
+3. **Dashboard form unfit**: `PromotionForm.tsx` asks for raw product/category IDs with no grouping and no dynamic selector (operator's own report).
+4. `comboPackage` exists in the enum but the engine's `case` is a no-op.
+
+### D-21 — the cash-opening dialog only accepts a NIO float (Fase 4.2 half-provable)
+
+- `Control de Caja → Abrir Caja` exposes a single `Fondo de Caja Inicial C$` field, while `cash_shift_sessions` has **both** `initial_float_nio` and `initial_float_usd` and every later screen shows both columns. Fase 4.2 («apertura con fondo en NIO y USD por separado») therefore can only be half demonstrated from the device.
+- **Fix**: mirror the two-currency row used in the movement and count dialogs (see D-20 for the label design), and confirm the USD float survives to the cloud.
+
+## 5. Phase coverage — what was proven, what was not
+
+| Fase | Status |
+|---|---|
+| 0 / 0-bis | ✅ tenant, fiscal setup, menu `58/0/0/0/0`, 58 SIMPLE |
+| 1 | ✅ cold start, online login, staff sync (2 users), tenant binding |
+| 2 | ✅ offline PIN login, clear errors |
+| 3 | ✅ linking, activation Fases 1–3, invoice **#1** `paid`, session `ACTIVATED`, credential issued; printer now **simulated** (earlier it was blocked offline) |
+| 4 | ✅ no sale without shift, float, shift bound to user+terminal, synced to cloud |
+| 5 | ✅ 5.1/5.2/5.3/5.5/5.6/5.7/5.8/5.9. ⚠ **5.4 only NIO change** (USD change never exercised); FX equivalence verified |
+| 6 | ✅ card dialog, fast voucher `PENDIENTE`, reaches cloud |
+| 7 | ✅ split payment, button gating, payments sum to total |
+| 8 | ⚠ void ✅ (reached cloud), reprint ✅ (reason required). **8.3 credit note NOT exercised** |
+| 9 | ✅ X read-only, blind count → variance, Z-0001/Z-0002, Z blocked by vouchers, NIO+USD. ❌ **9.5 no authorization (D-15)** |
+| 10 | ✅ CASH_IN and SAFE_DROP both directions, expected updates immediately, excludes cancelled invoices. ⚠ **PETTY_CASH and CASH_OUT never exercised**; D-13 open |
+| 11 | ✅ vouchers reconciled, Z unblocked |
+| 12 | ✅ 7/7 (12.2 proven on device). ⚠ **D-17** pre-selection |
+| 13 | ✅ real offline run (2 sales made without network, uploaded later), outbox 0, freshness, numbering. ⚠ **13.7** sync resumes alone after PIN, but the **app does not auto-start after reboot**. 🔴 **D-18** |
+| 14 | ✅ history, numbering 1..7 with no gaps, both shifts closed and synced. ❌ **14.2 wrong (D-19)**; **14.6 not exercisable same-day**; printing simulated |
+| Promos | ⚠ per-product 2x1 ✅, manual discount ✅; ❌ category promos dead; ❌ tips unreachable (D-7) |
+
+## 6. Re-run protocol for the next session
+
+1. Fix defects in the §4 order (start with **D-19**, **D-18**, **D-14**, **D-20**), committing one work-unit per fix with tests, on `fix/soho-commercial-fx-rate`.
+2. Build + install (bump `versionCode`), then **re-execute Fases 0→14 in order** from a clean start: log out → owner login → open shift → cash sale with change → card → split → credit note (8.3) → reprint → void → X → movements (all four types) → vouchers → switch operator → offline window → Z → reports → close.
+3. **Declare unproven checks as unproven.** Every check without observed evidence stays red — that is the plan's honesty criterion.
+4. Only after the full green run is the system `ready to operate`.
+
 ## Why a clean tenant
 
 The tablet was bound to tenant `SOHO` (`e05bf002-b1d3-45f2-a46a-3592e1cc1431`), which is a **test fixture**: RUC placeholder `J0000000000000`, 23 products (12 SIMPLE + 11 COMPOUND), 33 invoices named `TEST-BOUND-D` / `CASE-E2-YEAR-START`. No tenant in the local DB carries the 58-item menu. Running the fiscal phases there would emit real invoices against a false RUC and the wrong catalog — a §4.1 violation and contrary to the plan's honesty criterion.
@@ -24,9 +195,9 @@ The tablet was bound to tenant `SOHO` (`e05bf002-b1d3-45f2-a46a-3592e1cc1431`), 
 - [x] **T1 — Provision the clean client tenant.** Tenant `bc3bd4dd-92bb-4cfe-883e-cb5ec97bfe94` (`SOHO`/`soho`, RUC `J0000001203012`); owner `3d052da1-6b6f-4bfe-913a-84116606e297` (`admin@soho.com`). The pre-existing `SOHO` fixture was renamed to `SOHO Test Fixture`/`soho-test-fixture` (UPDATE, reversible) to free the canonical name.
 - [x] **T2 — Fiscal setup.** Applied: regime `CUOTA_FIJA`, businessName `SOHO`, ruc `J0000001203012`, `commercialFxSpread` 0.5, `pricesIncludeTax` false, `operationMode` `FOODPARK_QSR`, `checkoutFxMode` `COMMERCIAL`. `taxRateIva: 0`, config revision 1.
 - [x] **T3 — Import the menu.** PREVIEW on the clean tenant: `categories 7 / productsToCreate 58 / productsToUpdate 0 / recipesToCreate 0 / insumosToCreate [] / errors [] / warnings []`. Gate PASSED (58 create is the clean-tenant expectation). Committed: 58 products, all `SIMPLE`, all with price > 0 and active; categories 16/11/12/4/4/5/6; 0 insumos.
-- [ ] **T4 — Re-link the tablet and run activation (Fase 3).** New linking code; phases 1-2-3; `initializeRange` runs here (`activation_controlled_sale_runner.dart:127`).
-- [ ] **T5 — Execute Fases 1–14** on the tablet and record per-check evidence (POS state vs cloud state).
-- [ ] **T6 — Close the plan.** Update `docs/plans/sales/prueba_integral_dia_1_soho.md` per the release gate; declare unproven checks honestly.
+- [x] **T4 — Re-link the tablet and run activation (Fase 3).** Linking code, online login, PIN, then activation Fases 1–3 (printer simulated) — session `ACTIVATED`, invoice **#1** `paid`, device-sync credential issued, badge green. `initializeRange` ran during activation (`activation_controlled_sale_runner.dart:127`).
+- [x] **T5 — Execute Fases 0–14** on the tablet and record per-check evidence (see the handoff §5 matrix).
+- [ ] **T6 — Close the plan.** Pending the defect sweep + full re-run; then update `docs/plans/sales/prueba_integral_dia_1_soho.md` per the release gate and declare unproven checks honestly.
 
 ## Open inputs (owner-provided, not in the repo)
 
@@ -236,6 +407,8 @@ So the breakdown sums `payments.amount` and ignores `change_given`. Two conseque
 
 ### Blocked / pending
 
+> ⚠ **SUPERSEDED — historical snapshot from mid-run.** Fases 3–14 were executed afterwards; see the `# HANDOFF` section at the top and §5 there for the current state.
+
 - **Fase 3 COMPLETE.** The printer was configured (simulated, to save paper); Fase 1 then passed all 6 checks. Activation attempt `8b2f1984-e6bf-4170-b8a0-324a61c1f56a` finalized: 5 reconnect envelopes delivered (3× `ACTIVATION_CHECK`, `VERIFICATION_SALE`, `FIRST_SUCCESSFUL_SALE_OBSERVED`), device-sync credential provisioned, session `ACTIVATED`, sync badge green.
 - **Fiscal series is still unconfigured** and the verification invoice consumed **number 1**. On the real tenant, the operator must load the DGI-authorized initial consecutive in `Configuración del Negocio` BEFORE activation, or the first commercial sale will not be the authorized initial number (D-6).
 - **Preconditions the activation needed, discovered en route**: the onboarding session must be `SALE_READY`, which only happens after `GET /api/onboarding/session` reconciles readiness (tenant + owner + minimum fiscal + at least one sellable product). `GET /api/onboarding/readiness` does NOT reconcile. Without that call, `POST /api/onboarding/activation/attempts` returns `CANNOT_START_ACTIVATION_NOT_SALE_READY`.
@@ -255,5 +428,7 @@ The promotions feature works only for the narrowest case and is unusable for how
 Operator decision: leave this as its own issue/follow-up; it does not block the day-1 flow but must be redesigned before promotions are used in production.
 
 ### Next (Fases 5–14) — not yet executed
+
+> ⚠ **SUPERSEDED — these phases WERE executed afterwards.** Current matrix: see `# HANDOFF` §5.
 
 Sale with cash + change (5.2-5.5, 5.8-5.9), card voucher (6), split payment (7), void/credit note/reprint (8), X and Z cuts + blind count (9), cash movements (10), voucher reconciliation (11), operator switch (12), sync under load and with the network down (13), day close reports (14), plus the promotions/discounts/tips scenarios. Each needs a human at the tablet for the physical parts (cash counting, supervisor PINs, paper) and cloud-side verification in parallel.
