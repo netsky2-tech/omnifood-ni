@@ -66,6 +66,17 @@ class DgiReportViewModel extends ChangeNotifier {
   double get totalTax => _invoices.where((i) => !i.isCanceled).fold(0.0, (sum, i) => sum + i.totalTax);
   double get totalNet => totalGross - totalTax;
   
+  /// Cash collected **net of change handed back**, so the breakdown reconciles
+  /// with `totalGross` and with the drawer's `expected_cash` (float + NET cash
+  /// sales). D-19: summing the tendered `amount` overstated cash — a C$200
+  /// tender with C$75 change printed `Efectivo C$200` next to `Ventas Brutas
+  /// C$125`, a phantom C$75 gap against the drawer.
+  ///
+  /// `changeGiven > amount` (corrupt row) is clamped to 0 so a bad record can
+  /// never print negative cash. Card/QR amounts are charged amounts and carry
+  /// no change. A payment whose invoice is absent from this session is counted
+  /// as active (the `orElse` placeholder): dropping it would understate the
+  /// method total and break reconciliation instead of improving it.
   Map<PaymentMethod, double> get paymentsByMethod {
     final map = {
       PaymentMethod.cash: 0.0,
@@ -75,7 +86,12 @@ class DgiReportViewModel extends ChangeNotifier {
     for (final p in _payments) {
       final invoice = _invoices.firstWhere((i) => i.id == p.invoiceId, orElse: () => Invoice(id: '', number: '', createdAt: DateTime.now(), userId: '', subtotal: 0, totalTax: 0, total: 0));
       if (!invoice.isCanceled) {
-        map[p.method] = (map[p.method] ?? 0.0) + p.amount;
+        var amount = p.amount;
+        if (p.method == PaymentMethod.cash) {
+          final change = p.changeGiven;
+          amount = change > amount ? 0.0 : amount - change;
+        }
+        map[p.method] = (map[p.method] ?? 0.0) + amount;
       }
     }
     return map;
