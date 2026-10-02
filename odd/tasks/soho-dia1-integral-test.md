@@ -234,6 +234,11 @@ reports no gap, yet the rows never arrive). The amber badge is honest, but **`Fo
 does not drain the queue**. Endpoint is `POST /identity/audit` behind `SyncTransportGuard`.
 **No root cause yet** — treat as a delivery blocker until proven otherwise.
 
+> ⚠ **SUPERSEDED — R-11 was root-caused and resolved afterwards.** It was a **deploy gap, not a code
+> defect**: the fix existed only on the unpushed local branch `fix/soho-commercial-fx-rate`, so
+> production still enforced the human `AuthGuard`. Closing evidence is in
+> `## Cierre de entrega — 2026-10-02 (tarde)` at the end of this file.
+
 ### Rules learned that change the provisioning plan
 
 1. **The importer creates recipes as DRAFT by design** (`publication_state: DRAFT`) and classifies a
@@ -260,11 +265,11 @@ does not drain the queue**. Endpoint is `POST /identity/audit` behind `SyncTrans
 |---|---|---|
 | 1 | Provision a clean tenant in staging (`npm run provision`): SOHO name, RUC, owner, password, 6-digit PIN | row in `tenants`, `is_active=true`, owner login works |
 | 2 | Configure the **DGI fiscal series** (prefix + starting consecutive) in the portal | `initializeRange()` executed; 0.3 |
-| 3 | Import `Menu_SOHO_import_listo.xlsx` via Configuración → Importar menú | preview **exactly** `56 create / 2 update / 0 recipes / 0 insumos / 0 errors` — otherwise STOP |
+| 3 | Import `Menu_SOHO_import_listo.xlsx` via Configuración → Importar menú | preview with 0 recipes, 0 insumos and 0 errors — otherwise STOP. ⚠ The original `56 create / 2 update` expectation assumed the dummy tenant's state; on a **clean** tenant the real gate is `58 create / 0 update`, because nothing pre-exists to update (observed) |
 | 4 | Confirm 58 products SIMPLE, price > 0, `is_active=true` | no COMPOUND, no recipes |
 | 5 | Generate the activation code, activate the terminal, open the shift | `device_linking_codes` CLAIMED, `cash_shift_sessions` OPEN |
 | 6 | Re-run Fases 1–14 from zero **including the 7 never-exercised phases** (6, 7, 8.3, 10, 11, 12, 14) | per-check evidence in the report doc |
-| 7 | Resolve R-11 before declaring the release gate met | `audit_logs` rows for the tenant's terminal |
+| 7 | ~~Resolve R-11 before declaring the release gate met~~ **DONE — 2026-10-02 (tarde)** | `audit_logs` rows for the tenant's terminal: **met** — `Q802024120001 | SALE_CREATED | sequence_no 1` |
 
 **Owner-provided prerequisite (not in the repo):** `Menu_SOHO_import_listo.xlsx`, which lives on the
 operator's machine.
@@ -531,3 +536,11 @@ Operator decision: leave this as its own issue/follow-up; it does not block the 
 > ⚠ **SUPERSEDED — these phases WERE executed afterwards.** Current matrix: see `# HANDOFF` §5.
 
 Sale with cash + change (5.2-5.5, 5.8-5.9), card voucher (6), split payment (7), void/credit note/reprint (8), X and Z cuts + blind count (9), cash movements (10), voucher reconciliation (11), operator switch (12), sync under load and with the network down (13), day close reports (14), plus the promotions/discounts/tips scenarios. Each needs a human at the tablet for the physical parts (cash counting, supervisor PINs, paper) and cloud-side verification in parallel.
+
+## Cierre de entrega — 2026-10-02 (tarde)
+
+- **R-11 cerrado.** Brecha de deploy, no defecto de código: el fix vivía sólo en la rama local. Se empujó `9e83b15d` a `main` (fast-forward `27a15728..9e83b15d`) y el auto-deploy de Railway `fcee4eaa-1341-40f3-9284-7ceba9d496c4` quedó SUCCESS. Evidencia de cierre: el discriminador `POST /identity/audit` con token humano pasó de 201 a **401** `Invalid device access token`; `audit_logs` del tenant `5af6c6c9-47eb-4bed-badd-b30cd1943ad1` ya tiene `Q802024120001 | SALE_CREATED | sequence_no 1 | 2026-10-02 16:06:58.863+00`; el operador hizo "Forzar Sincronización" y el badge quedó verde; `audit_integrity_alerts` = 0. Nota de honestidad: el stream está drenado y no goteando porque el DAO escribe una sola fila por transacción (`sales_transaction_dao.dart:406` venta, `:522` anulación).
+- **Fix del validador de RUC (`9e83b15d`).** Verificado en el equipo: el Perfil del Negocio guarda dirección y teléfono con RUC de cédula `0011112930059D`. Antes era imposible. Detalle de RED/GREEN y de los fixtures corregidos (`A0011234567890` → `J0310000000000`) y el resultado de 174 tests.
+- **APK de entrega**: `1.0.1+2012`, `git_commit 9e83b15d`, `terminal_identity Q802024120001`, `api_url https://api.nhilospos.com/api`, `sha256 52764ec18e8838cce53fd5b2db9065902e1d8304977925821bf596e5e1b440fa`, instalado y verificado con `versionCode=2012`.
+- **Hallazgo de entorno**: la environment de Railway se llama `production` y el host `api-staging.nhilospos.com` es sólo un nombre heredado del mismo servicio y la misma base.
+- **Lo que queda abierto y NO se probó**: la re-corrida de las Fases 1→14 sobre el tenant limpio **no se ejecutó**, por decisión explícita del usuario de no hacer más ventas de prueba en el equipo que se entrega. El equipo quedó en la pantalla "APERTURA DE CAJA", con `cash_shift_sessions` = 0 filas: ningún turno fue abierto. La verificación del R-11 se obtuvo por la sincronización real del operador, no por una fase.
