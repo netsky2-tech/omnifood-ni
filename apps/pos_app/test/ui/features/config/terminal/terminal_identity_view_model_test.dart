@@ -255,4 +255,23 @@ void main() {
       },
     );
   });
+
+  group('TerminalIdentityViewModel server-URL rejection copy', () {
+    test(
+      'the notAbsolute rejection example names the official API host, not a staging host',
+      () async {
+        final vm = buildViewModel();
+        await pumpEventLoop();
+
+        // An invalid URL persists nothing; the Spanish rejection copy is
+        // surfaced through serverErrorMessage.
+        await vm.saveServerUrl('api.example.com/api');
+
+        expect(vm.serverErrorMessage, isNotNull);
+        expect(vm.serverErrorMessage, contains('https://api.nhilospos.com/api'));
+        expect(vm.serverErrorMessage, isNot(contains('api-staging')));
+        verifyNever(() => configDao.saveConfig(any()));
+      },
+    );
+  });
 }
