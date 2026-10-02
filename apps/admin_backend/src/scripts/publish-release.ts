@@ -221,12 +221,30 @@ async function main() {
   console.log('------------------------------------------------------------------------------');
 
   let dbConnected = false;
-  try {
-    await dataSource.initialize();
-    dbConnected = true;
-    console.log('✓ Database connection initialized.');
-  } catch (e: any) {
-    console.warn(`⚠️  Database connection skipped or failed (${e.message}). Only R2 uploads will proceed.`);
+  let pgClient: any = null;
+  const dbUrl = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
+
+  if (dbUrl) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Client } = require('pg');
+      pgClient = new Client({ connectionString: dbUrl });
+      await pgClient.connect();
+      console.log('✓ Connected to remote database via DATABASE_URL.');
+    } catch (e: any) {
+      console.warn(`⚠️  Remote database connection failed: ${e.message}`);
+      pgClient = null;
+    }
+  }
+
+  if (!pgClient) {
+    try {
+      await dataSource.initialize();
+      dbConnected = true;
+      console.log('✓ Database connection initialized via local dataSource.');
+    } catch (e: any) {
+      console.warn(`⚠️  Database connection skipped or failed (${e.message}). Only R2 uploads will proceed.`);
+    }
   }
 
   for (const artifact of rawManifest.artifacts) {
@@ -253,10 +271,9 @@ async function main() {
     });
     console.log(`   ✓ Upload complete to R2.`);
 
-    if (dbConnected) {
+    if (pgClient || dbConnected) {
       console.log(`   💾 Registering in app_releases table...`);
-      await dataSource.query(
-        `
+      const insertSql = `
         INSERT INTO app_releases (
           channel, abi, version_code, version_name, sha256,
           size_bytes, storage_key, min_from_version_code, mandatory, notes
@@ -270,24 +287,32 @@ async function main() {
           mandatory = EXCLUDED.mandatory,
           notes = EXCLUDED.notes,
           published_at = NOW();
-      `,
-        [
-          options.channel,
-          abi,
-          versionCode,
-          versionName,
-          artifact.sha256.toLowerCase(),
-          artifact.size_bytes.toString(),
-          storageKey,
-          options.minFromVersionCode,
-          options.mandatory,
-          options.notes || null,
-        ],
-      );
+      `;
+      const queryParams = [
+        options.channel,
+        abi,
+        versionCode,
+        versionName,
+        artifact.sha256.toLowerCase(),
+        artifact.size_bytes.toString(),
+        storageKey,
+        options.minFromVersionCode,
+        options.mandatory,
+        options.notes || null,
+      ];
+
+      if (pgClient) {
+        await pgClient.query(insertSql, queryParams);
+      } else {
+        await dataSource.query(insertSql, queryParams);
+      }
       console.log(`   ✓ Release record persisted.`);
     }
   }
 
+  if (pgClient) {
+    await pgClient.end();
+  }
   if (dbConnected) {
     await dataSource.destroy();
   }

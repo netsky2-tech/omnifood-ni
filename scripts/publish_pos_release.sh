@@ -79,6 +79,15 @@ if [ ! -f "${BACKEND_DIR}/.env" ]; then
     exit 1
 fi
 
+if [ -z "${DATABASE_URL:-}" ] && [ -z "${DATABASE_PUBLIC_URL:-}" ] && command -v railway >/dev/null 2>&1; then
+    echo "🔍 Resolving remote database URL via Railway..."
+    RAILWAY_DB_URL=$(railway variable list --service postgres --json 2>/dev/null | python3 -c "import sys, json; print(json.load(sys.stdin).get('DATABASE_PUBLIC_URL', ''))" 2>/dev/null || true)
+    if [ -n "${RAILWAY_DB_URL}" ]; then
+        export DATABASE_PUBLIC_URL="${RAILWAY_DB_URL}"
+        echo "✓ Remote database resolved from Railway."
+    fi
+fi
+
 NODE_ARGS=(
     "--manifest" "${MANIFEST_FILE}"
     "--channel" "${CHANNEL}"
