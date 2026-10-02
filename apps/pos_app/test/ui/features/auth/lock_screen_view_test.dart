@@ -141,4 +141,45 @@ void main() {
       expect(find.text('Seleccionar Usuario'), findsOneWidget);
     });
   });
+
+  group('LockScreenView D-17 handover regression', () {
+    testWidgets(
+      'a pre-selected user (outgoing operator) is demoted to the user list on mount',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 720);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final viewModel = LockScreenViewModel(_FakeAuthRepository(), _FakeUserDao());
+        // Simulates the app-root VM surviving a handover: the outgoing operator
+        // is still selected when the lock screen mounts (D-17).
+        viewModel.selectUser(const User(
+          id: 'cashier-1',
+          name: 'Cajero',
+          email: 'cajero@nhilospos.ni',
+          role: UserRole.cashier,
+          isActive: true,
+        ));
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ChangeNotifierProvider.value(
+              value: viewModel,
+              child: const LockScreenView(),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // The incoming operator must see the USER LIST first, not the
+        // outgoing operator's PIN pad.
+        expect(find.text('Seleccionar Usuario'), findsOneWidget);
+        expect(find.textContaining('PIN:'), findsNothing);
+        expect(find.text('HOLA, CAJERO'), findsNothing);
+        expect(find.text('Cajero'), findsOneWidget);
+      },
+    );
+  });
 }

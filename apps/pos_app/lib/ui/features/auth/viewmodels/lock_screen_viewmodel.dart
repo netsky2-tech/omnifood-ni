@@ -23,6 +23,11 @@ class LockScreenViewModel extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> loadUsers() async {
+    // D-17: the VM is app-root scoped, so a previous selection (outgoing
+    // operator) survives navigation. Every mount of the lock screen is a new
+    // entry into the handover flow and must start from the user list.
+    _selectedUser = null;
+    _error = null;
     _isLoading = true;
     notifyListeners();
 
@@ -66,6 +71,8 @@ class LockScreenViewModel extends ChangeNotifier {
       return false;
     }
 
+    // Hygiene: never park the shared VM on a user after a successful unlock.
+    _selectedUser = null;
     notifyListeners();
     return true;
   }
