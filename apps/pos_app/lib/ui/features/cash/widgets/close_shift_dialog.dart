@@ -12,8 +12,11 @@ class CloseShiftDialog extends StatefulWidget {
 }
 
 class _CloseShiftDialogState extends State<CloseShiftDialog> {
-  final _nioCountedController = TextEditingController(text: '0.00');
-  final _usdCountedController = TextEditingController(text: '0.00');
+  // D-16: start EMPTY so the counted amount REPLACES nothing instead of
+  // concatenating onto a seeded '0.00' (the blind count is exactly where a
+  // silent digit error corrupts the Z discrepancy).
+  final _nioCountedController = TextEditingController();
+  final _usdCountedController = TextEditingController();
   final _notesController = TextEditingController();
   final _supervisorPinController = TextEditingController();
 
@@ -167,6 +170,7 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
                       decoration: const InputDecoration(
                         labelText: 'Total Contado (C\$)',
                         prefixText: 'C\$ ',
+                        hintText: '0.00',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -181,6 +185,7 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
                       decoration: const InputDecoration(
                         labelText: 'Total Contado (\$ USD)',
                         prefixText: '\$ ',
+                        hintText: '0.00',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),

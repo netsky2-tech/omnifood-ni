@@ -11,8 +11,11 @@ class CashMovementDialog extends StatefulWidget {
 
 class _CashMovementDialogState extends State<CashMovementDialog> {
   String _selectedType = 'CASH_IN';
-  final _nioController = TextEditingController(text: '0.00');
-  final _usdController = TextEditingController(text: '0.00');
+  // D-16: start EMPTY. Seeding '0.00' made the operator's digits CONCATENATE
+  // onto it ("0.00100"), a silent data-entry error on a money field. The hint
+  // keeps the affordance without owning the value.
+  final _nioController = TextEditingController();
+  final _usdController = TextEditingController();
   final _reasonController = TextEditingController();
   final _supervisorPinController = TextEditingController();
   bool _submitting = false;
@@ -162,6 +165,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                       decoration: const InputDecoration(
                         labelText: 'Monto en Córdobas (C\$)',
                         prefixText: 'C\$ ',
+                        hintText: '0.00',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
@@ -176,6 +180,7 @@ class _CashMovementDialogState extends State<CashMovementDialog> {
                       decoration: const InputDecoration(
                         labelText: 'Monto en Dólares (\$ USD)',
                         prefixText: '\$ ',
+                        hintText: '0.00',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
