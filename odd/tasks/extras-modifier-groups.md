@@ -736,3 +736,60 @@ migracion nada mas.
 **Leccion de proceso para el feature.** Toda regla de "NULL significa X" necesita un test que siembre
 el vacio, no solo el valor ausente. `''` y `NULL` no son el mismo caso y el filtro `<> ''` aparece dos
 veces en el mismo fichero con la misma consecuencia.
+
+## 22. R0.5'a-REVIEW (2026-10-03, post-fix): R4-001 es un falso positivo determinista
+
+**Contexto.** Tras el fix `dec1b91c`, `review recover` rechazo sus propias rutas tres veces
+con `recovery base-ref does not match predecessor base`: el predecessor congelo
+`initial_atomic_start.selector.base_ref = c28f5d19...` (el TREE) mientras la ruta de recover
+renderizaba `--base-ref=04273823...` (el COMMIT). Nativo compara uno contra el otro.
+Verificado en disco que **ninguna corrida mut6**: el successor `review-1b4fe6af7236c826`
+no existia y el predecessor seguia intacto. Con autorizacion del usuario se abrio un
+**lineage fresco** sobre el candidato corregido: `review-1b4fe6af7236c826`, tier high,
+4 lentes concurrentes, 2457 lineas. El relay **funciono**: 4/4 materializados y admitidos
+(`prompt_bytes ~119k`, `result_bytes` 3.1k-6.5k). Ningun lente volvio a mencionar el
+`''`-vs-NULL: la correccion anterior quedo validada.
+
+**Veredicto nativo:** `correction_required` con un solo hallazgo.
+
+```
+R4-001  lens resilience  severity BLOCKER  evidence_class deterministic  causal introduced
+apps/admin_backend/src/migrations/1809570000000-PromotionTargetCategoryIdToUuid.ts:630
+"down() references the undefined identifier `runner` instead of its `queryRunner` parameter,
+ so any rollback ... throws a ReferenceError"
+```
+
+**Refutacion (3 niveles, sobre los bytes congelados `1680be49`).**
+
+1. Contenido exacto de `:630` via `git show HEAD:...`: `const unmapped = (await queryRunner.query(`.
+2. Filtro `runner.` sin `query` en el rango completo de `down()` (589-660): **ningun resultado**.
+3. Los 12 `runner.` reales del fichero estan todos dentro de privados que declaran
+   `runner: QueryRunner` en su firma (`:210, :232, :246, :258, :277, :392, :426, :458, :484`).
+4. Chequeo decisivo: `npx tsc --noEmit -p tsconfig.json` **limpio**. Un identificador
+   indefinido es `TS2304`, error de **compilacion**, no de runtime. Si R4-001 fuera cierto,
+   el proyecto no compilaria, y el work-unit se verifico compilando.
+
+**Por que no se submetio un correction plan.** La unica salida nativa para un bloqueador
+`deterministic` es `correction_plan_required` (presupuesto 200) y **no hay refuter**: el
+contrato reserva el refuter para inferenciales. Someter lineas de correccion para "arreglar"
+un `ReferenceError` inexistente significa mutar codigo para satisfacer un hecho falso, y
+destruye el valor del recibo: la proxima lectura creeria que hubo un defecto real ahi.
+Se dejo el lineage en `correction_required` sin quemar autoridad.
+
+**Defecto de proceso expuesto (para upstream).** Un hallazgo marcado `evidence_class:
+deterministic` fue admitido sin la verificacion mas barata imaginable: abrir la linea citada.
+Una maquina que afirma determinismo deberia estar obligada a que su prueba se reproduzca, y
+"el compilador no se queja" refuta `TS2304` en cero segundos. Un filtro de viabilidad
+(`tsc`/`eslint` sobre el candidato inmutable antes de admitir un bloqueador determinista de
+identificadores) eliminaria esta clase de falso positivo y liberaria presupuesto de correccion
+para los verdaderos.
+
+**Follow-up legitimo anotado (no bloqueador, no inventado para complacer).** En `down()`, un
+uuid cuyo `catalog_values` desaparecio queda `target_category_id = NULL` tras el
+`DROP COLUMN target_category_id_uuid`. El log `unmapped` lo cubre y el FK lo hace
+practicamente imposible. Queda aca, como follow-up, y **no** se toca codigo para dar la
+sensacion de que R4-001 tenia razon.
+
+**Estado de recibo.** T0.5'a + fix **sin recibo**. Linea de tiempo honesta de deuda abierta:
+`da4c2512` (T0.1') aprobada y no quemable; `d227d7b8`/`dec1b91c` (T0.5'a) en `correction_required`
+por un bloqueador falso. `0d6e7f72` (T1.1) y `394886e8` (T0.2') si consumidos.
