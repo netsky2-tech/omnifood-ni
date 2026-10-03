@@ -173,3 +173,28 @@ one-time local repair, or operator guidance. Unreviewed pilot devices make the b
   arithmetic** (⋮ Cerrar Caja vs Control de Caja → Corte Z).
 - **F6 — expose `mergeOrders` / `transferOrder` / `splitOrderItems`** (implemented, no UI).
 - Verification rows still open from the source doc: C3, C4, C5, D2, D3, D4, D5.
+
+## Native review receipt
+
+Lineage `review-4a3cb2d9edd0de15` · tier **medium** · 1180 changed lines · lens `review-reliability` ·
+correction budget 200 (unused, no correction opened) · consumed revision
+`sha256:1f4ad463544d6241010e4a519301337ce77df6c78685a3be7ee9b0f6f6b36e93` · authority **burned** by the
+exact provider acknowledgement (`native-approved-acknowledgement-completed`). Outcome: **approved** on
+the last admitted event; delivery follows ordinary repository policy.
+
+Five advisory findings were attached. They are non-blocking, they did not reopen the review, and the
+provider emitted only id + location + severity (no body), so they are recorded verbatim without
+inventing reviewer prose:
+
+| ID | Severity | Location | What lives there (parent's own reading, not reviewer prose) |
+|---|---|---|---|
+| R3-001 | WARNING | `sale_view_model.dart:1020` | `await _tableOrderService.liquidateOrder(ticket.id);` — the first await of `abandonHoldTicket`, i.e. the delete happens before the local-state cleanup and with no try/catch |
+| R3-002 | WARNING | `sale_view_model_test.dart:1679-1684` | the abandon assertions: `holdTickets` empty + table `DISPONIBLE` + `currentTicketId` null |
+| R3-003 | WARNING | `sale_view_model.dart:1024` | `_activeLoadedHoldTicket = null; clearCart();` inside the `if (_activeLoadedHoldTicket?.id == ticket.id)` guard |
+| R3-004 | SUGGESTION | `table_order_service.dart:133` | `version: entity.version + 1` in the `copyWith` of `replaceOrderItems` |
+| R3-005 | SUGGESTION | `sale_view.dart:913-915` | the rewritten recall list: `Column(mainAxisSize: MainAxisSize.min)` built with a `for` over `viewModel.holdTickets` inside a bounded `SingleChildScrollView` |
+
+These are follow-up work for a later slice, not reasons to re-run review on this candidate. R3-001 and
+R3-003 sit on the same statement (`abandonHoldTicket` deletes, then clears, then reloads with no error
+handling — a failure between them leaves the cart pointing at a deleted account), so they are worth
+reading together.
