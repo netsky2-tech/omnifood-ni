@@ -524,3 +524,81 @@ T1.4, no T0.4'.
 **Corolario honesto sobre T0.2'.** El backfill crea las filas que faltan, pero si el owner ya tiene
 `COMIDA` creada a mano, la regla es reusar y **no tocar el label**. Por eso la migración no debe
 pisar labels existentes, y por eso el reporte debe distinguir creado de reusado.
+
+## 16. T0.2' cerrado: el backfill existe y el bracket esta probado en produccion-real
+
+Commit de work unit: `394886e8 feat(admin_backend): backfill product category codes against
+catalog_values` (3 ficheros, 1.613 lineas anadidas).
+
+`.ts` 434 lineas · `.spec.ts` 664 (19 tests) · `.db.spec.ts` 515 (1 test contra Postgres 16 real).
+
+**Semantica, en el orden que ejecuta:** por tenant con al menos un `category_code` no vacio →
+canonicalizar con la regla espejada → reusar la fila `SALES_PRODUCT_CATEGORY` que ya existe **sin
+tocarle el label** → crear las que faltan con el valor original como label y `sort_order` continuo al
+maximo propio → plegar colisiones y reportarlas → `UPDATE ... AND category_code <> $2` o sea solo
+donde difiere de verdad → NULL/vacio quedan intactos y contados.
+
+**La trampa, ahora ejecutada y no solo afirmada.** `products` y `catalog_values` estan en
+`FORCE ROW LEVEL SECURITY` y el rol de migracion las posee. El `.db.spec.ts` construye la base scratch
+con el set real de 113 migraciones, entrega la propiedad a un rol `LOGIN NOSUPERUSER NOBYPASSRLS` y
+corre `up()` **conectado como ese rol**. Antes de la corrida, bajo FORCE y sin `app.tenant_id`,
+`SELECT count(*) FROM products` da **0** y la sonda de tenants devuelve **0 filas**: sin el bracket
+el backfill seria un no-op silencioso. Despues, las 4 filas del tenant forma-SOHO existen, el label
+preexistente del tenant B conserva `'Bebidas del menU original'` y `sort_order 7`, la colision
+`CAFÉ CALIENTE`/`CAFE CALIENTE` reusa una sola fila con el primer original en orden deterministico y
+`sort_order 8`, `relforcerowsecurity` vuelve a `true` en ambas tablas, cada tenant sigue sin ver al
+otro, y el segundo `up()` loguea el no-op de convergencia.
+
+**Lo que NO prueba:** la ruta de restaurar el subconjunto elevado cuando el throw ocurre a media
+elevacion, y el wrapper transaccional de TypeORM (`up()` se invoca directo, fuera de
+`runMigrations`). Ambos quedan cubiertos solo por el spec con fake.
+
+## 17. Hallazgo de plataforma: exportar una funcion en un fichero de migracion la ejecuta TypeORM
+
+Desviacion ratificada del worker, verificada en el codigo de TypeORM y no de palabra.
+
+`node_modules/typeorm/util/DirectoryExportedClassesLoader.js`:
+
+```js
+function loadFileClasses(exported, allLoaded) {
+  if (typeof exported === "function" || InstanceChecker.isEntitySchema(exported)) {
+    allLoaded.push(exported);          // cualquier export funcion, no solo clases
+```
+
+`ConnectionMetadataBuilder` despues hace `getFromContainer(metadata.target)`, es decir `new fn()`.
+Un `export function canonicalCategoryCode(raw)` en el fichero de migracion se instanciaba con
+`raw === undefined` y reventaba en `.trim()`. Romperia **cada** `runMigrations()` real, incluido el
+deploy (`npm run migration:run:prod` corre antes de `node dist/main`, y un fallo de migracion aborta
+el deploy y deja el despliegue previo sirviendo).
+
+Fix: el helper es `static canonicalCategoryCode()` dentro de la clase. Conserva nombre, duplicacion
+del de `menu-import.service.ts` y el pin del spec; cambia solo el mecanismo de export.
+
+**Estado del repo:** `grep '^export (function|const|async function)' src/migrations/*.ts` sobre las
+113 migraciones devuelve vacio. El hazard es latente, no hay otra victima hoy. Regla para cualquier
+fichero de migracion nuevo: **el unico export de un fichero de migracion es la clase de migracion**.
+
+## 18. Correccion a mi propio metodo de verificacion (dos falsas acusaciones en una sesion)
+
+1. Acuse fabricacion a `muskz7ix` leyendo el disco mientras el writer seguia corriendo. Su primera
+   escritura cayo a las 10:11; mi `find` fue antes. Relance sobre las mismas superficies y eso creo
+   el choque de dos escritores.
+2. Acuse al worker de `musly6j7` de no haber limpiado la base de desarrollo porque probe con
+   `id::text like '11111111%'`, patron que tambien atrapa los fixtures legitimos
+   `11111111-1111-4111-a111-...` (Restaurante General QA, creados 2026-09-27). Con los UUID reales del
+   spec (`...8111...`, `...8222...`) el residuo es **0 tenants, 0 productos, 0 filas de catalogo**,
+   y los fixtures intactos (3 productos General QA, 58 SOHO). La autodenuncia del incidente del worker
+   era exacta y su limpieza tambien.
+
+**Regla.** Verificar es comprobar la afirmacion con el identificador de la afirmacion, no con un
+patron propio que ademasse. Y un resultado que contradice la expectativa es una senal de que mi
+consulta esta mal antes que de que el otro mintio: los dos errores de esta sesion tuvieron la misma
+forma — concluir rapido desde una consulta amplia.
+
+**Bateria final, corrida por el padre, no delegada:** 19/19 unit · 1/1 db spec real · `tsc --noEmit`
+limpio · `eslint` exit 0 · `prettier --check` ok · suite completa **3.487 passed / 8 skipped / 3.17
+suites** · `verify-schema-build.sh` PASS en ambos escenarios, manifest `declared=68 legacy=0
+failures=0`, tablas sin cambio (la migracion no crea tablas).
+
+Un detalle cosmético corregido por el padre en vez de delegado: el log de merge nombraba el tenant
+dos veces.
