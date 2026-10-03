@@ -348,6 +348,25 @@ provider — inventing a cross-provider dependency would have exceeded the slice
 
 Focused runs: `flutter analyze` clean; `open_accounts_close_gate_test.dart` 4/4; `open_accounts_close_gate_ui_test.dart` 3/3; `sale_view_security_flows_test.dart` 11/11; `test/ui/features/cash` 57/57; `sale_view_model_test.dart` 39/39.
 
+## Native review receipt — slice F5
+
+Lineage `review-c6a8248ec46c7c10` · tier **high** · 20 files · 1363 changed lines · correction budget
+200 (unused) · consumed revision `sha256:81476176ca3161bc8f11853a2b1ab93d7b0a181c42cd91e5fcf97e977b36f8f8`
+· authority **burned** (`native-approved-acknowledgement-completed`). Outcome: **approved** on the last
+admitted event. The candidate was scoped to the F5 range (`baseRef f049a381`, committed-only) instead of
+the accumulated branch, because F1-F4 (`review-4a3cb2d9edd0de15`) had already been approved and burned —
+re-freezing it would have re-reviewed approved code. All four lenses ran as host-relay reviewer runs
+(~109.6 KB prompt each).
+
+Nine advisory findings, all non-blocking, recorded with only the id/location/severity the provider
+emitted. Two clusters, both about the same seam I flagged during verification:
+
+| Cluster | Findings | Why it matters |
+|---|---|---|
+| `init()` leaves a stale open-accounts list | `R1-stale-open-accounts-init` (`cash_shift_view_model.dart:216-217`), `R3-002` (`:217-218`), `R4-001` (`:214-218`) | **three independent lenses landed on the same line.** This is warning 1 above: the close fail-closes, but the UI pre-gate can render from a stale list, so the block can be skipped cosmetically before reaching the VM. Convergence across risk, reliability and resilience makes it the strongest follow-up in this slice. |
+| The gate depends on its wiring | `R1-open-gate-default` (`:418`), `R2-001` (`:418`) | when `openAccountsLoader == null` the gate is skipped — the deliberate choice that kept 50 existing cash tests honest. Production always wires it via `fromDatabase`, but a fiscal gate whose enforcement depends on a constructor argument is weaker than one that fails closed. |
+| Naming and copy | `R2-002` (`sale_view.dart:634`), `R2-003` (`waiter_settlement_service.dart:17`), `R2-004` (`close_shift_dialog.dart:96`) | readability suggestions: the `_requestSupervisorOverrideForCloseBox` name now overstates "close box", `OpenTablesPendingException` carries two meanings (names + accounts), and the block copy offers "abandonar" without repeating that it is irreversible — the same point the verifier raised independently. |
+
 ## Deferred from this slice
 
 - **F8** (already-duplicated accounts on a device are still recalled inflated) — unchanged, still open.
