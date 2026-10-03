@@ -9,6 +9,7 @@ import {
   Index,
 } from 'typeorm';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 
 export enum PromotionType {
   BUY_X_GET_Y_FREE = 'buyXGetYFree',
@@ -44,8 +45,24 @@ export class Promotion {
   @Column({ type: 'varchar', nullable: true })
   target_product_id?: string | null;
 
-  @Column({ type: 'varchar', nullable: true })
+  // T0.5'a: a uuid FK to catalog_values(tenant_id, id) — the SAME category
+  // identity modifier groups attach to (ODD §20). The composite tenant FK is
+  // owned by the migration (1809570000000) and only guarantees the row
+  // exists in the SAME tenant; catalog_values is shared by four catalog
+  // types, so the FK does NOT restrict to product categories — that guard
+  // (catalog_type = 'SALES_PRODUCT_CATEGORY') lives in the service layer,
+  // not here. NULL keeps its POS-engine meaning: a GLOBAL promotion
+  // (promotions_engine.dart:110/:132), which is exactly why the migration
+  // deactivates any promotion whose text it could not resolve.
+  @Column({ type: 'uuid', nullable: true })
   target_category_id?: string | null;
+
+  // Relation-only mapping: referential integrity is owned exclusively by the
+  // migration's composite (tenant_id, id) foreign key and must never be
+  // re-derived by the ORM.
+  @ManyToOne(() => CatalogValue, { createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'target_category_id' })
+  target_category?: CatalogValue;
 
   @Column({ type: 'int', default: 0 })
   buy_quantity: number;

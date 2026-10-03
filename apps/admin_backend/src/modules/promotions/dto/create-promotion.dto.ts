@@ -7,6 +7,7 @@ import {
   IsInt,
   IsBoolean,
   IsArray,
+  IsUUID,
   Min,
 } from 'class-validator';
 import { PromotionType } from '../entities/promotion.entity';
@@ -24,8 +25,12 @@ export class CreatePromotionDto {
   @IsString()
   target_product_id?: string;
 
+  // T0.5'a: a uuid referencing catalog_values(tenant_id, id); the service
+  // additionally requires it to be a SALES_PRODUCT_CATEGORY row of the
+  // caller's tenant. Optional: NULL keeps its POS-engine meaning of a
+  // GLOBAL promotion.
   @IsOptional()
-  @IsString()
+  @IsUUID()
   target_category_id?: string;
 
   @IsOptional()
