@@ -5,19 +5,60 @@ import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
-import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/data/daos/sales/cash_movement_dao.dart';
+import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
+import 'package:pos_app/data/daos/sales/payment_dao.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/services/config/business_mode_evaluator.dart';
+import 'package:pos_app/ui/features/cash/cash_shift_view_model.dart';
 import 'package:pos_app/ui/features/identity/supervisor_override_modal.dart';
 import 'package:pos_app/ui/features/sales/sale_view.dart';
 import 'package:pos_app/ui/widgets/app_drawer.dart';
 import 'package:provider/provider.dart';
 
 import 'sale_view_security_flows_test.mocks.dart';
+
+/// T7 (unified close): the sale screen's ⋮ Cerrar Caja entry now runs the
+/// Corte Z pre-gate + blind-count dialog from the ROOT CashShiftViewModel.
+/// This stub replaces the database-backed VM so widget tests stay isolated.
+class _StubSessionDao implements CashierSessionDao {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => UnimplementedError();
+}
+
+class _StubMovementDao implements CashMovementDao {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => UnimplementedError();
+}
+
+class _StubPaymentDao implements PaymentDao {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => UnimplementedError();
+}
+
+class _StubCashShiftViewModel extends CashShiftViewModel {
+  _StubCashShiftViewModel({this.stubbedPendingVouchers = 0})
+      : super(
+          sessionDao: _StubSessionDao(),
+          movementDao: _StubMovementDao(),
+          paymentDao: _StubPaymentDao(),
+        );
+
+  final int stubbedPendingVouchers;
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  int get pendingVouchersCount => stubbedPendingVouchers;
+
+  @override
+  bool get hasPendingVouchers => stubbedPendingVouchers > 0;
+}
 
 @GenerateNiceMocks([
   MockSpec<SaleViewModel>(),
@@ -69,21 +110,19 @@ void main() {
     when(mockViewModel.supportsTables).thenReturn(false);
     when(mockViewModel.supportsBuzzerPager).thenReturn(false);
     when(mockViewModel.businessModeEvaluator).thenReturn(const BusinessModeEvaluator(TenantConfig()));
-    when(mockViewModel.sessionExpected).thenReturn({
-      PaymentMethod.cash: 100,
-      PaymentMethod.card: 0,
-      PaymentMethod.qr: 0,
-    });
     when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => currentUser);
     when(mockAuthRepository.getAllUsers()).thenAnswer((_) async => [currentUser]);
     when(mockAuditRepository.logForensic(any, metadata: anyNamed('metadata'), metodoAutorizacion: anyNamed('metodoAutorizacion'), usuarioAutorizadorId: anyNamed('usuarioAutorizadorId')))
         .thenAnswer((_) async {});
   });
 
-  Widget buildTestApp() {
+  Widget buildTestApp({CashShiftViewModel? cashViewModel}) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<SaleViewModel>.value(value: mockViewModel),
+        ChangeNotifierProvider<CashShiftViewModel>.value(
+          value: cashViewModel ?? _StubCashShiftViewModel(),
+        ),
         Provider<AuthRepository>.value(value: mockAuthRepository),
         Provider<AuditRepository>.value(value: mockAuditRepository),
         Provider<SyncService>.value(value: mockSyncService),
@@ -128,12 +167,43 @@ void main() {
       usuarioAutorizadorId: 'supervisor-1',
     )).called(1);
 
-    expect(find.text('Cierre de Caja - Arqueo'), findsOneWidget);
+    // T7 (unified close): the supervisor override now opens the Corte Z
+    // blind-count dialog, not the retired weak arqueo dialog.
+    expect(find.text('Arqueo Ciego y Cierre de Turno'), findsOneWidget);
+    expect(find.text('Cierre de Caja - Arqueo'), findsNothing);
+  });
 
-    // #587 WU3: the arqueo breakdown renders Spanish method labels, not raw
-    // enum names (sessionExpected stubs PaymentMethod.cash: 100).
-    expect(find.text('Efectivo'), findsOneWidget);
-    expect(find.text('CASH'), findsNothing);
+  testWidgets('pending card vouchers block the close from the sale-screen entry too', (tester) async {
+    // The voucher gate used to be reachable only through Control de Caja;
+    // the ⋮ entry was a side door around it. T7 routes both through the
+    // same Corte Z pre-gate.
+    when(mockAuthRepository.authorizeOverride(
+      supervisorId: anyNamed('supervisorId'),
+      pin: anyNamed('pin'),
+      totpCode: anyNamed('totpCode'),
+    )).thenAnswer((_) async => true);
+
+    await tester.pumpWidget(buildTestApp(
+      cashViewModel: _StubCashShiftViewModel(stubbedPendingVouchers: 2),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Cerrar Caja'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Autorización de supervisor'), findsOneWidget);
+    await tester.enterText(find.byWidgetPredicate((widget) {
+      return widget is TextField && widget.decoration?.labelText == 'ID supervisor';
+    }), 'supervisor-1');
+    await tester.enterText(find.byWidgetPredicate((widget) {
+      return widget is TextField && widget.decoration?.labelText == 'PIN';
+    }), '1234');
+    await tester.tap(find.text('Autorizar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bloqueo de Corte Z Fiscal'), findsOneWidget);
+    expect(find.text('IR A RECONCILIACIÓN'), findsOneWidget);
+    expect(find.text('Arqueo Ciego y Cierre de Turno'), findsNothing);
   });
 
   testWidgets('checkout dialog renders Spanish payment method labels, not raw enum names', (tester) async {
@@ -202,7 +272,8 @@ void main() {
       usuarioAutorizadorId: 'supervisor-totp',
     )).called(1);
 
-    expect(find.text('Cierre de Caja - Arqueo'), findsOneWidget);
+    expect(find.text('Arqueo Ciego y Cierre de Turno'), findsOneWidget);
+    expect(find.text('Cierre de Caja - Arqueo'), findsNothing);
   });
 
   testWidgets('requires supervisor + justification and logs DRAWER_OPENED_MANUALLY', (tester) async {

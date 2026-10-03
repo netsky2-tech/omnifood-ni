@@ -332,7 +332,7 @@ void main() {
     verifyNever(mockSessionDao.insertSession(any));
   });
 
-  test('finalizeSale in CARTERA_MESERO tracks only cash expected', () async {
+  test('finalizeSale in CARTERA_MESERO persists the cash/card split the Z figure aggregates', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(
         id: 'u-1',
@@ -370,15 +370,29 @@ void main() {
 
     await viewModel.finalizeSale([PaymentMethod.cash, PaymentMethod.card]);
 
-    expect(
-      viewModel.sessionExpected[PaymentMethod.cash],
-      closeTo(100 + (totalBeforeFinalize / 2), 0.0001),
-    );
-    expect(viewModel.sessionExpected[PaymentMethod.card], 0.0);
+    // T7 (unified close): the in-memory sessionExpected counter was retired
+    // with CloseBoxDialog. The Corte Z figure (effectiveExpectedNio/Usd) is
+    // computed from the PERSISTED payment rows, so the surviving contract at
+    // the VM level is that the split reaches the repository intact: net cash
+    // = total/2, card = total/2.
+    final captured = verify(
+      mockSalesRepo.saveSale(
+        invoice: anyNamed('invoice'),
+        items: anyNamed('items'),
+        payments: captureAnyNamed('payments'),
+      ),
+    ).captured.single as List<Payment>;
+    expect(captured, hasLength(2));
+
+    final cashPayment = captured.firstWhere((p) => p.method == PaymentMethod.cash);
+    final cardPayment = captured.firstWhere((p) => p.method == PaymentMethod.card);
+    expect(cashPayment.amountNio - cashPayment.changeGiven,
+        closeTo(totalBeforeFinalize / 2, 0.0001));
+    expect(cardPayment.amount, closeTo(totalBeforeFinalize / 2, 0.0001));
   });
 
   test(
-    'finalizeSale in CAJA_CENTRAL tracks cash and card expected totals',
+    'finalizeSale in CAJA_CENTRAL persists the cash and card split the Z figure aggregates',
     () async {
       when(mockAuthRepo.getCurrentUser()).thenAnswer(
         (_) async => const User(
@@ -415,8 +429,25 @@ void main() {
 
       await viewModel.finalizeSale([PaymentMethod.cash, PaymentMethod.card]);
 
-      expect(viewModel.sessionExpected[PaymentMethod.cash], greaterThan(100));
-      expect(viewModel.sessionExpected[PaymentMethod.card], greaterThan(0));
+      // T7 (unified close): per-method totals are now asserted on the
+      // persisted payment rows — the input the Corte Z close re-queries via
+      // getCashPaymentsForShift — instead of the retired in-memory counter.
+      final captured = verify(
+        mockSalesRepo.saveSale(
+          invoice: anyNamed('invoice'),
+          items: anyNamed('items'),
+          payments: captureAnyNamed('payments'),
+        ),
+      ).captured.single as List<Payment>;
+      expect(captured, hasLength(2));
+      expect(
+        captured.firstWhere((p) => p.method == PaymentMethod.cash).amount,
+        greaterThan(0),
+      );
+      expect(
+        captured.firstWhere((p) => p.method == PaymentMethod.card).amount,
+        greaterThan(0),
+      );
     },
   );
 

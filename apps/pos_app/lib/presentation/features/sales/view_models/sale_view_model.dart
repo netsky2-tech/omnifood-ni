@@ -653,12 +653,11 @@ class SaleViewModel extends ChangeNotifier {
   CashierSession? _activeSession;
   CashierSession? get activeSession => _activeSession;
 
-  Map<PaymentMethod, double> _sessionExpected = {
-    PaymentMethod.cash: 0.0,
-    PaymentMethod.card: 0.0,
-    PaymentMethod.qr: 0.0,
-  };
-  Map<PaymentMethod, double> get sessionExpected => _sessionExpected;
+  // T7 (open-accounts slice): the in-memory `_sessionExpected` counter was
+  // retired with CloseBoxDialog. It reset on every checkActiveSession and
+  // ignored movements/USD, so the drawer expectation it fed was weaker than
+  // the Corte Z figure (CashShiftViewModel.effectiveExpectedNio/Usd), which
+  // re-queries the DB at close time.
 
   bool _isGlobalTaxExempt = false;
   bool get isGlobalTaxExempt => _isGlobalTaxExempt;
@@ -1043,11 +1042,6 @@ class SaleViewModel extends ChangeNotifier {
             .getActiveSessionForUserAndTerminal(user.id, effectiveTerminalId);
     if (sessionEntity != null) {
       _activeSession = SalesMapper.toSessionDomain(sessionEntity);
-      _sessionExpected = {
-        PaymentMethod.cash: _activeSession!.openingBalance,
-        PaymentMethod.card: 0.0,
-        PaymentMethod.qr: 0.0,
-      };
     } else {
       _activeSession = null;
     }
@@ -1100,34 +1094,6 @@ class SaleViewModel extends ChangeNotifier {
       SalesMapper.toSessionEntity(session),
     );
     _activeSession = session;
-    _sessionExpected = {
-      PaymentMethod.cash: balance,
-      PaymentMethod.card: 0.0,
-      PaymentMethod.qr: 0.0,
-    };
-    notifyListeners();
-  }
-
-  Future<void> closeSession(double closingBalance) async {
-    if (_activeSession == null) return;
-
-    final totalSales =
-        _sessionExpected.values.fold(0.0, (sum, v) => sum + v) -
-        _activeSession!.openingBalance;
-
-    final updated = _activeSession!.copyWith(
-      isClosed: true,
-      closedAt: DateTime.now(),
-      closingBalance: closingBalance,
-      closingCountedNio: closingBalance,
-      totalSales: totalSales,
-      totalExpected: _sessionExpected[PaymentMethod.cash] ?? 0.0,
-      expectedNio: _sessionExpected[PaymentMethod.cash] ?? 0.0,
-    );
-    await _database.cashierSessionDao.updateSession(
-      SalesMapper.toSessionEntity(updated),
-    );
-    _activeSession = null;
     notifyListeners();
   }
 
@@ -1565,19 +1531,11 @@ class SaleViewModel extends ChangeNotifier {
         );
       }
 
-      // Update expected totals
-      for (final p in payments) {
-        if (_activeSession?.tipoModelo == CashSessionModel.carteraMesero &&
-            p.method != PaymentMethod.cash) {
-          continue;
-        }
-        final effectiveCashNio =
-            (p.method == PaymentMethod.cash && p.amountNio > 0)
-            ? (p.amountNio - p.changeGiven)
-            : p.amount;
-        _sessionExpected[p.method] =
-            (_sessionExpected[p.method] ?? 0.0) + effectiveCashNio;
-      }
+      // T7 (open-accounts slice): the per-payment `_sessionExpected`
+      // increment (and its carteraMesero non-cash skip) was retired with
+      // the weak close path. The drawer expectation is the Corte Z figure:
+      // CashShiftViewModel recomputes net cash per payment row from the DB
+      // (getCashPaymentsForShift) at close time.
 
       if (_activeLoadedHoldTicket != null) {
         await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);

@@ -17,6 +17,7 @@ import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
+import '../cash/widgets/close_shift_dialog.dart' show showCloseShiftFlow;
 import 'widgets/product_card_thumbnail.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/tip_dialog.dart';
@@ -626,20 +627,13 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   // TODO: Implementar funcionalidad de devoluciones/notas de crédito
   // void _showReturnsDialog(BuildContext context) { ... }
 
-  void _showCloseBoxDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => const CloseBoxDialog(),
-    );
-  }
-
   Future<void> _requestSupervisorOverrideForCloseBox() async {
     final authRepo = context.read<AuthRepository>();
     final currentUser = await authRepo.getCurrentUser();
-    
-    // Si el usuario ya es Owner o Manager, abrir directamente el arqueo de cierre
+
+    // Si el usuario ya es Owner o Manager, abrir directamente el corte Z
     if (currentUser?.role == UserRole.owner || currentUser?.role == UserRole.manager) {
-      if (mounted) _showCloseBoxDialog(context);
+      if (mounted) await _openUnifiedZClose();
       return;
     }
 
@@ -671,8 +665,17 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
 
     if (!mounted) return;
     if (authorized == true) {
-      _showCloseBoxDialog(context);
+      await _openUnifiedZClose();
     }
+  }
+
+  /// T7 (unified close): the weak parallel close (CloseBoxDialog /
+  /// SaleViewModel.closeSession, in-memory expected map) was retired. Both
+  /// this entry and Control de Caja run the identical Corte Z pre-gate and
+  /// blind-count dialog from the root CashShiftViewModel.
+  Future<void> _openUnifiedZClose() async {
+    final cashVm = context.read<CashShiftViewModel>();
+    await showCloseShiftFlow(context, cashVm);
   }
 
   Future<void> _requestSupervisorOverrideForManualDrawer() async {
@@ -737,85 +740,6 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   }
 }
 
-class CloseBoxDialog extends StatefulWidget {
-  const CloseBoxDialog({super.key});
-
-  @override
-  State<CloseBoxDialog> createState() => _CloseBoxDialogState();
-}
-
-class _CloseBoxDialogState extends State<CloseBoxDialog> {
-  late final TextEditingController controller;
-
-  @override
-  void initState() {
-    super.initState();
-    controller = TextEditingController(text: '0.00');
-  }
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final viewModel = context.watch<SaleViewModel>();
-    final expected = viewModel.sessionExpected;
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return AlertDialog(
-      title: const Text('Cierre de Caja - Arqueo'),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: colorScheme.primary, width: 2)),
-      content: SizedBox(
-        width: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Resumen de Ventas:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            DataTable(
-              columns: const [
-                DataColumn(label: Text('Método')),
-                DataColumn(label: Text('Esperado')),
-              ],
-              rows: expected.entries.map((e) => DataRow(cells: [
-                DataCell(Text(localize(e.key.name, kPaymentMethodLabels))),
-                DataCell(Text('C\$ ${e.value.toStringAsFixed(2)}')),
-              ])).toList(),
-            ),
-            const Divider(),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Efectivo Real en Caja'),
-              keyboardType: TextInputType.number,
-              onTap: () {
-                controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
-              },
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
-        ElevatedButton(
-          onPressed: () async {
-            final balance = double.tryParse(controller.text) ?? 0.0;
-            await context.read<SaleViewModel>().closeSession(balance);
-            if (context.mounted) {
-              try {
-                context.read<CashShiftViewModel>().init();
-              } catch (_) {}
-              Navigator.pop(context);
-            }
-          }, 
-          child: const Text('CERRAR CAJA'),
-        ),
-      ],
-    );
-  }
-}
 
 class SearchBarWidget extends StatefulWidget {
   const SearchBarWidget({super.key});

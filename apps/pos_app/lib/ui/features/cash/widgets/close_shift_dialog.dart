@@ -2,9 +2,82 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../design_system/responsive_layout.dart';
 import '../cash_shift_view_model.dart';
+import '../card_voucher_reconciliation_view_model.dart';
+import 'card_voucher_reconciliation_dialog.dart';
 import 'z_report_dialog.dart';
 import '../../../design_system/nhilos_tokens.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
+
+/// T7 (unified close): THE single Corte Z close entry point. Both the
+/// Control de Caja button and the sale screen's ⋮ Cerrar Caja (after its
+/// supervisor override) run this identical pre-gate + dialog, so the weak
+/// parallel close (CloseBoxDialog / SaleViewModel.closeSession) cannot
+/// bypass the pending-voucher fiscal gate anymore.
+///
+/// The cash VM is re-synced from the database first ([CashShiftViewModel.init])
+/// so the gate and the dialog see the shift and voucher state as of NOW,
+/// not as of the last screen load.
+Future<void> showCloseShiftFlow(
+  BuildContext context,
+  CashShiftViewModel vm,
+) async {
+  await vm.init();
+  if (!context.mounted) return;
+
+  // Invariante Fiscal DGI: no Corte Z with pending card vouchers.
+  if (vm.hasPendingVouchers) {
+    final goToReconcile = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bloqueo de Corte Z Fiscal'),
+        content: Text(
+          'Existen ${vm.pendingVouchersCount} vouchers de datáfono en estado PENDIENTE.\n\nPor disposición de control fiscal y auditoría, debe conciliar o autorizar el override de todos los vouchers antes de emitir el Reporte Z.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('IR A RECONCILIACIÓN'),
+          ),
+        ],
+      ),
+    );
+    if (goToReconcile == true && context.mounted) {
+      await openVoucherReconciliationDialog(context, vm);
+    }
+    return;
+  }
+
+  await showDialog<bool>(
+    context: context,
+    builder: (_) => ChangeNotifierProvider<CashShiftViewModel>.value(
+      value: vm,
+      child: const CloseShiftDialog(),
+    ),
+  );
+}
+
+/// Opens the voucher reconciliation dialog for [vm]'s payment DAO and
+/// refreshes the pending-voucher count once it closes.
+Future<void> openVoucherReconciliationDialog(
+  BuildContext context,
+  CashShiftViewModel vm,
+) async {
+  if (vm.paymentDao == null) return;
+  await showDialog<void>(
+    context: context,
+    builder: (_) => ChangeNotifierProvider<CardVoucherReconciliationViewModel>(
+      create: (_) => CardVoucherReconciliationViewModel(
+        paymentDao: vm.paymentDao!,
+        currentUserId: vm.currentUserId,
+      )..loadPendingVouchers(),
+      child: const CardVoucherReconciliationDialog(),
+    ),
+  ).then((_) => vm.refreshPendingVouchersCount());
+}
 
 class CloseShiftDialog extends StatefulWidget {
   const CloseShiftDialog({super.key});

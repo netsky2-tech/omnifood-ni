@@ -240,7 +240,7 @@ type.
 
 ## Tasks
 
-### T7 — Unify the close on the Corte Z path
+### T7 — Unify the close on the Corte Z path — DONE
 ⋮ Cerrar Caja keeps its existing supervisor-override pre-gate (`sale_view.dart:636`,
 `_requestSupervisorOverrideForCloseBox`, audit `SUPERVISOR_OVERRIDE_CLOSE_SESSION`), then opens
 `CloseShiftDialog` instead of `CloseBoxDialog`. `CloseBoxDialog` and `SaleViewModel.closeSession` are
@@ -267,6 +267,38 @@ mid-shift print. Matrix row D3 gets its answer here.
 
 ### T10 — Checks
 `flutter analyze` + the cash suites + the sales suites, then native review on the slice.
+
+## T7 evidence (unified close)
+
+`showCloseShiftFlow(context, vm)` (`lib/ui/features/cash/widgets/close_shift_dialog.dart:20`) is now the
+single Z entry: `vm.init()` (fresh DB state) → pending-voucher fiscal gate → `CloseShiftDialog`. Both
+callers go through it: Control de Caja (`cash_shift_view.dart:415`) and ⋮ Cerrar Caja
+(`sale_view.dart:678`, `_openUnifiedZClose`), with the supervisor-override pre-gate and the
+`SUPERVISOR_OVERRIDE_CLOSE_SESSION` forensic audit left byte-identical (`sale_view.dart:657`).
+
+| Check | Result |
+|---|---|
+| Retired symbols `sessionExpected` / `closeSession` / `CloseBoxDialog` | zero live `lib/` references — only explanatory comments remain |
+| `flutter analyze` | No issues found (3.2s) |
+| `sale_view_security_flows_test.dart` | 10 passed (RED before: 7 passed / 3 failed — the override tests found the weak dialog, and the new voucher-gate test found no "Bloqueo de Corte Z Fiscal") |
+| `sale_view_model_test.dart` | 39 passed |
+| `multi_currency_checkout_e2e_test.dart` | 5 passed |
+| `test/ui/features/cash` | 50 passed |
+| `test/presentation/features/sales` | 142 passed |
+| `test/ui/features/sales` | 183 passed / 1 load-flake (`tabular_nums_and_haptics_test.dart`, green alone 3/3) — same runner-flake class as before |
+
+Unification also exposed how wrong the weak figure was: a card sale plus a USD tender that the in-memory
+counter collapsed into a single "500 NIO" is now recorded honestly as `effectiveExpectedUsd 20.00` /
+`effectiveExpectedNio -230.00`.
+
+**Nuance to carry into the waiter path:** the deleted per-payment loop held the only `carteraMesero`
+non-cash skip. `getCashPaymentsForShift` counts cash rows regardless of session model. No exposure today
+(the waiter close path is still unwired), but it must be stated when that path gets wired.
+
+**terminalId check (reported, not a defect):** `main.dart:647` and `:674` inject the SAME `deviceId` into
+both VMs, so production resolves one terminal. The `'TERM-01'` vs `'term-main'` divergence is reachable
+only through the direct constructor in tests, and the cash VM does not trim the value the way the sale
+path does. Not asserted as a live bug.
 
 ## Deferred from this slice
 

@@ -248,12 +248,6 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as List<_i14.HoldTicket>);
 
   @override
-  Map<_i15.PaymentMethod, double> get sessionExpected => (super.noSuchMethod(
-        Invocation.getter(#sessionExpected),
-        returnValue: <_i15.PaymentMethod, double>{},
-      ) as Map<_i15.PaymentMethod, double>);
-
-  @override
   bool get isGlobalTaxExempt => (super.noSuchMethod(
         Invocation.getter(#isGlobalTaxExempt),
         returnValue: false,
@@ -835,15 +829,6 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
         returnValueForMissingStub: _i16.Future<void>.value(),
       ) as _i16.Future<void>);
 
-  @override
-  _i16.Future<void> closeSession(double? closingBalance) => (super.noSuchMethod(
-        Invocation.method(
-          #closeSession,
-          [closingBalance],
-        ),
-        returnValue: _i16.Future<void>.value(),
-        returnValueForMissingStub: _i16.Future<void>.value(),
-      ) as _i16.Future<void>);
 
   @override
   void addToCart(
