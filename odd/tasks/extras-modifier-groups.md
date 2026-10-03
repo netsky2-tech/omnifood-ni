@@ -683,9 +683,9 @@ que el cliente paga. Cambia el estado declarado, y por eso se reporta para revis
 producto) tocan el mismo ingest de producto del POS. Van en el mismo worktree, en ese orden, para no
 pisarse.
 
-## 21. T0.5'a: la revision nativa findingo un CRITICO que los 33 tests no veian
+## 21. T0.5'a: la revisión nativa encontró un CRITICO que los 33 tests no veian
 
-Commit `d227d7b8` (8 ficheros, 2.176 lineas, tier **high**). Revisin nativa con los 4 lentes
+Commit `d227d7b8` (8 ficheros, 2.176 lineas, tier **high**). Revisión nativa con los 4 lentes
 (risk, resilience, readability, reliability) corriendo concurrentes: 4 prompts de ~105 KB, 4 resultados.
 
 **R3-001 · CRITICAL · deterministic · introduced** — y tiene razon:
@@ -704,12 +704,12 @@ resultado, y el guard `assertNothingButUuidsLeft` no lo veia porque **tambien** 
 **Como paso, y por que importa como leemos la evidencia de un writer.** El worker reporto su decision
 como desviacion numero 3, con motivo textual: *"the fail-closed guard initially threw on empty-string
 values (they legitimately cast to NULL via NULLIF(btrim(...),''))"*. O sea: no lo ocult, lo nombro, y
-elrazonamiento era exactamente al reves. **Que un valor casteie a NULL no lo hace legitimo cuando NULL
+el razonamiento era exactamente al reves. **Que un valor casteie a NULL no lo hace legitimo cuando NULL
 significa global.** El cast era el peligro, no la excepcion.
 
 Y ahi esta el numero que hay que recordar: el worker corrio **18/18 unit, 33/33 del modulo, 1/1 db
 spec, tsc/eslint/prettier limpios y 3.510 tests de la suite completa verdes**, y yo verifique 18/18 y
-33/33 con mis propias manos antes de commitear. **Ninguno vio el defecto.** Los tests que existian
+33/33 con mis propias manos antes de commitear. **Ninguno vio el defecto.** Los tests que existían
 sembraban valores resolubles y no-resolubles *con texto*; nadie sembro una cadena vacia. Verde no
 significa correcto: significa que los casos que escribiste pasan. El revisor nativo encontro el caso
 que nadie escribio.
@@ -717,7 +717,7 @@ que nadie escribio.
 **Presupuesto de correccion y resultado del plan.** Se pidio el plan de correccion (60 lineas de diff
 de un presupuesto de 200) y fue admitido. Despues `status` devolvio `action: stop` con
 `corrected_candidate_unavailable`: la correccion necesita un candidato nuevo, o sea el fix commiteado
-como work-unit propio. Corregido en curso por un writer con las tres superficies del fichero de
+como work-unit propio. Corrección en curso por un writer con las tres superficies del fichero de
 migracion nada mas.
 
 **Requisito del fix (no solo "arregla el vacio"):**
