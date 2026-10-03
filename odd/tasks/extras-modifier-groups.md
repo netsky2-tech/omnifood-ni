@@ -466,37 +466,45 @@ Lo que hay que mirar ahí: si algún `category_code` de producción normaliza al
 (fusión), porque la migración los convierte en una sola categoría y eso es una decisión del dueño,
 no un detalle técnico.
 
-## 14. Incidencia: evidencia de subagente fabricada (T0.2', primer intento)
+## 14. Incidencia de orquestacion: dos escritores sobre el mismo fichero (T0.2')
 
-El writer encargado de T0.2' devolvió un informe completo: tres ficheros de migración nuevos,
-16 tests unitarios RED→GREEN, 9 tests de db-spec contra Postgres real, y líneas de `console.log`
-muestra del reporte de la migración. **Nada de eso existía.**
+**La causa fui yo, no el subagente.** Queda registrado con los hechos, porque la conclusion inicial
+escrita aqui era falsa y el plan de registro no puede conservar una acusacion incorrecta.
 
-Comprobación que lo destapó (antes de cualquier commit, como siempre):
-- `npx jest BackfillProductCategoryCodes` → `Pattern: BackfillProductCategoryCodes - 0 matches`
-- `npx jest --config ./test/jest-db.json BackfillProductCategoryCodes.db.spec` → `0 matches`
-- `npx eslint` / `npx prettier` sobre los tres ficheros → `No files matching the pattern`
-- `find` del patrón en los 7 worktrees → vacío
-- `git status` limpio en los 7 worktrees
-- `pg_database` sin ningún scratch `_schema_build_test` / `_scratch`; `pg_roles` sin el rol
-  `..._nocat_mig` que el informe citaba textualmente
+Que paso de verdad:
 
-Consecuencia de haber confiado: la tarea habría quedado marcada como cerrada en el plan de
-registro con un commit y una evidencia de tests inventados.
+1. Lance el writer de T0.2' en `mode: background`. Su primera escritura del `.ts` ocurrio a las
+   **10:11**.
+2. Antes de eso lei una salida intermedia como si fuera el informe final, comprobe el disco, no
+   habia nada, y escribi "evidencia fabricada". **No habia nada porque todavia no habia escrito.**
+3. Relance la tarea sobre las **mismas superficies de edicion permitidas** mientras el primer writer
+   seguia vivo. Ahi se creo el conflicto real: dos escritores sobre
+   `1809560000000-BackfillProductCategoryCodes.ts` y su `.spec.ts`, reescribiendose mutuamente
+   (10:13, 10:16, 10:20, 10:23), alternando entre dos contratos incompatibles:
+   - export `canonicalCategoryCode` vs `canonicalizeCategoryCode`
+   - mock `GROUP BY count(*)` vs `DISTINCT` + sonda `MAX(sort_order)`
+   - UPDATE por original (scalar) vs UPDATE en lote con `ANY($3)`
+4. Cada `GREEN` observado (19/19 dos veces) quedo invalidado por la reescritura del otro en minutos.
+   Ninguno de los dos estaba mintiendo: ambos observaron sus propios tests pasar contra el estado
+   que cada uno tenia delante.
 
-**Regla que queda.** El reporte de un writer es una afirmación, no un hecho — la misma disciplina
-que se le exige al provider aplica al subagente. La verificación de trabajo delegado es contra
-sistema de ficheros y salida de comandos reales, no contra la narración:
-1. los ficheros existen (`ls`, `git status`);
-2. los tests corren y reportan matches distintos de cero;
-3. los efectos secundarios que el informe afirma (bases scratch, roles, migraciones aplicadas) se
-   encuentran.
+Ambos writers se detuvieron solos (`interaction_required`, pidiendo dueno exclusivo) y el worktree
+esta estable: `md5 4681ec95...` del `.ts` y `33392756...` del `.spec.ts` sin cambios en 45 s de
+observacion.
 
-Contraste útil: el relay del revisor nativo **sí** anunció su propio fallo
-(`reviewer-empty-output`, `stopReason: length`, `mutation_performed: false`). Los fallos de
-transporte se declaran; los reportes inventados no. El reencargo incluye una sección
-*"Why this is a re-assignment"* que nombra la fabricación y pone `ls -la` como primer comando de
-evidencia obligatorio, con instrucción explícita de escribir `NOT DONE` donde no se pueda completar.
+**Regla que sale de esto (para el padre, no para el child).** Antes de relanzar una tarea en
+background hay que comprobar que la anterior termino; `subagent_status` existe para eso y no lo use.
+Una salida intermedia no es un informe final: `mode: background` entrega estados parciales, y juzgar
+integridad de un writer por un `ls` tomado mientras trabaja es un error de verificacion, no del
+writer. La regla de un solo escritor a la vez se rompe por el orquestador, no por el delegante.
+
+**Estado del trabajo delegado (real, verificado en disco):** `.ts` 18,787 B con la canonicalizacion
+espejada, el bracket `NO FORCE` con restauracion en `finally` del subconjunto realmente elevado, bucle
+por tenant, reuse/insert/merge/skip/update-solo-si-difiere, reporte y `down()` no-op. `.spec.ts`
+22,876 B, 19 tests con QueryRunner falso de estado. **No compila hoy** por el choque de nombres
+(`TS2724` en el spec) y un `TS2339` reintroducido en el `.ts`. El `.db.spec.ts` (Postgres real, dueno
+`NOBYPASSRLS`) **no se escribio**: es la pieza que falta y la que prueba el bracket, que hasta agora
+solo esta probado con mocks.
 
 ## 15. T0.4' verificado (solo lectura): el dashboard ya administra categorías
 
