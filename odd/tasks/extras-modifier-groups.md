@@ -682,3 +682,57 @@ que el cliente paga. Cambia el estado declarado, y por eso se reporta para revis
 **Dependencia honesta con este feature:** T0.5'c y T2.3 (resolver grupos efectivos al cargar el
 producto) tocan el mismo ingest de producto del POS. Van en el mismo worktree, en ese orden, para no
 pisarse.
+
+## 21. T0.5'a: la revision nativa findingo un CRITICO que los 33 tests no veian
+
+Commit `d227d7b8` (8 ficheros, 2.176 lineas, tier **high**). Revisin nativa con los 4 lentes
+(risk, resilience, readability, reliability) corriendo concurrentes: 4 prompts de ~105 KB, 4 resultados.
+
+**R3-001 · CRITICAL · deterministic · introduced** — y tiene razon:
+
+```
+:258  WHERE target_category_id IS NOT NULL AND btrim(target_category_id) <> ''   -- deja afuera los vacios
+:457  USING NULLIF(btrim(target_category_id), '')::uuid                          -- los convierte en NULL
+      is_active: intocado                                                        -- NULL + activo = GLOBAL
+```
+
+Una promocion **activa** con `target_category_id = ''` (o espacios) quedaba despues de la migracion en
+`NULL + is_active = true`, y `NULL` en el motor POS significa **descuento sobre toda la linea de
+carrito** (`promotions_engine.dart:110`, `:132`). El propio header del fichero (`:41-44`) prohibia este
+resultado, y el guard `assertNothingButUuidsLeft` no lo veia porque **tambien** filaba `btrim <> ''`.
+
+**Como paso, y por que importa como leemos la evidencia de un writer.** El worker reporto su decision
+como desviacion numero 3, con motivo textual: *"the fail-closed guard initially threw on empty-string
+values (they legitimately cast to NULL via NULLIF(btrim(...),''))"*. O sea: no lo ocult, lo nombro, y
+elrazonamiento era exactamente al reves. **Que un valor casteie a NULL no lo hace legitimo cuando NULL
+significa global.** El cast era el peligro, no la excepcion.
+
+Y ahi esta el numero que hay que recordar: el worker corrio **18/18 unit, 33/33 del modulo, 1/1 db
+spec, tsc/eslint/prettier limpios y 3.510 tests de la suite completa verdes**, y yo verifique 18/18 y
+33/33 con mis propias manos antes de commitear. **Ninguno vio el defecto.** Los tests que existian
+sembraban valores resolubles y no-resolubles *con texto*; nadie sembro una cadena vacia. Verde no
+significa correcto: significa que los casos que escribiste pasan. El revisor nativo encontro el caso
+que nadie escribio.
+
+**Presupuesto de correccion y resultado del plan.** Se pidio el plan de correccion (60 lineas de diff
+de un presupuesto de 200) y fue admitido. Despues `status` devolvio `action: stop` con
+`corrected_candidate_unavailable`: la correccion necesita un candidato nuevo, o sea el fix commiteado
+como work-unit propio. Corregido en curso por un writer con las tres superficies del fichero de
+migracion nada mas.
+
+**Requisito del fix (no solo "arregla el vacio"):**
+1. antes del `ALTER ... TYPE uuid`, desactivar en una sola sentencia todo row con
+   `target_category_id IS NOT NULL AND btrim(target_category_id) = ''`, con log por promocion
+   (tenant, nombre, id, motivo nombrando la trampa global) y contador.
+2. el guard fail-closed tiene que ser **total**: antes del `ALTER`, afirmar que ningun row queda
+   `NULL + activo` **por culpa de esta migracion**. Los que ya venian `NULL + activo` antes de correr
+   son promociones globales legitimas y **no** deben pisar el guard ni cambiarse — esa distincion va
+   explicita en el header.
+3. RED obligatorio sembrando un promocion activa con `''` y otra con `'   '`: primero demostrar que el
+   defecto existe hoy, despues arreglar.
+4. el db spec real siembra la de texto vacio y afirma `NULL AND is_active = false`, y que una global
+   preexistente sigue `NULL AND activa`.
+
+**Leccion de proceso para el feature.** Toda regla de "NULL significa X" necesita un test que siembre
+el vacio, no solo el valor ausente. `''` y `NULL` no son el mismo caso y el filtro `<> ''` aparece dos
+veces en el mismo fichero con la misma consecuencia.
