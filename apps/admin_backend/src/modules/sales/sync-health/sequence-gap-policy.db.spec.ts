@@ -8,12 +8,8 @@ import { ChangeLog } from '../../audit/entities/change-log.entity';
 import { ChangeLogService } from '../../audit/change-log.service';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { UserRole } from '../../identity/entities/user.entity';
-import {
-  InventorySyncOutbox,
-} from '../../inventory/entities/inventory-sync-outbox.entity';
-import {
-  InventorySyncReceipt,
-} from '../../inventory/entities/inventory-sync-receipt.entity';
+import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
+import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import type { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import {
   InvoicesService,
@@ -184,9 +180,7 @@ describe('sequence gap policy (db-backed, real Postgres)', () => {
       );
     });
 
-    const insertAcceptedReceipt = async (
-      sequence: number,
-    ): Promise<void> => {
+    const insertAcceptedReceipt = async (sequence: number): Promise<void> => {
       await inTenantTx(async (manager, boundTenantId) => {
         await manager.query(
           `INSERT INTO inventory_sync_receipts (
@@ -303,15 +297,17 @@ describe('sequence gap policy (db-backed, real Postgres)', () => {
     // path under test (receipts/outbox/gap policy) runs fully real.
     const unusedRepository = {} as never;
     const userRepository = {
-      findOne: jest.fn().mockImplementation(
-        ({ where }: { where: { id: string; tenant_id: string } }) =>
-          Promise.resolve({
-            id: where.id,
-            tenant_id: where.tenant_id,
-            role: UserRole.MANAGER,
-            is_active: true,
-          }),
-      ),
+      findOne: jest
+        .fn()
+        .mockImplementation(
+          ({ where }: { where: { id: string; tenant_id: string } }) =>
+            Promise.resolve({
+              id: where.id,
+              tenant_id: where.tenant_id,
+              role: UserRole.MANAGER,
+              is_active: true,
+            }),
+        ),
     } as never;
     const recipeService = { findActiveVersion: jest.fn() } as never;
     const bomExplosionService = { explodeRecipe: jest.fn() } as never;
@@ -444,9 +440,7 @@ describe('sequence gap policy (db-backed, real Postgres)', () => {
       // Same shape as case 1, but the staged block is brand new.
       await stream.stageOutboxRow(7, blockedRecord, new Date());
 
-      const result = await service.syncBatch(stream.tenantId, [
-        blockedRecord,
-      ]);
+      const result = await service.syncBatch(stream.tenantId, [blockedRecord]);
       dumpRows('case2.syncResult', result);
 
       const receipts = await stream.readReceipts();
@@ -522,7 +516,8 @@ describe('sequence gap policy (db-backed, real Postgres)', () => {
 
       const fillsForSix = receipts.filter(
         (row) =>
-          row.source_sequence === '6' && row.result_code === GAP_FILL_RESULT_CODE,
+          row.source_sequence === '6' &&
+          row.result_code === GAP_FILL_RESULT_CODE,
       );
       expect(fillsForSix).toHaveLength(1);
       expect(fillsForSix[0]).toMatchObject({
@@ -549,9 +544,7 @@ describe('sequence gap policy (db-backed, real Postgres)', () => {
         new Date(Date.now() - AGED_BLOCK_CREATED_AT_MS),
       );
 
-      const result = await service.syncBatch(stream.tenantId, [
-        blockedRecord,
-      ]);
+      const result = await service.syncBatch(stream.tenantId, [blockedRecord]);
       dumpRows('case4.syncResult', result);
 
       const receipts = await stream.readReceipts();

@@ -263,7 +263,9 @@ export function deriveSyncFreshness(
       ? deriveLastCompleteAt(participatingTerminals)
       : null;
 
-  const hasDeclaredGaps = perTerminal.some((terminal) => terminal.hasDeclaredGaps);
+  const hasDeclaredGaps = perTerminal.some(
+    (terminal) => terminal.hasDeclaredGaps,
+  );
 
   return {
     state,

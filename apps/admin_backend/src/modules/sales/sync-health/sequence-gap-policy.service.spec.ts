@@ -105,8 +105,14 @@ describe('sequence gap policy', () => {
         find: jest.fn().mockResolvedValue([]),
         findOne: jest.fn().mockResolvedValue(null),
       };
-      const itemRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
-      const paymentRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
+      const itemRepo = {
+        upsert: jest.fn(),
+        find: jest.fn().mockResolvedValue([]),
+      };
+      const paymentRepo = {
+        upsert: jest.fn(),
+        find: jest.fn().mockResolvedValue([]),
+      };
       const userRepo = { findOne: jest.fn().mockResolvedValue(null) };
       const movementRepo = {
         create: jest.fn((x: unknown) => x),
@@ -127,33 +133,39 @@ describe('sequence gap policy', () => {
       };
       changeLogService = { log: jest.fn().mockResolvedValue(undefined) };
 
-      receiptRepo.findOne.mockImplementation(async (query: {
-        where?: Record<string, unknown>;
-      }) => {
-        const where = query?.where ?? {};
-        // resolveExpectedSequence: highest ACCEPTED receipt for the stream
-        if (where.result_status === 'ACCEPTED') {
-          return { source_sequence: '5' };
-        }
-        // receipt existence checks (by key, by sequence, gap-fill lookup)
-        if (where.source_sequence !== undefined) {
-          return receiptsBySequence.get(String(where.source_sequence)) ?? null;
-        }
-        return null;
-      });
+      receiptRepo.findOne.mockImplementation(
+        async (query: { where?: Record<string, unknown> }) => {
+          const where = query?.where ?? {};
+          // resolveExpectedSequence: highest ACCEPTED receipt for the stream
+          if (where.result_status === 'ACCEPTED') {
+            return { source_sequence: '5' };
+          }
+          // receipt existence checks (by key, by sequence, gap-fill lookup)
+          if (where.source_sequence !== undefined) {
+            const seqKey =
+              typeof where.source_sequence === 'string'
+                ? where.source_sequence
+                : typeof where.source_sequence === 'number'
+                  ? String(where.source_sequence)
+                  : '';
+            return receiptsBySequence.get(seqKey) ?? null;
+          }
+          return null;
+        },
+      );
 
-      outboxRepo.findOne.mockImplementation(async (query: {
-        where?: Record<string, unknown>;
-      }) => {
-        const where = query?.where ?? {};
-        if (where.source_sequence !== undefined) {
-          // Policy query uses a TypeORM MoreThan FindOperator; drain and
-          // staged-conflict queries use a plain string sequence.
-          if (typeof where.source_sequence === 'string') return null;
-          return oldestStagedRow;
-        }
-        return null;
-      });
+      outboxRepo.findOne.mockImplementation(
+        async (query: { where?: Record<string, unknown> }) => {
+          const where = query?.where ?? {};
+          if (where.source_sequence !== undefined) {
+            // Policy query uses a TypeORM MoreThan FindOperator; drain and
+            // staged-conflict queries use a plain string sequence.
+            if (typeof where.source_sequence === 'string') return null;
+            return oldestStagedRow;
+          }
+          return null;
+        },
+      );
 
       const qb = {
         setLock: jest.fn().mockReturnThis(),
@@ -205,7 +217,10 @@ describe('sequence gap policy', () => {
             provide: getRepositoryToken(InventorySyncOutbox),
             useValue: outboxRepo,
           },
-          { provide: RecipeService, useValue: { findActiveVersion: jest.fn(), getSnapshot: jest.fn() } },
+          {
+            provide: RecipeService,
+            useValue: { findActiveVersion: jest.fn(), getSnapshot: jest.fn() },
+          },
           { provide: BomExplosionService, useValue: { explode: jest.fn() } },
           { provide: ChangeLogService, useValue: changeLogService },
         ],
@@ -241,11 +256,12 @@ describe('sequence gap policy', () => {
       // Fill rows for the missing sequences must exist.
       const insertedSequences = receiptRepo.insert.mock.calls
         .flatMap((call) => call[0] as Record<string, unknown>[])
-        .map((row) => String(row.source_sequence))
+        .map((row) => String(row.source_sequence as string | number))
         .sort();
       expect(insertedSequences).toEqual(['6', '7']);
-      const fillRow = receiptRepo.insert.mock.calls
-        .flatMap((call) => call[0] as Record<string, unknown>[])[0];
+      const fillRow = receiptRepo.insert.mock.calls.flatMap(
+        (call) => call[0] as Record<string, unknown>[],
+      )[0];
       expect(fillRow).toMatchObject({
         result_status: 'ACCEPTED',
         result_code: 'GAP_FILL_DECLARED',
@@ -294,7 +310,7 @@ describe('sequence gap policy', () => {
 
       const insertedSequences = receiptRepo.insert.mock.calls
         .flatMap((call) => call[0] as Record<string, unknown>[])
-        .map((row) => String(row.source_sequence));
+        .map((row) => String(row.source_sequence as string | number));
       expect(insertedSequences).toEqual(['6', '7']);
     });
 
@@ -326,7 +342,7 @@ describe('sequence gap policy', () => {
 
       const fillRowsPerSequence = receiptRepo.insert.mock.calls
         .flatMap((call) => call[0] as Record<string, unknown>[])
-        .map((row) => String(row.source_sequence));
+        .map((row) => String(row.source_sequence as string | number));
       expect(fillRowsPerSequence).toEqual(['6', '7']);
     });
 
@@ -382,16 +398,23 @@ describe('sequence gap policy', () => {
         created_at: new Date(Date.now() - 60 * 1000),
       };
       // Watermark 1: record at seq 7 is far ahead.
-      receiptRepo.findOne.mockImplementation(async (query: {
-        where?: Record<string, unknown>;
-      }) => {
-        const where = query?.where ?? {};
-        if (where.result_status === 'ACCEPTED') return { source_sequence: '1' };
-        if (where.source_sequence !== undefined) {
-          return receiptsBySequence.get(String(where.source_sequence)) ?? null;
-        }
-        return null;
-      });
+      receiptRepo.findOne.mockImplementation(
+        async (query: { where?: Record<string, unknown> }) => {
+          const where = query?.where ?? {};
+          if (where.result_status === 'ACCEPTED')
+            return { source_sequence: '1' };
+          if (where.source_sequence !== undefined) {
+            const seqKey =
+              typeof where.source_sequence === 'string'
+                ? where.source_sequence
+                : typeof where.source_sequence === 'number'
+                  ? String(where.source_sequence)
+                  : '';
+            return receiptsBySequence.get(seqKey) ?? null;
+          }
+          return null;
+        },
+      );
       recipeActive(null);
 
       const result = await service.syncBatch('tenant-1', [

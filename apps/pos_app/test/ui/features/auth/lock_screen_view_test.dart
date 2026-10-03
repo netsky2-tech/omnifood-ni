@@ -16,6 +16,10 @@ class _FakeAuthRepository implements AuthRepository {
   DateTime? get lastSyncTimestamp => null;
   @override
   String? get lastAuthError => null;
+  @override
+  bool get isReauthenticationRequired => false;
+  @override
+  void notifyReauthenticationRequired() {}
 
   @override
   Future<void> logout() async {}
