@@ -401,6 +401,7 @@ export interface SyncFreshnessTerminal {
   state: SyncFreshnessTerminalState;
   acceptedThroughSequence: number | null;
   lastReceiptAt: string | null;
+  hasDeclaredGaps?: boolean;
 }
 
 /**
@@ -417,6 +418,7 @@ export interface SyncFreshnessResponse {
   lastCompleteAt: string | null;
   perTerminal: SyncFreshnessTerminal[];
   evaluatedAt: string;
+  hasDeclaredGaps?: boolean;
 }
 
 const FRESHNESS_STATES: readonly SyncFreshnessState[] = [
@@ -456,6 +458,9 @@ export function normalizeSyncFreshness(raw: unknown): SyncFreshnessResponse {
     thresholdMinutes:
       threshold !== null && threshold > 0 ? Math.trunc(threshold) : 5,
     lastCompleteAt: typeof r.lastCompleteAt === "string" ? r.lastCompleteAt : null,
+    ...(typeof r.hasDeclaredGaps === "boolean"
+      ? { hasDeclaredGaps: r.hasDeclaredGaps }
+      : {}),
     perTerminal: terminals.map((entry) => {
       const t = (typeof entry === "object" && entry !== null ? entry : {}) as Record<
         string,
@@ -467,6 +472,9 @@ export function normalizeSyncFreshness(raw: unknown): SyncFreshnessResponse {
         state: toTerminalState(t.state),
         acceptedThroughSequence: toNullableNumber(t.acceptedThroughSequence),
         lastReceiptAt: typeof t.lastReceiptAt === "string" ? t.lastReceiptAt : null,
+        ...(typeof t.hasDeclaredGaps === "boolean"
+          ? { hasDeclaredGaps: t.hasDeclaredGaps }
+          : {}),
       };
     }),
     evaluatedAt: typeof r.evaluatedAt === "string" ? r.evaluatedAt : "",

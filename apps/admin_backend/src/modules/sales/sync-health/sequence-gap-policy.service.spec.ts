@@ -435,8 +435,8 @@ describe('sequence gap policy', () => {
       expect(logCall).toMatchObject({
         tenantId: 'tenant-1',
         action: 'SYNC_SEQUENCE_GAP_DECLARED',
-        targetType: 'inventory_sync_stream',
-        targetId: 'd1:inventory',
+        targetType: 'inventory_sync_outbox',
+        targetId: 'staged-7',
       });
       expect(logCall.changes).toMatchObject({
         declaredSequences: [6, 7],

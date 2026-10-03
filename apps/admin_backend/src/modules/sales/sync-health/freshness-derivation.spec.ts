@@ -113,6 +113,77 @@ describe('deriveSyncFreshness (PRD §20 Gate C)', () => {
     expect(result.lastCompleteAt).toBeNull();
   });
 
+  it('case 3b — returns PARTIAL and hasDeclaredGaps=true when an explicit gap fill was declared', () => {
+    // When a gap was declared unrecoverable, fill receipts were inserted
+    // (result_code = 'GAP_FILL_DECLARED') advancing the watermark. Staged rows
+    // have drained (pendingAboveWatermark=0), but declaredGapCount > 0 proves
+    // permanent data loss: the terminal must resolve to PARTIAL, never COMPLETE.
+    const result = deriveSyncFreshness(
+      buildInput({
+        terminals: [
+          buildTerminal({
+            acceptedThroughSequence: 10,
+            lastReceiptAt: '2026-09-01T11:59:00.000Z',
+            gapEvidence: {
+              streams: [
+                {
+                  flowType: 'sales',
+                  acceptedMax: 10,
+                  acceptedCount: 10,
+                  minAcceptedSequence: 1,
+                  rejectedAboveWatermark: 0,
+                  pendingAboveWatermark: 0,
+                  declaredGapCount: 1,
+                },
+              ],
+            },
+          }),
+        ],
+      }),
+    );
+
+    expect(result.state).toBe('PARTIAL');
+    expect(result.hasDeclaredGaps).toBe(true);
+    expect(result.perTerminal[0].state).toBe('PARTIAL');
+    expect(result.perTerminal[0].hasDeclaredGaps).toBe(true);
+    // A gap declaration is an event with data loss: it must not emit lastCompleteAt.
+    expect(result.lastCompleteAt).toBeNull();
+  });
+
+  it('case 3c — a terminal with declared gaps never reverts to COMPLETE even with fresh subsequent receipts', () => {
+    // Later sync batches arrive and are accepted contiguous through seq 25,
+    // receipts are 30s old, zero pending outbox. The terminal still stays PARTIAL.
+    const result = deriveSyncFreshness(
+      buildInput({
+        terminals: [
+          buildTerminal({
+            acceptedThroughSequence: 25,
+            lastReceiptAt: '2026-09-01T11:59:30.000Z',
+            gapEvidence: {
+              streams: [
+                {
+                  flowType: 'sales',
+                  acceptedMax: 25,
+                  acceptedCount: 25,
+                  minAcceptedSequence: 1,
+                  rejectedAboveWatermark: 0,
+                  pendingAboveWatermark: 0,
+                  declaredGapCount: 2,
+                },
+              ],
+            },
+          }),
+        ],
+      }),
+    );
+
+    expect(result.state).toBe('PARTIAL');
+    expect(result.hasDeclaredGaps).toBe(true);
+    expect(result.perTerminal[0].state).toBe('PARTIAL');
+    expect(result.perTerminal[0].hasDeclaredGaps).toBe(true);
+    expect(result.lastCompleteAt).toBeNull();
+  });
+
   it('case 4 — returns UNKNOWN when no terminals resolve', () => {
     const result = deriveSyncFreshness(buildInput({ terminals: [] }));
 

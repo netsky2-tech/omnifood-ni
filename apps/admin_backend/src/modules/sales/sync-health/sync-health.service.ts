@@ -26,6 +26,7 @@ interface ReceiptStreamRow {
   acceptedMax: string | number | null;
   acceptedMin: string | number | null;
   acceptedCount: string | number | null;
+  declaredGapCount?: string | number | null;
   lastAcceptedAt: Date | null;
 }
 
@@ -114,6 +115,7 @@ export class SyncHealthService {
         state: terminal.state,
         acceptedThroughSequence: terminal.acceptedThroughSequence,
         lastReceiptAt: terminal.lastReceiptAt,
+        hasDeclaredGaps: terminal.hasDeclaredGaps,
       }),
     );
 
@@ -123,6 +125,7 @@ export class SyncHealthService {
       lastCompleteAt: derivation.lastCompleteAt,
       perTerminal,
       evaluatedAt: derivation.evaluatedAt,
+      hasDeclaredGaps: derivation.hasDeclaredGaps,
     };
   }
 
@@ -139,6 +142,7 @@ export class SyncHealthService {
       MAX(r.source_sequence::bigint) FILTER (WHERE r.result_status = 'ACCEPTED') AS "acceptedMax",
       MIN(r.source_sequence::bigint) FILTER (WHERE r.result_status = 'ACCEPTED') AS "acceptedMin",
       COUNT(*) FILTER (WHERE r.result_status = 'ACCEPTED')::bigint AS "acceptedCount",
+      COUNT(*) FILTER (WHERE r.result_code = 'GAP_FILL_DECLARED')::int AS "declaredGapCount",
       MAX(COALESCE(r.accepted_at, r.created_at))
         FILTER (WHERE r.result_status = 'ACCEPTED') AS "lastAcceptedAt"
     FROM inventory_sync_receipts r
@@ -330,6 +334,8 @@ export class SyncHealthService {
             acceptedMax: SyncHealthService.toNumber(stream.acceptedMax),
             acceptedCount: SyncHealthService.toNumber(stream.acceptedCount),
             minAcceptedSequence: SyncHealthService.toNumber(stream.acceptedMin),
+            declaredGapCount:
+              SyncHealthService.toNumber(stream.declaredGapCount) ?? 0,
             rejectedAboveWatermark:
               rejectedByStream.get(
                 SyncHealthService.streamKey(deviceId, stream.flowType),
@@ -353,6 +359,7 @@ export class SyncHealthService {
             acceptedMax: null,
             acceptedCount: null,
             minAcceptedSequence: null,
+            declaredGapCount: 0,
             rejectedAboveWatermark: 0,
             pendingAboveWatermark: pending,
           });

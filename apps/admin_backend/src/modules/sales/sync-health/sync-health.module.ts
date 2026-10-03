@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { IdentityModule } from '../../identity/identity.module';
+import { AuditModule } from '../../audit/audit.module';
 import { SyncHealthController } from './sync-health.controller';
 import { SyncHealthService } from './sync-health.service';
 import { CardReconciliationSummaryController } from './card-reconciliation-summary.controller';
 import { CardReconciliationSummaryService } from './card-reconciliation-summary.service';
+import { SequenceGapPolicyService } from './sequence-gap-policy.service';
 
 /**
  * Owner Dashboard V2 — sync freshness foundation (Batch 3) + card

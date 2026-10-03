@@ -54,6 +54,8 @@ export interface TerminalStreamGapEvidence {
   rejectedAboveWatermark: number;
   /** STAGED_FUTURE outbox rows above the accepted watermark (records blocked on a sequence gap). */
   pendingAboveWatermark: number;
+  /** Number of declared gap fill receipts (result_code = 'GAP_FILL_DECLARED') indicating permanent data loss. */
+  declaredGapCount?: number;
 }
 
 export interface SyncGapEvidence {
@@ -85,6 +87,7 @@ export interface TerminalFreshness {
   state: SyncFreshnessTerminalState;
   acceptedThroughSequence: number | null;
   lastReceiptAt: string | null;
+  hasDeclaredGaps: boolean;
 }
 
 export interface SyncFreshnessDerivation {
@@ -94,6 +97,7 @@ export interface SyncFreshnessDerivation {
   perTerminal: TerminalFreshness[];
   evaluatedAt: string;
   thresholdMinutes: number;
+  hasDeclaredGaps: boolean;
 }
 
 /** Raised when the freshness threshold is not a positive finite number. */
@@ -127,6 +131,7 @@ const isPositiveThreshold = (thresholdMinutes: number): boolean =>
  *   (acceptedMax - minAcceptedSequence + 1).
  */
 const streamHasGap = (stream: TerminalStreamGapEvidence): boolean => {
+  if ((stream.declaredGapCount ?? 0) > 0) return true;
   if (stream.pendingAboveWatermark > 0) return true;
   if (stream.rejectedAboveWatermark > 0) return true;
   if (
@@ -142,6 +147,11 @@ const streamHasGap = (stream: TerminalStreamGapEvidence): boolean => {
 
 const terminalHasGap = (evidence: TerminalReceiptEvidence): boolean =>
   (evidence.gapEvidence?.streams ?? []).some(streamHasGap);
+
+const terminalHasDeclaredGaps = (evidence: TerminalReceiptEvidence): boolean =>
+  (evidence.gapEvidence?.streams ?? []).some(
+    (stream) => (stream.declaredGapCount ?? 0) > 0,
+  );
 
 /**
  * Founder freshness participation policy: a device participates only once it
@@ -231,6 +241,7 @@ export function deriveSyncFreshness(
     state: deriveTerminalState(terminal, thresholdMs, nowMs),
     acceptedThroughSequence: terminal.acceptedThroughSequence,
     lastReceiptAt: terminal.lastReceiptAt,
+    hasDeclaredGaps: terminalHasDeclaredGaps(terminal),
   }));
 
   // PENDING terminals are display-only: they are filtered out before the
@@ -252,11 +263,14 @@ export function deriveSyncFreshness(
       ? deriveLastCompleteAt(participatingTerminals)
       : null;
 
+  const hasDeclaredGaps = perTerminal.some((terminal) => terminal.hasDeclaredGaps);
+
   return {
     state,
     lastCompleteAt,
     perTerminal,
     evaluatedAt: now,
     thresholdMinutes,
+    hasDeclaredGaps,
   };
 }
