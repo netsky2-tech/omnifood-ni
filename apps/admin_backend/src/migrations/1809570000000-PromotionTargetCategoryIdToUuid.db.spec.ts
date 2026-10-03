@@ -346,6 +346,13 @@ describe('PromotionTargetCategoryIdToUuid1809570000000 (db)', () => {
           );
           await insertPromotion(runner, TENANT_A, 'Global A', null);
 
+          // Tenant A: blank and whitespace-only ACTIVE targets — the cast
+          // would turn exactly these into NULL while active (the global
+          // trap through the second door). After the run they must be NULL
+          // **and** is_active = false — never NULL and active.
+          await insertPromotion(runner, TENANT_A, 'Blank target', '');
+          await insertPromotion(runner, TENANT_A, 'Whitespace target', '   ');
+
           // Tenant B: an unresolvable ACTIVE promotion — the NULL trap.
           // After the run it must be NULL **and** is_active = false.
           await insertPromotion(
@@ -459,6 +466,11 @@ describe('PromotionTargetCategoryIdToUuid1809570000000 (db)', () => {
           expect(deactivateLog).toBeDefined();
           expect(deactivateLog).toContain(TENANT_B);
           expect(deactivateLog).toContain('Promo huérfana');
+          const blankLog = logs.find((l) =>
+            l.includes('blank target_category_id destined for NULL'),
+          );
+          expect(blankLog).toBeDefined();
+          expect(blankLog).toContain('Blank target');
 
           // -- Resulting rows, per tenant, seen through RLS-bound reads ----
           await asMigrationRole(async (probeRunner) => {
@@ -471,6 +483,17 @@ describe('PromotionTargetCategoryIdToUuid1809570000000 (db)', () => {
             expect(globalA?.target_category_id).toBeNull();
             expect(globalA?.is_active).toBe(true);
 
+            // The blank-target trap, closed on the real database: NULL and
+            // is_active = false, never NULL and active.
+            const blankTarget = a.find((p) => p.name === 'Blank target');
+            expect(blankTarget?.target_category_id).toBeNull();
+            expect(blankTarget?.is_active).toBe(false);
+            const whitespaceTarget = a.find(
+              (p) => p.name === 'Whitespace target',
+            );
+            expect(whitespaceTarget?.target_category_id).toBeNull();
+            expect(whitespaceTarget?.is_active).toBe(false);
+
             const b = await promotionsAs(probeRunner, TENANT_B);
             const orphan = b.find((p) => p.name === 'Promo huérfana');
             expect(orphan?.target_category_id).toBeNull();
@@ -482,10 +505,10 @@ describe('PromotionTargetCategoryIdToUuid1809570000000 (db)', () => {
             expect(wrongType?.is_active).toBe(false);
 
             // -- The invariant, asserted on the real rows ----------------
-            // No promotion that carried a non-empty text target_category_id
-            // before the run may be NULL and still active. The only
-            // NULL+active row allowed in this database is the one seeded
-            // NULL (global by design).
+            // No promotion that carried any non-null text target_category_id
+            // before the run (resolvable, unresolvable or blank) may be NULL
+            // and still active. The only NULL+active rows allowed in this
+            // database are the ones seeded NULL (global by design).
             for (const row of [...a, ...b, ...c]) {
               if (row.name === 'Global A') {
                 continue;

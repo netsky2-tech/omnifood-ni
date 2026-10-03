@@ -53,6 +53,8 @@ interface FakeState {
   failOnLift?: number;
   /** Make the first data UPDATE fail (mid-data-work throw path). */
   failOnData?: boolean;
+  /** Make the blank-target deactivation no-op (guard-trip path). */
+  skipBlankDeactivate?: boolean;
 }
 
 const TENANT_A = '11111111-1111-4111-8111-111111111111';
@@ -107,9 +109,10 @@ const addCatalogRow = (
 
 /**
  * The invariant of ODD §20, asserted on state: every promotion that carried
- * a non-empty text target_category_id before the run must end up either
- * attached to a resolved uuid or deactivated — never NULL and still active.
- * Promotions that were already NULL (global by design) are untouched.
+ * a non-null target_category_id before the run (resolvable, unresolvable or
+ * blank) must end up either attached to a resolved uuid or deactivated —
+ * never NULL and still active. Promotions that were already NULL (global by
+ * design) are untouched.
  */
 const expectNoTouchedRowLeftNullAndActive = (
   state: FakeState,
@@ -122,18 +125,15 @@ const expectNoTouchedRowLeftNullAndActive = (
     if (!after) {
       throw new Error(`promotion ${before.id} vanished during the run`);
     }
-    if (
-      before.target_category_id !== null &&
-      before.target_category_id.trim() !== ''
-    ) {
+    if (before.target_category_id !== null) {
       const attached = after.target_category_id !== null;
       const deactivated = after.is_active === false;
       // Attach and deactivate are mutually exclusive, and one of them happened.
       expect(attached).toBe(!deactivated);
       expect(attached || deactivated).toBe(true);
     } else {
-      // Global (or empty) rows are not the migration's business.
-      expect(after.target_category_id).toBe(before.target_category_id);
+      // Pre-existing global rows are not the migration's business.
+      expect(after.target_category_id).toBeNull();
       expect(after.is_active).toBe(before.is_active);
     }
   }
@@ -227,6 +227,45 @@ const createQueryRunner = (state: FakeState) => {
       }
 
       // ---- up() data work ----------------------------------------------
+      // Fail-closed NULL+active guard: NOT NULL blank targets still active
+      // would be cast to NULL with the flag on. Pre-existing NULL rows
+      // never appear here (the query filters IS NOT NULL).
+      if (
+        sql.includes("btrim(target_category_id) = ''") &&
+        sql.includes('is_active = true')
+      ) {
+        return Promise.resolve(
+          state.promotions
+            .filter(
+              (p) =>
+                p.target_category_id !== null &&
+                p.target_category_id.trim() === '' &&
+                p.is_active,
+            )
+            .map((p) => ({ id: p.id, name: p.name, tenant_id: p.tenant_id })),
+        );
+      }
+      // Blank-target deactivation: one statement, value kept for the cast.
+      if (sql.includes("btrim(target_category_id) = ''")) {
+        if (state.failOnData) {
+          return Promise.reject(new Error('BOOM: mock failure'));
+        }
+        if (state.skipBlankDeactivate) {
+          return Promise.resolve([[], 0]);
+        }
+        const touched: Array<{ id: string; name: string; tenant_id: string }> =
+          [];
+        for (const p of state.promotions) {
+          if (
+            p.target_category_id !== null &&
+            p.target_category_id.trim() === ''
+          ) {
+            p.is_active = false;
+            touched.push({ id: p.id, name: p.name, tenant_id: p.tenant_id });
+          }
+        }
+        return Promise.resolve([touched, touched.length]);
+      }
       if (/DISTINCT tenant_id\s+FROM promotions/.test(sql)) {
         const tenants = [
           ...new Set(
@@ -334,6 +373,16 @@ const createQueryRunner = (state: FakeState) => {
       // ---- DDL ----------------------------------------------------------
       if (sql.includes('ALTER COLUMN target_category_id TYPE uuid')) {
         state.columnType = 'uuid';
+        // The real USING NULLIF(btrim(...), '') nulls the blank values the
+        // deactivate pass left in place.
+        for (const p of state.promotions) {
+          if (
+            p.target_category_id !== null &&
+            p.target_category_id.trim() === ''
+          ) {
+            p.target_category_id = null;
+          }
+        }
         return Promise.resolve([]);
       }
       if (sql.includes('ADD CONSTRAINT fk_promotions_target_category_tenant')) {
@@ -482,6 +531,71 @@ describe('PromotionTargetCategoryIdToUuid1809570000000 up()', () => {
     await migration.up(queryRunner);
 
     expectNoTouchedRowLeftNullAndActive(state, preRun);
+  });
+
+  it('deactivates active promotions with blank or whitespace-only targets instead of letting the cast NULL them into global promotions', async () => {
+    const state = freshState();
+    addCatalogRow(state, { code: 'CAFE_CALIENTE' });
+    const empty = addPromotion(state, {
+      name: 'Empty target',
+      target_category_id: '',
+    });
+    const blank = addPromotion(state, {
+      name: 'Whitespace target',
+      target_category_id: '   ',
+    });
+    // A row that was ALREADY NULL + active before the run is legitimately
+    // global today; it must not trip the guard nor be touched.
+    addPromotion(state, { name: 'Global by design', target_category_id: null });
+
+    const { queryRunner } = createQueryRunner(state);
+    await migration.up(queryRunner);
+
+    for (const promotion of [empty, blank]) {
+      expect(promotion.target_category_id).toBeNull();
+      expect(promotion.is_active).toBe(false);
+    }
+    const global = state.promotions.find((p) => p.name === 'Global by design');
+    expect(global?.target_category_id).toBeNull();
+    expect(global?.is_active).toBe(true);
+    // Each blank-target deactivation is reported, not silent.
+    expect(logs.some((l) => l.includes('blank target_category_id'))).toBe(true);
+  });
+
+  it('aborts before the ALTER when the run would still create a NULL + active promotion (the blank guard trips)', async () => {
+    const state = freshState();
+    // Simulate the deactivate pass missing its rows: the guard — not the
+    // cast — is what must stop the conversion.
+    state.skipBlankDeactivate = true;
+    addPromotion(state, {
+      name: 'Would become global',
+      target_category_id: '',
+    });
+
+    const { queryRunner } = createQueryRunner(state);
+    await expect(migration.up(queryRunner)).rejects.toThrow(
+      /refusing the uuid conversion: 1\+ ACTIVE promotion\(s\) hold a blank/,
+    );
+    // No DDL happened: the conversion was refused before the ALTER.
+    expect(state.columnType).toBe('character varying');
+  });
+
+  it('does NOT trip the blank guard for a promotion that was already NULL + active before the run', async () => {
+    const state = freshState();
+    addCatalogRow(state, { code: 'CAFE_CALIENTE' });
+    // Legitimately global today: untouched, and the guard stays silent.
+    addPromotion(state, { name: 'Already global', target_category_id: null });
+    addPromotion(state, {
+      name: 'Resolvable',
+      target_category_id: 'CAFÉ CALIENTE',
+    });
+
+    const { queryRunner } = createQueryRunner(state);
+    await expect(migration.up(queryRunner)).resolves.toBeUndefined();
+
+    const global = state.promotions.find((p) => p.name === 'Already global');
+    expect(global?.target_category_id).toBeNull();
+    expect(global?.is_active).toBe(true);
   });
 
   it('passes already-uuid-shaped values through untouched, without canonicalizing them', async () => {

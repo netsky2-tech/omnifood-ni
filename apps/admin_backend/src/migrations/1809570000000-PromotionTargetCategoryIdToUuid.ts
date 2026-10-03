@@ -13,6 +13,19 @@ import { type MigrationInterface, type QueryRunner } from 'typeorm';
  * renaming a category's label never breaks an attachment (the id does not
  * change; the code does).
  *
+ * Blank and whitespace-only targets take the deactivate path too, BEFORE the
+ * cast: `NULLIF(btrim(target_category_id), '')` would turn exactly those
+ * values into NULL while is_active stays true — the global-promotion trap
+ * through a second door. The `btrim(...) <> ''` filters in the per-tenant
+ * scan are ONLY about text that can be canonicalized and resolved by code;
+ * they never mean "blank values are fine".
+ *
+ * Scope of the fail-closed NULL+active guard: it refuses the conversion when
+ * a row THIS MIGRATION WOULD CHANGE would end up NULL with is_active = true
+ * (a NOT NULL blank target that survived the deactivate pass). A promotion
+ * that was ALREADY NULL + active before the run is legitimately global
+ * today; this migration does not touch it and the guard does not fail on it.
+ *
  * THE NULL TRAP — the contract this migration exists to honour. In the POS
  * engine, target_category_id IS NULL means GLOBAL promotion: it discounts
  * every line in the cart (promotions_engine.dart:110 and :132,
@@ -70,9 +83,14 @@ import { type MigrationInterface, type QueryRunner } from 'typeorm';
  * 3. Data work, per tenant: canonicalize → resolve by code within
  *    SALES_PRODUCT_CATEGORY of that tenant → attach the resolved id
  *    (UPDATE guarded by the exact original text), or — same statement —
- *    NULL + is_active = false for unresolvable values, with the full report.
- * 4. Fail-closed guard: any leftover value that is not uuid-shaped (or NULL)
- *    throws, naming up to 10 offenders, before any DDL runs.
+ *    NULL + is_active = false for unresolvable values, with the full report;
+ *    then every NOT NULL blank/whitespace target is deactivated the same way
+ *    (is_active = false, value kept, destined for NULL by the cast).
+ * 4. Fail-closed guards, both before any DDL: (a) no row this migration
+ *    changes may end up NULL + is_active = true — a NOT NULL blank target
+ *    that survived the deactivate pass aborts the run; (b) any leftover
+ *    value that is not uuid-shaped (or NULL) throws, naming up to 10
+ *    offenders.
  * 5. `ALTER TABLE promotions ALTER COLUMN target_category_id TYPE uuid
  *    USING NULLIF(btrim(target_category_id), '')::uuid`, then the guarded
  *    composite FK
@@ -152,11 +170,17 @@ interface ReturnedDeactivation {
   name: string;
 }
 
-const asReturnedDeactivations = (raw: unknown): ReturnedDeactivation[] => {
+interface ReturnedBlankDeactivation extends ReturnedDeactivation {
+  tenant_id: string;
+}
+
+const asReturnedDeactivations = <T extends ReturnedDeactivation>(
+  raw: unknown,
+): T[] => {
   if (Array.isArray(raw) && Array.isArray(raw[0])) {
-    return raw[0] as ReturnedDeactivation[];
+    return raw[0] as T[];
   }
-  return Array.isArray(raw) ? (raw as ReturnedDeactivation[]) : [];
+  return Array.isArray(raw) ? (raw as T[]) : [];
 };
 
 export class PromotionTargetCategoryIdToUuid1809570000000 implements MigrationInterface {
@@ -392,6 +416,70 @@ export class PromotionTargetCategoryIdToUuid1809570000000 implements MigrationIn
     return deactivated.length;
   }
 
+  /**
+   * Blank/whitespace-only targets: deactivate in ONE statement (value kept,
+   * destined for NULL by the ALTER's NULLIF) and log each one the same way
+   * deactivateUnresolvable does. Runs after the per-tenant pass, whose
+   * `<> ''` filters are only about text that can be resolved — never a
+   * licence to leave blanks alone.
+   */
+  private async deactivateBlankTargets(runner: QueryRunner): Promise<void> {
+    const deactivated = asReturnedDeactivations<ReturnedBlankDeactivation>(
+      await runner.query(
+        `UPDATE promotions
+            SET is_active = false,
+                updated_at = now()
+          WHERE target_category_id IS NOT NULL
+            AND btrim(target_category_id) = ''
+          RETURNING id, name, tenant_id`,
+      ),
+    );
+    for (const row of deactivated) {
+      console.log(
+        `${LOG_PREFIX} tenant ${row.tenant_id}: deactivated ` +
+          `(blank target_category_id destined for NULL) promotion ` +
+          `'${row.name}' id=${row.id} — the cast would leave it NULL and ` +
+          `active, and NULL means GLOBAL in the POS engine`,
+      );
+    }
+    console.log(
+      `${LOG_PREFIX} summary: deactivated ${deactivated.length} ` +
+        `blank-target promotion(s) before the uuid cast`,
+    );
+  }
+
+  /**
+   * Fail-closed guard: a NOT NULL blank target that survived
+   * deactivateBlankTargets would be cast to NULL with is_active still on —
+   * refuse before any DDL. A promotion ALREADY NULL + active before the run
+   * is legitimately global today and must NOT fail this guard (see header).
+   */
+  private async assertNoRowWouldBecomeNullAndActive(
+    runner: QueryRunner,
+  ): Promise<void> {
+    const offenders = (await runner.query(
+      `SELECT id, name, tenant_id
+         FROM promotions
+        WHERE target_category_id IS NOT NULL
+          AND btrim(target_category_id) = ''
+          AND is_active = true
+        ORDER BY id
+        LIMIT 10`,
+    )) as Array<{ id: string; name: string; tenant_id: string }>;
+
+    if (offenders.length > 0) {
+      const detail = offenders
+        .map((row) => `${row.id} ('${row.name}', tenant ${row.tenant_id})`)
+        .join('; ');
+      throw new Error(
+        `${LOG_PREFIX} refusing the uuid conversion: ` +
+          `${offenders.length}+ ACTIVE promotion(s) hold a blank ` +
+          `target_category_id the cast would turn into NULL — NULL means ` +
+          `GLOBAL in the POS engine: ${detail}`,
+      );
+    }
+  }
+
   /** Fail closed: leftovers that are neither NULL nor uuid-shaped abort the DDL. */
   private async assertNothingButUuidsLeft(runner: QueryRunner): Promise<void> {
     const leftovers = (await runner.query(
@@ -450,6 +538,8 @@ export class PromotionTargetCategoryIdToUuid1809570000000 implements MigrationIn
       }
 
       await this.migrateTextValues(queryRunner);
+      await this.deactivateBlankTargets(queryRunner);
+      await this.assertNoRowWouldBecomeNullAndActive(queryRunner);
       await this.assertNothingButUuidsLeft(queryRunner);
 
       // All remaining values are uuid-shaped or NULL: the cast is total.
