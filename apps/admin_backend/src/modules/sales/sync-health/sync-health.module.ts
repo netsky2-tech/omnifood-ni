@@ -15,11 +15,26 @@ import { CardReconciliationSummaryService } from './card-reconciliation-summary.
  * aggregates. All table reads are tenant-bound transaction reads (issue
  * #592), so no forFeature repository tokens are registered here on
  * purpose: the services' only DataSource use is runInTenantTransaction.
+ *
+ * The sequence-gap policy rides the same sync ingestion ownership: it is
+ * consulted by InvoicesService.syncBatch (SalesModule imports this module)
+ * at the moment a record would otherwise be staged STAGED_FUTURE forever
+ * behind a lost source_sequence. It writes audit entries through the
+ * ChangeLogService (AuditModule) inside the same transaction as the fill
+ * receipts, so a declaration and its audit trail commit atomically.
  */
 @Module({
-  imports: [IdentityModule],
+  imports: [IdentityModule, AuditModule],
   controllers: [SyncHealthController, CardReconciliationSummaryController],
-  providers: [SyncHealthService, CardReconciliationSummaryService],
-  exports: [SyncHealthService, CardReconciliationSummaryService],
+  providers: [
+    SyncHealthService,
+    CardReconciliationSummaryService,
+    SequenceGapPolicyService,
+  ],
+  exports: [
+    SyncHealthService,
+    CardReconciliationSummaryService,
+    SequenceGapPolicyService,
+  ],
 })
 export class SyncHealthModule {}
