@@ -116,7 +116,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 
 ### Fase 1 — Modelo de grupos (backend + web)
 
-- [ ] **T1.1** Entidades + migración con RLS *(en curso, WU-1, delegada a `gentle-ai-worker`)*:
+- [x] **T1.1** Entidades + migración con RLS **(cerrada en `0d6e7f72`, revisión nativa aprobada)**:
       `modifier_groups` (name, min_selected, max_selected, allow_quantities, sort_order, is_active),
       `modifier_options` (group_id, name, price_delta, is_default, sort_order, is_active),
       `category_modifier_groups`, `product_modifier_groups`. Ver §9 por la forma exacta acordada.
@@ -329,3 +329,40 @@ CONSTRAINT chk_modifier_groups_max_gte_min CHECK (max_selected >= min_selected A
 - `min_selected = 0` ⇒ opcional; `min_selected >= 1` ⇒ obligatorio.
 - **No existe "ilimitado"**: un grupo con muchas opciones guarda un `max_selected` explícito.
 - El default `1` y el CHECK viven en el mismo lugar, así que el entity y el DDL no se contradicen.
+
+## 10. Cierre de T1.1 (work unit `0d6e7f72`)
+
+Verificado contra Postgres 16 real, no solo contra el spec unitario:
+
+- La migración **executa** por los dos caminos: `runMigrations()` del `1809530000000-AddReportIndexes.db.spec`
+  y `npm run migration:run:prod` sobre una DB scratch. La FK compuesta a `catalog_values(tenant_id, id)`
+  fue **aceptada**: el `UNIQUE` del padre se crea antes, así que el orden es correcto.
+- `CHECK` comprobado con transacciones revertidas: rechaza `max_selected = 0` y `max_selected < min_selected`;
+  **acepta** `min=1, max=1` (la fila "Leche" de T4.3).
+- Cross-tenant rechazado en las tres tablas hija (tres FK distintas disparadas a propósito).
+- RLS: `ENABLE` + `FORCE` en las 4; **exactamente 4 policies por tabla**; predicado deparseado a
+  `(tenant_id = (current_setting('app.tenant_id', true))::uuid)` — casteo del setting, no de la columna.
+- Aislamiento real con rol `NOBYPASSRLS` + `set_config('app.tenant_id', …)`: sesión con tenant A ve solo
+  las filas de A; sesión nueva sin setear → **0 filas**.
+- `scripts/verify-schema-build.sh`: **exit 0**, `tables=85 classified=85 failures=0`; conteo programático del
+  manifiesto: 85 entradas = 52 `direct:SIUD` + 10 `direct:SI` + 6 `direct:SIU` = 68 direct, 9 global,
+  5 parent-owned, 3 debt. El comentario de conteos ahora **coincide con la realidad**.
+- Suites enfocadas: `CreateModifierGroups` 30/30, `tenant-rls-coverage` 35/35, `catalog` 95/95,
+  `migration` 571 pasando, `tsc --noEmit` limpio.
+
+Dos hallazgos del revisor nativo, **no bloqueantes**, que se cierron en el mismo work unit:
+- **F1:** las entidades declaraban `@ManyToOne` simples mientras la migración crea FK compuestas y ninguna
+  FK a `tenants`. Con `synchronize: false` es inocuo hoy, pero si alguien corriera `schema:sync` el ORM
+  reemplazaría las FK que sostienen la garantía cross-tenant. Fix: `createForeignKeyConstraints: false` en
+  las 9 relaciones, con comentario de que la integridad la posee la migración.
+- **F2:** `down()` terminaba con `ALTER TABLE catalog_values …` sin guarda sobre la tabla; en una DB
+  físicamente vacía da `relation "catalog_values" does not exist`. Fix: `ALTER TABLE IF EXISTS`.
+
+Quedan como trabajo separado, decididos y no ejecutados:
+- **F3 (informativo):** los 5 FK nuevos son `NO ACTION`. Es correcto con el borrado lógico por `is_active`
+  (un grupo sin opciones ni enganches se borra igual). Solo hace falta `ON DELETE CASCADE` si se quiere un
+  flujo real de borrado físico/purga.
+- **F4 (informativo):** `uq_modifier_options_tenant_id (tenant_id, id)` no lo referencia nada hoy. Peso
+  muerto hacia adelante, inocuo; se quita si no se planea una FK futura a `modifier_options`.
+- **F5:** `npx jest --silent modifiers` no encuentra tests: el módulo trae solo entidades por diseño
+  (cobertura vive en el spec de migración). No es defecto, es el nombre de suite que no aplica.
