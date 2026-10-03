@@ -443,7 +443,9 @@ class _CashShiftViewState extends State<CashShiftView> {
                         context: context,
                         builder: (_) => ChangeNotifierProvider<CashShiftViewModel>.value(
                           value: vm,
-                          child: const CloseShiftDialog(),
+                          // R-18: pass the id→name map so the Z report opened
+                          // by the close flow shows the resolved cashier.
+                          child: CloseShiftDialog(usersById: _usersById),
                         ),
                       );
                     },

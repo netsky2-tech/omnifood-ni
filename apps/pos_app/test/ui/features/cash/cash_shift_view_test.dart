@@ -322,7 +322,9 @@ void main() {
       when(() => mockSessionDao.updateSession(any())).thenAnswer((_) async {});
 
       await viewModel.init();
-      await tester.pumpWidget(buildApp(const CloseShiftDialog()));
+      await tester.pumpWidget(buildApp(CloseShiftDialog(
+        usersById: const {'user-cajero-1': 'María Pérez'},
+      )));
       await tester.pump();
 
       expect(find.text('Arqueo Ciego y Cierre de Turno'), findsOneWidget);
@@ -344,6 +346,18 @@ void main() {
       expect(viewModel.lastClosedShift!.differenceNio, 50.0);
       expect(viewModel.lastClosedShift!.differenceUsd, 0.0);
       verify(() => mockSessionDao.updateSession(any())).called(1);
+
+      // R-18: the Z report opened by the close flow must show the resolved
+      // cashier, not the honest fallback label (the fallback is only for
+      // genuinely unresolvable identities, never for a resolvable id).
+      // Explicit pumps: the close dialog is the harness home route, so it
+      // is never popped and its _submitting spinner would spin forever
+      // (pumpAndSettle times out). Two pumps complete the Z dialog's
+      // route-fade animation.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('María Pérez'), findsOneWidget);
+      expect(find.text('Operador no disponible'), findsNothing);
     });
 
     testWidgets('ZReportDialog renders formal DGI Z-sequence and discrepancy metrics',
