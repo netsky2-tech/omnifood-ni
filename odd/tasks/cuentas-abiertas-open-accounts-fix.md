@@ -265,8 +265,31 @@ no hold tickets) break for the wrong reason.
 `cash_shift_e2e_flow_test.dart:86-88`). Add "Cuentas abiertas: N · C$ X" as information for the
 mid-shift print. Matrix row D3 gets its answer here.
 
-### T10 — Checks
-`flutter analyze` + the cash suites + the sales suites, then native review on the slice.
+### T10 — Checks — DONE (independent verifier, slice F5)
+
+| Check | Result |
+|---|---|
+| `flutter analyze` | No issues found (4.2s) |
+| `flutter test test/ui/features/cash test/ui/features/sales test/presentation/features/sales test/domain/services/sales test/data/daos/sales test/ui/features/kitchen` | **623 passed / 0 failed**. One run lost a file to the known `flutter_tester` load flake (`loyalty_reward_interaction_service_v2_test.dart`), green alone 17/17. **Zero assertion failures attributable to F5** |
+| Retired API (`closeSession` / `sessionExpected` / `CloseBoxDialog`) | zero live `lib/` references; the 3 hand-edited mocks converge on the next `build_runner` instead of conflicting |
+| Single entry / bypass | `CloseShiftDialog` is constructed only inside `showCloseShiftFlow`; both entries run accounts→vouchers in VM (`:418`/`:447`) and dialog (`:36`/`:54`); the VM re-queries and throws independently, so a future caller cannot bypass the gate |
+| Blocked close burns no Z | `zSequence` computed at `:457-458` after both gates; test asserts `countClosedSessions() == 0` after a block and `zReportSequence == 1` on the later resolved close |
+| Fail closed | `:422-428` aborts with "No se pudieron verificar las cuentas abiertas" — never assumes zero |
+| Waiter path | `closeWaiterShift` still throws names-only, `toString()` unchanged → byte-identical; `WaiterSettlementService` still has zero `lib/` callers |
+| DGI / offline | no invoice delete or mutation anywhere in the diff; the gate is local SQLite with no network dependency; the closed row keeps `syncStatus: 'pending'` so an offline close still syncs |
+
+### Two warnings carried out of verification
+
+1. **`init()` is not fail-closed the way the close is.** Its loader call sits in the outer `try`
+   (`cash_shift_view_model.dart:217-221`) and the `catch` sets an error message **without clearing
+   `_openAccounts`**, so after a failed `init()` the UI pre-gate can act on a stale (possibly empty)
+   list. Acceptable as designed — the close re-queries and fail-closes, so no close can slip through —
+   but the pre-gate can be skipped cosmetically, which is a real inconsistency worth a follow-up.
+2. **The block copy names both exits but warns about only one.** It says "cobrar o abandonar" without
+   echoing that abandoning is irreversible; that warning currently lives only in the abandon
+   confirmation (`sale_view.dart:895-896`). The destructive route is itself gated, so this is a UX
+   follow-up, not a blocker — but it is exactly the spot where an operator at 23:00 decides what to
+   discard.
 
 ## T7 evidence (unified close)
 
