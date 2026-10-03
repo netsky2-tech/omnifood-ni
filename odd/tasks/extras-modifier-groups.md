@@ -102,8 +102,15 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
       siempre referencie una fila existente.
 - [ ] **T0.2'** Backfill de `products.category_code` existente: mapear los valores de texto libre actuales
       (incluidos los 58 productos de SOHO ya importados) contra `catalog_values.code`, creando las filas
-      que falten. **Datos de producción: inspeccionar antes de escribir el script**, no asumir los 8 codes
-      sembrados (`COMIDA, BEBIDA_CALIENTE, BEBIDA_FRIA, PANADERIA, SNACK, RETAIL, LIMPIEZA, OTROS`).
+      que falten.
+      **Medido en la base de desarrollo (2026-10-03): el tenant SOHO tiene 58 productos y CERO filas
+      `SALES_PRODUCT_CATEGORY`** (ni de ningún otro tipo). Sus codes son
+      `CAFÉ CALIENTE`(16), `BEBIDAS`(12), `CAFÉ HELADO`(11), `COMIDA`(6), `DESAYUNOS`(5), `BATIDOS`(4),
+      `POSTRES`(4): **el 100 % esta huerfano**. Con T0.1' el propio importador siembra las filas, asi que
+      T0.2' solo tiene que arreglar los 58 registros ya existentes y decidir el mapeo conceptual.
+      **No unificar automaticamente** `CAFÉ CALIENTE` con el code sembrado `BEBIDA_CALIENTE`: es la misma
+      idea de negocio con otro nombre, y esa union la decide el dueno en `/catalogs`, no la adivina un script.
+      **Produccion sigue sin inspeccionar** — correr la misma consulta antes de escribir el script.
 - [ ] **T0.3'** Delta de productos traiga la categoría: agregar `categoryCode` (y `categoryName` si hace
       falta para mostrar) al mapeo de `inbound-sync.service.ts:504-525` y a `InboundSyncProductDto`
       (`inbound-sync.dto.ts:62-89`), y consumirlos en el ingest del POS
@@ -366,3 +373,25 @@ Quedan como trabajo separado, decididos y no ejecutados:
   muerto hacia adelante, inocuo; se quita si no se planea una FK futura a `modifier_options`.
 - **F5:** `npx jest --silent modifiers` no encuentra tests: el módulo trae solo entidades por diseño
   (cobertura vive en el spec de migración). No es defecto, es el nombre de suite que no aplica.
+
+## 11. Estado real de las categorías (medido en la base de desarrollo, 2026-10-03)
+
+```
+tenant SOHO (bc3bd4dd)          → 58 productos | 0 filas SALES_PRODUCT_CATEGORY | 0 filas catalog_values
+  CAFÉ CALIENTE 16 · BEBIDAS 12 · CAFÉ HELADO 11 · COMIDA 6 · DESAYUNOS 5 · BATIDOS 4 · POSTRES 4
+  → los siete están huérfanos (100 %)
+tenant "SOHO Test Fixture"      → 23 productos | 8 filas SALES_PRODUCT_CATEGORY (los codes sembrados)
+```
+
+Lectura correcta del dato: **el tenant real nunca pasó por la siembra del catálogo**, porque el camino
+que tiene es el importador de menú, y el importador escribe el nombre de la hoja en `category_code` sin
+crear la fila (`menu-import.service.ts:609`). Por eso:
+
+1. **T0.1' no es una limpieza, es el mecanismo de siembra.** Con el importador canónico, importar el menú
+   crea/reusa las filas `SALES_PRODUCT_CATEGORY` del tenant.
+2. **T0.2' queda reducido** a las 58 filas que ya existen.
+3. Un grupo enganchado "por categoría" hoy **no tendría dónde engancharse**. Cualquier pantalla de
+   administración de grupos tiene que mostrar esa realidad en vez de un selector vacío.
+4. **No fuzzy-mear** `CAFÉ CALIENTE` ≈ `BEBIDA_CALIENTE`: coincidencia solo por `code` derivado. Unificar
+   conceptos es decisión del dueño en `/catalogs`.
+5. Producción todavía no fue inspeccionada; la misma consulta corre antes de escribir el script de backfill.
