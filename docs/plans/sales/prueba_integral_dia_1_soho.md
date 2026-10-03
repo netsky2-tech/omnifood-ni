@@ -339,6 +339,8 @@ sobre el tenant sembrado con datos dummy.
 | **R-11** | El stream de auditoría no replica a producción | `audit_logs` de la terminal = 0 filas; cada terminal del tenant tiene **exactamente 1** fila histórica; último del tenant 2026-09-29 22:54; la terminal acumula **7 pendientes + 1 outbox**; `audit_integrity_alerts` = 0 (la cadena forense no reporta hueco, pero tampoco sube). El badge es honesto; "Forzar Sincronización" no drena | **RESUELTO** — causa raíz: **brecha de deploy, no defecto de código.** El commit del fix (`33eebf31`, D-18 parte 2) existía sólo en la rama local `fix/soho-commercial-fx-rate`; nunca se empujó. `origin/main` no lo contenía y la rama estaba 49 commits adelante. Fix requerido (dos commits, no uno): `33eebf31` (guard de transporte en la ruta) + `585ad47e` (registro del provider del guard). Resolución: push fast-forward `27a15728..9e83b15d` a `main` → auto-deploy de Railway `fcee4eaa-1341-40f3-9284-7ceba9d496c4` = SUCCESS. Evidencia: (1) `POST /identity/audit` con token humano pasó de `201 {"status":"success","count":0}` a `401 {"message":"Invalid device access token"}`, con el control `GET /onboarding/fiscal-setup` en 200 con el mismo token; (2) `audit_logs` del tenant `5af6c6c9-47eb-4bed-badd-b30cd1943ad1` registra `Q802024120001 | SALE_CREATED | sequence_no 1 | 2026-10-02 16:06:58.863+00`; (3) el operador ejecutó "Forzar Sincronización" y el badge de nube quedó verde; (4) el stream quedó drenado, no goteando: `sales_transaction_dao.dart` escribe exactamente una fila de auditoría por transacción (`:406` transacción de venta, `:522` transacción de anulación — call sites distintos, no dos por venta), así que 1 venta = 1 fila = 1 recibida; (5) `audit_integrity_alerts` del tenant = 0. Veredicto anterior: `Bloqueador de entrega` — sin causa raíz |
 | **R-12** | Timestamps fiscales inconsistentes entre tablas | `invoices.created_at` guarda **hora local** sin normalizar (venta 14:27 local → `14:27Z`) mientras `cash_shift_sessions.opened_at/closed_at` guarda **UTC real** (`20:26Z`/`20:59Z`). La factura parece anterior al turno que la precede | **DGI/reportes** — ensucia cualquier filtro por fecha |
 | **R-13** | No hay detección ni aviso de ventas con inventario no aplicado, ni replay automático | 10 días de ventas de toda la flota en `APPLIED_INVENTORY_PENDING` sin una sola alerta al dueño. Sólo existe remediación **manual**: `POST /inventory/remediations/sale-inventory` | **§4.1** — el sistema vendió 10 días sin descontar inventario y nadie se enteró |
+| **R-14** | `bcn_official_exchange_rate` no tiene escritor en todo el POS | las cuatro facturas del rig (6, 7, 8, 9) registran `bcn_official_rate = 36.6241` — exactamente el default compilado en `sale_view_model.dart:599` — incluida la factura 9, cuya tasa comercial sí es la de la config. La clave no se proyecta ni se siembra en ninguna parte | latente pero grave — si un tenant cambia `checkoutFxMode` a `BCN_OFFICIAL`, `activeCheckoutRate` devuelve esa constante y el POS **cobra con una tasa oficial inventada**, sin ningún aviso |
+| **R-15** | el diálogo "Estado de la Nube" afirma que todo funciona cuando nada funciona | con el backend totalmente inalcanzable (toda petición con `DioException ... Connection refused`) el diálogo mostró `Conectividad: En Línea (Online)` y, en la nota amarilla, "Los registros de auditoría se enviaron a la nube más tarde de lo habitual, pero están guardados de forma segura en este terminal. Facturas y turnos se sincronizan normalmente." — mientras su propio `Detalle de Error`, ocho líneas más abajo, decía `Sales; CashShifts; Catálogo` | misma clase que D-18 parte 1. Si la red del cliente cae el día 1, el operador recibe un mensaje que dice que todo está bien mientras **nada** se sincroniza. Incumple el §4.1 del estándar (convierte un dato desconocido en un valor válido) |
 
 ### Nota sobre R-8 (no es hallazgo nuevo)
 
@@ -391,6 +393,32 @@ receta). En un tenant limpio no aplica: los 58 se crean SIMPLE de entrada.
 | `api_url` | `https://api.nhilospos.com/api` | producción |
 | `sha256` | `52764ec18e8838cce53fd5b2db9065902e1d8304977925821bf596e5e1b440fa` | 89.327.827 bytes |
 
+## Ensayo controlado con S23 Ultra contra backend local — 2026-10-02 (noche)
+
+La tablet de entrega sólo había producido la venta de verificación de la activación, así que la
+pregunta del tipo de cambio no se podía resolver a partir de ella: nadie podía decir si el FX
+equivocado de esa factura era un artefacto de la activación o un defecto sistémico. Para
+resolverlo se montó un rig de ensayo con **impacto cero en el tenant del cliente**: una Galaxy
+S23 Ultra (`S23TEST`) con un APK construido desde esta rama, apuntada a un backend NestJS local
+(`http://localhost:3000/api`) y la base Postgres local. Tenant de prueba:
+`bc3bd4dd-92bb-4cfe-883e-cb5ec97bfe94` (slug `soho`, 58 productos SIMPLE, revisión fiscal 4 con
+`commercialFxSpread 36.6243` y `checkoutFxMode COMMERCIAL`). Sobre ese rig se ejecutó una venta
+NORMAL por la UI real (producto → carrito → COBRAR → efectivo → confirmar), con turno abierto
+(`2c67e864-e4e8-4525-845a-a7372b245543`). No se emitió factura, no se consumió consecutivo y no
+se tocó ningún dato en producción.
+
+| Factura | Origen | `commercial_rate` | `total_usd` |
+| --- | --- | --- | --- |
+| 6 | venta normal, **código previo a la rama** (2026-10-01) | `36.5000` | `0.00` |
+| 7 | venta normal, **código previo a la rama** (2026-10-01) | `36.5000` | `0.00` |
+| 8 | venta de verificación del *runner* de activación | `36.5000` | `0.00` |
+| **9** | **venta NORMAL, código actual, equipo `S23TEST`** | **`36.6243`** | **`1.91`** |
+
+- La factura 9 es la prueba: `subtotal 70.00`, `total 70.00`, `commercial_rate 36.6243`, y el pago de la MISMA factura registró `exchange_rate 36.6243` — factura y pago coinciden con la config del tenant (`commercialFxSpread 36.6243`). `total_usd = 1.91` es exactamente `70 ÷ 36.6243`.
+- `inventory_outcome = APPLIED_NO_INVENTORY_IMPACT` (terminal) → correcto para productos SIMPLE.
+- La activación del rig pasó con `status PASS` y `warnings_count 0`, y el intento exigió la revisión fiscal 4 con su huella: **una activación que pasa prueba que la proyección fiscal se aplicó en el equipo**. Esa es la premisa que faltaba en la tablet de entrega.
+- Consecuencia para la entrega: el APK de la tablet (`1.0.1+2012`, `git_commit 9e83b15d`) es el mismo código en todo lo que importa, así que **su primera venta normal va a guardar `36.6243`**, no `36.5000`.
+
 ## Veredicto de esta corrida
 
 **La puerta de salida NO se considera habilitada.** Faltan las Fases 6, 7, 8.3, 10, 11, 12 y 14:
@@ -442,6 +470,8 @@ El día 1 se considera **habilitado** solo si:
 5. Con la red caída: se vende, se cobra, se da vuelto, y al volver la red **todo** llega al cloud.
 
 **Actualización 2026-10-02 (tarde):** el criterio 2 en lo que concierne a R-11 está ahora **CUMPLIDO** — el discriminador `POST /identity/audit` con token humano responde `401 Invalid device access token`, y `audit_logs` ya contiene la fila `Q802024120001 | SALE_CREATED | sequence_no 1`. Detalle completo en la fila R-11 de los hallazgos y en "Estado de entrega — tenant limpio de SOHO".
+
+**Actualización 2026-10-02 (noche):** el camino de venta normal quedó verificado de punta a punta sobre el código actual, en el rig S23 Ultra contra backend local (ver `## Ensayo controlado con S23 Ultra contra backend local — 2026-10-02 (noche)`): catálogo, turno abierto (`2c67e864-e4e8-4525-845a-a7372b245543`), venta por la UI real (producto → carrito → COBRAR → efectivo → confirmar), `commercial_rate 36.6243` correcto, `total_usd 1.91` correcto (`70 ÷ 36.6243`), `inventory_outcome = APPLIED_NO_INVENTORY_IMPACT` (terminal) y sincronización al cloud — todo citando la factura 9. Los dos defectos reales que siguen abiertos (los defaults compilados de la venta de activación, y `bcn_official_exchange_rate` sin escritor, R-14) **no bloquean la operación del día 1** mientras el tenant opere `checkoutFxMode COMMERCIAL`.
 
 **Criterio de honestidad:** si algo no se pudo probar, se declara **no probado**, no "OK".
 Un check sin evidencia observada es un check en rojo.
