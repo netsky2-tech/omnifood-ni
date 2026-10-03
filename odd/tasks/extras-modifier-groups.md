@@ -602,3 +602,26 @@ failures=0`, tablas sin cambio (la migracion no crea tablas).
 
 Un detalle cosmético corregido por el padre en vez de delegado: el log de merge nombraba el tenant
 dos veces.
+
+## 19. T0.2' revisado y quemado · T0.1' aprobado pero NO quemable
+
+**T0.2' (`394886e8`): recibo de revision aprobado y authority quemada.**
+- Lineage `review-273ff31ae341adae` · tier medium · 4 ficheros · 1.691 lineas · presupuesto de correccion 200
+- 1 corrida de revisor, lente `review-reliability`, transporte `pi_host_relay`
+- Cierre en el ultimo evento admitido: `state: approved`, `consumed_revision sha256:602cd1054701c4473ea883048ac468078e86839c80f80c0c9340ba2f5c541eed`
+- Acknowledgement exacto ejecutado: `authority: burned`, `burn_evidence: gentle-ai.review-acknowledged/v1`
+- Un solo hallazgo, **informativo y no bloqueante**: `R3-001` WARNING en `...BackfillProductCategoryCodes.db.spec.ts:30-36`. No abrio correccion, no reabre la revision, no ofrece transicion de correccion. Queda como trabajo separado.
+- Leccion de uso de la herramienta: `acknowledge-approved` **no acepta `input`**. El primer intento con el objeto `{target, expectedRevision, token}` devolvio `native-approved-acknowledgement-input-invalid` / `controller-only-input` sin mutar nada; la continuation correcta es `operation: acknowledge-approved` con `lineageId` y `workspaceRoot` nada mas, y el provider arma el token y la revision por su cuenta.
+
+**T0.1' (`da4c2512`): la revision se aprobo, pero el recibo ya no se puede quemar.**
+- El relay volvio a funcionar y `review-7286b42cf449371c` aprobo en la primera corrida: `state: approved`, `store_revision sha256:04ada54669a43361bcf9db19ea51f9b98609a1a2ef51a2cc3e6613a1a9ec9cd8`, con 4 hallazgos **todos informativos** (`R3-001`/`R3-002` en `menu-import.service.ts:444` y `444-452`, `R3-003` en `752-753`, `R3-004` SUGGESTION en `124-126`).
+- El acknowledgement devolvio `native-approved-acknowledgement-not-current` con `mutation_performed: false`. **Causa: mi secuencia, no el contenido.** Deje el lineage abierto a traves de dos commits siguientes; cuando la punta de la rama se movio, el target congelado de ese lineage dejo de ser el target current y el provider no admite el recibo.
+- El estado actual ofrece un START **combinado** (`review-1c21a32232dc6384`, base `878c1cb0`, 6 ficheros, ~2.300 lineas: T0.1' + T0.2' + docs). **No se arranca**: re-revisar en bloque dos work-unit ya revisados contra el presupuesto de revision humana es el defecto que el tier y el presupuesto existen para evitar.
+- Consecuencia registrada como deuda, no como cierre: `da4c2512` queda **aprobado sin recibo quemado**. Su evidencia funcional propia sigue en pie (43/43 menu-import, 694/694 onboarding, tsc/eslint/prettier limpios).
+
+**Regla operativa nueva.** Quemar el acknowledgement **inmediatamente** despues de la aprobacion, antes de cualquier commit nuevo en la rama. Un lineage aprobado y no quemado es una ventana que la siguiente escritura en la rama cierra. En T0.2' se hizo bien; en T0.1' se dejo abierto por decision del dueno cuando el relay fallaba, y el fallo del relay es exactamente lo que obliga a esta disciplina.
+
+**Follow-ups que dejo la revision, ninguno bloqueante:**
+- `menu-import.service.ts:444` y `444-452` (guarda del code vacio) y `752-753`: mirar al tocar el importador de nuevo.
+- `menu-import.service.ts:124-126` (SUGGESTION sobre `canonicalCategoryCode`):候选 de refactor menor, sin accion ahora.
+- `...BackfillProductCategoryCodes.db.spec.ts:30-36`: WARNING en el arn es del db spec.
