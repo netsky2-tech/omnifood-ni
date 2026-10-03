@@ -7,6 +7,45 @@ le pide la factura con nombre, debería de poder imprimirla así"*.
 
 ---
 
+## 0. Modelo reconciliado — snapshot fiscal vs. catálogo de clientes
+
+Acá hay **dos cosas distintas** y el plan original las mezclaba. La observación del dueño del producto —*no todo
+cliente nombrado pertenece al catálogo*— es la que ordena el diseño.
+
+**1. Los datos fiscales que el comprobante imprimió**, guardados **en la factura**. Esto **no es duplicar**: es
+el patrón correcto para un documento fiscal, y el código ya lo usa. `invoice_item_modifiers` guarda el
+modificador con su nombre y su precio deliberadamente **sin** vínculo al producto, porque un comprobante emitido
+no puede cambiar retroactivamente si el producto se renombra o cambia de precio. Con el receptor pasa lo mismo:
+**la factura debe conservar lo que imprimió**.
+
+**2. El catálogo de clientes**, entidad reutilizable, con la **fidelidad** colgando de ella. Ahí va **sólo lo que
+vale la pena recordar**. Alguien puede pedir la factura a su nombre y no volver nunca: ese dato es
+**descartable** y no debe ensuciar el catálogo.
+
+### Reglas
+
+| Pieza | Qué es | Cuándo se llena |
+|---|---|---|
+| `invoices.customer_name` / `customer_tax_id` | **snapshot fiscal** de lo impreso | cuando la venta fue nominada; `NULL` si fue anónima |
+| `invoices.customer_id` | **vínculo opcional** al catálogo | sólo si la venta se asoció a un cliente registrado |
+| Catálogo de clientes + fidelidad | entidad reutilizable | sólo si el operador decide guardarlo, o si ya existe |
+
+- **Nunca crear un cliente automáticamente** a partir de un nombre escrito en el cobro. Guardarlo es una decisión
+  **explícita** («guardar como cliente»), no un efecto secundario de facturar. Ése es el error que hay que evitar:
+  llenar el catálogo de nombres descartables.
+- Venta anónima → `customer_name IS NULL`, y **el ticket imprime `Cliente: Contado`** por regla de
+  presentación, no por dato guardado. Así la consulta «ventas anónimas» queda limpia y no se mete texto falso
+  en la base.
+- La fidelidad cuelga de `customer_id`, que es `NULL` en el caso descartable: correcto — no acumula y no ensucia.
+- Un dato fiscal por separado: la cédula/RUC puede venir sola o con el nombre, según pidió el cliente (hay quien
+  necesita la cédula para deducir el gasto en su empresa).
+
+**No implementar T1 en adelante hasta que llegue el mapeo de clientes y fidelidad.** Hay una hipótesis concreta a
+confirmar: si el catálogo se construye en algún lado a partir de nombres de transacciones, el problema es más
+grande que esta funcionalidad y conviene saberlo antes de escribir código.
+
+---
+
 ## 1. Decisiones tomadas
 
 | # | Pregunta | Elegido |
