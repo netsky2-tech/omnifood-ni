@@ -147,7 +147,7 @@ void main() {
     );
 
     test(
-      'NEVER attaches device token to inventory routes outside the explicit allowlist',
+      'rejects requests to inventory routes outside the explicit allowlist with DeviceSyncRouteNotAllowedException',
       () async {
         final paths = [
           '/inventory/purchase',
@@ -171,8 +171,12 @@ void main() {
 
           await interceptor.onRequest(options, handler);
 
-          expect(handler.isNextCalled, isTrue);
-          expect(options.headers['Authorization'], isNull);
+          expect(handler.isRejected, isTrue);
+          expect(handler.rejectionError, isNotNull);
+          expect(
+            handler.rejectionError!.error,
+            isA<DeviceSyncRouteNotAllowedException>(),
+          );
         }
 
         verifyNever(() => coordinator.getAccessToken());
@@ -204,7 +208,7 @@ void main() {
     );
 
     test(
-      'NEVER attaches device token to admin/onboarding/human endpoints',
+      'rejects requests to admin/onboarding/human endpoints with DeviceSyncRouteNotAllowedException',
       () async {
         final paths = [
           '/identity/login',
@@ -222,8 +226,12 @@ void main() {
 
           await interceptor.onRequest(options, handler);
 
-          expect(handler.isNextCalled, isTrue);
-          expect(options.headers['Authorization'], isNull);
+          expect(handler.isRejected, isTrue);
+          expect(handler.rejectionError, isNotNull);
+          expect(
+            handler.rejectionError!.error,
+            isA<DeviceSyncRouteNotAllowedException>(),
+          );
         }
 
         verifyNever(() => coordinator.getAccessToken());

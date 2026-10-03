@@ -125,6 +125,7 @@ describe('SyncHealthService', () => {
       state: 'COMPLETE',
       thresholdMinutes: 5,
       lastCompleteAt: '2026-09-01T11:58:00.000Z',
+      hasDeclaredGaps: false,
       perTerminal: [
         {
           terminalId: 'pos-01',
@@ -132,6 +133,7 @@ describe('SyncHealthService', () => {
           state: 'COMPLETE',
           acceptedThroughSequence: 42,
           lastReceiptAt: '2026-09-01T11:58:00.000Z',
+          hasDeclaredGaps: false,
         },
       ],
       evaluatedAt: '2026-09-01T12:00:00.000Z',
@@ -444,6 +446,37 @@ describe('SyncHealthService', () => {
       terminalId: 'pos-01',
       acceptedThroughSequence: 7,
       lastReceiptAt: '2026-09-01T11:40:00.000Z',
+    });
+  });
+
+  it('exposes declared gaps in freshness response (PARTIAL, hasDeclaredGaps=true, no lastCompleteAt)', async () => {
+    await bootstrap({
+      receipts: [
+        {
+          deviceId: 'pos-01',
+          flowType: 'sales',
+          acceptedMax: '10',
+          acceptedMin: '1',
+          acceptedCount: '10',
+          declaredGapCount: '1',
+          lastAcceptedAt: new Date('2026-09-01T11:58:00.000Z'),
+        },
+      ],
+    });
+
+    const result = await service.getFreshness(
+      TENANT_ID,
+      new Date('2026-09-01T12:00:00.000Z'),
+    );
+
+    expect(result.state).toBe('PARTIAL');
+    expect(result.hasDeclaredGaps).toBe(true);
+    expect(result.lastCompleteAt).toBeNull();
+    expect(result.perTerminal[0]).toMatchObject({
+      terminalId: 'pos-01',
+      state: 'PARTIAL',
+      hasDeclaredGaps: true,
+      acceptedThroughSequence: 10,
     });
   });
 });

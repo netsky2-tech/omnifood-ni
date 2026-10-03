@@ -74,3 +74,10 @@ class DeviceSyncRecoveryRequiredException extends DeviceSyncException {
   ]) : super(message);
 }
 
+/// Thrown when a request on the dedicated device sync client targets a route
+/// that is neither a canonical sync route nor on the explicit device transport allowlist.
+class DeviceSyncRouteNotAllowedException extends DeviceSyncException {
+  const DeviceSyncRouteNotAllowedException(String path)
+      : super('Route not allowed on device sync client: $path');
+}
+

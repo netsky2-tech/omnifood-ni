@@ -185,6 +185,8 @@ class PosDioClients {
   final Dio sync;
 }
 
+final rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Purge credentials left by pre-secure-store builds before any cloud auth
@@ -305,6 +307,8 @@ void main() async {
     claimDio: claimDio,
   );
 
+  SyncService? activeSyncService;
+
   // Add Cloud Auth, Automatic Refresh & Path Normalization Interceptor
   dio.interceptors.add(
     CloudAuthInterceptor(
@@ -316,6 +320,17 @@ void main() async {
       onReauthenticationRequired: () {
         debugPrint(
           "[CloudAuth] Reautenticación requerida: sesión cloud expirada o revocada.",
+        );
+        authRepository.notifyReauthenticationRequired();
+        activeSyncService?.notifyAuthBlocked();
+        rootScaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Sesión en la nube expirada o revocada. Se requiere iniciar sesión nuevamente.',
+            ),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 8),
+          ),
         );
       },
     ),
@@ -474,6 +489,7 @@ void main() async {
     database: database,
     connectivityService: connectivityService,
   );
+  activeSyncService = syncService;
 
   // Issue #556: pre-auth linking gate, resolved BEFORE any login attempt or
   // backend traffic. Terminals without a stored tenant slug are gated
@@ -725,6 +741,7 @@ class MyApp extends StatelessWidget {
     return InventoryAlertOverlay(
       alertService: alertService,
       child: MaterialApp(
+        scaffoldMessengerKey: rootScaffoldMessengerKey,
         title: 'NHILOS POS',
         navigatorObservers: [appRouteObserver],
         theme: ThemeData(

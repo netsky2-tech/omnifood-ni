@@ -46,6 +46,9 @@ import {
   parseCreditNoteSeries,
 } from '../../onboarding/services/fiscal-config-version.service';
 import { CreateAdminCreditNoteDto } from '../dto/admin-credit-note.dto';
+import {
+  SequenceGapPolicyService,
+} from '../sync-health/sequence-gap-policy.service';
 
 const SCALE_4 = 4;
 const CREDIT_NOTE_NO_STOCK_POLICIES = new Set([
@@ -192,6 +195,12 @@ export class InvoicesService {
     private readonly bomExplosionService: BomExplosionService,
     @Optional()
     private readonly saleInventoryOutcomeService?: SaleInventoryOutcomeService,
+    // Optional so standalone constructions (tests, replay scripts) keep the
+    // pre-policy behaviour: without the policy the stream stays blocked on
+    // a lost sequence exactly as before. SalesModule wires it via
+    // SyncHealthModule.
+    @Optional()
+    private readonly sequenceGapPolicy?: SequenceGapPolicyService,
   ) {
     this.outcomeService =
       this.saleInventoryOutcomeService ?? new SaleInventoryOutcomeService();
@@ -699,26 +708,46 @@ export class InvoicesService {
       );
 
       if (record.sourceSequence > expectedSequence) {
-        const lag = record.sourceSequence - expectedSequence;
-        this.logger.warn(
-          `[SYNC-LAG] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} expected=${expectedSequence} received=${record.sourceSequence} lag=${lag}`,
-        );
-        const stagedConflict = await this.stageFutureRecord(
-          tenantId,
-          record,
-          payloadHash,
-        );
-        if (stagedConflict) {
-          results.push(stagedConflict);
+        // Sequence-gap policy: before staging forever, check whether the
+        // block (age of the oldest staged row above the watermark) is old
+        // enough to declare the missing sequences unrecoverable. A declared
+        // gap advances the watermark to this record's sequence, so the
+        // record is applied instead of staged.
+        const gapDeclared = this.sequenceGapPolicy
+          ? await this.sequenceGapPolicy.declareGapIfBlocked({
+              tenantId,
+              sourceDeviceId: record.sourceDeviceId,
+              flowType,
+              expectedSequence,
+              incomingSequence: record.sourceSequence,
+            })
+          : false;
+        if (gapDeclared) {
+          // Fall through to the apply path below: the fill receipts make
+          // this record the new watermark and the device's own retry loop
+          // drains the staged rows above it.
+        } else {
+          const lag = record.sourceSequence - expectedSequence;
+          this.logger.warn(
+            `[SYNC-LAG] tenant=${tenantId} device=${record.sourceDeviceId} flow=${flowType} expected=${expectedSequence} received=${record.sourceSequence} lag=${lag}`,
+          );
+          const stagedConflict = await this.stageFutureRecord(
+            tenantId,
+            record,
+            payloadHash,
+          );
+          if (stagedConflict) {
+            results.push(stagedConflict);
+            continue;
+          }
+          results.push(
+            this.buildResult(record, SYNC_RESULT_STATUS.STAGED_FUTURE, {
+              code: `WAITING_FOR_SEQUENCE_${expectedSequence}`,
+              retryable: true,
+            }),
+          );
           continue;
         }
-        results.push(
-          this.buildResult(record, SYNC_RESULT_STATUS.STAGED_FUTURE, {
-            code: `WAITING_FOR_SEQUENCE_${expectedSequence}`,
-            retryable: true,
-          }),
-        );
-        continue;
       }
 
       if (record.sourceSequence < expectedSequence) {

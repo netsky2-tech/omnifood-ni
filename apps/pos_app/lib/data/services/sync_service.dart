@@ -162,6 +162,15 @@ class SyncRunOutcome {
 }
 
 class SyncService {
+  /// R-16: the scheduler runs every 5 minutes ([start]). A pending item left
+  /// unconfirmed for more than three full sync cycles while the device is
+  /// online means the sync pipeline is stalled even when the last pass
+  /// "succeeded" — the exact condition that kept the badge green for 68
+  /// minutes while cash work never reached the backend. The badge uses this
+  /// threshold together with [getOldestPendingItemAge] to render the
+  /// "Sync detenido" state instead of green.
+  static const Duration pendingStallThreshold = Duration(minutes: 15);
+
   final AuditRepository _auditRepository;
   // ignore: unused_field
   final SalesRepository _salesRepository;
@@ -290,7 +299,10 @@ class SyncService {
     }
   }
 
+  bool _isRunning = false;
+
   void start() {
+    _isRunning = true;
     // Listen to network transitions for immediate auto-sync
     _connectivitySubscription?.cancel();
     if (_connectivityService != null) {
@@ -308,15 +320,27 @@ class SyncService {
           });
     }
 
-    // Sync every 5 minutes
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(minutes: 5), (_) async {
-      await triggerManualSync();
-    });
+    _scheduleNextSync(const Duration(minutes: 5));
     developer.log('SyncService started', name: 'SyncService');
   }
 
+  void _scheduleNextSync([Duration? delay]) {
+    _timer?.cancel();
+    if (!_isRunning) return;
+    final nextDelay = delay ??
+        (_consecutiveFailures > 0
+            ? getNextBackoffDelay()
+            : const Duration(minutes: 5));
+    _timer = Timer(nextDelay, () async {
+      await triggerManualSync();
+      if (_isRunning) {
+        _scheduleNextSync();
+      }
+    });
+  }
+
   void stop() {
+    _isRunning = false;
     _timer?.cancel();
     _timer = null;
     _connectivitySubscription?.cancel();
@@ -334,6 +358,15 @@ class SyncService {
     if (_consecutiveFailures == 0) return Duration.zero;
     final seconds = min(300, (pow(2, _consecutiveFailures - 1) * 5).toInt());
     return Duration(seconds: seconds);
+  }
+
+  void notifyAuthBlocked([String reason = 'AUTH_BLOCKED']) {
+    _authBlocked = true;
+    _syncBlockedReason = reason;
+    _updateStatus(CloudSyncStatus.error);
+    _lastSyncError = reason == 'DEVICE_REVOKED'
+        ? 'DEVICE_REVOKED'
+        : 'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403)';
   }
 
   /// Finding H1 (slice 5a): each per-domain outbox count query used to fail
@@ -416,7 +449,129 @@ class SyncService {
       _logOutboxCountFailure('movements', e, st);
     }
 
+    // R-16: the badge must never report up to date while cash or loyalty
+    // work is unconfirmed. These domains were invisible to the count on the
+    // night of the 68-minute stall: cash movements, a reconciled card voucher
+    // and a closed shift sat pending while the counter read zero. Raw reads
+    // (no Floor codegen change), fault-isolated like every domain above.
+    final database = _database;
+    if (database != null) {
+      try {
+        final rows = await database.database.rawQuery(
+          "SELECT COUNT(*) AS pending FROM cash_movements "
+          "WHERE sync_status = 'pending'",
+        );
+        count += _scalarCount(rows);
+      } catch (e, st) {
+        _logOutboxCountFailure('cash movements', e, st);
+      }
+
+      try {
+        // Only CLOSED sessions count as unconfirmed work: an open session
+        // stays sync_status='pending' by design until closure (the backend
+        // upserts it by id on every pass), so counting it would keep the
+        // badge permanently above zero during every open shift. The closure
+        // — counted totals, difference, Z report — is the pending work.
+        final rows = await database.database.rawQuery(
+          "SELECT COUNT(*) AS pending FROM cashier_sessions "
+          "WHERE sync_status = 'pending' AND is_closed = 1",
+        );
+        count += _scalarCount(rows);
+      } catch (e, st) {
+        _logOutboxCountFailure('cash sessions', e, st);
+      }
+
+      try {
+        final rows = await database.database.rawQuery(
+          "SELECT COUNT(*) AS pending FROM customer_point_transactions "
+          "WHERE sync_status = 'pending'",
+        );
+        count += _scalarCount(rows);
+      } catch (e, st) {
+        _logOutboxCountFailure('loyalty point transactions', e, st);
+      }
+
+      try {
+        final rows = await database.database.rawQuery(
+          "SELECT COUNT(*) AS pending FROM fulfillment_outbox_events "
+          "WHERE state = 'PENDING'",
+        );
+        count += _scalarCount(rows);
+      } catch (e, st) {
+        _logOutboxCountFailure('fulfillment events', e, st);
+      }
+    }
+
     return count;
+  }
+
+  /// R-16: age of the oldest unconfirmed pending item in the locally
+  /// timestamped outbox sources, or null when nothing is pending (or the
+  /// device database is unavailable). This is the badge's stall signal:
+  /// while the device is online, an age beyond [pendingStallThreshold] means
+  /// work is not being confirmed even though the network is up — the exact
+  /// R-16 condition that kept the badge green during the 68-minute stall.
+  ///
+  /// Covers the sources the stall can actually age: sales invoices (DSI-6
+  /// credit notes excluded, mirroring the outbound hold), cash movements,
+  /// closed cash sessions and loyalty point transactions. Fulfillment outbox
+  /// events carry no timestamp column and cannot be aged; they are still
+  /// counted by [getPendingOutboxCount].
+  ///
+  /// Fault-isolated per source like [getPendingOutboxCount]: a failed read
+  /// only removes that source from the signal, never breaks the read.
+  Future<Duration?> getOldestPendingItemAge() async {
+    final database = _database;
+    if (database == null) return null;
+    final oldestTimestampsMs = <int>[];
+
+    Future<void> readOldest(String source, String sql) async {
+      try {
+        final rows = await database.database.rawQuery(sql);
+        if (rows.isEmpty) return;
+        final value = rows.first['oldest'];
+        if (value is int && value > 0) oldestTimestampsMs.add(value);
+      } catch (e, st) {
+        _logOutboxCountFailure(source, e, st);
+      }
+    }
+
+    await readOldest(
+      'sales oldest pending',
+      "SELECT MIN(created_at) AS oldest FROM invoices "
+      "WHERE sync_status = 'pending' AND type != 'creditNote'",
+    );
+    await readOldest(
+      'cash movements oldest pending',
+      "SELECT MIN(timestamp) AS oldest FROM cash_movements "
+      "WHERE sync_status = 'pending'",
+    );
+    // Open sessions are excluded deliberately: they stay 'pending' by design
+    // until closure and are re-pushed (idempotently) on every pass, so their
+    // age is not evidence of a stall. See getPendingOutboxCount.
+    await readOldest(
+      'cash sessions oldest pending',
+      "SELECT MIN(opened_at) AS oldest FROM cashier_sessions "
+      "WHERE sync_status = 'pending' AND is_closed = 1",
+    );
+    await readOldest(
+      'loyalty oldest pending',
+      "SELECT MIN(created_at) AS oldest FROM customer_point_transactions "
+      "WHERE sync_status = 'pending'",
+    );
+
+    if (oldestTimestampsMs.isEmpty) return null;
+    final oldestMs = oldestTimestampsMs.reduce(min);
+    return DateTime.now()
+        .difference(DateTime.fromMillisecondsSinceEpoch(oldestMs));
+  }
+
+  /// Scalar `COUNT(*) AS pending` extraction for the raw pending-count
+  /// queries below. Mirrors the defensive parse in [getPendingAuditCount].
+  int _scalarCount(List<Map<String, Object?>> rows) {
+    if (rows.isEmpty) return 0;
+    final value = rows.first['pending'];
+    return value is int ? value : int.tryParse('$value') ?? 0;
   }
 
   /// D-18: number of audit rows still pending cloud ACK on this terminal,
@@ -735,6 +890,8 @@ class SyncService {
       if (_hasPendingSyncRequest) {
         _hasPendingSyncRequest = false;
         scheduleMicrotask(() => triggerManualSync());
+      } else if (_isRunning) {
+        _scheduleNextSync();
       }
     }
   }

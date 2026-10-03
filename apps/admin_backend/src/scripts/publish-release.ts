@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-redundant-type-constituents, @typescript-eslint/no-base-to-string */
 import 'dotenv/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as https from 'https';
+import { Client } from 'pg';
 import dataSource from '../data-source';
 
 interface ManifestArtifact {
@@ -50,7 +52,9 @@ function parseCliArgs(): {
   }
 
   if (!manifestPath) {
-    console.error('Error: --manifest <path/to/release_manifest.json> is required.');
+    console.error(
+      'Error: --manifest <path/to/release_manifest.json> is required.',
+    );
     process.exit(1);
   }
 
@@ -110,15 +114,17 @@ async function uploadFileToR2({
   const payloadHash = sha256Hex(contentBuffer);
   const contentType = 'application/vnd.android.package-archive';
 
-  const canonicalHeaders = [
-    `content-length:${contentBuffer.length}`,
-    `content-type:${contentType}`,
-    `host:${host}`,
-    `x-amz-content-sha256:${payloadHash}`,
-    `x-amz-date:${amzDate}`,
-  ].join('\n') + '\n';
+  const canonicalHeaders =
+    [
+      `content-length:${contentBuffer.length}`,
+      `content-type:${contentType}`,
+      `host:${host}`,
+      `x-amz-content-sha256:${payloadHash}`,
+      `x-amz-date:${amzDate}`,
+    ].join('\n') + '\n';
 
-  const signedHeaders = 'content-length;content-type;host;x-amz-content-sha256;x-amz-date';
+  const signedHeaders =
+    'content-length;content-type;host;x-amz-content-sha256;x-amz-date';
 
   const canonicalRequest = [
     'PUT',
@@ -169,7 +175,9 @@ async function uploadFileToR2({
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve();
           } else {
-            reject(new Error(`R2 upload failed (HTTP ${res.statusCode}): ${body}`));
+            reject(
+              new Error(`R2 upload failed (HTTP ${res.statusCode}): ${body}`),
+            );
           }
         });
       },
@@ -190,11 +198,15 @@ async function main() {
   }
 
   const manifestDir = path.dirname(path.resolve(options.manifestPath));
-  const rawManifest = JSON.parse(fs.readFileSync(options.manifestPath, 'utf8')) as ReleaseManifestJson;
+  const rawManifest = JSON.parse(
+    fs.readFileSync(options.manifestPath, 'utf8'),
+  ) as ReleaseManifestJson;
 
   const versionMatch = rawManifest.version.match(/^([0-9.]+)\+([0-9]+)$/);
   if (!versionMatch) {
-    console.error(`Invalid version format in manifest: ${rawManifest.version} (expected x.y.z+buildNumber)`);
+    console.error(
+      `Invalid version format in manifest: ${rawManifest.version} (expected x.y.z+buildNumber)`,
+    );
     process.exit(1);
   }
 
@@ -207,32 +219,41 @@ async function main() {
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
 
   if (!endpoint || !accessKeyId || !secretAccessKey) {
-    console.error('Error: R2 credentials missing in environment (R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY).');
+    console.error(
+      'Error: R2 credentials missing in environment (R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY).',
+    );
     process.exit(1);
   }
 
-  console.log('==============================================================================');
+  console.log(
+    '==============================================================================',
+  );
   console.log('🚀 OmniFood POS — OTA Release Publisher');
-  console.log('==============================================================================');
+  console.log(
+    '==============================================================================',
+  );
   console.log(`📦 Manifest:     ${options.manifestPath}`);
-  console.log(`🏷️  Version:      ${versionName} (Base Build: ${baseBuildNumber})`);
+  console.log(
+    `🏷️  Version:      ${versionName} (Base Build: ${baseBuildNumber})`,
+  );
   console.log(`📡 Channel:      ${options.channel}`);
   console.log(`☁️  Bucket:       ${bucket}`);
-  console.log('------------------------------------------------------------------------------');
+  console.log(
+    '------------------------------------------------------------------------------',
+  );
 
   let dbConnected = false;
-  let pgClient: any = null;
+  let pgClient: Client | null = null;
   const dbUrl = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
 
   if (dbUrl) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { Client } = require('pg');
       pgClient = new Client({ connectionString: dbUrl });
       await pgClient.connect();
       console.log('✓ Connected to remote database via DATABASE_URL.');
-    } catch (e: any) {
-      console.warn(`⚠️  Remote database connection failed: ${e.message}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(`⚠️  Remote database connection failed: ${msg}`);
       pgClient = null;
     }
   }
@@ -242,8 +263,11 @@ async function main() {
       await dataSource.initialize();
       dbConnected = true;
       console.log('✓ Database connection initialized via local dataSource.');
-    } catch (e: any) {
-      console.warn(`⚠️  Database connection skipped or failed (${e.message}). Only R2 uploads will proceed.`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn(
+        `⚠️  Database connection skipped or failed (${msg}). Only R2 uploads will proceed.`,
+      );
     }
   }
 
@@ -254,12 +278,20 @@ async function main() {
       process.exit(1);
     }
 
-    const { abi, versionCode } = deriveAbiAndVersionCode(artifact.file, versionName, baseBuildNumber);
+    const { abi, versionCode } = deriveAbiAndVersionCode(
+      artifact.file,
+      versionName,
+      baseBuildNumber,
+    );
     if (abi === 'universal') continue; // POS terminals install per-ABI builds
 
     const storageKey = `releases/${options.channel}/nhilos-pos-${abi}-${versionCode}.apk`;
-    console.log(`\n📤 Uploading ${artifact.file} -> R2://${bucket}/${storageKey}`);
-    console.log(`   ABI: ${abi} | versionCode: ${versionCode} | Size: ${artifact.size_human} (${artifact.size_bytes} bytes)`);
+    console.log(
+      `\n📤 Uploading ${artifact.file} -> R2://${bucket}/${storageKey}`,
+    );
+    console.log(
+      `   ABI: ${abi} | versionCode: ${versionCode} | Size: ${artifact.size_human} (${artifact.size_bytes} bytes)`,
+    );
 
     await uploadFileToR2({
       endpoint,
@@ -317,9 +349,13 @@ async function main() {
     await dataSource.destroy();
   }
 
-  console.log('\n==============================================================================');
+  console.log(
+    '\n==============================================================================',
+  );
   console.log('🎉 ALL RELEASE ARTIFACTS PUBLISHED SUCCESSFULLY!');
-  console.log('==============================================================================');
+  console.log(
+    '==============================================================================',
+  );
 }
 
 if (require.main === module) {

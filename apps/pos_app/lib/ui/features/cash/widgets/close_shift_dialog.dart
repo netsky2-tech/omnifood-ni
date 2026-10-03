@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../design_system/responsive_layout.dart';
+import '../../../../core/localization/display_name_resolver.dart';
 import '../cash_shift_view_model.dart';
 import 'z_report_dialog.dart';
 import '../../../design_system/nhilos_tokens.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
 
 class CloseShiftDialog extends StatefulWidget {
-  const CloseShiftDialog({super.key});
+  const CloseShiftDialog({super.key, this.usersById = const {}});
+
+  final Map<String, String> usersById;
 
   @override
   State<CloseShiftDialog> createState() => _CloseShiftDialogState();
@@ -90,9 +93,19 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
           Navigator.of(context).pop(true);
         }
         if (vm.lastClosedShift != null) {
+          // R-18: the Z report must carry the same resolved person names the
+          // standalone 'Ver Último Corte Z' site passes (D-14). The dialog
+          // itself keeps the honest fallback contract for unresolvable ids.
+          final shift = vm.lastClosedShift!;
           showDialog<void>(
             context: context,
-            builder: (_) => ZReportDialog(shift: vm.lastClosedShift!),
+            builder: (_) => ZReportDialog(
+              shift: shift,
+              cashierName: resolveUserName(shift.userId, widget.usersById),
+              supervisorName: shift.supervisorId == null
+                  ? null
+                  : resolveUserName(shift.supervisorId, widget.usersById),
+            ),
           );
         }
         return;
