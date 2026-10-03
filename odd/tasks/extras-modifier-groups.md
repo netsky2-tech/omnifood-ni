@@ -116,10 +116,10 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 
 ### Fase 1 — Modelo de grupos (backend + web)
 
-- [ ] **T1.1** Entidades + migración con RLS:
-      `modifier_groups` (name, min_selected, max_selected, allow_quantities, display_order, is_active),
-      `modifier_options` (group_id, name, price_delta, is_default, display_order, is_active),
-      `category_modifier_groups`, `product_modifier_groups`.
+- [ ] **T1.1** Entidades + migración con RLS *(en curso, WU-1, delegada a `gentle-ai-worker`)*:
+      `modifier_groups` (name, min_selected, max_selected, allow_quantities, sort_order, is_active),
+      `modifier_options` (group_id, name, price_delta, is_default, sort_order, is_active),
+      `category_modifier_groups`, `product_modifier_groups`. Ver §9 por la forma exacta acordada.
 - [ ] **T1.2** API REST: CRUD de grupos y opciones, y enganches por categoría y por producto.
 - [ ] **T1.3** Resolución server-side de los grupos efectivos: categoría ∪ producto, con orden y overrides.
 - [ ] **T1.4** Dashboard: pantalla de grupos (nombre, min/max, cantidades, opciones con delta y default) y
@@ -278,3 +278,33 @@ Sin cambios: `Americano 8oz` / `12oz` siguen codificando el tamaño en el nombre
 
 **Recomendación: (A).** Compra la misma capacidad (enganche por categoría que sobrevive renombres) a una
 fracción del costo, y elimina las dos verdades en vez de crear una tercera.
+
+## 9. Forma del enganche (decisión del dueño, 2026-10-03)
+
+Elegida la vía mixta: **la BD referencia por `id`, el contrato de sync expone `code`.**
+
+```sql
+category_modifier_groups(id uuid, tenant_id uuid NOT NULL,
+  catalog_value_id uuid NOT NULL, group_id uuid NOT NULL,
+  sort_order integer NOT NULL DEFAULT 0, created_at, updated_at,
+  CONSTRAINT fk_cmg_catalog FOREIGN KEY (tenant_id, catalog_value_id)
+    REFERENCES catalog_values(tenant_id, id),
+  CONSTRAINT fk_cmg_group FOREIGN KEY (tenant_id, group_id)
+    REFERENCES modifier_groups(tenant_id, id),
+  CONSTRAINT uq_cmg UNIQUE (catalog_value_id, group_id))
+```
+
+- **FK compuestas por `(tenant_id, …)`**: un hijo de otro tenant es imposible en la BD, no por convención.
+  Requiere `UNIQUE (tenant_id, id)` en los padres; `products` ya lo tiene
+  (`1802000000000-CreateProductInventoryMappingVersions.ts`) y `catalog_values` **no**: la migración de
+  T1.1 lo agrega con guarda idempotente.
+- El delta `categoryModifierGroups` sale con `{ categoryId, categoryCode, groupName, min/max, options[] }`.
+  El POS resuelve **por `code`**, que ya está en su tabla `catalog_values` local → funciona offline.
+- Renombrar el `label` de una categoría no rompe nada; cambiar el `code` sí re-mapea, y eso lo controla
+  `/catalogs`.
+- **`price_delta` decimal(12,2)**: misma forma que `products.sell_price`. El total ya suma
+  `item.modifiersTotal` (`invoice_fiscal_calculator.dart:170`), así que el delta entra por ahí sin tocar
+  el cálculo fiscal.
+- **`sort_order`, no `display_order`**: convención de la casa (`catalog_values.sort_order`).
+- **`UNIQUE (tenant_id, name)` en `modifier_groups`**: es la clave de idempotencia para sembrar el set
+  SOHO de T4.3 sin duplicar grupos en cada corrida.
