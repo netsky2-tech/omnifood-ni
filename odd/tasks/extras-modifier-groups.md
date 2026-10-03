@@ -308,3 +308,24 @@ category_modifier_groups(id uuid, tenant_id uuid NOT NULL,
 - **`sort_order`, no `display_order`**: convención de la casa (`catalog_values.sort_order`).
 - **`UNIQUE (tenant_id, name)` en `modifier_groups`**: es la clave de idempotencia para sembrar el set
   SOHO de T4.3 sin duplicar grupos en cada corrida.
+
+### 9.1 Las reglas de selección son explícitas, sin centinela
+
+El primer intento de T1.1 introdujo `max_selected = 0` con la semántica "ilimitado" **y a la vez**
+`CHECK (max_selected >= min_selected)`. Las dos cosas no conviven: un grupo obligatorio
+(`min_selected = 1`) con `max_selected = 0` viola el CHECK (`0 >= 1` es falso). O sea que la fila más
+básica del negocio — *"Leche: obligatorio, elegí la cantidad que quieras"* — no se podía guardar, y el
+centinela iba en contra del principio §3 (**reglas como números, no banderas**).
+
+Forma final acordada:
+
+```sql
+min_selected integer NOT NULL DEFAULT 0,
+max_selected integer NOT NULL DEFAULT 1,
+CONSTRAINT chk_modifier_groups_min_selected_non_negative CHECK (min_selected >= 0),
+CONSTRAINT chk_modifier_groups_max_gte_min CHECK (max_selected >= min_selected AND max_selected >= 1)
+```
+
+- `min_selected = 0` ⇒ opcional; `min_selected >= 1` ⇒ obligatorio.
+- **No existe "ilimitado"**: un grupo con muchas opciones guarda un `max_selected` explícito.
+- El default `1` y el CHECK viven en el mismo lugar, así que el entity y el DDL no se contradicen.
