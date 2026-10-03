@@ -395,3 +395,73 @@ crear la fila (`menu-import.service.ts:609`). Por eso:
 4. **No fuzzy-mear** `CAFÉ CALIENTE` ≈ `BEBIDA_CALIENTE`: coincidencia solo por `code` derivado. Unificar
    conceptos es decisión del dueño en `/catalogs`.
 5. Producción todavía no fue inspeccionada; la misma consulta corre antes de escribir el script de backfill.
+
+## 12. Estado de la rama tras T1.1 y T0.1'
+
+Commits:
+```
+0d6e7f72 feat(admin_backend): create tenant-scoped modifier group schema        (T1.1)
+ef2d437c docs(odd): real tenant category state                                   (T4.3 §11)
+da4c2512 feat(onboarding): import menu categories as canonical catalog codes    (T0.1')
+```
+
+**Deuda de revisión abierta (decisión del dueño, 2026-10-03).** El candidato `da4c2512` quedó con
+revisión nativa **no producida**: el relay del revisor devolvió `reviewer-empty-output` con
+`stopReason: length` dos veces, ~245 s y ~250 s, sin timeout y **sin mutación**. El lineage
+`review-7286b42cf449371c` sigue en `reviewing`, `candidate.consumed: false`, el slot
+`review-reliability / order 0` reofrecido. Decidido: **dejarlo abierto** y seguir; si el relay se
+destraba se retoma el mismo lineage sin recomenzar. Costo explícito: ASSESS sigue marcando ese
+commit como `reviewDue: true` (`slice_budget_reached`), riesgo `medium`, `writerProfile: large`.
+Referencia de contraste: T1.1 (952 líneas, mismo tier) se revisó y quemó bien, así que el fallo no
+es un corte general del mecanismo.
+
+**T0.1' cerró con esto además del feature:**
+- `ON CONFLICT DO NOTHING` en vez de `try/catch` sobre `save()`: dentro de una transacción de
+  Postgres, un statement que falla aborta la transacción (`25P02`), así que el recovery
+  error-and-requery del primer intento **no podía funcionar nunca**. El harness con mocks no lo
+  ve, por eso pasó verde la primera vez.
+- Una hoja cuyo nombre normaliza a code vacío es ahora **error fail-closed antes de escribir**,
+  no un `category_code = ''` nuevo.
+- Lint: el work unit había agregado 13 errores (29 → 42). Volvió a 11, todos pre-existentes y en
+  líneas que este cambio no toca.
+
+**Qué NO hace T0.1'.** Deja de producir huérfanos hacia adelante y siembra al importar, pero no
+repara los 58 productos existentes: la rama de update de precio mantiene su contrato
+*"never touch name, recipe, or type"*. Eso es T0.2'.
+
+## 13. T0.2' — el backfill y la trampa que lo hace un no-op silencioso
+
+`products` y `catalog_values` están con `FORCE ROW LEVEL SECURITY`, y el rol de migración es **dueño**
+de las tablas. Sin `app.tenant_id` bindado, el predicado evalúa `NULL` y bajo FORCE el dueño
+**ve cero filas**: un backfill de categorías loguea un no-op limpio exactamente en la base que existe
+a reparar. Está documentado en el propio repo
+(`1809510000000-BackfillTemplateProductTypes.ts`, citando `1809180000000-ReconcileEnumColumns`), con
+el bracket `NO FORCE` / restore en `finally` como contrato. Ese es el requisito duro de T0.2', no un
+detalle de estilo.
+
+**Producción sin inspeccionar, y eso no bloquea.** No hay credenciales de producción en el repo
+(Railway las inyecta; `.env.example` es local). En vez de escribir un script que asuma los 7 valores
+del tenant SOHO, el backfill se especificó **para datos arbitrarios**: deriva el code de lo que haya,
+nunca toca el `label` de una fila existente, deja NULL/vacío como estado legítimo, y **reporta** lo que
+creó, reusó, fusionó o saltó. El dueño puede revisar el mapa en el log de la migración.
+
+Consulta de sólo lectura para correr en Railway **antes** del deploy (no escribe nada):
+
+```sql
+select t.name as tenant,
+       coalesce(nullif(p.category_code,''), '<vacio>') as category_code,
+       count(*) as productos,
+       bool_or(cv.id is not null) as existe_en_catalog
+  from products p
+  join tenants t on t.id = p.tenant_id
+  left join catalog_values cv
+    on cv.tenant_id = p.tenant_id
+   and cv.catalog_type = 'SALES_PRODUCT_CATEGORY'
+   and cv.code = p.category_code
+ group by 1,2
+ order by 1, 3 desc;
+```
+
+Lo que hay que mirar ahí: si algún `category_code` de producción normaliza al mismo code que otro
+(fusión), porque la migración los convierte en una sola categoría y eso es una decisión del dueño,
+no un detalle técnico.
