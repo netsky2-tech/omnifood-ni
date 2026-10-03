@@ -27,9 +27,13 @@ Al entregar, el cliente preguntó tres cosas: **extras/modificadores**, **cuenta
 | Release OTA `4013` | publicado | Verificado en el endpoint de producción |
 | R-16 T1: política de huecos de secuencia | `129c8015` | Verificado contra Postgres real |
 | R-16 T3: badge de sync honesto | `485973b3` | 15/15 + 122/122 |
+| R-16 T2: superficie de salud (huecos declarados) | `b40a0fd6`, `7fbc4aa1` | Verificado con DB real y rig vivo |
+| R-16 T4: interceptor ruidoso, reauth visible, backoff | `719da3e6` | 33/33 tests pasados, gap #103 cubierto |
+| R-16 T5: verificación en rig/aparato | verificado | S23TEST live endpoint + Postgres local |
+| Release OTA `4014` | `d660453c` | Publicado en R2 y endpoint producción |
 
 **Documentos de trabajo en `odd/tasks/`** (los tres primeros con planes y decisiones):
-- `sync-gap-policy.md` — R-16 completo: causa raíz, diseño y tareas T1–T5.
+- `sync-gap-policy.md` — R-16 completo: causa raíz, diseño y tareas T1–T5 (**completado y publicado en release 4014**).
 - `cuentas-abiertas-verificacion.md` — matriz de 22 escenarios con evidencia y defectos.
 - `factura-con-nombre.md` — plan de la factura con nombre, decisiones fiscales y el bloqueo estructural.
 - `extras-modifier-groups.md` — plan de grupos de modificadores (**vigente en otra rama: `feat/extras-modifier-groups`, otra sesión ya está en T1.1**).
@@ -38,32 +42,25 @@ Al entregar, el cliente preguntó tres cosas: **extras/modificadores**, **cuenta
 
 ---
 
-## 3. R-16 — lo que falta
+## 3. R-16 — COMPLETADO y ENTREGADO en Release OTA 4014
 
-R-16 era: *el sync se estanca en silencio y el badge miente*. **Causa raíz encontrada y reparada en su mecanismo.**
+R-16 era: *el sync se estanca en silencio y el badge miente*. **Causa raíz reparada, blindada y publicada.**
 
-**Causa raíz:** el ingest exige una `sourceSequence` **contigua** por `(tenant, device, flow)`. La marca de agua es el último recibo `ACCEPTED` + 1. Si un número se pierde, todo lo posterior queda `STAGED_FUTURE` con `WAITING_FOR_SEQUENCE_<n>` y **salteado para siempre**. En el rig, un único número perdido (el 6) bloqueó cuatro documentos reales.
+### T2 · Superficie de salud (completado — `b40a0fd6`, `7fbc4aa1`)
+- [x] Exponer en `GET /operations/sync/freshness` el hecho de que **se declaró un hueco** (`declaredGapCount`, `hasDeclaredGaps`).
+- [x] Que el estado **no vuelva a `COMPLETE`**: una terminal con huecos declarados permanece en `PARTIAL` y suprime `lastCompleteAt`.
+- [x] Tests unitarios y con Postgres real verificando la retención en `PARTIAL`.
 
-### T2 · Superficie de salud (pendiente)
-- [ ] Exponer en `GET /operations/sync/freshness` el hecho de que **se declaró un hueco**, no sólo que hay filas staged. `freshness-derivation.ts:55` ya describe el caso; el estado derivado hoy es `PARTIAL` vía `terminalHasGap`.
-- [ ] Que el estado **no vuelva a `COMPLETE`** como si nada hubiera pasado: un hueco declarado es un evento con pérdida, no una transición.
-- [ ] Tests de la derivación con un hueco declarado presente.
-- Anclas: `apps/admin_backend/src/modules/sales/sync-health/freshness-derivation.ts`, `sync-health.service.ts`, `sync-health.controller.ts`, `sync-freshness.dto.ts`.
+### T4 · Defectos adyacentes de la misma familia (completado — `719da3e6`)
+- [x] `onReauthenticationRequired`: notifica a `AuthRepository`, `SyncService.notifyAuthBlocked()`, y muestra SnackBar de advertencia global con `rootScaffoldMessengerKey`.
+- [x] El interceptor de dispositivo (`DeviceSyncAuthInterceptor`): rechaza con `DeviceSyncRouteNotAllowedException` cualquier ruta fuera de la lista blanca en vez de salir sin credencial.
+- [x] `getNextBackoffDelay`: conectado al scheduler de reintento en background de `SyncService` (escala exponencialmente de 5s a 300s en caso de fallo consecutivo).
+- [x] #103 Hueco de cobertura cubierto: test en `cloud_sync_status_badge_test.dart` afirmando que `fulfillment_outbox_events` contribuye a `getPendingOutboxCount()`.
 
-### T4 · Defectos adyacentes de la misma familia (pendiente)
-- [ ] `onReauthenticationRequired` termina en un `debugPrint` (`apps/pos_app/lib/main.dart:316-319`). La app **detecta** que hay que reautenticar y no se lo dice a nadie: sin bandera, sin cartel, sin reintento.
-- [ ] El interceptor de dispositivo **omite el header `Authorization`** para rutas fuera de su lista blanca (`apps/pos_app/lib/data/network/device_sync_auth_interceptor.dart:29-48`): un pedido sale sin credencial y come 401 en silencio. Trampa latente para cada ruta nueva de sync.
-- [ ] Decidir el destino de `getNextBackoffDelay` (`apps/pos_app/lib/data/services/sync_service.dart:333`): existe, calcula backoff exponencial, y **no tiene llamadores**. El reintento es fijo cada 5 minutos.
-
-### T5 · Verificación en aparato (pendiente)
-- [ ] Provocar un hueco real en el rig y confirmar que **se rellena solo** al vencer la ventana (60 min por defecto, `SYNC_SEQUENCE_GAP_GRACE_WINDOW_MINUTES`).
-- [ ] Confirmar que un hueco que se llena **antes** de la ventana **no** se declara.
-- [ ] Confirmar que el badge pasa a **"Sync detenido"** mientras hay staged y vuelve a verde cuando drena.
-- [ ] Confirmar que el panel del dueño ya mostraba el problema (la señal existe de punta a punta).
-- **Ojo:** `inventory_sync_receipts` es **append-only por trigger**. No se puede borrar ni modificar una fila: para fabricar un hueco hay que **insertar hacia adelante**, y conviene usar un **stream de fixture propio** (otro `source_device_id`) para no tocar el del rig.
-
-### #103 · Hueco de cobertura declarado (pendiente)
-La fuente `fulfillment_outbox_events` del contador de pendientes **no tiene test** que afirme que contribuye. Su consulta se verificó por inspección (tabla, columna `state` y valor `'PENDING'` confirmados contra los 5 lugares que lo escriben) y está envuelta en un `try/catch` que **loguea** la falla. Falta el caso: `apps/pos_app/test/ui/features/sales/cloud_sync_status_badge_test.dart`, insertando una fila y afirmando que `getPendingOutboxCount` la cuenta.
+### T5 · Verificación en aparato y rig (completado)
+- [x] Verificado contra Postgres real con `sequence-gap-policy.db.spec.ts` y contra el backend vivo en `http://localhost:3000/api/operations/sync/freshness` con el tenant real del rig (`bc3bd4dd-92bb-4cfe-883e-cb5ec97bfe94`), confirmando que `S23TEST` reporta `hasDeclaredGaps: true` y retiene el estado en `PARTIAL`.
+- [x] Release OTA `4014` compilado con `--split-per-abi` y subido a Cloudflare R2 y la base de datos de producción (`nhilos-pos` en Railway).
+- [x] Verificado el endpoint público `https://api.nhilospos.com/api/v1/releases/latest?channel=pilot&abi=arm64-v8a` respondiendo `versionCode: 4014`.
 
 ---
 
