@@ -409,3 +409,31 @@ Checks: `flutter analyze` clean; `test/ui/features/cash` 65 passed; broad run ov
   `OpenTablesPendingException` is its own slice.
 - D4 is now answered as "does not sync". Whether open accounts SHOULD reach the owner dashboard is a
   product decision this slice does not take.
+
+## Native review receipt — T12 (fail-closed follow-up)
+
+Approved on the last admitted event. Lineage `review-40c02137135565bd`, tier high, 10 files / 507
+lines, 4 lenses (risk, resilience, readability, reliability) via host relay, scoped to base tree
+`21586b6f` (the already-approved F5 candidate) so no reviewed code was re-frozen. Authority burned
+(`gentle-ai.review-acknowledged/v1`, `sha256:068b12d3`). Delivery follows ordinary repository policy.
+
+Six advisory findings, all non-blocking, none opened a correction:
+
+| ID | Lens | Location | Severity |
+|---|---|---|---|
+| R1-error-detail-exposure | risk | `cash_shift_view_model.dart:467` | SUGGESTION |
+| R2-HASOPENACCOUNTS-NAME | readability | `cash_shift_view_model.dart:151-152` | SUGGESTION |
+| R3-001 | reliability | `x_report_dialog.dart:48` | SUGGESTION |
+| R3-002 | reliability | `cash_shift_view_model.dart:152` | SUGGESTION |
+| R4-001 | resilience | `cash_shift_view_model.dart:454-460` | WARNING |
+| R4-002 | resilience | `cash_shift_view_model.dart:221` | SUGGESTION |
+
+Two clusters worth a later look, neither a reason to re-run review on this candidate: R4-001 (WARNING)
+and R1 point at the close-path error handling around `:454-467`, where the raw failure detail can reach
+an operator-facing message. R2/R3-002 note that `hasOpenAccounts` now returns true for the UNVERIFIED
+state, which is intentional for the gate but makes the name read wrong for anything else that consumes
+it — the X report is the one such consumer and it uses `openAccountsVerified` instead.
+
+Tooling note: `acknowledge-approved` takes ONLY `lineageId` (+ `workspaceRoot`). `idempotencyKey` and
+`input` are rejected as `controller-only-input`, and `expectedRevision` / `approvalToken` are not
+parameters of the facade at all — the provider-issued token is bound server-side to the lineage.
