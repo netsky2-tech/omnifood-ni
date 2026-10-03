@@ -86,10 +86,32 @@ peor: se pierde **todo lo posterior**. Por eso:
 - [ ] Tests de la derivación con un hueco declarado presente.
 
 ### T3 · El badge de la terminal
-- [ ] Que el POS consuma el mismo estado de salud que el panel, en lugar de `_pendingCount`.
-- [ ] Que muestre "sync detenido" cuando hay staged bloqueados, en vez de verde.
-- [ ] Cubrir los puntos ciegos del contador (sesiones de caja, movimientos de caja, fidelidad, fulfillment).
-- [ ] Tests del badge para los tres estados: al día, bloqueado, degradado.
+
+**Corrección de diseño (importante).** El plan original decía que el POS consumiera el mismo estado que el panel
+(`GET /operations/sync/freshness`). **Es imposible:** ese endpoint está detrás de la cadena de autenticación humana
+(`AuthGuard`, `AuthoritativeCurrentUserGuard`) **y** de `@Roles(OWNER, MANAGER)`
+(`sync-health.controller.ts:25-31`). El badge vive en la pantalla del **cajero**, que no tiene ninguno de los dos, y
+en sesión de PIN offline no hay JWT de nube. Un badge honesto sólo para el dueño no sirve.
+
+**Diseño corregido: el terminal calcula el estancamiento con lo que ya sabe.**
+
+- [ ] **La señal de estancamiento es local**: la antigüedad del item más viejo sin confirmar en el outbox, con
+      conexión activa. Si supera un umbral holgado respecto al ciclo de sync, el badge dice **"sync detenido"**.
+      No requiere endpoint nuevo, no toca autenticación y funciona en sesión de PIN. Es la condición exacta del
+      R-16: trabajo que no se confirma aunque haya red.
+- [ ] **El contador deja de mentir por omisión.** Hoy `_pendingCount` no cuenta sesiones de caja, movimientos de
+      caja, fidelidad ni fulfillment — justo los items que estaban pendientes esa noche. El badge no debe volver a
+      verde mientras exista trabajo sin confirmar, sea del dominio que sea.
+- [ ] `status` deja de ser la fuente: hoy sólo se modifica dentro de una corrida, así que si ninguna corre conserva
+      el `idle` anterior y el badge informa la última corrida en vez de la realidad.
+- [ ] Estados: al día (verde), **detenido** (trabajo viejo sin confirmar), degradado (ámbar), sin conexión.
+- [ ] El diálogo "Estado de la Nube" conserva **"Último Sync Exitoso"** como el único campo ya honesto, y suma
+      el motivo del estancamiento.
+- [ ] Tests de los estados y de los dominios que el contador omitía.
+
+**Queda como pieza posterior, no en T3:** que el terminal pueda leer del servidor el **hueco declarado** (que le
+diga que un documento se perdió). Eso sí requiere una vía de lectura con credencial de dispositivo y alcance de
+terminal — no la de dueño/gerente — y es información que sólo el servidor tiene. Se registra aparte.
 
 ### T4 · Defectos adyacentes de la misma familia
 - [ ] `onReauthenticationRequired` deja de terminar en `debugPrint` (`main.dart:316-319`): que sea visible.
