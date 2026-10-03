@@ -142,7 +142,7 @@ export class SyncHealthService {
       MAX(r.source_sequence::bigint) FILTER (WHERE r.result_status = 'ACCEPTED') AS "acceptedMax",
       MIN(r.source_sequence::bigint) FILTER (WHERE r.result_status = 'ACCEPTED') AS "acceptedMin",
       COUNT(*) FILTER (WHERE r.result_status = 'ACCEPTED')::bigint AS "acceptedCount",
-      COUNT(*) FILTER (WHERE r.result_code = 'GAP_FILL_DECLARED')::int AS "declaredGapCount",
+      COUNT(*) FILTER (WHERE r.result_code = 'GAP_FILL_DECLARED' OR r.result_code LIKE 'GAP_FILL%')::int AS "declaredGapCount",
       MAX(COALESCE(r.accepted_at, r.created_at))
         FILTER (WHERE r.result_status = 'ACCEPTED') AS "lastAcceptedAt"
     FROM inventory_sync_receipts r
