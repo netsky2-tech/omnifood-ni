@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../design_system/responsive_layout.dart';
+import '../../../../domain/models/sales/cart_item.dart';
+import '../../../../domain/models/sales/hold_ticket.dart';
+import '../../../../domain/services/sales/waiter_settlement_service.dart';
 import '../cash_shift_view_model.dart';
 import '../card_voucher_reconciliation_view_model.dart';
 import 'card_voucher_reconciliation_dialog.dart';
@@ -23,6 +26,29 @@ Future<void> showCloseShiftFlow(
 ) async {
   await vm.init();
   if (!context.mounted) return;
+
+  // T8 (INV-16.5): hard block — no Corte Z while open accounts exist.
+  // Deliberate order: accounts BEFORE the pending-voucher gate below,
+  // because resolving a tab paid by card creates a pending voucher — the
+  // operator clears accounts first and then reconciles the vouchers that
+  // action produced. Hard block: no supervisor override, no bypass, no
+  // "close anyway" — the only way through is to resolve the accounts.
+  if (vm.hasOpenAccounts) {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bloqueo de Corte Z — Cuentas Abiertas'),
+        content: Text(openAccountsBlockMessage(vm.openAccounts)),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('ENTENDIDO'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
 
   // Invariante Fiscal DGI: no Corte Z with pending card vouchers.
   if (vm.hasPendingVouchers) {
@@ -58,6 +84,27 @@ Future<void> showCloseShiftFlow(
       child: const CloseShiftDialog(),
     ),
   );
+}
+
+/// T8: the operator-facing block message for open accounts. Names each
+/// account with its line count and total, states that nothing is invoiced
+/// and no Z is emitted while accounts remain open, and tells the operator
+/// exactly what to do (Ventas en Espera — cobrar o abandonar). No
+/// continuation is offered anywhere this message is shown.
+String openAccountsBlockMessage(List<HoldTicket> accounts) {
+  final lines = accounts.map((a) {
+    final total = a.items.fold<double>(0, (sum, i) => sum + i.grossAmount);
+    final n = a.items.length;
+    return '• ${a.name} — $n ${n == 1 ? 'línea' : 'líneas'} · C\$ ${total.toStringAsFixed(2)}';
+  }).join('\n');
+  return 'Existen ${accounts.length} '
+      '${accounts.length == 1 ? 'cuenta abierta' : 'cuentas abiertas'} '
+      'en esta terminal:\n\n'
+      '$lines\n\n'
+      'Por disposición de control fiscal (INV-16.5), mientras haya cuentas '
+      'abiertas no se factura nada y no se emite Reporte Z.\n\n'
+      'Resuelva cada cuenta en Ventas en Espera (cobrar o abandonar) y '
+      'vuelva a intentar el cierre.';
 }
 
 /// Opens the voucher reconciliation dialog for [vm]'s payment DAO and
@@ -145,14 +192,29 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
       _error = null;
     });
 
-    final success = await vm.closeShiftWithBlindCount(
-      countedNio: countedNio,
-      countedUsd: countedUsd,
-      notes: _notesController.text.trim().isNotEmpty
-          ? _notesController.text.trim()
-          : null,
-      supervisorId: null,
-    );
+    bool success;
+    try {
+      success = await vm.closeShiftWithBlindCount(
+        countedNio: countedNio,
+        countedUsd: countedUsd,
+        notes: _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : null,
+        supervisorId: null,
+      );
+    } on OpenTablesPendingException catch (e) {
+      // T8 stale-read defence: an account parked between the pre-gate and
+      // this write resurfaces HERE, at the VM's fresh re-check. Same block,
+      // same copy, and still no continuation.
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = e.openAccounts.isEmpty
+            ? 'Existen cuentas abiertas. Resuélvalas en Ventas en Espera antes de emitir el Corte Z.'
+            : openAccountsBlockMessage(e.openAccounts);
+      });
+      return;
+    }
 
     if (mounted) {
       if (success) {

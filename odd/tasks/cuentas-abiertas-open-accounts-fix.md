@@ -253,14 +253,14 @@ session row (`isClosed`, `closedAt`, `closingBalance`, `closingCountedNio`, `tot
 `totalExpected`, `expectedNio`) must be written by the Z path too, or the unified flow must write the
 missing ones. Unifying must not silently drop the arqueo record.
 
-### T8 — Hard block on open accounts, enforced at the ViewModel
+### T8 — Hard block on open accounts, enforced at the ViewModel — DONE
 Gate in `CashShiftViewModel.closeShiftWithBlindCount`, next to the existing voucher gate. Hard block:
 no override, no supervisor bypass. The message names each open account with its line count and total.
 Enforce in the VM, not only in the dialog, so no future entry point can bypass it. The dependency must
 default to "no open accounts" when unwired, otherwise the existing cash tests (which mock DAOs and seed
 no hold tickets) break for the wrong reason.
 
-### T9 — Corte X lists them, without blocking
+### T9 — Corte X lists them, without blocking — DONE
 `XReportDialog` is read-only (no DAO write, `x_report_dialog.dart`, e2e proves the shift stays open,
 `cash_shift_e2e_flow_test.dart:86-88`). Add "Cuentas abiertas: N · C$ X" as information for the
 mid-shift print. Matrix row D3 gets its answer here.
@@ -299,6 +299,31 @@ non-cash skip. `getCashPaymentsForShift` counts cash rows regardless of session 
 both VMs, so production resolves one terminal. The `'TERM-01'` vs `'term-main'` divergence is reachable
 only through the direct constructor in tests, and the cash VM does not trim the value the way the sale
 path does. Not asserted as a live bug.
+
+## T8+T9 evidence (the close gate)
+
+| Requirement | Where | Proof |
+|---|---|---|
+| Hard block, no override | `close_shift_dialog.dart:41-47` — the only action is `ENTENDIDO` | no confirm/continue path exists in either entry |
+| Enforced in the VM, not only the UI | `cash_shift_view_model.dart:418-440` | the UI dialog and `_submit` both handle the throw |
+| Gate order: accounts **before** vouchers | VM `:418` vs `:445`; dialog `:41` vs `:54` | deliberate — settling a tab by card creates the voucher that must be reconciled afterwards |
+| Fresh re-query at close time | `:421` re-loads instead of trusting `:217`/`init()` | test: account parked after `init()` still blocks |
+| Blocked close writes nothing and burns no Z | Z computed at `:457-458`, after both gates; `updateSession` at `:493` | test asserts the resolved close gets `zReportSequence == 1` after a blocked attempt, not 2 |
+| Fail closed | `:422-428` — a loader error aborts the close with a message | a close that cannot verify accounts is a close that does not happen |
+| Unwired dependency stays inert | `openAccountsLoader == null` skips the gate | the 50 pre-existing cash tests pass unchanged |
+| Corte X informs, never blocks | `x_report_dialog.dart` row rendered only when count > 0 | shift stays open (read-only report, `cash_shift_e2e_flow_test.dart:86-88`) |
+| Message names the ACCOUNT | `close_shift_dialog.dart:98` uses `a.name`, with line count and total | not the table, so a "Sin mesa (Para llevar)" tab is still identifiable |
+
+Reused the existing domain exception (`OpenTablesPendingException`, `INV-16.5`) with an added optional
+`openAccounts` field; the waiter path still throws names-only and is byte-identical. The loader is wired
+in `fromDatabase` through `TableOrderService(database).getAllOpenOrders()`, one source of truth for gate,
+dialog and X, with no DAO change.
+
+Deferred by the writer for a good reason: the optional "take me to the list" button, because
+`RecallTicketsDialog` watches `SaleViewModel` and Control de Caja's context cannot guarantee that
+provider — inventing a cross-provider dependency would have exceeded the slice.
+
+Focused runs: `flutter analyze` clean; `open_accounts_close_gate_test.dart` 4/4; `open_accounts_close_gate_ui_test.dart` 3/3; `sale_view_security_flows_test.dart` 11/11; `test/ui/features/cash` 57/57; `sale_view_model_test.dart` 39/39.
 
 ## Deferred from this slice
 

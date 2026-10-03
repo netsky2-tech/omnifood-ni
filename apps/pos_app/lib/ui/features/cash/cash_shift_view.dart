@@ -382,6 +382,10 @@ class _CashShiftViewState extends State<CashShiftView> {
                         // blind count and the Z close use.
                         effectiveExpectedNio: vm.effectiveExpectedNio,
                         effectiveExpectedUsd: vm.effectiveExpectedUsd,
+                        // T9 (cuentas abiertas): informational line, fed by
+                        // the same loader the Z gate re-checks.
+                        openAccountsCount: vm.openAccountsCount,
+                        openAccountsTotalNio: vm.openAccountsTotalNio,
                       ),
                     ),
                     icon: const Icon(Icons.assessment_outlined),

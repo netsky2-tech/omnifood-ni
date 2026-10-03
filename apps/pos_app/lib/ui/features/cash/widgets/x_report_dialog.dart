@@ -21,6 +21,13 @@ class XReportDialog extends StatelessWidget {
   /// renders the honest fallback label, never the raw user id.
   final String? cashierName;
 
+  /// T9 (cuentas abiertas): informational only. Open accounts never reached
+  /// an invoice, so they are not in the drawer expectation above — but the
+  /// operator doing a mid-shift reading must see them. The X never blocks
+  /// on them (it writes nothing); the hard block lives in the Corte Z flow.
+  final int openAccountsCount;
+  final double openAccountsTotalNio;
+
   const XReportDialog({
     super.key,
     required this.shift,
@@ -28,6 +35,8 @@ class XReportDialog extends StatelessWidget {
     required this.effectiveExpectedNio,
     required this.effectiveExpectedUsd,
     this.cashierName,
+    this.openAccountsCount = 0,
+    this.openAccountsTotalNio = 0.0,
   });
 
   String _formatNio(double amount) => 'C\$ ${amount.toStringAsFixed(2)}';
@@ -111,6 +120,14 @@ class XReportDialog extends StatelessWidget {
                     // D-14: a person's name where the id used to be shown.
                     _buildRow('Cajero', cashierName ?? kUnresolvedUserNameLabel),
                     _buildRow('Fecha/Hora Apertura', openedStr),
+                    // T9 (cuentas abiertas): same row language as the rows
+                    // above, fed by the same loader the close gate uses —
+                    // exactly one source of truth.
+                    if (openAccountsCount > 0)
+                      _buildRow(
+                        'Cuentas abiertas',
+                        '$openAccountsCount · ${_formatNio(openAccountsTotalNio)}',
+                      ),
                   ],
                 ),
               ),

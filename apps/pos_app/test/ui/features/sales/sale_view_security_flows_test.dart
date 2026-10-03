@@ -5,6 +5,7 @@ import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
+import 'package:pos_app/domain/models/sales/hold_ticket.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
@@ -41,14 +42,17 @@ class _StubPaymentDao implements PaymentDao {
 }
 
 class _StubCashShiftViewModel extends CashShiftViewModel {
-  _StubCashShiftViewModel({this.stubbedPendingVouchers = 0})
-      : super(
+  _StubCashShiftViewModel({
+    this.stubbedPendingVouchers = 0,
+    this.stubbedOpenAccounts = const [],
+  }) : super(
           sessionDao: _StubSessionDao(),
           movementDao: _StubMovementDao(),
           paymentDao: _StubPaymentDao(),
         );
 
   final int stubbedPendingVouchers;
+  final List<HoldTicket> stubbedOpenAccounts;
 
   @override
   Future<void> init() async {}
@@ -58,6 +62,21 @@ class _StubCashShiftViewModel extends CashShiftViewModel {
 
   @override
   bool get hasPendingVouchers => stubbedPendingVouchers > 0;
+
+  // T8 (cuentas abiertas): the stub answers the same getters the block
+  // dialog and the gate read, mirroring the pendingVouchers stubbing above.
+  @override
+  List<HoldTicket> get openAccounts => stubbedOpenAccounts;
+
+  @override
+  bool get hasOpenAccounts => stubbedOpenAccounts.isNotEmpty;
+
+  @override
+  int get openAccountsCount => stubbedOpenAccounts.length;
+
+  @override
+  double get openAccountsTotalNio => stubbedOpenAccounts.fold(
+      0.0, (sum, t) => sum + t.items.fold(0.0, (s, i) => s + i.grossAmount));
 }
 
 @GenerateNiceMocks([
@@ -203,6 +222,68 @@ void main() {
 
     expect(find.text('Bloqueo de Corte Z Fiscal'), findsOneWidget);
     expect(find.text('IR A RECONCILIACIÓN'), findsOneWidget);
+    expect(find.text('Arqueo Ciego y Cierre de Turno'), findsNothing);
+  });
+
+  testWidgets('open accounts block the close from the sale-screen entry too', (tester) async {
+    // T8 (INV-16.5): the hard block on open accounts must surface through
+    // the ⋮ Cerrar Caja entry as well — same pre-gate, same list, and no
+    // continuation past it.
+    when(mockAuthRepository.authorizeOverride(
+      supervisorId: anyNamed('supervisorId'),
+      pin: anyNamed('pin'),
+      totpCode: anyNamed('totpCode'),
+    )).thenAnswer((_) async => true);
+
+    await tester.pumpWidget(buildTestApp(
+      cashViewModel: _StubCashShiftViewModel(
+        stubbedOpenAccounts: [
+          HoldTicket(
+            id: 'hold-1',
+            name: 'Mesa 5',
+            createdAt: DateTime(2026, 2, 1),
+            items: [
+              const CartItem(
+                productId: 'p-1',
+                productName: 'Pinol',
+                quantity: 1,
+                unitPrice: 240.0,
+                taxRate: 0.15,
+              ),
+              const CartItem(
+                productId: 'p-2',
+                productName: 'Gaseosa',
+                quantity: 1,
+                unitPrice: 200.0,
+                taxRate: 0.15,
+              ),
+            ],
+          ),
+        ],
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Cerrar Caja'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Autorización de supervisor'), findsOneWidget);
+    await tester.enterText(find.byWidgetPredicate((widget) {
+      return widget is TextField && widget.decoration?.labelText == 'ID supervisor';
+    }), 'supervisor-1');
+    await tester.enterText(find.byWidgetPredicate((widget) {
+      return widget is TextField && widget.decoration?.labelText == 'PIN';
+    }), '1234');
+    await tester.tap(find.text('Autorizar'));
+    await tester.pumpAndSettle();
+
+    // Even a supervisor authorization cannot pass the open-accounts gate:
+    // the hard block names the account, its line count and its total.
+    expect(find.text('Bloqueo de Corte Z — Cuentas Abiertas'), findsOneWidget);
+    expect(find.textContaining('Mesa 5'), findsOneWidget);
+    expect(find.textContaining('2 líneas'), findsOneWidget);
+    expect(find.textContaining('C\$ 440.00'), findsOneWidget);
+    expect(find.text('ENTENDIDO'), findsOneWidget);
     expect(find.text('Arqueo Ciego y Cierre de Turno'), findsNothing);
   });
 
