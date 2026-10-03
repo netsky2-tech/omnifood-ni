@@ -625,3 +625,60 @@ dos veces.
 - `menu-import.service.ts:444` y `444-452` (guarda del code vacio) y `752-753`: mirar al tocar el importador de nuevo.
 - `menu-import.service.ts:124-126` (SUGGESTION sobre `canonicalCategoryCode`):candidato de refactor menor, sin accion ahora.
 - `...BackfillProductCategoryCodes.db.spec.ts:30-36`: WARNING en el arn es del db spec.
+
+## 20. T0.5' decidido: unificar promociones y grupos en `catalog_values.id`
+
+**Hallazgo medido (no teoria).** Promociones y grupos de extras resuelven "categoria" con dos
+identidades distintas y ninguna de las dos funciona en el terminal:
+
+| capa | hecho |
+|---|---|
+| `promotions.target_category_id` | `varchar` **sin FK** (`promotion.entity.ts:47`; columna lisa creada en `1790000000000-CreatePromotionsTable.ts:37`) |
+| dashboard | input de **texto libre** (`PromotionForm.tsx:169-173`), no picker de `/catalogs` |
+| motor POS | comparacion **case-insensitive de strings** contra `item.category` (`promotions_engine.dart:106-108` y `128-130`) |
+| grupos (T1.1) | FK compuesta a `catalog_values(tenant_id, id)` |
+| `item.category` en el POS | **siempre null**: el delta de producto no manda campo de categoria (`inbound-sync.service.ts:504-527`) y el ingest hace `map['category'] ?? existing?.category` (`sync_service.dart:3251`); el dispositivo nunca sube productos, asi que no hay `existing` |
+| `PromotionDao.getPromotionsByCategory` | **cero llamadores** (`promotion_dao.dart:27-28`); codigo muerto |
+
+**El dato concreto que obliga a decidir ahora:** el tenant SOHO tiene 2 promociones y una apunta
+`CAF_E CALIENTE` como texto libre. Ese es exactamente el valor que T0.2' reescribe a
+`CAFE_CALIENTE` en los productos. Dejar las promociones como estan es tener dos features que nombran
+la misma cosa con claves distintas, una de ellas inerte.
+
+**Decision del dueno (2026-10-03): unificar en `catalog_values.id`.** Renombrar una categoria a mano
+no debe romper enganches: el id no cambia, el code si. Con esto, el matching por nombre desaparece
+del motor y `target_category_id` deja de ser un nombre mentiroso.
+
+**Trampa de diseno que hay que nombrar explicitamente.** En el motor, `target_category_id = NULL`
+significa **promocion global** (`isGlobal`, `promotions_engine.dart:110`, `132`). Por lo tanto una
+migracion que "no resuelva" el texto libre y lo deje en NULL **convierte una promocion de una
+categoria en un descuento sobre todo el menu**. El contrato de la migracion es: texto libre que no
+resuelve a una fila `SALES_PRODUCT_CATEGORY` del mismo tenant → `target_category_id = NULL`
+**y `is_active = false`**, reportado en el log con el nombre de la promocion. Nunca NULL activo.
+
+**Por que desactivar no es una regresion viva:** hoy ninguna promocion por categoria matchea en el
+terminal (`item.category` es null siempre), asi que desactivar las no resolubles no cambia el precio
+que el cliente paga. Cambia el estado declarado, y por eso se reporta para revision del dueno.
+
+**Work units en orden (cada uno cierra con su propio commit):**
+
+- **T0.5'a backend-schema**: `promotions.target_category_id` pasa a `uuid` con FK compuesta
+  `(tenant_id, target_category_id) REFERENCES catalog_values(tenant_id, id)`, patron T1.1
+  (`createForeignKeyConstraints: false` en la entidad). Migracion de datos: canonicaliza el texto
+  libre existente con la misma regla espejada, resuelve por `code` dentro del tenant, asigna el id, y
+  desactiva + reporta lo no resoluble. DTO valida UUID; el service rechaza un id de otra tenant o de
+  otro catalog_type. Sin tabla nueva: el manifest RLS no se toca.
+- **T0.5'b delta**: el payload de producto pasa a llevar `categoryId`, resuelto server-side haciendo
+  join `products.category_code` → `catalog_values(tenant, SALES_PRODUCT_CATEGORY, code)`. Un producto
+  sin categoria o con un code que no existe en el catalogo manda `null` y eso esta bien: ahi no hay
+  promocion possible.
+- **T0.5'c pos**: columna local `products.category_id TEXT` (migracion Floor propia), ingest de
+  `map['categoryId']`, `CartItem` lleva `categoryId`, y el motor pasa a **igualdad estricta de ids**
+  en los tres tipos de promocion. Borrar `getPromotionsByCategory` del DAO (esta muerto y tiene la
+  semantica vieja).
+- **T0.5'd dashboard**: `/promotions` pasa de input libre a picker sobre `/catalogs`
+  (`SALES_PRODUCT_CATEGORY`), mostrando el label y guardando el id.
+
+**Dependencia honesta con este feature:** T0.5'c y T2.3 (resolver grupos efectivos al cargar el
+producto) tocan el mismo ingest de producto del POS. Van en el mismo worktree, en ese orden, para no
+pisarse.
