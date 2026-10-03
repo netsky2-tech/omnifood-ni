@@ -271,4 +271,12 @@ emitida), confirmación de Corte Z (ningún Z quemado), Sincronizar Nube.
 lo que se desplegó por OTA (4014). Como 9014 es más alto, la próxima OTA necesita un versionCode mayor a
 9014 para poder instalarse por encima, o el aparato hay que desinstalarlo (y se pierde el SQLite local).
 
+**Corrección medida después (2026-10-03 15:55):** el servidor del rig es `http://localhost:3000/api`,
+procedencia *"Configuración guardada en este dispositivo"*, y llega al backend local por un
+**`adb reverse tcp:3000`** sobre USB — no por red. El canal OTA también es local: `app_releases` tiene
+`3014`, `4014` y `6014` (esquema `X014`, todos 1.0.1). O sea que el conflicto de versionCode es contra el
+canal de pruebas local, no contra producción, y se deshace publicando un `X014 > 9014` o instalando por
+`adb install -r` con un número mayor. Las facturas con formato DGI (`100101000000041`…) que el rig sincronizó
+están en el Postgres de esta máquina, lo que confirma que la tubería fiscal de este aparato desemboca acá.
+
 **Queda pendiente de matriz:** A6 (reinicio de app), B1-B4 (facturar con cuentas abiertas), C3-C5, D2-D5.

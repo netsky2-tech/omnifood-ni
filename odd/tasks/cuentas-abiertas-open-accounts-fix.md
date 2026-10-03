@@ -419,6 +419,9 @@ charged and no Z was burned during the run; the owner's own `Cuenta A` was left 
 **Cost of testing this way:** the rig now runs this branch (versionCode 9014) instead of the OTA build
 (4014) that carried other fixes, because Android refuses an in-place downgrade. The next OTA for this
 device needs a versionCode above 9014, or the device must be uninstalled and its local data rebuilt.
+Measured afterwards: the device's backend is `http://localhost:3000/api` via `adb reverse` over USB and the
+OTA channel is the local `app_releases` table (`3014`/`4014`/`6014`), so this is a conflict with the local
+test channel, not with production. Undoing it only needs a release above 9014.
 
 ## Deferred from this slice
 
