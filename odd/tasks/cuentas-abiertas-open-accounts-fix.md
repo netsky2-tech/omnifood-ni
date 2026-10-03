@@ -367,6 +367,40 @@ emitted. Two clusters, both about the same seam I flagged during verification:
 | The gate depends on its wiring | `R1-open-gate-default` (`:418`), `R2-001` (`:418`) | when `openAccountsLoader == null` the gate is skipped — the deliberate choice that kept 50 existing cash tests honest. Production always wires it via `fromDatabase`, but a fiscal gate whose enforcement depends on a constructor argument is weaker than one that fails closed. |
 | Naming and copy | `R2-002` (`sale_view.dart:634`), `R2-003` (`waiter_settlement_service.dart:17`), `R2-004` (`close_shift_dialog.dart:96`) | readability suggestions: the `_requestSupervisorOverrideForCloseBox` name now overstates "close box", `OpenTablesPendingException` carries two meanings (names + accounts), and the block copy offers "abandonar" without repeating that it is irreversible — the same point the verifier raised independently. |
 
+# Slice F8 decision + review follow-ups
+
+## F8 — owner decision: visibility, no auto-repair
+
+An already-duplicated account on a device is still recalled inflated. The owner decided **not to repair
+it automatically**: collapsing "duplicate" lines would change real balances, because a legitimate tab
+with 2× the same product is indistinguishable from one the defect doubled. Nobody watching from outside
+can decide whether C$880 was meant to be 440 or 880 — that is the operator's judgement with the customer
+in front of them.
+
+Complication that stays true: **open accounts never sync** (proven in this slice), so the owner cannot
+inspect terminals remotely at all. Detecting inflated accounts requires holding the device. What F5 does
+contribute is visibility: the Z block now puts every open account, with its line count and total, in
+front of the operator at the moment of closing — which is where a doubled tab becomes visible.
+
+## T12 — the three review findings, taken now instead of deferred — DONE
+
+| Finding | Fix |
+|---|---|
+| `init()` left a stale open-accounts list on failure (three lenses converged) | `_openAccounts` is now nullable where **null means UNVERIFIED**; `init()` clears it *before* its `try`, so a failed read can never report "no open accounts". `openAccountsVerified` is true only after a successful read |
+| The gate was skipped when the loader was unwired | the close now **refuses** when the state is unverifiable or unwired, with an explicit message. "There are no open accounts" is only ever an explicit loader answer — three existing tests were changed to *declare* that instead of inheriting it, and no assertion was deleted or relaxed |
+| The block copy offered "abandonar" without its consequence | final paragraph now reads `Abandonar la descarta definitivamente: no se puede deshacer.` |
+
+Found while landing it: the Corte X had the same defect in read-only form. It rendered its row only when
+`openAccountsCount > 0`, and an unverified state reads as 0 — so the printed X implied "no open accounts"
+exactly when the app did not know (`x_report_dialog.dart:126`). It now takes `openAccountsVerified`,
+defaults to **unverified** so a call site that forgets the flag fails toward honesty rather than a clean
+report, and prints `Cuentas abiertas · No se pudieron verificar`. Verified-with-zero keeps the previous
+silent behaviour: with the flag present, silence can only mean a successful empty read. The X remains
+strictly read-only.
+
+Checks: `flutter analyze` clean; `test/ui/features/cash` 65 passed; broad run over
+`test/ui/features/cash test/ui/features/sales test/presentation/features/sales test/domain/services/sales test/data/daos/sales test/ui/features/kitchen` = **631 passed / 0 failed** in a single run.
+
 ## Deferred from this slice
 
 - **F8** (already-duplicated accounts on a device are still recalled inflated) — unchanged, still open.

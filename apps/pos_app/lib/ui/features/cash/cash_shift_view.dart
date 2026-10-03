@@ -383,7 +383,11 @@ class _CashShiftViewState extends State<CashShiftView> {
                         effectiveExpectedNio: vm.effectiveExpectedNio,
                         effectiveExpectedUsd: vm.effectiveExpectedUsd,
                         // T9 (cuentas abiertas): informational line, fed by
-                        // the same loader the Z gate re-checks.
+                        // the same loader the Z gate re-checks. The verified
+                        // flag travels too, so an unverified read renders the
+                        // honest "No se pudieron verificar" row instead of a
+                        // silent report that implies zero accounts.
+                        openAccountsVerified: vm.openAccountsVerified,
                         openAccountsCount: vm.openAccountsCount,
                         openAccountsTotalNio: vm.openAccountsTotalNio,
                       ),

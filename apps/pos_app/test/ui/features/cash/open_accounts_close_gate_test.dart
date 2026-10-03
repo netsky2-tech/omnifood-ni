@@ -123,10 +123,13 @@ void main() {
     });
 
     test(
-        'plain constructor (loader unwired) keeps the gate inert — existing cash suite protection',
+        'unwired loader: the close REFUSES instead of assuming zero accounts',
         () async {
-      // The direct constructor deliberately defaults to "no open accounts":
-      // isolated harnesses that mock DAOs must keep closing normally.
+      // R1-open-gate-default / R2-001 (native review, slice F5): a fiscal
+      // gate must not depend on its wiring. The direct constructor no
+      // longer defaults to "no open accounts" — an unverifiable account
+      // state blocks the close, and "there are no open accounts" is only
+      // ever an explicit loader answer.
       final vm = CashShiftViewModel(
         sessionDao: database.cashierSessionDao,
         movementDao: database.cashMovementDao,
@@ -136,9 +139,36 @@ void main() {
       await vm.init();
       await vm.openShift(initialFloatNio: 1000.0, initialFloatUsd: 0.0);
 
-      // An open account EXISTS in this database, but the unwired VM cannot
-      // see it and — by contract — must not block on it.
-      await parkAccount();
+      final closed = await vm.closeShiftWithBlindCount(
+        countedNio: 1000.0,
+        countedUsd: 0.0,
+      );
+
+      expect(closed, isFalse);
+      expect(vm.errorMessage,
+          contains('No se pudieron verificar las cuentas abiertas'));
+      // Fail closed also means write nothing.
+      expect(vm.hasActiveShift, isTrue);
+      expect(await database.cashierSessionDao.countClosedSessions(), 0);
+      expect(vm.lastClosedShift, isNull);
+    });
+
+    test(
+        'explicit-empty loader: close proceeds normally — "no open accounts" is a declaration, not a default',
+        () async {
+      // The direct constructor WITH an explicit loader is the harness
+      // equivalent of production's fromDatabase wiring: the test DECLARES
+      // the account state instead of inheriting it from a missing
+      // dependency.
+      final vm = CashShiftViewModel(
+        sessionDao: database.cashierSessionDao,
+        movementDao: database.cashMovementDao,
+        currentUserId: 'user-cajero-1',
+        currentTerminalId: 'term-main',
+        openAccountsLoader: () async => const [],
+      );
+      await vm.init();
+      await vm.openShift(initialFloatNio: 1000.0, initialFloatUsd: 0.0);
 
       final closed = await vm.closeShiftWithBlindCount(
         countedNio: 1000.0,
@@ -177,6 +207,75 @@ void main() {
       expect(vm.openAccountsCount, 1);
       expect(vm.openAccountsTotalNio, 440.0);
       expect(vm.hasOpenAccounts, isTrue);
+    });
+
+    test(
+        'init() with a failing loader never reports a verifiable empty list, and the close blocks',
+        () async {
+      // R1-stale-open-accounts-init / R3-002 / R4-001 (native review,
+      // slice F5): three lenses converged on init() swallowing a loader
+      // failure and leaving _openAccounts at its previous value. Fail
+      // closed: a failed read is UNVERIFIED state, never "no accounts".
+      final vm = CashShiftViewModel(
+        sessionDao: database.cashierSessionDao,
+        movementDao: database.cashMovementDao,
+        currentUserId: 'user-cajero-1',
+        currentTerminalId: 'term-main',
+        openAccountsLoader: () async => throw StateError('db locked'),
+      );
+
+      await vm.init();
+
+      expect(vm.errorMessage, isNotNull);
+      expect(vm.openAccountsVerified, isFalse,
+          reason: 'a failed read must not vouch for the account state');
+      expect(vm.hasOpenAccounts, isTrue,
+          reason: 'unverified must block, not pass as zero accounts');
+      expect(vm.openAccounts, isEmpty);
+
+      // A subsequent close attempt is BLOCKED by the same failing loader,
+      // not allowed through.
+      await vm.openShift(initialFloatNio: 1000.0, initialFloatUsd: 0.0);
+      final closed = await vm.closeShiftWithBlindCount(
+        countedNio: 1000.0,
+        countedUsd: 0.0,
+      );
+      expect(closed, isFalse);
+      expect(vm.errorMessage,
+          contains('No se pudieron verificar las cuentas abiertas'));
+      expect(vm.hasActiveShift, isTrue);
+    });
+
+    test(
+        'a failed init() drops the previous account list instead of leaving it looking verified',
+        () async {
+      var calls = 0;
+      final account = await parkAccount(name: 'Mesa 9');
+      final vm = CashShiftViewModel(
+        sessionDao: database.cashierSessionDao,
+        movementDao: database.cashMovementDao,
+        currentUserId: 'user-cajero-1',
+        currentTerminalId: 'term-main',
+        openAccountsLoader: () async {
+          calls++;
+          if (calls == 1) return [account];
+          throw StateError('db locked');
+        },
+      );
+
+      await vm.init();
+      expect(vm.openAccountsVerified, isTrue);
+      expect(vm.openAccounts.single.name, 'Mesa 9');
+
+      // The refresh the close flow performs fails: the UI pre-gate must
+      // not keep rendering the PREVIOUS list as if it were current.
+      await vm.init();
+      expect(vm.errorMessage, isNotNull);
+      expect(vm.openAccountsVerified, isFalse,
+          reason: 'stale list must not survive a failed refresh');
+      expect(vm.openAccounts, isEmpty);
+      expect(vm.hasOpenAccounts, isTrue,
+          reason: 'a failed refresh must block, not pass as zero accounts');
     });
   });
 }

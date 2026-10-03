@@ -33,6 +33,30 @@ Future<void> showCloseShiftFlow(
   // operator clears accounts first and then reconciles the vouchers that
   // action produced. Hard block: no supervisor override, no bypass, no
   // "close anyway" — the only way through is to resolve the accounts.
+  // R1-stale-open-accounts-init (native review, slice F5): if init could
+  // not verify the open-account state, the pre-gate must not fall through
+  // as if it had verified "no open accounts" — same fail-closed posture
+  // as the VM's close gate. Checked BEFORE the hasOpenAccounts branch.
+  if (!vm.openAccountsVerified) {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bloqueo de Corte Z — Cuentas Abiertas'),
+        content: const Text(
+          'No se pudieron verificar las cuentas abiertas de esta terminal.\n\n'
+          'Por disposición de control fiscal (INV-16.5), sin verificación no se emite Reporte Z. Intente de nuevo.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('ENTENDIDO'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+
   if (vm.hasOpenAccounts) {
     await showDialog<void>(
       context: context,
@@ -103,8 +127,9 @@ String openAccountsBlockMessage(List<HoldTicket> accounts) {
       '$lines\n\n'
       'Por disposición de control fiscal (INV-16.5), mientras haya cuentas '
       'abiertas no se factura nada y no se emite Reporte Z.\n\n'
-      'Resuelva cada cuenta en Ventas en Espera (cobrar o abandonar) y '
-      'vuelva a intentar el cierre.';
+      'Resuelva cada cuenta en Ventas en Espera: cóbrela o abandónela. '
+      'Abandonar la descarta definitivamente: no se puede deshacer. '
+      'Luego vuelva a intentar el cierre.';
 }
 
 /// Opens the voucher reconciliation dialog for [vm]'s payment DAO and

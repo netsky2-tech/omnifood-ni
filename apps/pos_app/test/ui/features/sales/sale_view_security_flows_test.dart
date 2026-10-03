@@ -65,6 +65,11 @@ class _StubCashShiftViewModel extends CashShiftViewModel {
 
   // T8 (cuentas abiertas): the stub answers the same getters the block
   // dialog and the gate read, mirroring the pendingVouchers stubbing above.
+  // The stubbed state is fully declared here — nothing is unverifiable —
+  // so the pre-gate treats it as a verified read.
+  @override
+  bool get openAccountsVerified => true;
+
   @override
   List<HoldTicket> get openAccounts => stubbedOpenAccounts;
 

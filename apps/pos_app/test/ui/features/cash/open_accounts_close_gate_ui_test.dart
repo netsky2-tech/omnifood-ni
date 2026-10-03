@@ -63,6 +63,12 @@ class _StubCashShiftViewModel extends CashShiftViewModel {
   @override
   List<CashMovementEntity> get movements => const [];
 
+  // T8 (cuentas abiertas): the stub declares its account state explicitly
+  // (stubbedOpenAccounts) — nothing here is unverifiable, so the pre-gate
+  // treats it as a verified read.
+  @override
+  bool get openAccountsVerified => true;
+
   @override
   List<HoldTicket> get openAccounts => stubbedOpenAccounts;
 
@@ -75,6 +81,45 @@ class _StubCashShiftViewModel extends CashShiftViewModel {
   @override
   double get openAccountsTotalNio => stubbedOpenAccounts.fold(
       0.0, (sum, t) => sum + t.items.fold(0.0, (s, i) => s + i.grossAmount));
+}
+
+/// R1-stale-open-accounts-init companion (native review, slice F5): when
+/// the open-account state is UNVERIFIED (init failed, loader unwired), the
+/// pre-gate must not fall through to the blind-count dialog — it blocks
+/// with "could not verify", the same fail-closed posture as the VM.
+class _UnverifiedStubCashShiftViewModel extends CashShiftViewModel {
+  _UnverifiedStubCashShiftViewModel()
+      : super(
+          sessionDao: _StubSessionDao(),
+          movementDao: _StubMovementDao(),
+        );
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  CashierSessionEntity? get activeShift => CashierSessionEntity(
+        id: 'shift-1',
+        userId: 'user-cajero-1',
+        terminalId: 'term-main',
+        openedAt: 1716000000000,
+        tipoModelo: 'CAJA_CENTRAL',
+        openingBalanceNio: 1000.0,
+        openingBalanceUsd: 0.0,
+        expectedNio: 1000.0,
+        expectedUsd: 0.0,
+        isClosed: false,
+        syncStatus: 'pending',
+      );
+
+  @override
+  bool get hasActiveShift => true;
+
+  @override
+  List<CashMovementEntity> get movements => const [];
+
+  @override
+  bool get openAccountsVerified => false;
 }
 
 HoldTicket _account({String name = 'Mesa 3'}) => HoldTicket(
@@ -138,6 +183,34 @@ void main() {
     });
   });
 
+  group('R1: unverified open-account state blocks the Corte Z pre-gate', () {
+    testWidgets(
+        'init that could not verify accounts shows the could-not-verify block, never the blind count',
+        (tester) async {
+      final vm = _UnverifiedStubCashShiftViewModel();
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<CashShiftViewModel>.value(
+          value: vm,
+          child: const MaterialApp(home: CashShiftView()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Cerrar Turno (Corte Z)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bloqueo de Corte Z — Cuentas Abiertas'),
+          findsOneWidget);
+      expect(find.textContaining('No se pudieron verificar'), findsOneWidget);
+      expect(find.text('ENTENDIDO'), findsOneWidget);
+
+      // Fail closed: no blind-count dialog, and the shift is untouched.
+      expect(find.text('Arqueo Ciego y Cierre de Turno'), findsNothing);
+      expect(vm.hasActiveShift, isTrue);
+    });
+  });
+
   group('T9: Corte X lists open accounts without blocking', () {
     Widget buildX(CashShiftViewModel vm) {
       return ChangeNotifierProvider<CashShiftViewModel>.value(
@@ -149,6 +222,7 @@ void main() {
               movements: vm.movements,
               effectiveExpectedNio: vm.effectiveExpectedNio,
               effectiveExpectedUsd: vm.effectiveExpectedUsd,
+              openAccountsVerified: vm.openAccountsVerified,
               openAccountsCount: vm.openAccountsCount,
               openAccountsTotalNio: vm.openAccountsTotalNio,
             ),
@@ -178,7 +252,8 @@ void main() {
       expect(vm.activeShift!.isClosed, isFalse);
     });
 
-    testWidgets('renders no open-accounts line when there are none',
+    testWidgets(
+        'renders no open-accounts line when there are none',
         (tester) async {
       final vm = _StubCashShiftViewModel();
 
@@ -186,6 +261,55 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Cuentas abiertas'), findsNothing);
+    });
+
+    // Fail-closed representation (R1-stale-open-accounts-init, slice F5):
+    // when the account state is UNVERIFIED the X must NOT silently imply
+    // "no open accounts" — it must say it could not verify.
+    testWidgets(
+        'UNVERIFIED state shows the could-not-verify row, never a count that reads as zero',
+        (tester) async {
+      final vm = _UnverifiedStubCashShiftViewModel();
+
+      await tester.pumpWidget(buildX(vm));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cuentas abiertas'), findsOneWidget);
+      expect(find.text('No se pudieron verificar'), findsOneWidget);
+      // No count/total that could be read as "no accounts".
+      expect(find.textContaining('0 ·'), findsNothing);
+
+      // The X stays read-only: the shift is untouched.
+      expect(vm.hasActiveShift, isTrue);
+      expect(vm.activeShift!.isClosed, isFalse);
+    });
+
+    // Wiring: the same view flow an operator uses must carry the verified
+    // flag from the VM into the dialog — with the UNVERIFIED stub, the
+    // Control de Caja X button renders the could-not-verify row.
+    testWidgets(
+        'Control de Caja X button passes the unverified state through (fail-closed wiring)',
+        (tester) async {
+      final vm = _UnverifiedStubCashShiftViewModel();
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<CashShiftViewModel>.value(
+          value: vm,
+          child: const MaterialApp(home: CashShiftView()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Lectura Parcial (Corte X)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cuentas abiertas'), findsOneWidget);
+      expect(find.text('No se pudieron verificar'), findsOneWidget);
+      expect(find.textContaining('0 ·'), findsNothing);
+
+      // Read-only: the shift stays open.
+      expect(vm.hasActiveShift, isTrue);
+      expect(vm.activeShift!.isClosed, isFalse);
     });
   });
 }
