@@ -198,3 +198,81 @@ These are follow-up work for a later slice, not reasons to re-run review on this
 R3-003 sit on the same statement (`abandonHoldTicket` deletes, then clears, then reloads with no error
 handling — a failure between them leaves the cart pointing at a deleted account), so they are worth
 reading together.
+
+---
+
+# Slice F5 — the close must not pass open accounts (and the two-arithmetic bug)
+
+**Owner decisions (this slice):** gate in **both** close paths + list them in the Corte X ·
+**hard block, no supervisor override** · **unify the close on the Corte Z path now**.
+
+## Confirmed evidence for this slice
+
+| Fact | Evidence |
+|---|---|
+| Two close paths write **the same** `cashier_sessions` row | same lookup `getActiveSessionForUserAndTerminal` (`sale_view_model.dart:1040-1044` vs `cash_shift_view_model.dart:167-174`), same DAO (`:1127` vs `:421`) |
+| Their arithmetic differs — the device suspicion is **TRUE** | Path A expected = in-memory `_sessionExpected`, NIO only, no movements, no USD, no Z seq, no voucher gate (`sale_view_model.dart:1114-1129`). Path B = DB float + movements + `getCashPaymentsForShift`, dual currency, voucher gate, Z seq (`cash_shift_view_model.dart:371-397`) |
+| Correction to the original wording | Path A does count fresh cash sales (`:1577-1579`); what it omits is movements, USD, and anything before a `checkActiveSession` reset (`:1046-1051`). So: "different arithmetic" TRUE, "omits the shift's cash sales" only partially true |
+| If only the Z blocks, ⋮ becomes the side door | ⋮ closes the same row and skips the pending-voucher gate entirely |
+| `SaleViewModel.closeSession` has exactly **one** caller | `sale_view.dart:805` — same shape as the retired `appendItemsToOrder` |
+| A block dialog pattern already exists | "Bloqueo de Corte Z Fiscal" for pending vouchers (`cash_shift_view.dart:418-440`) |
+| Cash VM can reach open accounts | root provider `CashShiftViewModel` (`main.dart:631`); `fromDatabase` already receives `AppDatabase` (`cash_shift_view_model.dart:54-70`) and `database.holdTicketDao` exists (`app_database.dart:210`) |
+| **Open accounts never cross the wire** | zero `hold_ticket` references in `lib/data/services/sync_service.dart`. This kills the "blocked by another terminal's accounts" risk AND answers matrix row **D4**: held accounts do not reach the cloud, so the owner cannot see them in the dashboard |
+| The domain already models this block | `OpenTablesPendingException` + `WaiterSettlementReport.canCloseShift` + `closeWaiterShift` throwing on `hasOpenTables` (`waiter_settlement_service.dart:9-16, :36-38, :117-119`) — for WAITER shifts, and the whole service has **zero callers**: fifth instance of "complete service, no wiring" |
+
+## Design forks settled by exploration (before writing code)
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Would unifying drop the ⋮ arqueo record? | **No — the Z close writes a strict superset.** | The weak path writes `isClosed`, `closedAt`, `closingCountedNio`, `expectedNio` (`sale_view_model.dart:1119-1126`). The Z path writes all four plus `closingCountedUsd`, `expectedUsd`, `differenceNio/Usd`, `zReportSequence`, `supervisorId`, `syncStatus` (`cash_shift_view_model.dart:399-421`). `closingBalance`/`totalExpected` are aliases of `closingCountedNio`/`expectedNio` (`cashier_session_entity.dart:45-46,73-75`) and **`totalSales` is not a column at all** — it is `double? get totalSales => null;` (`:47`), so the weak path's `totalSales:` write goes nowhere. |
+| Can the ⋮ reach the Z ViewModel? | Yes, no rewiring. | `CashShiftViewModel` is a root provider built by `fromDatabase(database: …)` (`main.dart:664-675`) and `cash_shift_view.dart:444` already opens `CloseShiftDialog` via `ChangeNotifierProvider<CashShiftViewModel>.value`. |
+| Do other terminals' open accounts block this one? | No. | Hold tickets never sync (zero references in `sync_service.dart`) and local SQLite is per-terminal, so `getAllOpenOrders()` is this device's own accounts. |
+| Does a hard block conflict with the existing Z gates? | No, it joins them. | The Z close already blocks on pending card vouchers (`cash_shift_view_model.dart:371-381`) and the UI blocks before opening the dialog (`cash_shift_view.dart:418-440`) — precedent for a hard fiscal gate. |
+
+**Terminal-id caveat found in passing:** the weak path defaults the terminal to `'TERM-01'`
+(`sale_view_model.dart:1042`) while the cash VM defaults to `'term-main'`
+(`cash_shift_view_model.dart:51`), and `main.dart` injects the real `deviceId` for the cash VM (FC-1
+note, `:671-674`). If the sale path is not injected with the same value, the two paths may not resolve
+the same session row on a real multi-terminal deployment. **Not asserted; needs its own check.**
+
+F5 reuses the existing `OpenTablesPendingException` vocabulary instead of inventing a new exception
+type.
+
+## Tasks
+
+### T7 — Unify the close on the Corte Z path
+⋮ Cerrar Caja keeps its existing supervisor-override pre-gate (`sale_view.dart:636`,
+`_requestSupervisorOverrideForCloseBox`, audit `SUPERVISOR_OVERRIDE_CLOSE_SESSION`), then opens
+`CloseShiftDialog` instead of `CloseBoxDialog`. `CloseBoxDialog` and `SaleViewModel.closeSession` are
+retired (one caller each), together with `_sessionExpected` (`sale_view_model.dart:656-661`, seeded
+:1046-1051/:1103-1108, incremented :1577-1579) whose ONLY reader was the retired dialog — leaving that
+counter behind re-arms the same landmine. The field-superset invariant is proven above; re-verify it
+still holds after the change.
+**Invariant the writer must prove before deleting anything:** every field the ⋮ path wrote on the
+session row (`isClosed`, `closedAt`, `closingBalance`, `closingCountedNio`, `totalSales`,
+`totalExpected`, `expectedNio`) must be written by the Z path too, or the unified flow must write the
+missing ones. Unifying must not silently drop the arqueo record.
+
+### T8 — Hard block on open accounts, enforced at the ViewModel
+Gate in `CashShiftViewModel.closeShiftWithBlindCount`, next to the existing voucher gate. Hard block:
+no override, no supervisor bypass. The message names each open account with its line count and total.
+Enforce in the VM, not only in the dialog, so no future entry point can bypass it. The dependency must
+default to "no open accounts" when unwired, otherwise the existing cash tests (which mock DAOs and seed
+no hold tickets) break for the wrong reason.
+
+### T9 — Corte X lists them, without blocking
+`XReportDialog` is read-only (no DAO write, `x_report_dialog.dart`, e2e proves the shift stays open,
+`cash_shift_e2e_flow_test.dart:86-88`). Add "Cuentas abiertas: N · C$ X" as information for the
+mid-shift print. Matrix row D3 gets its answer here.
+
+### T10 — Checks
+`flutter analyze` + the cash suites + the sales suites, then native review on the slice.
+
+## Deferred from this slice
+
+- **F8** (already-duplicated accounts on a device are still recalled inflated) — unchanged, still open.
+- **Waiter settlement / `carteraMesero`** (`WaiterSettlementService`) is still unwired. The Z close and
+  the waiter close are two different shifts; making the waiter path actually use its existing
+  `OpenTablesPendingException` is its own slice.
+- D4 is now answered as "does not sync". Whether open accounts SHOULD reach the owner dashboard is a
+  product decision this slice does not take.
