@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/sales/cart_item.dart';
+import '../../../domain/models/sales/hold_ticket.dart';
 import '../../../data/services/sync_service.dart';
 import '../../../domain/models/sales/payment.dart';
 import '../../../domain/models/sales/promotion.dart';
@@ -43,7 +44,11 @@ class SaleView extends StatefulWidget {
       return;
     }
 
-    final controller = TextEditingController();
+    // F3 (open accounts fix): when a recalled account is loaded, the operator
+    // is EDITING that account — seed the field with its name and say so, so
+    // they are never blind to what a save will replace.
+    final loadedAccount = vm.activeLoadedHoldTicket;
+    final controller = TextEditingController(text: loadedAccount?.name ?? '');
     List<dynamic> tables = [];
     try {
       final database = context.read<AppDatabase>();
@@ -62,7 +67,9 @@ class SaleView extends StatefulWidget {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Poner Venta en Espera'),
+            title: Text(loadedAccount != null
+                ? 'Editar Cuenta Abierta'
+                : 'Poner Venta en Espera'),
             content: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 380),
               child: SingleChildScrollView(
@@ -70,6 +77,34 @@ class SaleView extends StatefulWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (loadedAccount != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.edit_note,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.onSecondaryContainer),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Está editando la cuenta abierta "${loadedAccount.name}". '
+                                'Al guardar se reemplazan sus productos y su nombre; '
+                                'no se crea una cuenta nueva.',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     TextField(
                       controller: controller,
                       decoration: const InputDecoration(
@@ -132,7 +167,9 @@ class SaleView extends StatefulWidget {
                   Navigator.pop(dialogCtx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Venta "$name" puesta en espera con éxito.'),
+                      content: Text(loadedAccount != null
+                          ? 'Cuenta "$name" actualizada con éxito.'
+                          : 'Venta "$name" puesta en espera con éxito.'),
                       duration: const Duration(seconds: 2),
                     ),
                   );
@@ -862,26 +899,100 @@ class RecallTicketsDialog extends StatelessWidget {
       title: const Text('Ventas en Espera'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400),
-        child: viewModel.holdTickets.isEmpty 
+        child: viewModel.holdTickets.isEmpty
           ? const Text('No hay ventas en espera.')
-          : ListView.builder(
-              shrinkWrap: true,
-              itemCount: viewModel.holdTickets.length,
-              itemBuilder: (context, index) {
-                final ticket = viewModel.holdTickets[index];
-                return ListTile(
-                  title: Text(ticket.name),
-                  subtitle: Text('${ticket.items.length} productos'),
-                  trailing: Text('C\$ ${ticket.items.fold(0.0, (sum, i) => sum + i.grossAmount).toStringAsFixed(2)}'),
-                  onTap: () {
-                    viewModel.recallTicket(ticket);
-                    Navigator.pop(context);
-                  },
-                );
-              },
+          // F4: bounded scrollable column instead of a shrinkWrap ListView —
+          // AlertDialog measures its content with IntrinsicWidth and a
+          // ShrinkWrappingViewport cannot compute intrinsics (crash whenever
+          // the list had at least one ticket).
+          : ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final ticket in viewModel.holdTickets)
+                      _holdTicketRow(context, viewModel, ticket),
+                  ],
+                ),
+              ),
             ),
       ),
     );
+  }
+
+  Widget _holdTicketRow(
+    BuildContext context,
+    SaleViewModel viewModel,
+    HoldTicket ticket,
+  ) {
+    return ListTile(
+      title: Text(ticket.name),
+      subtitle: Text('${ticket.items.length} productos'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('C\$ ${ticket.items.fold(0.0, (sum, i) => sum + i.grossAmount).toStringAsFixed(2)}'),
+          const SizedBox(width: 4),
+          // F4 (open accounts fix): discard an account that will never be
+          // invoiced. Destructive styling (error color) separates it from
+          // the frequent, safe recall tap, per the nhilos experience
+          // standard (§12.5, §23).
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            color: Theme.of(context).colorScheme.error,
+            tooltip: 'Abandonar cuenta',
+            onPressed: () => _confirmAbandon(context, viewModel, ticket),
+          ),
+        ],
+      ),
+      onTap: () {
+        viewModel.recallTicket(ticket);
+        Navigator.pop(context);
+      },
+    );
+  }
+
+  Future<void> _confirmAbandon(
+    BuildContext context,
+    SaleViewModel viewModel,
+    HoldTicket ticket,
+  ) async {
+    final total = ticket.items.fold<double>(0, (sum, i) => sum + i.grossAmount);
+    final lineCount = ticket.items.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('¿Abandonar cuenta?'),
+        content: Text(
+          'La cuenta "${ticket.name}" tiene $lineCount '
+          '${lineCount == 1 ? 'producto' : 'productos'} por '
+          'C\$ ${total.toStringAsFixed(2)}.\n\n'
+          'Nada de esto ha sido facturado. Al abandonarla se descarta '
+          'definitivamente: no se puede deshacer.',
+        ),
+        actions: [
+          // Cancel is the safe/default action (autofocused); the destructive
+          // verb is explicit, per the nhilos standard (§23.1, §23.3).
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('CANCELAR'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(dialogCtx).colorScheme.error,
+              foregroundColor: Theme.of(dialogCtx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('ABANDONAR'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    await viewModel.abandonHoldTicket(ticket);
   }
 }
 

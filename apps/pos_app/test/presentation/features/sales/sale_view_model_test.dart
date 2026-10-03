@@ -33,6 +33,8 @@ import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart';
 import 'package:pos_app/data/daos/sales/tax_config_dao.dart';
+import 'package:pos_app/data/models/sales/restaurant_area_entity.dart';
+import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 import 'package:pos_app/data/models/sales/tax_config_entity.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/services/sales/invoice_fiscal_calculator.dart';
@@ -1611,6 +1613,93 @@ void main() {
       final gross = reparked.items.fold<double>(0, (sum, item) => sum + item.grossAmount);
       expect(gross, 440.0,
           reason: 'A5 device bug: each recover+park cycle doubled C\$440 -> C\$880');
+    });
+  });
+
+  group('Open accounts (F4): abandoning a held account discards it and releases its table', () {
+    late AppDatabase realDb;
+    late TableOrderService realTableOrderService;
+    late SaleViewModel holdVm;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    setUp(() async {
+      realDb = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      realTableOrderService = TableOrderService(realDb);
+      holdVm = SaleViewModel(
+        mockSalesRepo,
+        mockInventoryRepo,
+        mockAuthRepo,
+        realDb,
+        realTableOrderService,
+        false,
+      );
+      await realDb.restaurantAreaDao.insertArea(
+        RestaurantAreaEntity(id: 'area-1', name: 'Salón Principal', displayOrder: 1),
+      );
+      await realDb.restaurantTableDao.insertTables([
+        RestaurantTableEntity(
+            id: 'tbl-9', areaId: 'area-1', tableNumber: 'Mesa 9', capacity: 4),
+      ]);
+    });
+
+    tearDown(() async {
+      holdVm.dispose();
+      await realDb.close();
+    });
+
+    Product productAt(double price, String id, String name) => Product(
+          id: id,
+          sku: id,
+          name: name,
+          uom: 'UND',
+          stock: 100,
+          averageCost: price / 2,
+          sellPrice: price,
+          taxRate: 0.15,
+        );
+
+    test(
+        'abandonHoldTicket removes the account from the open orders and releases its occupied table',
+        () async {
+      holdVm.addToCart(productAt(180, 'p-plato', 'Plato Fuerte'));
+      await holdVm.holdCurrentTicket('Mesa 9', tableId: 'tbl-9');
+      expect(holdVm.holdTickets, hasLength(1));
+
+      // Parking occupied the table; the abandonment must hand it back.
+      final occupied = await realDb.restaurantTableDao.getTableById('tbl-9');
+      expect(occupied?.status, 'OCUPADA');
+      expect(occupied?.currentTicketId, holdVm.holdTickets.single.id);
+
+      await holdVm.abandonHoldTicket(holdVm.holdTickets.single);
+
+      expect(holdVm.holdTickets, isEmpty,
+          reason: 'the abandoned account must disappear from getAllOpenOrders()');
+      final released = await realDb.restaurantTableDao.getTableById('tbl-9');
+      expect(released?.status, 'DISPONIBLE',
+          reason: 'liquidateOrder must release the occupied table');
+      expect(released?.currentTicketId, isNull);
+    });
+
+    test('abandoning the currently loaded account clears the cart and the loaded ticket', () async {
+      holdVm.addToCart(productAt(180, 'p-plato', 'Plato Fuerte'));
+      holdVm.addToCart(productAt(130, 'p-espresso', 'Espresso Doble'));
+      await holdVm.holdCurrentTicket('Cuenta 1');
+      await holdVm.recallTicket(holdVm.holdTickets.single);
+      expect(holdVm.cart, hasLength(2));
+      expect(holdVm.activeLoadedHoldTicket, isNotNull);
+
+      final loaded = holdVm.activeLoadedHoldTicket!;
+      await holdVm.abandonHoldTicket(loaded);
+
+      expect(holdVm.cart, isEmpty,
+          reason: 'the cart was the abandoned account; it must not linger as a phantom sale');
+      expect(holdVm.activeLoadedHoldTicket, isNull,
+          reason: 're-parking after abandonment must create a NEW account, never resurrect it');
+      expect(holdVm.holdTickets, isEmpty);
     });
   });
 }

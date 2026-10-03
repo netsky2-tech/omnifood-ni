@@ -4,7 +4,7 @@
 **Worktree:** `/home/octavio_morales/omnifood-ni-open-accounts`
 **Surface:** `apps/pos_app` (Flutter POS, MVVM + Floor/SQLite + Freezed)
 **Preceded by:** `odd/tasks/cuentas-abiertas-verificacion.md` (S23 rig verification, 0a21db66)
-**Status:** in progress — T1+T2 landed, T3+T4 building
+**Status:** T1+T2+T3+T4 landed — T5 broad verification running
 
 ## Owner decisions (binding)
 
@@ -49,12 +49,12 @@ Replace the `_activeLoadedHoldTicket != null` branch (:966) with `replaceOrderIt
 Add the first real VM-level regression test (park → recall → re-park keeps the exact total).
 Keep `clearCart()` + `loadHoldTickets()` behaviour and the `_activeLoadedHoldTicket = null` reset (:985).
 
-### T3 — Prefill the account name (F3)
+### T3 — Prefill the account name (F3) — DONE
 `SaleView.showHoldTicketDialog` (`sale_view.dart:34`) seeds the controller with
 `vm.activeLoadedHoldTicket?.name` and makes clear the save edits an existing account instead of
 creating one. Widget test for prefill + rename.
 
-### T4 — Abandon an account (F4)
+### T4 — Abandon an account (F4) — DONE
 Confirm-to-abandon affordance on the held-accounts list (`RecallTicketsDialog`, `sale_view.dart:855`),
 reusing the existing safe deletion path (`liquidateOrder` → `deleteHoldTicketWithItems`, which also
 frees the table). No DGI exposure: a hold ticket is pre-invoice local state and never emitted a
@@ -63,6 +63,27 @@ fiscal document. Tests: service-level (gone from `getAllOpenOrders`, table relea
 
 ### T5 — Checks
 `flutter analyze` on `apps/pos_app`, focused sales/cash suites, and `restaurant_flow_e2e_test.dart`.
+
+## Newly found defect (F7): the recall dialog could not render a non-empty list in debug
+
+While wiring T4 the writer replaced `RecallTicketsDialog`'s `shrinkWrap: true`
+`ListView.builder` with a bounded `SingleChildScrollView`/`Column` and claimed a pre-existing crash.
+That claim was tested rather than trusted — an executable probe reproduced the pre-fix structure:
+
+```text
+PROBE_ERROR_COUNT=15
+PROBE_ERROR=RenderShrinkWrappingViewport does not support returning intrinsic dimensions.
+PROBE_ERROR='package:flutter/src/rendering/box.dart': Failed assertion: line 2251 ... 'hasSize':
+             RenderBox was not laid out: RenderIntrinsicWidth#08394
+```
+
+Mechanism: `AlertDialog` wraps its content in `IntrinsicWidth` (flutter `dialog.dart:929`) and
+`RenderShrinkWrappingViewport` refuses to compute intrinsics (`viewport.dart:562`). So the held-accounts
+list threw in **debug** as soon as it had ≥1 ticket, and mis-sized silently in release — which is why the
+S23 verification run never saw it: the rig APK was a release build.
+
+Fixed as part of T4 (the abandon affordance cannot exist on a list that cannot render). No prior test
+pumped `RecallTicketsDialog`, so nothing guarded it.
 
 ## Evidence recorded
 
@@ -102,6 +123,25 @@ version check part of the write transaction is a separate hardening task.
 Empty-cart edge: `holdCurrentTicket` returns early when the cart is empty, so recalling an account,
 removing every line and re-parking leaves the stored account unchanged instead of emptying it.
 Un-addressed UX edge, not a duplication path.
+
+T3+T4 verified by the parent, not trusted from the writer:
+
+| Check | Result |
+|---|---|
+| `flutter analyze` (apps/pos_app) | No issues found (2.4s) |
+| `sale_view_model_test.dart` + `table_order_service_test.dart` | 47 passed / 0 failed |
+| `open_account_hold_and_abandon_test.dart` + restaurant e2e + kitchen e2e + sunmi responsive | 12 passed / 0 failed |
+| Deleted assertions in the VM test | zero (`git diff` shows additions only) |
+
+Abandon shipped behind an explicit confirmation that names the account, its line count and its total,
+states nothing was invoiced and that it cannot be undone, with `CANCELAR` autofocused as the safe
+default and the destructive verb styled with the error colour. Deletion reuses `liquidateOrder` →
+`deleteHoldTicketWithItems`; no new DAO surface.
+
+Note for the next `build_runner` run: `test/ui/features/sales/open_account_hold_and_abandon_test.dart`
+extends the checked-in `MockSaleViewModel` with a hand-written `abandonHoldTicket` override that mirrors
+codegen output, because regenerating every `.mocks.dart` in the package was out of scope. Codegen will
+absorb it.
 
 ## Deferred (decision taken, not built here)
 

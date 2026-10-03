@@ -1008,6 +1008,25 @@ class SaleViewModel extends ChangeNotifier {
     clearCart();
   }
 
+  /// F4 (open accounts fix): discard a parked account the operator decided
+  /// never to invoice. A hold ticket is pre-invoice local SQLite state — it
+  /// never emitted a DGI document, so discarding it is not a fiscal deletion
+  /// and needs no cancellation record. Parking never dispatches a kitchen
+  /// comanda either, so nothing can be orphaned.
+  ///
+  /// Reuses the existing safe deletion path (`liquidateOrder` →
+  /// `deleteHoldTicketWithItems`), which also releases the occupied table.
+  Future<void> abandonHoldTicket(HoldTicket ticket) async {
+    await _tableOrderService.liquidateOrder(ticket.id);
+
+    if (_activeLoadedHoldTicket?.id == ticket.id) {
+      _activeLoadedHoldTicket = null;
+      clearCart();
+    }
+
+    await loadHoldTickets();
+  }
+
   Future<void> checkActiveSession() async {
     await loadCompanyTaxRegime();
     // Issue #552: the open-session lookup is scoped to BOTH the acting user
