@@ -299,7 +299,10 @@ class SyncService {
     }
   }
 
+  bool _isRunning = false;
+
   void start() {
+    _isRunning = true;
     // Listen to network transitions for immediate auto-sync
     _connectivitySubscription?.cancel();
     if (_connectivityService != null) {
@@ -317,15 +320,27 @@ class SyncService {
           });
     }
 
-    // Sync every 5 minutes
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(minutes: 5), (_) async {
-      await triggerManualSync();
-    });
+    _scheduleNextSync(const Duration(minutes: 5));
     developer.log('SyncService started', name: 'SyncService');
   }
 
+  void _scheduleNextSync([Duration? delay]) {
+    _timer?.cancel();
+    if (!_isRunning) return;
+    final nextDelay = delay ??
+        (_consecutiveFailures > 0
+            ? getNextBackoffDelay()
+            : const Duration(minutes: 5));
+    _timer = Timer(nextDelay, () async {
+      await triggerManualSync();
+      if (_isRunning) {
+        _scheduleNextSync();
+      }
+    });
+  }
+
   void stop() {
+    _isRunning = false;
     _timer?.cancel();
     _timer = null;
     _connectivitySubscription?.cancel();
@@ -343,6 +358,15 @@ class SyncService {
     if (_consecutiveFailures == 0) return Duration.zero;
     final seconds = min(300, (pow(2, _consecutiveFailures - 1) * 5).toInt());
     return Duration(seconds: seconds);
+  }
+
+  void notifyAuthBlocked([String reason = 'AUTH_BLOCKED']) {
+    _authBlocked = true;
+    _syncBlockedReason = reason;
+    _updateStatus(CloudSyncStatus.error);
+    _lastSyncError = reason == 'DEVICE_REVOKED'
+        ? 'DEVICE_REVOKED'
+        : 'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403)';
   }
 
   /// Finding H1 (slice 5a): each per-domain outbox count query used to fail
@@ -866,6 +890,8 @@ class SyncService {
       if (_hasPendingSyncRequest) {
         _hasPendingSyncRequest = false;
         scheduleMicrotask(() => triggerManualSync());
+      } else if (_isRunning) {
+        _scheduleNextSync();
       }
     }
   }

@@ -73,6 +73,7 @@ class AuthRepositoryImpl implements AuthRepository {
        _cleaner = cleaner ?? LegacyHumanCredentialFallbackCleaner();
 
   String? _lastAuthError;
+  bool _isReauthenticationRequired = false;
 
   @override
   bool get isPendingSync => _isPendingSync;
@@ -82,6 +83,16 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   String? get lastAuthError => _lastAuthError;
+
+  @override
+  bool get isReauthenticationRequired => _isReauthenticationRequired;
+
+  @override
+  void notifyReauthenticationRequired() {
+    _isReauthenticationRequired = true;
+    _lastAuthError =
+        'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403)';
+  }
 
   DeviceSyncBootstrapCoordinator? get bootstrapCoordinator =>
       _bootstrapCoordinator;
@@ -150,6 +161,7 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<User?> loginOnline(String email, String password, {String? tenantSlug}) async {
     _capabilityCache?.clear();
     _lastAuthError = null;
+    _isReauthenticationRequired = false;
     debugPrint('[AuthRepository] POST /identity/login with email: $email');
     try {
       // Legacy/absent slug -> omit the key entirely so the wire contract for
@@ -619,6 +631,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> logout() async {
+    _isReauthenticationRequired = false;
     _capabilityCache?.clear();
     _currentUser = null;
     _accessToken = null;

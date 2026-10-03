@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
+import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
 import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart';
 import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
@@ -472,6 +473,30 @@ void main() {
           balanceAfter: 10,
           conversionRate: 1,
           createdAt: nowMinus(const Duration(minutes: 10)),
+        ),
+      );
+
+      final count = await syncService.getPendingOutboxCount();
+
+      expect(count, 1);
+    });
+
+    test(
+        'getPendingOutboxCount counts a pending fulfillment outbox event '
+        '(blind spot #103)', () async {
+      await database.fulfillmentPersistenceDao.insertOutboxEvent(
+        OutboxEventEntity(
+          eventId: 'fe-1',
+          tenantId: 'tenant-1',
+          deviceId: 'device-1',
+          sourceSequence: 1,
+          aggregateType: 'ORDER',
+          aggregateId: 'order-1',
+          idempotencyKey: 'idemp-fe-1',
+          payloadHash: 'hash-fe-1',
+          topologyRevision: 1,
+          state: 'PENDING',
+          attempts: 0,
         ),
       );
 

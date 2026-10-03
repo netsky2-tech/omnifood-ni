@@ -6792,6 +6792,21 @@ void main() {
     );
 
     test(
+      'notifyAuthBlocked immediately updates status to error and sets lastSyncError',
+      () {
+        expect(syncService.status, isNot(CloudSyncStatus.error));
+
+        syncService.notifyAuthBlocked();
+
+        expect(syncService.status, CloudSyncStatus.error);
+        expect(syncService.lastSyncError, contains('AUTH_BLOCKED'));
+
+        syncService.notifyAuthBlocked('DEVICE_REVOKED');
+        expect(syncService.lastSyncError, 'DEVICE_REVOKED');
+      },
+    );
+
+    test(
       'fault isolation: Inbound Catalog failure does not block Sales Outbox push',
       () async {
         final database = await $FloorAppDatabase
