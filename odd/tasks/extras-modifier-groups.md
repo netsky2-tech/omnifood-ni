@@ -37,7 +37,8 @@ silenciosa, que es exactamente la clase de defecto que ya costaron R-15, R-16 y 
 | 1 | ¿Parche provisorio del camino de lectura? | **No.** Directo al modelo de grupos |
 | 2 | ¿Dónde se administran los grupos? | **Sólo la web.** La terminal queda de lectura |
 | 3 | ¿Modificadores con cantidad (`2x extra shot`)? | **Sí, desde el arranque** |
-| 4 | ¿Cómo se enganchan a las categorías? | **Normalizar categorías a id propio** |
+| 4 | ¿Cómo se enganchan a las categorías? | **Normalizar a una identidad real** → implementado como **(A)**: reutilizar `catalog_values`, enganche por `code` |
+| 4' | *(revisión 2026-10-03)* ¿Crear `product_categories` o reutilizar `catalog_values`? | **Reutilizar `catalog_values` (opción A).** Ver §7.3 y §8 |
 
 ### Costo de la decisión 4, dicho sin adornos
 
@@ -46,6 +47,13 @@ los dos lados, y hay que crear la entidad, backfillear desde los strings existen
 sync, catálogo y promociones. **Es casi la mitad del esfuerzo total y no entrega valor visible por sí sola.**
 Se paga porque sin ella el enganche por categoría se rompe al renombrar una categoría, y porque el enganche
 por categoría es justamente lo que hace que configurar extras sea fácil en vez de cargarlos 58 veces.
+
+> **Corrección de la ronda 2 (2026-10-03):** la estimación anterior partió de una premisa falsa. La entidad
+> de categoría **no hay que crearla**: `catalog_values` (`SALES_PRODUCT_CATEGORY`) ya existe, ya es única por
+> tenant en `code`, ya se administra en `/catalogs` y **ya baja al POS por delta**. Lo que falta es solo el
+> vínculo (`products.category_code` hoy guarda el nombre crudo de la hoja) y traer la categoría en el delta de
+> productos. El costo real de la Fase 0 es una fracción del estimado, y el riesgo de "dos verdades" era más
+> cercano de lo que parecía.
 
 ---
 
@@ -76,17 +84,35 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 
 ## 5. Plan por fases
 
-### Fase 0 — Categorías con identidad (prerequisito, decisión 4)
+### Fase 0 — Categorías con identidad (reescrita tras la ronda 2: opción **A**, `catalog_values`)
 
-- [ ] **T0.1** Entidad `product_categories` (tenant-scoped + RLS) y migración. Sembrar desde los
-      `catalog_values` de tipo `SALES_PRODUCT_CATEGORY` y desde los `products.category_code` ya en uso.
-- [ ] **T0.2** `products.category_id` con backfill desde `category_code`.
-- [ ] **T0.3** Importador de menú: el nombre de la hoja crea/reusa la categoría y asigna `category_id`
-      (hoy `MENU_COLUMNS = [producto, precio, insumo, cantidad, unidad]` y la hoja **es** la categoría).
-- [ ] **T0.4** Sync: `categoryId` + `categoryName` en el delta de productos y un delta de categorías.
-- [ ] **T0.5** Dashboard `/catalog`: administrar categorías.
-- [ ] **T0.6** Promociones: `Promotion.target_category_id` convive con la entidad nueva (hoy engancha por
-      nombre contra `item.category`).
+> **Cambio de decisión (2026-10-03, §7.3 + §8):** se eligió **(A) reutilizar `catalog_values`
+> (`catalog_type = SALES_PRODUCT_CATEGORY`) como única identidad de categoría**. No se crea
+> `product_categories`: la entidad **ya existe**, ya es única por tenant en `code`, ya se administra en
+> `/catalogs` y **ya baja por delta** con el token `categories` (`inbound-sync.service.ts:166-169`).
+> El enganche de grupos es por **`code`**, la clave estable documentada; los renombres tocan `label`, no `code`.
+> La identidad por `id` uuid queda disponible (`catalog_values.id`) para las FK que la necesiten de verdad.
+
+- [x] ~~**T0.1** Entidad `product_categories` + migración~~ → **desaparece** (decisión A): sería la tercera
+      verdad sobre categorías.
+- [ ] **T0.1'** Importador de menú deja de escribir el nombre crudo de la hoja:
+      `menu-import.service.ts:609` hoy hace `category_code: group.category`. Debe **derivar el `code`
+      canónico** del nombre de hoja y **upsertear** la fila `SALES_PRODUCT_CATEGORY` que falte
+      (nombre de hoja nuevo ⇒ code nuevo, `label` = nombre legible), de modo que `products.category_code`
+      siempre referencie una fila existente.
+- [ ] **T0.2'** Backfill de `products.category_code` existente: mapear los valores de texto libre actuales
+      (incluidos los 58 productos de SOHO ya importados) contra `catalog_values.code`, creando las filas
+      que falten. **Datos de producción: inspeccionar antes de escribir el script**, no asumir los 8 codes
+      sembrados (`COMIDA, BEBIDA_CALIENTE, BEBIDA_FRIA, PANADERIA, SNACK, RETAIL, LIMPIEZA, OTROS`).
+- [ ] **T0.3'** Delta de productos traiga la categoría: agregar `categoryCode` (y `categoryName` si hace
+      falta para mostrar) al mapeo de `inbound-sync.service.ts:504-525` y a `InboundSyncProductDto`
+      (`inbound-sync.dto.ts:62-89`), y consumirlos en el ingest del POS
+      (`sync_service.dart:3251` lee `map['category']`, que **nunca viene**).
+- [ ] **T0.4'** Dashboard `/catalogs`: verificar que la administración de `SALES_PRODUCT_CATEGORY`
+      existente alcance para crear/renombrar categorías del menú (alta/renombre de `label`, soft-delete con
+      `is_active`). **No se construye pantalla nueva** salvo que falte algo.
+- [ ] **T0.5'** Promociones: `Promotion.target_category_id` (`promotion.entity.ts:48`) y el enganche de
+      grupos por `code` tienen que resolver contra la misma identidad. Dejar una sola verdad, no dos.
 
 ### Fase 1 — Modelo de grupos (backend + web)
 
@@ -103,11 +129,14 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 ### Fase 2 — Bajada y espejo local
 
 - [ ] **T2.1** Tipos de delta nuevos (`modifierGroups`, `categoryModifierGroups`, `productModifierGroups`)
-      en el inbound service y sus DTOs.
+      en `InboundSyncDeltasDto` (`inbound-sync.dto.ts:292`), su gating (`inbound-sync.service.ts:163-210`)
+      y el ingest del POS (`sync_service.dart:3215-3410`).
 - [ ] **T2.2** Tablas locales espejo + DAOs.
 - [ ] **T2.3** **Resolver los grupos efectivos al cargar el producto** — el punto exacto donde hoy se
       descartan las opciones. Acá se cierra el defecto de raíz.
-- [ ] **T2.4** Verificar que el pull del POS pida los tipos nuevos.
+- [ ] **T2.4** *(redefinida por §7.1)* **Agregar las keys nuevas al set default de `parseRequestedTypes()`**
+      (`inbound-sync.service.ts:427-444`). El POS **no manda `types`** (`sync_service.dart:3179-3197`), así
+      que si la key no está en el default, el delta llega vacío y **silencioso** (no es un 4xx).
 
 ### Fase 3 — POS
 
@@ -132,14 +161,120 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 
 ## 6. Riesgos y preguntas abiertas
 
-- **El pull del POS:** no se verificó qué `types` pide el dispositivo al sincronizar. Si no pide los tipos
-  nuevos, el delta nunca llega — se cubre en T2.4.
+> **Estado (ronda 2, ver §7):** el riesgo del pull del POS quedó **resuelto a favor** (el POS no manda
+> lista de tipos; manda el backend). El riesgo del dashboard quedó **resuelto: llama a producción**,
+> no a staging. Queda abierto solo el punto de identidad de categorías, que la ronda 2 reabre con
+> evidencia nueva.
+
+- ~~**El pull del POS:** no se verificó qué `types` pide el dispositivo~~ → **resuelto en §7.1.**
 - **Categorías por texto libre:** el enganche actual de promociones depende de `item.category` como string.
   La Fase 0 debe dejar claro si convive o migra, para no dejar dos verdades.
-- **El dashboard apunta a una API no confirmada.** La documentación dice
-  `VITE_API_URL=https://api-staging.nhilospos.com/api`, pero el bundle publicado no menciona `staging` ni
-  `nhilospos.com`, y el host devuelve `text/html` en `/api/v1/health` (no proxya). **Sin confirmar:** hay que
-  mirarlo en la pestaña de red del panel. Si el panel del dueño leyera staging, todo lo que ve estaría mal, y
-  además es donde se van a configurar los extras.
+- ~~**El dashboard apunta a una API no confirmada.**~~ → **resuelto en §7.2: llama a `https://api.nhilospos.com`.**
+  Queda como **defecto de documentación** en `apps/owner_dashboard/docs/staging-environment.md`.
 - **Tamaños:** los productos de SOHO codifican el tamaño en el nombre (`Americano 8oz` / `12oz`). La
   industria usaría variantes. Fuera de alcance; no bloquea.
+
+---
+
+## 7. Ronda 2 de verificación (2026-10-03, worktree `feat/extras-modifier-groups`)
+
+Scout read-only sobre el camino de sync + sonda al bundle publicado. Cambia el plan en un punto y liquida
+dos riesgos.
+
+### 7.1 El POS no pide tipos: manda el set default del backend (riesgo cerrado)
+
+- `apps/pos_app/lib/data/services/sync_service.dart:3179-3197` — el pull arma `queryParams` solo con
+  `sinceVersion`, `terminalId` y negociación OHAC, y llama `GET /v1/sync/inbound/deltas`. **No existe
+  parámetro `types` en todo `apps/pos_app/lib`** (grep: cero golpes).
+- `apps/admin_backend/src/modules/sales/services/inbound-sync.service.ts:425-444` —
+  `parseRequestedTypes()` devuelve un **set default hardcodeado** cuando `types` viene vacío:
+  `products, catalogvalues, catalog_values, categories, insumos, recipes, recipeversions, recipe_versions,
+  users, loyaltyprograms, promotions, customers, alerts, fiscal, fiscal_config, fiscalconfig`.
+- `inbound-sync.dto.ts:19` — `types?: string` solo tiene `@IsString()`: **sin enum, sin allowlist**.
+  `parseRequestedTypes` (`:446-451`) tokeniza en minúsculas; un token desconocido simplemente nunca
+  matchea.
+- **Modo de falla: entrega silenciosa vacía, nunca un 4xx.** Un tipo nuevo que no se agregue al set default
+  es invisible para todas las terminales.
+
+**Consecuencia:** T2.4 deja de ser "verificar que el POS pida los tipos nuevos" y pasa a ser
+**"agregar las keys nuevas al set default del backend"**, que es el paso que se pierde y no avisa.
+
+Checklist real para que un tipo nuevo baje (ambos lados, obligatorio):
+
+| Lado | Archivo:línea | Qué |
+|---|---|---|
+| backend | `inbound-sync.service.ts:427-444` | **agregar las keys al set default** (el paso silencioso) |
+| backend | `inbound-sync.dto.ts:292` | keys en `InboundSyncDeltasDto` + DTOs nuevos (patrón `InboundSyncProductDto:62`) |
+| backend | `inbound-sync.service.ts:163-210` | gating por key + fetch methods (patrón `fetchProductDeltas:453`) |
+| POS | `sync_service.dart:3215-3410` | ramas de ingest (patrón `rawDeltas['products']:3225`, `rawDeltas['catalogValues']:3272`) |
+| POS | entidad Freezed + DAO + tabla espejo | capa de datos local |
+
+### 7.2 El panel del dueño llama a producción, no a staging (riesgo cerrado, nace un defecto de docs)
+
+- `apps/owner_dashboard/src/lib/api-base-url.ts` — `getApiBaseUrl()` lee `import.meta.env.VITE_API_URL` y
+  devuelve `${resolveConfiguredApiOrigin(configured)}${API_PREFIX}` con `API_PREFIX = "/api"`; si no está
+  seteado cae en el relativo `"/api"` (solo dev proxy).
+- El repo **no** puede decidirlo: no hay `wrangler.toml` ni `_routes.json`, no hay `.env` del dashboard, y la
+  CI (`.github/workflows/owner-dashboard-ci.yml`) solo lint/typecheck/test — no build, no deploy, no
+  `VITE_API_URL`. El valor vive solo como env var del proyecto en Cloudflare Pages.
+- El bundle publicado sí lo decide: el chunk lazy `assets/utils-DnVrzdL2.js` contiene
+  ``return`${He(`https://api.nhilospos.com`)}${Be}` ``. Vite sustituye `import.meta.env.VITE_API_URL` en build,
+  así que **el artefacto desplegado se construyó con `VITE_API_URL=https://api.nhilospos.com`**.
+  `api-staging`: 0 golpes en cualquier chunk.
+- El hallazgo anterior ("el bundle no tiene ninguna referencia de API") era un **artefacto de haber greppeado
+  solo el chunk de entrada** `index-DachZXqr.js`: el cliente de API está en los chunks lazy.
+- `/api/v1/health` en el host del panel → `200 text/html`: Pages no proxya `/api`, consistente con un host
+  absoluto embebido.
+- **Defecto nuevo registrado (P2, documentación):** `apps/owner_dashboard/docs/staging-environment.md:12,74`
+  afirma `api-staging` para este hostname y está mal para el build publicado. No corregirlo es lo que
+  mañana hace que alguien configure extras contra la base equivocada.
+
+### 7.3 La premisa de la decisión 4 es parcialmente falsa: la entidad categoría YA EXISTE y YA baja
+
+Esto es lo único que reabre el plan, y recorta la Fase 0.
+
+- `apps/admin_backend/src/modules/catalog/entities/catalog-value.entity.ts` — `CatalogValue` ya tiene
+  `id` uuid, `tenant_id`, `catalog_type`, **`code` único por tenant**
+  (`UQ_catalog_tenant_type_code`), `label`→`name`, `is_active` (borrado lógico), `sort_order`.
+  `SALES_PRODUCT_CATEGORY` es un tipo real con 8 codes sembrados
+  (`COMIDA, BEBIDA_CALIENTE, BEBIDA_FRIA, PANADERIA, SNACK, RETAIL, LIMPIEZA, OTROS`,
+  `catalog.service.ts:56`).
+- El token `categories` del set default **apunta al mismo payload** que `catalog_values`
+  (`inbound-sync.service.ts:166-169`): **las categorías ya bajan por delta**, no hay que inventar un canal.
+- El POS ya las ingest y las guarda: `sync_service.dart:3272-3289` → `CatalogValueEntity(id, catalogType,
+  code, name, isActive, sortOrder)` vía `catalogValueDao.insertCatalogValues`.
+- Lo que falta es **solo el vínculo**: `product.entity.ts:51` guarda `category_code: string` sin FK, y
+  `menu-import.service.ts:609` escribe `category_code: group.category` o sea el **nombre crudo de la hoja**,
+  que puede no matchear ningún `code` sembrado. Ahí están las dos verdades, con ubicación exacta.
+- El delta de productos sigue sin traer categoría: `inbound-sync.service.ts:504-525` emite
+  `id, name, uom, stock, averageCost, sellPrice, taxRate, isTaxExempt, isActive, isPerishable, warehouseId,
+  productType, mappingVersionId, insumoId, createdAt, updatedAt, tenantId`. `sync_service.dart:3251` lee
+  `map['category']` → siempre null → conserva el valor local.
+
+**Relectura del costo de la decisión 4.** El documento decía "casi la mitad del esfuerzo total". Con esta
+evidencia, la mitad cara ya está construida: **no hay que crear la entidad ni el canal de sync de categorías,
+hay que referenciar la que existe y limpiar el importador.** El argumento "una clave de texto se rompe al
+renombrar" se cumple para el nombre de la hoja, **no** para `catalog_values.code`, que es la clave estable y
+única por tenant documentada justamente para que el POS referencie valores.
+
+Pendiente de decisión del dueño (ver §8).
+
+### 7.4 Tamaños y variantes
+
+Sin cambios: `Americano 8oz` / `12oz` siguen codificando el tamaño en el nombre. Fuera de alcance.
+
+## 8. Decisión reabierta en la ronda 2
+
+**Identidad de categoría: ¿creamos `product_categories` o referenciamos `catalog_values`?**
+
+- **(A) Reutilizar `catalog_values` (SALES_PRODUCT_CATEGORY).** El importador hace upsert de la hoja contra
+  `catalog_values` y escribe el `code` canónico en `products.category_code`; los grupos se enganchan por
+  `code` (o por `catalog_value_id`). **Cero tablas nuevas, cero deltas nuevos**: la categoría ya baja y ya se
+  administra en `/catalogs`. T0.1 y T0.4 desaparecen; quedan T0.2' (canonicalizar el importador) y T0.3'.
+- **(B) Entidad `product_categories` nueva** (plan original). Domínio más limpio y semántica propia, pero
+  duplica una entidad que ya existe, ya sincroniza y ya tiene UI, y exige un delta de categorías nuevo.
+- **(C) No tocar categorías:** enganchar grupos solo por producto. Barato hoy, y vuelve a cargar los extras
+  58 veces — contradice la decisión 2 y el motivo por el que se pagó la decisión 4.
+
+**Recomendación: (A).** Compra la misma capacidad (enganche por categoría que sobrevive renombres) a una
+fracción del costo, y elimina las dos verdades en vez de crear una tercera.
