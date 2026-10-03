@@ -219,3 +219,23 @@ con adopción incompleta.
   o anular; Lightspeed las **arrastra al día siguiente marcadas**.
 - Para **food park / QSR** la industria **desaconseja** la cuenta abierta sin garantía por riesgo de fuga, y
   recomienda pago al pedir o cuenta digital con tarjeta pre-autorizada.
+
+---
+
+## Estado post-arreglo (2026-10-03)
+
+Este documento registra lo observado en el aparato y **no se reescribe**: las filas conservan lo que se
+vio en el S23. Lo que cambió desde entonces está en `odd/tasks/cuentas-abiertas-open-accounts-fix.md`,
+en la rama `fix/open-account-lifecycle`:
+
+| Hallazgo | Estado |
+|---|---|
+| A4/A5 — el re-guardado duplica el contenido y descarta el nombre | **corregido en código** (`replaceOrderItems` + cableado del ViewModel, commit 9bd557f5), con el primer test que ejercita `holdCurrentTicket`. **Falta re-probarlo en el aparato.** |
+| A7 — no hay forma de abandonar una cuenta | **construido** (confirmación + `abandonHoldTicket`, commit 4efc2c53). **Falta re-probarlo en el aparato.** |
+| F2 (cobrar liquidaba la cuenta) | ya estaba bien: era un falso positivo por buscar `deleteHoldTicket` en lugar del llamador real. |
+| D1 — el cierre ignora las cuentas abiertas | **decidido: bloquear el cierre (estilo Clover)**, diferido fuera de este slice. |
+| F5/F6 | F5 diferido (ver arriba), F6 sin empezar. |
+| Nuevo defecto encontrado al construir F4 | la lista "Ventas en Espera" reventaba en **debug** apenas había ≥1 cuenta (`shrinkWrap` + `IntrinsicWidth` de `AlertDialog`); el APK del aparato era release, por eso nunca se vio. Corregido en 4efc2c53. |
+| Riesgo restante | **F8**: una cuenta ya duplicada en el SQLite del aparato se sigue recuperando duplicada. El arreglo corta el daño de aquí en adelante, no repara el pasado. |
+
+Filas de la matriz que siguen sin evidencia: C3, C4, C5, D2, D3, D4, D5.

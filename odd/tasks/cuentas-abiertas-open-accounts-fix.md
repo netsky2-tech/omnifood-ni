@@ -4,7 +4,7 @@
 **Worktree:** `/home/octavio_morales/omnifood-ni-open-accounts`
 **Surface:** `apps/pos_app` (Flutter POS, MVVM + Floor/SQLite + Freezed)
 **Preceded by:** `odd/tasks/cuentas-abiertas-verificacion.md` (S23 rig verification, 0a21db66)
-**Status:** T1+T2+T3+T4 landed — T5 broad verification running
+**Status:** T1-T5 landed and verified — closing
 
 ## Owner decisions (binding)
 
@@ -61,8 +61,19 @@ frees the table). No DGI exposure: a hold ticket is pre-invoice local state and 
 fiscal document. Tests: service-level (gone from `getAllOpenOrders`, table released) + UI-level
 (cancelling the confirmation deletes nothing).
 
-### T5 — Checks
+### T5 — Checks — DONE
 `flutter analyze` on `apps/pos_app`, focused sales/cash suites, and `restaurant_flow_e2e_test.dart`.
+
+Broad run (delegated verifier, 7 executions of the affected area):
+
+| Check | Result |
+|---|---|
+| `flutter test` over `test/domain/services/sales test/presentation/features/sales test/ui/features/sales test/ui/features/kitchen test/data/daos/sales test/domain/services/kitchen` | **571 passed / 0 failed** in 4 of 7 runs; 3 runs died on a `flutter_tester` WebSocket load error naming a DIFFERENT file each time (`promotions_integration_flow_test.dart`, `restaurant_flow_e2e_test.dart`, `post_paid_feedback_widget_test.dart`), each of which is green when re-run alone. Runner flake, not a regression. |
+| Live references to the deleted `appendItemsToOrder` | 0 (2 remaining hits are prose comments) |
+| Tests pinning the old dialog copy | none — no test asserted `Poner Venta en Espera` / `puesta en espera`; those strings still exist as the new-account branch |
+| DGI audit of the diff | no invoice delete/cancel path exists in `InvoiceDao` at all; `deleteHoldTicketWithItems` touches only `hold_ticket_items` + `hold_tickets`; `HoldTicket` has no invoice linkage; no new sync/network line in `lib/` |
+| Invoice numbering vs the `version` bump | independent — `version` is written to `hold_tickets` and read only as the optimistic-lock token; `DgiNumberingService` and `getLastInvoiceNumber()` never read it |
+| Mock drift (warning) | `sale_view_security_flows_test.mocks.dart` predates `abandonHoldTicket`; the new widget test hand-writes the override. A future `build_runner` will widen the param to nullable exactly as mockito does for `holdCurrentTicket`, so the override becomes redundant rather than breaking. Regenerate to retire it. |
 
 ## Newly found defect (F7): the recall dialog could not render a non-empty list in debug
 
@@ -142,6 +153,14 @@ Note for the next `build_runner` run: `test/ui/features/sales/open_account_hold_
 extends the checked-in `MockSaleViewModel` with a hand-written `abandonHoldTicket` override that mirrors
 codegen output, because regenerating every `.mocks.dart` in the package was out of scope. Codegen will
 absorb it.
+
+## Follow-up opened by the verifier (not built here)
+
+**F8 — already-corrupted open accounts are not repaired.** The fix stops the duplication going
+forward, but a device that persisted a doubled cart under the old append still RECALLS the doubled
+items, and charging that account still emits an inflated invoice. This is the only remaining path by
+which the original symptom reaches a fiscal document. Needs a decision: detect-and-warn on recall, a
+one-time local repair, or operator guidance. Unreviewed pilot devices make the blast radius unknown.
 
 ## Deferred (decision taken, not built here)
 
