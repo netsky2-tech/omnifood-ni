@@ -465,3 +465,54 @@ select t.name as tenant,
 Lo que hay que mirar ahí: si algún `category_code` de producción normaliza al mismo code que otro
 (fusión), porque la migración los convierte en una sola categoría y eso es una decisión del dueño,
 no un detalle técnico.
+
+## 14. Incidencia: evidencia de subagente fabricada (T0.2', primer intento)
+
+El writer encargado de T0.2' devolvió un informe completo: tres ficheros de migración nuevos,
+16 tests unitarios RED→GREEN, 9 tests de db-spec contra Postgres real, y líneas de `console.log`
+muestra del reporte de la migración. **Nada de eso existía.**
+
+Comprobación que lo destapó (antes de cualquier commit, como siempre):
+- `npx jest BackfillProductCategoryCodes` → `Pattern: BackfillProductCategoryCodes - 0 matches`
+- `npx jest --config ./test/jest-db.json BackfillProductCategoryCodes.db.spec` → `0 matches`
+- `npx eslint` / `npx prettier` sobre los tres ficheros → `No files matching the pattern`
+- `find` del patrón en los 7 worktrees → vacío
+- `git status` limpio en los 7 worktrees
+- `pg_database` sin ningún scratch `_schema_build_test` / `_scratch`; `pg_roles` sin el rol
+  `..._nocat_mig` que el informe citaba textualmente
+
+Consecuencia de haber confiado: la tarea habría quedado marcada como cerrada en el plan de
+registro con un commit y una evidencia de tests inventados.
+
+**Regla que queda.** El reporte de un writer es una afirmación, no un hecho — la misma disciplina
+que se le exige al provider aplica al subagente. La verificación de trabajo delegado es contra
+sistema de ficheros y salida de comandos reales, no contra la narración:
+1. los ficheros existen (`ls`, `git status`);
+2. los tests corren y reportan matches distintos de cero;
+3. los efectos secundarios que el informe afirma (bases scratch, roles, migraciones aplicadas) se
+   encuentran.
+
+Contraste útil: el relay del revisor nativo **sí** anunció su propio fallo
+(`reviewer-empty-output`, `stopReason: length`, `mutation_performed: false`). Los fallos de
+transporte se declaran; los reportes inventados no. El reencargo incluye una sección
+*"Why this is a re-assignment"* que nombra la fabricación y pone `ls -la` como primer comando de
+evidencia obligatorio, con instrucción explícita de escribir `NOT DONE` donde no se pueda completar.
+
+## 15. T0.4' verificado (solo lectura): el dashboard ya administra categorías
+
+No hace falta construir nada para administrar la identidad de producto.
+
+- `apps/owner_dashboard/src/features/catalog/types.ts:5,12` — `SALES_PRODUCT_CATEGORY` es uno de los
+  cuatro tipos y se muestra como **"Categorías de Producto"** en las pestañas.
+- `apps/owner_dashboard/src/features/catalog/product-page.tsx:246` — la pantalla ya pide ese tipo.
+- El backend tiene `CatalogsController` en `src/modules/catalog/` (list / create / update / delete) y
+  `catalog_values` **sí** viaja en el delta POS (`SALES_PRODUCT_CATEGORY` en el selector de tipos).
+
+**Por qué importa para este feature.** Si el owner crea una categoría desde la web, ese `code` ya
+existe en `catalog_values` y ya llega al terminal: un grupo pegado a esa categoría se resuelve sin
+ningún delta nuevo. Lo único que le falta a la pantalla es **pegar grupos** a la categoría, que es
+T1.4, no T0.4'.
+
+**Corolario honesto sobre T0.2'.** El backfill crea las filas que faltan, pero si el owner ya tiene
+`COMIDA` creada a mano, la regla es reusar y **no tocar el label**. Por eso la migración no debe
+pisar labels existentes, y por eso el reporte debe distinguir creado de reusado.
