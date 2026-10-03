@@ -964,9 +964,14 @@ class SaleViewModel extends ChangeNotifier {
     if (_cart.isEmpty) return;
 
     if (_activeLoadedHoldTicket != null) {
-      await _tableOrderService.appendItemsToOrder(
+      // F1 (open accounts fix): a recalled account's cart is its COMPLETE
+      // state, so re-parking REPLACES the stored contents (and applies the
+      // typed name). The old appendItemsToOrder call here doubled the
+      // balance on every recover+save cycle and discarded the name.
+      await _tableOrderService.replaceOrderItems(
         ticketId: _activeLoadedHoldTicket!.id,
-        newItems: List.from(_cart),
+        name: name,
+        items: List.from(_cart),
         expectedVersion: _activeLoadedHoldTicket!.version,
       );
     } else {

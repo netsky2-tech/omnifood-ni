@@ -4,7 +4,7 @@
 **Worktree:** `/home/octavio_morales/omnifood-ni-open-accounts`
 **Surface:** `apps/pos_app` (Flutter POS, MVVM + Floor/SQLite + Freezed)
 **Preceded by:** `odd/tasks/cuentas-abiertas-verificacion.md` (S23 rig verification, 0a21db66)
-**Status:** in progress — T1 running
+**Status:** in progress — T1+T2 landed, T3+T4 building
 
 ## Owner decisions (binding)
 
@@ -34,7 +34,7 @@
 
 ## Tasks
 
-### T1 — `TableOrderService.replaceOrderItems` + retire `appendItemsToOrder`
+### T1 — `TableOrderService.replaceOrderItems` + retire `appendItemsToOrder` — DONE
 Add `replaceOrderItems({required String ticketId, required String name, required List<CartItem> items, required int expectedVersion})`:
 load entity, throw `StateError` if missing, throw `OptimisticLockException` when
 `entity.version != expectedVersion`, rebuild the ticket with the **cart as the whole contents**,
@@ -44,7 +44,7 @@ Delete `appendItemsToOrder` and migrate its 7 test call sites (`table_order_serv
 `restaurant_flow_e2e_test.dart:226,393,403`, `kitchen_restaurant_flow_e2e_test.dart:283`).
 Core assertion: parking 3 lines / C$440, recalling, and parking again keeps **3 lines / C$440**, not 6 / C$880.
 
-### T2 — Wire `SaleViewModel.holdCurrentTicket`
+### T2 — Wire `SaleViewModel.holdCurrentTicket` — DONE
 Replace the `_activeLoadedHoldTicket != null` branch (:966) with `replaceOrderItems`, forwarding `name`.
 Add the first real VM-level regression test (park → recall → re-park keeps the exact total).
 Keep `clearCart()` + `loadHoldTickets()` behaviour and the `_activeLoadedHoldTicket = null` reset (:985).
@@ -63,6 +63,45 @@ fiscal document. Tests: service-level (gone from `getAllOpenOrders`, table relea
 
 ### T5 — Checks
 `flutter analyze` on `apps/pos_app`, focused sales/cash suites, and `restaurant_flow_e2e_test.dart`.
+
+## Evidence recorded
+
+T1+T2 verified independently (verifier did not trust the writer's own GREEN):
+
+| Check | Result |
+|---|---|
+| `flutter analyze` (apps/pos_app) | No issues found |
+| `table_order_service_test.dart` | 8 passed / 0 failed |
+| `sale_view_model_test.dart` | 37 passed / 0 failed |
+| `restaurant_flow_e2e_test.dart` | 3 passed / 0 failed |
+| `kitchen_restaurant_flow_e2e_test.dart` | 1 passed / 0 failed |
+| Broad sales/kitchen/daos run | 554 passed / 1 loaded — the one failure was `sunmi_v2s_responsive_sale_view_test.dart` failing to LOAD (WebSocket handshake to `flutter_tester`), unrelated to hold tickets, and **green in isolation (3/3)**: runner flake under parallel load, not a regression |
+| `appendItemsToOrder` references remaining | 2, both prose comments (`sale_view_model.dart:969`, `restaurant_flow_e2e_test.dart:219`); zero code, mock or generated references |
+| e2e migration integrity | no `expect(` deleted in either e2e file; assertions re-expressed under the replace contract, not weakened |
+| RED observed | pre-fix VM test failed on the discarded name (`Expected: 'Cuenta 2' / Actual: 'Cuenta 1'`) on the branch that also doubled 3→6 lines / C$440→C$880 |
+
+The guard test that fails if append is restored — `sale_view_model_test.dart:1610-1613`:
+
+```dart
+expect(reparked.items, hasLength(3),
+    reason: 'A5 device bug: each recover+park cycle doubled 3 -> 6 lines');
+final gross = reparked.items.fold<double>(0, (sum, item) => sum + item.grossAmount);
+expect(gross, 440.0,
+    reason: 'A5 device bug: each recover+park cycle doubled C$440 -> C$880');
+```
+
+## Known limitation left standing (concurrency)
+
+`replaceOrderItems` is check-then-write, not compare-and-swap: it reads the entity, compares
+`entity.version != expectedVersion`, then saves, as three separate awaits. `saveHoldTicket` is atomic
+only for its own replace+reinsert. Two terminals that both load version N can both pass the guard and
+the second write silently wins — a **lost update**, not a duplication, so it cannot resurrect the A5
+doubling. `mergeOrders`, `splitOrderItems` and `transferOrder` share the same pattern. Making the
+version check part of the write transaction is a separate hardening task.
+
+Empty-cart edge: `holdCurrentTicket` returns early when the cart is empty, so recalling an account,
+removing every line and re-parking leaves the stored account unchanged instead of emptying it.
+Un-addressed UX edge, not a duplication path.
 
 ## Deferred (decision taken, not built here)
 

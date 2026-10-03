@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:convert';
 import 'package:mockito/mockito.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
@@ -1531,6 +1533,85 @@ void main() {
         ).called(1);
       },
     );
+  });
+
+  group('Open accounts (F1): re-parking a recalled account REPLACES, never accumulates', () {
+    late AppDatabase realDb;
+    late TableOrderService realTableOrderService;
+    late SaleViewModel holdVm;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    setUp(() async {
+      realDb = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      realTableOrderService = TableOrderService(realDb);
+      holdVm = SaleViewModel(
+        mockSalesRepo,
+        mockInventoryRepo,
+        mockAuthRepo,
+        realDb,
+        realTableOrderService,
+        false,
+      );
+    });
+
+    tearDown(() async {
+      holdVm.dispose();
+      await realDb.close();
+    });
+
+    Product productAt(double price, String id, String name) => Product(
+          id: id,
+          sku: id,
+          name: name,
+          uom: 'UND',
+          stock: 100,
+          averageCost: price / 2,
+          sellPrice: price,
+          taxRate: 0.15,
+        );
+
+    test(
+        'park -> recall -> re-park keeps the exact 3 lines / C\$440 instead of doubling (device bug A5)',
+        () async {
+      // Same shape the S23 rig reproduced: 3 lines / C\$440.00 pre-tax.
+      holdVm.addToCart(productAt(180, 'p-plato', 'Plato Fuerte'));
+      holdVm.addToCart(productAt(130, 'p-espresso', 'Espresso Doble'));
+      holdVm.addToCart(productAt(130, 'p-latte', 'Latte'));
+      expect(holdVm.cart, hasLength(3));
+      expect(holdVm.subtotal, 440.0);
+
+      // A1: park as "Cuenta 1" — cart clears, exactly one open account.
+      await holdVm.holdCurrentTicket('Cuenta 1');
+      expect(holdVm.cart, isEmpty);
+      expect(holdVm.holdTickets, hasLength(1));
+
+      // A2: recall loads the WHOLE ticket back into the cart.
+      final cuenta1 = holdVm.holdTickets.single;
+      await holdVm.recallTicket(cuenta1);
+      expect(holdVm.cart, hasLength(3));
+      expect(holdVm.subtotal, 440.0);
+
+      // A4/A5: re-parking under a NEW name must rename the SAME account and
+      // replace its contents with the cart — never accumulate on top of it.
+      await holdVm.holdCurrentTicket('Cuenta 2');
+
+      expect(holdVm.holdTickets, hasLength(1),
+          reason: 'a typed name renames the existing account; it never creates a second one');
+      final reparked = holdVm.holdTickets.single;
+      expect(reparked.id, cuenta1.id);
+      expect(reparked.name, 'Cuenta 2',
+          reason: 'the typed name was discarded by the old append branch (A4)');
+      expect(reparked.version, 2);
+      expect(reparked.items, hasLength(3),
+          reason: 'A5 device bug: each recover+park cycle doubled 3 -> 6 lines');
+      final gross = reparked.items.fold<double>(0, (sum, item) => sum + item.grossAmount);
+      expect(gross, 440.0,
+          reason: 'A5 device bug: each recover+park cycle doubled C\$440 -> C\$880');
+    });
   });
 }
 
