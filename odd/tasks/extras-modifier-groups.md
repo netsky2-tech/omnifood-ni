@@ -623,5 +623,5 @@ dos veces.
 
 **Follow-ups que dejo la revision, ninguno bloqueante:**
 - `menu-import.service.ts:444` y `444-452` (guarda del code vacio) y `752-753`: mirar al tocar el importador de nuevo.
-- `menu-import.service.ts:124-126` (SUGGESTION sobre `canonicalCategoryCode`):候选 de refactor menor, sin accion ahora.
+- `menu-import.service.ts:124-126` (SUGGESTION sobre `canonicalCategoryCode`):candidato de refactor menor, sin accion ahora.
 - `...BackfillProductCategoryCodes.db.spec.ts:30-36`: WARNING en el arn es del db spec.
