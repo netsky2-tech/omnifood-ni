@@ -401,6 +401,25 @@ strictly read-only.
 Checks: `flutter analyze` clean; `test/ui/features/cash` 65 passed; broad run over
 `test/ui/features/cash test/ui/features/sales test/presentation/features/sales test/domain/services/sales test/data/daos/sales test/ui/features/kitchen` = **631 passed / 0 failed** in a single run.
 
+## T6 — device re-verification (partial close, 2026-10-03)
+
+Ran the fixed build on the S23 Ultra (`R5CWB2LQJDJ`). Release APK of this branch, `adb install -r`, same
+signing cert as the field build, uid unchanged so the local SQLite survived. Full evidence table in
+`cuentas-abiertas-verificacion.md` ("Re-verificación en hardware").
+
+Closed on hardware: **A5** (recall → re-park keeps 3 lines / C$ 280.00 — the doubling is gone), **A5
+rename** (`PRUEBA R1` → `PRUEBA R2` leaves one account, same money, with the "no se crea una cuenta
+nueva" banner), **A4** (two accounts coexist), **A7** (abandon with a confirmation naming lines and total),
+**T3 prefill**, **T8 Z block** (names every account, single `ENTENDIDO` control, close never started),
+**T9 Corte X row** (`Cuentas abiertas · 1 · C$ 80.00`, footer says the X does not close the shift).
+
+Still open: A6 (app restart), B1-B4 (invoicing while accounts are open), C3-C5, D2-D5. Nothing was
+charged and no Z was burned during the run; the owner's own `Cuenta A` was left untouched.
+
+**Cost of testing this way:** the rig now runs this branch (versionCode 9014) instead of the OTA build
+(4014) that carried other fixes, because Android refuses an in-place downgrade. The next OTA for this
+device needs a versionCode above 9014, or the device must be uninstalled and its local data rebuilt.
+
 ## Deferred from this slice
 
 - **F8** (already-duplicated accounts on a device are still recalled inflated) — unchanged, still open.

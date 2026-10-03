@@ -3,6 +3,9 @@
 **Dispositivo:** S23 Ultra (`R5CWB2LQJDJ`) contra backend local, tenant de pruebas.
 **Fecha:** 2026-10-02/03.
 **Estado:** en ejecución. Cada fila se cierra con evidencia, no con opinión.
+**Re-verificación 2026-10-03 (build 9014 de `fix/open-account-lifecycle`, instalada por `adb install -r`
+sobre la misma firma, SQLite intacto):** se cerraron A4, A5 y A7, y se probaron en aparato el bloqueo del
+Corte Z y el listado del Corte X. Evidencia al final del documento.
 
 Leyenda: **✔ verificado** · **✗ defecto** · **⚠ hueco/riesgo** · **· pendiente**
 
@@ -14,11 +17,11 @@ Leyenda: **✔ verificado** · **✗ defecto** · **⚠ hueco/riesgo** · **· p
 |---|---|---|---|
 | A1 | Guardar una venta en espera con nombre | park con nombre y limpieza del carrito | **✔** Cuenta 1, carrito a cero, botones de cobro deshabilitados |
 | A2 | Recuperarla desde "Ventas en Espera" | recall y restauración de items | **✔** volvió con 2 Americanos y C$ 180.00 |
-| A3 | Agregarle productos y volver a guardar | acumulación sobre la misma cuenta | **✔** fusionó: 4×Americano + 1×Espresso Doble = **C$ 440.00** (180 + 260) |
-| A4 | **Múltiples cuentas abiertas a la vez** | convivencia de varias cuentas | **✗** al guardar con un nombre nuevo **no** se creó la segunda cuenta |
-| A5 | Re-guardar una cuenta recuperada | ¿reemplaza o agrega? | **✗ DEFECTO** ver abajo: **duplica** el contenido |
+| A3 | Agregarle productos y volver a guardar | acumulación sobre la misma cuenta | **✔** fusionó: 4×Americano + 1×Espresso Doble = **C$ 440.00** (180 + 260). **Aclarado post-arreglo:** sigue siendo correcto, pero ahora la acumulación viene de *editar el carrito cargado*, no de un doble-escritura (ver A5) |
+| A4 | **Múltiples cuentas abiertas a la vez** | convivencia de varias cuentas | **✔ re-verificado 2026-10-03** conviven sin pisarse: `PRUEBA R1` (1 · C$ 80.00) junto a `Cuenta A` (1 · C$ 80.00). El comportamiento original esperado ("nombre nuevo crea cuenta nueva") fue **reemplazado por decisión del dueño**: re-estacionar con nombre nuevo **renombra** la cuenta, no crea una |
+| A5 | Re-guardar una cuenta recuperada | ¿reemplaza o agrega? | **✔ corregido y re-verificado 2026-10-03** recall de `PRUEBA A4` (3 líneas · C$ 280.00) → re-guardar tal cual → sigue **3 productos · C$ 280.00**. Antes: 6 / C$ 560.00. Renombrar `PRUEBA R1` → `PRUEBA R2` deja **una** cuenta con el mismo dinero |
 | A6 | Sobreviven al **reinicio de la app** | persistencia real (SQLite) | · |
-| A7 | **Cancelar/abandonar** una cuenta | ¿se puede borrar? ¿queda huérfana? | · |
+| A7 | **Cancelar/abandonar** una cuenta | ¿se puede borrar? ¿queda huérfana? | **✔ construido y re-verificado 2026-10-03** papelera roja por fila + confirmación que nombra la cuenta, sus líneas y su total. Tras abandonar, la cuenta desaparece de la lista y el carrito queda limpio |
 
 ## B. Facturar normalmente con cuentas abiertas
 
@@ -230,8 +233,8 @@ en la rama `fix/open-account-lifecycle`:
 
 | Hallazgo | Estado |
 |---|---|
-| A4/A5 — el re-guardado duplica el contenido y descarta el nombre | **corregido en código** (`replaceOrderItems` + cableado del ViewModel, commit 9bd557f5), con el primer test que ejercita `holdCurrentTicket`. **Falta re-probarlo en el aparato.** |
-| A7 — no hay forma de abandonar una cuenta | **construido** (confirmación + `abandonHoldTicket`, commit 4efc2c53). **Falta re-probarlo en el aparato.** |
+| A4/A5 — el re-guardado duplica el contenido y descarta el nombre | **corregido y re-probado en el aparato 2026-10-03** (`replaceOrderItems` + cableado del ViewModel, commit 9bd557f5) |
+| A7 — no hay forma de abandonar una cuenta | **construido y re-probado en el aparato 2026-10-03** (confirmación + `abandonHoldTicket`, commit 4efc2c53) |
 | F2 (cobrar liquidaba la cuenta) | ya estaba bien: era un falso positivo por buscar `deleteHoldTicket` en lugar del llamador real. |
 | D1 — el cierre ignora las cuentas abiertas | **decidido: bloquear el cierre (estilo Clover)**, diferido fuera de este slice. |
 | F5/F6 | F5 diferido (ver arriba), F6 sin empezar. |
@@ -239,3 +242,33 @@ en la rama `fix/open-account-lifecycle`:
 | Riesgo restante | **F8**: una cuenta ya duplicada en el SQLite del aparato se sigue recuperando duplicada. El arreglo corta el daño de aquí en adelante, no repara el pasado. |
 
 Filas de la matriz que siguen sin evidencia: C3, C4, C5, D2, D3, D4, D5.
+
+
+---
+
+## Re-verificación en hardware — 2026-10-03 (build 9014)
+
+Artefacto probado: release de `fix/open-account-lifecycle` instalada con `adb install -r` (misma firma
+`d44db6eb…` que la build anterior, uid 10277 intacto → **no se perdió SQLite**). Se subió el build-number
+a 9014 porque el rig venía de una actualización OTA con versionCode 4014 y Android rechaza el downgrade.
+Sesión: Maxwell Orozco (OWNER), modo operativo local, **sin tocar la nube ni sincronizar**.
+
+| Fila | Qué se vio en la pantalla | Veredicto |
+|---|---|---|
+| A5 dinero | `PRUEBA A4` recuperada → 3 líneas · C$ 280.00 → re-guardada → **3 productos · C$ 280.00** | **PASS** |
+| A5 rename | banner `Está editando la cuenta abierta "PRUEBA R1". Al guardar se reemplazan sus productos y su nombre; no se crea una cuenta nueva.` → guardar como `PRUEBA R2` → **una** cuenta, C$ 80.00 | **PASS** |
+| A4 convivencia | `PRUEBA R1` + `Cuenta A` listadas a la vez, cada una con su total | **PASS** |
+| A7 abandonar | `¿Abandonar cuenta? La cuenta "PRUEBA R2" tiene 1 producto por C$ 80.00. Nada de esto ha sido facturado. Al abandonarla se descarta definitivamente: no se puede deshacer.` | **PASS** |
+| Prefill (T3) | `Editar Cuenta Abierta` con el nombre ya escrito, sin tipear | **PASS** |
+| F5 bloqueo Z | `Bloqueo de Corte Z — Cuentas Abiertas` nombrando **cada** cuenta con líneas y total, un solo control `ENTENDIDO`, y el cierre no se inició | **PASS** |
+| T9 Corte X | fila `Cuentas abiertas · 1 · C$ 80.00` dentro de `CORTE X (TURNO EN CURSO)`, con el pie `La lectura X es informativa y no cierra el turno de caja.` | **PASS** |
+| F7 diálogo | el listado de cuentas renderizó sin errores en el aparato | **PASS** (el crash era exclusivo de debug; cubierto además por tests widget) |
+
+**No se tocó:** `Cuenta A` (cuenta del dueño, quedó intacta en 1 · C$ 80.00), COBRAR (ninguna factura
+emitida), confirmación de Corte Z (ningún Z quemado), Sincronizar Nube.
+
+**Consecuencia que hay que resolver:** el rig quedó con la build de esta rama (9014), que **no incluye**
+lo que se desplegó por OTA (4014). Como 9014 es más alto, la próxima OTA necesita un versionCode mayor a
+9014 para poder instalarse por encima, o el aparato hay que desinstalarlo (y se pierde el SQLite local).
+
+**Queda pendiente de matriz:** A6 (reinicio de app), B1-B4 (facturar con cuentas abiertas), C3-C5, D2-D5.
