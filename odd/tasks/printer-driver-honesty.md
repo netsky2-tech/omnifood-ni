@@ -51,9 +51,16 @@ imprime, el sistema **lo dice** en vez de mentir con un éxito"*
    not-ready status. No false success, and no crash: a thrown exception at port construction would take
    down the hardware screen and the sale path.
 2. Remove the `'Red TCP/IP'` segment from the driver selector. Because a terminal may already have
-   `escPosNetwork` persisted, the screen must handle that value explicitly — a `SegmentedButton` whose
-   `selected` value has no matching segment throws — and must show the profile as unsupported with the
-   reason, forcing the operator to pick a real driver.
+   `escPosNetwork` persisted, the screen must handle that value explicitly and show the profile as
+   unsupported with the reason, forcing the operator to pick a real driver.
+
+   *Correction after verification.* This spec originally justified the point by claiming that a
+   `SegmentedButton` whose `selected` value has no matching segment **throws**. It does not: Flutter
+   3.41.8 asserts only `segments.length > 0`, `selected.length > 0 || emptySelectionAllowed` and the
+   multi-selection bound (`segmented_button.dart:146-148`), and it renders membership per segment, so an
+   unmatched value simply renders nothing selected. The load-bearing part of the guard is
+   `emptySelectionAllowed`: passing `selected: <PrinterDriverType>{}` without it would trip its own
+   assert. The `selected`-subset check is defensive and no test would catch its removal.
 3. The failure must reach the operator through the paths that already exist: the sale path records it
    in `SaleViewModel.lastPrintError` (printing stays non-blocking after the sale is committed), and the
    hardware test print shows the reason.
@@ -92,10 +99,59 @@ reachable over adb, or a real ESC/POS network adapter implemented and an actual 
 3. The last reviewed receipt-row check for printing (`odd/tasks/issue-561-verification-autoprint.md`)
    covers the activation verification sale's auto-print gate, not hardware output.
 
+## T1 — outcome
+
+Committed as **`ebccc06b`** (4 files under `lib/`, 4 test files — 2 new; 176 insertions, 10 deletions).
+
+Shipped: `UnavailablePrinterAdapter` (`lib/data/adapters/printer/unavailable_printer_adapter.dart`)
+fails all nine `PrinterPort` operations with `PrinterStatus.error` and an actionable Spanish reason, and
+never throws; `escPosNetwork` resolves to it instead of the mock; the selector no longer offers the
+option and a persisted `escPosNetwork` profile renders an explicit unsupported-driver card and is
+recoverable by picking a real driver; the failure reaches the operator through
+`SaleViewModel.lastPrintError` while the sale still completes.
+
+### Evidence for T1
+
+- Red observed with numbers: `Expected: false / Actual: <true>` on the print result and
+  `Actual: PrinterStatus:<PrinterStatus.ready>` on the status check — the mock reporting success.
+- Independent verification enumerated all nine port methods and confirmed **every** one returns a
+  failure, including the only method with a default implementation (`printReceiptDocument`, whose
+  default was already a failure). Construction is inert.
+- Focused: 67/67 across four suites. Full suite: 2979 passed with an **empty real-failure set**
+  (4 load-time `WebSocketException` flakes, each passing in isolation). `flutter analyze` clean.
+- `mock`, `sunmiV2s` and `iPosQ80` resolution unchanged, asserted by identity regression tests; both
+  modified test files are pure additions with no expectation edited.
+- The `mock` driver stays selectable: it is labelled `'Simulador'`, so it does not pretend to be a
+  printer.
+
+## Follow-up findings raised by the verification
+
+Same defect class as this work unit (a false success where the hardware cannot deliver), found while
+verifying it, deliberately **not** fixed here because T1's scope was the printer driver and the founder
+approved exactly that decision.
+
+1. **`openCashDrawer()` reports success with no hardware.** `sunmi_printer_adapter.dart` and
+   `ipos_printer_adapter.dart` both do, on `MissingPluginException`:
+   `debugPrint('… openDrawer fallback simulation.'); return PrinterResult.success();`
+   Trigger: the default `driverType` is `sunmiV2s` (`printer_config.dart:20`) and the default
+   `openDrawerOnCash` is `true`, so on a device without the native service a cash payment calls
+   `openCashDrawer()` and **ignores the result**: no drawer opens, nothing opens it, and no error
+   surfaces to the cashier — who needs the drawer to give change. `HardwareSettingsViewModel.testOpenDrawer()`
+   would likewise report `'Pulso de apertura de gaveta enviado'`.
+   Note: the day-1 plan has **no** cash-drawer check (grep for `gaveta` returns nothing; Fase 4 is the
+   shift opening), so this is a latent defect rather than a failed client criterion — which is why it is
+   recorded instead of escalated.
+2. **`checkStatus()` keeps a ready status on missing hardware.** Both adapters set
+   `_isHardwareDetected = false` and then still `return PrinterStatus.ready;` on `MissingPluginException`,
+   with a test pinning that behaviour (`checkStatus falls back gracefully when MissingPluginException
+   occurs`). It does not by itself produce a print success, but it is the same lie one level down.
+3. **Minor and not reachable:** `printRawEscPos('')` on either adapter returns success without touching
+   the channel; production always sends non-empty bytes (`dgi_report_view.dart`).
+
 ## Ledger
 
 | Task | Status | Evidence |
 |---|---|---|
 | Recon + founder decisions | done | this document; adb and code evidence above |
-| T1 (remove the lying driver) | in progress | — |
+| T1 (remove the lying driver) | done | `ebccc06b` — 4 lib + 4 test files; 67/67 focused; full suite with an empty real-failure set; every port operation verified to fail honestly |
 | Physical ticket test | **not proven** | no printer reachable (see above) |
