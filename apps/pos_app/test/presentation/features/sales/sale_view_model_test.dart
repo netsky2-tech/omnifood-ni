@@ -150,6 +150,15 @@ void main() {
     fakeLocalConfigDao.saveConfig(
       LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'),
     );
+    // #67/T2a: the terminal no longer invents FX rates — the sale path only
+    // proceeds when BOTH recorded rates are configured, so the checkout
+    // fixtures seed them explicitly.
+    fakeLocalConfigDao.saveConfig(
+      LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
+    );
+    fakeLocalConfigDao.saveConfig(
+      LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
+    );
 
     when(mockDb.cashierSessionDao).thenReturn(mockSessionDao);
     when(mockDb.holdTicketDao).thenReturn(mockHoldDao);
