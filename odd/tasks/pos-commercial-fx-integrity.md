@@ -177,9 +177,118 @@ route above it is popped, and every pop fires `didPopNext`. No `removeRoute`/`re
 
 ## T2 — #67: never invent the rate
 
-To be specified after T1 lands: re-verify the fallback chain in this worktree (`SaleViewModel`,
-printer/receipt paths), decide fail-closed behavior and its operator-visible surface, then fix with
-RED-first tests. No open question is carried into implementation without evidence.
+Founder decisions (this session):
+
+1. **Total blocking.** Without a reliable rate the terminal does not sell at all. No "allow and warn".
+2. **Both recorded rates must be reliable**, because every invoice persists *and* prints both: the commercial
+   rate and the BCN official rate. An absent, corrupt or retracted row is not a rate.
+3. The `BCN_OFFICIAL` divergence found during recon is fixed **in this branch** (T2b).
+
+Why this keeps the change small: because the sale is blocked *before* an invoice is built, the
+"unknown" state lives only in the sale view-model's gate. The `NOT NULL DEFAULT 36.50` columns, the
+entity, the mapper and the sync contract stay exactly as they are — no migration.
+
+### The resolution chain, as it actually is (recon evidence)
+
+| Layer | Evidence | On absent / corrupt / error |
+|---|---|---|
+| Sale view model | `sale_view_model.dart:596-634` — field defaults, `?? 36.50` / `?? 36.6241`, and `catch (_) { // Fallback to default FX rates }` | keeps the default, **silent** |
+| Domain calculator | `invoice_fiscal_calculator.dart:325,339` — `commercialRate > 0 ? commercialRate : 36.50` | fabricates, **silent** |
+| Cloud projection | `fiscal_inbox_handler.dart:617` — the snapshot can **delete** `commercial_exchange_rate` | key vanishes, collapses to the default |
+| BCN cache | `inventory_repository_impl.dart:764` — `return 36.6241` with no log at all on an absent row | fabricates, **silent** |
+| Schema | `migrations.dart:1616,1621` — `NOT NULL DEFAULT 36.6241 / 36.50` | any insert that omits the column |
+
+**Point of no return**: `sales_repository_impl.dart:139 saveSale` persists the view model's **in-memory
+snapshot** (`invoice.copyWith(number: …)` → `SalesMapper.toInvoiceEntity`). Nothing re-reads
+`local_configs`. Whatever number the view model holds *is* the invoice.
+
+**"Not configured" and "resolution failed" are indistinguishable today**: an absent row, a row deleted
+by the cloud, a corrupt value and a DAO exception all collapse into the same literals.
+
+### What is and is not fiscally material (recon evidence)
+
+The **DGI tax base never uses a rate**: `invoice_fiscal_calculator.dart` computes taxable/exempt base
+and tax from NIO amounts only; the rate produces `totalUsd` (`:325-326`). The commercial rate *is*
+material to `total_usd` (persisted + synced), to USD tender/change conversion, and to the printed
+`Tipo de Cambio` / `TOTAL DOLARES` block. Credit notes inherit the origin rates
+(`sales_repository_impl.dart:998-1049`, JD-B-002) — with the comment that the constructor defaults
+"would fabricate a fiscal fact".
+
+---
+
+## T2a — total blocking on an unreliable rate
+
+Goal: no invoice is ever emitted with a rate the terminal invented, and the operator learns it before
+the invoice is built — not after.
+
+1. **Stop fabricating in the sale path.** `sale_view_model.dart` holds the rates as unknown-aware
+   state (nullable) instead of `36.50` / `36.6241` field defaults; `loadExchangeRates()` assigns a value
+   only when the row exists, parses as a number and is `> 0`. The `double.tryParse(...) ?? 36.50`
+   coercions and the swallowing `catch (_) { // Fallback to default FX rates }` go away, and the failure
+   reason is recorded so it can be surfaced and diagnosed.
+2. **Stop fabricating in the domain calculator.** `invoice_fiscal_calculator.dart:325,339` must not turn
+   `<= 0` into a usable rate. Throw a configuration error instead, so the fabrication is impossible even
+   for a caller the view model does not control. `SaleViewModel.currentFiscalCalculation` already has
+   the established pattern for this: it catches the fiscal configuration error and degrades the *preview*
+   ("cart browsing must remain usable before the business configures its DGI regime; finalization still
+   fails closed in processSale"). Degrade the preview the same way — NIO figures only, no fabricated USD.
+3. **Fail closed at finalization**, *before* any DGI sequence number is consumed. The blocking reason
+   must name **who can fix it**: since T1 made the FX fields owner/manager-only, the operator-facing
+   message must point at the owner or a manager, never at a screen the cashier cannot edit. Two distinct
+   messages, because the two missing rates have different fixes.
+4. **Show the state before the sale, not at the end**: the checkout rate label must say the rate is not
+   configured instead of printing `TC Comercial: 36.50`.
+
+### Checks for T2a
+
+- RED first, then GREEN, on: absent commercial row → blocked; corrupt value → blocked; `<= 0` → blocked;
+  absent BCN row → blocked; DAO exception → blocked; both valid → behavior unchanged.
+- The block must be proven to happen **without consuming a fiscal sequence number**.
+- The calculator throws instead of fabricating (unit test on the `<= 0` path), and the preview degrades.
+- `flutter analyze` clean and the focused suites for the touched surfaces green.
+
+## T2b — persist the rate actually applied
+
+Defect: in `BCN_OFFICIAL` mode the dialogs convert using `vm.activeCheckoutRate`
+(`multi_currency_checkout_dialog.dart:61-72`) while the invoice persists `calc.commercialRate`
+(`sale_view_model.dart:1376-1377`, fed `commercialRate: _commercialRate` at `:749`). The receipt prints
+`invoice.commercialRate` as `Tipo de Cambio` (`receipt_layout_formatter.dart:1604-1619`, `1911-1927`),
+so in BCN mode the printed rate is not the rate that was charged, and `total_usd` is computed from the
+wrong rate.
+
+The contract already says what we want: `sales_mapper.dart:546-561` (D-6) — *"the fx-rate fiscal
+snapshot travels as issued so the cloud mirrors the conversion actually applied at checkout"* — and the
+backend credit-note recompute divides by `origin.commercialRate`
+(`admin_backend/.../invoices.service.ts:420-425`), which only makes sense for the applied rate.
+`owner_dashboard` does no arithmetic on any rate field.
+
+Fix: feed the fiscal calculation the **applied** rate (`activeCheckoutRate`) so
+`invoice.commercialRate` carries the conversion actually applied, keeping `bcnOfficialRate` as the BCN
+configuration snapshot. `Payment.exchangeRate` must carry the same applied rate on every path — today
+only the split path does (`split_payment_calculator.dart:106,149,180`), while
+`sale_view_model.dart:1403` and `multi_currency_checkout_dialog.dart:204,213,236` write the configured
+commercial rate even though the charged amounts were converted at the active rate. The share-split and
+tip dialogs (`sale_view.dart:1676-1680`, `tip_dialog.dart:101`) pass `vm.commercialRate`; in BCN mode
+that display disagrees with the charge, so they move to the applied rate too, and the D-5 comment there
+must be updated to say why rather than silently contradicted.
+
+### Checks for T2b
+
+- RED first, then GREEN: in `BCN_OFFICIAL` mode the persisted `invoice.commercialRate`, `totalUsd` and
+  every `Payment.exchangeRate` equal the BCN rate, and the printed `Tipo de Cambio` matches the charge.
+- COMMERCIAL mode stays byte-identical (applied rate == commercial rate there), so every existing
+  checkout test must still pass unchanged.
+- Document the column semantics where it is read (mapper/entity comment): `commercial_rate` is the
+  conversion applied at checkout; the office configuration lives in `local_configs` and the
+  business-profile mirror.
+
+### Carried-forward finding for T2b (not fixed here)
+
+`inventory_repository_impl.dart:740-765` `getCachedOfficialBcnRate` returns a hardcoded `36.6241` on an
+absent row **with no log at all**, and its single production caller (`purchase_view_model.dart:107`)
+pre-fills and **locks** the "Tasa de cambio BCN" field in purchases behind an authoritative-looking
+value with no warning. It cannot reach an invoice or a receipt, but it is the same defect in the
+purchases path.
 
 ## Acceptance for the branch
 
