@@ -359,6 +359,67 @@ pre-fills and **locks** the "Tasa de cambio BCN" field in purchases behind an au
 value with no warning. It cannot reach an invoice or a receipt, but it is the same defect in the
 purchases path.
 
+## T2b — outcome
+
+Committed as **`313f0e7f`** (5 files under `lib/`, +473/−19 counting the 422-line new test).
+
+What shipped: the fiscal calculation that builds the persisted invoice is fed `activeCheckoutRate`, so
+`invoice.commercialRate` and `invoice.totalUsd` follow the conversion actually charged, while
+`bcnOfficialRate` stays the BCN configuration snapshot; `Payment.exchangeRate` carries the applied rate
+on the default, single-cash, card and QR paths as well as the split path; the split-bill and tip
+dialogs display the applied rate; and the D-6 comment now records the column semantics.
+
+### Evidence for T2b
+
+- New `test/ui/features/sales/bcn_applied_rate_test.dart` seeds **non-default** values (commercial
+  `37.25`, BCN `36.80`, neither equal to the `Invoice` defaults nor to each other) so no assertion can
+  be satisfied by a model default. Applying the T2a lesson deliberately.
+- Observed RED: `Expected: <36.8> / Actual: <37.25>` on `invoice.commercialRate` in the default,
+  single-cash, card, QR and split cases — the invoice was persisting the configured rate.
+- Independent verification confirmed from the code that the persisted values come from `calc`
+  (not from the dead local `totalUsd` at `sale_view_model.dart:1498`, which is genuinely unread) and
+  that the backend credit-note recompute stays coherent under applied-rate semantics.
+- Focused: 113/113 across six suites. Full suite: 3015 passed with an **empty real-failure set**
+  (4 load-time `WebSocketException` flakes, each passing in isolation). The implementer's unreproduced
+  transient `-1` did not reproduce in the verifier's combined run either.
+- **No existing test expectation was edited anywhere in this branch** — verified by `git diff --numstat`
+  showing zero deletions in any pre-existing test file.
+
+---
+
+## Follow-ups carried out of this branch
+
+None of these is a persistence or sync defect for a checkout sale; each is listed with its evidence so
+it is not mistaken for safety.
+
+1. **Perfil del Negocio is still open to any operational PIN.** The FX fields are guarded (T1) but the
+   rest of the screen is not, and it holds the DGI block: `dgi_prefix`, `dgi_current_number`,
+   `dgi_range_start`, `dgi_authorization_code`, `tax_regime`, `ruc`, `operation_mode`. A cashier can
+   move the **fiscal consecutive number** — a numbering hazard, not a pricing one. Declared out of
+   scope by the founder when the T1 scope was chosen; needs its own decision.
+2. **The activation verification sale never reads `checkout_fx_mode`** (found by the T2b verification).
+   On a `BCN_OFFICIAL` terminal its invoice records and prints the commercial configuration rate as
+   `commercial_rate`. No conversion takes place (flat NIO, payment rate `1.0`), so no money figure is
+   wrong; it is mode-blind metadata outside the checkout surface. Recorded rather than fixed because
+   fixing it would have reopened a verified work unit for no fiscal consequence.
+3. **`getCachedOfficialBcnRate`** (`inventory_repository_impl.dart:740-765`) returns a hardcoded
+   `36.6241` on an absent row **with no log at all**, and its only production caller
+   (`purchase_view_model.dart:107`) pre-fills and **locks** the BCN field in purchases behind an
+   authoritative-looking value with no warning. It cannot reach an invoice or a receipt.
+4. **Recovered fulfillment reprint** (`durable_print_service.dart:433`) rebuilds an invoice from a
+   payload with no rates, so the reprint shows `36.50`/`0.00` while the SQLite row keeps the true rate.
+   Display-only.
+5. **NIO payment-metadata convention.** The default `processSale` and single-cash paths store
+   `activeCheckoutRate` as `exchangeRate` for NIO tenders, while card, QR and the split calculator store
+   `1.0`. Pre-existing shape; no NIO amount is affected. Worth aligning when that area is next touched.
+6. **Dead code kept coherent.** The unread local `totalUsd` at `sale_view_model.dart:1498` was updated to
+   the applied rate so it cannot mislead a future reader; it should be deleted in a cleanup.
+7. **Display-only fallbacks and non-persisted prints** keep a `36.50` literal: `tip_engine.dart:66`,
+   `split_bill_engine.dart:85`, `receipt_document.dart:409/454`, plus the pre-offline printer test, the
+   hardware test print and the receipt preview sample mode. Unreachable for a fiscal artifact.
+8. **Pre-existing parity gap**: the FX field validators still run on `readOnly` inputs, as they already
+   did for the cloud-managed case before this branch.
+
 ## Acceptance for the branch
 
 1. A cashier/waiter cannot change the commercial rate, the BCN rate, or the checkout FX mode by any
@@ -374,4 +435,4 @@ purchases path.
 | Feature opened, recon + decisions | done | this document; explorer recon (read-only) |
 | T1 (#66) | done | `28b31525` — 6 files, +533/−14; 77/77 focused; `flutter analyze` clean; two independent verification runs; stale-role defect found by the parent and fixed in the same work unit |
 | T2a (#67) | done | `2a244cc4` (fixtures, +95/−0) + `853deb09` (behavior, 4 lib + 8 test); `flutter analyze` clean; full suite with an empty real-failure set; three verification rounds, two of which found real blockers |
-| T2b (#67) | pending | — |
+| T2b (#67) | done | `313f0e7f` — 5 lib + 1 test; 113/113 focused; full suite with an empty real-failure set; no existing expectation edited anywhere in the branch |
