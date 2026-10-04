@@ -6,8 +6,12 @@ import '../../../data/daos/sales/cash_movement_dao.dart';
 import '../../../data/daos/sales/payment_dao.dart';
 import '../../../data/models/sales/cashier_session_entity.dart';
 import '../../../data/models/sales/cash_movement_entity.dart';
+import '../../../domain/models/sales/cart_item.dart';
+import '../../../domain/models/sales/hold_ticket.dart';
 import '../../../domain/models/user.dart';
 import '../../../domain/repositories/auth_repository.dart';
+import '../../../domain/services/sales/table_order_service.dart';
+import '../../../domain/services/sales/waiter_settlement_service.dart';
 
 class CashShiftViewModel extends ChangeNotifier {
   final CashierSessionDao sessionDao;
@@ -23,6 +27,26 @@ class CashShiftViewModel extends ChangeNotifier {
   /// hard-coded literal captured at construction.
   final AuthRepository? authRepository;
   UserRole? _currentUserRole;
+
+  /// T8 (cuentas abiertas, INV-16.5): loads THIS device's open accounts
+  /// (hold tickets). Optional and null on the plain constructor — an
+  /// unwired VM defaults to "no open accounts" so isolated harnesses that
+  /// mock DAOs keep closing normally. `fromDatabase` wires it to the same
+  /// `TableOrderService.getAllOpenOrders()` source the held-accounts UI
+  /// uses: one source of truth for the close gate and the Corte X.
+  final Future<List<HoldTicket>> Function()? openAccountsLoader;
+
+  /// Open accounts as of the last verified read; exposed for the UI block
+  /// dialog and the Corte X line. The close NEVER trusts this — it
+  /// re-queries.
+  ///
+  /// Fail-closed representation (R1-stale-open-accounts-init, native
+  /// review slice F5): `null` means the state could NOT be verified — no
+  /// loader wired, or the last read failed. Null is never treated as
+  /// "no open accounts"; [hasOpenAccounts] reports true and the close
+  /// refuses, so a failed or unwired read can never vouch for a clear
+  /// drawer the way a successful empty read does.
+  List<HoldTicket>? _openAccounts;
 
   CashierSessionEntity? _activeShift;
   CashierSessionEntity? _lastClosedShift;
@@ -49,6 +73,7 @@ class CashShiftViewModel extends ChangeNotifier {
     this.currentTerminalId = 'term-main',
     this.authRepository,
     UserRole? currentUserRole,
+    this.openAccountsLoader,
   }) : _currentUserRole = currentUserRole;
 
   factory CashShiftViewModel.fromDatabase({
@@ -71,6 +96,10 @@ class CashShiftViewModel extends ChangeNotifier {
       currentTerminalId: currentTerminalId,
       authRepository: authRepository,
       currentUserRole: currentUserRole,
+      // T8: least invasive seam — the database is already here, so the
+      // loader is built from it. Hold tickets never sync (no references in
+      // sync_service), so this list is this device's own accounts.
+      openAccountsLoader: () => TableOrderService(database).getAllOpenOrders(),
     );
   }
 
@@ -104,6 +133,30 @@ class CashShiftViewModel extends ChangeNotifier {
   List<CashMovementEntity> get movements => List.unmodifiable(_movements);
   int get pendingVouchersCount => _pendingVouchersCount;
   bool get hasPendingVouchers => _pendingVouchersCount > 0;
+
+  // T8 (cuentas abiertas): UI-facing open-account state. A `null` backing
+  // list is UNVERIFIED state (see [_openAccounts]): it renders as no
+  // accounts anywhere, but the gates treat it as blocking.
+  List<HoldTicket> get openAccounts =>
+      List.unmodifiable(_openAccounts ?? const <HoldTicket>[]);
+  int get openAccountsCount => _openAccounts?.length ?? 0;
+
+  /// True only when a loader read SUCCEEDED. A failed or unwired read
+  /// leaves this false, so the pre-gate can distinguish "verified empty"
+  /// from "unknown".
+  bool get openAccountsVerified => _openAccounts != null;
+
+  /// Whether the close must block. Unverified state blocks too — a read
+  /// we could not make is not a clean answer.
+  bool get hasOpenAccounts =>
+      !openAccountsVerified || _openAccounts!.isNotEmpty;
+
+  /// Pre-invoice gross of the open accounts (never collected, never
+  /// invoiced — hold tickets carry no invoice linkage).
+  double get openAccountsTotalNio => (_openAccounts ?? const <HoldTicket>[])
+      .fold(
+          0.0, (sum, t) => sum + t.items.fold(0.0, (s, i) => s + i.grossAmount));
+
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   UserRole? get currentUserRole => _currentUserRole;
@@ -160,6 +213,12 @@ class CashShiftViewModel extends ChangeNotifier {
   Future<void> init() async {
     _isLoading = true;
     _errorMessage = null;
+    // Fail closed FIRST: until a fresh read proves otherwise the account
+    // state is unverified. A failed init must never leave the previous
+    // list in place — the UI pre-gate would render it as "no open
+    // accounts" and the block could be skipped cosmetically before the
+    // close re-checks (R1-stale-open-accounts-init).
+    _openAccounts = null;
     notifyListeners();
 
     try {
@@ -179,6 +238,13 @@ class CashShiftViewModel extends ChangeNotifier {
         _salesCashNio = 0.0;
         _salesCashUsd = 0.0;
       }
+      // T8 (cuentas abiertas): part of the same refresh the close flow
+      // performs (showCloseShiftFlow calls init first), so the UI block
+      // dialog and the Corte X render the same figure from the same loader.
+      // Only a SUCCESSFUL read assigns the list; a throw above leaves the
+      // unverified state in place (the catch below records the error).
+      _openAccounts =
+          openAccountsLoader != null ? await openAccountsLoader!() : null;
       await refreshPendingVouchersCount();
     } catch (e) {
       _errorMessage = 'Error al cargar turno: $e';
@@ -366,6 +432,53 @@ class CashShiftViewModel extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+
+    // T8 (INV-16.5): hard block — the shift cannot close while open
+    // accounts exist. Deliberate gate order: open accounts BEFORE pending
+    // vouchers, because resolving a tab paid by card creates a pending
+    // voucher — the operator clears accounts first and then reconciles the
+    // vouchers that action produced.
+    //
+    // Re-queried HERE, fresh, not trusting the figure the dialog rendered
+    // (same freshness argument as the sales-cash re-query inside the try
+    // below): an account parked after the last refresh must still block.
+    // A blocked close writes NOTHING and consumes no Z number (the
+    // sequence is computed after every gate has passed).
+    //
+    // Fail closed on the wiring itself (R1-open-gate-default / R2-001):
+    // an unwired loader cannot verify accounts, so it can never declare
+    // "there are no open accounts" — only an explicit empty loader answer
+    // may. A fiscal gate must not depend on whether a constructor
+    // argument was passed.
+    final loader = openAccountsLoader;
+    if (loader == null) {
+      _isLoading = false;
+      _errorMessage =
+          'No se pudieron verificar las cuentas abiertas. No se puede emitir el Corte Z Fiscal.';
+      notifyListeners();
+      return false;
+    }
+    List<HoldTicket> accounts;
+    try {
+      accounts = await loader();
+    } catch (e) {
+      // Fail closed: if the accounts cannot be verified, do not close.
+      _isLoading = false;
+      _errorMessage = 'No se pudieron verificar las cuentas abiertas: $e';
+      notifyListeners();
+      return false;
+    }
+    _openAccounts = accounts;
+    if (accounts.isNotEmpty) {
+      _isLoading = false;
+      _errorMessage =
+          'Existen ${accounts.length} cuentas abiertas. Debe cobrarlas o abandonarlas en Ventas en Espera antes de emitir el Corte Z Fiscal.';
+      notifyListeners();
+      throw OpenTablesPendingException(
+        accounts.map((a) => a.name).toList(),
+        openAccounts: accounts,
+      );
+    }
 
     try {
       // Invariante Fiscal DGI: No emitir Corte Z con vouchers pendientes

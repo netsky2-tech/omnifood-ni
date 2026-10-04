@@ -653,12 +653,11 @@ class SaleViewModel extends ChangeNotifier {
   CashierSession? _activeSession;
   CashierSession? get activeSession => _activeSession;
 
-  Map<PaymentMethod, double> _sessionExpected = {
-    PaymentMethod.cash: 0.0,
-    PaymentMethod.card: 0.0,
-    PaymentMethod.qr: 0.0,
-  };
-  Map<PaymentMethod, double> get sessionExpected => _sessionExpected;
+  // T7 (open-accounts slice): the in-memory `_sessionExpected` counter was
+  // retired with CloseBoxDialog. It reset on every checkActiveSession and
+  // ignored movements/USD, so the drawer expectation it fed was weaker than
+  // the Corte Z figure (CashShiftViewModel.effectiveExpectedNio/Usd), which
+  // re-queries the DB at close time.
 
   bool _isGlobalTaxExempt = false;
   bool get isGlobalTaxExempt => _isGlobalTaxExempt;
@@ -964,9 +963,14 @@ class SaleViewModel extends ChangeNotifier {
     if (_cart.isEmpty) return;
 
     if (_activeLoadedHoldTicket != null) {
-      await _tableOrderService.appendItemsToOrder(
+      // F1 (open accounts fix): a recalled account's cart is its COMPLETE
+      // state, so re-parking REPLACES the stored contents (and applies the
+      // typed name). The old appendItemsToOrder call here doubled the
+      // balance on every recover+save cycle and discarded the name.
+      await _tableOrderService.replaceOrderItems(
         ticketId: _activeLoadedHoldTicket!.id,
-        newItems: List.from(_cart),
+        name: name,
+        items: List.from(_cart),
         expectedVersion: _activeLoadedHoldTicket!.version,
       );
     } else {
@@ -1003,6 +1007,25 @@ class SaleViewModel extends ChangeNotifier {
     clearCart();
   }
 
+  /// F4 (open accounts fix): discard a parked account the operator decided
+  /// never to invoice. A hold ticket is pre-invoice local SQLite state — it
+  /// never emitted a DGI document, so discarding it is not a fiscal deletion
+  /// and needs no cancellation record. Parking never dispatches a kitchen
+  /// comanda either, so nothing can be orphaned.
+  ///
+  /// Reuses the existing safe deletion path (`liquidateOrder` →
+  /// `deleteHoldTicketWithItems`), which also releases the occupied table.
+  Future<void> abandonHoldTicket(HoldTicket ticket) async {
+    await _tableOrderService.liquidateOrder(ticket.id);
+
+    if (_activeLoadedHoldTicket?.id == ticket.id) {
+      _activeLoadedHoldTicket = null;
+      clearCart();
+    }
+
+    await loadHoldTickets();
+  }
+
   Future<void> checkActiveSession() async {
     await loadCompanyTaxRegime();
     // Issue #552: the open-session lookup is scoped to BOTH the acting user
@@ -1019,11 +1042,6 @@ class SaleViewModel extends ChangeNotifier {
             .getActiveSessionForUserAndTerminal(user.id, effectiveTerminalId);
     if (sessionEntity != null) {
       _activeSession = SalesMapper.toSessionDomain(sessionEntity);
-      _sessionExpected = {
-        PaymentMethod.cash: _activeSession!.openingBalance,
-        PaymentMethod.card: 0.0,
-        PaymentMethod.qr: 0.0,
-      };
     } else {
       _activeSession = null;
     }
@@ -1076,34 +1094,6 @@ class SaleViewModel extends ChangeNotifier {
       SalesMapper.toSessionEntity(session),
     );
     _activeSession = session;
-    _sessionExpected = {
-      PaymentMethod.cash: balance,
-      PaymentMethod.card: 0.0,
-      PaymentMethod.qr: 0.0,
-    };
-    notifyListeners();
-  }
-
-  Future<void> closeSession(double closingBalance) async {
-    if (_activeSession == null) return;
-
-    final totalSales =
-        _sessionExpected.values.fold(0.0, (sum, v) => sum + v) -
-        _activeSession!.openingBalance;
-
-    final updated = _activeSession!.copyWith(
-      isClosed: true,
-      closedAt: DateTime.now(),
-      closingBalance: closingBalance,
-      closingCountedNio: closingBalance,
-      totalSales: totalSales,
-      totalExpected: _sessionExpected[PaymentMethod.cash] ?? 0.0,
-      expectedNio: _sessionExpected[PaymentMethod.cash] ?? 0.0,
-    );
-    await _database.cashierSessionDao.updateSession(
-      SalesMapper.toSessionEntity(updated),
-    );
-    _activeSession = null;
     notifyListeners();
   }
 
@@ -1541,23 +1531,22 @@ class SaleViewModel extends ChangeNotifier {
         );
       }
 
-      // Update expected totals
-      for (final p in payments) {
-        if (_activeSession?.tipoModelo == CashSessionModel.carteraMesero &&
-            p.method != PaymentMethod.cash) {
-          continue;
-        }
-        final effectiveCashNio =
-            (p.method == PaymentMethod.cash && p.amountNio > 0)
-            ? (p.amountNio - p.changeGiven)
-            : p.amount;
-        _sessionExpected[p.method] =
-            (_sessionExpected[p.method] ?? 0.0) + effectiveCashNio;
-      }
+      // T7 (open-accounts slice): the per-payment `_sessionExpected`
+      // increment (and its carteraMesero non-cash skip) was retired with
+      // the weak close path. The drawer expectation is the Corte Z figure:
+      // CashShiftViewModel recomputes net cash per payment row from the DB
+      // (getCashPaymentsForShift) at close time.
 
       if (_activeLoadedHoldTicket != null) {
         await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);
         _activeLoadedHoldTicket = null;
+        // K1 (device verification): liquidateOrder deletes the SQLite row, but
+        // _holdTickets is the list the recall dialog renders. Without this
+        // refresh the billed account stays on screen as if it were still open,
+        // and recalling it invites a second charge of an account that no
+        // longer exists. The list must agree with the DB the moment the sale
+        // commits.
+        await loadHoldTickets();
       } else {
         // Direct counter sale: dispatch to kitchen KDS if items exist
         if (_cart.isNotEmpty) {
