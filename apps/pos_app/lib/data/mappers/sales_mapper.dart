@@ -552,10 +552,15 @@ class SalesMapper {
       'totalTax': invoice.totalTax,
       'total': invoice.total,
       // D-6: the fx-rate fiscal snapshot travels as issued so the cloud
-      // mirrors the conversion actually applied at checkout. Non-nullable
-      // domain fields (invoice.dart defaults) — always emitted, never
-      // omitted, or the backend silently writes its 36.5/0.0 column
-      // defaults and credit-note re-derivations propagate the wrong rate.
+      // mirrors the conversion actually applied at checkout.
+      // commercialRate is the APPLIED conversion (the BCN rate in
+      // BCN_OFFICIAL checkout mode, the commercial rate otherwise) — the
+      // office's rate configuration itself lives in local_configs and the
+      // business-profile mirror, never on the invoice. bcnOfficialRate is
+      // the BCN configuration snapshot. Non-nullable domain fields
+      // (invoice.dart defaults) — always emitted, never omitted, or the
+      // backend silently writes its 36.5/0.0 column defaults and
+      // credit-note re-derivations propagate the wrong rate.
       'bcnOfficialRate': invoice.bcnOfficialRate,
       'commercialRate': invoice.commercialRate,
       'totalUsd': invoice.totalUsd,

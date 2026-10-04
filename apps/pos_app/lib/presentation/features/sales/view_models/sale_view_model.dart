@@ -892,7 +892,12 @@ class SaleViewModel extends ChangeNotifier {
         taxRegime: _companyTaxRegime,
         isGlobalTaxExempt: _isGlobalTaxExempt,
         totalDiscounts: totalDiscounts,
-        commercialRate: _commercialRate,
+        // T2b/#67: the fiscal snapshot must carry the conversion actually
+        // APPLIED at checkout. In BCN_OFFICIAL mode that is the BCN rate, so
+        // invoice.commercialRate and totalUsd follow the charged conversion;
+        // the office configuration itself lives in local_configs / the
+        // business-profile mirror, and bcnOfficialRate keeps the BCN snapshot.
+        commercialRate: activeCheckoutRate,
         bcnOfficialRate: _bcnOfficialRate,
         requireFiscalRates: ratesUsable,
       );
@@ -939,9 +944,9 @@ class SaleViewModel extends ChangeNotifier {
         exemptSubtotal: subtotal,
         totalTax: 0.0,
         total: subtotal,
-        commercialRate: _commercialRate,
+        commercialRate: activeCheckoutRate,
         bcnOfficialRate: _bcnOfficialRate,
-        totalUsd: _commercialRate > 0 ? subtotal / _commercialRate : 0.0,
+        totalUsd: activeCheckoutRate > 0 ? subtotal / activeCheckoutRate : 0.0,
       );
     }
   }
@@ -978,7 +983,10 @@ class SaleViewModel extends ChangeNotifier {
     tipType: _tipType,
     customPercentage: _customTipPercentage,
     fixedAmount: _fixedTipAmount,
-    commercialRate: _commercialRate,
+    // T2b/#67: the tip USD snapshot converts at the rate actually applied
+    // at checkout (the BCN rate in BCN_OFFICIAL mode), matching the
+    // invoice's own conversion.
+    commercialRate: activeCheckoutRate,
   );
 
   double get tipAmount => tipCalculation.tipAmountNio;
@@ -1485,8 +1493,10 @@ class SaleViewModel extends ChangeNotifier {
     // confirmed — fiscal total + voluntary tip. The tip stays OUT of the
     // taxable total below (DGI INV-16.1); it is charged ON TOP of it.
     final grandTotalNio = grandTotalWithTip;
-    final totalUsd = _commercialRate > 0
-        ? ((total / _commercialRate) * 100).round() / 100
+    // T2b/#67: same applied-rate convention as the fiscal snapshot — the
+    // BCN rate in BCN_OFFICIAL mode, the commercial rate otherwise.
+    final totalUsd = activeCheckoutRate > 0
+        ? ((total / activeCheckoutRate) * 100).round() / 100
         : 0.0;
 
     final effectiveBuzzer =
@@ -1566,7 +1576,10 @@ class SaleViewModel extends ChangeNotifier {
                   method: m,
                   amount: grandTotalNio / methods.length,
                   currency: 'NIO',
-                  exchangeRate: _commercialRate,
+                  // T2b/#67: the payment records the conversion actually
+                  // applied at checkout, not the office's configured
+                  // commercial rate (they differ in BCN_OFFICIAL mode).
+                  exchangeRate: activeCheckoutRate,
                   amountNio: grandTotalNio / methods.length,
                   changeGiven: 0.0,
                   changeCurrency: 'NIO',

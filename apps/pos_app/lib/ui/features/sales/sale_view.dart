@@ -1679,7 +1679,11 @@ class CartSummary extends StatelessWidget {
   Future<void> _showSplitBillDialog(BuildContext context) async {
     final vm = context.read<SaleViewModel>();
     // D-5: same refresh as the checkout — the split dialog prints the
-    // commercial rate and computes share equivalents from it.
+    // checkout rate and computes share equivalents from it. T2b/#67: that
+    // rate is the APPLIED one (vm.activeCheckoutRate, the BCN rate in
+    // BCN_OFFICIAL mode), so what the operator sees matches what is
+    // charged — the office's commercial configuration lives in
+    // local_configs / the business-profile mirror, not on this dialog.
     await vm.loadExchangeRates();
     if (!context.mounted) return;
     // #67/T2a: same gate as the checkout — an unknown rate must not render
@@ -1689,7 +1693,7 @@ class CartSummary extends StatelessWidget {
       context: context,
       builder: (context) => SplitBillDialog(
         cart: vm.cart,
-        commercialRate: vm.commercialRate,
+        commercialRate: vm.activeCheckoutRate,
         taxRegime: vm.companyTaxRegime,
         onPayShare: (share) {
           Navigator.of(context).pop();

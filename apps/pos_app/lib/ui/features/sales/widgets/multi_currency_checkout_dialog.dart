@@ -201,7 +201,10 @@ class _MultiCurrencyCheckoutDialogState
         method: PaymentMethod.cash,
         amount: breakdown.tenderAmount,
         currency: breakdown.tenderCurrency,
-        exchangeRate: vm.commercialRate,
+        // T2b/#67: the applied checkout rate (BCN rate in BCN_OFFICIAL
+        // mode), matching what the calculator charged — not the office's
+        // configured commercial rate.
+        exchangeRate: vm.activeCheckoutRate,
         amountNio: breakdown.tenderAmountNio,
         changeGiven: breakdown.effectiveChange,
         changeCurrency: breakdown.changeCurrency,
@@ -210,7 +213,9 @@ class _MultiCurrencyCheckoutDialogState
     } else if (_selectedMethod == PaymentMethod.card) {
       final auth = _authCodeController.text.trim();
       final hasAuth = auth.isNotEmpty;
-      final rate = _tenderCurrency == 'USD' ? vm.commercialRate : 1.0;
+      // T2b/#67: USD tenders convert at the applied checkout rate (the BCN
+      // rate in BCN_OFFICIAL mode), matching the split-payment path.
+      final rate = _tenderCurrency == 'USD' ? vm.activeCheckoutRate : 1.0;
       final amountNio = tenderAmount * rate;
 
       payment = Payment(
@@ -233,7 +238,9 @@ class _MultiCurrencyCheckoutDialogState
         createdAt: DateTime.now(),
       );
     } else {
-      final rate = _tenderCurrency == 'USD' ? vm.commercialRate : 1.0;
+      // T2b/#67: USD tenders convert at the applied checkout rate (the BCN
+      // rate in BCN_OFFICIAL mode), matching the split-payment path.
+      final rate = _tenderCurrency == 'USD' ? vm.activeCheckoutRate : 1.0;
       payment = Payment(
         id: const Uuid().v4(),
         invoiceId: '',
