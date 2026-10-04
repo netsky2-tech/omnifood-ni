@@ -1540,6 +1540,13 @@ class SaleViewModel extends ChangeNotifier {
       if (_activeLoadedHoldTicket != null) {
         await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);
         _activeLoadedHoldTicket = null;
+        // K1 (device verification): liquidateOrder deletes the SQLite row, but
+        // _holdTickets is the list the recall dialog renders. Without this
+        // refresh the billed account stays on screen as if it were still open,
+        // and recalling it invites a second charge of an account that no
+        // longer exists. The list must agree with the DB the moment the sale
+        // commits.
+        await loadHoldTickets();
       } else {
         // Direct counter sale: dispatch to kitchen KDS if items exist
         if (_cart.isNotEmpty) {
