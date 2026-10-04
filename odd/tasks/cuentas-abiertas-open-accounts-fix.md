@@ -459,3 +459,48 @@ it — the X report is the one such consumer and it uses `openAccountsVerified` 
 Tooling note: `acknowledge-approved` takes ONLY `lineageId` (+ `workspaceRoot`). `idempotencyKey` and
 `input` are rejected as `controller-only-input`, and `expectedRevision` / `approvalToken` are not
 parameters of the facade at all — the provider-issued token is bound server-side to the lineage.
+
+## Slice post-verificación en hardware (T13, T14, T17)
+
+La pasada de B/C en el aparato dejó cuatro hallazgos. Tres se cerraron en esta rama y uno
+quedó documentado como hueco de funcionalidad.
+
+### T13 — la cuenta facturada seguía listada (commit `2cc6ff94`)
+
+`processSale` liquidaba la orden recallada y soltaba `_activeLoadedHoldTicket`, pero nunca
+recargaba `_holdTickets`. El diálogo de recuperación mostraba una cuenta que ya no existía
+en SQLite, y recallarla invitaba a cobrarla dos veces. Es la misma clase de falla que el
+duplicado original: memoria contra base de datos.
+
+Fix: recargar la lista apenas se confirma la venta. Test `RED → GREEN` en
+`test/ui/features/sales/open_account_list_refresh_after_checkout_test.dart`, con base real
+en memoria; en RED el DAO devolvía vacío y `vm.holdTickets` todavía traía la cuenta.
+
+### T14 — "descartar el carrito borra la cuenta" (no reproducible)
+
+Probado con una sonda determinística sobre SQLite real: vaciar el carrito de una cuenta
+recallada deja la cuenta intacta en la base y en la lista. `cancelLoadedHoldTicket` no tiene
+llamadores en `lib/`, y el único borrado real (`abandonHoldTicket`) ya confirma con cantidad
+y total. No se agregó ningún diálogo para un camino que no existe; la sonda se borró del
+repo y el resultado quedó en la matriz de verificación.
+
+### T17 — cuánto se descarta al re-parkear (commit `2f009f08`)
+
+La sonda mostró lo que el reporte buscaba decir: re-parkear con un carrito distinto reemplaza
+el contenido anterior sin decir el monto. El dueño eligió **mostrar, no bloquear**. El banner
+de `Editar Cuenta Abierta` ahora nombra los productos y el total guardado, los productos y el
+total del carrito, y —solo cuando el carrito es más chico— cuánto se pierde. Una cuenta que
+crece no menciona pérdida alguna y mantiene un solo tap.
+
+### C4 y C5, cerrados sin cambio de código
+
+C4 (propina fuera del total fiscal) es comportamiento documentado con referencia a norma
+INV-16.1, y el snapshot de propina sí se persiste en el checkout. C5 (cantidad fraccionada)
+es funcionalidad que no existe: el stepper es de enteros. Va en slice propio, mezclarlo acá
+agrandaría el cambio sin relación con las cuentas abiertas.
+
+### Lección de método
+
+`uiautomator dump` no sirve en esta app: Flutter pinta en un solo canvas y no expone nodos
+de accesibilidad, así que los taps calculados "por estructura" salen a ciegas. Hay que leer
+la captura y derivar la coordenada de la imagen, un tap por vez, verificando en pantalla.
