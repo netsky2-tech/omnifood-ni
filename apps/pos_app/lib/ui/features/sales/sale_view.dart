@@ -30,6 +30,34 @@ import '../../../presentation/features/sales/widgets/loyalty_compact_widget.dart
 import '../../../presentation/features/sales/widgets/reward_cta_widget.dart';
 import '../../../presentation/features/sales/widgets/reward_confirmation_dialog.dart';
 
+/// F3b: the REPLACE semantics of a re-parked account are a deliberate
+/// decision, but the operator must see in numbers what a save discards.
+/// Disclosure only: this never blocks the normal "add a product and save"
+/// flow, which is by far the most common edit.
+String _editAccountBanner(HoldTicket account, List<CartItem> cart) {
+  String count(int n) => n == 1 ? 'producto' : 'productos';
+  String money(double v) => 'C\$ ${v.toStringAsFixed(2)}';
+  double totalOf(List<CartItem> items) =>
+      items.fold<double>(0, (sum, i) => sum + i.grossAmount);
+
+  final storedTotal = totalOf(account.items);
+  final cartTotal = totalOf(cart);
+  final dropped = storedTotal - cartTotal;
+
+  final buffer = StringBuffer()
+    ..write('Está editando la cuenta abierta "${account.name}". ')
+    ..write('Al guardar, sus ${account.items.length} ${count(account.items.length)} ')
+    ..write('por ${money(storedTotal)} pasan a ser los ${cart.length} ')
+    ..write('${count(cart.length)} del carrito, por ${money(cartTotal)}. ')
+    ..write('No se crea una cuenta nueva.');
+
+  if (dropped > 0.005) {
+    buffer.write('\n\nSe pierden ${money(dropped)} de productos que no están '
+        'en el carrito.');
+  }
+  return buffer.toString();
+}
+
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
 
@@ -95,9 +123,7 @@ class SaleView extends StatefulWidget {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Está editando la cuenta abierta "${loadedAccount.name}". '
-                                'Al guardar se reemplazan sus productos y su nombre; '
-                                'no se crea una cuenta nueva.',
+                                _editAccountBanner(loadedAccount, vm.cart),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ),

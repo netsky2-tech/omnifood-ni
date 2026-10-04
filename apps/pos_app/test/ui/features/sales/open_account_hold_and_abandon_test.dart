@@ -184,6 +184,113 @@ void main() {
     });
   });
 
+  group('F3b: the edit banner discloses what the replace will discard', () {
+    // Owner decision (open-accounts slice): the REPLACE semantics of F1 stay,
+    // but the operator must see, in numbers, what is lost. No extra blocking
+    // step: this is disclosure, not a second confirmation.
+    HoldTicket accountWith(List<CartItem> items) => HoldTicket(
+          id: 'ticket-1',
+          name: 'Cuenta 2',
+          items: items,
+          createdAt: DateTime(2026, 1, 1),
+        );
+
+    String money(double v) => 'C\$ ${v.toStringAsFixed(2)}';
+
+    testWidgets('names the stored contents and the incoming cart contents',
+        (tester) async {
+      final stored = accountWith([
+        CartItem(
+            productId: 'a',
+            productName: 'A',
+            quantity: 1,
+            unitPrice: 500.0,
+            taxRate: 0.15),
+        CartItem(
+            productId: 'b',
+            productName: 'B',
+            quantity: 1,
+            unitPrice: 300.0,
+            taxRate: 0.15),
+        CartItem(
+            productId: 'c',
+            productName: 'C',
+            quantity: 1,
+            unitPrice: 200.0,
+            taxRate: 0.15),
+      ]);
+      when(mockViewModel.activeLoadedHoldTicket).thenReturn(stored);
+      // The cart now holds a single C$ 80 line: the save would drop C$ 920.
+      when(mockViewModel.cart).thenReturn([
+        CartItem(
+            productId: 'z',
+            productName: 'Z',
+            quantity: 1,
+            unitPrice: 80.0,
+            taxRate: 0.15),
+      ]);
+
+      await tester.pumpWidget(buildTestApp());
+      await openHoldDialog(tester);
+
+      final banner = tester.widget<Text>(find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.textContaining('Está editando la cuenta abierta'),
+        ));
+
+      expect(banner.data, contains('3 productos'),
+          reason: 'the operator must see how many lines are being replaced');
+      expect(banner.data, contains(money(1000.0)),
+          reason: 'the operator must see the stored amount at risk');
+      expect(banner.data, contains('1 producto'),
+          reason: 'the operator must see what the cart will become');
+      expect(banner.data, contains(money(80.0)),
+          reason: 'the operator must see the incoming amount');
+      expect(banner.data, contains(money(920.0)),
+          reason: 'the discarded difference must be stated explicitly');
+    });
+
+    testWidgets('does not claim a loss when the cart only adds to the account',
+        (tester) async {
+      final stored = accountWith([
+        CartItem(
+            productId: 'a',
+            productName: 'A',
+            quantity: 1,
+            unitPrice: 100.0,
+            taxRate: 0.15),
+      ]);
+      when(mockViewModel.activeLoadedHoldTicket).thenReturn(stored);
+      when(mockViewModel.cart).thenReturn([
+        CartItem(
+            productId: 'a',
+            productName: 'A',
+            quantity: 1,
+            unitPrice: 100.0,
+            taxRate: 0.15),
+        CartItem(
+            productId: 'b',
+            productName: 'B',
+            quantity: 1,
+            unitPrice: 250.0,
+            taxRate: 0.15),
+      ]);
+
+      await tester.pumpWidget(buildTestApp());
+      await openHoldDialog(tester);
+
+      final banner = tester.widget<Text>(find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.textContaining('Está editando la cuenta abierta'),
+        ));
+
+      expect(banner.data, contains('1 producto'));
+      expect(banner.data, contains('2 productos'));
+      expect(banner.data, isNot(contains('Se pierden')),
+          reason: 'a growing account loses nothing and must not say it does');
+    });
+  });
+
   group('F4: abandon account from the held-accounts list', () {
     testWidgets('cancelling the confirmation deletes nothing', (tester) async {
       final ticket = ticketNamed('Cuenta 2');
