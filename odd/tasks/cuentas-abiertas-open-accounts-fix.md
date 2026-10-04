@@ -504,3 +504,29 @@ agrandaría el cambio sin relación con las cuentas abiertas.
 `uiautomator dump` no sirve en esta app: Flutter pinta en un solo canvas y no expone nodos
 de accesibilidad, así que los taps calculados "por estructura" salen a ciegas. Hay que leer
 la captura y derivar la coordenada de la imagen, un tap por vez, verificando en pantalla.
+
+## Pendientes (issues nuevos, no defectos)
+
+| Issue | Feature | Estado |
+|---|---|---|
+| [#777](https://github.com/netsky2-tech/omnifood-ni/issues/777) | **F9: merge / transfer / split de cuentas** | Open, approved `status:approved,type:feature` |
+| [#778](https://github.com/netsky2-tech/omnifood-ni/issues/778) | **A6: persistencia tras reinicio de app** | Open, approved `status:approved,type:feature` |
+
+### F9: Merge / Transfer / Split (issue #777)
+
+- **Merge**: combinar dos o más cuentas en una sola (consolidar)
+- **Transfer**: cambiar la mesa o el mesero de una cuenta (cuando cambia de cliente)
+- **Split**: dividir una cuenta en dos (cuando se van algunas personas)
+
+Implementación separada porque requiere UI nueva:
+- Multi-select para merge
+- Selector de mesa + mesero para transfer
+- Item picker para split (checkboxes por línea)
+- No es defecto de implementación
+
+### A6: Persistencia tras reinicio de app (issue #778)
+
+La cuenta abierta se guarda en SQLite (`hold_ticket` table) y se recupera en `loadHoldTickets()`
+que corre en `init()`. Ya debería sobrevivir a un reinicio de app, pero no se probó el escenario
+de muerte del proceso (Android kill, crash manual, etc.). El issue requiere un test de reinicio
+y verificación manual en dispositivo.

@@ -362,3 +362,32 @@ solo canvas y no expone nodos de accesibilidad salvo que se active semantics. Po
 se estaban calculando a ciegas y terminaron inflando un carrito a C$ 1.600 y botando la app.
 La forma que sí funciona es leer la captura de pantalla y calcular la coordenada sobre la
 imagen, un tap por vez.
+
+---
+
+## Issue tracking (pending features)
+
+Los siguientes escenarios no fueron implementados ni probados porque fueron
+**separados como issues nuevos** (no son defectos, son mejoras de funcionalidad):
+
+| Issue | Escenario | Por qué se separó |
+|---|---|---|
+| [#777](https://github.com/netsky2-tech/omnifood-ni/issues/777) | **F9: merge / transfer / split de cuentas** | UI/UX complejo, requiere dialogs nuevos (multi-select, item picker), no es defecto |
+| [#778](https://github.com/netsky2-tech/omnifood-ni/issues/778) | **A6: persistencia tras reinicio de app** | Ya está cableado (`loadHoldTickets()` en `init()`), se necesita test de proceso-reinicio para confirmar |
+
+**Nota:** B1-B4 (facturar con cuentas abiertas), C3-C5 (cobrar y propina), D2-D5 (cierre de caja y Corte Z) se probaron en la verificación del rig y están cubiertos por la evidencia en esta misma sección.
+
+## Comandos útiles para verificar
+
+- Re-instalar build local sin borrar SQLite:
+  ```bash
+  cd apps/pos_app && sed -i 's/9014/9015/' pubspec.yaml && flutter build apk --release && adb install -r build/app/outputs/flutter-apk/app-release.apk
+  ```
+- Re-crear datos de prueba (borra SQLite, no se recomienda):
+  ```bash
+  # Desde el login, tap "Limpiar datos" en Configuración
+  ```
+- Backup de SQLite antes de reinstalar:
+  ```bash
+  adb pull /data/data/com.nhilos.pos_app/databases/omnifood_db /tmp/omnifood_backup.db
+  ```
