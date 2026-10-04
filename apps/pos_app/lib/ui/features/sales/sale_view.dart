@@ -1651,8 +1651,13 @@ class CartSummary extends StatelessWidget {
     // (business profile edit, or a synced fiscal config) would not reach an
     // already-running terminal until the POS was restarted — wrong USD
     // equivalents on the day of the change.
-    await context.read<SaleViewModel>().loadExchangeRates();
+    final vm = context.read<SaleViewModel>();
+    await vm.loadExchangeRates();
     if (!context.mounted) return;
+    // #67/T2a: with an unreliable rate the checkout dialog never opens —
+    // the operator learns BEFORE ringing up the whole sale, not after
+    // pressing COBRAR. The directive message rides the standard error path.
+    if (vm.gateCheckoutOnFxRates() != null) return;
     showDialog(
       context: context,
       builder: (context) => const MultiCurrencyCheckoutDialog(),
@@ -1662,6 +1667,12 @@ class CartSummary extends StatelessWidget {
   /// D-7: direct tip entry on the checkout (independent of the gated
   /// DIVIDIR CUENTA flow).
   Future<void> _showTipDialog(BuildContext context) async {
+    // #67/T2a: same gate as the checkout and split dialogs — an unknown rate
+    // must not render tip USD equivalents computed from a fabricated number.
+    final vm = context.read<SaleViewModel>();
+    await vm.loadExchangeRates();
+    if (!context.mounted) return;
+    if (vm.gateCheckoutOnFxRates() != null) return;
     await TipDialog.show(context);
   }
 
@@ -1671,6 +1682,9 @@ class CartSummary extends StatelessWidget {
     // commercial rate and computes share equivalents from it.
     await vm.loadExchangeRates();
     if (!context.mounted) return;
+    // #67/T2a: same gate as the checkout — an unknown rate must not render
+    // split equivalents computed from a fabricated number.
+    if (vm.gateCheckoutOnFxRates() != null) return;
     showDialog(
       context: context,
       builder: (context) => SplitBillDialog(

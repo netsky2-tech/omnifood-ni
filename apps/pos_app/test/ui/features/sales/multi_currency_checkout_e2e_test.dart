@@ -428,5 +428,48 @@ void main() {
       expect(reloadedInvoice.bcnOfficialRate, 36.6241);
       expect(reloadedInvoice.totalUsd, 10.00);
     });
+
+    test('Scenario 6: absent FX rate rows block the sale BEFORE any fiscal sequence is consumed (#67/T2a)', () async {
+      // 1. Remove both rate rows: the terminal must not invent a rate.
+      await database.localConfigDao.deleteConfig('commercial_exchange_rate');
+      await database.localConfigDao.deleteConfig('bcn_official_exchange_rate');
+      await saleViewModel.loadExchangeRates();
+
+      saleViewModel.addToCart(
+        const Product(
+          id: 'prod-fx-guard',
+          name: 'Café Sin Tasa',
+          uom: 'UND',
+          stock: 10,
+          averageCost: 50.0,
+          sellPrice: 100.00,
+          category: 'Bebidas',
+        ),
+      );
+
+      await expectLater(
+        saleViewModel.processSale([PaymentMethod.cash]),
+        throwsA(isA<Exception>()),
+      );
+
+      // The block must carry a directive Spanish message naming who can fix
+      // it (FX fields are owner/manager-only since #66).
+      expect(
+        saleViewModel.errorMessage,
+        'No se puede vender: la tasa de cambio comercial no está configurada en este terminal. Pedile al dueño o a un encargado que la configure en Perfil del Negocio.',
+      );
+
+      // Proof: the fiscal sequence number was NEVER consumed — the DGI
+      // numbering service was never reached, no sale transaction ran and no
+      // invoice exists.
+      verifyNever(mockNumberingService.getNextNumber());
+      verifyNever(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any, any, any, any, any, any, any, any,
+        ),
+      );
+      final invoices = await database.invoiceDao.getAllInvoices();
+      expect(invoices, isEmpty);
+    });
   });
 }
