@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../../domain/models/config/printer_config.dart';
 import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/ports/printer_port.dart';
+import '../../../../data/adapters/printer/unavailable_printer_adapter.dart';
 import '../../../widgets/receipt_preview_dialog.dart';
 import 'hardware_settings_view_model.dart';
 
@@ -52,6 +53,13 @@ class HardwareSettingsView extends StatelessWidget {
                 _buildStatusCard(context, status, viewModel),
                 const SizedBox(height: 16),
 
+                // #70 T1: a persisted 'Red TCP/IP' profile has no working
+                // driver in this version. Never present it as a printer.
+                if (viewModel.isPersistedDriverUnsupported) ...[
+                  _buildUnsupportedDriverCard(context),
+                  const SizedBox(height: 16),
+                ],
+
                 // Driver Selection Card
                 Card(
                   child: Padding(
@@ -83,22 +91,25 @@ class HardwareSettingsView extends StatelessWidget {
                               icon: Icon(Icons.computer),
                             ),
                             ButtonSegment(
-                              value: PrinterDriverType.escPosNetwork,
-                              label: Text('Red TCP/IP'),
-                              icon: Icon(Icons.network_ping),
-                            ),
-                            ButtonSegment(
                               value: PrinterDriverType.iPosQ80,
                               label: Text('Q80 / iPos'),
                               icon: Icon(Icons.point_of_sale),
                             ),
                           ],
-                          emptySelectionAllowed: profileUnconfigured,
+                          // #70 T1: a persisted escPosNetwork profile has no
+                          // matching segment (a SegmentedButton whose selected
+                          // value has no segment throws), so the configured
+                          // selection renders as empty until the operator
+                          // picks a real driver.
+                          emptySelectionAllowed: profileUnconfigured ||
+                              viewModel.isPersistedDriverUnsupported,
                           selected: profileUnconfigured
                               ? (viewModel.pendingDriverType == null
                                   ? <PrinterDriverType>{}
                                   : {viewModel.pendingDriverType!})
-                              : {config.driverType},
+                              : (viewModel.isPersistedDriverUnsupported
+                                  ? <PrinterDriverType>{}
+                                  : {config.driverType}),
                           onSelectionChanged: profileUnconfigured
                               ? (set) {
                                   if (set.isNotEmpty) {
@@ -330,6 +341,46 @@ class HardwareSettingsView extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildUnsupportedDriverCard(BuildContext context) {
+    return Card(
+      color: Colors.red.withOpacity(0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  color: Colors.red,
+                  size: 28,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Controlador configurado no disponible: Red TCP/IP',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade900,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '$kNetworkPrinterUnavailableMessage '
+              'Seleccione otro controlador en esta pantalla para poder '
+              'imprimir.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }
