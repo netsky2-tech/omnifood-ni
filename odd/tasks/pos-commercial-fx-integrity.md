@@ -111,8 +111,69 @@ already present in the app (drawer hide / route deny / disabled control / write-
 - `test/ui/features/config/business_profile_view_test.dart`: cashier → the three FX controls are
   read-only/disabled and the lock copy explains why; owner → editable. Regression: cloud-managed
   read-only behavior unchanged.
-- Full `flutter test` suite green (CI gate) + `build_runner` codegen unchanged.
+- Full `flutter test` suite on this host: **explicitly not claimed as green**. Two runs produced
+  2986/−3 and 2961/−4 with **disjoint** failing file sets, every failure a load-time
+  `WebSocketException: Invalid WebSocket upgrade request` from `flutter_tester`, every flaked file
+  passing in isolation, and none in the touched surface. Harness flake, not a regression — but CI
+  (`flutter test --coverage` on ubuntu-latest) is the only place the full-suite gate is meaningful.
 - TDD: RED observed first, on the new and extended tests, then GREEN.
+
+## T1 — outcome
+
+Committed as **`28b31525`** (6 files, +533/−14) on `fix/pos-commercial-fx-integrity`. Test volume
+pushed the diff above the 250-350 estimate the plan expected; the production diff is ~135 lines.
+
+What shipped: `config_permissions.dart` (mirrors `boh_permissions.dart`); the view model holds the
+signed-in role with a **null = denied** default, drops the three FX keys in `saveConfig`, and refuses
+`fetchOfficialBcnRate` before it writes or mutates anything; the view renders the commercial-rate
+field, the BCN field, the checkout-FX dropdown and the BCN fetch button inert for a restricted role,
+with copy that names the reason and keeps the cloud-managed reason separate (it wins when both
+apply).
+
+### The defect the first verification missed
+
+The first verification (`flutter analyze` clean, 76/76 focused, guard holds, scope clean) reported
+"safe to commit" with the cached role flagged as a low-confidence, `UNVERIFIED` residual. It was
+real, and the parent proved it instead of accepting the report:
+
+`app_drawer.dart:82` pushes `/lock` (a push, so `/config/profile` stays **mounted** underneath) and
+`lock_screen_view.dart:58` replaces it with `/home`, so the profile route is never disposed and kept
+the **previous** operator's role. A cashier returning to it would have found the fields editable:
+the exact hazard #66 closes, through another door. Verified downstream in the SDK: `RouteObserver`
+delivers `didPopNext()` to the `previousRoute` on pop, and it does **not** override `didReplace`.
+
+Fix: `_BusinessProfileViewState` now uses the app's **already existing** `appRouteObserver`
+(`lib/core/navigation/route_observer.dart:8`, registered at `main.dart:746`) with `RouteAware`,
+resubscribing in `didChangeDependencies` and re-resolving the role in `didPopNext()` — mirroring
+`sale_view.dart:153-196`, whose own comment names this case. No `main.dart` change, no view-model
+change, no new infrastructure. The invariant: the profile route becomes visible again only when the
+route above it is popped, and every pop fires `didPopNext`. No `removeRoute`/`removeRouteBelow`/
+`popUntil` exists in `lib/` (grep), so no re-exposure path escapes the refresh today.
+
+### Evidence for T1
+
+- Focused: `77/77` across the three test files; `.only` grep clean; `flutter analyze` clean.
+- The stale-role test is non-vacuous: real `appRouteObserver` in `navigatorObservers`, a real covering
+  push with a runtime role flip and a real pop, then inertness assertions plus
+  `findsNWidgets(3)` role copy / `findsNothing` cloud copy. RED was observed first
+  (`Expected: true / Actual: <false>` on the commercial-rate field).
+- Guard invariants re-verified twice independently, plus `git status` scope (exactly six files, no
+  pubspec/lock or generated churn).
+- **Not verified**: the real `/lock` → `/home` flow end to end on a device or in an integration run.
+  The test reproduces the covering-push/pop mechanics against the same observer wiring `main.dart`
+  uses, but `main.dart` itself was never executed.
+
+### Carried-forward findings from T1 (not fixed, must not be lost)
+
+1. `inventory_repository_impl.dart:714` is a second writer of `bcn_official_exchange_rate`. It is
+   reachable only through the purchases BOH screen, which sits behind `BohRouteGuard` with the same
+   owner/manager allowlist, and the value comes from the backend BCN service — a refresh of the
+   official rate, not an operator-authored value. Not a bypass; recorded as a known second writer.
+2. `operation_mode` is still editable by a restricted role on the save path (it is not an FX key and
+   was outside the approved scope).
+3. Validators keep running on the `readOnly` FX fields, as they already did for the cloud-managed
+   case; a persisted-and-invalid value would make a cashier's save fail validation. Pre-existing
+   parity, not introduced here.
 
 ## T2 — #67: never invent the rate
 
@@ -133,5 +194,5 @@ RED-first tests. No open question is carried into implementation without evidenc
 | Task | Status | Evidence |
 |---|---|---|
 | Feature opened, recon + decisions | done | this document; explorer recon (read-only) |
-| T1 (#66) | in progress | — |
+| T1 (#66) | done | `28b31525` — 6 files, +533/−14; 77/77 focused; `flutter analyze` clean; two independent verification runs; stale-role defect found by the parent and fixed in the same work unit |
 | T2 (#67) | pending | — |
