@@ -247,6 +247,75 @@ the invoice is built — not after.
 - The calculator throws instead of fabricating (unit test on the `<= 0` path), and the preview degrades.
 - `flutter analyze` clean and the focused suites for the touched surfaces green.
 
+## T2a — outcome
+
+Committed in two pieces so the behavior change stays readable:
+
+- **`2a244cc4`** — `test(pos_app): seed the FX rates in the suites that relied on the fabricated
+  default`. 15 files, +95/−0, additions only, no assertion touched, inert on its own.
+- **`853deb09`** — `fix(pos_app): block the sale when the exchange rate cannot be resolved`.
+  4 files under `lib/` + 8 test files, +1201/−45 (the bulk is the new 473-line guard suite).
+
+### Why 23 test files moved (the cascade, and why it is fixture work)
+
+Seven activation/onboarding suites failed deterministically with the new gate: they call
+`executeControlledOfflineSale` and assert `expect(result.isSuccess, isTrue)`, and none of them ever
+seeded the FX rows because the sale path used to substitute `36.50`. They are **not** simulating a
+bare terminal — each already seeds `dgi_prefix`, `dgi_current_number`, `dgi_range_end`/`_start`,
+`tax_regime` and/or `terminal_device_id` (for example `activation_lifecycle_m6_closure_e2e_test.dart:153-163`).
+They model a terminal with the fiscal profile configured and had simply forgotten the rates. Seeding
+them is the honest fix; no expectation was changed anywhere (verified twice: `git diff --numstat`
+shows zero deletions in each).
+
+A further two suites failed because they read the unknown rate instead of the fabricated one, one of
+them because it builds the view model with `autoLoad: false` and never resolved rates — its fixture now
+calls `loadExchangeRates()`, mirroring the production refresh before the checkout dialog opens.
+
+### What the first two verifications caught that the implementation had missed
+
+1. **The activation verification sale invented rates and persisted them.**
+   `activation_controlled_sale_runner.dart` built its `Invoice` without setting either rate, so the
+   model defaults `36.50`/`36.6241` (`invoice.dart:66-68`) were persisted through `saveSale`, consuming
+   a DGI consecutive. The view-model guard never covered it because it lives in another service. It now
+   resolves both rates from `localConfigs` under the same reliability rule and fails closed before
+   invoice construction, `prepService.prepare` and `saveSale`.
+2. **A weak assertion.** The activation runner's "both rates reliable" case seeded `36.50`/`36.6241`,
+   which are identical to the `Invoice` model defaults, so it could not distinguish the explicit
+   wiring from the defaults and would have passed without it. It now seeds `37.25`/`36.80`, values
+   that can only appear if the resolution actually ran. That single assertion is the only behavioral
+   proof the wiring exists, so it is load-bearing.
+3. **An ungated dialog.** `_showTipDialog` did not consult the gate, so the tip dialog could preview
+   USD at the fabricated `36.50`. It now uses the same gate as the checkout and split dialogs.
+
+### Activation prerequisite the founder must know before the go-live
+
+The verification sale is a real DGI invoice, so the founder's total-blocking decision reaches it. A
+fresh terminal whose commercial rate was never configured — neither on the terminal nor pushed by the
+web business profile — will now **fail activation** with the actionable message instead of silently
+invoicing at `36.50`. Recovery is a browser-free one: the owner or a manager configures both rates in
+Perfil del Negocio and the attempt is retried. Reported to the founder as a go-live prerequisite:
+**configure both rates before activating each terminal.** If he prefers the verification sale to be
+exempt from the gate, that is a product decision, not an implementation detail.
+
+### Accepted boundaries (recorded, not oversights)
+
+1. **Stale-rate window.** `processSale` does not re-read the config: it uses the last successfully
+   resolved rate, so a row deleted after resolution does not retroactively block a sale in progress.
+   Accepted because the value is stale, not invented, and because failing a sale mid-checkout on a
+   cloud-side deletion would be worse than the disease in an offline-first terminal.
+2. **Display-only fallbacks remain.** `tip_engine.dart:66-69`, `split_bill_engine.dart:85,177` and
+   `receipt_document.dart:405-410` keep their `36.50` fallbacks. They are unreachable for a persisted
+   artifact: the only `TipDialog.show` caller is the gated dialog, the split dialog is gated, and
+   persisted invoices always carry rates `> 0`.
+3. **Operator-visible, non-persisted invented rates** (listed so they are not mistaken for safety): the
+   pre-offline printer test ticket (`activation_pre_offline_runner.dart:269`), the hardware test print
+   (`hardware_settings_view_model.dart:231`, hardcoded), the receipt preview sample mode
+   (`receipt_preview_dialog.dart:136-139`), and the business-profile field hints. None persist, none
+   consume a folio.
+4. **Recovered fulfillment reprint** (`durable_print_service.dart:444`) rebuilds an invoice from a
+   payload without rates, so the reprint prints the default rate while the SQLite row keeps the true
+   one. Display-only, tracked as a follow-up.
+
 ## T2b — persist the rate actually applied
 
 Defect: in `BCN_OFFICIAL` mode the dialogs convert using `vm.activeCheckoutRate`
@@ -304,4 +373,5 @@ purchases path.
 |---|---|---|
 | Feature opened, recon + decisions | done | this document; explorer recon (read-only) |
 | T1 (#66) | done | `28b31525` — 6 files, +533/−14; 77/77 focused; `flutter analyze` clean; two independent verification runs; stale-role defect found by the parent and fixed in the same work unit |
-| T2 (#67) | pending | — |
+| T2a (#67) | done | `2a244cc4` (fixtures, +95/−0) + `853deb09` (behavior, 4 lib + 8 test); `flutter analyze` clean; full suite with an empty real-failure set; three verification rounds, two of which found real blockers |
+| T2b (#67) | pending | — |
