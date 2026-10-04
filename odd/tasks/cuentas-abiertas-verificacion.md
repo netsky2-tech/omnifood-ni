@@ -280,3 +280,77 @@ canal de pruebas local, no contra producción, y se deshace publicando un `X014 
 están en el Postgres de esta máquina, lo que confirma que la tubería fiscal de este aparato desemboca acá.
 
 **Queda pendiente de matriz:** A6 (reinicio de app), B1-B4 (facturar con cuentas abiertas), C3-C5, D2-D5.
+
+## B/C en hardware — 2026-10-03 (build 9014) y resolución de sus hallazgos
+
+La pasada de B1-B4/C3-C5 se hizo con el aparato ya encendido y sesión abierta. Resultado:
+
+| Fila | Qué se vio | Veredicto |
+|---|---|---|
+| B1 | Factura 18 (C$ 80) emitida con `Cuenta A` abierta y sin tocarla | **PASS** |
+| B2 | Facturas 19-20, varias cuentas conviviendo | **PASS** |
+| B3/B4 | Recuperar + re-guardar conserva totales (el fix F1 se mantiene) | **PASS** |
+| C3 | Pago partido Efectivo + QR → factura 20 | **PASS** |
+| C4 | Propina cobrada (C$ 66) pero la factura muestra C$ 60 | **PASS con hallazgo → ver abajo** |
+| C5 | Medio producto / cantidad fraccionada | **NO EJERCIBLE → ver abajo** |
+
+Cuatro cosas salieron de esa pasada. Las tres primeras quedaron resueltas el mismo día;
+la cuarta quedó como decisión de producto.
+
+### K1 — la cuenta facturada seguía apareciendo como abierta (DEFECTO, ARREGLADO)
+
+Al cobrar una cuenta recallada, el camino de checkout llamaba `liquidateOrder` (borra la fila
+de SQLite) y ponía `_activeLoadedHoldTicket = null`, pero **nunca** volvía a cargar
+`_holdTickets`, que es la lista que renderiza el diálogo de recuperación. La cuenta seguía
+visible como abierta aunque ya no existiera: el operador podía volver a recallarla y cobrarla
+de nuevo. Es la misma clase de defecto que el duplicado original: el estado en memoria no
+refleja la base de datos.
+
+Prueba que lo reproduce y que ahora pasa (RED → GREEN):
+`test/ui/features/sales/open_account_list_refresh_after_checkout_test.dart`. En RED el DAO
+devolvía vacío y `vm.holdTickets` todavía traía `Cuenta A`. Commit `2cc6ff94`.
+
+### C4 — la propina no entra al total fiscal (NO ES DEFECTO)
+
+`sale_view_model.dart` lo dice explícito con referencia a la norma: el total cobrado es
+*total fiscal + propina voluntaria*, y la propina se mantiene **fuera** del total imponible
+(DGI INV-16.1). La propina sí queda registrada: el snapshot (`tipAmountNio`, `tipAmountUsd`,
+`tipPercentage`, `tipEligibleBaseNio`) se persiste en el momento del checkout. Por eso la
+factura muestra C$ 60 y el cajón recibió C$ 66. Comportamiento correcto; se cierra sin cambio.
+
+### C5 — cantidades fraccionadas (HUECO DE FUNCIONALIDAD, no defecto)
+
+El stepper de cantidad del POS es de enteros, así que "2.5 unidades" no se puede ingresar.
+No es una regresión de esta rama ni un bug: es una funcionalidad que no existe. Va como slice
+aparte; mezclarla acá agrandaría el cambio sin relación con las cuentas abiertas.
+
+### K3 — "descartar el carrito borra la cuenta sin avisar" (NO REPRODUCIBLE)
+
+El reporte decía que al vaciar el carrito de una cuenta recallada la cuenta desaparecía sin
+confirmación. Se probó determinísticamente con una base de datos real en memoria:
+
+| Paso | carrito | cuenta cargada | lista | SQLite |
+|---|---|---|---|---|
+| tras park | 0 | — | 1 | `Cuenta A`/1 |
+| tras recall | 1 | `Cuenta A` | 1 | `Cuenta A`/1 |
+| **tras vaciar el carrito** | **0** | `Cuenta A` | **1** | **`Cuenta A`/1** |
+| tras re-park con otro producto | 1 | — | 1 | `Cuenta A`/1 (Panini) |
+
+Vaciar el carrito **no** elimina la cuenta: sigue en SQLite y sigue en la lista. Además el único
+método que suelta la cuenta en memoria (`cancelLoadedHoldTicket`) no tiene llamadores en `lib/`,
+y el único camino que la borra de verdad (`abandonHoldTicket`) ya pide confirmación nombrando
+cantidad y total. No se agregó ningún diálogo para un camino que no existe.
+
+Lo que la tabla sí muestra, y es real: al re-parkear con un carrito distinto, el contenido anterior
+se **reemplaza** (Espresso → Panini) sin decir cuánto se pierde. Eso es la semántica REPLACE que
+se decidió para F1, y el diálogo ya la anuncia ("Al guardar se reemplazan sus productos y su
+nombre"). Lo que falta es que anuncie **qué** se pierde, con números, como lo hace el abandono.
+Queda como decisión de producto, no se implementó por iniciativa propia.
+
+### Método: por qué la pasada anterior falló en el aparato
+
+`adb shell uiautomator dump` no devuelve nada útil sobre esta app: Flutter dibuja todo en un
+solo canvas y no expone nodos de accesibilidad salvo que se active semantics. Por eso los taps
+se estaban calculando a ciegas y terminaron inflando un carrito a C$ 1.600 y botando la app.
+La forma que sí funciona es leer la captura de pantalla y calcular la coordenada sobre la
+imagen, un tap por vez.
