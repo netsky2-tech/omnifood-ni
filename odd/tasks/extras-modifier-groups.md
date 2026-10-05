@@ -129,7 +129,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
       `category_modifier_groups`, `product_modifier_groups`. Ver §9 por la forma exacta acordada.
 - [x] **T1.2** API REST: CRUD de grupos y opciones, y enganches por categoría y por producto.
 - [x] **T1.3** Resolución server-side de los grupos efectivos: categoría ∪ producto, con orden y overrides.
-- [ ] **T1.4** Dashboard: pantalla de grupos (nombre, min/max, cantidades, opciones con delta y default) y
+- [x] **T1.4** Dashboard: pantalla de grupos (nombre, min/max, cantidades, opciones con delta y default) y
       el flujo principal **"pegar grupos a una categoría"**, más la excepción por producto mostrando lo
       heredado como heredado.
 
@@ -1168,3 +1168,35 @@ completo desde STATUS (lección de §29 aplicada). 3 advisory → backlog: R3-02
 spec a mitad de sesión; fue reconstruido fielmente (verificado por el orquestador: el diff
 contra el commit es +85/−2, sólo adiciones). Un `git checkout` de recuperación fue
 correctamente bloqueado por la guarda de seguridad y abandonado.
+
+## 33. T1.4.b — Enganches por categoría y excepciones por producto (3a2a68e1, RECIBO QUEMADO)
+
+**Unidad.** 9 ficheros / 1325 líneas: la pantalla de grupos ahora tiene 3 tabs — "Grupos",
+"Por categoría", "Por producto". **Fase 1 COMPLETA** (T1.1-T1.4 todos con recibo quemado,
+excepto la deuda documentada de T0.1'/T0.5'a).
+
+**"Por categoría"** (flujo principal del plan): selector con el picker estilo promociones
+(inactivas marcadas `(inactiva)`, nunca silenciosas), enganchados por `?category_id=`,
+attach con `sort_order` append-at-end (no existe endpoint de reorden — deuda de capacidad
+backend, anotada), detach con confirmación explícita.
+
+**"Por producto"** sobre el endpoint T1.3: sección **"Heredado de la categoría"** (badge
+"Heredado", SIN acción de borrar — quitar un enganche de categoría desde acá sería mentir;
+una línea guía al tab de categoría) y **"Excepciones de este producto"** (badge "De este
+producto", "Quitar" con confirmación). El picker de excepciones incluye grupos heredados
+a propósito: agregar uno crea el override product-wins, explicado en copy plano:
+"Al agregarlo aquí, este producto usará su propia configuración del grupo".
+
+**Revisión.** `review-0abb49cc21d17f55` (medium, 1 lente): **approved al primer intento**,
+sin refuter. **Recibo QUEMADO**: `consumed_revision sha256:d4a16faa…`. 3 advisory → backlog:
+R3-001 (`category-attachments.tsx:170-172`), R3-002 (`product-exceptions.tsx:183-189`),
+R3-003 (`product-exceptions.tsx:170-174`).
+
+**Verificación del orquestador:** superficie exacta, copy audit limpio (los hits de
+`uuid/tenant/zod` son identificadores de código, no texto visible), sección heredada sin
+`onRemove` en el render, 32/32 del módulo, **suite completa 98/98 / 1393 tests**, tsc y
+oxlint limpios. Copy guard extendido sobre los 3 tabs.
+
+**Riesgos registrados:** selector de producto carga el listado completo con filtro client-
+side (con catálogos muy grandes haría falta paginación — el filtro ya aísla el punto); el
+reorden de enganches requiere un endpoint PATCH que hoy no existe.
