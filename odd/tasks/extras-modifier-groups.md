@@ -127,7 +127,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
       `modifier_groups` (name, min_selected, max_selected, allow_quantities, sort_order, is_active),
       `modifier_options` (group_id, name, price_delta, is_default, sort_order, is_active),
       `category_modifier_groups`, `product_modifier_groups`. Ver §9 por la forma exacta acordada.
-- [ ] **T1.2** API REST: CRUD de grupos y opciones, y enganches por categoría y por producto.
+- [x] **T1.2** API REST: CRUD de grupos y opciones, y enganches por categoría y por producto.
 - [ ] **T1.3** Resolución server-side de los grupos efectivos: categoría ∪ producto, con orden y overrides.
 - [ ] **T1.4** Dashboard: pantalla de grupos (nombre, min/max, cantidades, opciones con delta y default) y
       el flujo principal **"pegar grupos a una categoría"**, más la excepción por producto mostrando lo
@@ -1016,3 +1016,48 @@ documentado en §26; ninguno bloquea el cierre de T0.5'd ni de Fase 0.
 **Fase 0 completa:** T0.1' + T0.2' + T0.4' (por verificación) + T0.5'a (recibo deuda §22) +
 T0.5'b (recibo) + T0.5'c (recibo) + T0.5'd (recibo). La identidad de categoría es uuid
 `catalog_values.id` de punta a punta: backend → delta → motor en dispositivo → dashboard.
+
+## 28. T1.2 — API REST CRUD de grupos, opciones y enganches (e691d4e5)
+
+**Qué se construyó.** 12 rutas bajo `/modifier-groups` en `modifiers/`:
+`GET /` (con filtros opcionales `?category_id=` / `?product_id=`), `GET /:id`, `POST /`,
+`PATCH /:id`, `DELETE /:id` (borrado suave), CRUD de opciones bajo `/:groupId/options`,
+y enganches `POST|DELETE /:id/categories[/:catalogValueId]` e
+`POST|DELETE /:id/products[/:productId]`. Lecturas con los 4 roles, mutaciones
+OWNER/MANAGER (convención promotions). 12 ficheros, +2155/−8.
+
+**Doctrina aplicada (heredada y verificada):**
+- Toda operación dentro de `runInTenantTransaction` con helpers basados en `manager`.
+- `max_selected >= min_selected` espejo de `chk_modifier_groups_max_gte_min` → **400 antes
+  que 500** (la SQL de la migración es el contrato; el servicio lo refleja).
+- Nombre duplicado → `409 ConflictException` (doctrina de `catalog.service.ts`), pre-check
+  dentro de la transacción.
+- Guard de categoría idéntico a `assertValidTargetCategory` (tipo `SALES_PRODUCT_CATEGORY`,
+  **un solo mensaje** para tenant ajeno/inexistente/tipo equivocado — sin oráculo
+  cross-tenant). Guard de producto con la misma doctrina.
+- **Invariante single-default nuevo:** `is_default=true` limpia los hermanos en la misma
+  transacción (`clearSiblingDefaults`); T1.3 debe confiar en él, no re-verificarlo.
+- `removeGroup` deja los junctions a propósito (el grupo inactivo deja de resolver en T1.3);
+  el detach es DELETE duro porque los junctions no tienen `is_active`.
+
+**TDD.** RED observado antes de implementar (ambas specs sin compilar, TS2307). GREEN:
+**52 tests de servicio + 17 de controlador = 69/69**.
+
+**Verificación del orquestador (independiente del reporte del worker):**
+- `git status`/`diff`: sólo la superficie `modules/modifiers` + 2 ficheros fuera declarados abajo.
+- Reproduje 69/69, `tsc --noEmit` exit 0, eslint 0/0, prettier limpio.
+- **Suite completa: primer rojo legítimo** — `route-transport-registry.spec.ts`
+  (`unclassified: route exists without a declared transport class` ×12): registry
+  **fail-closed** en `test/support/route-transport-registry.ts` que el worker no podía tocar
+  (fuera de su superficie). Arreglo: una línea `{ controller: 'ModifiersController',
+  transport: 'human' }`. Corregido por el orquestador dentro de la unidad.
+- Deuda de formato de T1.1 (`category-modifier-group.entity.ts`, prettier/eslint 3 errors
+  preexistentes) corregida format-only en este commit.
+- **Suite completa final: 320 suites / 3592 tests verdes, 0 rojos** (8 skips pre-existentes).
+
+**Decisiones de diseño dentro del contrato:** attach/detach/opciones exigen grupo activo
+(404); `PATCH` de grupo **no** filtra `is_active` para poder reactivar; la validación de uuid
+de query vive en el servicio (patrón promotions).
+
+**Riesgos señalados:** ver foco de revisión — invariante single-default, junctions que
+sobreviven al soft-delete del grupo.
