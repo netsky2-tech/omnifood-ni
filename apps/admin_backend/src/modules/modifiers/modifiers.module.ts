@@ -4,12 +4,18 @@ import { ModifierGroup } from './entities/modifier-group.entity';
 import { ModifierOption } from './entities/modifier-option.entity';
 import { CategoryModifierGroup } from './entities/category-modifier-group.entity';
 import { ProductModifierGroup } from './entities/product-modifier-group.entity';
+import { ModifiersService } from './services/modifiers.service';
+import { ModifiersController } from './controllers/modifiers.controller';
+import { IdentityModule } from '../identity/identity.module';
 
 /**
- * Reusable modifier groups (extras). T1.1 registers the schema entities
- * only; the REST CRUD surface lands with T1.2, so the module currently
- * carries no controllers or providers and exports the TypeORM feature
- * registration for the modules that will consume it.
+ * Reusable modifier groups (extras/modifiers, ODD tasks T1.1 + T1.2).
+ *
+ * T1.1 registered the schema entities; T1.2 adds the REST CRUD surface
+ * (groups, their options and their attachments to categories/products).
+ * Every service operation runs inside a tenant-bound transaction, mirroring
+ * the promotions module. Exports the TypeORM feature registration for the
+ * modules that consume it (T1.3 resolution, POS sync).
  */
 @Module({
   imports: [
@@ -19,7 +25,10 @@ import { ProductModifierGroup } from './entities/product-modifier-group.entity';
       CategoryModifierGroup,
       ProductModifierGroup,
     ]),
+    IdentityModule,
   ],
-  exports: [TypeOrmModule],
+  controllers: [ModifiersController],
+  providers: [ModifiersService],
+  exports: [ModifiersService, TypeOrmModule],
 })
 export class ModifiersModule {}

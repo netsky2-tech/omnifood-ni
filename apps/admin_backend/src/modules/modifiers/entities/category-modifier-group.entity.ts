@@ -23,9 +23,13 @@ import { ModifierGroup } from './modifier-group.entity';
  * product_modifier_groups.
  */
 @Entity('category_modifier_groups')
-@Index('uq_category_modifier_groups_value_group', ['catalog_value_id', 'group_id'], {
-  unique: true,
-})
+@Index(
+  'uq_category_modifier_groups_value_group',
+  ['catalog_value_id', 'group_id'],
+  {
+    unique: true,
+  },
+)
 export class CategoryModifierGroup {
   @PrimaryGeneratedColumn('uuid')
   id: string;
