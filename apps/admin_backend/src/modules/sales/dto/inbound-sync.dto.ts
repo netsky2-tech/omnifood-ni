@@ -296,6 +296,55 @@ export interface InboundSyncCustomerDto {
   updatedAt: Date;
 }
 
+/**
+ * One selectable option inside a modifier group, projected for the POS
+ * mirror. Inactive rows are shipped too: the terminal mirrors soft-deletes
+ * from tombstones instead of guessing.
+ */
+export interface InboundSyncModifierOptionDto {
+  id: string;
+  groupId: string;
+  name: string;
+  /** Amount added to the product base price; may be negative (discounts). */
+  priceDelta: number;
+  isDefault: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+/** One reusable modifier group with its FULL option closure. */
+export interface InboundSyncModifierGroupDto {
+  id: string;
+  name: string;
+  minSelected: number;
+  maxSelected: number;
+  allowQuantities: boolean;
+  sortOrder: number;
+  isActive: boolean;
+  /** Always present; `[]` for a group with no options. */
+  options: InboundSyncModifierOptionDto[];
+}
+
+/**
+ * Attaches a modifier group to a product CATEGORY. `catalogCode` embeds the
+ * resolved `catalog_values.code` so the POS never resolves codes itself.
+ */
+export interface InboundSyncCategoryModifierGroupDto {
+  id: string;
+  catalogValueId: string;
+  catalogCode: string;
+  groupId: string;
+  sortOrder: number;
+}
+
+/** Attaches a modifier group to a single PRODUCT (per-product exception). */
+export interface InboundSyncProductModifierGroupDto {
+  id: string;
+  productId: string;
+  groupId: string;
+  sortOrder: number;
+}
+
 export interface InboundSyncDeltasDto {
   products: InboundSyncProductDto[];
   catalogValues: InboundSyncCatalogValueDto[];
@@ -319,6 +368,16 @@ export interface InboundSyncDeltasDto {
   promotions: InboundSyncPromotionDto[];
   /** Customers delta (slice 5d, finding M3). */
   customers: InboundSyncCustomerDto[];
+  /**
+   * Modifier-groups delta (groups with their option closure) plus the two
+   * attachment tables. Optional in the type like `alerts` — older envelope
+   * literals and consumers predate them — but the service always populates
+   * them (empty when not requested), which is the documented `alerts`
+   * precedent.
+   */
+  modifierGroups?: InboundSyncModifierGroupDto[];
+  categoryModifierGroups?: InboundSyncCategoryModifierGroupDto[];
+  productModifierGroups?: InboundSyncProductModifierGroupDto[];
   fiscalConfig?: FiscalConfigSnapshot | null;
 }
 

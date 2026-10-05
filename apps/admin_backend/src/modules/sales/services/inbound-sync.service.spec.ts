@@ -15,6 +15,10 @@ import { LoyaltyProgram } from '../../loyalty/entities/loyalty-program.entity';
 import { RewardDefinition } from '../../loyalty/entities/reward-definition.entity';
 import { Promotion } from '../../promotions/entities/promotion.entity';
 import { Customer } from '../../customers/entities/customer.entity';
+import { ModifierGroup } from '../../modifiers/entities/modifier-group.entity';
+import { ModifierOption } from '../../modifiers/entities/modifier-option.entity';
+import { CategoryModifierGroup } from '../../modifiers/entities/category-modifier-group.entity';
+import { ProductModifierGroup } from '../../modifiers/entities/product-modifier-group.entity';
 import { FiscalConfigVersionService } from '../../onboarding/services/fiscal-config-version.service';
 import { StaffPolicyEpochDeliveryService } from '../../identity/human-authorization/services/staff-policy-epoch-delivery.service';
 import { StaffPolicyEpochAcknowledgementService } from '../../identity/human-authorization/services/staff-policy-epoch-acknowledgement.service';
@@ -77,6 +81,10 @@ describe('InboundSyncService', () => {
   let loyaltyRewardQb: MockQueryBuilder<RewardDefinition>;
   let promotionQb: MockQueryBuilder<Promotion>;
   let customerQb: MockQueryBuilder<Customer>;
+  let modifierGroupQb: MockQueryBuilder<ModifierGroup>;
+  let modifierOptionQb: MockQueryBuilder<ModifierOption>;
+  let categoryAttachmentQb: MockQueryBuilder<CategoryModifierGroup>;
+  let productAttachmentQb: MockQueryBuilder<ProductModifierGroup>;
 
   let mockProductRepo: { createQueryBuilder: jest.Mock };
   let mockCatalogRepo: { createQueryBuilder: jest.Mock };
@@ -93,6 +101,10 @@ describe('InboundSyncService', () => {
   let mockLoyaltyRewardRepo: { createQueryBuilder: jest.Mock };
   let mockPromotionRepo: { createQueryBuilder: jest.Mock };
   let mockCustomerRepo: { createQueryBuilder: jest.Mock };
+  let mockModifierGroupRepo: { createQueryBuilder: jest.Mock };
+  let mockModifierOptionRepo: { createQueryBuilder: jest.Mock };
+  let mockCategoryAttachmentRepo: { createQueryBuilder: jest.Mock };
+  let mockProductAttachmentRepo: { createQueryBuilder: jest.Mock };
 
   beforeEach(async () => {
     productQb = createMockQueryBuilder<Product>([]);
@@ -109,6 +121,10 @@ describe('InboundSyncService', () => {
     loyaltyRewardQb = createMockQueryBuilder<RewardDefinition>([]);
     promotionQb = createMockQueryBuilder<Promotion>([]);
     customerQb = createMockQueryBuilder<Customer>([]);
+    modifierGroupQb = createMockQueryBuilder<ModifierGroup>([]);
+    modifierOptionQb = createMockQueryBuilder<ModifierOption>([]);
+    categoryAttachmentQb = createMockQueryBuilder<CategoryModifierGroup>([]);
+    productAttachmentQb = createMockQueryBuilder<ProductModifierGroup>([]);
 
     mockProductRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(productQb),
@@ -146,6 +162,18 @@ describe('InboundSyncService', () => {
     };
     mockCustomerRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(customerQb),
+    };
+    mockModifierGroupRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(modifierGroupQb),
+    };
+    mockModifierOptionRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(modifierOptionQb),
+    };
+    mockCategoryAttachmentRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(categoryAttachmentQb),
+    };
+    mockProductAttachmentRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(productAttachmentQb),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -233,6 +261,10 @@ describe('InboundSyncService', () => {
         if (entity === RewardDefinition) return mockLoyaltyRewardRepo;
         if (entity === Promotion) return mockPromotionRepo;
         if (entity === Customer) return mockCustomerRepo;
+        if (entity === ModifierGroup) return mockModifierGroupRepo;
+        if (entity === ModifierOption) return mockModifierOptionRepo;
+        if (entity === CategoryModifierGroup) return mockCategoryAttachmentRepo;
+        if (entity === ProductModifierGroup) return mockProductAttachmentRepo;
         if (entity === ForensicAlert)
           return {
             createQueryBuilder: jest
@@ -2087,6 +2119,403 @@ describe('InboundSyncService', () => {
 
       expect(response.deltas.products[0].categoryId).toBe('cat-early');
       warnSpy.mockRestore();
+    });
+  });
+
+  describe('modifier delta types (T2.1 backend)', () => {
+    function buildGroupRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'grp-1',
+        tenant_id: 'tenant-abc',
+        name: 'Leche',
+        min_selected: 0,
+        max_selected: 1,
+        allow_quantities: false,
+        sort_order: 1,
+        is_active: true,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-01T00:00:00Z'),
+        ...overrides,
+      } as unknown as ModifierGroup;
+    }
+
+    function buildOptionRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'opt-1',
+        tenant_id: 'tenant-abc',
+        group_id: 'grp-1',
+        name: 'Entera',
+        price_delta: '5.00',
+        is_default: true,
+        sort_order: 0,
+        is_active: true,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-01T00:00:00Z'),
+        ...overrides,
+      } as unknown as ModifierOption;
+    }
+
+    function buildCategoryAttachmentRow(
+      overrides: Record<string, unknown> = {},
+    ) {
+      return {
+        id: 'catt-1',
+        tenant_id: 'tenant-abc',
+        catalog_value_id: 'cat-bebidas',
+        group_id: 'grp-1',
+        sort_order: 0,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-01T00:00:00Z'),
+        ...overrides,
+      } as unknown as CategoryModifierGroup;
+    }
+
+    function buildProductAttachmentRow(
+      overrides: Record<string, unknown> = {},
+    ) {
+      return {
+        id: 'patt-1',
+        tenant_id: 'tenant-abc',
+        product_id: 'prod-1',
+        group_id: 'grp-1',
+        sort_order: 0,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-01T00:00:00Z'),
+        ...overrides,
+      } as unknown as ProductModifierGroup;
+    }
+
+    it('includes the three new keys by default, reads them through the bound manager, and tenant-scopes every read', async () => {
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        {},
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      // Always populated (the alerts precedent): empty when not requested.
+      expect(response.deltas.modifierGroups).toEqual([]);
+      expect(response.deltas.categoryModifierGroups).toEqual([]);
+      expect(response.deltas.productModifierGroups).toEqual([]);
+      expect(mockModifierGroupRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(mockModifierOptionRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(mockCategoryAttachmentRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(mockProductAttachmentRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(modifierGroupQb.where).toHaveBeenCalledWith(
+        'group.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+      expect(modifierOptionQb.where).toHaveBeenCalledWith(
+        'option.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+      expect(categoryAttachmentQb.where).toHaveBeenCalledWith(
+        'attachment.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+      expect(productAttachmentQb.where).toHaveBeenCalledWith(
+        'attachment.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+    });
+
+    it('answers empty arrays for the new keys when they are not requested', async () => {
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products,users' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      // Keys present, arrays empty, no reads: the gating matches the other
+      // delta types exactly.
+      expect(response.deltas.modifierGroups).toEqual([]);
+      expect(response.deltas.categoryModifierGroups).toEqual([]);
+      expect(response.deltas.productModifierGroups).toEqual([]);
+      expect(mockModifierGroupRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(mockModifierOptionRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(
+        mockCategoryAttachmentRepo.createQueryBuilder,
+      ).not.toHaveBeenCalled();
+      expect(
+        mockProductAttachmentRepo.createQueryBuilder,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('activates each gate from the exact client types strings', async () => {
+      await service.getInboundDeltas(
+        'tenant-abc',
+        // Client-sent camelCase is lowercased by the normalizer.
+        { types: 'modifierGroups' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+      expect(mockModifierGroupRepo.createQueryBuilder).toHaveBeenCalled();
+      expect(
+        mockCategoryAttachmentRepo.createQueryBuilder,
+      ).not.toHaveBeenCalled();
+      expect(
+        mockProductAttachmentRepo.createQueryBuilder,
+      ).not.toHaveBeenCalled();
+
+      await service.getInboundDeltas(
+        'tenant-abc',
+        // The normalizer keeps underscores, so the underscore variant is
+        // accepted explicitly.
+        { types: 'modifier_groups' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+      expect(mockModifierGroupRepo.createQueryBuilder).toHaveBeenCalledTimes(2);
+
+      await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'categorymodifiergroups' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+      expect(mockCategoryAttachmentRepo.createQueryBuilder).toHaveBeenCalled();
+
+      await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'productModifierGroups' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+      expect(mockProductAttachmentRepo.createQueryBuilder).toHaveBeenCalled();
+    });
+
+    it('ships the FULL snapshot: groups with all their options, including inactive tombstones', async () => {
+      modifierGroupQb.getMany.mockResolvedValue([
+        buildGroupRow(),
+        buildGroupRow({
+          id: 'grp-2',
+          name: 'Endulzante',
+          min_selected: 1,
+          max_selected: 3,
+          allow_quantities: true,
+          sort_order: 2,
+          is_active: false,
+        }),
+      ]);
+      modifierOptionQb.getMany.mockResolvedValue([
+        buildOptionRow(),
+        buildOptionRow({
+          id: 'opt-2',
+          group_id: 'grp-1',
+          name: 'Deslactosada',
+          price_delta: '0.00',
+          is_default: false,
+          sort_order: 1,
+          // Tombstone: soft-deleted options must still reach the POS.
+          is_active: false,
+        }),
+      ]);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'modifiergroups' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.modifierGroups).toEqual([
+        {
+          id: 'grp-1',
+          name: 'Leche',
+          minSelected: 0,
+          maxSelected: 1,
+          allowQuantities: false,
+          sortOrder: 1,
+          isActive: true,
+          options: [
+            {
+              id: 'opt-1',
+              groupId: 'grp-1',
+              name: 'Entera',
+              priceDelta: 5,
+              isDefault: true,
+              sortOrder: 0,
+              isActive: true,
+            },
+            {
+              id: 'opt-2',
+              groupId: 'grp-1',
+              name: 'Deslactosada',
+              priceDelta: 0,
+              isDefault: false,
+              sortOrder: 1,
+              isActive: false,
+            },
+          ],
+        },
+        {
+          id: 'grp-2',
+          name: 'Endulzante',
+          minSelected: 1,
+          maxSelected: 3,
+          allowQuantities: true,
+          sortOrder: 2,
+          isActive: false,
+          options: [],
+        },
+      ]);
+    });
+
+    it('is independent of sinceDate: a future since still returns every row (hard-delete propagation rationale)', async () => {
+      modifierGroupQb.getMany.mockResolvedValue([buildGroupRow()]);
+      modifierOptionQb.getMany.mockResolvedValue([buildOptionRow()]);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        // Future timestamp: an incremental read would return nothing.
+        { types: 'modifiergroups', since: '2099-01-01T00:00:00Z' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.modifierGroups).toHaveLength(1);
+      expect(response.deltas.modifierGroups[0].options).toHaveLength(1);
+      // The builder never applies a since filter: attachments use hard
+      // DELETE on detach, so only a full snapshot can propagate removals.
+      expect(modifierGroupQb.andWhere).not.toHaveBeenCalled();
+      expect(modifierOptionQb.andWhere).not.toHaveBeenCalled();
+    });
+
+    it('embeds catalogCode in category attachments and skips rows whose catalog row vanished, with a warn', async () => {
+      categoryAttachmentQb.getMany.mockResolvedValue([
+        buildCategoryAttachmentRow(),
+        buildCategoryAttachmentRow({
+          id: 'catt-2',
+          catalog_value_id: 'cat-lost',
+        }),
+      ]);
+      catalogQb.getMany.mockResolvedValue([
+        {
+          id: 'cat-bebidas',
+          tenant_id: 'tenant-abc',
+          catalog_type: 'SALES_PRODUCT_CATEGORY',
+          code: 'BEBIDAS',
+        } as unknown as CatalogValue,
+      ]);
+      const warnSpy = jest
+        .spyOn(service['logger'], 'warn')
+        .mockImplementation(() => undefined);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'categorymodifiergroups' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.categoryModifierGroups).toEqual([
+        {
+          id: 'catt-1',
+          catalogValueId: 'cat-bebidas',
+          catalogCode: 'BEBIDAS',
+          groupId: 'grp-1',
+          sortOrder: 0,
+        },
+      ]);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      warnSpy.mockRestore();
+    });
+
+    it('projects product attachment rows', async () => {
+      productAttachmentQb.getMany.mockResolvedValue([
+        buildProductAttachmentRow(),
+        buildProductAttachmentRow({
+          id: 'patt-2',
+          product_id: 'prod-2',
+          group_id: 'grp-2',
+          sort_order: 3,
+        }),
+      ]);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'productmodifiergroups' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.productModifierGroups).toEqual([
+        {
+          id: 'patt-1',
+          productId: 'prod-1',
+          groupId: 'grp-1',
+          sortOrder: 0,
+        },
+        {
+          id: 'patt-2',
+          productId: 'prod-2',
+          groupId: 'grp-2',
+          sortOrder: 3,
+        },
+      ]);
+    });
+
+    it('orders every read deterministically (sort_order, name, id)', async () => {
+      await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'modifiergroups' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+      expect(modifierGroupQb.orderBy).toHaveBeenCalledWith(
+        'group.sort_order',
+        'ASC',
+      );
+      expect(modifierGroupQb.addOrderBy).toHaveBeenCalledWith(
+        'group.name',
+        'ASC',
+      );
+      expect(modifierGroupQb.addOrderBy).toHaveBeenCalledWith(
+        'group.id',
+        'ASC',
+      );
+      expect(modifierOptionQb.orderBy).toHaveBeenCalledWith(
+        'option.sort_order',
+        'ASC',
+      );
+      expect(modifierOptionQb.addOrderBy).toHaveBeenCalledWith(
+        'option.name',
+        'ASC',
+      );
+      expect(modifierOptionQb.addOrderBy).toHaveBeenCalledWith(
+        'option.id',
+        'ASC',
+      );
+    });
+
+    it('fails closed without a tenant-bound manager for each modifier read', async () => {
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'modifiergroups' }),
+      ).rejects.toThrow(
+        'Inbound modifier group sync requires a tenant-bound transaction manager',
+      );
+      await expect(
+        service.getInboundDeltas('tenant-abc', {
+          types: 'categorymodifiergroups',
+        }),
+      ).rejects.toThrow(
+        'Inbound category modifier group sync requires a tenant-bound transaction manager',
+      );
+      await expect(
+        service.getInboundDeltas('tenant-abc', {
+          types: 'productmodifiergroups',
+        }),
+      ).rejects.toThrow(
+        'Inbound product modifier group sync requires a tenant-bound transaction manager',
+      );
+      expect(mockModifierGroupRepo.createQueryBuilder).not.toHaveBeenCalled();
+      expect(
+        mockCategoryAttachmentRepo.createQueryBuilder,
+      ).not.toHaveBeenCalled();
+      expect(
+        mockProductAttachmentRepo.createQueryBuilder,
+      ).not.toHaveBeenCalled();
     });
   });
 });
