@@ -55,7 +55,8 @@ const mockGroup: ModifierGroup = {
   ],
 };
 
-const renderForm = (initialData?: ModifierGroup | null) =>
+const renderForm = (initialData?: ModifierGroup | null) => {
+  const onSuccess = vi.fn();
   render(
     <Dialog open={true}>
       <DialogContent>
@@ -64,12 +65,14 @@ const renderForm = (initialData?: ModifierGroup | null) =>
         </DialogHeader>
         <ModifierGroupForm
           initialData={initialData}
-          onSuccess={vi.fn()}
+          onSuccess={onSuccess}
           onCancel={vi.fn()}
         />
       </DialogContent>
     </Dialog>,
   );
+  return { onSuccess };
+};
 
 describe("modifierGroupFormSchema", () => {
   const validBase = {
@@ -356,6 +359,84 @@ describe("ModifierGroupForm", () => {
           description: "No se pudo conectar con el servidor",
         }),
       );
+    });
+  });
+
+  // R3-01: completed save steps are reconciled; retries attempt only pending work.
+  describe("partial-save reconciliation (R3-01)", () => {
+    it("does not duplicate a created option on retry: the returned id is adopted as a PATCH", async () => {
+      const createMutate = vi.fn((args: any) =>
+        args.input.name === "Queso"
+          ? Promise.resolve({ id: "new-opt-1", name: "Queso" })
+          : Promise.reject(new Error("boom")),
+      );
+      (useCreateModifierOption as any).mockReturnValue({
+        mutateAsync: createMutate,
+      });
+      renderForm({ ...mockGroup, options: [] });
+      fireEvent.click(screen.getByRole("button", { name: /agregar opción/i }));
+      fireEvent.click(screen.getByRole("button", { name: /agregar opción/i }));
+      const setName = (label: string, value: string) =>
+        fireEvent.change(screen.getByLabelText(label), { target: { value } });
+      setName("Nombre de la opción 1", "Queso");
+      setName("Nombre de la opción 2", "Jamón");
+      fireEvent.click(screen.getByRole("button", { name: /actualizar/i }));
+      await waitFor(() =>
+        expect(toast).toHaveBeenCalledWith(
+          expect.objectContaining({ title: "Error al guardar" }),
+        ),
+      );
+      // Retry must PATCH row 1, never POST it again.
+      fireEvent.click(screen.getByRole("button", { name: /actualizar/i }));
+      await waitFor(() =>
+        expect(mockUpdateOption.mutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({ optionId: "new-opt-1" }),
+        ),
+      );
+      expect(
+        createMutate.mock.calls.filter(
+          (call) => call[0].input.name === "Queso",
+        ),
+      ).toHaveLength(1);
+    });
+
+    it("retries only pending removals and treats a 404 retry as success", async () => {
+      const deactivateMutate = vi.fn();
+      let calls = 0;
+      deactivateMutate.mockImplementation(() => {
+        calls += 1;
+        // opt-1 lands; opt-2 fails then answers 404 (already applied).
+        if (calls === 1) return Promise.resolve({ success: true });
+        return Promise.reject(
+          calls === 2 ? new Error("boom") : { status: 404 },
+        );
+      });
+      (useDeactivateModifierOption as any).mockReturnValue({
+        mutateAsync: deactivateMutate,
+        isPending: false,
+      });
+      const { onSuccess } = renderForm(mockGroup);
+      fireEvent.click(screen.getByLabelText("Quitar opción Entera"));
+      fireEvent.click(screen.getByLabelText("Quitar opción Deslactosada"));
+      fireEvent.click(screen.getByRole("button", { name: /actualizar/i }));
+      await waitFor(() =>
+        expect(toast).toHaveBeenCalledWith(
+          expect.objectContaining({ title: "Error al guardar" }),
+        ),
+      );
+      fireEvent.click(screen.getByRole("button", { name: /actualizar/i }));
+      await waitFor(() =>
+        expect(toast).toHaveBeenCalledWith(
+          expect.objectContaining({ title: "Grupo actualizado" }),
+        ),
+      );
+      expect(onSuccess).toHaveBeenCalled();
+      // Retry re-attempted ONLY the still-pending opt-2, never opt-1.
+      expect(
+        deactivateMutate.mock.calls.map(
+          (call) => (call[0] as { optionId: string }).optionId,
+        ),
+      ).toEqual(["opt-1", "opt-2", "opt-2"]);
     });
   });
 });

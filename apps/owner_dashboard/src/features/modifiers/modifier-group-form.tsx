@@ -142,6 +142,13 @@ export function ModifierGroupForm({
     row.name.trim() || `${index + 1}`;
 
   const onSubmit = async (data: ModifierGroupFormData) => {
+    // Partial saves are reconciled CLIENT-SIDE: the backend offers no
+    // transaction across the group and option calls, so every completed
+    // step is written back into the form state and a retry only re-attempts
+    // what is still pending — created rows adopt their server id (next
+    // submit PATCHes instead of POSTing a duplicate), completed removals
+    // leave the pending list, and a removal that already landed but answers
+    // 404 on retry counts as success.
     const groupInput = {
       name: data.name,
       min_selected: data.min_selected,
@@ -161,8 +168,23 @@ export function ModifierGroupForm({
 
       // Options only apply to an existing group: on edit they sync against
       // the loaded rows; on create the group was just created.
+      const isAlreadyDeactivated = (error: unknown): boolean => {
+        const status =
+          (error as { status?: number } | null)?.status ??
+          (error as { statusCode?: number } | null)?.statusCode;
+        return status === 404;
+      };
       for (const removedId of removedOptionIds) {
-        await deactivateOption.mutateAsync({ groupId, optionId: removedId });
+        try {
+          await deactivateOption.mutateAsync({ groupId, optionId: removedId });
+        } catch (error) {
+          if (!isAlreadyDeactivated(error)) {
+            throw error;
+          }
+        }
+        // Completed removal: drop it from the pending list so a retry
+        // never re-attempts it.
+        setRemovedOptionIds((ids) => ids.filter((id) => id !== removedId));
       }
       for (const row of optionRows) {
         const optionInput = {
@@ -178,7 +200,15 @@ export function ModifierGroupForm({
             input: optionInput,
           });
         } else if (row.name.trim()) {
-          await createOption.mutateAsync({ groupId, input: optionInput });
+          const created = await createOption.mutateAsync({
+            groupId,
+            input: optionInput,
+          });
+          // Completed create: adopt the server id so a retry PATCHes this
+          // row instead of POSTing a duplicate.
+          setOptionRows((rows) =>
+            rows.map((r) => (r.key === row.key ? { ...r, id: created.id } : r)),
+          );
         }
       }
 
