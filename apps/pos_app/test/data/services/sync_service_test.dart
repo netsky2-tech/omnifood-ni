@@ -2720,6 +2720,34 @@ void main() {
           expect(savedProduct.categoryId, 'cat-uuid-espresso-101');
           expect(savedProduct.category, isNull);
 
+          // T0.5c R3-002: a delta WITHOUT the categoryId key (older backend)
+          // must preserve the previously resolved id instead of nulling it.
+          final deltaResponse =
+              capturedGets['/v1/sync/inbound/deltas'] as Map<String, dynamic>;
+          final productList = (deltaResponse['deltas']
+              as Map<String, dynamic>)['products'] as List<Map<String, dynamic>>;
+          productList.first.remove('categoryId');
+          await syncServiceWithDb.pullInboundDeltas();
+          final keptId =
+              await database.productDao.findProductById('prod-101');
+          expect(keptId!.categoryId, 'cat-uuid-espresso-101');
+
+          // An explicit null is authoritative and clears the id, so stale
+          // identities cannot keep matching category promotions forever.
+          // The delta literal infers Map<String, Object>, which refuses a
+          // null value, so the null case rides a JSON-cloned response.
+          final withNull =
+              jsonDecode(jsonEncode(deltaResponse)) as Map<String, dynamic>;
+          final withNullProduct = ((withNull['deltas']
+              as Map<String, dynamic>)['products'] as List)
+              .first as Map<String, dynamic>;
+          withNullProduct['categoryId'] = null;
+          capturedGets['/v1/sync/inbound/deltas'] = withNull;
+          await syncServiceWithDb.pullInboundDeltas();
+          final clearedId =
+              await database.productDao.findProductById('prod-101');
+          expect(clearedId!.categoryId, isNull);
+
           final savedCategory = await database.catalogValueDao
               .findByTypeAndCode('CATEGORY', 'HOT_BEVERAGE');
           expect(savedCategory, isNotNull);

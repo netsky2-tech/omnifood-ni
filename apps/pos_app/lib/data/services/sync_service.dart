@@ -3249,7 +3249,11 @@ class SyncService {
               sku: map['sku'] as String? ?? existing?.sku,
               barcode: map['barcode'] as String? ?? existing?.barcode,
               category: map['category'] as String? ?? existing?.category,
-              categoryId: map['categoryId']?.toString(),
+              // T0.5c: absent key (older backend) keeps the previously
+              // resolved id; an explicit null is authoritative and clears it.
+              categoryId: map.containsKey('categoryId')
+                  ? map['categoryId']?.toString()
+                  : existing?.categoryId,
               isPrepared: pType == 'PREPARED' || pType == 'COMPOUND',
               productType: pType,
               mappingVersionId: map['mappingVersionId'] as String?,

@@ -70,6 +70,8 @@ void main() {
     List<Map<String, dynamic>>? catalogValues,
     Map<String, dynamic>? fiscalConfig,
     bool includeFiscalConfig = true,
+    bool omitCategoryId = false,
+    bool clearCategoryId = false,
   }) =>
       TerminalPrimingPayload.fromJson(
         <String, dynamic>{
@@ -92,7 +94,11 @@ void main() {
                   'tenantId': 'tenant-founder-01',
                   // T0.5c: the priming payload carries the resolved category
                   // identity (catalog_values.id); it must land on the entity.
-                  'categoryId': 'cat-uuid-plato-1',
+                  // Omitted (older backend) must preserve a previously
+                  // resolved id; an explicit null must clear it.
+                  if (!omitCategoryId)
+                    'categoryId':
+                        clearCategoryId ? null : 'cat-uuid-plato-1',
                 },
               ],
             'catalogValues': catalogValues ??
@@ -377,6 +383,30 @@ void main() {
       final reprimed =
           await database.productDao.findProductById('prod-uuid-1');
       expect(reprimed!.sku, equals('SKU-KEPT'));
+    });
+
+    test(
+        'T0.5c: sin categoryId conserva el id resuelto y null explicito lo limpia',
+        () async {
+      // Fase 1: poblar la entidad con el id resuelto.
+      primingPort.payload = payload();
+      await service.primeTerminal();
+
+      // Payload SIN la key (backend anterior a T0.5'b): el id previamente
+      // resuelto debe conservarse, no borrarse en silencio (R3-001).
+      primingPort.payload = payload(omitCategoryId: true);
+      await service.primeTerminal();
+      final kept =
+          await database.productDao.findProductById('prod-uuid-1');
+      expect(kept!.categoryId, equals('cat-uuid-plato-1'));
+
+      // null explicito: valor autoritativo, limpia el id (un fallback
+      // `?? existing` cegaria este camino y dejaria ids obsoletos).
+      primingPort.payload = payload(clearCategoryId: true);
+      await service.primeTerminal();
+      final cleared =
+          await database.productDao.findProductById('prod-uuid-1');
+      expect(cleared!.categoryId, isNull);
     });
   });
 }
