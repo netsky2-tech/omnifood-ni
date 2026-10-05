@@ -2669,6 +2669,61 @@ final migration60_61 = Migration(60, 61, (database) async {
   }
 });
 
+/// v61 → v62: modifier-group mirror tables (groups, options and the two
+/// attachment tables). Fresh-install parity: the same CREATE IF NOT EXISTS
+/// statements the entities generate, so a probe-style guard keeps the
+/// migration re-runnable (second run must be a no-op).
+final migration61_62 = Migration(61, 62, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS modifier_groups (
+      id TEXT NOT NULL PRIMARY KEY,
+      name TEXT NOT NULL,
+      min_selected INTEGER NOT NULL,
+      max_selected INTEGER NOT NULL,
+      allow_quantities INTEGER NOT NULL,
+      sort_order INTEGER NOT NULL,
+      is_active INTEGER NOT NULL
+    )
+  ''');
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS modifier_options (
+      id TEXT NOT NULL PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      price_delta REAL NOT NULL,
+      is_default INTEGER NOT NULL,
+      sort_order INTEGER NOT NULL,
+      is_active INTEGER NOT NULL
+    )
+  ''');
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS category_modifier_groups (
+      id TEXT NOT NULL PRIMARY KEY,
+      catalog_value_id TEXT NOT NULL,
+      catalog_code TEXT NOT NULL,
+      group_id TEXT NOT NULL,
+      sort_order INTEGER NOT NULL
+    )
+  ''');
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS product_modifier_groups (
+      id TEXT NOT NULL PRIMARY KEY,
+      product_id TEXT NOT NULL,
+      group_id TEXT NOT NULL,
+      sort_order INTEGER NOT NULL
+    )
+  ''');
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_modifier_options_group_id ON modifier_options (group_id)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_category_modifier_groups_catalog_value_id ON category_modifier_groups (catalog_value_id)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_product_id ON product_modifier_groups (product_id)',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2721,6 +2776,7 @@ final allMigrations = [
   migration58_59,
   migration59_60,
   migration60_61,
+  migration61_62,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

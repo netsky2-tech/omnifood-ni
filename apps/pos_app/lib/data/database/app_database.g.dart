@@ -138,6 +138,8 @@ class _$AppDatabase extends AppDatabase {
 
   PromotionDao? _promotionDaoInstance;
 
+  ModifierDao? _modifierDaoInstance;
+
   RestaurantAreaDao? _restaurantAreaDaoInstance;
 
   RestaurantTableDao? _restaurantTableDaoInstance;
@@ -180,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 61,
+      version: 62,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -284,6 +286,14 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT, `target_category_id` TEXT, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `min_order_amount` REAL NOT NULL, `days_of_week` TEXT, `start_time` TEXT, `end_time` TEXT, `start_date` INTEGER, `end_date` INTEGER, `priority` INTEGER NOT NULL, `is_stackable` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `modifier_groups` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `min_selected` INTEGER NOT NULL, `max_selected` INTEGER NOT NULL, `allow_quantities` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `modifier_options` (`id` TEXT NOT NULL, `group_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_delta` REAL NOT NULL, `is_default` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `category_modifier_groups` (`id` TEXT NOT NULL, `catalog_value_id` TEXT NOT NULL, `catalog_code` TEXT NOT NULL, `group_id` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `product_modifier_groups` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `group_id` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
             'CREATE TABLE IF NOT EXISTS `restaurant_areas` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `display_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `restaurant_tables` (`id` TEXT NOT NULL, `area_id` TEXT NOT NULL, `table_number` TEXT NOT NULL, `capacity` INTEGER NOT NULL, `status` TEXT NOT NULL, `current_ticket_id` TEXT, `active_guests` INTEGER, `opened_at` INTEGER, FOREIGN KEY (`area_id`) REFERENCES `restaurant_areas` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
@@ -349,6 +359,12 @@ class _$AppDatabase extends AppDatabase {
             'CREATE INDEX `idx_invoices_shift_id` ON `invoices` (`shift_id`)');
         await database.execute(
             'CREATE INDEX `idx_invoices_local_issue_date` ON `invoices` (`local_issue_date`)');
+        await database.execute(
+            'CREATE INDEX `index_modifier_options_group_id` ON `modifier_options` (`group_id`)');
+        await database.execute(
+            'CREATE INDEX `index_category_modifier_groups_catalog_value_id` ON `category_modifier_groups` (`catalog_value_id`)');
+        await database.execute(
+            'CREATE INDEX `index_product_modifier_groups_product_id` ON `product_modifier_groups` (`product_id`)');
         await database.execute(
             'CREATE INDEX `index_kitchen_orders_station_status` ON `kitchen_orders` (`station`, `status`)');
         await database.execute(
@@ -583,6 +599,11 @@ class _$AppDatabase extends AppDatabase {
   @override
   PromotionDao get promotionDao {
     return _promotionDaoInstance ??= _$PromotionDao(database, changeListener);
+  }
+
+  @override
+  ModifierDao get modifierDao {
+    return _modifierDaoInstance ??= _$ModifierDao(database, changeListener);
   }
 
   @override
@@ -5367,6 +5388,211 @@ class _$PromotionDao extends PromotionDao {
   Future<void> updatePromotion(PromotionEntity promotion) async {
     await _promotionEntityUpdateAdapter.update(
         promotion, OnConflictStrategy.replace);
+  }
+}
+
+class _$ModifierDao extends ModifierDao {
+  _$ModifierDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _modifierGroupEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'modifier_groups',
+            (ModifierGroupEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'min_selected': item.minSelected,
+                  'max_selected': item.maxSelected,
+                  'allow_quantities': item.allowQuantities ? 1 : 0,
+                  'sort_order': item.sortOrder,
+                  'is_active': item.isActive ? 1 : 0
+                }),
+        _modifierOptionEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'modifier_options',
+            (ModifierOptionEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'group_id': item.groupId,
+                  'name': item.name,
+                  'price_delta': item.priceDelta,
+                  'is_default': item.isDefault ? 1 : 0,
+                  'sort_order': item.sortOrder,
+                  'is_active': item.isActive ? 1 : 0
+                }),
+        _categoryModifierGroupEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'category_modifier_groups',
+            (CategoryModifierGroupEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'catalog_value_id': item.catalogValueId,
+                  'catalog_code': item.catalogCode,
+                  'group_id': item.groupId,
+                  'sort_order': item.sortOrder
+                }),
+        _productModifierGroupEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'product_modifier_groups',
+            (ProductModifierGroupEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'product_id': item.productId,
+                  'group_id': item.groupId,
+                  'sort_order': item.sortOrder
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ModifierGroupEntity>
+      _modifierGroupEntityInsertionAdapter;
+
+  final InsertionAdapter<ModifierOptionEntity>
+      _modifierOptionEntityInsertionAdapter;
+
+  final InsertionAdapter<CategoryModifierGroupEntity>
+      _categoryModifierGroupEntityInsertionAdapter;
+
+  final InsertionAdapter<ProductModifierGroupEntity>
+      _productModifierGroupEntityInsertionAdapter;
+
+  @override
+  Future<void> deleteAllModifierGroups() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM modifier_groups');
+  }
+
+  @override
+  Future<void> deleteAllModifierOptions() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM modifier_options');
+  }
+
+  @override
+  Future<void> deleteAllCategoryModifierGroups() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM category_modifier_groups');
+  }
+
+  @override
+  Future<void> deleteAllProductModifierGroups() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM product_modifier_groups');
+  }
+
+  @override
+  Future<List<ModifierGroupEntity>> getAllModifierGroups() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM modifier_groups ORDER BY sort_order ASC, name ASC, id ASC',
+        mapper: (Map<String, Object?> row) => ModifierGroupEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            minSelected: row['min_selected'] as int,
+            maxSelected: row['max_selected'] as int,
+            allowQuantities: (row['allow_quantities'] as int) != 0,
+            sortOrder: row['sort_order'] as int,
+            isActive: (row['is_active'] as int) != 0));
+  }
+
+  @override
+  Future<List<ModifierOptionEntity>> getAllModifierOptions() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM modifier_options ORDER BY sort_order ASC, name ASC, id ASC',
+        mapper: (Map<String, Object?> row) => ModifierOptionEntity(
+            id: row['id'] as String,
+            groupId: row['group_id'] as String,
+            name: row['name'] as String,
+            priceDelta: row['price_delta'] as double,
+            isDefault: (row['is_default'] as int) != 0,
+            sortOrder: row['sort_order'] as int,
+            isActive: (row['is_active'] as int) != 0));
+  }
+
+  @override
+  Future<List<CategoryModifierGroupEntity>>
+      getCategoryAttachmentsByCatalogValue(String catalogValueId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM category_modifier_groups WHERE catalog_value_id = ?1 ORDER BY sort_order ASC, id ASC',
+        mapper: (Map<String, Object?> row) => CategoryModifierGroupEntity(id: row['id'] as String, catalogValueId: row['catalog_value_id'] as String, catalogCode: row['catalog_code'] as String, groupId: row['group_id'] as String, sortOrder: row['sort_order'] as int),
+        arguments: [catalogValueId]);
+  }
+
+  @override
+  Future<List<ProductModifierGroupEntity>> getProductAttachmentsByProduct(
+      String productId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM product_modifier_groups WHERE product_id = ?1 ORDER BY sort_order ASC, id ASC',
+        mapper: (Map<String, Object?> row) => ProductModifierGroupEntity(id: row['id'] as String, productId: row['product_id'] as String, groupId: row['group_id'] as String, sortOrder: row['sort_order'] as int),
+        arguments: [productId]);
+  }
+
+  @override
+  Future<List<CategoryModifierGroupEntity>>
+      getAllCategoryModifierGroups() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM category_modifier_groups ORDER BY sort_order ASC, id ASC',
+        mapper: (Map<String, Object?> row) => CategoryModifierGroupEntity(
+            id: row['id'] as String,
+            catalogValueId: row['catalog_value_id'] as String,
+            catalogCode: row['catalog_code'] as String,
+            groupId: row['group_id'] as String,
+            sortOrder: row['sort_order'] as int));
+  }
+
+  @override
+  Future<List<ProductModifierGroupEntity>> getAllProductModifierGroups() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM product_modifier_groups ORDER BY sort_order ASC, id ASC',
+        mapper: (Map<String, Object?> row) => ProductModifierGroupEntity(
+            id: row['id'] as String,
+            productId: row['product_id'] as String,
+            groupId: row['group_id'] as String,
+            sortOrder: row['sort_order'] as int));
+  }
+
+  @override
+  Future<void> insertModifierGroups(List<ModifierGroupEntity> groups) async {
+    await _modifierGroupEntityInsertionAdapter.insertList(
+        groups, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertModifierOptions(List<ModifierOptionEntity> options) async {
+    await _modifierOptionEntityInsertionAdapter.insertList(
+        options, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertCategoryModifierGroups(
+      List<CategoryModifierGroupEntity> attachments) async {
+    await _categoryModifierGroupEntityInsertionAdapter.insertList(
+        attachments, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertProductModifierGroups(
+      List<ProductModifierGroupEntity> attachments) async {
+    await _productModifierGroupEntityInsertionAdapter.insertList(
+        attachments, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> replaceAllModifierData(
+    List<ModifierGroupEntity> groups,
+    List<ModifierOptionEntity> options,
+    List<CategoryModifierGroupEntity> categoryAttachments,
+    List<ProductModifierGroupEntity> productAttachments,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceAllModifierData(
+          groups, options, categoryAttachments, productAttachments);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.modifierDao.replaceAllModifierData(
+            groups, options, categoryAttachments, productAttachments);
+      });
+    }
   }
 }
 
