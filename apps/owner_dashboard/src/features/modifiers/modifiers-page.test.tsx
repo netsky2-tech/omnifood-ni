@@ -10,11 +10,24 @@ import {
   useCreateModifierOption,
   useUpdateModifierOption,
   useDeactivateModifierOption,
+  useGroupsByCategory,
+  useAttachCategory,
+  useDetachCategory,
+  useEffectiveGroups,
+  useAttachProduct,
+  useDetachProduct,
 } from "./use-modifiers";
+import { useCatalogValues } from "@/features/catalog/use-catalog";
+import { useProducts } from "@/features/catalog/use-product";
 import { toast } from "@/hooks/use-toast";
 
 vi.mock("./use-modifiers");
 vi.mock("@/hooks/use-toast");
+vi.mock("@/features/catalog/use-catalog");
+vi.mock("@/features/catalog/use-product");
+vi.mock("@/lib/rbac", () => ({
+  useRbac: () => ({ canPerformAction: () => true }),
+}));
 vi.mock("@/lib/rbac", () => ({
   useRbac: () => ({ canPerformAction: () => true }),
 }));
@@ -90,6 +103,36 @@ describe("ModifiersPage", () => {
       mutateAsync: vi.fn(),
       isPending: false,
     });
+    (useGroupsByCategory as any).mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    (useAttachCategory as any).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    (useDetachCategory as any).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    (useEffectiveGroups as any).mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    (useAttachProduct as any).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    (useDetachProduct as any).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    });
+    (useCatalogValues as any).mockReturnValue({ data: [] });
+    (useProducts as any).mockReturnValue({ data: [], isLoading: false });
     (toast as any).mockImplementation(vi.fn());
   });
 
@@ -158,15 +201,28 @@ describe("ModifiersPage", () => {
 
   it("never renders forbidden internal/technical copy anywhere on the screen", () => {
     const { container } = render(<ModifiersPage />);
-    const text = container.textContent ?? "";
-
     // Owner rule: no plan/section references, internal identifier
     // prefixes, task codes or commit-hash-looking strings in ANY visible
     // copy (labels, badges, empty states, aria-labels included via DOM).
-    expect(text).not.toMatch(/§/);
-    expect(text).not.toMatch(/INV\./);
-    expect(text).not.toMatch(/\bT\d\.\d\b/);
-    expect(text).not.toMatch(/\b[0-9a-f]{40}\b/);
-    expect(text).not.toMatch(/\b(uuid|tenant|zod|RLS)\b/i);
+    // The guard walks every tab so nothing added later escapes it.
+    const forbiddenPatterns = [
+      /§/,
+      /INV\./,
+      /\bT\d\.\d\b/,
+      /\b[0-9a-f]{40}\b/,
+      /\b(uuid|tenant|zod|RLS)\b/i,
+    ];
+    const assertClean = () => {
+      const text = container.textContent ?? "";
+      for (const pattern of forbiddenPatterns) {
+        expect(text).not.toMatch(pattern);
+      }
+    };
+
+    assertClean(); // Grupos
+    fireEvent.click(screen.getByRole("tab", { name: "Por categoría" }));
+    assertClean();
+    fireEvent.click(screen.getByRole("tab", { name: "Por producto" }));
+    assertClean();
   });
 });

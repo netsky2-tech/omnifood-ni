@@ -19,26 +19,67 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { ModifierGroupForm } from "./modifier-group-form";
+import { CategoryAttachments } from "./category-attachments";
+import { ProductExceptions } from "./product-exceptions";
 import { useModifierGroups, useDeactivateModifierGroup } from "./use-modifiers";
 import { describeModifierError } from "./modifiers-api";
+import { formatSelectionRange } from "./format";
 import { type ModifierGroup } from "./types";
 import { toast } from "@/hooks/use-toast";
 import { useRbac } from "@/lib/rbac";
+import { cn } from "@/lib/utils";
 
-/**
- * Human-readable selection rule: "Obligatorio 1/1" when at least one
- * selection is required, "Opcional 0/3" when the customer may skip it.
- */
-function formatSelectionRange(
-  minSelected: number,
-  maxSelected: number,
-): string {
-  return minSelected >= 1
-    ? `Obligatorio ${minSelected}/${maxSelected}`
-    : `Opcional 0/${maxSelected}`;
-}
+type ModifiersTab = "grupos" | "categoria" | "producto";
+
+const TABS: { id: ModifiersTab; label: string }[] = [
+  { id: "grupos", label: "Grupos" },
+  { id: "categoria", label: "Por categoría" },
+  { id: "producto", label: "Por producto" },
+];
 
 export function ModifiersPage() {
+  const [activeTab, setActiveTab] = useState<ModifiersTab>("grupos");
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Modificadores</h1>
+        <p className="text-sm text-muted-foreground">
+          Defina grupos de opciones como leche, extras o endulzante que sus
+          productos comparten al ordenar
+        </p>
+      </div>
+
+      <div
+        role="tablist"
+        aria-label="Secciones de modificadores"
+        className="flex gap-1 border-b"
+      >
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={cn(
+              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+              activeTab === tab.id
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "grupos" && <GroupsTab />}
+      {activeTab === "categoria" && <CategoryAttachments />}
+      {activeTab === "producto" && <ProductExceptions />}
+    </div>
+  );
+}
+
+function GroupsTab() {
   const { canPerformAction } = useRbac();
   const canWrite = canPerformAction("modifiers.write");
   const { data: groups, isLoading, error, refetch } = useModifierGroups();
@@ -113,13 +154,6 @@ export function ModifiersPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Modificadores</h1>
-          <p className="text-sm text-muted-foreground">
-            Defina grupos de opciones como leche, extras o endulzante que sus
-            productos comparten al ordenar
-          </p>
-        </div>
         {canWrite && (
           <Button
             onClick={() => {

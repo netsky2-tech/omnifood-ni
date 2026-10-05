@@ -2,6 +2,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTenantId } from "@/lib/tenant";
 import {
   fetchModifierGroups,
+  fetchEffectiveGroups,
+  attachGroupToCategory,
+  detachGroupFromCategory,
+  attachGroupToProduct,
+  detachGroupFromProduct,
   createModifierGroup,
   updateModifierGroup,
   deactivateModifierGroup,
@@ -20,8 +25,107 @@ export function useModifierGroups() {
   const tenantId = useTenantId();
   return useQuery({
     queryKey: ["modifiers", tenantId],
-    queryFn: ({ signal }) => fetchModifierGroups({ signal }),
+    queryFn: ({ signal }) => fetchModifierGroups({}, { signal }),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Groups attached to one category (inheritance source). */
+export function useGroupsByCategory(categoryId?: string) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ["modifiers", tenantId, "category", categoryId],
+    queryFn: ({ signal }) =>
+      fetchModifierGroups({ category_id: categoryId! }, { signal }),
+    enabled: !!categoryId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Effective resolution for one product (inherited + own exceptions). */
+export function useEffectiveGroups(productId?: string) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ["modifiers", tenantId, "effective", productId],
+    queryFn: ({ signal }) => fetchEffectiveGroups(productId!, { signal }),
+    enabled: !!productId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useAttachCategory() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      catalogValueId,
+      sortOrder,
+    }: {
+      groupId: string;
+      catalogValueId: string;
+      sortOrder: number;
+    }) => attachGroupToCategory(groupId, catalogValueId, sortOrder),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["modifiers", tenantId] });
+    },
+  });
+}
+
+export function useDetachCategory() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      catalogValueId,
+    }: {
+      groupId: string;
+      catalogValueId: string;
+    }) => detachGroupFromCategory(groupId, catalogValueId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["modifiers", tenantId] });
+    },
+  });
+}
+
+export function useAttachProduct() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      productId,
+      sortOrder,
+    }: {
+      groupId: string;
+      productId: string;
+      sortOrder: number;
+    }) => attachGroupToProduct(groupId, productId, sortOrder),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["modifiers", tenantId] });
+    },
+  });
+}
+
+export function useDetachProduct() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      productId,
+    }: {
+      groupId: string;
+      productId: string;
+    }) => detachGroupFromProduct(groupId, productId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["modifiers", tenantId] });
+    },
   });
 }
 

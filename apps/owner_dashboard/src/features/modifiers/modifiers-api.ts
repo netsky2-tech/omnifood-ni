@@ -5,14 +5,83 @@ import type {
   ModifierOption,
   ModifierOptionInput,
 } from "./types";
+import type { EffectiveModifierGroup } from "./effective-types";
 
 /**
  * HTTP functions for the modifier-groups screen. Same client and tenant
  * header conventions as the catalog feature; the backend prefixes all
  * routes under /modifier-groups.
  */
-export function fetchModifierGroups(opts?: ApiClientMethodOptions) {
-  return api.get<ModifierGroup[]>("/modifier-groups", opts);
+export function fetchModifierGroups(
+  filters: { category_id?: string; product_id?: string } = {},
+  opts?: ApiClientMethodOptions,
+) {
+  const params = new URLSearchParams();
+  if (filters.category_id) params.set("category_id", filters.category_id);
+  if (filters.product_id) params.set("product_id", filters.product_id);
+  const qs = params.toString();
+  return api.get<ModifierGroup[]>(
+    `/modifier-groups${qs ? `?${qs}` : ""}`,
+    opts,
+  );
+}
+
+export function fetchEffectiveGroups(
+  productId: string,
+  opts?: ApiClientMethodOptions,
+) {
+  return api.get<EffectiveModifierGroup[]>(
+    `/modifier-groups/effective?product_id=${productId}`,
+    opts,
+  );
+}
+
+export function attachGroupToCategory(
+  groupId: string,
+  catalogValueId: string,
+  sortOrder: number,
+  opts?: ApiClientMethodOptions,
+) {
+  return api.post<Record<string, string>>(
+    `/modifier-groups/${groupId}/categories`,
+    { catalog_value_id: catalogValueId, sort_order: sortOrder },
+    opts,
+  );
+}
+
+export function detachGroupFromCategory(
+  groupId: string,
+  catalogValueId: string,
+  opts?: ApiClientMethodOptions,
+) {
+  return api.delete<{ success: boolean }>(
+    `/modifier-groups/${groupId}/categories/${catalogValueId}`,
+    opts,
+  );
+}
+
+export function attachGroupToProduct(
+  groupId: string,
+  productId: string,
+  sortOrder: number,
+  opts?: ApiClientMethodOptions,
+) {
+  return api.post<Record<string, string>>(
+    `/modifier-groups/${groupId}/products`,
+    { product_id: productId, sort_order: sortOrder },
+    opts,
+  );
+}
+
+export function detachGroupFromProduct(
+  groupId: string,
+  productId: string,
+  opts?: ApiClientMethodOptions,
+) {
+  return api.delete<{ success: boolean }>(
+    `/modifier-groups/${groupId}/products/${productId}`,
+    opts,
+  );
 }
 
 export function createModifierGroup(
