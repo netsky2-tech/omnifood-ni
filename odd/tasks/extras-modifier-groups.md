@@ -1139,3 +1139,32 @@ lente (reliability)** → `approved` al **3er intento** (intento 1: `stopReason:
 **Verificación del orquestador (independiente):** 4 ficheros dentro de la superficie, orden
 `@Get('effective')` antes de `@Get(':id')` verificado en el fichero, 82/82 del módulo, tsc,
 eslint y prettier limpios, **suite completa 320/320 / 3605 tests verdes**.
+
+## 32. T1.4.a — Pantalla de grupos + corrección R3-01 (review-453d0b084d90a63c, RECIBO QUEMADO)
+
+**Unidad.** `b8a90e02` (11 ficheros, 1567 líneas): pantalla de grupos en el dashboard —
+lista con reglas legibles ("Obligatorio 1/1" / "Opcional 0/3"), alta/edición con zod
+espejando las reglas del backend, editor de opciones con default único en el estado del
+form, desactivación con confirmación. Ruta `/modifiers`, sidebar "Modificadores" en
+Gestión, rbac OWNER+MANAGER (pantalla de configuración pura, sin rol de lectura para
+personal). **Regla de copy del dueño aplicada y codificada**: un test guardián recorre el
+`textContent` renderizado y falla con `§`, `INV.`, `T\d.\d`, hashes o jerga
+(uuid/tenant/zod/RLS) — guardado también como preferencia de proyecto (obs 9863).
+
+**Corrección R3-01 (CRITICAL, real): `e8b73fd7`** — el guardado secuencial sin
+reconciliación duplicaba opciones creadas en un retry y trababa desactivaciones en 404
+permanente. Fix client-side (el candidato no incluye backend): crear adopta el `id`
+devuelto en la fila (retry = PATCH), desactivar saca el id del set pendiente, y un 404
+en una reintento cuenta como éxito idempotente. Plan **120**, usado **119**. RED observado
+(3 failed), GREEN **22/22**, dashboard completo **1383**.
+
+**Proceso.** El primer START devolvió `consent-binding-expired` (binding de >10 min,
+`lineage_created: false`) — se repitió START para obtener uno fresco, sin linajes zombis.
+El validador dirigido admitió al primer intento incluyendo el bloque `validationRequest`
+completo desde STATUS (lección de §29 aplicada). 3 advisory → backlog: R3-02
+(`form:167-182`), R3-03 (`form:131-139`), R3-04 (`form.test:1-361`).
+
+**Incidente de proceso del worker (sin impacto en el repo):** un edit agresivo truncó el
+spec a mitad de sesión; fue reconstruido fielmente (verificado por el orquestador: el diff
+contra el commit es +85/−2, sólo adiciones). Un `git checkout` de recuperación fue
+correctamente bloqueado por la guarda de seguridad y abandonado.
