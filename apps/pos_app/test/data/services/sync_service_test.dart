@@ -23,6 +23,10 @@ import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/models/customer/customer_entity.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
+import 'package:pos_app/data/models/modifiers/modifier_group_entity.dart';
+import 'package:pos_app/data/models/modifiers/modifier_option_entity.dart';
+import 'package:pos_app/data/models/modifiers/category_modifier_group_entity.dart';
+import 'package:pos_app/data/models/modifiers/product_modifier_group_entity.dart';
 import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
@@ -8030,6 +8034,310 @@ void main() {
         }
       },
     );
+  });
+
+  group('T2.2 Modifier Mirrors Inbound (full-snapshot deltas)', () {
+    // Sentinel distinguishing "key absent" from "key present (possibly empty)".
+    const absent = Object();
+
+    Map<String, Object?> modifierEnvelope({
+      Object? groups = absent,
+      Object? categoryAttachments = absent,
+      Object? productAttachments = absent,
+    }) {
+      final deltas = <String, Object?>{};
+      if (!identical(groups, absent)) deltas['modifierGroups'] = groups;
+      if (!identical(categoryAttachments, absent)) {
+        deltas['categoryModifierGroups'] = categoryAttachments;
+      }
+      if (!identical(productAttachments, absent)) {
+        deltas['productModifierGroups'] = productAttachments;
+      }
+      return {
+        'status': 'success',
+        'serverTime': '2026-09-01T18:00:00.000Z',
+        'currentVersion': 1790000000000,
+        'deltas': deltas,
+      };
+    }
+
+    test('hydrates all four mirror tables when the three keys are present', () async {
+      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+      try {
+        final syncServiceWithDb = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          dio,
+          database: database,
+        );
+
+        capturedGets['/v1/sync/inbound/deltas'] = modifierEnvelope(
+          groups: [
+            {
+              'id': 'grp-1',
+              'name': 'Leche',
+              'minSelected': 1,
+              'maxSelected': 3,
+              'allowQuantities': true,
+              'sortOrder': 1,
+              'isActive': true,
+              'options': [
+                {
+                  'id': 'opt-1',
+                  'groupId': 'grp-1',
+                  'name': 'Entera',
+                  'priceDelta': 5.0,
+                  'isDefault': true,
+                  'sortOrder': 0,
+                  'isActive': true,
+                },
+                // Tombstone: soft-deleted options still reach the mirror.
+                {
+                  'id': 'opt-2',
+                  'groupId': 'grp-1',
+                  'name': 'Vieja',
+                  'priceDelta': 0.0,
+                  'isDefault': false,
+                  'sortOrder': 1,
+                  'isActive': false,
+                },
+              ],
+            },
+            // Inactive group tombstone.
+            {
+              'id': 'grp-2',
+              'name': 'Eliminado',
+              'minSelected': 0,
+              'maxSelected': 1,
+              'allowQuantities': false,
+              'sortOrder': 2,
+              'isActive': false,
+              'options': [],
+            },
+          ],
+          categoryAttachments: [
+            {
+              'id': 'catt-1',
+              'catalogValueId': 'cat-bebidas',
+              'catalogCode': 'BEBIDAS',
+              'groupId': 'grp-1',
+              'sortOrder': 0,
+            },
+          ],
+          productAttachments: [
+            {
+              'id': 'patt-1',
+              'productId': 'prod-1',
+              'groupId': 'grp-1',
+              'sortOrder': 0,
+            },
+          ],
+        );
+
+        await syncServiceWithDb.pullInboundDeltas();
+
+        final groups = await database.modifierDao.getAllModifierGroups();
+        expect(groups.map((g) => g.id), containsAll(['grp-1', 'grp-2']));
+        expect(
+          groups.firstWhere((g) => g.id == 'grp-1').maxSelected,
+          3,
+        );
+        final options = await database.modifierDao.getAllModifierOptions();
+        expect(options, hasLength(2));
+        expect(
+          options.firstWhere((o) => o.id == 'opt-1').priceDelta,
+          5.0,
+        );
+        expect(
+          options.firstWhere((o) => o.id == 'opt-2').isActive,
+          false,
+        );
+        final categoryAttachments = await database.modifierDao
+            .getCategoryAttachmentsByCatalogValue('cat-bebidas');
+        expect(categoryAttachments, hasLength(1));
+        expect(categoryAttachments.first.catalogCode, 'BEBIDAS');
+        final productAttachments = await database.modifierDao
+            .getProductAttachmentsByProduct('prod-1');
+        expect(productAttachments, hasLength(1));
+        expect(productAttachments.first.groupId, 'grp-1');
+      } finally {
+        await database.close();
+      }
+    });
+
+    test('an envelope WITHOUT the modifier keys leaves pre-existing rows untouched', () async {
+      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+      try {
+        final dao = database.modifierDao;
+        await dao.replaceAllModifierData(
+          [ModifierGroupEntity(id: 'grp-keep', name: 'Leche', minSelected: 0, maxSelected: 1, allowQuantities: false, sortOrder: 0, isActive: true)],
+          [ModifierOptionEntity(id: 'opt-keep', groupId: 'grp-keep', name: 'Entera', priceDelta: 1.0, isDefault: false, sortOrder: 0, isActive: true)],
+          [CategoryModifierGroupEntity(id: 'catt-keep', catalogValueId: 'cat-x', catalogCode: 'X', groupId: 'grp-keep', sortOrder: 0)],
+          [ProductModifierGroupEntity(id: 'patt-keep', productId: 'prod-x', groupId: 'grp-keep', sortOrder: 0)],
+        );
+
+        final syncServiceWithDb = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          dio,
+          database: database,
+        );
+        // Older backend: no modifier keys at all in the envelope.
+        capturedGets['/v1/sync/inbound/deltas'] = {
+          'status': 'success',
+          'serverTime': '2026-09-01T18:00:00.000Z',
+          'currentVersion': 1790000000001,
+          'deltas': {
+            'promotions': [],
+          },
+        };
+
+        await syncServiceWithDb.pullInboundDeltas();
+
+        // NO wipe: absence means the backend type was not requested.
+        expect((await dao.getAllModifierGroups()).map((g) => g.id),
+            ['grp-keep']);
+        expect((await dao.getAllModifierOptions()).map((o) => o.id),
+            ['opt-keep']);
+        expect(
+          await dao.getCategoryAttachmentsByCatalogValue('cat-x'),
+          hasLength(1),
+        );
+        expect(
+          await dao.getProductAttachmentsByProduct('prod-x'),
+          hasLength(1),
+        );
+      } finally {
+        await database.close();
+      }
+    });
+
+    test('a malformed row is skipped while the rest still lands', () async {
+      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+      try {
+        final syncServiceWithDb = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          dio,
+          database: database,
+        );
+
+        capturedGets['/v1/sync/inbound/deltas'] = modifierEnvelope(
+          groups: [
+            // Malformed group: missing name.
+            {'id': 'grp-broken', 'minSelected': 0},
+            {
+              'id': 'grp-1',
+              'name': 'Leche',
+              'minSelected': 0,
+              'maxSelected': 1,
+              'allowQuantities': false,
+              'sortOrder': 0,
+              'isActive': true,
+              'options': [
+                // Malformed option inside an otherwise valid group.
+                {'id': 'opt-broken'},
+                {
+                  'id': 'opt-1',
+                  'groupId': 'grp-1',
+                  'name': 'Entera',
+                  'priceDelta': 0.0,
+                  'isDefault': false,
+                  'sortOrder': 0,
+                  'isActive': true,
+                },
+              ],
+            },
+          ],
+          categoryAttachments: [
+            // Malformed attachment: missing groupId.
+            {'id': 'catt-broken', 'catalogValueId': 'cat-x'},
+            {
+              'id': 'catt-1',
+              'catalogValueId': 'cat-bebidas',
+              'catalogCode': 'BEBIDAS',
+              'groupId': 'grp-1',
+              'sortOrder': 0,
+            },
+          ],
+          productAttachments: [
+            // Malformed attachment: missing productId.
+            {'id': 'patt-broken', 'groupId': 'grp-1'},
+            {
+              'id': 'patt-1',
+              'productId': 'prod-1',
+              'groupId': 'grp-1',
+              'sortOrder': 0,
+            },
+          ],
+        );
+
+        await syncServiceWithDb.pullInboundDeltas();
+
+        final dao = database.modifierDao;
+        final groups = await dao.getAllModifierGroups();
+        expect(groups.map((g) => g.id), ['grp-1']);
+        final options = await dao.getAllModifierOptions();
+        expect(options.map((o) => o.id), ['opt-1']);
+        final categoryAttachments = await dao
+            .getCategoryAttachmentsByCatalogValue('cat-bebidas');
+        expect(categoryAttachments, hasLength(1));
+        final productAttachments = await dao
+            .getProductAttachmentsByProduct('prod-1');
+        expect(productAttachments, hasLength(1));
+      } finally {
+        await database.close();
+      }
+    });
+
+    test('modifierGroups present but EMPTY wipes groups and options (present-empty is authoritative)', () async {
+      final database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+      try {
+        final dao = database.modifierDao;
+        await dao.replaceAllModifierData(
+          [ModifierGroupEntity(id: 'grp-old', name: 'Viejo', minSelected: 0, maxSelected: 1, allowQuantities: false, sortOrder: 0, isActive: true)],
+          [ModifierOptionEntity(id: 'opt-old', groupId: 'grp-old', name: 'Vieja', priceDelta: 0.0, isDefault: false, sortOrder: 0, isActive: true)],
+          [CategoryModifierGroupEntity(id: 'catt-old', catalogValueId: 'cat-x', catalogCode: 'X', groupId: 'grp-old', sortOrder: 0)],
+          [ProductModifierGroupEntity(id: 'patt-old', productId: 'prod-x', groupId: 'grp-old', sortOrder: 0)],
+        );
+
+        final syncServiceWithDb = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          dio,
+          database: database,
+        );
+        // Groups key PRESENT and empty: authoritative wipe of groups and
+        // their options. Attachment keys absent: attachments stay.
+        capturedGets['/v1/sync/inbound/deltas'] = modifierEnvelope(
+          groups: [],
+        );
+
+        await syncServiceWithDb.pullInboundDeltas();
+
+        expect(await dao.getAllModifierGroups(), isEmpty);
+        expect(await dao.getAllModifierOptions(), isEmpty);
+        // Absent attachment keys: untouched (no wipe).
+        expect(
+          await dao.getCategoryAttachmentsByCatalogValue('cat-x'),
+          hasLength(1),
+        );
+        expect(
+          await dao.getProductAttachmentsByProduct('prod-x'),
+          hasLength(1),
+        );
+      } finally {
+        await database.close();
+      }
+    });
   });
 }
 
