@@ -986,3 +986,33 @@ sacar `valueAsNumber` de esos dos campos.
 
 **Decidido en la iteracion:** opcion A (tipos compartidos ampliados, no cast) + `npm ci`
 autorizado en el worktree (solo crea `node_modules`, lockfile de la rama).
+
+## 27. T0.5'd — Recibo nativo y cierre (review-51ead544a49cabf0)
+
+**Resultado.** `approved` sin corrección; **autoridad QUEMADA** antes de cualquier commit
+posterior: `consumed_revision sha256:4405377a99db89f0ee64e318575528546e6d84790f56313fd79732736f38a479`,
+`burn_evidence gentle-ai.review-acknowledged/v1`, target `sha256:59a168703c511375770af93ee6bb28e7d5c9aa3e4b51acfb4fb37d0824565dc4`,
+tier high (hot path: `update-promotion.dto.ts`), 451 líneas, 11 paths.
+
+**Proceso de captura (patrón confirmado por tercera vez).** El capture group abortó dos
+veces por `stopReason: length` en lentes distintos (primero `reliability`, luego
+`resilience`) con relay de 4 corridas. Vía per-slot: `risk` OK al primer intento,
+`resilience` OK al segundo intento (tras `stopReason: length`), `readability` y
+`reliability` OK al primer intento. STATUS fresco antes de cada slot, como manda el
+contrato. La vía per-slot con reintentos sigue siendo la robusta.
+
+**Hallazgos advisory (4, todos informativos — el recibo se mantiene y ninguno reabre):**
+
+| Id | Lente | Ubicación | Severidad |
+|----|-------|-----------|-----------|
+| R2-1 | readability | `PromotionForm.tsx:114-118` | WARNING |
+| R3-001 | reliability | `PromotionForm.tsx:201-209` | WARNING |
+| R3-002 | reliability | `PromotionsList.test.tsx:282-287` | SUGGESTION |
+| R4-1 | resilience | `PromotionForm.tsx:206` | WARNING |
+
+Van al backlog de seguimiento junto al defecto `start_date`/`end_date` (`NaN` silencioso)
+documentado en §26; ninguno bloquea el cierre de T0.5'd ni de Fase 0.
+
+**Fase 0 completa:** T0.1' + T0.2' + T0.4' (por verificación) + T0.5'a (recibo deuda §22) +
+T0.5'b (recibo) + T0.5'c (recibo) + T0.5'd (recibo). La identidad de categoría es uuid
+`catalog_values.id` de punta a punta: backend → delta → motor en dispositivo → dashboard.
