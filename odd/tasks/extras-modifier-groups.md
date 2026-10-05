@@ -836,3 +836,18 @@ paquetes, asi que se repararon 44 links re-apuntando `omnifood-ni-fx/node_module
 `omnifood-ni/node_modules/...` (0 rotos tras la reparacion) y la suite volvio a correr completa.
 Leccion: los worktrees comparten `node_modules` via symlink, asi que **borrar un worktree
 hermano puede tumbar el toolchain de todos los demas**.
+
+**Recibo nativo de T0.5'b: QUEMADO.** Lineage `review-df0be20055493a05`, tier medium,
+1 lente (reliability), 370 lineas, `approved` -> `acknowledge-approved` ->
+`authority: burned` (`consumed_revision sha256:1621c432…`) **antes de ningun commit nuevo**.
+Un unico hallazgo advisory (no bloqueante): R3-001 SUGGESTION en
+`inbound-sync.service.ts:587-589`, la expresion `categoryId` hace dos veces `.trim()` sobre
+`p.category_code` — cosmético, queda como follow-up.
+
+**Defecto de captura y su salida.** El `gentle_review_capture_group` rechazo DOS veces con
+error identico byte a byte (`pi-host-relay-transport-failure`: payload del revisor truncado
+en byte 589, `reviewer payload contains no complete JSON object`); el segundo intento tardo
+153 ms y reproceso los mismos bytes rechazados (`rejected-results/…attempt:1`). El mismo
+binding exacto enviado por la via de slot unico (`gentle_review_capture`) corrio un revisor
+fresco y aprobo. Regla practica: si el grupo rechaza repetido con errores identicos, pasar
+el slot a la via de slot unico en vez de insistir con el grupo.
