@@ -888,6 +888,224 @@ describe('ModifiersService', () => {
   // Every access must run inside the tenant-bound transaction: the fake
   // manager records the set_config binding and the pooled repositories act
   // as tripwires.
+  // T1.3: effective modifier-group resolution for a product — category
+  // (inherited) + product (exceptions), union with product-side override,
+  // deterministic ordering, fail-closed filtering.
+  describe('getEffectiveGroups (T1.3)', () => {
+    const productId = '33333333-3333-4333-8333-333333333333';
+
+    const mockProduct = (overrides: Record<string, unknown> = {}): Product =>
+      ({
+        id: productId,
+        tenant_id: 'tenant-1',
+        category_code: 'BEBIDAS',
+        ...overrides,
+      }) as Product;
+
+    const group = (
+      id: string,
+      name: string,
+      overrides: Partial<ModifierGroup> = {},
+    ): ModifierGroup => mockGroup({ id, name, ...overrides });
+
+    const option = (
+      id: string,
+      name: string,
+      overrides: Partial<ModifierOption> = {},
+    ): ModifierOption => mockOption({ id, name, ...overrides });
+
+    beforeEach(() => {
+      productRepo.findOne.mockResolvedValue(mockProduct());
+      catalogRepo.findOne.mockResolvedValue({
+        id: 'cat-value-uuid-1',
+        tenant_id: 'tenant-1',
+        catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+        code: 'BEBIDAS',
+      });
+      categoryAttachmentRepo.find.mockResolvedValue([]);
+      productAttachmentRepo.find.mockResolvedValue([]);
+      groupRepo.find.mockResolvedValue([]);
+      optionRepo.find.mockResolvedValue([]);
+    });
+
+    it('unions category and product sides, category block first, each block ordered by attachment sort_order then group name', async () => {
+      categoryAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'g-b', sort_order: 2 },
+        { group_id: 'g-a2', sort_order: 1 },
+        { group_id: 'g-a1', sort_order: 1 },
+      ]);
+      productAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'g-p', sort_order: 0 },
+      ]);
+      groupRepo.find.mockResolvedValue([
+        group('g-a1', 'Bebidas Calientes'),
+        group('g-a2', 'Aguardiente'),
+        group('g-b', 'Leche'),
+        group('g-p', 'Extras'),
+      ]);
+
+      const result = await service.getEffectiveGroups('tenant-1', productId);
+
+      expect(result.map((entry) => entry.group_id)).toEqual([
+        'g-a2', // sort_order 1, name 'Aguardiente'
+        'g-a1', // sort_order 1, name 'Bebidas Calientes'
+        'g-b', // sort_order 2
+        'g-p', // product block last
+      ]);
+      expect(result[0].source).toBe('category');
+      expect(result[2].source).toBe('category');
+      expect(result[3].source).toBe('product');
+      // Catalog resolution is by (tenant, code, SALES_PRODUCT_CATEGORY).
+      expect(catalogRepo.findOne).toHaveBeenCalledWith({
+        where: {
+          tenant_id: 'tenant-1',
+          code: 'BEBIDAS',
+          catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+        },
+      });
+    });
+
+    it('a group attached at BOTH levels appears ONCE with source product (override rule)', async () => {
+      categoryAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'g-x', sort_order: 0 },
+      ]);
+      productAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'g-x', sort_order: 5 },
+        { group_id: 'g-p', sort_order: 0 },
+      ]);
+      groupRepo.find.mockResolvedValue([
+        group('g-p', 'Extras'),
+        group('g-x', 'Leche'),
+      ]);
+
+      const result = await service.getEffectiveGroups('tenant-1', productId);
+
+      const gxEntries = result.filter((entry) => entry.group_id === 'g-x');
+      expect(gxEntries).toHaveLength(1);
+      expect(gxEntries[0].source).toBe('product');
+      // The override lives in the product block, after any pure-category
+      // groups.
+      expect(result.map((entry) => entry.group_id)).toEqual(['g-p', 'g-x']);
+    });
+
+    it('drops inactive groups on either side and inactive options inside an active group', async () => {
+      categoryAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'g-inactive', sort_order: 0 },
+        { group_id: 'g-active', sort_order: 1 },
+      ]);
+      productAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'g-p-inactive', sort_order: 0 },
+      ]);
+      // The batched queries are is_active-filtered, so inactive rows never
+      // come back: only the active group and its active options resolve.
+      groupRepo.find.mockResolvedValue([group('g-active', 'Leche')]);
+      optionRepo.find.mockResolvedValue([
+        option('o-1', 'Entera', { group_id: 'g-active' }),
+      ]);
+
+      const result = await service.getEffectiveGroups('tenant-1', productId);
+
+      expect(result.map((entry) => entry.group_id)).toEqual(['g-active']);
+      expect(result[0].options.map((opt) => opt.id)).toEqual(['o-1']);
+    });
+
+    it('a product with no category_code resolves to product-side only', async () => {
+      productRepo.findOne.mockResolvedValue(
+        mockProduct({ category_code: null }),
+      );
+      productAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'g-p', sort_order: 0 },
+      ]);
+      groupRepo.find.mockResolvedValue([group('g-p', 'Extras')]);
+
+      const result = await service.getEffectiveGroups('tenant-1', productId);
+
+      expect(result.map((entry) => entry.group_id)).toEqual(['g-p']);
+      expect(result[0].source).toBe('product');
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(categoryAttachmentRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('a category_code with no matching catalog row (legacy orphan) resolves to product-side only, no throw', async () => {
+      catalogRepo.findOne.mockResolvedValue(null);
+      productAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'g-p', sort_order: 0 },
+      ]);
+      groupRepo.find.mockResolvedValue([group('g-p', 'Extras')]);
+
+      const result = await service.getEffectiveGroups('tenant-1', productId);
+
+      expect(result.map((entry) => entry.group_id)).toEqual(['g-p']);
+      expect(result[0].source).toBe('product');
+      expect(categoryAttachmentRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException for a nonexistent or foreign-tenant product (single message)', async () => {
+      productRepo.findOne.mockResolvedValue(null);
+      await expect(
+        service.getEffectiveGroups('tenant-1', productId),
+      ).rejects.toThrow(
+        new NotFoundException(`Product with ID ${productId} not found`),
+      );
+    });
+
+    it('rejects a malformed product_id with 400 without querying the product', async () => {
+      await expect(
+        service.getEffectiveGroups('tenant-1', 'not-a-uuid'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.getEffectiveGroups('tenant-1', undefined as unknown as string),
+      ).rejects.toThrow(BadRequestException);
+      expect(productRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('returns the exact response shape: no leaked attachment or entity fields, position in array IS the order', async () => {
+      categoryAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'g-c', sort_order: 0, tenant_id: 'tenant-1', id: 'att-1' },
+      ]);
+      groupRepo.find.mockResolvedValue([
+        group('g-c', 'Leche', {
+          tenant_id: 'tenant-1',
+          min_selected: 1,
+          max_selected: 3,
+          allow_quantities: true,
+        }),
+      ]);
+      optionRepo.find.mockResolvedValue([
+        option('o-1', 'Entera', {
+          group_id: 'g-c',
+          price_delta: 5,
+          is_default: true,
+          sort_order: 0,
+          tenant_id: 'tenant-1',
+          is_active: true,
+        }),
+      ]);
+
+      const result = await service.getEffectiveGroups('tenant-1', productId);
+
+      expect(result).toEqual([
+        {
+          group_id: 'g-c',
+          name: 'Leche',
+          min_selected: 1,
+          max_selected: 3,
+          allow_quantities: true,
+          source: 'category',
+          options: [
+            {
+              id: 'o-1',
+              name: 'Entera',
+              price_delta: 5,
+              is_default: true,
+              sort_order: 0,
+            },
+          ],
+        },
+      ]);
+    });
+  });
+
   describe('tenant transaction binding', () => {
     it('binds the tenant context through runInTenantTransaction for every operation', async () => {
       const setConfigCalls: Array<[string, string[]]> = [];

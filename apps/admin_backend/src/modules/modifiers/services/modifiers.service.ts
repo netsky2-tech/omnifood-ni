@@ -38,6 +38,30 @@ export interface ModifierGroupWithOption extends ModifierGroup {
   options: ModifierOption[];
 }
 
+/** One option in an effective-group response (T1.3). */
+export interface EffectiveModifierOption {
+  id: string;
+  name: string;
+  price_delta: number;
+  is_default: boolean;
+  sort_order: number;
+}
+
+/**
+ * One effective modifier group for a product (T1.3). Position in the
+ * response array IS the deterministic order — there is deliberately no
+ * group-level sort_order field; only options carry their own sort_order.
+ */
+export interface EffectiveModifierGroup {
+  group_id: string;
+  name: string;
+  min_selected: number;
+  max_selected: number;
+  allow_quantities: boolean;
+  source: 'category' | 'product';
+  options: EffectiveModifierOption[];
+}
+
 @Injectable()
 export class ModifiersService {
   constructor(
@@ -373,6 +397,183 @@ export class ModifiersService {
         });
       },
     );
+  }
+
+  /**
+   * T1.3: effective modifier-group resolution for a product — the union of
+   * the groups inherited through the product's category (catalog_values
+   * SALES_PRODUCT_CATEGORY via category_modifier_groups) and the explicit
+   * per-product exceptions (product_modifier_groups).
+   *
+   * Resolution rules (fixed by the ODD task):
+   * 1. Category side: products.category_code → the tenant's catalog row of
+   *    type SALES_PRODUCT_CATEGORY with that code → its attachments. No
+   *    category_code or no matching catalog row (legacy orphan) means an
+   *    EMPTY inherited set — resolution never fails for that reason.
+   * 2. Product side: product_modifier_groups rows for the product.
+   * 3. Union with override: deduplicated by group_id; a group attached at
+   *    BOTH levels appears ONCE with source 'product' (the explicit
+   *    exception wins over inheritance).
+   * 4. Ordering is deterministic: the source 'category' block first, then
+   *    the 'product' block; each block ordered by its attachment's
+   *    sort_order, then the group name, then the group id.
+   * 5. Fail-closed filtering: only is_active groups and is_active options
+   *    resolve; an inactive attached group simply drops out. OPTIONS carry
+   *    no source and keep their own sort_order in the payload — position
+   *    in the array IS the order, so the response has no separate sort
+   *    field for the groups (their position encodes it).
+   */
+  async getEffectiveGroups(
+    tenantId: string,
+    productId: string,
+  ): Promise<EffectiveModifierGroup[]> {
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      this.resolveEffectiveGroups(manager, tenantId, productId),
+    );
+  }
+
+  /**
+   * Manager-based read used inside an already-bound transaction. Every
+   * `where` keeps the explicit `tenant_id` filter: binding is additive, it
+   * never replaces the per-query tenant scoping. Group and option loads
+   * are batched with `In(...)` — two queries total, never a loop per row.
+   */
+  private async resolveEffectiveGroups(
+    manager: EntityManager,
+    tenantId: string,
+    productId: string,
+  ): Promise<EffectiveModifierGroup[]> {
+    this.assertUuid(productId, 'product_id');
+    const product = await manager.getRepository(Product).findOne({
+      where: { id: productId, tenant_id: tenantId },
+    });
+    // Same doctrine as the T1.2 guards: nonexistent and foreign-tenant
+    // products are indistinguishable — one message, no existence oracle.
+    if (!product) {
+      throw new NotFoundException(`Product with ID ${productId} not found`);
+    }
+
+    // Category side (inherited). A legacy orphan category_code resolves an
+    // empty inherited set instead of failing the whole read.
+    let categoryAttachments: CategoryModifierGroup[] = [];
+    if (product.category_code) {
+      const catalogValue = await manager.getRepository(CatalogValue).findOne({
+        where: {
+          tenant_id: tenantId,
+          code: product.category_code,
+          catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+        },
+      });
+      if (catalogValue) {
+        categoryAttachments = await manager
+          .getRepository(CategoryModifierGroup)
+          .find({
+            where: {
+              tenant_id: tenantId,
+              catalog_value_id: catalogValue.id,
+            },
+          });
+      }
+    }
+
+    // Product side (explicit exceptions).
+    const productAttachments = await manager
+      .getRepository(ProductModifierGroup)
+      .find({ where: { tenant_id: tenantId, product_id: productId } });
+
+    // Override rule: a group attached at BOTH levels resolves through the
+    // product side only, so it is dropped from the inherited block.
+    const productGroupIds = new Set(
+      productAttachments.map((attachment) => attachment.group_id),
+    );
+    const inheritedAttachments = categoryAttachments.filter(
+      (attachment) => !productGroupIds.has(attachment.group_id),
+    );
+
+    const effectiveAttachments = [
+      ...inheritedAttachments,
+      ...productAttachments,
+    ];
+    if (effectiveAttachments.length === 0) {
+      return [];
+    }
+    const groupIds = [
+      ...new Set(effectiveAttachments.map((attachment) => attachment.group_id)),
+    ];
+
+    // Fail-closed: the is_active filter drops inactive groups here, before
+    // any ordering, so an inactive attached group resolves to nothing.
+    const groups = await manager.getRepository(ModifierGroup).find({
+      where: { tenant_id: tenantId, is_active: true, id: In(groupIds) },
+    });
+    const groupById = new Map(groups.map((group) => [group.id, group]));
+
+    // Fail-closed for options too, batched in one In(...) query.
+    const options = await manager.getRepository(ModifierOption).find({
+      where: { tenant_id: tenantId, is_active: true, group_id: In(groupIds) },
+      order: { sort_order: 'ASC', name: 'ASC', id: 'ASC' },
+    });
+    const optionsByGroup = new Map<string, ModifierOption[]>();
+    for (const option of options) {
+      const list = optionsByGroup.get(option.group_id) ?? [];
+      list.push(option);
+      optionsByGroup.set(option.group_id, list);
+    }
+
+    // Block ordering: attachment sort_order, then group name, then group
+    // id. Attachments whose group did not survive the is_active filter
+    // drop out here (fail-closed), never throw.
+    const buildBlock = (
+      attachments: CategoryModifierGroup[] | ProductModifierGroup[],
+      source: EffectiveModifierGroup['source'],
+    ): EffectiveModifierGroup[] =>
+      attachments
+        .filter((attachment) => groupById.has(attachment.group_id))
+        .sort((a, b) => {
+          const groupA = groupById.get(a.group_id);
+          const groupB = groupById.get(b.group_id);
+          const bySortOrder = a.sort_order - b.sort_order;
+          if (bySortOrder !== 0) {
+            return bySortOrder;
+          }
+          const byName = (groupA?.name ?? '').localeCompare(groupB?.name ?? '');
+          if (byName !== 0) {
+            return byName;
+          }
+          return (groupA?.id ?? '').localeCompare(groupB?.id ?? '');
+        })
+        .map((attachment) => {
+          const resolved = groupById.get(attachment.group_id);
+          if (!resolved) {
+            // Unreachable after the filter above; keeps the types honest
+            // without non-null assertions.
+            throw new NotFoundException(
+              `Modifier group with ID ${attachment.group_id} not found`,
+            );
+          }
+          return {
+            group_id: resolved.id,
+            name: resolved.name,
+            min_selected: resolved.min_selected,
+            max_selected: resolved.max_selected,
+            allow_quantities: resolved.allow_quantities,
+            source,
+            options: (optionsByGroup.get(resolved.id) ?? []).map(
+              (option): EffectiveModifierOption => ({
+                id: option.id,
+                name: option.name,
+                price_delta: option.price_delta,
+                is_default: option.is_default,
+                sort_order: option.sort_order,
+              }),
+            ),
+          };
+        });
+
+    return [
+      ...buildBlock(inheritedAttachments, 'category'),
+      ...buildBlock(productAttachments, 'product'),
+    ];
   }
 
   /**

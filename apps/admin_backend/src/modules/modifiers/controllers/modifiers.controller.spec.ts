@@ -26,6 +26,7 @@ describe('ModifiersController', () => {
     detachCategory: jest.Mock;
     attachProduct: jest.Mock;
     detachProduct: jest.Mock;
+    getEffectiveGroups: jest.Mock;
   };
 
   const mockGroup = (overrides: Partial<ModifierGroup> = {}): ModifierGroup =>
@@ -58,6 +59,7 @@ describe('ModifiersController', () => {
       detachCategory: jest.fn().mockResolvedValue(undefined),
       attachProduct: jest.fn().mockResolvedValue({ id: 'att-2' }),
       detachProduct: jest.fn().mockResolvedValue(undefined),
+      getEffectiveGroups: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -218,6 +220,15 @@ describe('ModifiersController', () => {
     );
   });
 
+  it('maps getEffectiveGroups to the service', async () => {
+    const result = await controller.getEffective('prod-uuid-1', 'tenant-1');
+    expect(result).toEqual([]);
+    expect(service.getEffectiveGroups).toHaveBeenCalledWith(
+      'tenant-1',
+      'prod-uuid-1',
+    );
+  });
+
   describe('requireTenant', () => {
     it('throws UnauthorizedException without tenant context', async () => {
       await expect(
@@ -237,7 +248,7 @@ describe('ModifiersController', () => {
     };
 
     it('allows reads for OWNER, MANAGER, CASHIER and WAITER', () => {
-      for (const method of ['findAll', 'findOne']) {
+      for (const method of ['findAll', 'findOne', 'getEffective']) {
         expect(rolesOf(method)).toEqual([
           UserRole.OWNER,
           UserRole.MANAGER,

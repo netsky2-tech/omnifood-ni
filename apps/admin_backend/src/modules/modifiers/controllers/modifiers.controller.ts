@@ -53,6 +53,22 @@ export class ModifiersController {
     });
   }
 
+  // NOTE: declared BEFORE @Get(':id') so 'effective' is not captured as an
+  // :id path parameter by Nest's in-order route matching.
+  @Get('effective')
+  @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER, UserRole.WAITER)
+  async getEffective(
+    @Query('product_id') productId: string | undefined,
+    @GetTenantId() tenantId?: string,
+  ) {
+    // Missing or malformed product_id is rejected with 400 by the service
+    // (assertUuid), the same doctrine as the other uuid inputs.
+    return this.modifiersService.getEffectiveGroups(
+      this.requireTenant(tenantId),
+      productId ?? '',
+    );
+  }
+
   @Get(':id')
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER, UserRole.WAITER)
   async findOne(@Param('id') id: string, @GetTenantId() tenantId?: string) {
