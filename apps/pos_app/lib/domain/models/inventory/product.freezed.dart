@@ -30,6 +30,10 @@ mixin _$Product {
   String? get sku => throw _privateConstructorUsedError;
   String? get barcode => throw _privateConstructorUsedError;
   String? get category => throw _privateConstructorUsedError;
+
+  /// T0.5c: resolved category identity (catalog_values.id). Promotions
+  /// match strictly on this id, never on the free-text [category].
+  String? get categoryId => throw _privateConstructorUsedError;
   bool get isPrepared => throw _privateConstructorUsedError;
   String get productType => throw _privateConstructorUsedError;
   String? get mappingVersionId => throw _privateConstructorUsedError;
@@ -69,6 +73,7 @@ abstract class $ProductCopyWith<$Res> {
       String? sku,
       String? barcode,
       String? category,
+      String? categoryId,
       bool isPrepared,
       String productType,
       String? mappingVersionId,
@@ -105,6 +110,7 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
     Object? sku = freezed,
     Object? barcode = freezed,
     Object? category = freezed,
+    Object? categoryId = freezed,
     Object? isPrepared = null,
     Object? productType = null,
     Object? mappingVersionId = freezed,
@@ -157,6 +163,10 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
       category: freezed == category
           ? _value.category
           : category // ignore: cast_nullable_to_non_nullable
+              as String?,
+      categoryId: freezed == categoryId
+          ? _value.categoryId
+          : categoryId // ignore: cast_nullable_to_non_nullable
               as String?,
       isPrepared: null == isPrepared
           ? _value.isPrepared
@@ -224,6 +234,7 @@ abstract class _$$ProductImplCopyWith<$Res> implements $ProductCopyWith<$Res> {
       String? sku,
       String? barcode,
       String? category,
+      String? categoryId,
       bool isPrepared,
       String productType,
       String? mappingVersionId,
@@ -258,6 +269,7 @@ class __$$ProductImplCopyWithImpl<$Res>
     Object? sku = freezed,
     Object? barcode = freezed,
     Object? category = freezed,
+    Object? categoryId = freezed,
     Object? isPrepared = null,
     Object? productType = null,
     Object? mappingVersionId = freezed,
@@ -310,6 +322,10 @@ class __$$ProductImplCopyWithImpl<$Res>
       category: freezed == category
           ? _value.category
           : category // ignore: cast_nullable_to_non_nullable
+              as String?,
+      categoryId: freezed == categoryId
+          ? _value.categoryId
+          : categoryId // ignore: cast_nullable_to_non_nullable
               as String?,
       isPrepared: null == isPrepared
           ? _value.isPrepared
@@ -373,6 +389,7 @@ class _$ProductImpl implements _Product {
       this.sku,
       this.barcode,
       this.category,
+      this.categoryId,
       this.isPrepared = false,
       this.productType = 'SIMPLE',
       this.mappingVersionId,
@@ -411,6 +428,11 @@ class _$ProductImpl implements _Product {
   final String? barcode;
   @override
   final String? category;
+
+  /// T0.5c: resolved category identity (catalog_values.id). Promotions
+  /// match strictly on this id, never on the free-text [category].
+  @override
+  final String? categoryId;
   @override
   @JsonKey()
   final bool isPrepared;
@@ -460,7 +482,7 @@ class _$ProductImpl implements _Product {
 
   @override
   String toString() {
-    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, productType: $productType, mappingVersionId: $mappingVersionId, insumoId: $insumoId, createdAt: $createdAt, inventoryPolicy: $inventoryPolicy, directStockInsumoId: $directStockInsumoId, taxRate: $taxRate, isTaxExempt: $isTaxExempt, variants: $variants, availableModifiers: $availableModifiers)';
+    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, categoryId: $categoryId, isPrepared: $isPrepared, productType: $productType, mappingVersionId: $mappingVersionId, insumoId: $insumoId, createdAt: $createdAt, inventoryPolicy: $inventoryPolicy, directStockInsumoId: $directStockInsumoId, taxRate: $taxRate, isTaxExempt: $isTaxExempt, variants: $variants, availableModifiers: $availableModifiers)';
   }
 
   @override
@@ -482,6 +504,8 @@ class _$ProductImpl implements _Product {
             (identical(other.barcode, barcode) || other.barcode == barcode) &&
             (identical(other.category, category) ||
                 other.category == category) &&
+            (identical(other.categoryId, categoryId) ||
+                other.categoryId == categoryId) &&
             (identical(other.isPrepared, isPrepared) ||
                 other.isPrepared == isPrepared) &&
             (identical(other.productType, productType) ||
@@ -518,6 +542,7 @@ class _$ProductImpl implements _Product {
         sku,
         barcode,
         category,
+        categoryId,
         isPrepared,
         productType,
         mappingVersionId,
@@ -557,6 +582,7 @@ abstract class _Product implements Product {
       final String? sku,
       final String? barcode,
       final String? category,
+      final String? categoryId,
       final bool isPrepared,
       final String productType,
       final String? mappingVersionId,
@@ -591,6 +617,11 @@ abstract class _Product implements Product {
   String? get barcode;
   @override
   String? get category;
+  @override
+
+  /// T0.5c: resolved category identity (catalog_values.id). Promotions
+  /// match strictly on this id, never on the free-text [category].
+  String? get categoryId;
   @override
   bool get isPrepared;
   @override

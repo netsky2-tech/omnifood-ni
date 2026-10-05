@@ -13,6 +13,9 @@ class CartItem with _$CartItem {
     required double unitPrice,
     required double taxRate,
     String? category,
+    /// T0.5c: resolved category identity carried from the product for strict
+    /// promotion matching (exact id equality; no case folding).
+    String? categoryId,
     String? variantId,
     String? notes,
     @Default([]) List<Modifier> selectedModifiers,

@@ -90,6 +90,9 @@ void main() {
                   'productType': 'SIMPLE',
                   'createdAt': '2026-09-21T09:00:00.000Z',
                   'tenantId': 'tenant-founder-01',
+                  // T0.5c: the priming payload carries the resolved category
+                  // identity (catalog_values.id); it must land on the entity.
+                  'categoryId': 'cat-uuid-plato-1',
                 },
               ],
             'catalogValues': catalogValues ??
@@ -195,6 +198,8 @@ void main() {
       expect(product.uom, equals('PLATO'));
       expect(product.sellPrice, equals(75.0));
       expect(product.tenantId, equals('tenant-founder-01'));
+      // T0.5c: the resolved category id survives priming into the entity.
+      expect(product.categoryId, equals('cat-uuid-plato-1'));
 
       final catalogValue =
           await database.catalogValueDao.findByTypeAndCode('UOM', 'PLATO');
@@ -388,6 +393,7 @@ ProductEntity _copyWithSku(ProductEntity source, String sku) {
     sku: sku,
     barcode: source.barcode,
     category: source.category,
+    categoryId: source.categoryId,
     isPrepared: source.isPrepared,
     productType: source.productType,
     mappingVersionId: source.mappingVersionId,

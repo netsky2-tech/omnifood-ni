@@ -81,6 +81,7 @@ void main() {
     sellPrice: 50,
     taxRate: 0.15,
     category: 'Bebidas',
+    categoryId: 'cat-bebidas',
   );
 
   final pBurger = const Product(
@@ -92,6 +93,7 @@ void main() {
     sellPrice: 120,
     taxRate: 0.15,
     category: 'Comida',
+    categoryId: 'cat-comida',
   );
 
   setUpAll(() {
@@ -165,7 +167,8 @@ void main() {
           id: 'promo-cat-10',
           name: '10% Descuento en Bebidas',
           type: 'percentageDiscount',
-          targetCategoryId: 'Bebidas',
+          // T0.5c: strict catalog_values.id, never free text.
+          targetCategoryId: 'cat-bebidas',
           discountValue: 10.0, // 10%
           priority: 5,
           isActive: true,

@@ -2626,6 +2626,9 @@ void main() {
                   'isActive': true,
                   'isPerishable': false,
                   'createdAt': '2026-08-26T10:00:00.000Z',
+                  // T0.5c: the cloud delta carries the resolved category
+                  // identity (catalog_values.id); it must land on the entity.
+                  'categoryId': 'cat-uuid-espresso-101',
                 },
               ],
               'catalogValues': [
@@ -2712,6 +2715,10 @@ void main() {
           // B2e D-3 fail-closed: the delta omits taxRate, so the stored rate
           // must default to 0.0 (exempt), never an invented 15%.
           expect(savedProduct.taxRate, 0.0);
+          // T0.5c: the resolved category id is persisted for strict
+          // promotion matching; the legacy free-text category stays untouched.
+          expect(savedProduct.categoryId, 'cat-uuid-espresso-101');
+          expect(savedProduct.category, isNull);
 
           final savedCategory = await database.catalogValueDao
               .findByTypeAndCode('CATEGORY', 'HOT_BEVERAGE');

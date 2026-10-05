@@ -3249,6 +3249,7 @@ class SyncService {
               sku: map['sku'] as String? ?? existing?.sku,
               barcode: map['barcode'] as String? ?? existing?.barcode,
               category: map['category'] as String? ?? existing?.category,
+              categoryId: map['categoryId']?.toString(),
               isPrepared: pType == 'PREPARED' || pType == 'COMPOUND',
               productType: pType,
               mappingVersionId: map['mappingVersionId'] as String?,

@@ -17,6 +17,9 @@ class Product with _$Product {
     String? sku,
     String? barcode,
     String? category,
+    /// T0.5c: resolved category identity (catalog_values.id). Promotions
+    /// match strictly on this id, never on the free-text [category].
+    String? categoryId,
     @Default(false) bool isPrepared,
     @Default('SIMPLE') String productType,
     String? mappingVersionId,

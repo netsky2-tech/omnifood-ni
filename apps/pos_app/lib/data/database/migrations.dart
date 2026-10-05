@@ -2647,6 +2647,28 @@ final migration59_60 = Migration(59, 60, (database) async {
   }
 });
 
+// T0.5c: the products table gains the nullable resolved-category identity
+// column (`category_id` = catalog_values.id) shipped by the cloud product
+// delta. Promotions match strictly by this id; the free-text `category`
+// column stays for display. Nullable TEXT with no default — full parity with
+// the Floor entity field: a product without a resolved category legitimately
+// has null, so no NOT NULL/DEFAULT trade-off exists (same shape argument as
+// migration59_60). Each guard (table existence + column probe) makes the
+// migration safe to re-run (SQLite has no ADD COLUMN IF NOT EXISTS).
+final migration60_61 = Migration(60, 61, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='products'",
+  );
+  if (tables.isEmpty) return;
+  final columns = await database.rawQuery('PRAGMA table_info(products)');
+  final names = columns.map((row) => row['name'] as String).toSet();
+  if (!names.contains('category_id')) {
+    await database.execute(
+      'ALTER TABLE products ADD COLUMN category_id TEXT',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2698,6 +2720,7 @@ final allMigrations = [
   migration57_58,
   migration58_59,
   migration59_60,
+  migration60_61,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open
