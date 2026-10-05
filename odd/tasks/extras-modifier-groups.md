@@ -135,7 +135,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 
 ### Fase 2 — Bajada y espejo local
 
-- [ ] **T2.1** Tipos de delta nuevos (`modifierGroups`, `categoryModifierGroups`, `productModifierGroups`)
+- [x] **T2.1** Tipos de delta nuevos (`modifierGroups`, `categoryModifierGroups`, `productModifierGroups`)
       en `InboundSyncDeltasDto` (`inbound-sync.dto.ts:292`), su gating (`inbound-sync.service.ts:163-210`)
       y el ingest del POS (`sync_service.dart:3215-3410`).
 - [ ] **T2.2** Tablas locales espejo + DAOs.
@@ -1200,3 +1200,36 @@ oxlint limpios. Copy guard extendido sobre los 3 tabs.
 **Riesgos registrados:** selector de producto carga el listado completo con filtro client-
 side (con catálogos muy grandes haría falta paginación — el filtro ya aísla el punto); el
 reorden de enganches requiere un endpoint PATCH que hoy no existe.
+
+## 34. T2.1 — Delta del catálogo de modifiers al POS (69041819, RECIBO QUEMADO) + T2.4 temprano
+
+**Unidad backend** (3 ficheros, 671 líneas): `InboundSyncDeltasDto` gana
+`modifierGroups` / `categoryModifierGroups` / `productModifierGroups` (opcionales en el
+tipo, siempre poblados — precedente `alerts`), gating con variantes planas y con
+guion bajo, y 3 builders.
+
+**Decisión de diseño central: SNAPSHOT COMPLETO, sin `sinceDate`.** Los enganches se
+borran con `DELETE` duro (T1.2 detach), así que un delta incremental `created_at > since`
+**nunca** propagaría borrados. Las tablas son minúsculas ⇒ el estado completo es la
+semántica correcta. El test `is independent of sinceDate: a future since still returns
+every row` codifica la rationale. Grupos/opciones inactivos viajan como tombstones; el
+`catalogCode` se resuelve en lote (una lectura `In`, sin N+1) y una fila catálogo
+inexistente (imposible por FK) se salta con `warn`, nunca fabrica código.
+
+**T2.4 cerrada dentro de esta unidad** (aterrizaje temprano, documentado con honestidad):
+los 6 tokens entraron al set default de `parseRequestedTypes` porque es el patrón de la
+casa (todos los tipos viven ahí) — mi contrato de delegación no lo excluyó, el worker lo
+siguió y lo reportó. Está **doble-testeado** ("includes the three new keys by default" ×2).
+Rechazarlo para re-hacer una línea en unidad aparte sería burocracia, no disciplina.
+
+**Reorden honesto de Fase 2**: el ingest POS (mitad de T2.1 original) se mueve a **T2.2**
+— depende de las tablas locales espejo que todavía no existen; el orden estricto es
+backend → tablas/DAOs+ingest → resolución T2.3.
+
+**Revisión.** `review-1b5973f1aa5f1a69` (medium, 1 lente): **approved al primer intento**,
+**recibo QUEMADO** (`consumed_revision sha256:10c46e6d…`). 1 advisory → backlog:
+R3-CATALOG-TYPE-FILTER (`inbound-sync.service.ts:1321-1322`). Segundo
+`consent-binding-expired` del día — resuelto con re-START (`lineage_created: false`).
+
+**Verificación del orquestador:** 66/66 del spec, **suite completa 3614 tests**, tsc,
+prettier y eslint limpios, sólo los 3 ficheros de la superficie.
