@@ -527,6 +527,50 @@ describe('ModifiersService', () => {
       });
       expect(optionRepo.update).not.toHaveBeenCalled();
     });
+
+    // R4-001: the single-default invariant must be SERIALIZED per group.
+    // The service must take a transaction-scoped pessimistic_write lock on
+    // the parent group row BEFORE any sibling UPDATE/SAVE, so two
+    // concurrent is_default=true writers cannot both commit a default
+    // under READ COMMITTED.
+    it('takes the pessimistic_write lock on the group row BEFORE any option write when is_default=true', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      await service.createOption('tenant-1', 'group-uuid-1', {
+        name: 'Entera',
+        is_default: true,
+      });
+      const lockCallIndex = groupRepo.findOne.mock.calls.findIndex(
+        (call: unknown[]) =>
+          (call[0] as { lock?: unknown })?.lock !== undefined,
+      );
+      expect(lockCallIndex).toBeGreaterThanOrEqual(0);
+      expect(groupRepo.findOne.mock.calls[lockCallIndex][0]).toEqual({
+        where: { id: 'group-uuid-1', tenant_id: 'tenant-1' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      // Ordering contract: the lock read happens before BOTH the sibling
+      // clear (update) and the new default's save.
+      const lockInvocationOrder =
+        groupRepo.findOne.mock.invocationCallOrder[lockCallIndex];
+      expect(lockInvocationOrder).toBeLessThan(
+        optionRepo.update.mock.invocationCallOrder[0],
+      );
+      expect(lockInvocationOrder).toBeLessThan(
+        optionRepo.save.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('does NOT take the group lock on non-default create paths', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      await service.createOption('tenant-1', 'group-uuid-1', {
+        name: 'Entera',
+      });
+      const lockCalls = groupRepo.findOne.mock.calls.filter(
+        (call: unknown[]) =>
+          (call[0] as { lock?: unknown })?.lock !== undefined,
+      );
+      expect(lockCalls).toHaveLength(0);
+    });
   });
 
   describe('updateOption', () => {
@@ -601,6 +645,47 @@ describe('ModifiersService', () => {
         is_default: false,
       });
       expect(optionRepo.update).not.toHaveBeenCalled();
+    });
+
+    // R4-001: same serialization contract on the update path — lock the
+    // parent group row (pessimistic_write) BEFORE clearing siblings and
+    // saving the new default.
+    it('takes the pessimistic_write lock on the group row BEFORE any option write when is_default=true', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      optionRepo.findOne.mockResolvedValue(mockOption());
+      await service.updateOption('tenant-1', 'group-uuid-1', 'option-uuid-1', {
+        is_default: true,
+      });
+      const lockCallIndex = groupRepo.findOne.mock.calls.findIndex(
+        (call: unknown[]) =>
+          (call[0] as { lock?: unknown })?.lock !== undefined,
+      );
+      expect(lockCallIndex).toBeGreaterThanOrEqual(0);
+      expect(groupRepo.findOne.mock.calls[lockCallIndex][0]).toEqual({
+        where: { id: 'group-uuid-1', tenant_id: 'tenant-1' },
+        lock: { mode: 'pessimistic_write' },
+      });
+      const lockInvocationOrder =
+        groupRepo.findOne.mock.invocationCallOrder[lockCallIndex];
+      expect(lockInvocationOrder).toBeLessThan(
+        optionRepo.update.mock.invocationCallOrder[0],
+      );
+      expect(lockInvocationOrder).toBeLessThan(
+        optionRepo.save.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('does NOT take the group lock on non-default update paths', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      optionRepo.findOne.mockResolvedValue(mockOption());
+      await service.updateOption('tenant-1', 'group-uuid-1', 'option-uuid-1', {
+        name: 'Sin azúcar',
+      });
+      const lockCalls = groupRepo.findOne.mock.calls.filter(
+        (call: unknown[]) =>
+          (call[0] as { lock?: unknown })?.lock !== undefined,
+      );
+      expect(lockCalls).toHaveLength(0);
     });
   });
 

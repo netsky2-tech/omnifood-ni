@@ -537,10 +537,17 @@ export class ModifiersService {
   }
 
   /**
-   * Single-default invariant: at most one default option per group. Runs
-   * inside the same tenant transaction that persists the new/updated
-   * default, so contradictory multi-default state cannot exist even
-   * transiently across transactions.
+   * Single-default invariant: at most one default option per group.
+   *
+   * R4-001: the sibling clear is an unlocked UPDATE, so under READ
+   * COMMITTED two concurrent `is_default=true` writers could each miss the
+   * other's uncommitted default and both commit. To serialize them, this
+   * method FIRST takes a transaction-scoped pessimistic_write lock on the
+   * parent group row: the second transaction blocks until the first
+   * commits, and its trailing UPDATE (per-statement snapshot) then sees
+   * and clears the committed default. Only the `is_default=true` paths
+   * call this, and every caller locks the group row first (group-row-first
+   * lock ordering), so no deadlock is possible.
    */
   private async clearSiblingDefaults(
     manager: EntityManager,
@@ -548,6 +555,11 @@ export class ModifiersService {
     groupId: string,
     excludeOptionId?: string,
   ): Promise<void> {
+    // Serialize default mutations per group before touching siblings.
+    await manager.getRepository(ModifierGroup).findOne({
+      where: { id: groupId, tenant_id: tenantId },
+      lock: { mode: 'pessimistic_write' },
+    });
     await manager.getRepository(ModifierOption).update(
       {
         tenant_id: tenantId,
