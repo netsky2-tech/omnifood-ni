@@ -793,3 +793,46 @@ sensacion de que R4-001 tenia razon.
 **Estado de recibo.** T0.5'a + fix **sin recibo**. Linea de tiempo honesta de deuda abierta:
 `da4c2512` (T0.1') aprobada y no quemable; `d227d7b8`/`dec1b91c` (T0.5'a) en `correction_required`
 por un bloqueador falso. `0d6e7f72` (T1.1) y `394886e8` (T0.2') si consumidos.
+
+## 23. T0.5'b (2026-10-03): el delta de producto embarca categoryId resuelto — `3c39010d`
+
+**Defecto cerrado.** `fetchProductDeltas` (`inbound-sync.service.ts:509-533`) no tenia ningun
+campo de categoria. Esa es la razon raiz de que `item.category` sea siempre `null` en el
+dispositivo: los productos nunca viajan con categoria por el canal nube->POS y el ingest hace
+`map['category'] ?? existing?.category` con `existing` inexistente.
+
+**Contrato nuevo.** `InboundSyncProductDto.categoryId: string | null` — el `catalog_values.id`
+resuelto del `category_code` canonico del producto, dentro del mismo tenant; `null` si el code
+esta vacio o no tiene fila de catalogo (nunca bloquea el sync). **Obligatorio, no opcional:**
+un productor que lo olvide no compila. Se eligio id y no code porque el match del motor de
+promociones va a ser por identidad, y el id sobrevive a un rename de etiqueta; mandar el code
+obligaria al POS a mantener un mapa code->id sincronizado con cada rename.
+
+**Implementacion.** Una sola lectura batcheada de `catalog_values` (sin N+1) por la caja de
+productos ya cargada, atada al MISMO `entityManager` bound al tenant: el contrato RLS y el
+throw fail-closed por manager ausente quedan intactos. Sin constraint unico en
+`(tenant_id, catalog_type, code)` (verificado: solo `catalog_values_pkey`), las filas
+duplicadas de un code se resuelven **deterministicamente**: orden por `created_at` luego `id`,
+nunca por el orden de retorno de la base, y cada code ambiguo loguea tenant/code/conteo.
+
+**Fixture fuera de superficie.** El campo obligatorio rompio `terminal-priming.service.spec.ts`
+(`TS2741`, el unico error del proyecto). El worker hizo bien en frenar y preguntar. Se
+autorizo agregar una linea (`categoryId: null,`) porque ese fixture ya lo exige por convencion
+propia documentada (comentario `:33-35`: "any InboundSyncProductDto fixture must carry [contract
+fields]"). Se descubrio ademas que `inbound-sync.dto.ts` violaba prettier ya en HEAD; sin ese
+reformato `--check` no pasa en un diff limpio.
+
+**Evidencia.** RED `TS2322 Property 'categoryId' is missing` -> GREEN. Propio:
+`inbound-sync` 66/66, `src/modules/sales` 452/452, `terminal-priming` 31/31,
+suite completa **318 suites / 3519 tests** (baseline 3510/3487, nada roto),
+`tsc --noEmit` exit 0, eslint y prettier limpios.
+
+**Incidente de entorno resuelto a mitad de la verificacion.** El worktree hermano
+`/home/octavio_morales/omnifood-ni-fx` fue eliminado mientras corría la suite. 44 symlinks del
+`node_modules` compartido apuntaban al store `.pnpm` de ese worktree (`jest`, `tsc`, `typescript`,
+`eslint`, `prettier`, `@nestjs/*`, `@types/*`, `pg`, `typeorm`...) y quedaron colgados:
+`Cannot find module 'jest/bin/jest.js'`. El store principal tenia **el mismo hash** de todos los
+paquetes, asi que se repararon 44 links re-apuntando `omnifood-ni-fx/node_modules/...` ->
+`omnifood-ni/node_modules/...` (0 rotos tras la reparacion) y la suite volvio a correr completa.
+Leccion: los worktrees comparten `node_modules` via symlink, asi que **borrar un worktree
+hermano puede tumbar el toolchain de todos los demas**.
