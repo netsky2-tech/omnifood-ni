@@ -138,7 +138,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 - [x] **T2.1** Tipos de delta nuevos (`modifierGroups`, `categoryModifierGroups`, `productModifierGroups`)
       en `InboundSyncDeltasDto` (`inbound-sync.dto.ts:292`), su gating (`inbound-sync.service.ts:163-210`)
       y el ingest del POS (`sync_service.dart:3215-3410`).
-- [ ] **T2.2** Tablas locales espejo + DAOs.
+- [x] **T2.2** Tablas locales espejo + DAOs (ingest POS absorbido aquí, ver §35).
 - [ ] **T2.3** **Resolver los grupos efectivos al cargar el producto** — el punto exacto donde hoy se
       descartan las opciones. Acá se cierra el defecto de raíz.
 - [ ] **T2.4** *(redefinida por §7.1)* **Agregar las keys nuevas al set default de `parseRequestedTypes()`**
@@ -1233,3 +1233,37 @@ R3-CATALOG-TYPE-FILTER (`inbound-sync.service.ts:1321-1322`). Segundo
 
 **Verificación del orquestador:** 66/66 del spec, **suite completa 3614 tests**, tsc,
 prettier y eslint limpios, sólo los 3 ficheros de la superficie.
+
+## 35. T2.2 — Espejo SQLite + ingest (4d018f6c + 28664f79, RECIBO QUEMADO)
+
+**Unidad encadenada.** Cuatro entidades Floor (uuid TEXT PK, sin columna tenant), `ModifierDao`
+con UN `replaceAllModifierData` `@transaction` de argumentos posicionales (DELETE+INSERT
+atómico = propagación de los borrados duros), migración `61→62` con sonda, e ingest en
+`sync_service.dart` **presencia-correcta por key**: key ausente (backend viejo) salta la
+rama sin wipe; key presente aunque vacía = reemplazo autoritativo; grupos+opciones siempre
+juntos; las tablas no dueñas se preservan leyéndolas y re-insertándolas en la misma
+transacción. 11 tests nuevos; suite completa POS verificada por el orquestador (2985 con
+sólo el flake rotativo `flutter_tester`, ambos ficheros verdes individuales).
+
+**`lens_context_budget_exceeded` — diagnóstico y solución.** El primer commit de la unidad
+(6178+4664 líneas) reventó el presupuesto del lente. El villano NO fue el código (1380
+líneas reales) sino el **churn generado de 7 ficheros `*.mocks.dart` (~9.7k líneas de
+renumbering de aliases por meterse `ModifierDao` en `AppDatabase`)**. Verificado que los
+mocks viejos compilan y pasan (mockito `noSuchMethod`) ⇒ **descartados de la unidad** y el
+historial reescrito con `reset --soft` en dos commits encadenados. Lección: regenerar
+mockito puede inflar el diff ×7 — ojo con el presupuesto de revisión.
+
+**Incidente del relay (7 intentos + reinicio de Pi).** El lente `reliability` falló en
+cascada: `length` → `stop` (1.4s) → JSON truncado (967 B) → replay → JSON truncado (3506 B)
+→ replay → replay antiguo. El relay reenviaba bytes rechazados en vez de correr de nuevo.
+**El reinicio de Pi lo resolvió de entrada**: forecast → ack → `approved` con 3 advisory.
+Dos lecciones de ritual: (a) tras un reinicio, el capture necesita `workspaceRoot` explícito
+(`collectBinding belongs to a different registered route` — el mapa de rutas retenidas vive
+en proceso); (b) si el ack devuelve otro forecast, repetir el ack.
+
+**Advisory → backlog:** R3-001 (`sync_service.dart:4034`), R3-002 (`migrations.dart:2717`),
+R3-003 (`sync_service.dart:4077`). El payload truncado reveló de paso un hallazgo real
+(`R3-SCHEMA-PARITY`, prefijo `index_` de Floor vs `idx_` de la migración) que quedó
+cubierto por el resultado completo — está en los advisory.
+
+**Recibo QUEMADO**: `consumed_revision sha256:4e5e72fc…`, target `sha256:f4820c2b…`.
