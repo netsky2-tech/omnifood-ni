@@ -851,3 +851,44 @@ en byte 589, `reviewer payload contains no complete JSON object`); el segundo in
 binding exacto enviado por la via de slot unico (`gentle_review_capture`) corrio un revisor
 fresco y aprobo. Regla practica: si el grupo rechaza repetido con errores identicos, pasar
 el slot a la via de slot unico en vez de insistir con el grupo.
+
+## 24. T0.5'c (2026-10-05): el POS guarda categoryId y matchea promos por identidad estricta — `353fe2fd`
+
+**Defecto cerrado.** El motor comparaba `item.category?.toLowerCase()` contra
+`targetCategoryId` (`promotions_engine.dart:107` y `:129`), un campo que el delta de producto
+nube->nunca mando: la comparacion corria sobre `null` siempre y la ruta de texto libre era
+muerta en la practica, mientras era la UNICA logica que existia.
+
+**Cambios.**
+- **Columna local**: entidad Floor `category_id` TEXT nullable, base 60 -> 61 con
+  `migration60_61` (probe de tabla + probe `PRAGMA table_info`, re-ejecutable, paridad
+  null-without-default con la entidad). Regenerado con build_runner (nada editado a mano).
+- **Ingesta**: `sync_service.dart:3251` y `activation_priming_service.dart:121` mapean
+  `map['categoryId']`; el `category` de display queda intacto.
+- **Carrito**: `CartItem.categoryId` (Freezed), poblado en `sale_view_model.dart`.
+- **Match estricto**: target null = global (byte-igual al viejo); si no,
+  `line.categoryId == promo.targetCategoryId` exacto, sin case folding ni trim; linea con id
+  null no matchea ninguna promo no-global.
+- **Código muerto eliminado**: `getPromotionsByCategory` (cero llamadores productivos,
+  verificado antes de borrar).
+
+**El unico rojo real de la suite completa** fue
+`promotions_integration_flow_test.dart:180` (`Expected 20.0, Actual 0.0`): sembraba el
+contrato viejo (target `'Bebidas'` contra `category: 'Bebidas'`). Su fixture se migro a ids
+(`cat-bebidas`/`cat-comida`, 4+/1-). **Leccion**: un test de integracion que siembra el
+contrato viejo ES el RED del cambio de contrato; arreglar el fixture es la correccion, no
+truco para verde.
+
+**Flake de toolchain documentado (no nuestro).** Varias corridas completas de `flutter test`
+fallaron siempre en un fichero distinto, siempre en etapa `loading`, con
+`Unable to connect to flutter_tester process: WebSocketException: Invalid WebSocket upgrade
+request`: agotamiento intermitente del handshake del flutter_tester al escalar suites.
+Cada uno de esos ficheros pasa individual (verificado: payment_dao_voucher,
+dgi_report_view_responsive, inventory_database, inventory_valuation_view,
+restaurant_flow_e2e, release_downloader, y otros), sin presion de memoria (10 Gi libres),
+idem con `-j3`. Nada del cambio tocado.
+
+**Verificacion propia (no delegada).** engine 20/20, migrations+promotion_dao 13/13,
+sync 122/122, priming 11/11, integration flow 4/4, `flutter analyze` sin issues.
+**Riesgo aceptado y anotado**: `dart format` de esta version reformatea ficheros de HEAD
+tambien (no es el formatter del repo) — no se aplica; el fixture cambio 4+/1-.
