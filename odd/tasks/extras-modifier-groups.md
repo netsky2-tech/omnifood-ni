@@ -1061,3 +1061,39 @@ de query vive en el servicio (patrón promotions).
 
 **Riesgos señalados:** ver foco de revisión — invariante single-default, junctions que
 sobreviven al soft-delete del grupo.
+
+## 29. T1.2 — Recibo quemado + corrección R4-001 (review-6feb2ce8bd4c14dd)
+
+**Resultado.** START con `baseRef` explícito (`a6399070…`, rango = sólo T1.2: 13 ficheros /
+2210 líneas — el inspect por defecto ofrecía origin/main con los 67 paths de la rama,
+re-empaquetando unidades ya quemadas; se evitó con `{"mode":"ordinary","baseRef":…,
+"committedOnly":true}`). Tier high, 4 lentes + refuter + **corrección acotada** →
+`approved` → **autoridad QUEMADA**: `consumed_revision sha256:1f0cd400…`,
+target `sha256:132e53be…` (correction target `sha256:415a0b73…`).
+
+**R4-001 (CRITICAL, real) y su corrección `8bb09926`.** `clearSiblingDefaults` hacía un
+UPDATE sin lock y el `save` del nuevo default era otra sentencia: bajo READ COMMITTED dos
+`is_default=true` concurrentes no se veían y el grupo quedaba con múltiples defaults.
+Fix: `SELECT … FOR UPDATE` de la fila del grupo ANTES del clear (ordena grupo→opciones en
+todos los caminos, sin deadlock) + docstring honesto. Plan **110** líneas, usado **105**.
+Tests: 4 nuevos (2 de orden vía `invocationCallOrder` + 2 negativos de que no hay lock en
+rutas no-default), RED observado (`lockCallIndex = -1`), modifiers **73/73**.
+
+**Defecto de admisión decodificado (aplicable al flujo futuro).** El slot
+`capture-validation` rechazó 5 veces con `capture-binding-rejected: missing or stale`:
+el `collectBinding` de validación incluye un bloque **`validationRequest`** final
+(camelCase) que los primeros renders de STATUS NO mostraban y mi copia omitía; la
+comparación es `canonicalReviewCaptureBinding` (claves ordenadas recursivamente — el
+ORDEN no importa, SÍ todo el contenido). Ritual correcto: **STATUS fresco → copiar el
+binding COMPLETO incluyendo `validationRequest` → forecast → ack**. Errores propios
+encontrados de paso: (a) transcripción de un JSON gigante a mano es frágil — verificar con
+canon JSON local; (b) `inspect` sin `workspaceRoot` apunta al repo principal.
+
+**Lentes `stopReason: length`.** readability necesitó 4 intentos y reliability 4 (prompts
+~98KB); patrón: STATUS fresco → relanzar el binding reofrecido idéntico. El grupo volvió a
+abortar; per-slot sigue siendo la vía.
+
+**11 advisory informativos (backlog, ninguno reabre):** R2-binding-test-incomplete
+(`spec:807`), R2-dead-injected-repositories (`service:44-54`), R2-self-exclusion-assertion-vacuous
+(`spec:592-594`), R3-1..R3-5 (`service:454,298,135,100,389`), R4-002 (`service:270-293`),
+R4-003 (`service:100-110`), R4-004 (`controller:151-164`).
