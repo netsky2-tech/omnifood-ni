@@ -17,6 +17,7 @@ import { ProductInventoryMappingVersion } from '../../inventory/entities/product
 import { ForensicAlert } from '../../inventory/entities/forensic-alert.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
+import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import {
@@ -507,6 +508,66 @@ export class InboundSyncService {
       : [];
     const mappingByProductId = new Map(mappings.map((m) => [m.product_id, m]));
 
+    // T0.5'b: resolve each product's canonical `category_code` to its
+    // `catalog_values.id` within the same tenant, so the POS can match
+    // promotions by category identity instead of free-text category names.
+    // One batched read for the whole page (no N+1), riding the same
+    // tenant-bound manager as the product read — the RLS contract does not
+    // change. A product whose code is empty or has no catalog row emits
+    // null; it never blocks the sync.
+    const categoryCodes = new Set<string>();
+    for (const item of items) {
+      const code = item.category_code?.trim();
+      if (code) {
+        categoryCodes.add(code);
+      }
+    }
+    const categoryIdByCode = new Map<string, string>();
+    if (categoryCodes.size > 0) {
+      const categoryRows = await entityManager
+        .getRepository(CatalogValue)
+        .createQueryBuilder('catalog')
+        .where('catalog.tenant_id = :tenantId', { tenantId })
+        .andWhere('catalog.catalog_type = :catalogType', {
+          catalogType: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+        })
+        .andWhere('catalog.code IN (:...codes)', {
+          codes: [...categoryCodes],
+        })
+        .getMany();
+      // No unique constraint guarantees one row per (tenant, type, code),
+      // so the same code can legitimately match several rows. Group them
+      // and resolve deterministically (created_at, then id) instead of
+      // trusting database return order, warning when a code is ambiguous.
+      const rowsByCode = new Map<string, CatalogValue[]>();
+      for (const row of categoryRows) {
+        const candidates = rowsByCode.get(row.code);
+        if (candidates) {
+          candidates.push(row);
+        } else {
+          rowsByCode.set(row.code, [row]);
+        }
+      }
+      for (const [code, candidates] of rowsByCode) {
+        if (candidates.length > 1) {
+          this.logger.warn(
+            `Inbound product sync: ${candidates.length} catalog_values rows matched tenant=${tenantId} catalog_type=${CATALOG_TYPE.SALES_PRODUCT_CATEGORY} code=${code}; resolving deterministically by created_at then id`,
+          );
+        }
+        const [chosen] = [...candidates].sort((a, b) => {
+          const byCreatedAt =
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          if (byCreatedAt !== 0) {
+            return byCreatedAt;
+          }
+          return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+        });
+        if (chosen) {
+          categoryIdByCode.set(code, chosen.id);
+        }
+      }
+    }
+
     return items.map((p) => {
       const mapping = mappingByProductId.get(p.id);
       return {
@@ -523,6 +584,9 @@ export class InboundSyncService {
         isTaxExempt: p.is_tax_exempt,
         isActive: p.is_active,
         isPerishable: p.is_perishable,
+        categoryId: p.category_code?.trim()
+          ? (categoryIdByCode.get(p.category_code.trim()) ?? null)
+          : null,
         warehouseId: p.warehouse_id ?? null,
         productType: p.product_type,
         mappingVersionId: mapping ? mapping.id : null,

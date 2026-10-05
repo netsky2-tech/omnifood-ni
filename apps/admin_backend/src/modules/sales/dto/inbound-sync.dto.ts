@@ -78,6 +78,13 @@ export interface InboundSyncProductDto {
   isTaxExempt: boolean;
   isActive: boolean;
   isPerishable: boolean;
+  /**
+   * Resolved `catalog_values.id` for the product's canonical `category_code`
+   * within the same tenant (`catalog_type = 'SALES_PRODUCT_CATEGORY'`). Null
+   * when the product has no category code or the code has no catalog row:
+   * the POS matches promotions by this identity, never by free-text names.
+   */
+  categoryId: string | null;
   warehouseId?: string | null;
   productType?: string;
   mappingVersionId?: string | null;
@@ -317,9 +324,7 @@ export interface InboundSyncDeltasDto {
 
 /** Statuses the negotiation answers an opted-in client with (design §12). */
 export type HumanAuthorizationDeliveryStatus =
-  | 'DISABLED'
-  | 'UPGRADE_REQUIRED'
-  | 'RECOVERY_REQUIRED';
+  'DISABLED' | 'UPGRADE_REQUIRED' | 'RECOVERY_REQUIRED';
 
 export interface HumanAuthorizationDeliveryDto {
   /**

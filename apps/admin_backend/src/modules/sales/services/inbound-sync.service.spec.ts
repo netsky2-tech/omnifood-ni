@@ -330,6 +330,7 @@ describe('InboundSyncService', () => {
       isTaxExempt: false,
       isActive: true,
       isPerishable: true,
+      categoryId: null,
       warehouseId: 'wh-1',
       productType: ProductType.SIMPLE,
       mappingVersionId: null,
@@ -1836,6 +1837,256 @@ describe('InboundSyncService', () => {
       expect(mockLoyaltyRewardRepo.createQueryBuilder).not.toHaveBeenCalled();
       expect(mockPromotionRepo.createQueryBuilder).not.toHaveBeenCalled();
       expect(mockCustomerRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("product category identity in the inbound product delta (T0.5'b)", () => {
+    function buildProductRow(overrides: Record<string, unknown> = {}): Product {
+      return {
+        id: 'prod-cat-1',
+        name: 'Café Americano',
+        uom: 'CUP',
+        stock: 10.5,
+        averageCost: 15.0,
+        sellPrice: 45.0,
+        is_active: true,
+        is_perishable: false,
+        warehouse_id: null,
+        product_type: ProductType.SIMPLE,
+        tenant_id: 'tenant-abc',
+        tax_rate: 0.15,
+        is_tax_exempt: false,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+        ...overrides,
+      } as unknown as Product;
+    }
+
+    function buildCategoryRow(
+      overrides: Record<string, unknown> = {},
+    ): CatalogValue {
+      return {
+        id: 'cat-uuid-bebidas',
+        tenant_id: 'tenant-abc',
+        catalog_type: 'SALES_PRODUCT_CATEGORY' as CatalogType,
+        code: 'BEBIDAS',
+        name: 'Bebidas',
+        description: null,
+        is_active: true,
+        sort_order: 1,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-01T00:00:00Z'),
+        ...overrides,
+      } as unknown as CatalogValue;
+    }
+
+    function buildCategoryOnlyManager(categoryRepo: {
+      createQueryBuilder: jest.Mock;
+    }) {
+      // Overriding CatalogValue keeps the category-resolution read isolated
+      // from the pooled catalog delta mock, while the products read still
+      // rides the default bound path.
+      return buildDefaultBoundManager(
+        new Map<unknown, unknown>([[CatalogValue, categoryRepo]]),
+      );
+    }
+
+    it('emits the resolved catalog_values.id for a resolvable category_code', async () => {
+      productQb.getMany.mockResolvedValue([
+        buildProductRow({ id: 'prod-a', category_code: 'BEBIDAS' }),
+      ]);
+      const categoryRepo = {
+        createQueryBuilder: jest
+          .fn()
+          .mockReturnValue(
+            createMockQueryBuilder([
+              buildCategoryRow({ id: 'cat-uuid-bebidas' }),
+            ]),
+          ),
+      };
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildCategoryOnlyManager(categoryRepo),
+      );
+
+      expect(response.deltas.products).toHaveLength(1);
+      expect(response.deltas.products[0].categoryId).toBe('cat-uuid-bebidas');
+      const categoryQb = categoryRepo.createQueryBuilder.mock.results[0].value;
+      expect(categoryQb.where).toHaveBeenCalledWith(
+        'catalog.tenant_id = :tenantId',
+        { tenantId: 'tenant-abc' },
+      );
+      expect(categoryQb.andWhere).toHaveBeenCalledWith(
+        'catalog.catalog_type = :catalogType',
+        { catalogType: 'SALES_PRODUCT_CATEGORY' },
+      );
+      expect(categoryQb.andWhere).toHaveBeenCalledWith(
+        'catalog.code IN (:...codes)',
+        { codes: ['BEBIDAS'] },
+      );
+    });
+
+    it('emits null when the category code has no catalog row', async () => {
+      productQb.getMany.mockResolvedValue([
+        buildProductRow({ id: 'prod-b', category_code: 'FANTASMA' }),
+      ]);
+      const categoryRepo = {
+        createQueryBuilder: jest
+          .fn()
+          .mockReturnValue(createMockQueryBuilder([])),
+      };
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildCategoryOnlyManager(categoryRepo),
+      );
+
+      expect(response.deltas.products[0].categoryId).toBeNull();
+    });
+
+    it('emits null for null or empty category_code and skips the catalog read entirely', async () => {
+      productQb.getMany.mockResolvedValue([
+        buildProductRow({ id: 'prod-null', category_code: null }),
+        buildProductRow({ id: 'prod-empty', category_code: '' }),
+      ]);
+      const categoryRepo = {
+        createQueryBuilder: jest
+          .fn()
+          .mockReturnValue(createMockQueryBuilder([])),
+      };
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildCategoryOnlyManager(categoryRepo),
+      );
+
+      expect(response.deltas.products).toHaveLength(2);
+      expect(response.deltas.products[0].categoryId).toBeNull();
+      expect(response.deltas.products[1].categoryId).toBeNull();
+      // No codes means no query: the catalog read is skipped entirely.
+      expect(categoryRepo.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it('batches the category resolution into exactly one catalog read for many products (no N+1)', async () => {
+      productQb.getMany.mockResolvedValue([
+        buildProductRow({ id: 'prod-1', category_code: 'BEBIDAS' }),
+        buildProductRow({ id: 'prod-2', category_code: 'BEBIDAS' }),
+        buildProductRow({ id: 'prod-3', category_code: 'COMIDAS' }),
+      ]);
+      const categoryRepo = {
+        createQueryBuilder: jest.fn().mockReturnValue(
+          createMockQueryBuilder([
+            buildCategoryRow({ id: 'cat-uuid-bebidas' }),
+            buildCategoryRow({
+              id: 'cat-uuid-comidas',
+              code: 'COMIDAS',
+            }),
+          ]),
+        ),
+      };
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildCategoryOnlyManager(categoryRepo),
+      );
+
+      expect(categoryRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+      const categoryQb = categoryRepo.createQueryBuilder.mock.results[0].value;
+      expect(categoryQb.andWhere).toHaveBeenCalledWith(
+        'catalog.code IN (:...codes)',
+        { codes: ['BEBIDAS', 'COMIDAS'] },
+      );
+      expect(response.deltas.products[0].categoryId).toBe('cat-uuid-bebidas');
+      expect(response.deltas.products[1].categoryId).toBe('cat-uuid-bebidas');
+      expect(response.deltas.products[2].categoryId).toBe('cat-uuid-comidas');
+    });
+
+    it("resolves duplicate catalog rows for one code deterministically and warns (T0.5'b)", async () => {
+      const warnSpy = jest
+        .spyOn(service['logger'], 'warn')
+        .mockImplementation(() => {});
+      productQb.getMany.mockResolvedValue([
+        buildProductRow({ id: 'prod-dup', category_code: 'DUP' }),
+      ]);
+      // Same created_at on both rows: only the id tie-break can make the
+      // choice deterministic, and the rows arrive in the hostile order
+      // (later id first) to prove the result does not rely on return order.
+      const categoryRepo = {
+        createQueryBuilder: jest.fn().mockReturnValue(
+          createMockQueryBuilder([
+            buildCategoryRow({
+              id: 'cat-zzz',
+              code: 'DUP',
+              created_at: new Date('2026-08-01T00:00:00Z'),
+            }),
+            buildCategoryRow({
+              id: 'cat-aaa',
+              code: 'DUP',
+              created_at: new Date('2026-08-01T00:00:00Z'),
+            }),
+          ]),
+        ),
+      };
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildCategoryOnlyManager(categoryRepo),
+      );
+
+      expect(response.deltas.products[0].categoryId).toBe('cat-aaa');
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('tenant-abc'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DUP'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('2'));
+      warnSpy.mockRestore();
+    });
+
+    it('prefers the earliest created_at row when duplicates differ in creation time', async () => {
+      const warnSpy = jest
+        .spyOn(service['logger'], 'warn')
+        .mockImplementation(() => {});
+      productQb.getMany.mockResolvedValue([
+        buildProductRow({ id: 'prod-dup2', category_code: 'DUP2' }),
+      ]);
+      const categoryRepo = {
+        createQueryBuilder: jest.fn().mockReturnValue(
+          createMockQueryBuilder([
+            buildCategoryRow({
+              id: 'cat-late',
+              code: 'DUP2',
+              created_at: new Date('2026-09-01T00:00:00Z'),
+            }),
+            buildCategoryRow({
+              id: 'cat-early',
+              code: 'DUP2',
+              created_at: new Date('2026-08-01T00:00:00Z'),
+            }),
+          ]),
+        ),
+      };
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildCategoryOnlyManager(categoryRepo),
+      );
+
+      expect(response.deltas.products[0].categoryId).toBe('cat-early');
+      warnSpy.mockRestore();
     });
   });
 });
