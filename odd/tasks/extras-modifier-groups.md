@@ -128,7 +128,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
       `modifier_options` (group_id, name, price_delta, is_default, sort_order, is_active),
       `category_modifier_groups`, `product_modifier_groups`. Ver §9 por la forma exacta acordada.
 - [x] **T1.2** API REST: CRUD de grupos y opciones, y enganches por categoría y por producto.
-- [ ] **T1.3** Resolución server-side de los grupos efectivos: categoría ∪ producto, con orden y overrides.
+- [x] **T1.3** Resolución server-side de los grupos efectivos: categoría ∪ producto, con orden y overrides.
 - [ ] **T1.4** Dashboard: pantalla de grupos (nombre, min/max, cantidades, opciones con delta y default) y
       el flujo principal **"pegar grupos a una categoría"**, más la excepción por producto mostrando lo
       heredado como heredado.
@@ -1097,3 +1097,30 @@ abortar; per-slot sigue siendo la vía.
 (`spec:807`), R2-dead-injected-repositories (`service:44-54`), R2-self-exclusion-assertion-vacuous
 (`spec:592-594`), R3-1..R3-5 (`service:454,298,135,100,389`), R4-002 (`service:270-293`),
 R4-003 (`service:100-110`), R4-004 (`controller:151-164`).
+
+## 30. T1.3 — Resolución server-side de grupos efectivos (38e37c71)
+
+**Endpoint.** `GET /modifier-groups/effective?product_id=<uuid>` → lista ordenada de grupos
+efectivos con `source: 'category' | 'product'` y sus opciones activas. La posición en el
+array ES el orden (no hay campo `sort_order` en la respuesta). `@Get('effective')` declarado
+ANTES de `@Get(':id')` — el matching de Nest es en orden y `:id` capturaría la ruta.
+
+**Regla de resolución (T2.3 DEBE espejarla idéntica en el POS):**
+
+1. **Lado categoría (heredado):** `products.category_code` → fila `catalog_values` del tenant
+   con `catalog_type = SALES_PRODUCT_CATEGORY` y ese `code` → sus `category_modifier_groups`.
+   Sin `code` o con código huérfano (sin fila catálogo) → conjunto heredado **vacío**, nunca
+   un fallo.
+2. **Lado producto (excepciones):** `product_modifier_groups` del producto.
+3. **Unión con override:** dedup por `group_id`; si el producto engancha un grupo que también
+   cuelga de la categoría, aparece **una sola vez** con `source: 'product'` (la excepción
+   explícita gana), aunque su sort_order de categoría sea menor.
+4. **Orden determinístico:** bloque `category` primero (`cmg.sort_order`, `group.name`,
+   `group.id`), después bloque `product` (mismas claves con `pmg`).
+5. **Filtrado fail-closed:** sólo `modifier_groups.is_active` y `modifier_options.is_active`.
+6. Producto inexistente → 404 con mensaje único (sin oráculo cross-tenant); uuid malformado → 400.
+
+**TDD.** RED primero (TS2339 `getEffectiveGroups` no existe, 0 tests), luego GREEN:
+**82/82** en el módulo (8 tests nuevos de servicio + 1 de controlador). Verificado por el
+orquestador de forma independiente: alcance de 4 ficheros dentro de la superficie, orden de
+rutas, lint/prettier/tsc limpios, **suite completa 320/320 / 3605 tests verdes**.
