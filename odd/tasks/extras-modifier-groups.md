@@ -892,3 +892,54 @@ idem con `-j3`. Nada del cambio tocado.
 sync 122/122, priming 11/11, integration flow 4/4, `flutter analyze` sin issues.
 **Riesgo aceptado y anotado**: `dart format` de esta version reformatea ficheros de HEAD
 tambien (no es el formatter del repo) — no se aplica; el fixture cambio 4+/1-.
+
+## 25. R0.5'c (2026-10-05): correccion R3-001/R3-002 + RECIBO QUEMADO — `a2712d7b`
+
+**Veredicto inicial (4 lentes, tier high):** `correction_required` con dos CRITICAL gemelos
+del lente reliability, ambos reales en el codigo:
+- **R3-001** `activation_priming_service.dart:122` y **R3-002** `sync_service.dart:3252`:
+  `categoryId` se asignaba SIN el fallback `?? existing?` que si usan sus vecinos
+  (sku/barcode/category). Un payload que omite la key borra en silencio el id resuelto y
+  desactiva el match estricto de promos hasta que otro payload lo reponga.
+
+**El arreglo obvio estaba mal.** `map['categoryId']?.toString() ?? existing?.categoryId`
+haria IMPOSIBLE limpiar un id: un `null` autoritativo (backend diciendo "categoria
+resuelta ya no existe") tambien caeria al fallback y dejaria el id obsoleto matcheando una
+categoria de la que el producto ya no forma parte. La correccion distingue los tres casos:
+
+```dart
+categoryId: map.containsKey('categoryId')
+    ? map['categoryId']?.toString()   // valor presente: sobrescribe (null limpia)
+    : existing?.categoryId,           // key ausente (backend viejo): conserva
+```
+
+**Evidencia TDD.** RED observado primero con `git stash` de los dos ficheros de origen:
+ambas aserciones de preservacion fallaron `Expected 'cat-uuid-...' Actual <null>`.
+GREEN: priming 12/12 + sync 122/122, `flutter analyze` limpio.
+**Presupuesto:** 73 lineas de diff contra las 140 declaradas (techo 200).
+
+### Flujo de correccion nativo — descifrado completo (aplicable a todos los work-units)
+
+1. 4 lentes → `correction_required` → STATUS ofrece `correction_plan_required` con
+   `request_hash` → `gentle_review_capture` con `correctionLines` (lineas de diff) admite
+   el plan.
+2. STATUS devuelve `stop / corrected_candidate_unavailable` **y sigue devolviendo lo mismo**
+   aunque los cambios esten en el working tree — `git add` (staged) **no mueve nada**: la
+   proyeccion es del rango CONGELADO, no del workspace.
+3. **El paso que desbloquea es COMMITEAR la correccion.** Acto seguido, STATUS devuelve
+   `action=collect / targeted_validation_required` con `correction_candidate_tree` y
+   exactamente los paths corregidos.
+4. Slot `capture-validation` (materialize: forecast → ack) corre UN validador dirigido
+   sobre el arbol corregido → `approved` → `acknowledge-approved` **sin input** →
+   `authority: burned`.
+   Toda commit ahi es segura: el recibo se quema ANTES de cualquier commit posterior.
+
+**Tambien confirmado:** cuando el capture por GRUPO falla con errores de admision identicos
+byte a byte o `stopReason: length` en un lente, la salida es capturar DE A SLOT con STATUS
+fresco entre cada uno — los 4 lentes completaron por esa via (readability, que reventó en
+grupo, corrio solo con 7430 bytes).
+
+**Recibo:** `review-96bb16fbf6825a99` QUEMADO sobre `target sha256:74877c81…`
+(`consumed_revision sha256:55990ff8…`). Seis hallazgos advisory informativos quedan como
+follow-up: R1/R4-1/R4-2 (`sync:3252`, `priming:122`, WARNING), R2-1 (`priming:122`),
+R2-2 (`promotions_engine:135`), R2-3 (`migrations_test:223`).
