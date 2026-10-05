@@ -26,10 +26,12 @@ export class UpdatePromotionDto {
 
   // T0.5'a: a uuid referencing catalog_values(tenant_id, id); the service
   // additionally requires it to be a SALES_PRODUCT_CATEGORY row of the
-  // caller's tenant.
+  // caller's tenant. T0.5'd: an explicit JSON null is also accepted and
+  // means "clear to global" (the column is set to NULL); an empty string
+  // is still rejected by the service guard.
   @IsOptional()
   @IsUUID()
-  target_category_id?: string;
+  target_category_id?: string | null;
 
   @IsOptional()
   @IsInt()

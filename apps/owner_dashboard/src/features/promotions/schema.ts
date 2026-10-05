@@ -1,11 +1,24 @@
 import { z } from 'zod';
 import { PromotionType } from '@/types/promotions';
 
+// Same shape the backend guard enforces (T0.5'a/T0.5'd): a category target
+// must be a uuid or an explicit empty selection ("Global"). Free text is
+// rejected here so the form can never submit a blank-string target.
+const CATEGORY_UUID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
 export const promotionFormSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido').max(100, 'Máximo 100 caracteres'),
   type: z.nativeEnum(PromotionType, { required_error: 'Seleccione un tipo de promoción' }),
   target_product_id: z.string().optional(),
-  target_category_id: z.string().optional(),
+  // T0.5'd: '' = nothing selected (global); anything else must be a uuid
+  // chosen from the synced category picker.
+  target_category_id: z
+    .string()
+    .refine((value) => value === '' || CATEGORY_UUID_PATTERN.test(value), {
+      message: 'Seleccione una categoría de producto válida',
+    })
+    .optional(),
   buy_quantity: z.coerce.number().int().min(0).optional(),
   get_quantity: z.coerce.number().int().min(0).optional(),
   discount_value: z.coerce.number().min(0).optional(),

@@ -232,6 +232,59 @@ describe('PromotionsService', () => {
     });
   });
 
+  // T0.5'd: an explicit JSON null is a deliberate "no category target"
+  // (global on create, clear on update) and must flow to the column, while
+  // an empty string stays rejected — the blank-target trap T0.5'a guards.
+  describe("target_category_id null contract (T0.5'd)", () => {
+    const validUuid = '11111111-1111-4111-8111-111111111111';
+
+    it('accepts target_category_id null on create as a global promotion without querying the catalog', async () => {
+      const created = await service.create('tenant-1', {
+        name: 'Promo Global',
+        type: PromotionType.PERCENTAGE_DISCOUNT,
+        target_category_id: null,
+      });
+      expect(created.target_category_id).toBeNull();
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(repo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears a previously set target_category_id on update with null', async () => {
+      repo.findOne.mockResolvedValue(
+        mockPromotion({ target_category_id: validUuid }),
+      );
+      const updated = await service.update('tenant-1', 'promo-uuid-1', {
+        target_category_id: null,
+      });
+      expect(updated.target_category_id).toBeNull();
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(repo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('still rejects an empty-string target_category_id on create', async () => {
+      await expect(
+        service.create('tenant-1', {
+          name: 'Promo',
+          type: PromotionType.PERCENTAGE_DISCOUNT,
+          target_category_id: '',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('still rejects an empty-string target_category_id on update', async () => {
+      repo.findOne.mockResolvedValue(mockPromotion());
+      await expect(
+        service.update('tenant-1', 'promo-uuid-1', {
+          target_category_id: '',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+  });
+
   // Issue #512 T3 slice 6: the promotions table is now tenant-RLS
   // protected, so every promotions access must run inside a tenant-bound
   // transaction. This guard has RUNTIME teeth: it injects a fake DataSource

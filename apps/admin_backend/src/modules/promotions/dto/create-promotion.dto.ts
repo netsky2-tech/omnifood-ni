@@ -28,10 +28,12 @@ export class CreatePromotionDto {
   // T0.5'a: a uuid referencing catalog_values(tenant_id, id); the service
   // additionally requires it to be a SALES_PRODUCT_CATEGORY row of the
   // caller's tenant. Optional: NULL keeps its POS-engine meaning of a
-  // GLOBAL promotion.
+  // GLOBAL promotion. T0.5'd: an explicit JSON null is also accepted and
+  // means "no category target" (global on create, clear on update); an
+  // empty string is still rejected by the service guard.
   @IsOptional()
   @IsUUID()
-  target_category_id?: string;
+  target_category_id?: string | null;
 
   @IsOptional()
   @IsInt()

@@ -114,7 +114,11 @@ export class PromotionsService {
     dto: CreatePromotionDto | UpdatePromotionDto,
   ): Promise<void> {
     const targetCategoryId = dto.target_category_id;
-    if (targetCategoryId === undefined) {
+    // T0.5'd: an explicit null means "no category target" exactly like
+    // undefined — global on create, clear on update — and skips the guard.
+    // An empty string is still rejected below: it is the blank-target trap
+    // T0.5'a protects against, never a valid target.
+    if (targetCategoryId === undefined || targetCategoryId === null) {
       return;
     }
     if (!UUID_PATTERN.test(targetCategoryId)) {
