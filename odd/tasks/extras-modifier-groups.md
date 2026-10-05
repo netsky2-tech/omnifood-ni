@@ -1124,3 +1124,18 @@ ANTES de `@Get(':id')` — el matching de Nest es en orden y `:id` capturaría l
 **82/82** en el módulo (8 tests nuevos de servicio + 1 de controlador). Verificado por el
 orquestador de forma independiente: alcance de 4 ficheros dentro de la superficie, orden de
 rutas, lint/prettier/tsc limpios, **suite completa 320/320 / 3605 tests verdes**.
+
+## 31. T1.3 — Recibo quemado (review-389ba8dc54550829)
+
+**Resultado.** Rango delimitado con `baseRef` explícito (`5d6e979a…` — el inspect por defecto
+otra vez ofreció origin/main con toda la rama): 5 ficheros / 477 líneas. Tier **medium, 1
+lente (reliability)** → `approved` al **3er intento** (intento 1: `stopReason: length` a los
+188s; intento 2: `stopReason: stop` a 1.2s — relayer caído, carácter distinto) →
+**autoridad QUEMADA**: `consumed_revision sha256:e853a3c9…`, target `sha256:42892ba1…`.
+
+**Advisory (2, informativos → backlog):** R3-001 (`modifiers.service.ts:493-496`) y R3-002
+(`modifiers.service.ts:539-543`), ambos WARNING de reliability sobre la resolución nueva.
+
+**Verificación del orquestador (independiente):** 4 ficheros dentro de la superficie, orden
+`@Get('effective')` antes de `@Get(':id')` verificado en el fichero, 82/82 del módulo, tsc,
+eslint y prettier limpios, **suite completa 320/320 / 3605 tests verdes**.
