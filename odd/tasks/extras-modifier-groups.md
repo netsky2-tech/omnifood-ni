@@ -943,3 +943,46 @@ grupo, corrio solo con 7430 bytes).
 (`consumed_revision sha256:55990ff8…`). Seis hallazgos advisory informativos quedan como
 follow-up: R1/R4-1/R4-2 (`sync:3252`, `priming:122`, WARNING), R2-1 (`priming:122`),
 R2-2 (`promotions_engine:135`), R2-3 (`migrations_test:223`).
+
+## 26. T0.5'd (2026-10-05): picker de categorias + contrato null — `3a40a15a`
+
+**Defecto cerrado (urgente).** Tras T0.5'a el backend exige uuid, pero el form del dashboard
+seguia mandando texto libre con default `''` — `'' !== undefined` asi que **todo create de
+promocion desde el dashboard devolvia 400**, y editar no podia limpiar un target.
+
+**Backend (contract).** DTOs `target_category_id?: string | null` (create+update;
+`IsOptional` de class-validator ya salta null, update aplica via `Object.assign`) y el guard
+trata `null` igual que `undefined` (create = global, update = limpiar). **`''` sigue con
+BadRequest** — es la misma trampa de target en blanco que T0.5'a protege.
+
+**Dashboard.**
+- Input de texto -> `<select>` nativo con `useCatalogValues('SALES_PRODUCT_CATEGORY', true)`
+  (**nativo porque Radix Select rechaza values `''`**). Categorias inactivas llevan sufijo
+  ` (inactiva)`: un target guardado en una categoria desactivada debe renderizarse como lo
+  que es, no parecer global.
+- `schema.ts`: acepta solo `''` o uuid; el texto libre muere en cliente con mensaje en espanol.
+- **Normalizacion de envio** (el corazon): create omite la key con `''` (backend -> global);
+  update manda `null` explicito con `''` (`Object.assign` limpia); el id elegido pasa sin tocar.
+- `PromotionsList`: resuelve id -> nombre con fallback `…ultimos8`; nunca uuid a pelo, nunca
+  `Global` para un id no-nulo (2 sitios: fila y dialogo).
+- `types/promotions.ts`: solo los dos DTOs ampliados a `string | null` (sin casts).
+
+**Evidencia.** RED en ambos lados: backend (`2 failed` con el BadRequest del guard) y
+dashboard (`3 failed` contra el schema de texto libre, tras `npm ci`). GREEN: backend
+promotions **37/37**, dashboard promotions **31 passed / 4 skips pre-existentes**, tsc limpio
+en las dos apps, oxlint sin warns nuevos, eslint+prettier limpios.
+
+**Suites completas.** Backend **318 suites / 3523 tests** verdes. Dashboard: la primera
+corrida completa tiro 2 tests en 1 fichero que **no se reprodujeron en 3 corridas
+consecutivas** (95/95, 1361 passed x3); no capture sus nombres en su momento — queda como
+transitorio sin identidad, mismo caracter que los flakes de flutter_tester.
+
+**Seguimiento nuevo (encontrado por el worker, fuera de alcance).** En `PromotionForm`, los
+inputs opcionales `start_date`/`end_date` registran `valueAsNumber`: vacios producen `NaN`,
+`z.coerce.number()` rechaza con un error atado a campos sin UI, `onSubmit` nunca se dispara y
+la creacion **no hace nada en silencio**. Los tests del picker rellenan las fechas (caso
+realista). Corregir en una unidad aparte: preprocess `NaN -> undefined` en el schema o
+sacar `valueAsNumber` de esos dos campos.
+
+**Decidido en la iteracion:** opcion A (tipos compartidos ampliados, no cast) + `npm ci`
+autorizado en el worktree (solo crea `node_modules`, lockfile de la rama).
