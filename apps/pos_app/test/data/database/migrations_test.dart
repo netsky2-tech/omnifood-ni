@@ -217,13 +217,13 @@ void main() {
   });
 
   test(
-      'allMigrations keeps the chain ordered: migration60_61 is the newest '
+      'allMigrations keeps the chain ordered: migration63_64 is the newest '
       'link at the end and migration59_60 is retained immediately before it',
       () {
     // The newest link is registered at the end of the chain.
-    expect(allMigrations.last.startVersion, 60);
-    expect(allMigrations.last.endVersion, 61);
-    expect(allMigrations.last, same(migration60_61));
+    expect(allMigrations.last.startVersion, 63);
+    expect(allMigrations.last.endVersion, 64);
+    expect(allMigrations.last, same(migration63_64));
     // The previous newest link is still registered, in position, with its
     // versions unchanged.
     expect(allMigrations[allMigrations.length - 2], same(migration59_60));

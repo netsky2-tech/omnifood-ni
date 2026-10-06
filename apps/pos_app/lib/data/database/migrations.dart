@@ -2647,7 +2647,7 @@ final migration59_60 = Migration(59, 60, (database) async {
   }
 });
 
-final migration60_61 = Migration(60, 61, (database) async {
+final migration63_64 = Migration(63, 64, (database) async {
   // S1a (backlog #68): per-row outbox for the card/voucher reconciliation
   // push (`POST /sales/payment-reconciliations/sync`). NOT NULL DEFAULT
   // 'synced' is deliberate: a freshly created payment already travels inside
@@ -2719,7 +2719,7 @@ final allMigrations = [
   migration57_58,
   migration58_59,
   migration59_60,
-  migration60_61,
+  migration63_64,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open
