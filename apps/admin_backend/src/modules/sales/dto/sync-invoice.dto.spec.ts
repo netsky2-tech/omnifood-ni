@@ -179,4 +179,48 @@ describe('SyncInvoiceDto fx-rate fiscal fields (D-6)', () => {
 
     expect(errors).toEqual([]);
   });
+
+  describe('customer snapshot fields (odd/factura-con-nombre)', () => {
+    it('accepts customerName and customerTaxId and keeps them after whitelist stripping', () => {
+      const { dto, errors } = validate({
+        ...basePayload,
+        customerName: 'Comercial S.A.',
+        customerTaxId: 'J0310000001234',
+      });
+
+      expect(errors).toEqual([]);
+      expect(dto.customerName).toBe('Comercial S.A.');
+      expect(dto.customerTaxId).toBe('J0310000001234');
+    });
+
+    it('accepts explicit nulls for anonymous sales', () => {
+      const { dto, errors } = validate({
+        ...basePayload,
+        customerName: null,
+        customerTaxId: null,
+      });
+
+      expect(errors).toEqual([]);
+      expect(dto.customerName).toBeNull();
+      expect(dto.customerTaxId).toBeNull();
+    });
+
+    it('allows either customerName or customerTaxId alone', () => {
+      const withNameOnly = validate({
+        ...basePayload,
+        customerName: 'Juan Perez',
+      });
+      expect(withNameOnly.errors).toEqual([]);
+      expect(withNameOnly.dto.customerName).toBe('Juan Perez');
+      expect(withNameOnly.dto.customerTaxId).toBeUndefined();
+
+      const withTaxIdOnly = validate({
+        ...basePayload,
+        customerTaxId: '001-120590-0001A',
+      });
+      expect(withTaxIdOnly.errors).toEqual([]);
+      expect(withTaxIdOnly.dto.customerName).toBeUndefined();
+      expect(withTaxIdOnly.dto.customerTaxId).toBe('001-120590-0001A');
+    });
+  });
 });

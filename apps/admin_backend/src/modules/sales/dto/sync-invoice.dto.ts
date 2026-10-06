@@ -291,6 +291,14 @@ export class SyncInvoiceDto {
   @IsOptional()
   customerId?: string;
 
+  @IsString()
+  @IsOptional()
+  customerName?: string | null;
+
+  @IsString()
+  @IsOptional()
+  customerTaxId?: string | null;
+
   @IsBoolean()
   @IsOptional()
   globalTaxOverride?: boolean;

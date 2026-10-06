@@ -187,6 +187,37 @@ describe('SalesExportService', () => {
       );
     });
 
+    it('uses the customerName snapshot when present, avoiding customerId fallback', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([
+        {
+          id: 'inv-named',
+          tenant_id: tenantId,
+          number: '001-001-01-00000099',
+          type: 'regular',
+          subtotal: 500,
+          totalTax: 75,
+          total: 575,
+          totalUsd: 15.75,
+          isCanceled: false,
+          customerId: 'cust-uuid-1234',
+          customerName: 'Comercializadora Managua S.A.',
+          customerTaxId: 'J0310000009999',
+          created_at: new Date('2026-08-26T12:00:00.000Z'),
+          items: [],
+        } as unknown as Invoice,
+      ]);
+
+      const jsonResult = await service.exportSalesBook(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'json',
+      });
+
+      expect(jsonResult.data.records[0].customerName).toBe(
+        'Comercializadora Managua S.A.',
+      );
+    });
+
     // B2e U3 (D-3): the configured rate governs the label — with a 15%
     // Regimen General setup (the beforeEach default) the derived header is
     // 'IVA 15% (NIO)'; a different configured rate must flow through.

@@ -236,7 +236,7 @@ export class SalesExportService {
         date: dateStr,
         invoiceNumber: inv.number || 'N/A',
         documentType: docType,
-        customerName: inv.customerId || 'CONSUMIDOR FINAL',
+        customerName: inv.customerName || (inv.customerId || 'CONSUMIDOR FINAL'),
         exemptSubtotalNio: round2(exemptSubtotalNio),
         taxableSubtotalNio: round2(taxableSubtotalNio),
         taxAmountNio: round2(totalTax),
