@@ -263,7 +263,9 @@ void main() {
       // All initial orders are now served
       expect(kitchenViewModel.pendingCount, 0);
 
-      // --- STEP 6: Customer orders Flan & Coffee later (Append with Optimistic Lock) ---
+      // --- STEP 6: Customer orders Flan & Coffee later (full-cart replace with Optimistic Lock) ---
+      // F1 semantics: the caller sends the COMPLETE new contents of the
+      // account (existing items + the new round).
       final flanItem = const CartItem(
         productId: 'prod-flan',
         productName: 'Flan Casero',
@@ -280,9 +282,10 @@ void main() {
         taxRate: 0.15,
       );
 
-      final updatedTicket = await tableOrderService.appendItemsToOrder(
+      final updatedTicket = await tableOrderService.replaceOrderItems(
         ticketId: parkedTicket.id,
-        newItems: [flanItem, coffeeItem],
+        name: 'Mesa 1 - Almuerzo Ejecutivo',
+        items: [...parkedTicket.items, flanItem, coffeeItem],
         expectedVersion: 1,
       );
 

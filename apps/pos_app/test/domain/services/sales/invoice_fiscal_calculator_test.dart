@@ -29,6 +29,8 @@ void main() {
       final result = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.cuotaFija,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
 
       expect(result.taxRegime, TaxRegime.cuotaFija);
@@ -81,6 +83,8 @@ void main() {
       final result = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
 
       expect(result.taxRegime, TaxRegime.regimenGeneral);
@@ -134,7 +138,10 @@ void main() {
           selectedModifiers: [Modifier(id: 'cheese', name: 'Queso extra', extraPrice: 15)],
         ),
       ];
-      final calculation = calculator.calculate(cart: cart, taxRegime: TaxRegime.regimenGeneral);
+      final calculation = calculator.calculate(cart: cart, taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
+      );
       final document = calculator.buildReceiptDocument(
         calculation: calculation,
         sourceCart: cart,
@@ -167,6 +174,8 @@ void main() {
       final generalResult = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
       expect(generalResult.subtotal, equals(100.00));
       expect(generalResult.totalTax, equals(15.00));
@@ -176,6 +185,8 @@ void main() {
       final cuotaFijaResult = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.cuotaFija,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
       expect(cuotaFijaResult.subtotal, equals(100.00));
       expect(cuotaFijaResult.totalTax, equals(0.00));
@@ -199,6 +210,8 @@ void main() {
       final result = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
 
       expect(result.subtotal, equals(100.00));
@@ -244,6 +257,8 @@ void main() {
       final result = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
 
       expect(result.grossSubtotal, equals(100.00));
@@ -271,6 +286,8 @@ void main() {
       final resGeneral = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
       // 1.50 * 0.15 = 0.225 -> rounded to 0.23
       expect(resGeneral.subtotal, equals(1.50));
@@ -280,6 +297,8 @@ void main() {
       final resCuotaFija = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.cuotaFija,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
       expect(resCuotaFija.subtotal, equals(1.50));
       expect(resCuotaFija.totalTax, equals(0.00));
@@ -300,6 +319,8 @@ void main() {
       final resGeneral = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
       // 12500 * 0.15 = 1875.00
       expect(resGeneral.subtotal, equals(12500.00));
@@ -309,6 +330,8 @@ void main() {
       final resCuotaFija = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.cuotaFija,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
       expect(resCuotaFija.subtotal, equals(12500.00));
       expect(resCuotaFija.totalTax, equals(0.00));
@@ -342,6 +365,8 @@ void main() {
       final resGeneral = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
       expect(resGeneral.subtotal, equals(740.00));
       expect(resGeneral.totalTax, equals(111.00));
@@ -354,6 +379,8 @@ void main() {
       final resCuotaFija = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.cuotaFija,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
       expect(resCuotaFija.subtotal, equals(740.00));
       expect(resCuotaFija.totalTax, equals(0.00));
@@ -389,6 +416,8 @@ void main() {
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
         totalDiscounts: 20.00,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
 
       expect(result.grossSubtotal, equals(200.00));
@@ -432,6 +461,8 @@ void main() {
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
         totalDiscounts: 15.00,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
 
       for (final line in resRG.lines) {
@@ -450,6 +481,8 @@ void main() {
         cart: cart,
         taxRegime: TaxRegime.cuotaFija,
         totalDiscounts: 15.00,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
 
       for (final line in resCF.lines) {
@@ -539,6 +572,8 @@ void main() {
           () => calculator.calculate(
             cart: cart,
             taxRegime: null,
+            commercialRate: 36.50,
+            bcnOfficialRate: 36.6241,
           ),
           throwsA(isA<FiscalConfigurationException>()),
         );
@@ -559,9 +594,58 @@ void main() {
           () => calculator.calculate(
             cart: cart,
             taxRegime: null,
+            commercialRate: 36.50,
+            bcnOfficialRate: 36.6241,
           ),
           throwsA(isA<FiscalConfigurationException>()),
         );
+      });
+    });
+
+    group('FX rate integrity (#67/T2a): the calculator never fabricates a rate', () {
+      CartItem validItem() => const CartItem(
+            productId: 'p-fx',
+            productName: 'Producto FX',
+            quantity: 1,
+            unitPrice: 100.00,
+            taxRate: 0.15,
+          );
+
+      test('calculate throws on a non-positive commercialRate instead of substituting 36.50', () {
+        expect(
+          () => calculator.calculate(
+            cart: [validItem()],
+            taxRegime: TaxRegime.regimenGeneral,
+            commercialRate: 0.0,
+            bcnOfficialRate: 36.6241,
+          ),
+          throwsA(isA<FiscalConfigurationException>()),
+        );
+      });
+
+      test('calculate throws on a non-positive bcnOfficialRate instead of substituting 36.6241', () {
+        expect(
+          () => calculator.calculate(
+            cart: [validItem()],
+            taxRegime: TaxRegime.regimenGeneral,
+            commercialRate: 36.50,
+            bcnOfficialRate: -1.0,
+          ),
+          throwsA(isA<FiscalConfigurationException>()),
+        );
+      });
+
+      test('valid rates keep computing totalUsd from the given commercial rate', () {
+        final result = calculator.calculate(
+          cart: [validItem()],
+          taxRegime: TaxRegime.regimenGeneral,
+          commercialRate: 50.0,
+          bcnOfficialRate: 48.0,
+        );
+
+        expect(result.commercialRate, 50.0);
+        expect(result.bcnOfficialRate, 48.0);
+        expect(result.totalUsd, 2.30); // 115.00 / 50.00
       });
     });
 
@@ -580,6 +664,8 @@ void main() {
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
           totalDiscounts: 1.00,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         // Discarded rounding would produce 0.33 + 0.33 + 0.33 = 0.99 (losing 1 cent).
@@ -608,6 +694,8 @@ void main() {
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
           totalDiscounts: 2.00,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         expect(result.lines[0].discount, equals(0.67));
@@ -634,6 +722,8 @@ void main() {
             cart: cart,
             taxRegime: TaxRegime.regimenGeneral,
             totalDiscounts: disc,
+            commercialRate: 36.50,
+            bcnOfficialRate: 36.6241,
           );
 
           final sumDiscounts = double.parse(
@@ -722,6 +812,8 @@ void main() {
             ),
           ],
           taxRegime: TaxRegime.cuotaFija,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
         expect(cfResult.totalTax, equals(0.00));
         expect(cfResult.total, equals(50.00));
@@ -742,6 +834,8 @@ void main() {
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
           totalDiscounts: 10.0,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         // Path A: buildReceiptDocument directly from calculation
@@ -814,6 +908,8 @@ void main() {
         final calc = calculator.calculate(
           cart: cart,
           taxRegime: TaxRegime.cuotaFija,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         final docA = calculator.buildReceiptDocument(
@@ -882,6 +978,8 @@ void main() {
         final calc = calculator.calculate(
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         final invoiceItem = InvoiceItem(
@@ -918,6 +1016,8 @@ void main() {
         final result = calculator.calculate(
           cart: cart,
           taxRegime: TaxRegime.cuotaFija,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         expect(result.lines.first.taxableBase, equals(0.0));
@@ -945,6 +1045,8 @@ void main() {
         final result = calculator.calculate(
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         expect(result.subtotal, equals(result.taxableSubtotal + result.exemptSubtotal));
@@ -959,6 +1061,8 @@ void main() {
         final result = calculator.calculate(
           cart: cart,
           taxRegime: TaxRegime.cuotaFija,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         expect(result.totalTax, equals(0.0));
@@ -978,6 +1082,8 @@ void main() {
         final result = calculator.calculate(
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         expect(result.lines.first.lineSubtotal, equals(100.0));
@@ -1001,6 +1107,8 @@ void main() {
         final result = calculator.calculate(
           cart: cart,
           taxRegime: TaxRegime.cuotaFija,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         expect(result.lines.first.taxAmount, equals(0.0));
@@ -1025,12 +1133,18 @@ void main() {
           const CartItem(productId: 'p1', productName: 'Almuerzo', quantity: 1, unitPrice: 100.0, taxRate: 0.15),
         ];
 
-        final rgResult = calculator.calculate(cart: cart, taxRegime: TaxRegime.regimenGeneral);
+        final rgResult = calculator.calculate(cart: cart, taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
+      );
         expect(rgResult.subtotal, equals(100.0));
         expect(rgResult.totalTax, equals(15.0));
         expect(rgResult.total, equals(115.0));
 
-        final cfResult = calculator.calculate(cart: cart, taxRegime: TaxRegime.cuotaFija);
+        final cfResult = calculator.calculate(cart: cart, taxRegime: TaxRegime.cuotaFija,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
+      );
         expect(cfResult.subtotal, equals(100.0));
         expect(cfResult.totalTax, equals(0.0));
         expect(cfResult.total, equals(100.0));
@@ -1142,6 +1256,8 @@ void main() {
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
           totalDiscounts: 10.0,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         // Path A: buildReceiptDocument
@@ -1206,7 +1322,10 @@ void main() {
         final cart = [const CartItem(productId: 'p1', productName: 'Item', quantity: 1, unitPrice: 100.0, taxRate: 0.15)];
 
         expect(
-          () => calculator.calculate(cart: cart, taxRegime: null),
+          () => calculator.calculate(cart: cart, taxRegime: null,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
+      ),
           throwsA(isA<FiscalConfigurationException>()),
         );
       });
@@ -1226,7 +1345,10 @@ void main() {
         final cart = [const CartItem(productId: 'p1', productName: 'Item', quantity: 1, unitPrice: 100.0, taxRate: 0.15)];
 
         expect(
-          () => calculator.calculate(cart: cart, taxRegime: null),
+          () => calculator.calculate(cart: cart, taxRegime: null,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
+      ),
           throwsA(isA<FiscalConfigurationException>()),
         );
       });
@@ -1303,6 +1425,8 @@ void main() {
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
           totalDiscounts: 0.01,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         final sumDiscounts = result.lines.fold(0.0, (acc, l) => acc + l.discount);
@@ -1322,6 +1446,8 @@ void main() {
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
           totalDiscounts: 0.05,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         final sumDiscounts = result.lines.fold(0.0, (acc, l) => acc + l.discount);
@@ -1340,6 +1466,8 @@ void main() {
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
           totalDiscounts: 10.00,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         final sumDiscounts = result.lines.fold(0.0, (acc, l) => acc + l.discount);
@@ -1358,6 +1486,8 @@ void main() {
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
           totalDiscounts: 5.00,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         final sumDiscounts = result.lines.fold(0.0, (acc, l) => acc + l.discount);
@@ -1374,7 +1504,9 @@ void main() {
         final result = calculator.calculate(
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
-          totalDiscounts: 100.00, // exceeds gross
+          totalDiscounts: 100.00, // exceeds gross,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         expect(result.totalDiscount, equals(50.00));
@@ -1391,6 +1523,8 @@ void main() {
           cart: cart,
           taxRegime: TaxRegime.regimenGeneral,
           totalDiscounts: -10.00,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
         );
 
         expect(result.totalDiscount, equals(0.0));
@@ -1407,7 +1541,10 @@ void main() {
           const CartItem(productId: 'latte', productName: 'Café Latte', quantity: 1, unitPrice: 110.00, taxRate: 0.15),
         ];
 
-        final result = calculator.calculate(cart: cart, taxRegime: TaxRegime.cuotaFija);
+        final result = calculator.calculate(cart: cart, taxRegime: TaxRegime.cuotaFija,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
+      );
 
         expect(result.lines.first.grossAmount, equals(110.00));
         expect(result.lines.first.discount, equals(0.00));
@@ -1431,7 +1568,10 @@ void main() {
           const CartItem(productId: 'esp', productName: 'Espresso', quantity: 1, unitPrice: 50.00, taxRate: 0.15),
         ];
 
-        final result = calculator.calculate(cart: cart, taxRegime: TaxRegime.regimenGeneral);
+        final result = calculator.calculate(cart: cart, taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
+      );
 
         expect(result.grossSubtotal, equals(50.00));
         expect(result.subtotal, equals(50.00));
@@ -1460,6 +1600,8 @@ void main() {
       final result = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
+        commercialRate: 36.50,
+        bcnOfficialRate: 36.6241,
       );
       return calculator.buildReceiptDocument(
         calculation: result,

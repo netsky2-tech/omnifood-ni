@@ -2,11 +2,15 @@ import { BadRequestException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
-import { MenuImportService } from './menu-import.service';
+import {
+  canonicalCategoryCode,
+  MenuImportService,
+} from './menu-import.service';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
+import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 
 const TENANT = 'tenant-uuid-1';
 
@@ -15,13 +19,19 @@ type SheetFixture = {
   rows: (string | number | null)[][];
 };
 
+/** One recorded query-builder insert call (the orIgnore category path). */
+type InsertCall = {
+  into: unknown;
+  values: unknown;
+  orIgnoreCalled: boolean;
+  execute: jest.Mock;
+};
+
 /**
  * Builds a real multi-sheet .xlsx workbook fully in memory with exceljs and
  * returns it as the base64 payload the controller transport would post.
  */
-const buildWorkbookBase64 = async (
-  sheets: SheetFixture[],
-): Promise<string> => {
+const buildWorkbookBase64 = async (sheets: SheetFixture[]): Promise<string> => {
   const workbook = new ExcelJS.Workbook();
   for (const sheet of sheets) {
     const ws = workbook.addWorksheet(sheet.name);
@@ -43,12 +53,55 @@ describe('MenuImportService (Unit)', () => {
     findOne: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
+    createQueryBuilder: jest.Mock;
   };
   let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
   let idSequence: number;
+  let insertCalls: InsertCall[];
+
+  /**
+   * Builds a chainable insert query builder that records every call so
+   * tests can assert the category write path structurally (into / values /
+   * orIgnore) instead of inferring it from manager.save calls. An optional
+   * executeImpl replaces the resolved result (used to simulate conflict
+   * outcomes or commit rows into a fake persistent store).
+   */
+  const insertBuilder = (
+    result: unknown,
+    executeImpl?: (call: InsertCall) => Promise<unknown>,
+  ) => {
+    const call: InsertCall = {
+      into: undefined,
+      values: undefined,
+      orIgnoreCalled: false,
+      execute: jest.fn(),
+    };
+    call.execute.mockImplementation(() =>
+      executeImpl ? executeImpl(call) : Promise.resolve(result),
+    );
+    insertCalls.push(call);
+    const builder = {
+      insert: () => builder,
+      into: (target: unknown) => {
+        call.into = target;
+        return builder;
+      },
+      values: (values: unknown) => {
+        call.values = values;
+        return builder;
+      },
+      orIgnore: () => {
+        call.orIgnoreCalled = true;
+        return builder;
+      },
+      execute: () => call.execute(),
+    };
+    return builder;
+  };
 
   beforeEach(() => {
     idSequence = 0;
+    insertCalls = [];
     mockManager = {
       // The production binding SQL: runInTenantTransaction issues exactly
       // this parameterised set_config on the transaction's manager before
@@ -70,10 +123,13 @@ describe('MenuImportService (Unit)', () => {
         }
         return value;
       }),
+      createQueryBuilder: jest.fn(() =>
+        insertBuilder({ identifiers: [{}], raw: [{}] }),
+      ),
     };
     dataSource = {
-      transaction: jest.fn(
-        (cb: (mgr: unknown) => Promise<unknown>) => cb(mockManager),
+      transaction: jest.fn((cb: (mgr: unknown) => Promise<unknown>) =>
+        cb(mockManager),
       ),
       // The pooled repository path must stay unused by this service.
       getRepository: jest.fn(),
@@ -104,10 +160,14 @@ describe('MenuImportService (Unit)', () => {
     insumos?: Partial<Insumo>[];
     products?: Partial<Product>[];
     recipeVersionFor?: string;
+    catalogValues?: Partial<CatalogValue>[];
   }) => {
     mockManager.find.mockImplementation((entity: unknown) => {
       if (entity === Insumo) return Promise.resolve(overrides?.insumos ?? []);
       if (entity === Product) return Promise.resolve(overrides?.products ?? []);
+      if (entity === CatalogValue) {
+        return Promise.resolve(overrides?.catalogValues ?? []);
+      }
       return Promise.resolve([]);
     });
     mockManager.findOne.mockImplementation((entity: unknown) => {
@@ -210,9 +270,7 @@ describe('MenuImportService (Unit)', () => {
         .map(([, plain]) => plain as Record<string, unknown>);
       expect(productCreates).toHaveLength(2);
       const flan = productCreates.find((p) => p.name === 'Flan');
-      const slice = productCreates.find(
-        (p) => p.name === 'Tres Leches Slice',
-      );
+      const slice = productCreates.find((p) => p.name === 'Tres Leches Slice');
       expect(flan).toMatchObject({
         tenant_id: TENANT,
         product_type: 'COMPOUND',
@@ -339,8 +397,7 @@ describe('MenuImportService (Unit)', () => {
         },
       ]);
       const recipeSaves = mockManager.save.mock.calls.filter(
-        ([entity]) =>
-          entity === RecipeVersion || entity === RecipeDetail,
+        ([entity]) => entity === RecipeVersion || entity === RecipeDetail,
       );
       expect(recipeSaves).toHaveLength(0);
     });
@@ -374,6 +431,368 @@ describe('MenuImportService (Unit)', () => {
       expect(productCreates).toHaveLength(0);
       expect(recipeSaves).toHaveLength(0);
       expect(insumoSaves).toHaveLength(0);
+    });
+  });
+
+  describe('canonical category codes (worksheet → catalog_values.code)', () => {
+    const catalogCreates = () =>
+      insertCalls
+        .filter((call) => call.into === CatalogValue)
+        .map((call) => call.values as Record<string, unknown>);
+    const catalogSaves = () =>
+      mockManager.save.mock.calls.filter(([entity]) => entity === CatalogValue);
+
+    /**
+     * Makes committed CatalogValue rows visible to the transaction's find,
+     * so a second import sees the rows the first import created. Category
+     * rows are committed through the orIgnore insert path, so persistence
+     * hooks the recorded insert calls instead of manager.save.
+     */
+    const simulateCatalogPersistence = () => {
+      const committed: Record<string, unknown>[] = [];
+      const baseFind = mockManager.find.getMockImplementation();
+      mockManager.find.mockImplementation((entity: unknown) => {
+        if (entity === CatalogValue) {
+          return Promise.resolve(committed.map((row) => ({ ...row })));
+        }
+        return (baseFind as (e: unknown) => Promise<unknown>)(entity);
+      });
+      mockManager.createQueryBuilder.mockImplementation(() =>
+        insertBuilder(undefined, (call) => {
+          committed.push({
+            ...(call.values as object),
+            id: `cv-${committed.length + 1}`,
+          });
+          return Promise.resolve({ identifiers: [{}], raw: [{}] });
+        }),
+      );
+      return committed;
+    };
+
+    describe('canonicalCategoryCode (pure function)', () => {
+      it('derives the canonical code for the SOHO worksheet names', () => {
+        expect(canonicalCategoryCode('Café caliente')).toBe('CAFE_CALIENTE');
+        expect(canonicalCategoryCode('Bebidas')).toBe('BEBIDAS');
+        expect(canonicalCategoryCode('Café helado')).toBe('CAFE_HELADO');
+        expect(canonicalCategoryCode('Postres')).toBe('POSTRES');
+      });
+
+      it('trims, collapses internal whitespace and strips punctuation', () => {
+        expect(canonicalCategoryCode('  Café   caliente (frío)  ')).toBe(
+          'CAFE_CALIENTE_FRIO',
+        );
+        expect(canonicalCategoryCode('Bebidas')).toBe(
+          canonicalCategoryCode(' BEBIDAS '),
+        );
+      });
+    });
+
+    it('creates the derived code and never reuses a similar existing label row', async () => {
+      seedExisting({
+        catalogValues: [
+          {
+            id: 'cv-1',
+            tenant_id: TENANT,
+            catalog_type: 'SALES_PRODUCT_CATEGORY' as const,
+            code: 'BEBIDA_CALIENTE',
+            name: 'Bebida caliente',
+            is_active: true,
+            sort_order: 0,
+          },
+        ],
+      });
+      const payload = await buildWorkbookBase64([
+        {
+          name: 'Café caliente',
+          rows: [MENU_HEADERS, ['Espresso', 45, '', '', '']],
+        },
+      ]);
+
+      const summary = await service.commit(TENANT, { fileBase64: payload });
+
+      const creates = catalogCreates();
+      expect(creates).toHaveLength(1);
+      expect(creates[0]).toMatchObject({
+        tenant_id: TENANT,
+        catalog_type: 'SALES_PRODUCT_CATEGORY',
+        code: 'CAFE_CALIENTE',
+        name: 'Café caliente',
+        is_active: true,
+      });
+      expect(creates[0].code).not.toBe('BEBIDA_CALIENTE');
+      const productCreates = mockManager.create.mock.calls
+        .filter(([entity]) => entity === Product)
+        .map(([, plain]) => plain as Record<string, unknown>);
+      expect(productCreates[0].category_code).toBe('CAFE_CALIENTE');
+      // The owner sees what the import added to /catalogs.
+      expect(
+        summary.warnings.some((w) => w.message.includes('CAFE_CALIENTE')),
+      ).toBe(true);
+    });
+
+    it('reuses an existing catalog row with the same code: no insert, label untouched', async () => {
+      const existing = {
+        id: 'cv-9',
+        tenant_id: TENANT,
+        catalog_type: 'SALES_PRODUCT_CATEGORY' as const,
+        code: 'CAFE_CALIENTE',
+        name: 'Café de la casa',
+        is_active: true,
+        sort_order: 3,
+      };
+      seedExisting({ catalogValues: [existing] });
+      const payload = await buildWorkbookBase64([
+        {
+          name: 'CAFÉ CALIENTE',
+          rows: [MENU_HEADERS, ['Espresso', 45, '', '', '']],
+        },
+      ]);
+
+      const summary = await service.commit(TENANT, { fileBase64: payload });
+
+      expect(catalogCreates()).toHaveLength(0);
+      expect(catalogSaves()).toHaveLength(0);
+      expect(existing.name).toBe('Café de la casa');
+      const productCreates = mockManager.create.mock.calls
+        .filter(([entity]) => entity === Product)
+        .map(([, plain]) => plain as Record<string, unknown>);
+      expect(productCreates[0].category_code).toBe('CAFE_CALIENTE');
+      expect(summary.warnings.some((w) => w.sheet === 'CAFÉ CALIENTE')).toBe(
+        false,
+      );
+    });
+
+    it('merges sheets that normalize to the same code into one category row', async () => {
+      seedExisting();
+      const payload = await buildWorkbookBase64([
+        {
+          name: 'Café caliente',
+          rows: [MENU_HEADERS, ['Espresso', 45, '', '', '']],
+        },
+        {
+          name: 'Cafe caliente',
+          rows: [MENU_HEADERS, ['Americano', 40, '', '', '']],
+        },
+      ]);
+
+      await service.commit(TENANT, { fileBase64: payload });
+
+      const creates = catalogCreates();
+      expect(creates).toHaveLength(1);
+      expect(creates[0].code).toBe('CAFE_CALIENTE');
+      const productCreates = mockManager.create.mock.calls
+        .filter(([entity]) => entity === Product)
+        .map(([, plain]) => plain as Record<string, unknown>);
+      expect(productCreates).toHaveLength(2);
+      expect(
+        productCreates.every((p) => p.category_code === 'CAFE_CALIENTE'),
+      ).toBe(true);
+    });
+
+    it('is idempotent for categories: importing the same workbook twice creates no duplicate category rows', async () => {
+      seedExisting();
+      const committed = simulateCatalogPersistence();
+      const payload = await buildWorkbookBase64([
+        {
+          name: 'Café caliente',
+          rows: [MENU_HEADERS, ['Espresso', 45, '', '', '']],
+        },
+      ]);
+
+      await service.commit(TENANT, { fileBase64: payload });
+      const createsAfterFirst = catalogCreates().length;
+      expect(createsAfterFirst).toBe(1);
+
+      await service.commit(TENANT, { fileBase64: payload });
+
+      expect(catalogCreates()).toHaveLength(createsAfterFirst);
+      expect(committed).toHaveLength(1);
+      expect(committed[0].code).toBe('CAFE_CALIENTE');
+    });
+
+    it('leaves no orphan category references: every product category_code is a known catalog code', async () => {
+      seedExisting({
+        catalogValues: [
+          {
+            id: 'cv-2',
+            tenant_id: TENANT,
+            catalog_type: 'SALES_PRODUCT_CATEGORY' as const,
+            code: 'BEBIDAS',
+            name: 'Bebidas',
+            is_active: true,
+            sort_order: 0,
+          },
+        ],
+      });
+      const committed = simulateCatalogPersistence();
+      const payload = await buildWorkbookBase64([
+        {
+          name: 'Bebidas',
+          rows: [MENU_HEADERS, ['Limonada', 35, '', '', '']],
+        },
+        {
+          name: 'Postres',
+          rows: [MENU_HEADERS, ['Flan', 60, '', '', '']],
+        },
+      ]);
+
+      await service.commit(TENANT, { fileBase64: payload });
+
+      const knownCodes = new Set([
+        'BEBIDAS',
+        ...committed.map((row) => row.code as string),
+      ]);
+      const productCreates = mockManager.create.mock.calls
+        .filter(([entity]) => entity === Product)
+        .map(([, plain]) => plain as Record<string, unknown>);
+      expect(productCreates.length).toBeGreaterThan(0);
+      for (const product of productCreates) {
+        expect(knownCodes.has(product.category_code as string)).toBe(true);
+      }
+    });
+  });
+
+  describe('concurrent category creation (orIgnore, never try/catch recovery)', () => {
+    const productCreates = () =>
+      mockManager.create.mock.calls
+        .filter(([entity]) => entity === Product)
+        .map(([, plain]) => plain as Record<string, unknown>);
+
+    it('writes the category with a single ON CONFLICT DO NOTHING insert, not catch + re-read', async () => {
+      seedExisting();
+      const payload = await buildWorkbookBase64([
+        {
+          name: 'BATIDOS',
+          rows: [MENU_HEADERS, ['Malteada', 80, '', '', '']],
+        },
+      ]);
+
+      await service.commit(TENANT, { fileBase64: payload });
+
+      // Structural assertion: exactly one insert statement targeted
+      // CatalogValue with orIgnore enabled. A try/catch around save()
+      // cannot work here — once a statement fails inside a PostgreSQL
+      // transaction, every later statement aborts with 25P02 — so the
+      // only recoverable design is an insert that cannot fail.
+      expect(insertCalls).toHaveLength(1);
+      expect(insertCalls[0].into).toBe(CatalogValue);
+      expect(insertCalls[0].orIgnoreCalled).toBe(true);
+      expect(insertCalls[0].values).toMatchObject({
+        tenant_id: TENANT,
+        catalog_type: 'SALES_PRODUCT_CATEGORY',
+        code: 'BATIDOS',
+        name: 'BATIDOS',
+      });
+      // No save-based fallback and no post-failure re-read of CatalogValue.
+      expect(
+        mockManager.save.mock.calls.filter(
+          ([entity]) => entity === CatalogValue,
+        ),
+      ).toHaveLength(0);
+      expect(
+        mockManager.findOne.mock.calls.filter(
+          ([entity]) => entity === CatalogValue,
+        ),
+      ).toHaveLength(0);
+      expect(productCreates()[0].category_code).toBe('BATIDOS');
+    });
+
+    it('reuses the raced row via a safe read-back when the ignored insert affects 0 rows', async () => {
+      seedExisting();
+      const raced = {
+        id: 'cv-raced',
+        tenant_id: TENANT,
+        catalog_type: 'SALES_PRODUCT_CATEGORY' as const,
+        code: 'BATIDOS',
+        name: 'BATIDOS (otra importación)',
+        is_active: true,
+        sort_order: 7,
+      };
+      // Empty identifiers = the insert was ignored (the concurrent
+      // transaction committed the same code first). No statement failed,
+      // so the read-back is safe and must reuse the raced row.
+      mockManager.createQueryBuilder.mockImplementation(() =>
+        insertBuilder({ identifiers: [], raw: [] }),
+      );
+      mockManager.findOne.mockImplementation((entity: unknown) => {
+        if (entity === CatalogValue) return Promise.resolve(raced);
+        return Promise.resolve(null);
+      });
+      const payload = await buildWorkbookBase64([
+        {
+          name: 'BATIDOS',
+          rows: [MENU_HEADERS, ['Malteada', 80, '', '', '']],
+        },
+      ]);
+
+      const summary = await service.commit(TENANT, { fileBase64: payload });
+
+      expect(productCreates()[0].category_code).toBe('BATIDOS');
+      // Honest warning semantics: this import created nothing, so it must
+      // not claim "Created new category" for a row another import made.
+      expect(
+        summary.warnings.some((w) =>
+          w.message.includes('Created new category'),
+        ),
+      ).toBe(false);
+      expect(raced.name).toBe('BATIDOS (otra importación)');
+    });
+
+    it('fails closed when an ignored insert is followed by no readable row', async () => {
+      seedExisting();
+      mockManager.createQueryBuilder.mockImplementation(() =>
+        insertBuilder({ identifiers: [], raw: [] }),
+      );
+      // findOne resolves null for CatalogValue (seedExisting default).
+      const payload = await buildWorkbookBase64([
+        {
+          name: 'BATIDOS',
+          rows: [MENU_HEADERS, ['Malteada', 80, '', '', '']],
+        },
+      ]);
+
+      await expect(
+        service.commit(TENANT, { fileBase64: payload }),
+      ).rejects.toThrow(/BATIDOS/);
+      expect(productCreates()).toHaveLength(0);
+    });
+  });
+
+  describe('empty canonical code (fail closed)', () => {
+    const starSheetPayload = async () =>
+      buildWorkbookBase64([
+        {
+          name: '★',
+          rows: [MENU_HEADERS, ['Estrella', 50, '', '', '']],
+        },
+      ]);
+
+    it('flags a worksheet whose name normalizes to an empty category code', async () => {
+      seedExisting();
+      const payload = await starSheetPayload();
+
+      const summary = await service.preview(TENANT, { fileBase64: payload });
+
+      expect(summary.errors).toHaveLength(1);
+      expect(summary.errors[0]).toMatchObject({ sheet: '★', row: 1 });
+      expect(summary.errors[0].message).toContain('★');
+      expect(summary.errors[0].message).toMatch(/category code/i);
+    });
+
+    it('fails a commit closed for an empty-code sheet, writing no product or catalog row', async () => {
+      seedExisting();
+      const payload = await starSheetPayload();
+
+      await expect(
+        service.commit(TENANT, { fileBase64: payload }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockManager.save).not.toHaveBeenCalled();
+      expect(insertCalls).toHaveLength(0);
+      expect(
+        mockManager.create.mock.calls.filter(
+          ([entity]) => entity === Product || entity === CatalogValue,
+        ),
+      ).toHaveLength(0);
     });
   });
 
@@ -462,7 +881,10 @@ describe('MenuImportService (Unit)', () => {
       const payload = await buildWorkbookBase64([
         {
           name: 'CAFÉ',
-          rows: [['Nombre', 'Costo'], ['Espresso', 45]],
+          rows: [
+            ['Nombre', 'Costo'],
+            ['Espresso', 45],
+          ],
         },
       ]);
 
@@ -475,9 +897,7 @@ describe('MenuImportService (Unit)', () => {
 
     it('rejects a sheet with no header row at all', async () => {
       seedExisting();
-      const payload = await buildWorkbookBase64([
-        { name: 'VACÍA', rows: [] },
-      ]);
+      const payload = await buildWorkbookBase64([{ name: 'VACÍA', rows: [] }]);
 
       await expect(
         service.preview(TENANT, { fileBase64: payload }),
@@ -514,9 +934,9 @@ describe('MenuImportService (Unit)', () => {
       await expect(
         service.preview('   ', { fileBase64: payload }),
       ).rejects.toThrow('TENANT_CONTEXT_REQUIRED');
-      await expect(
-        service.commit('', { fileBase64: payload }),
-      ).rejects.toThrow('TENANT_CONTEXT_REQUIRED');
+      await expect(service.commit('', { fileBase64: payload })).rejects.toThrow(
+        'TENANT_CONTEXT_REQUIRED',
+      );
 
       expect(dataSource.transaction).not.toHaveBeenCalled();
       expect(mockManager.query).not.toHaveBeenCalled();
@@ -535,8 +955,7 @@ describe('MenuImportService (Unit)', () => {
       );
       // Binding order: transaction-local set_config first, then the first
       // save, all on the same tenant-bound manager.
-      const firstSaveOrder =
-        mockManager.save.mock.invocationCallOrder[0];
+      const firstSaveOrder = mockManager.save.mock.invocationCallOrder[0];
       expect(mockManager.query.mock.invocationCallOrder[0]).toBeLessThan(
         firstSaveOrder,
       );
@@ -635,9 +1054,9 @@ describe('MenuImportService (Unit)', () => {
     it('round-trips: the generated template passes preview with no errors (guide sheet ignored)', async () => {
       seedExisting();
       const buffer = await service.buildTemplate();
-      const fileBase64 = Buffer.from(
-        buffer as unknown as ArrayBuffer,
-      ).toString('base64');
+      const fileBase64 = Buffer.from(buffer as unknown as ArrayBuffer).toString(
+        'base64',
+      );
 
       const summary = await service.preview(TENANT, { fileBase64 });
 

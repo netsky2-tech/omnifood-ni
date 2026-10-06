@@ -15,6 +15,7 @@ void main() {
     averageCost: 30,
     sellPrice: 60,
     category: 'Bebidas',
+    categoryId: 'cat-bebidas-uuid',
   );
 
   final pBurger = const Product(
@@ -25,6 +26,7 @@ void main() {
     averageCost: 80,
     sellPrice: 150,
     category: 'Comida',
+    categoryId: 'cat-comida-uuid',
   );
 
   final pWings = const Product(
@@ -35,6 +37,7 @@ void main() {
     averageCost: 70,
     sellPrice: 120,
     category: 'Comida',
+    categoryId: 'cat-comida-uuid',
   );
 
   CartItem item(Product p, double qty) => CartItem(
@@ -43,6 +46,7 @@ void main() {
         unitPrice: p.sellPrice,
         taxRate: 0.15,
         category: p.category,
+        categoryId: p.categoryId,
         quantity: qty,
       );
 
@@ -127,7 +131,7 @@ void main() {
         id: 'promo-10-drinks',
         name: '10% en Bebidas',
         type: PromotionType.percentageDiscount,
-        targetCategoryId: 'Bebidas',
+        targetCategoryId: 'cat-bebidas-uuid',
         discountValue: 10.0,
       );
 
@@ -234,7 +238,7 @@ void main() {
         id: 'promo-min-order',
         name: '15% en compras mayores a C\$300',
         type: PromotionType.percentageDiscount,
-        targetCategoryId: 'Comida',
+        targetCategoryId: 'cat-comida-uuid',
         discountValue: 15.0,
         minOrderAmount: 300.0,
       );
@@ -264,6 +268,81 @@ void main() {
 
       final cart = [item(pBurger, 2)];
       expect(engine.evaluate(cart: cart, promotions: [promoDisabled]).totalDiscount, equals(0.0));
+    });
+  });
+
+  group('PromotionsEngine - Strict category identity (T0.5c)', () {
+    final promoByCat = const Promotion(
+      id: 'promo-cat-strict',
+      name: '10% Bebidas (id estricto)',
+      type: PromotionType.percentageDiscount,
+      targetCategoryId: 'cat-bebidas-uuid',
+      discountValue: 10.0,
+    );
+
+    test('matchea una línea cuyo categoryId es exactamente igual al target', () {
+      final cart = [item(pBeer, 2)]; // 2 * 60 = 120 C$
+      final result = engine.evaluate(cart: cart, promotions: [promoByCat]);
+
+      expect(result.totalDiscount, equals(12.0));
+    });
+
+    test('no matchea una línea con un categoryId distinto', () {
+      final cart = [item(pBurger, 2)]; // cat-comida-uuid != cat-bebidas-uuid
+      final result = engine.evaluate(cart: cart, promotions: [promoByCat]);
+
+      expect(result.totalDiscount, equals(0.0));
+    });
+
+    test('no matchea una línea con categoryId null', () {
+      final line = item(pBeer, 2).copyWith(categoryId: null);
+      final result = engine.evaluate(cart: [line], promotions: [promoByCat]);
+
+      expect(result.totalDiscount, equals(0.0));
+    });
+
+    test('no matchea cuando el id solo difiere en mayúsculas/minúsculas', () {
+      // El mundo viejo foldaba a minúsculas (string match difuso). T0.5c exige
+      // igualdad exacta por id: sin case folding, sin trimming.
+      final promoLowerCase = promoByCat.copyWith(targetCategoryId: 'cat-bebidas-uuid'.toUpperCase());
+      final cart = [item(pBeer, 2)];
+      final result = engine.evaluate(cart: cart, promotions: [promoLowerCase]);
+
+      expect(result.totalDiscount, equals(0.0));
+    });
+
+    test('una promoción global (target null) matchea toda línea, incluso con categoryId null', () {
+      const globalPromo = Promotion(
+        id: 'promo-global',
+        name: '5% en todo',
+        type: PromotionType.percentageDiscount,
+        discountValue: 5.0,
+      );
+
+      final withCategory = item(pBeer, 2); // 120 C$ -> 6 C$
+      final withoutCategory = item(pBurger, 2).copyWith(categoryId: null); // 300 C$ -> 15 C$
+      final result = engine.evaluate(
+        cart: [withCategory, withoutCategory],
+        promotions: [globalPromo],
+      );
+
+      expect(result.totalDiscount, equals(21.0));
+    });
+
+    test('el descuento fijo también respeta la identidad estricta de categoría', () {
+      final promoFixed = const Promotion(
+        id: 'promo-fixed-cat',
+        name: 'C\$10 en Bebidas',
+        type: PromotionType.fixedDiscount,
+        targetCategoryId: 'cat-bebidas-uuid',
+        discountValue: 10.0,
+      );
+
+      final match = engine.evaluate(cart: [item(pBeer, 1)], promotions: [promoFixed]);
+      final noMatch = engine.evaluate(cart: [item(pBurger, 1)], promotions: [promoFixed]);
+
+      expect(match.totalDiscount, equals(10.0));
+      expect(noMatch.totalDiscount, equals(0.0));
     });
   });
 

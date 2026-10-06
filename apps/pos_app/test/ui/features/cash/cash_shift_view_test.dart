@@ -61,6 +61,11 @@ void main() {
       currentUserId: 'user-cajero-1',
       currentUserName: 'Juan Pérez',
       currentTerminalId: 'term-main',
+      // R1-open-gate-default (native review, slice F5): the gate no longer
+      // defaults to "no open accounts" when unwired. This harness DECLARES
+      // an explicitly empty account list, matching what production's
+      // fromDatabase wiring would read on a clean device.
+      openAccountsLoader: () async => const [],
     );
   });
 

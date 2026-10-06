@@ -90,28 +90,6 @@ export class CashShiftSessionSyncItemDto {
   @IsOptional()
   zReportSequence?: number;
 
-  /**
-   * S2 (backlog #68): the shift's card-voucher reconciliation state at
-   * close time — counts of the card payments attached to the shift's
-   * invoices by reconciliation status (PENDIENTE / CONCILIADO /
-   * MANUAL_OVERRIDE). Optional on purpose: legacy terminals never send
-   * them, and a still-OPEN session legitimately omits them (the counts
-   * are a close-time fact). When absent, the ingestion service maps NULL
-   * into the columns so the dashboard can distinguish "no data" from a
-   * genuine zero.
-   */
-  @IsNumber()
-  @IsOptional()
-  cardVouchersPending?: number;
-
-  @IsNumber()
-  @IsOptional()
-  cardVouchersReconciled?: number;
-
-  @IsNumber()
-  @IsOptional()
-  cardVouchersOverridden?: number;
-
   @IsString()
   @IsOptional()
   supervisorId?: string;

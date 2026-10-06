@@ -7,6 +7,11 @@ import { AppService } from './app.service';
 import { IdentityModule } from '../../modules/identity/identity.module';
 import { InventoryModule } from '../../modules/inventory/inventory.module';
 import { CatalogModule } from '../../modules/catalog/catalog.module';
+import { ModifiersModule } from '../../modules/modifiers/modifiers.module';
+import { ModifierGroup } from '../../modules/modifiers/entities/modifier-group.entity';
+import { ModifierOption } from '../../modules/modifiers/entities/modifier-option.entity';
+import { CategoryModifierGroup } from '../../modules/modifiers/entities/category-modifier-group.entity';
+import { ProductModifierGroup } from '../../modules/modifiers/entities/product-modifier-group.entity';
 import { SalesModule } from '../../modules/sales/sales.module';
 import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { OnboardingModule } from '../../modules/onboarding/onboarding.module';
@@ -153,6 +158,10 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     KardexRecalculateQueue,
     KardexCorrection,
     CatalogValue,
+    ModifierGroup,
+    ModifierOption,
+    CategoryModifierGroup,
+    ProductModifierGroup,
     Invoice,
     InvoiceItem,
     Payment,
@@ -213,6 +222,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     IdentityModule,
     InventoryModule,
     CatalogModule,
+    ModifiersModule,
     SalesModule,
     NotificationsModule,
     OnboardingModule,

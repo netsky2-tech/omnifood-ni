@@ -22,6 +22,7 @@ import '../../models/inventory/batch_entity.dart';
 import '../../models/local_config_entity.dart';
 import '../../models/catalog/catalog_value_entity.dart';
 import '../../mappers/inventory_mapper.dart';
+import '../../services/modifier_resolution_service.dart';
 import '../../mappers/purchase_mapper.dart';
 import '../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../data/database/app_database.dart';
@@ -143,13 +144,60 @@ class InventoryRepositoryImpl
   @override
   Future<List<Product>> getActiveProducts() async {
     final entities = await _database.productDao.findAllActiveProducts();
-    return entities.map(InventoryMapper.toProductDomain).toList();
+    if (entities.isEmpty) {
+      // No products: no mirror reads at all (no DAO explosion on an empty
+      // catalog).
+      return const [];
+    }
+    // The modifier mirror is a small full snapshot: fetch the four datasets
+    // ONCE and resolve every product in memory — never per-product queries.
+    final modifierDao = _database.modifierDao;
+    final groups = await modifierDao.getAllModifierGroups();
+    final options = await modifierDao.getAllModifierOptions();
+    final categoryAttachments =
+        await modifierDao.getAllCategoryModifierGroups();
+    final productAttachments =
+        await modifierDao.getAllProductModifierGroups();
+    return entities
+        .map(
+          (entity) => InventoryMapper.toProductDomain(
+            entity,
+            modifierGroups: ModifierResolutionService.resolveEffective(
+              productId: entity.id,
+              categoryId: entity.categoryId,
+              groups: groups,
+              options: options,
+              categoryAttachments: categoryAttachments,
+              productAttachments: productAttachments,
+            ),
+          ),
+        )
+        .toList();
   }
 
   @override
   Future<Product?> getProductById(String id) async {
     final entity = await _database.productDao.findProductById(id);
-    return entity != null ? InventoryMapper.toProductDomain(entity) : null;
+    if (entity == null) return null;
+    // Same single-snapshot resolution as getActiveProducts.
+    final modifierDao = _database.modifierDao;
+    final groups = await modifierDao.getAllModifierGroups();
+    final options = await modifierDao.getAllModifierOptions();
+    final categoryAttachments =
+        await modifierDao.getAllCategoryModifierGroups();
+    final productAttachments =
+        await modifierDao.getAllProductModifierGroups();
+    return InventoryMapper.toProductDomain(
+      entity,
+      modifierGroups: ModifierResolutionService.resolveEffective(
+        productId: entity.id,
+        categoryId: entity.categoryId,
+        groups: groups,
+        options: options,
+        categoryAttachments: categoryAttachments,
+        productAttachments: productAttachments,
+      ),
+    );
   }
 
   @override

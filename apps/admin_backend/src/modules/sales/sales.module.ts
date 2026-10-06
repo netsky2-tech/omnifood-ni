@@ -31,8 +31,6 @@ import { CashShiftService } from './services/cash-shift.service';
 import { CashShiftController } from './controllers/cash-shift.controller';
 import { CashShiftSyncController } from './controllers/cash-shift-sync.controller';
 import { CashShiftSyncIngestionService } from './services/cash-shift-sync-ingestion.service';
-import { PaymentReconciliationSyncController } from './controllers/payment-reconciliation-sync.controller';
-import { PaymentReconciliationSyncIngestionService } from './services/payment-reconciliation-sync-ingestion.service';
 import { SalesReportsService } from './services/sales-reports.service';
 import { SyncHealthModule } from './sync-health/sync-health.module';
 import { FiscalReportsService } from './services/fiscal-reports.service';
@@ -81,7 +79,6 @@ import { forwardRef } from '@nestjs/common';
   controllers: [
     CashShiftController,
     CashShiftSyncController,
-    PaymentReconciliationSyncController,
     AdminInvoicesController,
     ReportsController,
     SyncBatchController,
@@ -94,7 +91,6 @@ import { forwardRef } from '@nestjs/common';
     InboundSyncService,
     CashShiftService,
     CashShiftSyncIngestionService,
-    PaymentReconciliationSyncIngestionService,
     SalesReportsService,
     FiscalReportsService,
     SalesExportService,

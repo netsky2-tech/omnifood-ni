@@ -216,9 +216,139 @@ void main() {
     await databaseFactory.deleteDatabase(legacyPath);
   });
 
+  // T0.5c: minimal version-60 shape of `products` — enough columns to insert
+  // a representative legacy row. The migration only appends the nullable
+  // category_id column (resolved catalog_values.id carried by the cloud
+  // product delta).
+  Future<dynamic> openV60Database() async {
+    final db = await databaseFactory.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 60,
+        onCreate: (database, version) async {
+          await database.execute('''
+            CREATE TABLE products (
+              id TEXT NOT NULL PRIMARY KEY,
+              name TEXT NOT NULL,
+              uom TEXT NOT NULL,
+              stock REAL NOT NULL,
+              average_cost REAL NOT NULL,
+              sell_price REAL NOT NULL,
+              is_active INTEGER NOT NULL,
+              category TEXT,
+              is_prepared INTEGER NOT NULL,
+              product_type TEXT NOT NULL,
+              tax_rate REAL NOT NULL,
+              is_tax_exempt INTEGER NOT NULL
+            )
+          ''');
+        },
+      ),
+    );
+    await db.insert('products', {
+      'id': 'prod-legacy-1',
+      'name': 'Café Legacy',
+      'uom': 'UND',
+      'stock': 10.0,
+      'average_cost': 5.0,
+      'sell_price': 20.0,
+      'is_active': 1,
+      'category': 'Bebidas',
+      'is_prepared': 0,
+      'product_type': 'SIMPLE',
+      'tax_rate': 0.0,
+      'is_tax_exempt': 1,
+    });
+    return db;
+  }
+
+  test('migration60_61 adds the nullable category_id column to products',
+      () async {
+    final db = await openV60Database();
+
+    await migration60_61.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(products)');
+    final column = columns.firstWhere((c) => c['name'] == 'category_id');
+    // Nullable TEXT, no default — full parity with the Floor entity field:
+    // a product without a resolved category legitimately has null.
+    expect(column['notnull'], 0);
+    expect(column['dflt_value'], isNull);
+
+    await db.close();
+  });
+
+  test('migration60_61 leaves legacy product rows intact with null category_id',
+      () async {
+    final db = await openV60Database();
+
+    await migration60_61.migrate(db);
+
+    final rows = await db.query(
+      'products',
+      where: 'id = ?',
+      whereArgs: ['prod-legacy-1'],
+    );
+    expect(rows, hasLength(1));
+    final row = rows.first;
+    // The legacy free-text display category is untouched; the new identity
+    // column reads as null (matches no non-global promotion until synced).
+    expect(row['category'], 'Bebidas');
+    expect(row['category_id'], isNull);
+
+    await db.close();
+  });
+
+  test('migration60_61 is safe to re-run (guarded ADD COLUMN)', () async {
+    final db = await openV60Database();
+
+    await migration60_61.migrate(db);
+    await migration60_61.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(products)');
+    final matches = columns.where((c) => c['name'] == 'category_id').toList();
+    expect(matches, hasLength(1));
+
+    await db.close();
+  });
+
+  // Same guard direction as migration54_55 (#548): with the `products` table
+  // absent (synthetic legacy schemas, e.g. the sync_service regression DB),
+  // the migration completes and creates NOTHING.
   test(
-      'allMigrations keeps the chain ordered: migration63_64 is the newest '
-      'link at the end and migration59_60 is retained immediately before it',
+      'migration60_61 completes without throwing when products does not exist',
+      () async {
+    final legacyPath =
+        '${await databaseFactory.getDatabasesPath()}/category_id_no_products_test.db';
+    await databaseFactory.deleteDatabase(legacyPath);
+    final db = await databaseFactory.openDatabase(
+      legacyPath,
+      options: OpenDatabaseOptions(
+        version: 60,
+        onCreate: (database, version) async {
+          await database.execute(
+            'CREATE TABLE purchases (id TEXT NOT NULL PRIMARY KEY)',
+          );
+        },
+      ),
+    );
+
+    await migration60_61.migrate(db);
+
+    final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    final tableNames = tables.map((row) => row['name'] as String).toSet();
+    expect(tableNames, isNot(contains('products')));
+    expect(tableNames, contains('purchases'));
+
+    await db.close();
+    await databaseFactory.deleteDatabase(legacyPath);
+  });
+
+  test(
+      'allMigrations keeps the chain ordered: migration62_63 is the newest '
+      'link at the end and migration61_62 is retained immediately before it',
       () {
     // The newest link is registered at the end of the chain.
     expect(allMigrations.last.startVersion, 63);
@@ -226,8 +356,8 @@ void main() {
     expect(allMigrations.last, same(migration63_64));
     // The previous newest link is still registered, in position, with its
     // versions unchanged.
-    expect(allMigrations[allMigrations.length - 2], same(migration59_60));
-    expect(migration59_60.startVersion, 59);
-    expect(migration59_60.endVersion, 60);
+    expect(allMigrations[allMigrations.length - 2], same(migration62_63));
+    expect(migration62_63.startVersion, 62);
+    expect(migration62_63.endVersion, 63);
   });
 }

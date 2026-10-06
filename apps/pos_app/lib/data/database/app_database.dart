@@ -37,6 +37,7 @@ import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
 import 'package:pos_app/data/daos/sales/cash_movement_dao.dart';
 import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart';
 import 'package:pos_app/data/daos/sales/promotion_dao.dart';
+import 'package:pos_app/data/daos/modifiers/modifier_dao.dart';
 import 'package:pos_app/data/daos/sales/restaurant_area_dao.dart';
 import 'package:pos_app/data/daos/sales/restaurant_table_dao.dart';
 import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart';
@@ -92,6 +93,10 @@ import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
 import 'package:pos_app/data/models/sales/hold_ticket_entity.dart';
 import 'package:pos_app/data/models/sales/promotion_entity.dart';
+import 'package:pos_app/data/models/modifiers/modifier_group_entity.dart';
+import 'package:pos_app/data/models/modifiers/modifier_option_entity.dart';
+import 'package:pos_app/data/models/modifiers/category_modifier_group_entity.dart';
+import 'package:pos_app/data/models/modifiers/product_modifier_group_entity.dart';
 import 'package:pos_app/data/models/sales/restaurant_area_entity.dart';
 import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 import 'package:pos_app/data/models/kitchen/kitchen_order_entity.dart';
@@ -154,6 +159,10 @@ part 'app_database.g.dart'; // generated code
     HoldTicketEntity,
     HoldTicketItemEntity,
     PromotionEntity,
+    ModifierGroupEntity,
+    ModifierOptionEntity,
+    CategoryModifierGroupEntity,
+    ProductModifierGroupEntity,
     RestaurantAreaEntity,
     RestaurantTableEntity,
     KitchenOrderEntity,
@@ -209,6 +218,7 @@ abstract class AppDatabase extends FloorDatabase {
   CashMovementDao get cashMovementDao;
   HoldTicketDao get holdTicketDao;
   PromotionDao get promotionDao;
+  ModifierDao get modifierDao;
   RestaurantAreaDao get restaurantAreaDao;
   RestaurantTableDao get restaurantTableDao;
   KitchenOrderDao get kitchenOrderDao;
