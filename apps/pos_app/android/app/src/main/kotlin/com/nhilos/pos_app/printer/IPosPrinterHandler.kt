@@ -187,7 +187,10 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
 
     private fun handlePrintText(call: MethodCall, result: MethodChannel.Result) {
         val text = call.argument<String>("text")
-        if (text == null) {
+        // T5: optional size-tagged segments ({text, textSize?}). Absent keeps
+        // the legacy single-blob contract byte-identical.
+        val segments = call.argument<List<Map<*, *>>>("segments")
+        if (text == null && segments.isNullOrEmpty()) {
             result.error("INVALID_ARGS", "Text argument is null", null)
             return
         }
@@ -201,28 +204,50 @@ class IPosPrinterHandler(private val context: Context) : MethodChannel.MethodCal
 
         val paperWidthMm = call.argument<Int>("paperWidthMm") ?: 58
         try {
-            val format = if (paperWidthMm == 80) {
-                NyxPrintProfile.receipt80mm.createFormat()
-            } else {
-                PrintTextFormat().apply { textSize = 24 }
-            }
-            // This controls per-job layout/render width only; it does not change the
-            // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.
-            val res = when (paperWidthMm) {
-                58 -> service.printText2(text, format, 384, 0)
-                80 -> service.printText(text, format)
-                else -> {
-                    result.error(
-                        "INVALID_PAPER_WIDTH",
-                        "Unsupported paper width: $paperWidthMm. Use 58 or 80.",
-                        null,
-                    )
-                    return
+            val payload: List<Pair<String, Int?>> = if (segments != null) {
+                segments.map { segment ->
+                    val segmentText = segment["text"] as? String
+                        ?: throw IllegalArgumentException("Segment text is null")
+                    // Absent textSize keeps the profile/default size for this
+                    // segment; present marks a small (modifier) segment.
+                    val segmentTextSize = (segment["textSize"] as? Number)?.toInt()
+                    segmentText to segmentTextSize
                 }
+            } else {
+                listOf(text!! to null)
+            }
+
+            for ((segmentText, segmentTextSize) in payload) {
+                val format = if (paperWidthMm == 80) {
+                    NyxPrintProfile.receipt80mm.createFormat()
+                } else {
+                    PrintTextFormat().apply { textSize = 24 }
+                }
+                // Only textSize may differ for small segments (3/4 of the
+                // profile body size, sent by the adapter); lineSpacing,
+                // topPadding, alignment and every other format field stay
+                // exactly as the profile/defaults define.
+                if (segmentTextSize != null) {
+                    format.textSize = segmentTextSize
+                }
+                // This controls per-job layout/render width only; it does not change the
+                // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.
+                val res = when (paperWidthMm) {
+                    58 -> service.printText2(segmentText, format, 384, 0)
+                    80 -> service.printText(segmentText, format)
+                    else -> {
+                        result.error(
+                            "INVALID_PAPER_WIDTH",
+                            "Unsupported paper width: $paperWidthMm. Use 58 or 80.",
+                            null,
+                        )
+                        return
+                    }
+                }
+                Log.i(TAG, "printText result: $res")
             }
             // Current Nyx driver feed value. Its physical distance requires device measurement.
             service.paperOut(140)
-            Log.i(TAG, "printText result: $res")
             result.success(true)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending text to Nyx printer: ${e.message}", e)

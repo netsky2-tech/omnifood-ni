@@ -10,6 +10,50 @@ import 'esc_pos_builder.dart';
 import 'receipt_layout_metrics.dart';
 import 'printable_text_codec.dart';
 
+/// Font-size kind of a segmented receipt text run.
+enum ReceiptTextRunSize { normal, small }
+
+/// A contiguous block of receipt text rendered at a single font size.
+///
+/// The plain-text receipt is segmented on complete lines only: every run's
+/// text is built from whole lines (each emitted with its trailing newline,
+/// except a trailing raw footer gap), so concatenating all run texts
+/// reproduces `ReceiptLayoutFormatter.formatReceiptDocumentText`
+/// byte-for-byte.
+class ReceiptTextRun {
+  final String text;
+  final ReceiptTextRunSize size;
+
+  const ReceiptTextRun(this.text, this.size);
+}
+
+/// Internal accumulator that groups emitted receipt lines into
+/// [ReceiptTextRun]s of consecutive equal size.
+class _ReceiptRunBuffer {
+  final List<ReceiptTextRun> _runs = [];
+
+  /// Emits one complete receipt line (with its trailing newline).
+  void writeln(
+    String line, {
+    ReceiptTextRunSize size = ReceiptTextRunSize.normal,
+  }) {
+    _append('$line\n', size);
+  }
+
+  /// Appends raw trailing text (the footer gap) without adding a newline.
+  void write(String text) => _append(text, ReceiptTextRunSize.normal);
+
+  void _append(String text, ReceiptTextRunSize size) {
+    if (_runs.isNotEmpty && _runs.last.size == size) {
+      _runs[_runs.length - 1] = ReceiptTextRun(_runs.last.text + text, size);
+    } else {
+      _runs.add(ReceiptTextRun(text, size));
+    }
+  }
+
+  List<ReceiptTextRun> build() => List.unmodifiable(_runs);
+}
+
 /// Highly modular, robust layout engine and ticket generator for 58mm (32 cols) and 80mm (44 cols)
 /// thermal printers. Strictly adheres to Nicaraguan tax laws (DGI Disposición Técnica 09-2007 & Ley 822).
 ///
@@ -378,8 +422,22 @@ class ReceiptLayoutFormatter {
   /// Formats a complete, calculated [ReceiptDocument] as plain text.
   /// Strictly adheres to visual hierarchy:
   /// BUSINESS -> DOCUMENT -> ITEMS -> SUMMARY -> TOTAL -> FX USD -> PAYMENTS -> FOOTER
-  String formatReceiptDocumentText(ReceiptDocument doc) {
-    final buffer = StringBuffer();
+  ///
+  /// Byte-for-byte identical to concatenating the texts of
+  /// [formatReceiptDocumentTextRuns].
+  String formatReceiptDocumentText(ReceiptDocument doc) =>
+      formatReceiptDocumentTextRuns(doc).map((run) => run.text).join();
+
+  /// Segmented variant of [formatReceiptDocumentText]: the same receipt text
+  /// grouped into [ReceiptTextRun]s by font size. Only the item modifier
+  /// lines (`  + ...` extras under each item) are tagged
+  /// [ReceiptTextRunSize.small]; every other line is
+  /// [ReceiptTextRunSize.normal]. Run boundaries fall on complete lines, so
+  /// the concatenation of all run texts equals the plain-text receipt
+  /// byte-for-byte (T5: smaller font for extras on printers that accept a
+  /// per-call text size, e.g. iPOS/Nyx).
+  List<ReceiptTextRun> formatReceiptDocumentTextRuns(ReceiptDocument doc) {
+    final buffer = _ReceiptRunBuffer();
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
 
     // 1. BUSINESS HEADER (Centered)
@@ -529,7 +587,9 @@ class ReceiptLayoutFormatter {
           : line.modifiers;
       for (final mod in modifiers) {
         for (final mLine in wrap('  + $mod', metrics.contentWidth, '    ')) {
-          buffer.writeln(mLine);
+          // T5: extras print one size below the item text; layout (columns,
+          // wrapping, ordering) is untouched — only the font-size tag differs.
+          buffer.writeln(mLine, size: ReceiptTextRunSize.small);
         }
       }
       if (hasLineDiscount) {
@@ -819,8 +879,7 @@ class ReceiptLayoutFormatter {
     }
     buffer.write(metrics.footerGap());
 
-    final raw = buffer.toString();
-    return raw;
+    return buffer.build();
   }
 
   // ==========================================

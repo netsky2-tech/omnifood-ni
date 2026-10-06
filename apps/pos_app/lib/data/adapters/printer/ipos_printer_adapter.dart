@@ -18,6 +18,12 @@ class IPosPrinterAdapter implements PrinterPort {
   /// Keeps platform-channel bitmap payloads bounded before Nyx decodes them.
   static const int maxLogoBytes = 1024 * 1024;
 
+  /// Small font size for modifier/extra lines on the iPOS/Nyx production
+  /// printer: 18px = 3/4 of the 24px body size used by the 58mm handler
+  /// default and the NyxPrintProfile.receipt80mm profile. Tunable — adjust
+  /// after physical verification on the real terminal (feature T5).
+  static const int smallModifierTextSize = 18;
+
   static const MethodChannel _defaultChannel = MethodChannel(
     'com.nhilos.pos/ipos_printer',
   );
@@ -106,6 +112,7 @@ class IPosPrinterAdapter implements PrinterPort {
     final formatter = ReceiptLayoutFormatter.fromPaperWidth(
       normalizedPaperWidthMm,
     );
+    final List<ReceiptTextRun> receiptRuns;
     final String formattedText;
     if (loyaltyFeedback?.hasContent ?? false) {
       formattedText = formatter.formatInvoiceText(
@@ -123,6 +130,9 @@ class IPosPrinterAdapter implements PrinterPort {
         loyaltyFeedback: loyaltyFeedback,
         fiscalAuthorizationNumber: fiscalAuthorizationNumber,
       );
+      // The legacy invoice adapter has no run segmentation: it always
+      // travels as a single normal-size payload (unchanged contract).
+      receiptRuns = [ReceiptTextRun(formattedText, ReceiptTextRunSize.normal)];
     } else {
       final document = ReceiptDocument.fromInvoice(
         invoice,
@@ -142,7 +152,8 @@ class IPosPrinterAdapter implements PrinterPort {
         reprintAt: reprintAt,
         originDocumentReference: originDocumentReference,
       );
-      formattedText = formatter.formatReceiptDocumentText(document);
+      receiptRuns = formatter.formatReceiptDocumentTextRuns(document);
+      formattedText = receiptRuns.map((run) => run.text).join();
     }
 
     try {
@@ -162,10 +173,7 @@ class IPosPrinterAdapter implements PrinterPort {
 
       // This selects per-job layout/render width only; it does not change the
       // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.
-      await _channel.invokeMethod('printText', {
-        'text': formattedText,
-        'paperWidthMm': normalizedPaperWidthMm,
-      });
+      await _invokePrintText(receiptRuns, paperWidthMm: normalizedPaperWidthMm);
       return PrinterResult.success(text: formattedText);
     } on MissingPluginException {
       debugPrint('[IPosPrinterAdapter] iPos print service unavailable.');
@@ -191,9 +199,11 @@ class IPosPrinterAdapter implements PrinterPort {
     int paperWidthMm = 58,
   }) async {
     final normalizedPaperWidthMm = _normalizedPaperWidthMm(paperWidthMm);
-    final text = ReceiptLayoutFormatter.fromPaperWidth(
+    final formatter = ReceiptLayoutFormatter.fromPaperWidth(
       normalizedPaperWidthMm,
-    ).formatReceiptDocumentText(document);
+    );
+    final runs = formatter.formatReceiptDocumentTextRuns(document);
+    final text = runs.map((run) => run.text).join();
     try {
       final logo = document.logoRasterBytes;
       if (logo != null &&
@@ -210,10 +220,7 @@ class IPosPrinterAdapter implements PrinterPort {
       }
       // This selects per-job layout/render width only; it does not change the
       // persistent physical/default paper setting in net.nyx.printerservice.SETTINGS.
-      await _channel.invokeMethod('printText', {
-        'text': text,
-        'paperWidthMm': normalizedPaperWidthMm,
-      });
+      await _invokePrintText(runs, paperWidthMm: normalizedPaperWidthMm);
       return PrinterResult.success(text: text);
     } on MissingPluginException {
       return PrinterResult.failure(
@@ -374,6 +381,41 @@ class IPosPrinterAdapter implements PrinterPort {
   }
 
   int _normalizedPaperWidthMm(int paperWidthMm) => paperWidthMm < 80 ? 58 : 80;
+
+  /// Sends [runs] through the `printText` method channel.
+  ///
+  /// Without small runs the legacy single-blob contract is kept byte-for-byte
+  /// (`text` + `paperWidthMm`). With small runs the blob is split into
+  /// size-tagged segments (complete lines only): normal segments omit
+  /// `textSize` so the native handler keeps its current effective size, and
+  /// small segments carry [smallModifierTextSize]. The join of all segment
+  /// texts equals the original blob exactly — no newline is added or lost.
+  Future<void> _invokePrintText(
+    List<ReceiptTextRun> runs, {
+    required int paperWidthMm,
+  }) async {
+    final hasSmallRuns =
+        runs.any((run) => run.size == ReceiptTextRunSize.small);
+    if (!hasSmallRuns) {
+      await _channel.invokeMethod('printText', {
+        'text': runs.map((run) => run.text).join(),
+        'paperWidthMm': paperWidthMm,
+      });
+      return;
+    }
+    await _channel.invokeMethod('printText', {
+      'paperWidthMm': paperWidthMm,
+      'segments': [
+        for (final run in runs)
+          run.size == ReceiptTextRunSize.small
+              ? <String, Object>{
+                  'text': run.text,
+                  'textSize': smallModifierTextSize,
+                }
+              : <String, Object>{'text': run.text},
+      ],
+    });
+  }
 
   Future<PrinterResult> _sendToHardware({
     List<int>? rawBytes,
