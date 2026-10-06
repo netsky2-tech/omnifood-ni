@@ -2,18 +2,31 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:pos_app/core/navigation/route_observer.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
+import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/ui/features/config/business_profile/business_profile_view.dart';
 import 'package:pos_app/ui/features/config/business_profile/business_profile_view_model.dart';
 import 'package:provider/provider.dart';
 
 class _MockLocalConfigDao extends Mock implements LocalConfigDao {}
+class _MockAuthRepository extends Mock implements AuthRepository {}
+
+/// Mutable operator session for tests that switch operators mid-test
+/// (T1 #66 stale-role regression). Defaults to owner so every pre-existing
+/// test keeps asserting today's behavior.
+class _OperatorSession {
+  UserRole role = UserRole.owner;
+}
 
 void main() {
+  final _OperatorSession operatorSession = _OperatorSession();
   late _MockLocalConfigDao mockDao;
   late BusinessProfileViewModel viewModel;
+  late _MockAuthRepository authRepository;
 
   setUpAll(() {
     registerFallbackValue(LocalConfigEntity(key: 'fallback', value: ''));
@@ -22,12 +35,34 @@ void main() {
   setUp(() {
     mockDao = _MockLocalConfigDao();
     viewModel = BusinessProfileViewModel(mockDao);
+    authRepository = _MockAuthRepository();
+    operatorSession.role = UserRole.owner;
   });
 
-  Widget buildWidget({DateTime? fiscalToday}) {
-    return ChangeNotifierProvider<BusinessProfileViewModel>.value(
-      value: viewModel,
+  Widget buildWidget({
+    DateTime? fiscalToday,
+    UserRole? userRole,
+    List<NavigatorObserver>? navigatorObservers,
+  }) {
+    // T1 (#66): the view resolves the signed-in role via AuthRepository,
+    // exactly as app_drawer.dart does. The harness defaults to the mutable
+    // operator session (owner) so the pre-existing assertions keep today's
+    // behavior; the role-guard group below passes cashier/waiter explicitly.
+    when(() => authRepository.getCurrentUser()).thenAnswer((_) async => User(
+          id: 'u-1',
+          name: 'Test Operator',
+          role: userRole ?? operatorSession.role,
+          isActive: true,
+        ));
+    return MultiProvider(
+      providers: [
+        Provider<AuthRepository>.value(value: authRepository),
+        ChangeNotifierProvider<BusinessProfileViewModel>.value(
+          value: viewModel,
+        ),
+      ],
       child: MaterialApp(
+        navigatorObservers: navigatorObservers ?? const [],
         home: BusinessProfileView(fiscalToday: fiscalToday),
       ),
     );
@@ -721,6 +756,190 @@ void main() {
       // Malformed values must still be rejected.
       expect(validate('12345'), isNotNull);
       expect(validate('X0310000000000'), isNotNull);
+    });
+  });
+
+  group('T1 #66: role guard on the FX fields', () {
+    Future<void> pumpAsRole(WidgetTester tester, UserRole role) async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
+      await tester.pumpWidget(buildWidget(userRole: role));
+      await tester.pumpAndSettle();
+    }
+
+    TextField bcnFieldOf(WidgetTester tester) => tester.widget<TextField>(find.descendant(
+      of: find.widgetWithText(TextFormField, 'Tipo de Cambio Oficial BCN (Base Fiscal DGI)'),
+      matching: find.byType(TextField),
+    ).first);
+
+    testWidgets('cashier sees the FX values but every FX control is inert and explains why',
+        (tester) async {
+      await pumpAsRole(tester, UserRole.cashier);
+
+      final commercialField = tester.widget<TextField>(find.descendant(
+        of: find.byKey(const Key('commercial_exchange_rate_field')),
+        matching: find.byType(TextField),
+      ).first);
+      expect(commercialField.readOnly, isTrue,
+          reason: 'a cashier must not rewrite the commercial rate');
+      expect(commercialField.decoration?.prefixIcon,
+          isA<Icon>().having((i) => i.icon, 'icon', Icons.lock));
+
+      final bcnField = bcnFieldOf(tester);
+      expect(bcnField.readOnly, isTrue,
+          reason: 'a cashier must not rewrite the BCN fiscal base');
+
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+                find.byKey(const Key('checkout_fx_mode_dropdown')))
+            .onChanged,
+        isNull,
+        reason: 'a cashier must not switch the checkout FX mode',
+      );
+
+      expect(
+        tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.sync)).onPressed,
+        isNull,
+        reason: 'a cashier must not trigger the BCN web-service fetch (direct write path)',
+      );
+
+      // AP-17 (disabled dead end): the inert controls explain WHY. The
+      // role-restricted copy is distinct from the cloud-managed copy, and
+      // with no cloud marker only the role copy appears (three FX controls).
+      expect(find.textContaining('Solo el propietario o un gerente'),
+          findsNWidgets(3));
+      expect(find.textContaining('Definido por la oficina'), findsNothing);
+    });
+
+    testWidgets('owner keeps full control: the three FX controls stay editable',
+        (tester) async {
+      await pumpAsRole(tester, UserRole.owner);
+
+      final commercialField = tester.widget<TextField>(find.descendant(
+        of: find.byKey(const Key('commercial_exchange_rate_field')),
+        matching: find.byType(TextField),
+      ).first);
+      expect(commercialField.readOnly, isFalse);
+
+      final bcnField = bcnFieldOf(tester);
+      expect(bcnField.readOnly, isFalse);
+
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+                find.byKey(const Key('checkout_fx_mode_dropdown')))
+            .onChanged,
+        isNotNull,
+      );
+      expect(
+        tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.sync)).onPressed,
+        isNotNull,
+      );
+      expect(find.textContaining('Solo el propietario o un gerente'), findsNothing);
+    });
+
+    testWidgets('when both restrictions apply, cloud-managed wins the helper copy',
+        (tester) async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.getConfigByKey('business_profile_managed_keys'))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'business_profile_managed_keys',
+                value: 'commercial_exchange_rate',
+              ));
+      await tester.pumpWidget(buildWidget(userRole: UserRole.cashier));
+      await tester.pumpAndSettle();
+
+      // The commercial-rate field is locked for BOTH reasons, but the
+      // helper states the office authority, not the role restriction.
+      final commercialField = tester.widget<TextField>(find.descendant(
+        of: find.byKey(const Key('commercial_exchange_rate_field')),
+        matching: find.byType(TextField),
+      ).first);
+      expect(commercialField.readOnly, isTrue);
+      expect(find.textContaining('Definido por la oficina'), findsOneWidget);
+      // The other two FX controls still carry the role copy.
+      expect(find.textContaining('Solo el propietario o un gerente'),
+          findsNWidgets(2));
+    });
+
+    testWidgets(
+        'didPopNext re-resolves the role: an operator switch while the profile route is covered locks the FX controls on return (T1 #66)',
+        (tester) async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.saveConfig(any())).thenAnswer((_) async {});
+
+      // The real global observer is wired exactly as main.dart does, so the
+      // view's RouteAware subscription (mirroring sale_view.dart) fires.
+      await tester
+          .pumpWidget(buildWidget(navigatorObservers: [appRouteObserver]));
+      await tester.pumpAndSettle();
+
+      // Owner at first load: the three FX controls are live.
+      final ownerCommercial = tester.widget<TextField>(find.descendant(
+        of: find.byKey(const Key('commercial_exchange_rate_field')),
+        matching: find.byType(TextField),
+      ).first);
+      expect(ownerCommercial.readOnly, isFalse);
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+                find.byKey(const Key('checkout_fx_mode_dropdown')))
+            .onChanged,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.sync))
+            .onPressed,
+        isNotNull,
+      );
+
+      // app_drawer.dart "Cambiar operador" PUSHES /lock: the profile route
+      // stays mounted underneath (never disposed, never re-inited).
+      final NavigatorState navigator = tester.firstState(find.byType(Navigator));
+      navigator.push(MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Center(child: Text('Lock'))),
+      ));
+      await tester.pumpAndSettle();
+
+      // The operator switch happens while the profile route is covered.
+      operatorSession.role = UserRole.cashier;
+
+      // lock_screen_view.dart pop-replaces to /home; when the covering route
+      // is popped the still-mounted profile route is re-exposed.
+      navigator.pop();
+      await tester.pumpAndSettle();
+
+      // The stale role cache must be gone: every FX control is now inert.
+      final cashierCommercial = tester.widget<TextField>(find.descendant(
+        of: find.byKey(const Key('commercial_exchange_rate_field')),
+        matching: find.byType(TextField),
+      ).first);
+      expect(cashierCommercial.readOnly, isTrue,
+          reason:
+              'the re-exposed profile route must re-resolve the switched operator role');
+      expect(
+        tester
+            .widget<DropdownButtonFormField<String>>(
+                find.byKey(const Key('checkout_fx_mode_dropdown')))
+            .onChanged,
+        isNull,
+        reason: 'a cashier must not switch the checkout FX mode after the switch',
+      );
+      expect(
+        tester
+            .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.sync))
+            .onPressed,
+        isNull,
+        reason: 'a cashier must not trigger the BCN web-service fetch after the switch',
+      );
+
+      // AP-17: the inert controls explain WHY (role-restricted copy, three FX
+      // controls, no cloud marker in this test).
+      expect(find.textContaining('Solo el propietario o un gerente'),
+          findsNWidgets(3));
+      expect(find.textContaining('Definido por la oficina'), findsNothing);
     });
   });
 }

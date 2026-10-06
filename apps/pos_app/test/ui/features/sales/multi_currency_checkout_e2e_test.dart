@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/sales/payment_entity.dart';
@@ -18,6 +19,7 @@ import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/ui/features/cash/cash_shift_view_model.dart';
 import 'package:pos_app/data/daos/sales/sales_transaction_dao.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
@@ -46,6 +48,10 @@ void main() {
   late MockAuthRepository mockAuthRepo;
   late SalesRepositoryImpl salesRepository;
   late SaleViewModel saleViewModel;
+  // T7 (unified close): the Z-side view model over the same database, so
+  // drawer expectations are asserted against the surviving Corte Z figure
+  // (effectiveExpectedNio/Usd) instead of the retired in-memory counter.
+  late CashShiftViewModel cashViewModel;
 
   setUpAll(() {
     sqfliteFfiInit();
@@ -131,6 +137,31 @@ void main() {
     await saleViewModel.loadExchangeRates();
     // Allow async constructor fires to finish
     await Future.delayed(const Duration(milliseconds: 50));
+
+    // T7 (unified close): seed the open shift the sale path binds to
+    // (saveSale resolves the shift by user + terminal and stamps
+    // invoice.shift_id) and load the Z-side view model over it. Same
+    // lookup the production root provider performs.
+    await database.cashierSessionDao.insertSession(CashierSessionEntity(
+      id: 'shift-e2e-01',
+      userId: 'u-cashier-1',
+      terminalId: 'terminal-test',
+      openedAt: DateTime.now().millisecondsSinceEpoch,
+      tipoModelo: 'CAJA_CENTRAL',
+      openingBalanceNio: 0.0,
+      openingBalanceUsd: 0.0,
+      expectedNio: 0.0,
+      expectedUsd: 0.0,
+      isClosed: false,
+      syncStatus: 'pending',
+    ));
+    cashViewModel = CashShiftViewModel.fromDatabase(
+      database: database,
+      currentUserId: 'u-cashier-1',
+      currentTerminalId: 'terminal-test',
+    );
+    await cashViewModel.init();
+    expect(cashViewModel.hasActiveShift, isTrue);
   });
 
   tearDown(() async {
@@ -204,8 +235,11 @@ void main() {
       expect(pay.changeGiven, 150.00);
       expect(pay.changeCurrency, 'NIO');
 
-      // 5. Verify Cash drawer expected accumulation = Net Cash Received (500 - 150 = C$ 350)
-      expect(saleViewModel.sessionExpected[PaymentMethod.cash], 350.00);
+      // 5. T7: drawer expectation asserted against the surviving Corte Z
+      // figure: net cash received (500 - 150 = C$ 350) re-queried from the
+      // payment rows of this shift (opening float was 0).
+      await cashViewModel.refreshSalesCash();
+      expect(cashViewModel.effectiveExpectedNio, 350.00);
     });
 
     test('Scenario 2: Tender in USD (\$20 bill), change given in NIO, correct FX snapshot', () async {
@@ -288,8 +322,12 @@ void main() {
       expect(pay.changeGiven, 230.00);
       expect(pay.changeCurrency, 'NIO');
 
-      // Net cash added to drawer = 730 - 230 = C$ 500.00
-      expect(saleViewModel.sessionExpected[PaymentMethod.cash], 500.00);
+      // T7: the Z arithmetic keeps dual-currency buckets separate — the
+      // drawer gained $20 USD and handed out C$230 NIO change. The retired
+      // in-memory counter collapsed this to a single NIO figure (500).
+      await cashViewModel.refreshSalesCash();
+      expect(cashViewModel.effectiveExpectedUsd, 20.00);
+      expect(cashViewModel.effectiveExpectedNio, -230.00);
     });
 
     test('Scenario 3: Tender in USD (\$50 bill) with change given in USD (\$30 USD)', () async {
@@ -381,9 +419,12 @@ void main() {
       expect(pay.currency, 'NIO');
       expect(pay.changeGiven, 0.0);
 
-      // Card expected updated, Cash expected remains 0
-      expect(saleViewModel.sessionExpected[PaymentMethod.card], 180.00);
-      expect(saleViewModel.sessionExpected[PaymentMethod.cash], 0.00);
+      // T7: per-method totals survive as the Z contract — a CARD payment
+      // never enters the cash drawer expectation (cash figures stay 0 in
+      // both currencies).
+      await cashViewModel.refreshSalesCash();
+      expect(cashViewModel.effectiveExpectedNio, 0.00);
+      expect(cashViewModel.effectiveExpectedUsd, 0.00);
     });
 
     test('Scenario 5: Fiscal Immutability: changing exchange rate later does not mutate historical invoice', () async {
@@ -427,6 +468,49 @@ void main() {
       expect(reloadedInvoice!.commercialRate, 36.50);
       expect(reloadedInvoice.bcnOfficialRate, 36.6241);
       expect(reloadedInvoice.totalUsd, 10.00);
+    });
+
+    test('Scenario 6: absent FX rate rows block the sale BEFORE any fiscal sequence is consumed (#67/T2a)', () async {
+      // 1. Remove both rate rows: the terminal must not invent a rate.
+      await database.localConfigDao.deleteConfig('commercial_exchange_rate');
+      await database.localConfigDao.deleteConfig('bcn_official_exchange_rate');
+      await saleViewModel.loadExchangeRates();
+
+      saleViewModel.addToCart(
+        const Product(
+          id: 'prod-fx-guard',
+          name: 'Café Sin Tasa',
+          uom: 'UND',
+          stock: 10,
+          averageCost: 50.0,
+          sellPrice: 100.00,
+          category: 'Bebidas',
+        ),
+      );
+
+      await expectLater(
+        saleViewModel.processSale([PaymentMethod.cash]),
+        throwsA(isA<Exception>()),
+      );
+
+      // The block must carry a directive Spanish message naming who can fix
+      // it (FX fields are owner/manager-only since #66).
+      expect(
+        saleViewModel.errorMessage,
+        'No se puede vender: la tasa de cambio comercial no está configurada en este terminal. Pedile al dueño o a un encargado que la configure en Perfil del Negocio.',
+      );
+
+      // Proof: the fiscal sequence number was NEVER consumed — the DGI
+      // numbering service was never reached, no sale transaction ran and no
+      // invoice exists.
+      verifyNever(mockNumberingService.getNextNumber());
+      verifyNever(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any, any, any, any, any, any, any, any,
+        ),
+      );
+      final invoices = await database.invoiceDao.getAllInvoices();
+      expect(invoices, isEmpty);
     });
   });
 }

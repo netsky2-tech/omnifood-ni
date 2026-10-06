@@ -101,6 +101,10 @@ void main() {
     await database.localConfigDao.saveConfig(
       LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
     );
+    // #67/T2a: the sale path no longer invents the BCN rate — seed it too.
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
+    );
     salesRepo = FakeSalesRepository();
 
     viewModel = SaleViewModel(

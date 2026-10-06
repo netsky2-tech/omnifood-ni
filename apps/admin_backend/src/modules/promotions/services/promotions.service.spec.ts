@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { PromotionsService } from './promotions.service';
 import { Promotion, PromotionType } from '../entities/promotion.entity';
+import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
+import { CATALOG_TYPE } from '../../catalog/catalog-type';
 
 describe('PromotionsService', () => {
   let service: PromotionsService;
@@ -14,6 +16,11 @@ describe('PromotionsService', () => {
     create: jest.Mock;
     save: jest.Mock;
   };
+  // T0.5'a: target_category_id is a uuid FK to catalog_values
+  // (SALES_PRODUCT_CATEGORY); the service validates it inside the same
+  // tenant-bound transaction, so the manager must hand out a distinct
+  // catalog repository the tests can observe.
+  let catalogRepo: { findOne: jest.Mock };
   // The tenant-bound transaction fake: the manager hands back the same
   // repository mock the pooled token provides, so the existing behavior
   // assertions keep working unchanged while the guard test below proves the
@@ -51,9 +58,15 @@ describe('PromotionsService', () => {
       save: jest.fn((entity: unknown) => Promise.resolve(entity)),
     };
 
+    catalogRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+
     transactionalManager = {
       query: jest.fn(async () => []),
-      getRepository: jest.fn(() => repo),
+      getRepository: jest.fn((entity: unknown) =>
+        entity === CatalogValue ? catalogRepo : repo,
+      ),
     };
     transactionalDataSource = {
       transaction: jest.fn(
@@ -107,14 +120,28 @@ describe('PromotionsService', () => {
     const dto = {
       name: '15% Descuento Bebidas',
       type: PromotionType.PERCENTAGE_DISCOUNT,
-      target_category_id: 'Bebidas',
+      target_category_id: '11111111-1111-4111-8111-111111111111',
       discount_value: 15,
       priority: 5,
     };
+    catalogRepo.findOne.mockResolvedValueOnce({
+      id: dto.target_category_id,
+      tenant_id: 'tenant-1',
+      catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+    });
     const created = await service.create('tenant-1', dto);
     expect(created.name).toBe('15% Descuento Bebidas');
     expect(created.tenant_id).toBe('tenant-1');
     expect(created.is_active).toBe(true);
+    // T0.5'a: the target category was validated inside the SAME tenant-bound
+    // transaction, tenant-scoped and restricted to SALES_PRODUCT_CATEGORY.
+    expect(catalogRepo.findOne).toHaveBeenCalledWith({
+      where: {
+        id: dto.target_category_id,
+        tenant_id: 'tenant-1',
+        catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+      },
+    });
   });
 
   it('should update promotion', async () => {
@@ -131,6 +158,131 @@ describe('PromotionsService', () => {
     await service.remove('tenant-1', 'promo-uuid-1');
     expect(promo.is_active).toBe(false);
     expect(repo.save).toHaveBeenCalledWith(promo);
+  });
+
+  // T0.5'a: target_category_id is now a uuid referencing
+  // catalog_values(tenant_id, id). The DTO accepts UUID strings only, and
+  // the service must reject, with a 4xx (never a silent ignore): a
+  // non-uuid value, and a uuid that is not a SALES_PRODUCT_CATEGORY row of
+  // the caller's tenant (foreign tenant, other catalog type, or missing —
+  // all one message, so the endpoint is not a cross-tenant existence
+  // oracle).
+  describe("target_category_id validation (T0.5'a)", () => {
+    const validUuid = '11111111-1111-4111-8111-111111111111';
+
+    it('rejects a non-uuid target_category_id without querying the catalog', async () => {
+      await expect(
+        service.create('tenant-1', {
+          name: 'Promo',
+          type: PromotionType.PERCENTAGE_DISCOUNT,
+          target_category_id: 'Bebidas',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a uuid that is not a SALES_PRODUCT_CATEGORY row of the tenant', async () => {
+      catalogRepo.findOne.mockResolvedValueOnce(null);
+      await expect(
+        service.create('tenant-1', {
+          name: 'Promo',
+          type: PromotionType.PERCENTAGE_DISCOUNT,
+          target_category_id: validUuid,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(catalogRepo.findOne).toHaveBeenCalledWith({
+        where: {
+          id: validUuid,
+          tenant_id: 'tenant-1',
+          catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+        },
+      });
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('validates on update too', async () => {
+      repo.findOne.mockResolvedValue(mockPromotion());
+      catalogRepo.findOne.mockResolvedValueOnce(null);
+      await expect(
+        service.update('tenant-1', 'promo-uuid-1', {
+          target_category_id: validUuid,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('accepts a valid SALES_PRODUCT_CATEGORY row of the tenant on update', async () => {
+      repo.findOne.mockResolvedValue(mockPromotion());
+      catalogRepo.findOne.mockResolvedValueOnce({
+        id: validUuid,
+        tenant_id: 'tenant-1',
+        catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+      });
+      const updated = await service.update('tenant-1', 'promo-uuid-1', {
+        target_category_id: validUuid,
+      });
+      expect(updated.target_category_id).toBe(validUuid);
+    });
+
+    it('never queries the catalog when target_category_id is absent', async () => {
+      repo.findOne.mockResolvedValue(mockPromotion());
+      await service.update('tenant-1', 'promo-uuid-1', { priority: 20 });
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+    });
+  });
+
+  // T0.5'd: an explicit JSON null is a deliberate "no category target"
+  // (global on create, clear on update) and must flow to the column, while
+  // an empty string stays rejected — the blank-target trap T0.5'a guards.
+  describe("target_category_id null contract (T0.5'd)", () => {
+    const validUuid = '11111111-1111-4111-8111-111111111111';
+
+    it('accepts target_category_id null on create as a global promotion without querying the catalog', async () => {
+      const created = await service.create('tenant-1', {
+        name: 'Promo Global',
+        type: PromotionType.PERCENTAGE_DISCOUNT,
+        target_category_id: null,
+      });
+      expect(created.target_category_id).toBeNull();
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(repo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears a previously set target_category_id on update with null', async () => {
+      repo.findOne.mockResolvedValue(
+        mockPromotion({ target_category_id: validUuid }),
+      );
+      const updated = await service.update('tenant-1', 'promo-uuid-1', {
+        target_category_id: null,
+      });
+      expect(updated.target_category_id).toBeNull();
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(repo.save).toHaveBeenCalledTimes(1);
+    });
+
+    it('still rejects an empty-string target_category_id on create', async () => {
+      await expect(
+        service.create('tenant-1', {
+          name: 'Promo',
+          type: PromotionType.PERCENTAGE_DISCOUNT,
+          target_category_id: '',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('still rejects an empty-string target_category_id on update', async () => {
+      repo.findOne.mockResolvedValue(mockPromotion());
+      await expect(
+        service.update('tenant-1', 'promo-uuid-1', {
+          target_category_id: '',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(catalogRepo.findOne).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+    });
   });
 
   // Issue #512 T3 slice 6: the promotions table is now tenant-RLS

@@ -10,8 +10,10 @@ import '../../../../../data/services/sync_service.dart';
 
 import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
+import '../../../../domain/models/user.dart';
 
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
+import '../config_permissions.dart';
 
 class BusinessProfileViewModel extends ChangeNotifier {
   final LocalConfigDao _configDao;
@@ -62,6 +64,22 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'tax_regime': 'REGIMEN_GENERAL',
   };
   Map<String, String> get config => _config;
+
+  /// T1 (#66): the role of the operator currently signed in on this
+  /// terminal. Defaults to null, which resolves to NO permission — the view
+  /// loads the role asynchronously, so an unset role must deny, never allow.
+  UserRole? _currentUserRole;
+
+  void setCurrentUserRole(UserRole? role) {
+    if (_currentUserRole == role) return;
+    _currentUserRole = role;
+    notifyListeners();
+  }
+
+  /// Whether the current operator may write the FX fields. Both write paths
+  /// (saveConfig and the direct BCN fetch) consult this.
+  bool get canEditExchangeRates =>
+      hasConfigPermission(_currentUserRole, ConfigPermission.editExchangeRates);
 
   /// BXW-007 U3 (#734): local key names the cloud currently asserts for the
   /// business profile, parsed from the managed-keys marker. The marker is
@@ -139,6 +157,13 @@ class BusinessProfileViewModel extends ChangeNotifier {
   bool get isFetchingBcnRate => _isFetchingBcnRate;
 
   Future<double> fetchOfficialBcnRate([Future<double> Function()? bcnFetcher]) async {
+    // T1 (#66): this is a direct write path that bypasses saveConfig; a
+    // restricted operator must not be able to persist the BCN rate. Refuse
+    // before any write and without mutating [_config].
+    if (!canEditExchangeRates) {
+      throw Exception(
+          'Solo el propietario o un gerente puede actualizar la tasa oficial BCN');
+    }
     _isFetchingBcnRate = true;
     notifyListeners();
     try {
@@ -270,6 +295,15 @@ class BusinessProfileViewModel extends ChangeNotifier {
   /// Reads ignore it because it is no longer in the defaults map.
   static const String _retiredKey = 'dgi_range_end';
 
+  /// T1 (#66): the FX keys a restricted operator must never write. The
+  /// commercial rate and the checkout FX mode drive the invoice rate; the
+  /// BCN rate is the DGI fiscal base.
+  static const Set<String> _fxWriteKeys = {
+    'commercial_exchange_rate',
+    'bcn_official_exchange_rate',
+    'checkout_fx_mode',
+  };
+
   Future<void> saveConfig(Map<String, String> newConfig) async {
     _isLoading = true;
     notifyListeners();
@@ -298,6 +332,11 @@ class BusinessProfileViewModel extends ChangeNotifier {
         if (_sequenceKeys.contains(entry.key) &&
             entry.value.trim().isEmpty) {
           // Blank sequence value = leave the persisted row untouched.
+          continue;
+        }
+        if (!canEditExchangeRates && _fxWriteKeys.contains(entry.key)) {
+          // T1 (#66): cashier/waiter see the FX values but never write them
+          // — an unauthorized rate change at the point of collection.
           continue;
         }
         await _configDao.saveConfig(LocalConfigEntity(

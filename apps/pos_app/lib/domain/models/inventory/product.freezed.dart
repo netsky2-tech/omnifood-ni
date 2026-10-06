@@ -30,6 +30,10 @@ mixin _$Product {
   String? get sku => throw _privateConstructorUsedError;
   String? get barcode => throw _privateConstructorUsedError;
   String? get category => throw _privateConstructorUsedError;
+
+  /// T0.5c: resolved category identity (catalog_values.id). Promotions
+  /// match strictly on this id, never on the free-text [category].
+  String? get categoryId => throw _privateConstructorUsedError;
   bool get isPrepared => throw _privateConstructorUsedError;
   String get productType => throw _privateConstructorUsedError;
   String? get mappingVersionId => throw _privateConstructorUsedError;
@@ -47,6 +51,12 @@ mixin _$Product {
   bool get isTaxExempt => throw _privateConstructorUsedError;
   List<ProductVariant> get variants => throw _privateConstructorUsedError;
   List<Modifier> get availableModifiers => throw _privateConstructorUsedError;
+
+  /// T2.3: effective modifier groups resolved at load time from the local
+  /// mirror, mirroring the server's category-inheritance + per-product
+  /// exception rule. Empty when the mirror has nothing for the product.
+  List<EffectiveModifierGroup> get availableModifierGroups =>
+      throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -69,6 +79,7 @@ abstract class $ProductCopyWith<$Res> {
       String? sku,
       String? barcode,
       String? category,
+      String? categoryId,
       bool isPrepared,
       String productType,
       String? mappingVersionId,
@@ -79,7 +90,8 @@ abstract class $ProductCopyWith<$Res> {
       double taxRate,
       bool isTaxExempt,
       List<ProductVariant> variants,
-      List<Modifier> availableModifiers});
+      List<Modifier> availableModifiers,
+      List<EffectiveModifierGroup> availableModifierGroups});
 }
 
 /// @nodoc
@@ -105,6 +117,7 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
     Object? sku = freezed,
     Object? barcode = freezed,
     Object? category = freezed,
+    Object? categoryId = freezed,
     Object? isPrepared = null,
     Object? productType = null,
     Object? mappingVersionId = freezed,
@@ -116,6 +129,7 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
     Object? isTaxExempt = null,
     Object? variants = null,
     Object? availableModifiers = null,
+    Object? availableModifierGroups = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -157,6 +171,10 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
       category: freezed == category
           ? _value.category
           : category // ignore: cast_nullable_to_non_nullable
+              as String?,
+      categoryId: freezed == categoryId
+          ? _value.categoryId
+          : categoryId // ignore: cast_nullable_to_non_nullable
               as String?,
       isPrepared: null == isPrepared
           ? _value.isPrepared
@@ -202,6 +220,10 @@ class _$ProductCopyWithImpl<$Res, $Val extends Product>
           ? _value.availableModifiers
           : availableModifiers // ignore: cast_nullable_to_non_nullable
               as List<Modifier>,
+      availableModifierGroups: null == availableModifierGroups
+          ? _value.availableModifierGroups
+          : availableModifierGroups // ignore: cast_nullable_to_non_nullable
+              as List<EffectiveModifierGroup>,
     ) as $Val);
   }
 }
@@ -224,6 +246,7 @@ abstract class _$$ProductImplCopyWith<$Res> implements $ProductCopyWith<$Res> {
       String? sku,
       String? barcode,
       String? category,
+      String? categoryId,
       bool isPrepared,
       String productType,
       String? mappingVersionId,
@@ -234,7 +257,8 @@ abstract class _$$ProductImplCopyWith<$Res> implements $ProductCopyWith<$Res> {
       double taxRate,
       bool isTaxExempt,
       List<ProductVariant> variants,
-      List<Modifier> availableModifiers});
+      List<Modifier> availableModifiers,
+      List<EffectiveModifierGroup> availableModifierGroups});
 }
 
 /// @nodoc
@@ -258,6 +282,7 @@ class __$$ProductImplCopyWithImpl<$Res>
     Object? sku = freezed,
     Object? barcode = freezed,
     Object? category = freezed,
+    Object? categoryId = freezed,
     Object? isPrepared = null,
     Object? productType = null,
     Object? mappingVersionId = freezed,
@@ -269,6 +294,7 @@ class __$$ProductImplCopyWithImpl<$Res>
     Object? isTaxExempt = null,
     Object? variants = null,
     Object? availableModifiers = null,
+    Object? availableModifierGroups = null,
   }) {
     return _then(_$ProductImpl(
       id: null == id
@@ -310,6 +336,10 @@ class __$$ProductImplCopyWithImpl<$Res>
       category: freezed == category
           ? _value.category
           : category // ignore: cast_nullable_to_non_nullable
+              as String?,
+      categoryId: freezed == categoryId
+          ? _value.categoryId
+          : categoryId // ignore: cast_nullable_to_non_nullable
               as String?,
       isPrepared: null == isPrepared
           ? _value.isPrepared
@@ -355,6 +385,10 @@ class __$$ProductImplCopyWithImpl<$Res>
           ? _value._availableModifiers
           : availableModifiers // ignore: cast_nullable_to_non_nullable
               as List<Modifier>,
+      availableModifierGroups: null == availableModifierGroups
+          ? _value._availableModifierGroups
+          : availableModifierGroups // ignore: cast_nullable_to_non_nullable
+              as List<EffectiveModifierGroup>,
     ));
   }
 }
@@ -373,6 +407,7 @@ class _$ProductImpl implements _Product {
       this.sku,
       this.barcode,
       this.category,
+      this.categoryId,
       this.isPrepared = false,
       this.productType = 'SIMPLE',
       this.mappingVersionId,
@@ -383,9 +418,11 @@ class _$ProductImpl implements _Product {
       this.taxRate = 0.0,
       this.isTaxExempt = false,
       final List<ProductVariant> variants = const [],
-      final List<Modifier> availableModifiers = const []})
+      final List<Modifier> availableModifiers = const [],
+      final List<EffectiveModifierGroup> availableModifierGroups = const []})
       : _variants = variants,
-        _availableModifiers = availableModifiers;
+        _availableModifiers = availableModifiers,
+        _availableModifierGroups = availableModifierGroups;
 
   factory _$ProductImpl.fromJson(Map<String, dynamic> json) =>
       _$$ProductImplFromJson(json);
@@ -411,6 +448,11 @@ class _$ProductImpl implements _Product {
   final String? barcode;
   @override
   final String? category;
+
+  /// T0.5c: resolved category identity (catalog_values.id). Promotions
+  /// match strictly on this id, never on the free-text [category].
+  @override
+  final String? categoryId;
   @override
   @JsonKey()
   final bool isPrepared;
@@ -458,9 +500,26 @@ class _$ProductImpl implements _Product {
     return EqualUnmodifiableListView(_availableModifiers);
   }
 
+  /// T2.3: effective modifier groups resolved at load time from the local
+  /// mirror, mirroring the server's category-inheritance + per-product
+  /// exception rule. Empty when the mirror has nothing for the product.
+  final List<EffectiveModifierGroup> _availableModifierGroups;
+
+  /// T2.3: effective modifier groups resolved at load time from the local
+  /// mirror, mirroring the server's category-inheritance + per-product
+  /// exception rule. Empty when the mirror has nothing for the product.
+  @override
+  @JsonKey()
+  List<EffectiveModifierGroup> get availableModifierGroups {
+    if (_availableModifierGroups is EqualUnmodifiableListView)
+      return _availableModifierGroups;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_availableModifierGroups);
+  }
+
   @override
   String toString() {
-    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, isPrepared: $isPrepared, productType: $productType, mappingVersionId: $mappingVersionId, insumoId: $insumoId, createdAt: $createdAt, inventoryPolicy: $inventoryPolicy, directStockInsumoId: $directStockInsumoId, taxRate: $taxRate, isTaxExempt: $isTaxExempt, variants: $variants, availableModifiers: $availableModifiers)';
+    return 'Product(id: $id, name: $name, uom: $uom, stock: $stock, averageCost: $averageCost, sellPrice: $sellPrice, isActive: $isActive, sku: $sku, barcode: $barcode, category: $category, categoryId: $categoryId, isPrepared: $isPrepared, productType: $productType, mappingVersionId: $mappingVersionId, insumoId: $insumoId, createdAt: $createdAt, inventoryPolicy: $inventoryPolicy, directStockInsumoId: $directStockInsumoId, taxRate: $taxRate, isTaxExempt: $isTaxExempt, variants: $variants, availableModifiers: $availableModifiers, availableModifierGroups: $availableModifierGroups)';
   }
 
   @override
@@ -482,6 +541,8 @@ class _$ProductImpl implements _Product {
             (identical(other.barcode, barcode) || other.barcode == barcode) &&
             (identical(other.category, category) ||
                 other.category == category) &&
+            (identical(other.categoryId, categoryId) ||
+                other.categoryId == categoryId) &&
             (identical(other.isPrepared, isPrepared) ||
                 other.isPrepared == isPrepared) &&
             (identical(other.productType, productType) ||
@@ -501,7 +562,9 @@ class _$ProductImpl implements _Product {
                 other.isTaxExempt == isTaxExempt) &&
             const DeepCollectionEquality().equals(other._variants, _variants) &&
             const DeepCollectionEquality()
-                .equals(other._availableModifiers, _availableModifiers));
+                .equals(other._availableModifiers, _availableModifiers) &&
+            const DeepCollectionEquality().equals(
+                other._availableModifierGroups, _availableModifierGroups));
   }
 
   @JsonKey(ignore: true)
@@ -518,6 +581,7 @@ class _$ProductImpl implements _Product {
         sku,
         barcode,
         category,
+        categoryId,
         isPrepared,
         productType,
         mappingVersionId,
@@ -528,7 +592,8 @@ class _$ProductImpl implements _Product {
         taxRate,
         isTaxExempt,
         const DeepCollectionEquality().hash(_variants),
-        const DeepCollectionEquality().hash(_availableModifiers)
+        const DeepCollectionEquality().hash(_availableModifiers),
+        const DeepCollectionEquality().hash(_availableModifierGroups)
       ]);
 
   @JsonKey(ignore: true)
@@ -547,27 +612,30 @@ class _$ProductImpl implements _Product {
 
 abstract class _Product implements Product {
   const factory _Product(
-      {required final String id,
-      required final String name,
-      required final String uom,
-      required final double stock,
-      required final double averageCost,
-      required final double sellPrice,
-      final bool isActive,
-      final String? sku,
-      final String? barcode,
-      final String? category,
-      final bool isPrepared,
-      final String productType,
-      final String? mappingVersionId,
-      final String? insumoId,
-      final String? createdAt,
-      final InventoryPolicy? inventoryPolicy,
-      final String? directStockInsumoId,
-      final double taxRate,
-      final bool isTaxExempt,
-      final List<ProductVariant> variants,
-      final List<Modifier> availableModifiers}) = _$ProductImpl;
+          {required final String id,
+          required final String name,
+          required final String uom,
+          required final double stock,
+          required final double averageCost,
+          required final double sellPrice,
+          final bool isActive,
+          final String? sku,
+          final String? barcode,
+          final String? category,
+          final String? categoryId,
+          final bool isPrepared,
+          final String productType,
+          final String? mappingVersionId,
+          final String? insumoId,
+          final String? createdAt,
+          final InventoryPolicy? inventoryPolicy,
+          final String? directStockInsumoId,
+          final double taxRate,
+          final bool isTaxExempt,
+          final List<ProductVariant> variants,
+          final List<Modifier> availableModifiers,
+          final List<EffectiveModifierGroup> availableModifierGroups}) =
+      _$ProductImpl;
 
   factory _Product.fromJson(Map<String, dynamic> json) = _$ProductImpl.fromJson;
 
@@ -591,6 +659,11 @@ abstract class _Product implements Product {
   String? get barcode;
   @override
   String? get category;
+  @override
+
+  /// T0.5c: resolved category identity (catalog_values.id). Promotions
+  /// match strictly on this id, never on the free-text [category].
+  String? get categoryId;
   @override
   bool get isPrepared;
   @override
@@ -619,6 +692,12 @@ abstract class _Product implements Product {
   List<ProductVariant> get variants;
   @override
   List<Modifier> get availableModifiers;
+  @override
+
+  /// T2.3: effective modifier groups resolved at load time from the local
+  /// mirror, mirroring the server's category-inheritance + per-product
+  /// exception rule. Empty when the mirror has nothing for the product.
+  List<EffectiveModifierGroup> get availableModifierGroups;
   @override
   @JsonKey(ignore: true)
   _$$ProductImplCopyWith<_$ProductImpl> get copyWith =>
@@ -811,6 +890,11 @@ mixin _$Modifier {
   String get name => throw _privateConstructorUsedError;
   double get extraPrice => throw _privateConstructorUsedError;
 
+  /// How many units of this option the line includes. Defaults to 1 so
+  /// old persisted payloads (name + extraPrice only, invoice history
+  /// included) keep loading as quantity 1.
+  int get quantity => throw _privateConstructorUsedError;
+
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
   $ModifierCopyWith<Modifier> get copyWith =>
@@ -822,7 +906,7 @@ abstract class $ModifierCopyWith<$Res> {
   factory $ModifierCopyWith(Modifier value, $Res Function(Modifier) then) =
       _$ModifierCopyWithImpl<$Res, Modifier>;
   @useResult
-  $Res call({String id, String name, double extraPrice});
+  $Res call({String id, String name, double extraPrice, int quantity});
 }
 
 /// @nodoc
@@ -841,6 +925,7 @@ class _$ModifierCopyWithImpl<$Res, $Val extends Modifier>
     Object? id = null,
     Object? name = null,
     Object? extraPrice = null,
+    Object? quantity = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -855,6 +940,10 @@ class _$ModifierCopyWithImpl<$Res, $Val extends Modifier>
           ? _value.extraPrice
           : extraPrice // ignore: cast_nullable_to_non_nullable
               as double,
+      quantity: null == quantity
+          ? _value.quantity
+          : quantity // ignore: cast_nullable_to_non_nullable
+              as int,
     ) as $Val);
   }
 }
@@ -867,7 +956,7 @@ abstract class _$$ModifierImplCopyWith<$Res>
       __$$ModifierImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({String id, String name, double extraPrice});
+  $Res call({String id, String name, double extraPrice, int quantity});
 }
 
 /// @nodoc
@@ -884,6 +973,7 @@ class __$$ModifierImplCopyWithImpl<$Res>
     Object? id = null,
     Object? name = null,
     Object? extraPrice = null,
+    Object? quantity = null,
   }) {
     return _then(_$ModifierImpl(
       id: null == id
@@ -898,6 +988,10 @@ class __$$ModifierImplCopyWithImpl<$Res>
           ? _value.extraPrice
           : extraPrice // ignore: cast_nullable_to_non_nullable
               as double,
+      quantity: null == quantity
+          ? _value.quantity
+          : quantity // ignore: cast_nullable_to_non_nullable
+              as int,
     ));
   }
 }
@@ -906,7 +1000,10 @@ class __$$ModifierImplCopyWithImpl<$Res>
 @JsonSerializable()
 class _$ModifierImpl implements _Modifier {
   const _$ModifierImpl(
-      {required this.id, required this.name, required this.extraPrice});
+      {required this.id,
+      required this.name,
+      required this.extraPrice,
+      this.quantity = 1});
 
   factory _$ModifierImpl.fromJson(Map<String, dynamic> json) =>
       _$$ModifierImplFromJson(json);
@@ -918,9 +1015,16 @@ class _$ModifierImpl implements _Modifier {
   @override
   final double extraPrice;
 
+  /// How many units of this option the line includes. Defaults to 1 so
+  /// old persisted payloads (name + extraPrice only, invoice history
+  /// included) keep loading as quantity 1.
+  @override
+  @JsonKey()
+  final int quantity;
+
   @override
   String toString() {
-    return 'Modifier(id: $id, name: $name, extraPrice: $extraPrice)';
+    return 'Modifier(id: $id, name: $name, extraPrice: $extraPrice, quantity: $quantity)';
   }
 
   @override
@@ -931,12 +1035,14 @@ class _$ModifierImpl implements _Modifier {
             (identical(other.id, id) || other.id == id) &&
             (identical(other.name, name) || other.name == name) &&
             (identical(other.extraPrice, extraPrice) ||
-                other.extraPrice == extraPrice));
+                other.extraPrice == extraPrice) &&
+            (identical(other.quantity, quantity) ||
+                other.quantity == quantity));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, name, extraPrice);
+  int get hashCode => Object.hash(runtimeType, id, name, extraPrice, quantity);
 
   @JsonKey(ignore: true)
   @override
@@ -956,7 +1062,8 @@ abstract class _Modifier implements Modifier {
   const factory _Modifier(
       {required final String id,
       required final String name,
-      required final double extraPrice}) = _$ModifierImpl;
+      required final double extraPrice,
+      final int quantity}) = _$ModifierImpl;
 
   factory _Modifier.fromJson(Map<String, dynamic> json) =
       _$ModifierImpl.fromJson;
@@ -968,7 +1075,499 @@ abstract class _Modifier implements Modifier {
   @override
   double get extraPrice;
   @override
+
+  /// How many units of this option the line includes. Defaults to 1 so
+  /// old persisted payloads (name + extraPrice only, invoice history
+  /// included) keep loading as quantity 1.
+  int get quantity;
+  @override
   @JsonKey(ignore: true)
   _$$ModifierImplCopyWith<_$ModifierImpl> get copyWith =>
       throw _privateConstructorUsedError;
+}
+
+EffectiveModifierOption _$EffectiveModifierOptionFromJson(
+    Map<String, dynamic> json) {
+  return _EffectiveModifierOption.fromJson(json);
+}
+
+/// @nodoc
+mixin _$EffectiveModifierOption {
+  String get id => throw _privateConstructorUsedError;
+  String get name => throw _privateConstructorUsedError;
+  double get priceDelta => throw _privateConstructorUsedError;
+  bool get isDefault => throw _privateConstructorUsedError;
+
+  Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
+  @JsonKey(ignore: true)
+  $EffectiveModifierOptionCopyWith<EffectiveModifierOption> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class $EffectiveModifierOptionCopyWith<$Res> {
+  factory $EffectiveModifierOptionCopyWith(EffectiveModifierOption value,
+          $Res Function(EffectiveModifierOption) then) =
+      _$EffectiveModifierOptionCopyWithImpl<$Res, EffectiveModifierOption>;
+  @useResult
+  $Res call({String id, String name, double priceDelta, bool isDefault});
+}
+
+/// @nodoc
+class _$EffectiveModifierOptionCopyWithImpl<$Res,
+        $Val extends EffectiveModifierOption>
+    implements $EffectiveModifierOptionCopyWith<$Res> {
+  _$EffectiveModifierOptionCopyWithImpl(this._value, this._then);
+
+  // ignore: unused_field
+  final $Val _value;
+  // ignore: unused_field
+  final $Res Function($Val) _then;
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? id = null,
+    Object? name = null,
+    Object? priceDelta = null,
+    Object? isDefault = null,
+  }) {
+    return _then(_value.copyWith(
+      id: null == id
+          ? _value.id
+          : id // ignore: cast_nullable_to_non_nullable
+              as String,
+      name: null == name
+          ? _value.name
+          : name // ignore: cast_nullable_to_non_nullable
+              as String,
+      priceDelta: null == priceDelta
+          ? _value.priceDelta
+          : priceDelta // ignore: cast_nullable_to_non_nullable
+              as double,
+      isDefault: null == isDefault
+          ? _value.isDefault
+          : isDefault // ignore: cast_nullable_to_non_nullable
+              as bool,
+    ) as $Val);
+  }
+}
+
+/// @nodoc
+abstract class _$$EffectiveModifierOptionImplCopyWith<$Res>
+    implements $EffectiveModifierOptionCopyWith<$Res> {
+  factory _$$EffectiveModifierOptionImplCopyWith(
+          _$EffectiveModifierOptionImpl value,
+          $Res Function(_$EffectiveModifierOptionImpl) then) =
+      __$$EffectiveModifierOptionImplCopyWithImpl<$Res>;
+  @override
+  @useResult
+  $Res call({String id, String name, double priceDelta, bool isDefault});
+}
+
+/// @nodoc
+class __$$EffectiveModifierOptionImplCopyWithImpl<$Res>
+    extends _$EffectiveModifierOptionCopyWithImpl<$Res,
+        _$EffectiveModifierOptionImpl>
+    implements _$$EffectiveModifierOptionImplCopyWith<$Res> {
+  __$$EffectiveModifierOptionImplCopyWithImpl(
+      _$EffectiveModifierOptionImpl _value,
+      $Res Function(_$EffectiveModifierOptionImpl) _then)
+      : super(_value, _then);
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? id = null,
+    Object? name = null,
+    Object? priceDelta = null,
+    Object? isDefault = null,
+  }) {
+    return _then(_$EffectiveModifierOptionImpl(
+      id: null == id
+          ? _value.id
+          : id // ignore: cast_nullable_to_non_nullable
+              as String,
+      name: null == name
+          ? _value.name
+          : name // ignore: cast_nullable_to_non_nullable
+              as String,
+      priceDelta: null == priceDelta
+          ? _value.priceDelta
+          : priceDelta // ignore: cast_nullable_to_non_nullable
+              as double,
+      isDefault: null == isDefault
+          ? _value.isDefault
+          : isDefault // ignore: cast_nullable_to_non_nullable
+              as bool,
+    ));
+  }
+}
+
+/// @nodoc
+@JsonSerializable()
+class _$EffectiveModifierOptionImpl implements _EffectiveModifierOption {
+  const _$EffectiveModifierOptionImpl(
+      {required this.id,
+      required this.name,
+      required this.priceDelta,
+      required this.isDefault});
+
+  factory _$EffectiveModifierOptionImpl.fromJson(Map<String, dynamic> json) =>
+      _$$EffectiveModifierOptionImplFromJson(json);
+
+  @override
+  final String id;
+  @override
+  final String name;
+  @override
+  final double priceDelta;
+  @override
+  final bool isDefault;
+
+  @override
+  String toString() {
+    return 'EffectiveModifierOption(id: $id, name: $name, priceDelta: $priceDelta, isDefault: $isDefault)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$EffectiveModifierOptionImpl &&
+            (identical(other.id, id) || other.id == id) &&
+            (identical(other.name, name) || other.name == name) &&
+            (identical(other.priceDelta, priceDelta) ||
+                other.priceDelta == priceDelta) &&
+            (identical(other.isDefault, isDefault) ||
+                other.isDefault == isDefault));
+  }
+
+  @JsonKey(ignore: true)
+  @override
+  int get hashCode => Object.hash(runtimeType, id, name, priceDelta, isDefault);
+
+  @JsonKey(ignore: true)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$EffectiveModifierOptionImplCopyWith<_$EffectiveModifierOptionImpl>
+      get copyWith => __$$EffectiveModifierOptionImplCopyWithImpl<
+          _$EffectiveModifierOptionImpl>(this, _$identity);
+
+  @override
+  Map<String, dynamic> toJson() {
+    return _$$EffectiveModifierOptionImplToJson(
+      this,
+    );
+  }
+}
+
+abstract class _EffectiveModifierOption implements EffectiveModifierOption {
+  const factory _EffectiveModifierOption(
+      {required final String id,
+      required final String name,
+      required final double priceDelta,
+      required final bool isDefault}) = _$EffectiveModifierOptionImpl;
+
+  factory _EffectiveModifierOption.fromJson(Map<String, dynamic> json) =
+      _$EffectiveModifierOptionImpl.fromJson;
+
+  @override
+  String get id;
+  @override
+  String get name;
+  @override
+  double get priceDelta;
+  @override
+  bool get isDefault;
+  @override
+  @JsonKey(ignore: true)
+  _$$EffectiveModifierOptionImplCopyWith<_$EffectiveModifierOptionImpl>
+      get copyWith => throw _privateConstructorUsedError;
+}
+
+EffectiveModifierGroup _$EffectiveModifierGroupFromJson(
+    Map<String, dynamic> json) {
+  return _EffectiveModifierGroup.fromJson(json);
+}
+
+/// @nodoc
+mixin _$EffectiveModifierGroup {
+  String get id => throw _privateConstructorUsedError;
+  String get name => throw _privateConstructorUsedError;
+  int get minSelected => throw _privateConstructorUsedError;
+  int get maxSelected => throw _privateConstructorUsedError;
+  bool get allowQuantities => throw _privateConstructorUsedError;
+  String get source => throw _privateConstructorUsedError;
+  List<EffectiveModifierOption> get options =>
+      throw _privateConstructorUsedError;
+
+  Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
+  @JsonKey(ignore: true)
+  $EffectiveModifierGroupCopyWith<EffectiveModifierGroup> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class $EffectiveModifierGroupCopyWith<$Res> {
+  factory $EffectiveModifierGroupCopyWith(EffectiveModifierGroup value,
+          $Res Function(EffectiveModifierGroup) then) =
+      _$EffectiveModifierGroupCopyWithImpl<$Res, EffectiveModifierGroup>;
+  @useResult
+  $Res call(
+      {String id,
+      String name,
+      int minSelected,
+      int maxSelected,
+      bool allowQuantities,
+      String source,
+      List<EffectiveModifierOption> options});
+}
+
+/// @nodoc
+class _$EffectiveModifierGroupCopyWithImpl<$Res,
+        $Val extends EffectiveModifierGroup>
+    implements $EffectiveModifierGroupCopyWith<$Res> {
+  _$EffectiveModifierGroupCopyWithImpl(this._value, this._then);
+
+  // ignore: unused_field
+  final $Val _value;
+  // ignore: unused_field
+  final $Res Function($Val) _then;
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? id = null,
+    Object? name = null,
+    Object? minSelected = null,
+    Object? maxSelected = null,
+    Object? allowQuantities = null,
+    Object? source = null,
+    Object? options = null,
+  }) {
+    return _then(_value.copyWith(
+      id: null == id
+          ? _value.id
+          : id // ignore: cast_nullable_to_non_nullable
+              as String,
+      name: null == name
+          ? _value.name
+          : name // ignore: cast_nullable_to_non_nullable
+              as String,
+      minSelected: null == minSelected
+          ? _value.minSelected
+          : minSelected // ignore: cast_nullable_to_non_nullable
+              as int,
+      maxSelected: null == maxSelected
+          ? _value.maxSelected
+          : maxSelected // ignore: cast_nullable_to_non_nullable
+              as int,
+      allowQuantities: null == allowQuantities
+          ? _value.allowQuantities
+          : allowQuantities // ignore: cast_nullable_to_non_nullable
+              as bool,
+      source: null == source
+          ? _value.source
+          : source // ignore: cast_nullable_to_non_nullable
+              as String,
+      options: null == options
+          ? _value.options
+          : options // ignore: cast_nullable_to_non_nullable
+              as List<EffectiveModifierOption>,
+    ) as $Val);
+  }
+}
+
+/// @nodoc
+abstract class _$$EffectiveModifierGroupImplCopyWith<$Res>
+    implements $EffectiveModifierGroupCopyWith<$Res> {
+  factory _$$EffectiveModifierGroupImplCopyWith(
+          _$EffectiveModifierGroupImpl value,
+          $Res Function(_$EffectiveModifierGroupImpl) then) =
+      __$$EffectiveModifierGroupImplCopyWithImpl<$Res>;
+  @override
+  @useResult
+  $Res call(
+      {String id,
+      String name,
+      int minSelected,
+      int maxSelected,
+      bool allowQuantities,
+      String source,
+      List<EffectiveModifierOption> options});
+}
+
+/// @nodoc
+class __$$EffectiveModifierGroupImplCopyWithImpl<$Res>
+    extends _$EffectiveModifierGroupCopyWithImpl<$Res,
+        _$EffectiveModifierGroupImpl>
+    implements _$$EffectiveModifierGroupImplCopyWith<$Res> {
+  __$$EffectiveModifierGroupImplCopyWithImpl(
+      _$EffectiveModifierGroupImpl _value,
+      $Res Function(_$EffectiveModifierGroupImpl) _then)
+      : super(_value, _then);
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? id = null,
+    Object? name = null,
+    Object? minSelected = null,
+    Object? maxSelected = null,
+    Object? allowQuantities = null,
+    Object? source = null,
+    Object? options = null,
+  }) {
+    return _then(_$EffectiveModifierGroupImpl(
+      id: null == id
+          ? _value.id
+          : id // ignore: cast_nullable_to_non_nullable
+              as String,
+      name: null == name
+          ? _value.name
+          : name // ignore: cast_nullable_to_non_nullable
+              as String,
+      minSelected: null == minSelected
+          ? _value.minSelected
+          : minSelected // ignore: cast_nullable_to_non_nullable
+              as int,
+      maxSelected: null == maxSelected
+          ? _value.maxSelected
+          : maxSelected // ignore: cast_nullable_to_non_nullable
+              as int,
+      allowQuantities: null == allowQuantities
+          ? _value.allowQuantities
+          : allowQuantities // ignore: cast_nullable_to_non_nullable
+              as bool,
+      source: null == source
+          ? _value.source
+          : source // ignore: cast_nullable_to_non_nullable
+              as String,
+      options: null == options
+          ? _value._options
+          : options // ignore: cast_nullable_to_non_nullable
+              as List<EffectiveModifierOption>,
+    ));
+  }
+}
+
+/// @nodoc
+@JsonSerializable()
+class _$EffectiveModifierGroupImpl implements _EffectiveModifierGroup {
+  const _$EffectiveModifierGroupImpl(
+      {required this.id,
+      required this.name,
+      required this.minSelected,
+      required this.maxSelected,
+      required this.allowQuantities,
+      required this.source,
+      final List<EffectiveModifierOption> options = const []})
+      : _options = options;
+
+  factory _$EffectiveModifierGroupImpl.fromJson(Map<String, dynamic> json) =>
+      _$$EffectiveModifierGroupImplFromJson(json);
+
+  @override
+  final String id;
+  @override
+  final String name;
+  @override
+  final int minSelected;
+  @override
+  final int maxSelected;
+  @override
+  final bool allowQuantities;
+  @override
+  final String source;
+  final List<EffectiveModifierOption> _options;
+  @override
+  @JsonKey()
+  List<EffectiveModifierOption> get options {
+    if (_options is EqualUnmodifiableListView) return _options;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_options);
+  }
+
+  @override
+  String toString() {
+    return 'EffectiveModifierGroup(id: $id, name: $name, minSelected: $minSelected, maxSelected: $maxSelected, allowQuantities: $allowQuantities, source: $source, options: $options)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$EffectiveModifierGroupImpl &&
+            (identical(other.id, id) || other.id == id) &&
+            (identical(other.name, name) || other.name == name) &&
+            (identical(other.minSelected, minSelected) ||
+                other.minSelected == minSelected) &&
+            (identical(other.maxSelected, maxSelected) ||
+                other.maxSelected == maxSelected) &&
+            (identical(other.allowQuantities, allowQuantities) ||
+                other.allowQuantities == allowQuantities) &&
+            (identical(other.source, source) || other.source == source) &&
+            const DeepCollectionEquality().equals(other._options, _options));
+  }
+
+  @JsonKey(ignore: true)
+  @override
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      name,
+      minSelected,
+      maxSelected,
+      allowQuantities,
+      source,
+      const DeepCollectionEquality().hash(_options));
+
+  @JsonKey(ignore: true)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$EffectiveModifierGroupImplCopyWith<_$EffectiveModifierGroupImpl>
+      get copyWith => __$$EffectiveModifierGroupImplCopyWithImpl<
+          _$EffectiveModifierGroupImpl>(this, _$identity);
+
+  @override
+  Map<String, dynamic> toJson() {
+    return _$$EffectiveModifierGroupImplToJson(
+      this,
+    );
+  }
+}
+
+abstract class _EffectiveModifierGroup implements EffectiveModifierGroup {
+  const factory _EffectiveModifierGroup(
+          {required final String id,
+          required final String name,
+          required final int minSelected,
+          required final int maxSelected,
+          required final bool allowQuantities,
+          required final String source,
+          final List<EffectiveModifierOption> options}) =
+      _$EffectiveModifierGroupImpl;
+
+  factory _EffectiveModifierGroup.fromJson(Map<String, dynamic> json) =
+      _$EffectiveModifierGroupImpl.fromJson;
+
+  @override
+  String get id;
+  @override
+  String get name;
+  @override
+  int get minSelected;
+  @override
+  int get maxSelected;
+  @override
+  bool get allowQuantities;
+  @override
+  String get source;
+  @override
+  List<EffectiveModifierOption> get options;
+  @override
+  @JsonKey(ignore: true)
+  _$$EffectiveModifierGroupImplCopyWith<_$EffectiveModifierGroupImpl>
+      get copyWith => throw _privateConstructorUsedError;
 }

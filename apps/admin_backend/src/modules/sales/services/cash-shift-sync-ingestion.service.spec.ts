@@ -90,10 +90,6 @@ describe('CashShiftSyncIngestionService', () => {
           finalCountedNio: 5200,
           differenceNio: 200,
           zReportSequence: 7,
-          // S2 (#68): the close push carries the shift's voucher state.
-          cardVouchersPending: 2,
-          cardVouchersReconciled: 3,
-          cardVouchersOverridden: 1,
         }),
       ],
       movements: [posMovement()],
@@ -117,10 +113,6 @@ describe('CashShiftSyncIngestionService', () => {
       final_counted_nio: 5200,
       difference_nio: 200,
       z_report_sequence: 7,
-      // S2 (#68): voucher counts land verbatim on the cloud columns.
-      card_vouchers_pending: 2,
-      card_vouchers_reconciled: 3,
-      card_vouchers_overridden: 1,
     });
     expect(sessionValues.opened_at).toEqual(
       new Date('2026-01-01T12:00:00.000Z'),
@@ -303,64 +295,6 @@ describe('CashShiftSyncIngestionService', () => {
     // session is inserted.
     expect(shifts.insert).toHaveBeenCalledTimes(1);
     expect(shifts.insert.mock.calls[0][0].id).toBe('shift-good');
-  });
-
-  it('maps omitted voucher counts to NULL (legacy or open-session payloads never fabricate zeros)', async () => {
-    const shifts = repoStub();
-    const service = new CashShiftSyncIngestionService(
-      makeDataSource(shifts, repoStub()),
-      shifts as never,
-      repoStub() as never,
-    );
-
-    await service.ingestCashShiftBatch('tenant-1', {
-      // No cardVouchers* keys at all: a pre-S2 terminal, or a still-OPEN
-      // session whose voucher state is not a fact yet.
-      sessions: [posSession()],
-      movements: [],
-    });
-
-    const sessionValues = shifts.insert.mock.calls[0][0];
-    expect(sessionValues.card_vouchers_pending).toBeNull();
-    expect(sessionValues.card_vouchers_reconciled).toBeNull();
-    expect(sessionValues.card_vouchers_overridden).toBeNull();
-  });
-
-  it('overwrites the voucher counts on a closed-session replay (OPEN -> CLOSED carries the counts)', async () => {
-    const shifts = repoStub();
-    shifts.findOne.mockResolvedValue({
-      id: 'shift-001',
-      tenant_id: 'tenant-1',
-      status: 'OPEN',
-      card_vouchers_pending: null,
-    });
-    const service = new CashShiftSyncIngestionService(
-      makeDataSource(shifts, repoStub()),
-      shifts as never,
-      repoStub() as never,
-    );
-
-    await service.ingestCashShiftBatch('tenant-1', {
-      sessions: [
-        posSession({
-          status: 'CLOSED',
-          closedAt: '2026-01-01T20:00:00.000Z',
-          cardVouchersPending: 0,
-          cardVouchersReconciled: 4,
-          cardVouchersOverridden: 0,
-        }),
-      ],
-      movements: [],
-    });
-
-    expect(shifts.update).toHaveBeenCalledTimes(1);
-    expect(shifts.update.mock.calls[0][1]).toMatchObject({
-      status: 'CLOSED',
-      // A genuine zero is distinguishable from the NULL it replaces.
-      card_vouchers_pending: 0,
-      card_vouchers_reconciled: 4,
-      card_vouchers_overridden: 0,
-    });
   });
 
   it('persists a provided cashierName verbatim (D-3: person name, never the id)', async () => {

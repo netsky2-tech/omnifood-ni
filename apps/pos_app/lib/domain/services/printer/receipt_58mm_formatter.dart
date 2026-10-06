@@ -6,6 +6,7 @@ import '../../models/sales/invoice.dart';
 import '../../models/sales/invoice_item.dart';
 import '../../models/sales/payment.dart';
 import 'esc_pos_builder.dart';
+import 'kitchen_modifier_lines.dart';
 import 'receipt_layout_formatter.dart';
 import 'receipt_layout_metrics.dart';
 
@@ -241,9 +242,9 @@ class Receipt58mmFormatter {
         buffer.writeln(line);
       }
 
-      for (final mod in item.selectedModifiers) {
-        for (final line in wrap('[MOD] ${mod.name}', lineWidth - 4)) {
-          buffer.writeln('   * $line');
+      for (final line in KitchenModifierLines.forItem(item)) {
+        for (final text in wrap(line, lineWidth - 4)) {
+          buffer.writeln('   * $text');
         }
       }
       if (item.notes != null && item.notes!.isNotEmpty) {

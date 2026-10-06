@@ -168,3 +168,44 @@ Batch 1 is roughly half done and **the remaining half is the part that touches A
 - Nothing has been verified on the device for OTA yet. Everything measured on
   hardware so far is in the facts table above; the resolver and parser are
   host-tested only.
+
+---
+
+## Incident 2026-10-06: manifest/APK drift froze the field terminal at 9015
+
+**Symptom.** `Identidad de terminal → Actualizaciones del sistema` reported
+"El sistema está al día (compilación 9015)" on the S23 while the newest
+registry row was 4015 — and every newly published release stayed invisible.
+
+**Root cause.** The 2026-10-03 hold-tickets test build was produced from a
+dirty `pubspec.yaml` (`1.0.1+7015`, never committed, no `--build-number` in
+git), so its arm64 APK carried `versionCode 9015` (Flutter's per-ABI offset:
+2000 + N). The publish that shipped it ran against a **stale**
+`release_manifest.json` from an earlier `+2014` build, so the registry row
+said `4014` while the bytes said `9015`. `publish-release.ts` only checked
+that artifact files existed; nothing tied the manifest to the bytes.
+
+**Consequences.** The terminal installed 9015 via OTA. `resolveUpgrade` (R2)
+then rejected every row ≤ 9015 as a downgrade, so no release could reach the
+terminal until the baseline moved above 9015.
+
+**Fixes (both landed on `main`):**
+
+| fix | commit | evidence |
+|---|---|---|
+| Fail-closed digest gate in `publish-release.ts`: recompute each artifact's sha256 and compare against the manifest **before** any R2 upload or DB write; a stale manifest aborts with an actionable error | `d495ddc7` | `publish-release.spec.ts`: 10 tests green (5 new verifier tests + 5 pre-existing ABI/versionCode tests) |
+| Baseline release `1.1.0+7016` → rows arm64 `9016`, armeabi `8016`, x86_64 `11016` (all equal to the APKs' internal per-ABI versionCodes), published to `pilot` in the remote (Railway) and local databases | `57a8c949` | `aapt2 dump badging` = 9016/8016/11016; SQL rows verified; local `releases/latest` returns 9016 |
+
+**Rules going forward.**
+
+1. Never publish from a dirty tree: build and publish only through
+   `build_pos_apk.sh` → `publish_pos_release.sh` in one session. The digest
+   gate now fails closed if the manifest is stale.
+2. The version baseline is `≥ +7016` forever (arm64 = 2000 + N must stay
+   above the installed 9015 until every field terminal passes it).
+3. `production` has no rows and the client hardcodes
+   `checkForUpdate(channel: 'pilot')` — `pilot` is the only live channel.
+4. A release that must contain two features ships as ONE build: the
+   `1.1.0+7016` release already carries hold tickets and modifier groups;
+   verify with `git merge-base --is-ancestor <commit> <release-sha>` before
+   promising content parity.
