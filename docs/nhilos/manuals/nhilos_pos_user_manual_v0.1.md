@@ -106,12 +106,16 @@ El sistema permite mantener múltiples cuentas abiertas simultáneamente para at
 Cuando terminás de armar un pedido para un cliente que seguirá en el local:
 
 1. **Armar el pedido** en el carrito (agregar productos como de costumbre).
-2. **Poner en Espera:** Presioná el ícono **⏸️ (Poner en Espera)** en la barra inferior del carrito.
-3. Se abre el diálogo "Poner Venta en Espera":
-   * **Nombre / Identificador:** Escribí un nombre para la cuenta (ej: "Mesa 3", "Cliente 2", "Juan Pérez").
+2. **Abrir el Carrito:** Tocá **"VER CARRITO"** en la barra inferior.
+
+![Carrito con Opción de Poner en Espera](images/pos_05a_carrito_en_espera.png)
+
+3. **Poner en Espera:** Presioná el botón **"EN ESPERA"** (con el ícono `||`) a la izquierda del botón Cobrar.
+4. Se abre el diálogo "Poner Venta en Espera":
+   * **Nombre / Identificador:** Escribí un nombre para la cuenta (ej: "Mesa 4", "Cliente Juan", "Terraza").
    * **Mesa Asignada (Opcional):** Seleccioná la mesa del local si se trata de una comanda.
    * **Invitados:** Cantidad de personas (opcional).
-4. Presioná **"GUARDAR"**. La cuenta se guarda y el carrito queda vacío para atender al siguiente cliente.
+5. Presioná **"GUARDAR"**. La cuenta se guarda y el carrito queda vacío para atender al siguiente cliente.
 
 > **Importante:** Una vez guardada, la cuenta no se puede modificar desde el catálogo. Para cambiar productos o nombre, debés recuperarla primero (sección 6.2).
 
@@ -119,41 +123,47 @@ Cuando terminás de armar un pedido para un cliente que seguirá en el local:
 
 Para continuar atendiendo una cuenta abierta:
 
-1. **Abrir Cuentas Abiertas:** Tocá el botón **⏸️ (Cuentas Abiertas)** en la barra superior del menú principal. Verás todas las cuentas activas con su nombre, cantidad de productos y total.
-2. **Recuperar:** Presioná sobre la cuenta que querés editar. El pedido se cargará en el carrito.
+1. **Abrir Cuentas Abiertas:** Tocá el ícono de **Historial / Espera** en la barra de herramientas o el acceso de Cuentas Abiertas. Verás todas las cuentas activas con su nombre, cantidad de productos y total.
+
+![Listado de Ventas en Espera](images/pos_05b_lista_cuentas_abiertas.png)
+
+2. **Recuperar:** Presioná sobre la cuenta que querés editar (ej. `Mesa 4`). El pedido se cargará íntegramente en el carrito.
 3. **Editar:** Podés agregar productos, modificar cantidades o quitar items como en cualquier venta normal.
-4. **Re-guardar (Editar Nombre):** Si querés cambiar el nombre de la cuenta o re-guardar con los productos actualizados:
-   * Presioná el botón **⏸️ (Editar Cuenta Abierta)** en la barra inferior.
-   * Aparecerá un banner que muestra exactamente lo que se va a cambiar: cuántos productos tenés guardados, el total actual, cuántos productos tiene el carrito ahora y la diferencia.
-   * Ejemplo: *"Al guardar, sus 2 productos por C$ 250 pasan a ser los 3 productos del carrito, por C$ 150. Se pierden C$ 100 de productos que no están en el carrito."*
-   * Cambiá el nombre si querés (se renombra la cuenta, no se crea una nueva).
+4. **Re-guardar (Editar Nombre o Modificar Productos):** Si querés re-estacionar la cuenta con los cambios aplicados:
+   * Abrí el carrito y presioná el botón **"EN ESPERA"**.
+   * El diálogo cambia automáticamente su título a **"Editar Cuenta Abierta"** y presenta un banner informativo con el resumen de la modificación:
+
+![Diálogo Editar Cuenta Abierta con Banner de Comparación](images/pos_05d_editar_cuenta_abierta.png)
+
+   * El banner indica con números reales: cuántos productos y total tenía la cuenta guardada, a cuántos productos y total pasará con el carrito actual, y si hubiera ítems retirados, avisará explícitamente: *\"Se pierden C$ XXX de productos que no están en el carrito.\"*
+   * Podés modificar el nombre si deseás renombrarla.
    * Presioná **"GUARDAR"** para aplicar los cambios.
 
-> **Re-guardar reemplaza, no acumula:** Cuando re-parkkeás una cuenta recuperada, el contenido se **reemplaza** por completo con lo que hay en el carrito. No se suman productos a la cuenta original. Esto evita duplicidades y asegura que cada cuenta refleje exactamente su estado actual.
+> **Re-guardar reemplaza, no acumula:** Cuando re-estacionás una cuenta recuperada, el contenido se **reemplaza** por completo con lo que hay en el carrito. No se duplican productos sobre la cuenta original. Esto asegura que el total refleje con exactitud matemática el consumo real.
 
 ### 6.3 Múltiples Cuentas Abiertas Simultáneas
 
-Podés tener varias cuentas abiertas a la vez (por ejemplo, Mesa 3 y Mesa 5 atendiendo al mismo tiempo):
+Podés tener varias cuentas abiertas a la vez (por ejemplo, `Mesa 4` con C$ 250.00 y `Cuenta A` con C$ 150.00 conviviendo en paralelo):
 
-* Cada cuenta se muestra de forma independiente en el listado.
-* Cada una tiene su propio total y cantidad de productos.
-* Podés cobrar una cuenta sin afectar a las demás.
-* Al cobrar, esa cuenta desaparece del listado y se emite factura.
+* Cada cuenta se muestra de forma independiente en el listado con su respectivo identificador, líneas y saldo.
+* Podés vender o cobrar en caja libremente sin que las cuentas retenidas interfieran.
+* Al cobrar una de ellas, esa cuenta se liquida y **desaparece de inmediato del listado**, dejando intactas a las demás.
 
 ### 6.4 Abandonar una Cuenta (Eliminar)
 
-Si una cuenta ya no será cobrada (ej: cliente que se fue sin pagar):
+Si una cuenta ya no será cobrada (ej: un comensal que desiste y se retira sin consumir):
 
-1. Abrí el listado de Cuentas Abiertas (⏸️ en barra superior).
-2. Tocá el ícono de papelera roja **🗑️** al lado de la cuenta que querés eliminar.
-3. El sistema muestra una confirmación con:
-   * El nombre de la cuenta
-   * La cantidad de productos
-   * El total monetario
-   * Advertencia: *"Nada de esto ha sido facturado. Al abandonarla se descarta definitivamente: no se puede deshacer."*
-4. Presioná **"ABANDONAR"** para eliminar la cuenta. Si presionás **"CANCELAR"**, la cuenta se mantiene.
+1. Abrí el listado de Cuentas Abiertas.
+2. Tocá el ícono de papelera roja **🗑️** al lado de la cuenta correspondiente.
+3. El sistema despliega un diálogo de confirmación con advertencia de irreversibilidad:
 
-> **Importante:** Una cuenta abandonada **no se puede recuperar**. No genera factura ni nota de crédito, ya que es estado pre-fiscal (SQLite local).
+![Confirmación de Abandono de Cuenta](images/pos_05c_dialogo_abandonar_cuenta.png)
+
+   * Informa el nombre de la cuenta, cantidad de productos y el saldo no facturado.
+   * Advierte: *\"Nada de esto ha sido facturado. Al abandonarla se descarta definitivamente: no se puede deshacer.\"*
+4. Presioná **"ABANDONAR"** (en botón rojo destacado) para eliminarla definitivamente. Si presionás **"CANCELAR"**, la cuenta permanece segura.
+
+> **Seguridad Fiscal:** Una cuenta abandonada no genera factura ni requiere nota de crédito DGI, pues se trata de un pedido pre-fiscal que nunca emitió documento tributario.
 
 ### 6.5 Copiar una Cuenta
 
@@ -280,7 +290,7 @@ Al acceder a **Control de Caja y Turnos** desde el menú lateral:
 * Al finalizar el turno, presioná el botón rojo **"Cerrar Turno (Corte Z)"**.
 * **Bloqueo de Cuentas Abiertas:** Si existieran cuentas abiertas (ventas en espera) que no se cobraron, el sistema **bloquea el cierre** y muestra un diálogo informativo enumerando cada cuenta abierta con su total:
 
-![Bloqueo de Corte Z — Cuentas Abiertas](images/pos_16b_cierre_con_cuentas_abiertas.png)
+![Bloqueo de Corte Z — Cuentas Abiertas](images/pos_16b_bloqueo_corte_z_cuentas.png)
 
 * El cierre no se inicia hasta que todas las cuentas abiertas se liquidaron (se cobraron o abandonaron).
 * El cajero debe confirmar que cada cuenta se liquidó o que abandonó las que no se cobrarán.
