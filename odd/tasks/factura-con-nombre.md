@@ -40,9 +40,11 @@ vale la pena recordar**. Alguien puede pedir la factura a su nombre y no volver 
 - Un dato fiscal por separado: la cédula/RUC puede venir sola o con el nombre, según pidió el cliente (hay quien
   necesita la cédula para deducir el gasto en su empresa).
 
-**No implementar T1 en adelante hasta que llegue el mapeo de clientes y fidelidad.** Hay una hipótesis concreta a
-confirmar: si el catálogo se construye en algún lado a partir de nombres de transacciones, el problema es más
-grande que esta funcionalidad y conviene saberlo antes de escribir código.
+### Nota de arquitectura: Programa de Lealtad (nhilos loyalty points)
+Con la asignación de cliente se acumula el punto/visita o lo que el programa de fidelización tenga configurado (Slice 14.3 / `LoyaltyService`), así como la captación futura mediante lectura de QR o código digitado. Aunque el motor de lealtad no se altera en este bloque, las interfaces y adaptadores del POS y de cobro deben mantener explícita la distinción:
+- Si se asigna un cliente registrado (por búsqueda, escaneo de QR o código), la venta recibe su `customer_id` (para acumulación/redención de lealtad) **y** pre-carga el snapshot fiscal (`customerName`, `customerRuc`).
+- Si se ingresan datos fiscales ad-hoc en el checkout (`Nombre Cliente`, `RUC/Cédula`), se puebla únicamente el snapshot fiscal de la factura, dejando `customer_id = NULL` para no generar clientes espurios en el ledger de puntos.
+- Los adaptadores e interfaces quedan preparados para que la capa de fidelización opere limpiamente sobre `customer_id`.
 
 ---
 

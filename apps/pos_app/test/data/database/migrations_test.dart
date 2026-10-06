@@ -347,17 +347,180 @@ void main() {
   });
 
   test(
-      'allMigrations keeps the chain ordered: migration62_63 is the newest '
-      'link at the end and migration61_62 is retained immediately before it',
+      'allMigrations keeps the chain ordered: migration64_65 is the newest '
+      'link at the end and migration63_64 is retained immediately before it',
       () {
     // The newest link is registered at the end of the chain.
-    expect(allMigrations.last.startVersion, 63);
-    expect(allMigrations.last.endVersion, 64);
-    expect(allMigrations.last, same(migration63_64));
+    expect(allMigrations.last.startVersion, 64);
+    expect(allMigrations.last.endVersion, 65);
+    expect(allMigrations.last, same(migration64_65));
     // The previous newest link is still registered, in position, with its
     // versions unchanged.
-    expect(allMigrations[allMigrations.length - 2], same(migration62_63));
-    expect(migration62_63.startVersion, 62);
-    expect(migration62_63.endVersion, 63);
+    expect(allMigrations[allMigrations.length - 2], same(migration63_64));
+    expect(migration63_64.startVersion, 63);
+    expect(migration63_64.endVersion, 64);
+  });
+
+  const namedInvoiceColumns = [
+    'customer_name',
+    'customer_tax_id',
+  ];
+
+  Future<dynamic> openV64Database() async {
+    final db = await databaseFactory.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: 64,
+        onCreate: (database, version) async {
+          await database.execute('''
+            CREATE TABLE invoices (
+              id TEXT NOT NULL PRIMARY KEY,
+              invoice_number TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              user_id TEXT NOT NULL,
+              subtotal REAL NOT NULL,
+              total_tax REAL NOT NULL,
+              total REAL NOT NULL,
+              is_canceled INTEGER NOT NULL,
+              sync_status TEXT NOT NULL,
+              payment_status TEXT NOT NULL,
+              type TEXT NOT NULL,
+              global_tax_override INTEGER NOT NULL
+            )
+          ''');
+        },
+      ),
+    );
+    await db.insert('invoices', {
+      'id': 'legacy-invoice-v64',
+      'invoice_number': '001-001-01-00000010',
+      'created_at':
+          DateTime.parse('2026-03-01T10:00:00Z').millisecondsSinceEpoch,
+      'user_id': 'cashier-legacy',
+      'subtotal': 100.0,
+      'total_tax': 15.0,
+      'total': 115.0,
+      'is_canceled': 0,
+      'sync_status': 'synced',
+      'payment_status': 'paid',
+      'type': 'regular',
+      'global_tax_override': 0,
+    });
+    return db;
+  }
+
+  test('migration64_65 adds customer_name and customer_tax_id to invoices',
+      () async {
+    final db = await openV64Database();
+
+    await migration64_65.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(invoices)');
+    final names = columns.map((row) => row['name'] as String).toSet();
+    for (final col in namedInvoiceColumns) {
+      expect(names, contains(col), reason: 'missing $col');
+    }
+
+    await db.close();
+  });
+
+  test(
+      'migration64_65 leaves pre-existing invoices intact with null customer info',
+      () async {
+    final db = await openV64Database();
+
+    await migration64_65.migrate(db);
+
+    final rows = await db.query(
+      'invoices',
+      where: 'id = ?',
+      whereArgs: ['legacy-invoice-v64'],
+    );
+    expect(rows, hasLength(1));
+    final row = rows.first;
+    expect(row['customer_name'], isNull);
+    expect(row['customer_tax_id'], isNull);
+
+    await db.close();
+  });
+
+  test('migration64_65 accepts new rows with customer values after upgrade',
+      () async {
+    final db = await openV64Database();
+
+    await migration64_65.migrate(db);
+
+    await db.insert('invoices', {
+      'id': 'named-invoice-1',
+      'invoice_number': '001-001-01-00000011',
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+      'user_id': 'cashier-1',
+      'subtotal': 200.0,
+      'total_tax': 30.0,
+      'total': 230.0,
+      'is_canceled': 0,
+      'sync_status': 'pending',
+      'payment_status': 'paid',
+      'type': 'regular',
+      'global_tax_override': 0,
+      'customer_name': 'Juan Perez',
+      'customer_tax_id': '001-120590-0001A',
+    });
+
+    final rows = await db.query(
+      'invoices',
+      where: 'id = ?',
+      whereArgs: ['named-invoice-1'],
+    );
+    expect(rows, hasLength(1));
+    expect(rows.first['customer_name'], 'Juan Perez');
+    expect(rows.first['customer_tax_id'], '001-120590-0001A');
+
+    await db.close();
+  });
+
+  test('migration64_65 is safe to re-run (guarded ADD COLUMN)', () async {
+    final db = await openV64Database();
+
+    await migration64_65.migrate(db);
+    await migration64_65.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(invoices)');
+    for (final name in namedInvoiceColumns) {
+      final matches = columns.where((c) => c['name'] == name).toList();
+      expect(matches, hasLength(1), reason: name);
+    }
+
+    await db.close();
+  });
+
+  test(
+      'migration64_65 completes without throwing when invoices does not exist',
+      () async {
+    final legacyPath =
+        '${await databaseFactory.getDatabasesPath()}/named_no_invoices_test.db';
+    await databaseFactory.deleteDatabase(legacyPath);
+    final db = await databaseFactory.openDatabase(
+      legacyPath,
+      options: OpenDatabaseOptions(
+        version: 64,
+        onCreate: (database, version) async {
+          await database.execute(
+            'CREATE TABLE other_table (id TEXT NOT NULL PRIMARY KEY)',
+          );
+        },
+      ),
+    );
+
+    await migration64_65.migrate(db);
+
+    final tables = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    final tableNames = tables.map((row) => row['name'] as String).toSet();
+    expect(tableNames, isNot(contains('invoices')));
+
+    await db.close();
+    await databaseFactory.deleteDatabase(legacyPath);
   });
 }

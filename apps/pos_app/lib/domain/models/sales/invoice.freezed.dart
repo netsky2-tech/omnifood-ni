@@ -34,6 +34,14 @@ mixin _$Invoice {
   PaymentStatus get paymentStatus => throw _privateConstructorUsedError;
   InvoiceType get type => throw _privateConstructorUsedError;
   String? get customerId => throw _privateConstructorUsedError;
+
+  /// Factura con nombre: snapshot fiscal del nombre del cliente
+  /// capturado en el cobro o precargado desde un cliente registrado.
+  String? get customerName => throw _privateConstructorUsedError;
+
+  /// Factura con nombre: snapshot fiscal de Cédula o RUC del cliente
+  /// capturado en el cobro o precargado desde un cliente registrado.
+  String? get customerTaxId => throw _privateConstructorUsedError;
   bool get globalTaxOverride => throw _privateConstructorUsedError;
   String? get relatedInvoiceId =>
       throw _privateConstructorUsedError; // For Credit Notes
@@ -100,6 +108,8 @@ abstract class $InvoiceCopyWith<$Res> {
       PaymentStatus paymentStatus,
       InvoiceType type,
       String? customerId,
+      String? customerName,
+      String? customerTaxId,
       bool globalTaxOverride,
       String? relatedInvoiceId,
       String? originInvoiceId,
@@ -151,6 +161,8 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
     Object? paymentStatus = null,
     Object? type = null,
     Object? customerId = freezed,
+    Object? customerName = freezed,
+    Object? customerTaxId = freezed,
     Object? globalTaxOverride = null,
     Object? relatedInvoiceId = freezed,
     Object? originInvoiceId = freezed,
@@ -227,6 +239,14 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
       customerId: freezed == customerId
           ? _value.customerId
           : customerId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      customerName: freezed == customerName
+          ? _value.customerName
+          : customerName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      customerTaxId: freezed == customerTaxId
+          ? _value.customerTaxId
+          : customerTaxId // ignore: cast_nullable_to_non_nullable
               as String?,
       globalTaxOverride: null == globalTaxOverride
           ? _value.globalTaxOverride
@@ -345,6 +365,8 @@ abstract class _$$InvoiceImplCopyWith<$Res> implements $InvoiceCopyWith<$Res> {
       PaymentStatus paymentStatus,
       InvoiceType type,
       String? customerId,
+      String? customerName,
+      String? customerTaxId,
       bool globalTaxOverride,
       String? relatedInvoiceId,
       String? originInvoiceId,
@@ -394,6 +416,8 @@ class __$$InvoiceImplCopyWithImpl<$Res>
     Object? paymentStatus = null,
     Object? type = null,
     Object? customerId = freezed,
+    Object? customerName = freezed,
+    Object? customerTaxId = freezed,
     Object? globalTaxOverride = null,
     Object? relatedInvoiceId = freezed,
     Object? originInvoiceId = freezed,
@@ -470,6 +494,14 @@ class __$$InvoiceImplCopyWithImpl<$Res>
       customerId: freezed == customerId
           ? _value.customerId
           : customerId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      customerName: freezed == customerName
+          ? _value.customerName
+          : customerName // ignore: cast_nullable_to_non_nullable
+              as String?,
+      customerTaxId: freezed == customerTaxId
+          ? _value.customerTaxId
+          : customerTaxId // ignore: cast_nullable_to_non_nullable
               as String?,
       globalTaxOverride: null == globalTaxOverride
           ? _value.globalTaxOverride
@@ -584,6 +616,8 @@ class _$InvoiceImpl implements _Invoice {
       this.paymentStatus = PaymentStatus.pending,
       this.type = InvoiceType.regular,
       this.customerId,
+      this.customerName,
+      this.customerTaxId,
       this.globalTaxOverride = false,
       this.relatedInvoiceId,
       this.originInvoiceId,
@@ -643,6 +677,16 @@ class _$InvoiceImpl implements _Invoice {
   final InvoiceType type;
   @override
   final String? customerId;
+
+  /// Factura con nombre: snapshot fiscal del nombre del cliente
+  /// capturado en el cobro o precargado desde un cliente registrado.
+  @override
+  final String? customerName;
+
+  /// Factura con nombre: snapshot fiscal de Cédula o RUC del cliente
+  /// capturado en el cobro o precargado desde un cliente registrado.
+  @override
+  final String? customerTaxId;
   @override
   @JsonKey()
   final bool globalTaxOverride;
@@ -714,7 +758,7 @@ class _$InvoiceImpl implements _Invoice {
 
   @override
   String toString() {
-    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, shiftId: $shiftId, localIssueDate: $localIssueDate, tipAmountNio: $tipAmountNio, tipAmountUsd: $tipAmountUsd, tipPercentage: $tipPercentage, tipEligibleBaseNio: $tipEligibleBaseNio, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
+    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, customerName: $customerName, customerTaxId: $customerTaxId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, shiftId: $shiftId, localIssueDate: $localIssueDate, tipAmountNio: $tipAmountNio, tipAmountUsd: $tipAmountUsd, tipPercentage: $tipPercentage, tipEligibleBaseNio: $tipEligibleBaseNio, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
   }
 
   @override
@@ -743,6 +787,10 @@ class _$InvoiceImpl implements _Invoice {
             (identical(other.type, type) || other.type == type) &&
             (identical(other.customerId, customerId) ||
                 other.customerId == customerId) &&
+            (identical(other.customerName, customerName) ||
+                other.customerName == customerName) &&
+            (identical(other.customerTaxId, customerTaxId) ||
+                other.customerTaxId == customerTaxId) &&
             (identical(other.globalTaxOverride, globalTaxOverride) ||
                 other.globalTaxOverride == globalTaxOverride) &&
             (identical(other.relatedInvoiceId, relatedInvoiceId) ||
@@ -807,6 +855,8 @@ class _$InvoiceImpl implements _Invoice {
         paymentStatus,
         type,
         customerId,
+        customerName,
+        customerTaxId,
         globalTaxOverride,
         relatedInvoiceId,
         originInvoiceId,
@@ -861,6 +911,8 @@ abstract class _Invoice implements Invoice {
       final PaymentStatus paymentStatus,
       final InvoiceType type,
       final String? customerId,
+      final String? customerName,
+      final String? customerTaxId,
       final bool globalTaxOverride,
       final String? relatedInvoiceId,
       final String? originInvoiceId,
@@ -913,6 +965,16 @@ abstract class _Invoice implements Invoice {
   InvoiceType get type;
   @override
   String? get customerId;
+  @override
+
+  /// Factura con nombre: snapshot fiscal del nombre del cliente
+  /// capturado en el cobro o precargado desde un cliente registrado.
+  String? get customerName;
+  @override
+
+  /// Factura con nombre: snapshot fiscal de Cédula o RUC del cliente
+  /// capturado en el cobro o precargado desde un cliente registrado.
+  String? get customerTaxId;
   @override
   bool get globalTaxOverride;
   @override

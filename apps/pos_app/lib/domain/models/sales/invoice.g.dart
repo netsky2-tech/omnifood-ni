@@ -26,6 +26,8 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       type: $enumDecodeNullable(_$InvoiceTypeEnumMap, json['type']) ??
           InvoiceType.regular,
       customerId: json['customerId'] as String?,
+      customerName: json['customerName'] as String?,
+      customerTaxId: json['customerTaxId'] as String?,
       globalTaxOverride: json['globalTaxOverride'] as bool? ?? false,
       relatedInvoiceId: json['relatedInvoiceId'] as String?,
       originInvoiceId: json['originInvoiceId'] as String?,
@@ -66,6 +68,8 @@ Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
       'paymentStatus': _$PaymentStatusEnumMap[instance.paymentStatus]!,
       'type': _$InvoiceTypeEnumMap[instance.type]!,
       'customerId': instance.customerId,
+      'customerName': instance.customerName,
+      'customerTaxId': instance.customerTaxId,
       'globalTaxOverride': instance.globalTaxOverride,
       'relatedInvoiceId': instance.relatedInvoiceId,
       'originInvoiceId': instance.originInvoiceId,

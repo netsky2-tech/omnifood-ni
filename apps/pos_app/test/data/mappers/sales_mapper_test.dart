@@ -389,4 +389,69 @@ void main() {
       expect(json['totalUsd'], isNotNull);
     });
   });
+
+  group('SalesMapper — named invoice customer snapshot (odd/factura-con-nombre)', () {
+    final baseInvoice = Invoice(
+      id: 'inv-named',
+      number: '001-001-01-00000004',
+      createdAt: DateTime(2026, 10, 6),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+    );
+
+    Invoice namedInvoice() => baseInvoice.copyWith(
+          customerName: 'Distribuidora Central S.A.',
+          customerTaxId: 'J0310000001234',
+        );
+
+    test('toInvoiceEntity maps customerName and customerTaxId from domain to entity', () {
+      final entity = SalesMapper.toInvoiceEntity(namedInvoice());
+
+      expect(entity.customerName, 'Distribuidora Central S.A.');
+      expect(entity.customerTaxId, 'J0310000001234');
+    });
+
+    test('toInvoiceEntity leaves customerName and customerTaxId null when anonymous', () {
+      final entity = SalesMapper.toInvoiceEntity(baseInvoice);
+
+      expect(entity.customerName, isNull);
+      expect(entity.customerTaxId, isNull);
+    });
+
+    test('toInvoiceDomain maps customerName and customerTaxId from entity to domain', () {
+      final entity = SalesMapper.toInvoiceEntity(namedInvoice());
+
+      final domain = SalesMapper.toInvoiceDomain(entity);
+
+      expect(domain.customerName, 'Distribuidora Central S.A.');
+      expect(domain.customerTaxId, 'J0310000001234');
+    });
+
+    test('toSyncJson includes customerName and customerTaxId with real values', () {
+      final json = SalesMapper.toSyncJson(namedInvoice(), const [], const []);
+
+      expect(json['customerName'], 'Distribuidora Central S.A.');
+      expect(json['customerTaxId'], 'J0310000001234');
+    });
+
+    test('toSyncJson emits customerName and customerTaxId as null when anonymous', () {
+      final json = SalesMapper.toSyncJson(baseInvoice, const [], const []);
+
+      expect(json['customerName'], isNull);
+      expect(json['customerTaxId'], isNull);
+    });
+
+    test('customer snapshot round-trips entity → domain → sync JSON unchanged', () {
+      final restored = SalesMapper.toInvoiceDomain(
+        SalesMapper.toInvoiceEntity(namedInvoice()),
+      );
+
+      final json = SalesMapper.toSyncJson(restored, const [], const []);
+
+      expect(json['customerName'], 'Distribuidora Central S.A.');
+      expect(json['customerTaxId'], 'J0310000001234');
+    });
+  });
 }
