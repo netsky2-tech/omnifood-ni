@@ -119,6 +119,12 @@ class ActivationPrimingService {
           sku: map['sku'] as String? ?? existing?.sku,
           barcode: map['barcode'] as String? ?? existing?.barcode,
           category: map['category'] as String? ?? existing?.category,
+          // T0.5c: absent key (older backend) keeps the previously resolved
+          // id; an explicit null is authoritative and clears it. A plain
+          // `?? existing` fallback could never clear a stale id.
+          categoryId: map.containsKey('categoryId')
+              ? map['categoryId']?.toString()
+              : existing?.categoryId,
           isPrepared: pType == 'PREPARED' || pType == 'COMPOUND',
           productType: pType,
           mappingVersionId: map['mappingVersionId'] as String?,

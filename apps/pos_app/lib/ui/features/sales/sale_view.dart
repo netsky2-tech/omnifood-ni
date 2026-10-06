@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/sales/cart_item.dart';
+import '../../../domain/services/printer/kitchen_modifier_lines.dart';
 import '../../../domain/models/sales/hold_ticket.dart';
 import '../../../data/services/sync_service.dart';
 import '../../../domain/models/sales/payment.dart';
@@ -1061,7 +1062,9 @@ class ProductGrid extends StatelessWidget {
   }
 
   void _showProductOptions(BuildContext context, Product product) {
-    if (product.variants.isEmpty && product.availableModifiers.isEmpty) {
+    if (product.variants.isEmpty &&
+        product.availableModifiers.isEmpty &&
+        product.availableModifierGroups.isEmpty) {
       context.read<SaleViewModel>().addToCart(product);
       return;
     }
@@ -1083,7 +1086,16 @@ class ProductOptionsDialog extends StatefulWidget {
 
 class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   String? _selectedVariantId;
-  final List<Modifier> _selectedModifiers = [];
+  // Legacy flat modifiers: unreachable today, but never a silent sink.
+  final List<Modifier> _selectedLegacyModifiers = [];
+  // Grouped selection state, keyed per GROUP for radios and per OPTION for
+  // checkboxes and quantities. Checkbox and quantity groups start EMPTY:
+  // the operator opts in, the dialog never silently adds price.
+  final Map<String, String> _selectedRadioOption = {};
+  final Map<String, bool> _checkedOptions = {};
+  final Map<String, int> _optionQuantities = {};
+  // Inline error shows only while the required group is still unsatisfied.
+  bool _showMissingGroupError = false;
 
   @override
   void initState() {
@@ -1091,11 +1103,73 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
     if (widget.product.variants.isNotEmpty) {
       _selectedVariantId = widget.product.variants.first.id;
     }
+    // Radio groups preselect the option flagged as default, when present.
+    for (final group in widget.product.availableModifierGroups) {
+      if (group.maxSelected == 1) {
+        for (final option in group.options) {
+          if (option.isDefault) {
+            _selectedRadioOption[group.id] = option.id;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  /// Whole-price display for deltas ('+C$ 5'), consistent with the variant
+  /// idiom but without the trailing '.0' doubles would print.
+  String _formatDelta(double priceDelta) =>
+      priceDelta % 1 == 0 ? priceDelta.toInt().toString() : '$priceDelta';
+
+  String _groupHint(EffectiveModifierGroup group) {
+    if (group.maxSelected == 1) {
+      return 'Elige una opción';
+    }
+    if (group.allowQuantities) {
+      return 'Elige hasta ${group.maxSelected} · puedes repetir';
+    }
+    return 'Elige hasta ${group.maxSelected}';
+  }
+
+  /// First group whose selected total is below its minimum, if any: radio
+  /// groups count 0/1, checkboxes count checked options, quantity groups
+  /// sum their steppers.
+  String? _firstUnsatisfiedGroupName() {
+    for (final group in widget.product.availableModifierGroups) {
+      final total = group.maxSelected == 1
+          ? (_selectedRadioOption[group.id] != null ? 1 : 0)
+          : group.allowQuantities
+              ? group.options.fold<int>(
+                  0, (sum, o) => sum + (_optionQuantities[o.id] ?? 0))
+              : group.options
+                  .where((o) => _checkedOptions[o.id] == true)
+                  .length;
+      if (total < group.minSelected) return group.name;
+    }
+    return null;
+  }
+
+  void _incrementQuantity(
+    EffectiveModifierGroup group,
+    EffectiveModifierOption option,
+  ) {
+    setState(() {
+      final currentTotal = group.options
+          .fold<int>(0, (sum, o) => sum + (_optionQuantities[o.id] ?? 0));
+      // The TOTAL quantity across the group's options never exceeds the
+      // group's limit; the minus button floors each option at zero.
+      if (currentTotal >= group.maxSelected) return;
+      _optionQuantities[option.id] = (_optionQuantities[option.id] ?? 0) + 1;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    // The inline error shows only while the group is still unsatisfied, so
+    // it clears itself the moment the operator fixes the selection.
+    final missingGroup =
+        _showMissingGroupError ? _firstUnsatisfiedGroupName() : null;
     return AlertDialog(
       title: Text(widget.product.name),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: colorScheme.outline, width: 2)),
@@ -1121,22 +1195,136 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                 ),
                 const Divider(),
               ],
+              // Legacy flat modifiers: unreachable in today's read path, but
+              // rendered (same look as before the grouped selector) so they
+              // are never silently dropped.
               if (widget.product.availableModifiers.isNotEmpty) ...[
                 const Text('Modificadores:', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 ...widget.product.availableModifiers.map((m) => CheckboxListTile(
+                  dense: true,
                   title: Text('${m.name} (+C\$ ${m.extraPrice})'),
-                  value: _selectedModifiers.contains(m),
-                  onChanged: (val) {
-                    setState(() {
-                      if (val == true) {
-                        _selectedModifiers.add(m);
-                      } else {
-                        _selectedModifiers.remove(m);
-                      }
-                    });
-                  },
+                  value: _selectedLegacyModifiers.contains(m),
+                  onChanged: (selected) => setState(() {
+                    if (selected == true) {
+                      _selectedLegacyModifiers.add(m);
+                    } else {
+                      _selectedLegacyModifiers.remove(m);
+                    }
+                  }),
                 )),
+                const Divider(),
+              ],
+              // One section per group, in the order the resolver produced
+              // (category-inherited first, product exceptions last — already
+              // deterministic; never re-sorted here).
+              if (missingGroup != null) ...[
+                Text(
+                  'Falta elegir una opción en «$missingGroup»',
+                  style: TextStyle(color: colorScheme.error),
+                ),
+                const SizedBox(height: 8),
+              ],
+              for (final group in widget.product.availableModifierGroups) ...[
+                Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  _groupHint(group),
+                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 4),
+                if (group.maxSelected == 1)
+                  RadioGroup<String>(
+                    groupValue: _selectedRadioOption[group.id] ?? '',
+                    onChanged: (val) => setState(() {
+                      // A null callback value clears the selection.
+                      if (val == null) {
+                        _selectedRadioOption.remove(group.id);
+                      } else {
+                        _selectedRadioOption[group.id] = val;
+                      }
+                    }),
+                    child: Column(
+                      children: group.options
+                          .map(
+                            (option) => RadioListTile<String>(
+                              dense: true,
+                              title: Text(
+                                '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                              ),
+                              value: option.id,
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  )
+                else if (group.allowQuantities)
+                  Column(
+                    children: [
+                      for (final option in group.options)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                              ),
+                            ),
+                            IconButton(
+                              key: Key('modifier_qty_minus_${option.id}'),
+                              icon: const Icon(Icons.remove_circle_outline),
+                              onPressed: () => setState(() {
+                                final current = _optionQuantities[option.id] ?? 0;
+                                if (current > 0) {
+                                  _optionQuantities[option.id] = current - 1;
+                                }
+                              }),
+                            ),
+                            Text(
+                              '${_optionQuantities[option.id] ?? 0}',
+                              key: Key('modifier_qty_count_${option.id}'),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            IconButton(
+                              key: Key('modifier_qty_plus_${option.id}'),
+                              icon: const Icon(Icons.add_circle_outline),
+                              onPressed: () => _incrementQuantity(group, option),
+                            ),
+                          ],
+                        ),
+                    ],
+                  )
+                else
+                  Column(
+                    children: group.options
+                        .map(
+                          (option) => CheckboxListTile(
+                            dense: true,
+                            title: Text(
+                              '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                            ),
+                            value: _checkedOptions[option.id] ?? false,
+                            onChanged: (selected) => setState(() {
+                              if (selected != true) {
+                                // Unchecking is always allowed.
+                                _checkedOptions[option.id] = false;
+                                return;
+                              }
+                              // Same total-bound as the steppers: the
+                              // header promises 'Elige hasta N', so a full
+                              // group ignores the extra tap.
+                              final checkedCount = group.options
+                                  .where((o) => _checkedOptions[o.id] == true)
+                                  .length;
+                              if (checkedCount >= group.maxSelected) return;
+                              _checkedOptions[option.id] = true;
+                            }),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                const Divider(),
               ],
             ],
           ),
@@ -1146,13 +1334,65 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
         ElevatedButton(
           onPressed: () {
+            // A required group left empty blocks the add: nothing reaches
+            // the cart and the dialog stays open with a friendly hint.
+            if (_firstUnsatisfiedGroupName() != null) {
+              setState(() => _showMissingGroupError = true);
+              return;
+            }
+            // Puente hacia el carrito: cada opción elegida se entrega como
+            // un modificador del modelo existente con su precio POR UNIDAD
+            // y su cantidad explícita; las opciones sin selección no generan
+            // entrada. Así los totales, el recibo y la comanda de cocina
+            // muestran la cantidad real sin tocar el modelo del carrito.
+            final selectedModifiers = <Modifier>[];
+            selectedModifiers.addAll(_selectedLegacyModifiers);
+            for (final group in widget.product.availableModifierGroups) {
+              for (final option in group.options) {
+                if (group.maxSelected == 1) {
+                  if (_selectedRadioOption[group.id] == option.id) {
+                    selectedModifiers.add(
+                      Modifier(
+                        id: option.id,
+                        name: option.name,
+                        extraPrice: option.priceDelta,
+                        quantity: 1,
+                      ),
+                    );
+                  }
+                } else if (group.allowQuantities) {
+                  final quantity = _optionQuantities[option.id] ?? 0;
+                  if (quantity > 0) {
+                    selectedModifiers.add(
+                      Modifier(
+                        id: option.id,
+                        name: option.name,
+                        // Precio POR UNIDAD: la cantidad viaja en su campo
+                        // propio para que totales y comanda sepan cuántas.
+                        extraPrice: option.priceDelta,
+                        quantity: quantity,
+                      ),
+                    );
+                  }
+                } else if (_checkedOptions[option.id] == true) {
+                  selectedModifiers.add(
+                    Modifier(
+                      id: option.id,
+                      name: option.name,
+                      extraPrice: option.priceDelta,
+                      quantity: 1,
+                    ),
+                  );
+                }
+              }
+            }
             context.read<SaleViewModel>().addToCart(
               widget.product,
               variantId: _selectedVariantId,
-              modifiers: List.from(_selectedModifiers),
+              modifiers: selectedModifiers,
             );
             Navigator.pop(context);
-          }, 
+          },
           child: const Text('AGREGAR'),
         ),
       ],
@@ -1429,8 +1669,29 @@ class CartSidebar extends StatelessWidget {
                     dense: isMobileSheet,
                     contentPadding: EdgeInsets.zero,
                     title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Row(
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (item.selectedModifiers.isNotEmpty)
+                          Text(
+                            // Mismo formato que la comanda de cocina:
+                            // '<cantidad>x <nombre>' por cada opción.
+                            item.selectedModifiers
+                                .map(
+                                  (modifier) => KitchenModifierLines
+                                      .quantityLabel(
+                                    modifier.quantity,
+                                    modifier.name,
+                                  ),
+                                )
+                                .join(', '),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        Row(
+                          children: [
                         IconButton(
                           icon: Icon(Icons.remove_circle_outline, size: 22, color: colorScheme.primary),
                           onPressed: () => viewModel.updateQuantity(
@@ -1449,6 +1710,8 @@ class CartSidebar extends StatelessWidget {
                             variantId: item.variantId,
                             modifiers: item.selectedModifiers,
                           ),
+                        ),
+                      ],
                         ),
                       ],
                     ),

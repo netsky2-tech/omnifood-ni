@@ -2693,18 +2693,6 @@ class MockPromotionDao extends _i1.Mock implements _i36.PromotionDao {
       ) as _i55.Future<List<_i84.PromotionEntity>>);
 
   @override
-  _i55.Future<List<_i84.PromotionEntity>> getPromotionsByCategory(
-          String? categoryId) =>
-      (super.noSuchMethod(
-        Invocation.method(
-          #getPromotionsByCategory,
-          [categoryId],
-        ),
-        returnValue: _i55.Future<List<_i84.PromotionEntity>>.value(
-            <_i84.PromotionEntity>[]),
-      ) as _i55.Future<List<_i84.PromotionEntity>>);
-
-  @override
   _i55.Future<void> deletePromotionById(String? id) => (super.noSuchMethod(
         Invocation.method(
           #deletePromotionById,

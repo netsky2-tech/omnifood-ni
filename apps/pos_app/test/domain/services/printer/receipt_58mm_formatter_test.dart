@@ -227,7 +227,8 @@ void main() {
 
       expect(ticket, contains('BUZZER / PAGER #15'));
       expect(ticket, contains('2 x Tacos de Birria'));
-      expect(ticket, contains('* [MOD] Sin Cilantro'));
+      // Kitchen lines now carry the explicit count: '1x' for a single unit.
+      expect(ticket, contains('* [MOD] 1x Sin Cilantro'));
       expect(ticket, contains('* [NOTA] Bien dorados'));
       expect(ticket, contains('NOTAS GENERALES:'));
     });

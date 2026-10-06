@@ -474,6 +474,7 @@ class SalesMapper {
             invoiceItemId: domain.id,
             name: m.name,
             extraPrice: m.extraPrice,
+            quantity: m.quantity,
           ),
         )
         .toList();
@@ -630,7 +631,13 @@ class SalesMapper {
                 'inventorySnapshot': item.inventorySnapshot!.toJson(),
               'originInvoiceItemId': item.originInvoiceItemId,
               'modifiers': item.selectedModifiers
-                  .map((m) => ({'name': m.name, 'extraPrice': m.extraPrice}))
+                  .map(
+                    (m) => {
+                      'name': m.name,
+                      'extraPrice': m.extraPrice,
+                      'quantity': m.quantity,
+                    },
+                  )
                   .toList(),
             },
           )

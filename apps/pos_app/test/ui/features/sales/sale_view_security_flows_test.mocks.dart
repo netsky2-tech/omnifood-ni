@@ -515,6 +515,13 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
       ) as List<_i15.Product>);
 
   @override
+  bool get isProcessingSale => (super.noSuchMethod(
+        Invocation.getter(#isProcessingSale),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   bool get hasListeners => (super.noSuchMethod(
         Invocation.getter(#hasListeners),
         returnValue: false,
@@ -967,14 +974,17 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
   @override
   _i19.Future<void> openSession(
     double? balance, {
-    double? balanceUsd,
+    double? balanceUsd = 0.0,
     _i21.CashSessionModel? tipoModelo = _i21.CashSessionModel.cajaCentral,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
           #openSession,
           [balance],
-          {#balanceUsd: balanceUsd, #tipoModelo: tipoModelo},
+          {
+            #balanceUsd: balanceUsd,
+            #tipoModelo: tipoModelo,
+          },
         ),
         returnValue: _i19.Future<void>.value(),
         returnValueForMissingStub: _i19.Future<void>.value(),
@@ -1489,12 +1499,6 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockSyncService extends _i1.Mock implements _i10.SyncService {
-  // Hand-patched (build_runner is frozen in this worktree): D-18 added
-  // `isAuditStreamDegraded` to SyncService after these mocks were generated.
-  // Without this override the synthesized noSuchMethod forwarder returns null
-  // and every test that builds the cloud-sync badge dies on the bool cast.
-  @override
-  bool get isAuditStreamDegraded => false;
   @override
   _i19.Stream<_i10.InboundSyncResult> get onInboundSync => (super.noSuchMethod(
         Invocation.getter(#onInboundSync),
@@ -1542,6 +1546,13 @@ class MockSyncService extends _i1.Mock implements _i10.SyncService {
   @override
   bool get isCloudAuthRequired => (super.noSuchMethod(
         Invocation.getter(#isCloudAuthRequired),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
+  bool get isAuditStreamDegraded => (super.noSuchMethod(
+        Invocation.getter(#isAuditStreamDegraded),
         returnValue: false,
         returnValueForMissingStub: false,
       ) as bool);
@@ -1599,6 +1610,16 @@ class MockSyncService extends _i1.Mock implements _i10.SyncService {
   _i19.Future<int> getPendingOutboxCount() => (super.noSuchMethod(
         Invocation.method(
           #getPendingOutboxCount,
+          [],
+        ),
+        returnValue: _i19.Future<int>.value(0),
+        returnValueForMissingStub: _i19.Future<int>.value(0),
+      ) as _i19.Future<int>);
+
+  @override
+  _i19.Future<int> getPendingAuditCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getPendingAuditCount,
           [],
         ),
         returnValue: _i19.Future<int>.value(0),

@@ -1147,6 +1147,7 @@ class SaleViewModel extends ChangeNotifier {
           unitPrice: unitPrice,
           taxRate: itemTaxRate,
           category: product.category,
+          categoryId: product.categoryId,
           variantId: variantId,
           selectedModifiers: modifiers,
         ),

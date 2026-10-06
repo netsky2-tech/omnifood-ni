@@ -34,7 +34,10 @@ export interface CreatePromotionDto {
   name: string;
   type: PromotionType;
   target_product_id?: string;
-  target_category_id?: string;
+  // T0.5'd: mirrors the backend contract — a uuid, or an explicit null for
+  // "no category target" (global). '' is never sent: the form omits the
+  // key on create and the backend rejects empty strings.
+  target_category_id?: string | null;
   buy_quantity?: number;
   get_quantity?: number;
   discount_value?: number;
@@ -52,7 +55,9 @@ export interface UpdatePromotionDto {
   name?: string;
   type?: PromotionType;
   target_product_id?: string;
-  target_category_id?: string;
+  // T0.5'd: mirrors the backend contract — a uuid, or an explicit null
+  // meaning "clear to global". '' is never sent on update.
+  target_category_id?: string | null;
   buy_quantity?: number;
   get_quantity?: number;
   discount_value?: number;
