@@ -77,9 +77,17 @@ class DeviceSyncAuthInterceptor extends Interceptor {
     final path = options.path;
 
     // Bearer token must ONLY be attached to canonical /v1/sync/* routes and
-    // the explicitly allowlisted device-transported routes
+    // the explicitly allowlisted device-transported routes.
+    // Fail loudly if any other route is dispatched on the dedicated device sync client.
     if (!isSyncRoute(path) && !isDeviceTransportedRoute(path)) {
-      handler.next(options);
+      handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.cancel,
+          error: DeviceSyncRouteNotAllowedException(path),
+          message: 'Route not allowed on device sync client: $path',
+        ),
+      );
       return;
     }
 

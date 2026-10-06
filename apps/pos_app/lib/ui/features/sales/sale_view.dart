@@ -4,6 +4,7 @@ import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/sales/cart_item.dart';
 import '../../../domain/services/printer/kitchen_modifier_lines.dart';
+import '../../../domain/models/sales/hold_ticket.dart';
 import '../../../data/services/sync_service.dart';
 import '../../../domain/models/sales/payment.dart';
 import '../../../domain/models/sales/promotion.dart';
@@ -17,6 +18,7 @@ import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
+import '../cash/widgets/close_shift_dialog.dart' show showCloseShiftFlow;
 import 'widgets/product_card_thumbnail.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/tip_dialog.dart';
@@ -28,6 +30,34 @@ import '../config/business_profile/fiscal_authorization_expiry_notice_widget.dar
 import '../../../presentation/features/sales/widgets/loyalty_compact_widget.dart';
 import '../../../presentation/features/sales/widgets/reward_cta_widget.dart';
 import '../../../presentation/features/sales/widgets/reward_confirmation_dialog.dart';
+
+/// F3b: the REPLACE semantics of a re-parked account are a deliberate
+/// decision, but the operator must see in numbers what a save discards.
+/// Disclosure only: this never blocks the normal "add a product and save"
+/// flow, which is by far the most common edit.
+String _editAccountBanner(HoldTicket account, List<CartItem> cart) {
+  String count(int n) => n == 1 ? 'producto' : 'productos';
+  String money(double v) => 'C\$ ${v.toStringAsFixed(2)}';
+  double totalOf(List<CartItem> items) =>
+      items.fold<double>(0, (sum, i) => sum + i.grossAmount);
+
+  final storedTotal = totalOf(account.items);
+  final cartTotal = totalOf(cart);
+  final dropped = storedTotal - cartTotal;
+
+  final buffer = StringBuffer()
+    ..write('Está editando la cuenta abierta "${account.name}". ')
+    ..write('Al guardar, sus ${account.items.length} ${count(account.items.length)} ')
+    ..write('por ${money(storedTotal)} pasan a ser los ${cart.length} ')
+    ..write('${count(cart.length)} del carrito, por ${money(cartTotal)}. ')
+    ..write('No se crea una cuenta nueva.');
+
+  if (dropped > 0.005) {
+    buffer.write('\n\nSe pierden ${money(dropped)} de productos que no están '
+        'en el carrito.');
+  }
+  return buffer.toString();
+}
 
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
@@ -44,7 +74,11 @@ class SaleView extends StatefulWidget {
       return;
     }
 
-    final controller = TextEditingController();
+    // F3 (open accounts fix): when a recalled account is loaded, the operator
+    // is EDITING that account — seed the field with its name and say so, so
+    // they are never blind to what a save will replace.
+    final loadedAccount = vm.activeLoadedHoldTicket;
+    final controller = TextEditingController(text: loadedAccount?.name ?? '');
     List<dynamic> tables = [];
     try {
       final database = context.read<AppDatabase>();
@@ -63,7 +97,9 @@ class SaleView extends StatefulWidget {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Poner Venta en Espera'),
+            title: Text(loadedAccount != null
+                ? 'Editar Cuenta Abierta'
+                : 'Poner Venta en Espera'),
             content: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 380),
               child: SingleChildScrollView(
@@ -71,6 +107,32 @@ class SaleView extends StatefulWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (loadedAccount != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.edit_note,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.onSecondaryContainer),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _editAccountBanner(loadedAccount, vm.cart),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     TextField(
                       controller: controller,
                       decoration: const InputDecoration(
@@ -133,7 +195,9 @@ class SaleView extends StatefulWidget {
                   Navigator.pop(dialogCtx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Venta "$name" puesta en espera con éxito.'),
+                      content: Text(loadedAccount != null
+                          ? 'Cuenta "$name" actualizada con éxito.'
+                          : 'Venta "$name" puesta en espera con éxito.'),
                       duration: const Duration(seconds: 2),
                     ),
                   );
@@ -590,20 +654,13 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   // TODO: Implementar funcionalidad de devoluciones/notas de crédito
   // void _showReturnsDialog(BuildContext context) { ... }
 
-  void _showCloseBoxDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => const CloseBoxDialog(),
-    );
-  }
-
   Future<void> _requestSupervisorOverrideForCloseBox() async {
     final authRepo = context.read<AuthRepository>();
     final currentUser = await authRepo.getCurrentUser();
-    
-    // Si el usuario ya es Owner o Manager, abrir directamente el arqueo de cierre
+
+    // Si el usuario ya es Owner o Manager, abrir directamente el corte Z
     if (currentUser?.role == UserRole.owner || currentUser?.role == UserRole.manager) {
-      if (mounted) _showCloseBoxDialog(context);
+      if (mounted) await _openUnifiedZClose();
       return;
     }
 
@@ -635,8 +692,17 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
 
     if (!mounted) return;
     if (authorized == true) {
-      _showCloseBoxDialog(context);
+      await _openUnifiedZClose();
     }
+  }
+
+  /// T7 (unified close): the weak parallel close (CloseBoxDialog /
+  /// SaleViewModel.closeSession, in-memory expected map) was retired. Both
+  /// this entry and Control de Caja run the identical Corte Z pre-gate and
+  /// blind-count dialog from the root CashShiftViewModel.
+  Future<void> _openUnifiedZClose() async {
+    final cashVm = context.read<CashShiftViewModel>();
+    await showCloseShiftFlow(context, cashVm);
   }
 
   Future<void> _requestSupervisorOverrideForManualDrawer() async {
@@ -701,85 +767,6 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   }
 }
 
-class CloseBoxDialog extends StatefulWidget {
-  const CloseBoxDialog({super.key});
-
-  @override
-  State<CloseBoxDialog> createState() => _CloseBoxDialogState();
-}
-
-class _CloseBoxDialogState extends State<CloseBoxDialog> {
-  late final TextEditingController controller;
-
-  @override
-  void initState() {
-    super.initState();
-    controller = TextEditingController(text: '0.00');
-  }
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final viewModel = context.watch<SaleViewModel>();
-    final expected = viewModel.sessionExpected;
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return AlertDialog(
-      title: const Text('Cierre de Caja - Arqueo'),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: colorScheme.primary, width: 2)),
-      content: SizedBox(
-        width: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Resumen de Ventas:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            DataTable(
-              columns: const [
-                DataColumn(label: Text('Método')),
-                DataColumn(label: Text('Esperado')),
-              ],
-              rows: expected.entries.map((e) => DataRow(cells: [
-                DataCell(Text(localize(e.key.name, kPaymentMethodLabels))),
-                DataCell(Text('C\$ ${e.value.toStringAsFixed(2)}')),
-              ])).toList(),
-            ),
-            const Divider(),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(labelText: 'Efectivo Real en Caja'),
-              keyboardType: TextInputType.number,
-              onTap: () {
-                controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
-              },
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
-        ElevatedButton(
-          onPressed: () async {
-            final balance = double.tryParse(controller.text) ?? 0.0;
-            await context.read<SaleViewModel>().closeSession(balance);
-            if (context.mounted) {
-              try {
-                context.read<CashShiftViewModel>().init();
-              } catch (_) {}
-              Navigator.pop(context);
-            }
-          }, 
-          child: const Text('CERRAR CAJA'),
-        ),
-      ],
-    );
-  }
-}
 
 class SearchBarWidget extends StatefulWidget {
   const SearchBarWidget({super.key});
@@ -863,26 +850,100 @@ class RecallTicketsDialog extends StatelessWidget {
       title: const Text('Ventas en Espera'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400),
-        child: viewModel.holdTickets.isEmpty 
+        child: viewModel.holdTickets.isEmpty
           ? const Text('No hay ventas en espera.')
-          : ListView.builder(
-              shrinkWrap: true,
-              itemCount: viewModel.holdTickets.length,
-              itemBuilder: (context, index) {
-                final ticket = viewModel.holdTickets[index];
-                return ListTile(
-                  title: Text(ticket.name),
-                  subtitle: Text('${ticket.items.length} productos'),
-                  trailing: Text('C\$ ${ticket.items.fold(0.0, (sum, i) => sum + i.grossAmount).toStringAsFixed(2)}'),
-                  onTap: () {
-                    viewModel.recallTicket(ticket);
-                    Navigator.pop(context);
-                  },
-                );
-              },
+          // F4: bounded scrollable column instead of a shrinkWrap ListView —
+          // AlertDialog measures its content with IntrinsicWidth and a
+          // ShrinkWrappingViewport cannot compute intrinsics (crash whenever
+          // the list had at least one ticket).
+          : ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 420),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final ticket in viewModel.holdTickets)
+                      _holdTicketRow(context, viewModel, ticket),
+                  ],
+                ),
+              ),
             ),
       ),
     );
+  }
+
+  Widget _holdTicketRow(
+    BuildContext context,
+    SaleViewModel viewModel,
+    HoldTicket ticket,
+  ) {
+    return ListTile(
+      title: Text(ticket.name),
+      subtitle: Text('${ticket.items.length} productos'),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('C\$ ${ticket.items.fold(0.0, (sum, i) => sum + i.grossAmount).toStringAsFixed(2)}'),
+          const SizedBox(width: 4),
+          // F4 (open accounts fix): discard an account that will never be
+          // invoiced. Destructive styling (error color) separates it from
+          // the frequent, safe recall tap, per the nhilos experience
+          // standard (§12.5, §23).
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            color: Theme.of(context).colorScheme.error,
+            tooltip: 'Abandonar cuenta',
+            onPressed: () => _confirmAbandon(context, viewModel, ticket),
+          ),
+        ],
+      ),
+      onTap: () {
+        viewModel.recallTicket(ticket);
+        Navigator.pop(context);
+      },
+    );
+  }
+
+  Future<void> _confirmAbandon(
+    BuildContext context,
+    SaleViewModel viewModel,
+    HoldTicket ticket,
+  ) async {
+    final total = ticket.items.fold<double>(0, (sum, i) => sum + i.grossAmount);
+    final lineCount = ticket.items.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('¿Abandonar cuenta?'),
+        content: Text(
+          'La cuenta "${ticket.name}" tiene $lineCount '
+          '${lineCount == 1 ? 'producto' : 'productos'} por '
+          'C\$ ${total.toStringAsFixed(2)}.\n\n'
+          'Nada de esto ha sido facturado. Al abandonarla se descarta '
+          'definitivamente: no se puede deshacer.',
+        ),
+        actions: [
+          // Cancel is the safe/default action (autofocused); the destructive
+          // verb is explicit, per the nhilos standard (§23.1, §23.3).
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('CANCELAR'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(dialogCtx).colorScheme.error,
+              foregroundColor: Theme.of(dialogCtx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('ABANDONAR'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    await viewModel.abandonHoldTicket(ticket);
   }
 }
 

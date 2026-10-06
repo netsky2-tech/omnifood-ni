@@ -38,6 +38,12 @@ export class SyncFreshnessTerminalDto {
 
   /** Newest confirmed receipt watermark (ISO 8601), oldest across the terminal's streams. */
   lastReceiptAt!: string | null;
+
+  /**
+   * True when one or more sequence gaps were explicitly declared for this
+   * terminal (permanent data loss). When true, state cannot return to COMPLETE.
+   */
+  hasDeclaredGaps!: boolean;
 }
 
 export class SyncFreshnessDto {
@@ -57,4 +63,7 @@ export class SyncFreshnessDto {
 
   /** Report generation time — technical metadata only, never freshness (FR-SYNC-04). */
   evaluatedAt!: string;
+
+  /** True when any participating terminal has explicitly declared sequence gaps. */
+  hasDeclaredGaps!: boolean;
 }

@@ -4,7 +4,6 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
-import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
@@ -79,11 +78,6 @@ void main() {
     when(
       mockViewModel.businessModeEvaluator,
     ).thenReturn(const BusinessModeEvaluator(TenantConfig()));
-    when(mockViewModel.sessionExpected).thenReturn({
-      PaymentMethod.cash: 100,
-      PaymentMethod.card: 0,
-      PaymentMethod.qr: 0,
-    });
     when(
       mockViewModel.hasPendingLoyaltyWarning,
     ).thenAnswer((_) => pendingLoyaltyWarning);

@@ -56,6 +56,7 @@ describe('SyncHealthController', () => {
     state: 'COMPLETE',
     thresholdMinutes: 5,
     lastCompleteAt: '2026-09-01T11:58:00.000Z',
+    hasDeclaredGaps: false,
     perTerminal: [
       {
         terminalId: 'pos-01',
@@ -63,6 +64,7 @@ describe('SyncHealthController', () => {
         state: 'COMPLETE',
         acceptedThroughSequence: 42,
         lastReceiptAt: '2026-09-01T11:58:00.000Z',
+        hasDeclaredGaps: false,
       },
     ],
     evaluatedAt: '2026-09-01T12:00:00.000Z',

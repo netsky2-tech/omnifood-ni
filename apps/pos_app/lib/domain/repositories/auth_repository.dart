@@ -6,6 +6,9 @@ abstract class AuthRepository {
   DateTime? get lastSyncTimestamp;
   String? get lastAuthError;
 
+  bool get isReauthenticationRequired => false;
+  void notifyReauthenticationRequired() {}
+
   Future<User?> loginOnline(String email, String password, {String? tenantSlug});
 
   /// Claims a pre-auth terminal linking code (issue #556): exchanges the

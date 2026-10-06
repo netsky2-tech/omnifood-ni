@@ -5,7 +5,6 @@ import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
-import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
@@ -85,11 +84,6 @@ void main() {
     when(
       mockViewModel.businessModeEvaluator,
     ).thenReturn(const BusinessModeEvaluator(TenantConfig()));
-    when(mockViewModel.sessionExpected).thenReturn({
-      PaymentMethod.cash: 100,
-      PaymentMethod.card: 0,
-      PaymentMethod.qr: 0,
-    });
     when(
       mockAuthRepository.getCurrentUser(),
     ).thenAnswer((_) async => currentUser);

@@ -20,6 +20,13 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
   Timer? _refreshTimer;
   int _pendingCount = 0;
   int _pendingAuditCount = 0;
+
+  /// R-16: age of the oldest unconfirmed pending item in the outbox (from
+  /// [SyncService.getOldestPendingItemAge]). The badge's stall signal: when
+  /// the device is online and this exceeds
+  /// [SyncService.pendingStallThreshold], the sync pipeline is stopped even
+  /// if the cached `status` still says idle/success from a previous pass.
+  Duration? _oldestPendingAge;
   late AnimationController _rotationController;
 
   @override
@@ -81,10 +88,18 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
         // Keep the previous read on failure: a failed audit count must not
         // clear an already-visible degraded signal.
       }
+      // R-16: the stall signal is read with the same fault isolation: a
+      // failed age read keeps the previous value so a visible stall is
+      // never silently cleared; a fresh read corrects it on the next tick.
+      Duration? oldestPendingAge = _oldestPendingAge;
+      try {
+        oldestPendingAge = await syncService.getOldestPendingItemAge();
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _pendingCount = count;
           _pendingAuditCount = auditCount;
+          _oldestPendingAge = oldestPendingAge;
         });
       }
     } catch (_) {}
@@ -135,6 +150,19 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
     final bool auditDegraded =
         status == CloudSyncStatus.auditDegraded ||
         (syncService?.isAuditStreamDegraded ?? false);
+
+    // R-16: the last run's status is not the whole truth. `status` is only
+    // mutated inside a run, so after a sleep (or a pass that "succeeded"
+    // without confirming anything) it can report a stale idle/success. The
+    // terminal can tell it is stuck from what it knows locally: while the
+    // device is online and the oldest unconfirmed pending item is older
+    // than the stall threshold, the sync pipeline is stopped — this can
+    // never paint the badge green, whatever `status` claims.
+    final bool stalled = isOnline &&
+        status != CloudSyncStatus.offline &&
+        status != CloudSyncStatus.syncing &&
+        _oldestPendingAge != null &&
+        _oldestPendingAge! > SyncService.pendingStallThreshold;
     // When the audit stream is the only thing pending, show its count on
     // the badge instead of the (zero) business outbox count.
     final int badgeCount = auditDegraded && _pendingCount == 0
@@ -153,6 +181,14 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
       iconColor = Colors.orange;
       iconData = Icons.sync;
       tooltip = 'Sincronizando con la Nube...';
+    } else if (stalled) {
+      // R-16: work is not being confirmed even though the network is up.
+      // Red is reserved for this and the error state: both mean business
+      // documents are not reaching the cloud.
+      iconColor = Colors.redAccent;
+      iconData = Icons.sync_disabled;
+      tooltip = 'Sync detenido — trabajo sin confirmar hace '
+          '${_oldestPendingAge!.inMinutes} min';
     } else if (status == CloudSyncStatus.error) {
       iconColor = Colors.redAccent;
       iconData = Icons.sync_problem;
@@ -235,6 +271,14 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
             : 'Ninguna';
         final status = syncService?.status ?? CloudSyncStatus.idle;
         final lastError = syncService?.lastSyncError;
+        // R-16: the dialog must not say "Nube Sincronizada al 100%" while
+        // old unconfirmed work sits in the outbox, no matter what the
+        // cached status claims.
+        final bool stalled = isOnline &&
+            status != CloudSyncStatus.offline &&
+            status != CloudSyncStatus.syncing &&
+            _oldestPendingAge != null &&
+            _oldestPendingAge! > SyncService.pendingStallThreshold;
         // D-18: the dialog must tell the truth about the audit stream even
         // when it is not an error: degraded passes render the amber status
         // label, the pending-audit row, and an explanatory note.
@@ -252,6 +296,9 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
           statusColor = Colors.orange;
         } else if (status == CloudSyncStatus.error) {
           statusLabel = 'Error en última sincronización';
+          statusColor = Colors.red;
+        } else if (stalled) {
+          statusLabel = 'Sync detenido';
           statusColor = Colors.red;
         } else if (auditDegraded) {
           statusLabel = localize(
@@ -340,6 +387,31 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
                     ),
                     style: TextStyle(
                       color: Colors.amber.shade900,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              // R-16: the reason is shown when the state is stalled — the
+              // truth the incident's dialog failed to tell. "Último Sync
+              // Exitoso" below stays exactly as it was.
+              if (stalled) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'Sync detenido: el trabajo más antiguo lleva '
+                    '${_oldestPendingAge!.inMinutes} minutos sin '
+                    'confirmarse aunque hay conexión. Fuerza una '
+                    'sincronización o revisa la conexión.',
+                    style: TextStyle(
+                      color: Colors.red.shade900,
                       fontSize: 11,
                     ),
                   ),

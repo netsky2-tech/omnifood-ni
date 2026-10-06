@@ -40,10 +40,12 @@ type QueryRunnerMock = {
  * the human transport.
  */
 describe('AuditController transport (D-18 part 2)', () => {
-  const handlerOf = (method: string): Function => {
-    const handler = AuditController.prototype[method];
+  const handlerOf = (method: string): ((...args: unknown[]) => unknown) => {
+    const handler = AuditController.prototype[
+      method as keyof AuditController
+    ] as unknown as (...args: unknown[]) => unknown;
     expect(handler).toBeDefined();
-    return handler as Function;
+    return handler;
   };
 
   it('declares POST push (empty subpath) as device sync transport with sync:push scope and no human guard', () => {
@@ -51,9 +53,9 @@ describe('AuditController transport (D-18 part 2)', () => {
     const guards = Reflect.getMetadata(GUARDS_METADATA, pushHandler) ?? [];
     expect(guards).toContain(SyncTransportGuard);
     expect(guards).not.toContain(AuthGuard);
-    expect(
-      Reflect.getMetadata(SYNC_SCOPES_KEY, pushHandler),
-    ).toEqual(['sync:push']);
+    expect(Reflect.getMetadata(SYNC_SCOPES_KEY, pushHandler)).toEqual([
+      'sync:push',
+    ]);
   });
 
   it('keeps GET overrides and GET drawer-opens on the human transport with OWNER/MANAGER roles', () => {
@@ -124,20 +126,23 @@ describe('AuditController transport (D-18 part 2)', () => {
             provide: getRepositoryToken(AuditLog),
             useValue: { findOne: jest.fn(), save: jest.fn() },
           },
-          { provide: DataSource, useValue: { createQueryRunner: () => mockQueryRunner } },
+          {
+            provide: DataSource,
+            useValue: { createQueryRunner: () => mockQueryRunner },
+          },
           { provide: AuditTrailService, useValue: {} },
           { provide: AuditVerificationService, useValue: verificationService },
         ],
       })
-      // Human routes still reference AuthGuard as a guard dependency and the
-      // device route references SyncTransportGuard; the fixture stubs both
-      // (no JWT machinery) — the metadata assertions above are what pin WHICH
-      // routes carry which guard.
-      .overrideGuard(AuthGuard)
-      .useValue({ canActivate: () => true })
-      .overrideGuard(SyncTransportGuard)
-      .useValue({ canActivate: () => true })
-      .compile();
+        // Human routes still reference AuthGuard as a guard dependency and the
+        // device route references SyncTransportGuard; the fixture stubs both
+        // (no JWT machinery) — the metadata assertions above are what pin WHICH
+        // routes carry which guard.
+        .overrideGuard(AuthGuard)
+        .useValue({ canActivate: () => true })
+        .overrideGuard(SyncTransportGuard)
+        .useValue({ canActivate: () => true })
+        .compile();
 
       controller = module.get<AuditController>(AuditController);
     });
@@ -172,7 +177,7 @@ describe('AuditController transport (D-18 part 2)', () => {
       // principal attached by SyncTransportGuard.
       await controller.pushLogs('tenant_1', dto, {
         devicePrincipal: { deviceId: 'term-1' },
-      } as never);
+      });
 
       expect(verificationService.verifyBatch).toHaveBeenCalledWith(
         dto.logs,
@@ -203,7 +208,7 @@ describe('AuditController transport (D-18 part 2)', () => {
 
       await controller.pushLogs('tenant_1', dto, {
         devicePrincipal: { deviceId: 'term-1' },
-      } as never);
+      });
 
       const inserted = mockQueryRunner.manager.insert.mock.calls[0][1] as {
         user_id: string;
@@ -229,7 +234,7 @@ describe('AuditController transport (D-18 part 2)', () => {
 
       await controller.pushLogs('tenant_1', dto, {
         user: { sub: 'user_1' },
-      } as never);
+      });
 
       expect(verificationService.verifyBatch).toHaveBeenCalledWith(
         dto.logs,

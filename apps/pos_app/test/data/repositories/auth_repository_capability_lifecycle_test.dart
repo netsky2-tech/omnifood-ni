@@ -90,4 +90,16 @@ void main() {
     await f.repository.logout();
     expect(f.cache.hasFreshAuthority('tenant-a'), isFalse);
   });
+
+  test('notifyReauthenticationRequired sets flag and lastAuthError, cleared by logout', () async {
+    final f = _Fixture();
+    expect(f.repository.isReauthenticationRequired, isFalse);
+
+    f.repository.notifyReauthenticationRequired();
+    expect(f.repository.isReauthenticationRequired, isTrue);
+    expect(f.repository.lastAuthError, contains('AUTH_BLOCKED'));
+
+    await f.repository.logout();
+    expect(f.repository.isReauthenticationRequired, isFalse);
+  });
 }
