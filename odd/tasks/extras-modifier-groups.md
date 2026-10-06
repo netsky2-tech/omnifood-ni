@@ -1428,3 +1428,38 @@ formularios** (el plan permitía "retirar o corregir"). Evidencia:
 **Verificación del orquestador:** grep de seeds `'0.0'`, inventario completo de
 `prefixText`, y conteo de inputs del editor — los tres limpios. T4.2 cierra como T0.4':
 sin diff, con evidencia.
+
+## 41. T4.3a — Siembra SOHO aplicada en local + runner de migraciones (6ffeb536)
+
+**Siembra (script `seed:soho-modifier-groups`).** Fixture literal del plan (3 grupos /
+11 opciones / 3 enganches), dry-run por defecto, `--apply` para escribir, idempotente por
+`UNIQUE(tenant_id, name)` con conflictos que **abortan listándolo** (nunca overwrite
+silencioso), resolución fail-closed de tenant y categoría (nunca adivina
+`CAFE_CALIENTE`/`BEBIDAS`). Sin `is_default`: el grupo obligatorio fuerza elección
+explícita.
+
+**Runner `migration:run:ts`.** El CLI de TypeORM dev está roto en TODOS los checkouts
+(Node 24 carga el `.ts` como ESM y revienta el import sin extensión de `data-source.ts`;
+el camino `dist` de prod no se toca). Runner programático con el mismo data-source, salida
+JSON y `destroy` en `finally`.
+
+**Ejecución real contra el dev local (127.0.0.1/omnifood):**
+1. Diagnóstico inicial: el libro tenía 110 migraciones (mi primera consulta con LIKE
+   prefijo '1809%' fue un FALSO negativo — los nombres llevan el timestamp de sufijo).
+2. `CreateAppReleases1809540000000` estaba **aplicada sin registro** en el libro (tabla
+   idéntica a la migración: 13 columnas + 3 índices, con 3 filas de datos) → **baseline
+   manual del libro** (`INSERT` de la fila, sin tocar datos — tabla y datos preservados).
+3. Runner aplicó las 3 pendientes: `CreateModifierGroups` (T1.1), `BackfillProductCategoryCodes`
+   (T0.2' — `CAFÉ CALIENTE` → `CAFE_CALIENTE` en 7 categorías de SOHO + filas de catálogo),
+   `PromotionTargetCategoryIdToUuid` (T0.5'a — 1 de 2 promociones con target en blanco
+   quedó NULL+deshabilitada, tal como diseñado).
+4. **Dry-run**: 3/11/3, cero conflictos. **Apply**: tenant SOHO `bc3bd4dd`, categoría
+   `CAFE_CALIENTE` (`76be56f2`), creados 3 grupos / 11 opciones / 3 enganches.
+5. **Re-corrida de verificación**: 0 creados (idempotencia real). SQL: Leche 1/1,
+   Endulzante 0/2, Extras 0/3 con cantidades, precios exactos del plan
+   (0/0/20/20 · 0/0/0 · 15/10/15/5), enganches orden 1-2-3.
+
+**Tests.** 34 nuevos (30 fixture/fail-closed/idempotencia con doble-aplicación en memoria +
+4 del runner con fakes). Suite backend **3648**, tsc/eslint/prettier limpios. Ni el worker
+ni el orquestador ejecutamos migraciones/seed sin pasar por el plan: dry-run primero,
+después apply con evidencia SQL.
