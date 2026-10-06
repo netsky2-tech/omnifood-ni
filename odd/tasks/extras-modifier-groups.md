@@ -156,7 +156,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 
 - [x] **T4.1** El editor de opciones del BOH pasa a lectura, explicando que se administra desde la web
       (decisión 2). Esto elimina de raíz la clase de divergencia del editor del BOH.
-- [ ] **T4.2** Retirar o corregir con el editor viejo los dos defectos del campo de dinero: el `0.0`
+- [x] **T4.2** Retirar o corregir con el editor viejo los dos defectos del campo de dinero: el `0.0`
       pre-cargado que concatena (`15 → 0.015`, clase D-16) y el prefijo `$` en vez de `C$`.
 - [ ] **T4.3** Sembrar el set real de SOHO y verificarlo en el S23:
       **Leche** (obligatorio 1/1: Entera, Descremada, Almendras +20, Soya +20) ·
@@ -1407,3 +1407,24 @@ el flake rotativo (5 ficheros, todos verdes individuales), `analyze` limpio.
 **Nota de proceso:** el primer worker de esta unidad murió por infraestructura
 ("process cleanup unconfirmed; capacity quarantined") dejando el árbol LIMPIO (verificado
 antes de relanzar); relanzado como tarea nueva con el contrato completo.
+
+## 40. T4.2 — Defectos del campo dinero: RETIRADOS con el editor viejo (cierre por verificación)
+
+**Sin código nuevo — ambas deudas vivían en el editor de BOH y T4.1 las retiró con sus
+formularios** (el plan permitía "retirar o corregir"). Evidencia:
+
+1. **`0.0` que concatena (`15 → 0.015`, clase D-16):** el editor pre-T4.1 sembraba
+   `TextEditingController(text: ... ?? '0.0')` en "Ajuste de Precio" y "Precio Extra" sin
+   selección-al-tocar — verificado contra `git show 0de4ead9~1`. Hoy el editor tiene **0
+   TextField**. Barrido de toda `lib/ui`: el único controller con seed es
+   `CloseBoxDialog('0.00')`, protegido con selección-total al tocar (patrón anti-concat,
+   distinto del defecto); el patrón canónico D-16 ("vacío, '0.00' sólo es hint") está
+   documentado en apertura y cierre de caja.
+2. **Prefijo `$` en vez de `C$`:** barrido de los 11 `prefixText` de la app: **cada `$`
+   suelto corresponde a un campo USD** ("Fondo USD", "Monto fijo en dólares",
+   `isNio ? C$ : $` condicionales) y **todos los campos NIO usan `C$`**. Ningún córdoba
+   muestra `$`.
+
+**Verificación del orquestador:** grep de seeds `'0.0'`, inventario completo de
+`prefixText`, y conteo de inputs del editor — los tres limpios. T4.2 cierra como T0.4':
+sin diff, con evidencia.
