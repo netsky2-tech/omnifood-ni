@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/sales/cart_item.dart';
+import '../../../domain/services/printer/kitchen_modifier_lines.dart';
 import '../../../data/services/sync_service.dart';
 import '../../../domain/models/sales/payment.dart';
 import '../../../domain/models/sales/promotion.dart';
@@ -1279,10 +1280,10 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
               return;
             }
             // Puente hacia el carrito: cada opción elegida se entrega como
-            // un modificador del modelo existente, con su precio extra ya
-            // multiplicado por la cantidad cuando el grupo la permite; las
-            // opciones sin selección no generan entrada. Así el carrito, el
-            // recibo y la factura siguen funcionando sin cambios.
+            // un modificador del modelo existente con su precio POR UNIDAD
+            // y su cantidad explícita; las opciones sin selección no generan
+            // entrada. Así los totales, el recibo y la comanda de cocina
+            // muestran la cantidad real sin tocar el modelo del carrito.
             final selectedModifiers = <Modifier>[];
             selectedModifiers.addAll(_selectedLegacyModifiers);
             for (final group in widget.product.availableModifierGroups) {
@@ -1294,6 +1295,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                         id: option.id,
                         name: option.name,
                         extraPrice: option.priceDelta,
+                        quantity: 1,
                       ),
                     );
                   }
@@ -1304,7 +1306,10 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                       Modifier(
                         id: option.id,
                         name: option.name,
-                        extraPrice: option.priceDelta * quantity,
+                        // Precio POR UNIDAD: la cantidad viaja en su campo
+                        // propio para que totales y comanda sepan cuántas.
+                        extraPrice: option.priceDelta,
+                        quantity: quantity,
                       ),
                     );
                   }
@@ -1314,6 +1319,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                       id: option.id,
                       name: option.name,
                       extraPrice: option.priceDelta,
+                      quantity: 1,
                     ),
                   );
                 }
@@ -1602,8 +1608,29 @@ class CartSidebar extends StatelessWidget {
                     dense: isMobileSheet,
                     contentPadding: EdgeInsets.zero,
                     title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Row(
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (item.selectedModifiers.isNotEmpty)
+                          Text(
+                            // Mismo formato que la comanda de cocina:
+                            // '<cantidad>x <nombre>' por cada opción.
+                            item.selectedModifiers
+                                .map(
+                                  (modifier) => KitchenModifierLines
+                                      .quantityLabel(
+                                    modifier.quantity,
+                                    modifier.name,
+                                  ),
+                                )
+                                .join(', '),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        Row(
+                          children: [
                         IconButton(
                           icon: Icon(Icons.remove_circle_outline, size: 22, color: colorScheme.primary),
                           onPressed: () => viewModel.updateQuantity(
@@ -1622,6 +1649,8 @@ class CartSidebar extends StatelessWidget {
                             variantId: item.variantId,
                             modifiers: item.selectedModifiers,
                           ),
+                        ),
+                      ],
                         ),
                       ],
                     ),

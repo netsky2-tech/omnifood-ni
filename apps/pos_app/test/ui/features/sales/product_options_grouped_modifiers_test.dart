@@ -266,7 +266,7 @@ void main() {
     expect(viewModel.addedModifiers.last, isEmpty);
   });
 
-  testWidgets('AGREGAR maps quantities into the flat modifier bridge (2 × 15 = 30)', (tester) async {
+  testWidgets('AGREGAR bridges quantities as PER-UNIT price plus explicit quantity (2 × 15)', (tester) async {
     final product = Product(
       id: 'p-1',
       name: 'Capuccino',
@@ -294,11 +294,15 @@ void main() {
     await tester.tap(find.text('AGREGAR'));
     await tester.pumpAndSettle();
 
+    // Semantic change vs the first bridge: extraPrice is PER UNIT and the
+    // quantity rides on its own field, so the kitchen can print '2x Entera'
+    // and the totals stay quantity-aware end to end.
     final modifiers = viewModel.addedModifiers.single;
     expect(modifiers, hasLength(1));
     expect(modifiers.first.id, 'opt-1');
     expect(modifiers.first.name, 'Entera');
-    expect(modifiers.first.extraPrice, 30.0);
+    expect(modifiers.first.extraPrice, 15.0);
+    expect(modifiers.first.quantity, 2);
     expect(viewModel.addedProducts.single.id, 'p-1');
   });
 

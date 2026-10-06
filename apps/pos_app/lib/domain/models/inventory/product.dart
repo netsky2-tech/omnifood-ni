@@ -75,6 +75,10 @@ class Modifier with _$Modifier {
     required String id,
     required String name,
     required double extraPrice,
+    /// How many units of this option the line includes. Defaults to 1 so
+    /// old persisted payloads (name + extraPrice only, invoice history
+    /// included) keep loading as quantity 1.
+    @Default(1) int quantity,
   }) = _Modifier;
 
   factory Modifier.fromJson(Map<String, dynamic> json) =>

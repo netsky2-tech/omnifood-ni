@@ -2724,6 +2724,23 @@ final migration61_62 = Migration(61, 62, (database) async {
   );
 });
 
+/// v62 → v63: modifier quantity on the invoice-item modifiers table. The
+/// column is NOT NULL DEFAULT 1 so every pre-quantity row (old invoices,
+/// reprints) reads as one unit — the same default the domain model uses.
+final migration62_63 = Migration(62, 63, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='invoice_item_modifiers'",
+  );
+  if (tables.isEmpty) return;
+  final columns = await database.rawQuery('PRAGMA table_info(invoice_item_modifiers)');
+  final names = columns.map((row) => row['name'] as String).toSet();
+  if (!names.contains('quantity')) {
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2777,6 +2794,7 @@ final allMigrations = [
   migration59_60,
   migration60_61,
   migration61_62,
+  migration62_63,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

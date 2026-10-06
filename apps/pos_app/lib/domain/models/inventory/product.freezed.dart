@@ -890,6 +890,11 @@ mixin _$Modifier {
   String get name => throw _privateConstructorUsedError;
   double get extraPrice => throw _privateConstructorUsedError;
 
+  /// How many units of this option the line includes. Defaults to 1 so
+  /// old persisted payloads (name + extraPrice only, invoice history
+  /// included) keep loading as quantity 1.
+  int get quantity => throw _privateConstructorUsedError;
+
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
   $ModifierCopyWith<Modifier> get copyWith =>
@@ -901,7 +906,7 @@ abstract class $ModifierCopyWith<$Res> {
   factory $ModifierCopyWith(Modifier value, $Res Function(Modifier) then) =
       _$ModifierCopyWithImpl<$Res, Modifier>;
   @useResult
-  $Res call({String id, String name, double extraPrice});
+  $Res call({String id, String name, double extraPrice, int quantity});
 }
 
 /// @nodoc
@@ -920,6 +925,7 @@ class _$ModifierCopyWithImpl<$Res, $Val extends Modifier>
     Object? id = null,
     Object? name = null,
     Object? extraPrice = null,
+    Object? quantity = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -934,6 +940,10 @@ class _$ModifierCopyWithImpl<$Res, $Val extends Modifier>
           ? _value.extraPrice
           : extraPrice // ignore: cast_nullable_to_non_nullable
               as double,
+      quantity: null == quantity
+          ? _value.quantity
+          : quantity // ignore: cast_nullable_to_non_nullable
+              as int,
     ) as $Val);
   }
 }
@@ -946,7 +956,7 @@ abstract class _$$ModifierImplCopyWith<$Res>
       __$$ModifierImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({String id, String name, double extraPrice});
+  $Res call({String id, String name, double extraPrice, int quantity});
 }
 
 /// @nodoc
@@ -963,6 +973,7 @@ class __$$ModifierImplCopyWithImpl<$Res>
     Object? id = null,
     Object? name = null,
     Object? extraPrice = null,
+    Object? quantity = null,
   }) {
     return _then(_$ModifierImpl(
       id: null == id
@@ -977,6 +988,10 @@ class __$$ModifierImplCopyWithImpl<$Res>
           ? _value.extraPrice
           : extraPrice // ignore: cast_nullable_to_non_nullable
               as double,
+      quantity: null == quantity
+          ? _value.quantity
+          : quantity // ignore: cast_nullable_to_non_nullable
+              as int,
     ));
   }
 }
@@ -985,7 +1000,10 @@ class __$$ModifierImplCopyWithImpl<$Res>
 @JsonSerializable()
 class _$ModifierImpl implements _Modifier {
   const _$ModifierImpl(
-      {required this.id, required this.name, required this.extraPrice});
+      {required this.id,
+      required this.name,
+      required this.extraPrice,
+      this.quantity = 1});
 
   factory _$ModifierImpl.fromJson(Map<String, dynamic> json) =>
       _$$ModifierImplFromJson(json);
@@ -997,9 +1015,16 @@ class _$ModifierImpl implements _Modifier {
   @override
   final double extraPrice;
 
+  /// How many units of this option the line includes. Defaults to 1 so
+  /// old persisted payloads (name + extraPrice only, invoice history
+  /// included) keep loading as quantity 1.
+  @override
+  @JsonKey()
+  final int quantity;
+
   @override
   String toString() {
-    return 'Modifier(id: $id, name: $name, extraPrice: $extraPrice)';
+    return 'Modifier(id: $id, name: $name, extraPrice: $extraPrice, quantity: $quantity)';
   }
 
   @override
@@ -1010,12 +1035,14 @@ class _$ModifierImpl implements _Modifier {
             (identical(other.id, id) || other.id == id) &&
             (identical(other.name, name) || other.name == name) &&
             (identical(other.extraPrice, extraPrice) ||
-                other.extraPrice == extraPrice));
+                other.extraPrice == extraPrice) &&
+            (identical(other.quantity, quantity) ||
+                other.quantity == quantity));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, name, extraPrice);
+  int get hashCode => Object.hash(runtimeType, id, name, extraPrice, quantity);
 
   @JsonKey(ignore: true)
   @override
@@ -1035,7 +1062,8 @@ abstract class _Modifier implements Modifier {
   const factory _Modifier(
       {required final String id,
       required final String name,
-      required final double extraPrice}) = _$ModifierImpl;
+      required final double extraPrice,
+      final int quantity}) = _$ModifierImpl;
 
   factory _Modifier.fromJson(Map<String, dynamic> json) =
       _$ModifierImpl.fromJson;
@@ -1046,6 +1074,12 @@ abstract class _Modifier implements Modifier {
   String get name;
   @override
   double get extraPrice;
+  @override
+
+  /// How many units of this option the line includes. Defaults to 1 so
+  /// old persisted payloads (name + extraPrice only, invoice history
+  /// included) keep loading as quantity 1.
+  int get quantity;
   @override
   @JsonKey(ignore: true)
   _$$ModifierImplCopyWith<_$ModifierImpl> get copyWith =>

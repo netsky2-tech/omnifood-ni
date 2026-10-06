@@ -8,6 +8,7 @@ import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/services/config/business_mode_evaluator.dart';
@@ -257,6 +258,43 @@ void main() {
           modifiers: anyNamed('modifiers'),
         ),
       ).called(1);
+    });
+
+    testWidgets('the cart tile shows each selected modifier with its count', (tester) async {
+      final cartItem = CartItem(
+        productId: 'prod-grp',
+        productName: 'Capuccino',
+        quantity: 1,
+        unitPrice: 60,
+        taxRate: 0.15,
+        selectedModifiers: const [
+          Modifier(id: 'm-1', name: 'Extra Shot', extraPrice: 15, quantity: 2),
+          Modifier(id: 'm-2', name: 'Crema', extraPrice: 10),
+        ],
+      );
+      when(mockViewModel.filteredProducts).thenReturn([]);
+      when(mockViewModel.cart).thenReturn([cartItem]);
+      when(mockViewModel.total).thenReturn(100.0);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      // One consistent '<qty>x <name>' format per modifier.
+      expect(find.text('2x Extra Shot, 1x Crema'), findsOneWidget);
+
+      // Copy guard over the rendered tile: Spanish business copy only.
+      final tileText = tester
+          .widgetList<Text>(find.byType(Text))
+          .map((text) => text.data ?? '')
+          .join('\n');
+      expect(tileText, isNot(contains('§')));
+      expect(tileText, isNot(matches(RegExp(r'INV\.'))));
+      expect(tileText, isNot(matches(RegExp(r'\bT\d\.\d\b'))));
+      expect(tileText, isNot(matches(RegExp(r'\b[0-9a-f]{40}\b'))));
+      expect(
+        tileText,
+        isNot(matches(RegExp(r'\b(uuid|tenant|freezed|zod)\b', caseSensitive: false))),
+      );
     });
   });
 }

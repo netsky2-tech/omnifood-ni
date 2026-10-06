@@ -347,17 +347,17 @@ void main() {
   });
 
   test(
-      'allMigrations keeps the chain ordered: migration61_62 is the newest '
-      'link at the end and migration60_61 is retained immediately before it',
+      'allMigrations keeps the chain ordered: migration62_63 is the newest '
+      'link at the end and migration61_62 is retained immediately before it',
       () {
     // The newest link is registered at the end of the chain.
-    expect(allMigrations.last.startVersion, 61);
-    expect(allMigrations.last.endVersion, 62);
-    expect(allMigrations.last, same(migration61_62));
+    expect(allMigrations.last.startVersion, 62);
+    expect(allMigrations.last.endVersion, 63);
+    expect(allMigrations.last, same(migration62_63));
     // The previous newest link is still registered, in position, with its
     // versions unchanged.
-    expect(allMigrations[allMigrations.length - 2], same(migration60_61));
-    expect(migration60_61.startVersion, 60);
-    expect(migration60_61.endVersion, 61);
+    expect(allMigrations[allMigrations.length - 2], same(migration61_62));
+    expect(migration61_62.startVersion, 61);
+    expect(migration61_62.endVersion, 62);
   });
 }

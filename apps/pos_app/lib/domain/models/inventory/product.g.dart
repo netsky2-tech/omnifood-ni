@@ -98,6 +98,7 @@ _$ModifierImpl _$$ModifierImplFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       name: json['name'] as String,
       extraPrice: (json['extraPrice'] as num).toDouble(),
+      quantity: json['quantity'] as int? ?? 1,
     );
 
 Map<String, dynamic> _$$ModifierImplToJson(_$ModifierImpl instance) =>
@@ -105,6 +106,7 @@ Map<String, dynamic> _$$ModifierImplToJson(_$ModifierImpl instance) =>
       'id': instance.id,
       'name': instance.name,
       'extraPrice': instance.extraPrice,
+      'quantity': instance.quantity,
     };
 
 _$EffectiveModifierOptionImpl _$$EffectiveModifierOptionImplFromJson(

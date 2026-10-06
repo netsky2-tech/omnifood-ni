@@ -29,7 +29,10 @@ extension CartItemX on CartItem {
   double get subtotal => quantity * unitPrice;
   
   /// Total extra price of selected modifiers multiplied by quantity.
-  double get modifiersTotal => selectedModifiers.fold(0.0, (sum, m) => sum + m.extraPrice) * quantity;
+  /// Sum of per-unit modifier prices × each modifier's quantity, times the
+  /// line quantity. A modifier without quantity (legacy payload) counts as
+  /// one unit.
+  double get modifiersTotal => selectedModifiers.fold(0.0, (sum, m) => sum + m.extraPrice * m.quantity) * quantity;
 
   /// Total pre-tax gross amount (subtotal + modifiersTotal).
   double get grossAmount => subtotal + modifiersTotal;
