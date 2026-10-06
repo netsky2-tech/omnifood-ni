@@ -81,6 +81,10 @@ class CardVoucherReconciliationViewModel extends ChangeNotifier {
             : payment.batchNumber,
         reconciledAt: DateTime.now().millisecondsSinceEpoch,
         reconciledByUserId: currentUserId,
+        // S1a (backlog #68): the reconciliation write itself creates the
+        // outbox work — a reconciliation is never recorded locally without
+        // creating the push to the cloud.
+        reconciliationSyncStatus: 'pending',
         createdAt: payment.createdAt,
       );
 
@@ -142,6 +146,9 @@ class CardVoucherReconciliationViewModel extends ChangeNotifier {
         batchNumber: payment.batchNumber,
         reconciledAt: DateTime.now().millisecondsSinceEpoch,
         reconciledByUserId: supervisorId,
+        // S1a (backlog #68): the override write also creates the outbox
+        // work — MANUAL_OVERRIDE state must reach the cloud as well.
+        reconciliationSyncStatus: 'pending',
         createdAt: payment.createdAt,
       );
 

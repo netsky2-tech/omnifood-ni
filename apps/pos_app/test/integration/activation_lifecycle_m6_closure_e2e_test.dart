@@ -169,6 +169,9 @@ void main() {
           PrinterConfigService.fiscalRucKey: 'J0310000000001',
           'tax_regime': 'CUOTA_FIJA',
           PrinterConfigService.paperWidthMmKey: '80',
+          // #67/T2a: the controlled sale fails closed without BOTH recorded FX rates.
+          'commercial_exchange_rate': '36.50',
+          'bcn_official_exchange_rate': '36.6241',
         }.entries) {
           await dbPhase1.localConfigDao.saveConfig(
             LocalConfigEntity(key: entry.key, value: entry.value),

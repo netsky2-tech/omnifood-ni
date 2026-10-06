@@ -47,8 +47,16 @@ import 'dart:async';
 // --- Fakes for non-loyalty DAOs (same as existing test) ---
 
 class FakeLocalConfigDao extends Mock implements LocalConfigDao {
+  // #67/T2a: the sale path fails closed without BOTH recorded FX rates, so
+  // the fixture seeds them. Every other key still resolves to null, exactly
+  // as before (the terminal-binding lookup included).
+  final Map<String, String> _configs = {
+    'commercial_exchange_rate': '36.50',
+    'bcn_official_exchange_rate': '36.6241',
+  };
+
   @override
-  Future<String?> getConfigValue(String? key) async => null;
+  Future<String?> getConfigValue(String? key) async => _configs[key];
 
   /// Required by the DAO contract. Before checkout resolved a blank per-user
   /// tenant from the terminal binding, this call did not exist on the sale
@@ -56,7 +64,11 @@ class FakeLocalConfigDao extends Mock implements LocalConfigDao {
   /// a real `Future<null>` keeps the pre-existing behaviour: no binding means
   /// the legacy inventory path, exactly as before that change.
   @override
-  Future<LocalConfigEntity?> getConfigByKey(String key) async => null;
+  Future<LocalConfigEntity?> getConfigByKey(String key) async {
+    final value = _configs[key];
+    if (value == null) return null;
+    return LocalConfigEntity(key: key, value: value);
+  }
 }
 
 class FakeKitchenOrderDao extends Mock implements KitchenOrderDao {}

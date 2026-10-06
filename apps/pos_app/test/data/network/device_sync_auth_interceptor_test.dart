@@ -74,6 +74,34 @@ void main() {
 
   group('DeviceSyncAuthInterceptor onRequest', () {
     test(
+      'allowlists the payment reconciliation sync route as device-transported (S1a #68)',
+      () async {
+        when(
+          () => coordinator.getAccessToken(),
+        ).thenAnswer((_) async => 'device.access.jwt');
+
+        expect(
+          DeviceSyncAuthInterceptor.isDeviceTransportedRoute(
+            'sales/payment-reconciliations/sync',
+          ),
+          isTrue,
+        );
+
+        final options = RequestOptions(
+          path: '/sales/payment-reconciliations/sync',
+          baseUrl: 'https://api.test',
+        );
+        final handler = _TestRequestHandler();
+
+        await interceptor.onRequest(options, handler);
+
+        expect(handler.isNextCalled, isTrue);
+        expect(handler.isRejected, isFalse);
+        expect(options.headers['Authorization'], 'Bearer device.access.jwt');
+      },
+    );
+
+    test(
       'attaches device access token as Bearer only to /v1/sync/* routes',
       () async {
         when(

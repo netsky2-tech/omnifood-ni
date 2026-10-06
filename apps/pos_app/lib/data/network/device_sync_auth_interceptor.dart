@@ -40,6 +40,12 @@ class DeviceSyncAuthInterceptor extends Interceptor {
     'inventory/movements/sync',
     'sales/shifts/sync',
     'sales/invoices/sync',
+    // S1a (backlog #68): dedicated payment-level transport for card/voucher
+    // reconciliations (POST /sales/payment-reconciliations/sync, backend
+    // PaymentReconciliationSyncController). The hardened interceptor rejects
+    // any route outside this allowlist, so the reconciliation push must be
+    // declared here explicitly.
+    'sales/payment-reconciliations/sync',
     'loyalty/point-transactions/sync',
     // D-18: the forensic audit stream push (POST /identity/audit) is device
     // transport on the backend; in an offline-PIN kiosk session there is no

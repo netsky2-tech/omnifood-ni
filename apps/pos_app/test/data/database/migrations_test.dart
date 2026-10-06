@@ -351,13 +351,13 @@ void main() {
       'link at the end and migration61_62 is retained immediately before it',
       () {
     // The newest link is registered at the end of the chain.
-    expect(allMigrations.last.startVersion, 62);
-    expect(allMigrations.last.endVersion, 63);
-    expect(allMigrations.last, same(migration62_63));
+    expect(allMigrations.last.startVersion, 63);
+    expect(allMigrations.last.endVersion, 64);
+    expect(allMigrations.last, same(migration63_64));
     // The previous newest link is still registered, in position, with its
     // versions unchanged.
-    expect(allMigrations[allMigrations.length - 2], same(migration61_62));
-    expect(migration61_62.startVersion, 61);
-    expect(migration61_62.endVersion, 62);
+    expect(allMigrations[allMigrations.length - 2], same(migration62_63));
+    expect(migration62_63.startVersion, 62);
+    expect(migration62_63.endVersion, 63);
   });
 }

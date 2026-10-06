@@ -1997,8 +1997,13 @@ class CartSummary extends StatelessWidget {
     // (business profile edit, or a synced fiscal config) would not reach an
     // already-running terminal until the POS was restarted — wrong USD
     // equivalents on the day of the change.
-    await context.read<SaleViewModel>().loadExchangeRates();
+    final vm = context.read<SaleViewModel>();
+    await vm.loadExchangeRates();
     if (!context.mounted) return;
+    // #67/T2a: with an unreliable rate the checkout dialog never opens —
+    // the operator learns BEFORE ringing up the whole sale, not after
+    // pressing COBRAR. The directive message rides the standard error path.
+    if (vm.gateCheckoutOnFxRates() != null) return;
     showDialog(
       context: context,
       builder: (context) => const MultiCurrencyCheckoutDialog(),
@@ -2008,20 +2013,33 @@ class CartSummary extends StatelessWidget {
   /// D-7: direct tip entry on the checkout (independent of the gated
   /// DIVIDIR CUENTA flow).
   Future<void> _showTipDialog(BuildContext context) async {
+    // #67/T2a: same gate as the checkout and split dialogs — an unknown rate
+    // must not render tip USD equivalents computed from a fabricated number.
+    final vm = context.read<SaleViewModel>();
+    await vm.loadExchangeRates();
+    if (!context.mounted) return;
+    if (vm.gateCheckoutOnFxRates() != null) return;
     await TipDialog.show(context);
   }
 
   Future<void> _showSplitBillDialog(BuildContext context) async {
     final vm = context.read<SaleViewModel>();
     // D-5: same refresh as the checkout — the split dialog prints the
-    // commercial rate and computes share equivalents from it.
+    // checkout rate and computes share equivalents from it. T2b/#67: that
+    // rate is the APPLIED one (vm.activeCheckoutRate, the BCN rate in
+    // BCN_OFFICIAL mode), so what the operator sees matches what is
+    // charged — the office's commercial configuration lives in
+    // local_configs / the business-profile mirror, not on this dialog.
     await vm.loadExchangeRates();
     if (!context.mounted) return;
+    // #67/T2a: same gate as the checkout — an unknown rate must not render
+    // split equivalents computed from a fabricated number.
+    if (vm.gateCheckoutOnFxRates() != null) return;
     showDialog(
       context: context,
       builder: (context) => SplitBillDialog(
         cart: vm.cart,
-        commercialRate: vm.commercialRate,
+        commercialRate: vm.activeCheckoutRate,
         taxRegime: vm.companyTaxRegime,
         onPayShare: (share) {
           Navigator.of(context).pop();

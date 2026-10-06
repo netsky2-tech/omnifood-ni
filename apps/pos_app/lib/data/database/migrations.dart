@@ -2741,6 +2741,19 @@ final migration62_63 = Migration(62, 63, (database) async {
   }
 });
 
+
+final migration63_64 = Migration(63, 64, (database) async {
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(payments)',
+  );
+  final names = columns.map((row) => row['name'] as String).toSet();
+  if (!names.contains('reconciliation_sync_status')) {
+    await database.execute(
+      "ALTER TABLE payments ADD COLUMN reconciliation_sync_status TEXT NOT NULL DEFAULT 'synced'",
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2795,6 +2808,7 @@ final allMigrations = [
   migration60_61,
   migration61_62,
   migration62_63,
+  migration63_64,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open
