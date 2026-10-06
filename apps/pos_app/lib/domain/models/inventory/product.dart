@@ -36,6 +36,10 @@ class Product with _$Product {
     @Default(false) bool isTaxExempt,
     @Default([]) List<ProductVariant> variants,
     @Default([]) List<Modifier> availableModifiers,
+    /// T2.3: effective modifier groups resolved at load time from the local
+    /// mirror, mirroring the server's category-inheritance + per-product
+    /// exception rule. Empty when the mirror has nothing for the product.
+    @Default([]) List<EffectiveModifierGroup> availableModifierGroups,
   }) = _Product;
 
   factory Product.fromJson(Map<String, dynamic> json) =>
@@ -75,4 +79,41 @@ class Modifier with _$Modifier {
 
   factory Modifier.fromJson(Map<String, dynamic> json) =>
       _$ModifierFromJson(json);
+}
+
+/// One selectable option inside an effective modifier group. Kept minimal:
+/// the selector only needs identity, label, price delta and the default
+/// flag.
+@freezed
+class EffectiveModifierOption with _$EffectiveModifierOption {
+  const factory EffectiveModifierOption({
+    required String id,
+    required String name,
+    required double priceDelta,
+    required bool isDefault,
+  }) = _EffectiveModifierOption;
+
+  factory EffectiveModifierOption.fromJson(Map<String, dynamic> json) =>
+      _$EffectiveModifierOptionFromJson(json);
+}
+
+/// One effective modifier group for a product, resolved on-device. [source]
+/// is exactly 'category' (inherited through the product's category) or
+/// 'product' (the product's own exception, which wins when both exist).
+/// Position in the enclosing list is the deterministic display order; no
+/// sort field is carried.
+@freezed
+class EffectiveModifierGroup with _$EffectiveModifierGroup {
+  const factory EffectiveModifierGroup({
+    required String id,
+    required String name,
+    required int minSelected,
+    required int maxSelected,
+    required bool allowQuantities,
+    required String source,
+    @Default([]) List<EffectiveModifierOption> options,
+  }) = _EffectiveModifierGroup;
+
+  factory EffectiveModifierGroup.fromJson(Map<String, dynamic> json) =>
+      _$EffectiveModifierGroupFromJson(json);
 }
