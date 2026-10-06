@@ -148,7 +148,7 @@ void main() {
     expect(viewModel.addedModifiers.single.first.extraPrice, 6.0);
   });
 
-  testWidgets('checkbox group starts empty and allows multiple selections', (tester) async {
+  testWidgets('checkbox group starts empty, allows multiple selections and never exceeds its limit', (tester) async {
     final product = Product(
       id: 'p-1',
       name: 'Capuccino',
@@ -157,19 +157,18 @@ void main() {
       averageCost: 0,
       sellPrice: 60,
       availableModifierGroups: [
-        group(
-          'grp-1',
-          'Extras',
-          maxSelected: 3,
-          options: [option('opt-1', 'Crema', 10), option('opt-2', 'Canela', 3)],
-        ),
+        group('grp-1', 'Extras', maxSelected: 2, options: [
+          option('opt-1', 'Crema', 10),
+          option('opt-2', 'Canela', 3),
+          option('opt-3', 'Nuez', 4),
+        ]),
       ],
     );
 
     final viewModel = await _pumpDialog(tester, product);
 
     // Starts EMPTY: opt-in, never silently adds price (checkboxes unchecked).
-    expect(find.byType(CheckboxListTile), findsNWidgets(2));
+    expect(find.byType(CheckboxListTile), findsNWidgets(3));
     expect(
       tester
           .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
@@ -182,6 +181,24 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Canela (+C\$ 3)'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Nuez (+C\$ 4)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Crema (+C\$ 10)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Nuez (+C\$ 4)'));
+    await tester.pumpAndSettle();
+    bool checked(String name) => tester
+        .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+        .firstWhere((tile) => (tile.title as Text?)!.data!.startsWith(name))
+        .value!;
+    expect(checked('Crema'), false);
+    expect(checked('Canela'), true);
+    expect(checked('Nuez'), true);
+    await tester.tap(find.text('Nuez (+C\$ 4)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Crema (+C\$ 10)'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('AGREGAR'));
     await tester.pumpAndSettle();
 
@@ -285,28 +302,64 @@ void main() {
     expect(viewModel.addedProducts.single.id, 'p-1');
   });
 
-  testWidgets('the legacy flat modifiers section is gone (dead data)', (tester) async {
-    final product = Product(
-      id: 'p-1',
-      name: 'Capuccino',
-      uom: 'UND',
-      stock: 5,
-      averageCost: 0,
-      sellPrice: 60,
-      availableModifiers: const [
-        Modifier(id: 'legacy-1', name: 'Viejo', extraPrice: 1),
-      ],
-      availableModifierGroups: [
+  Product productWith(
+    List<EffectiveModifierGroup> groups, {
+    List<Modifier> legacy = const [],
+  }) =>
+      Product(
+        id: 'p-1',
+        name: 'Capuccino',
+        uom: 'UND',
+        stock: 5,
+        averageCost: 0,
+        sellPrice: 60,
+        availableModifiers: legacy,
+        availableModifierGroups: groups,
+      );
+
+  testWidgets('legacy modifiers coexist with the grouped selector, both ride to the cart', (tester) async {
+    final legacy = const [Modifier(id: 'legacy-1', name: 'Viejo', extraPrice: 1)];
+    final viewModel = await _pumpDialog(
+      tester,
+      productWith([
         group('grp-1', 'Leche', maxSelected: 1, options: [option('opt-1', 'Entera', 5)]),
-      ],
+      ], legacy: legacy),
+    );
+    await tester.tap(find.textContaining('Viejo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Entera (+C\$ 5)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AGREGAR'));
+    await tester.pumpAndSettle();
+    // The bridge carries BOTH selections, no silent sink, no cross-talk.
+    expect(
+      viewModel.addedModifiers.single.map((m) => m.id).toSet(),
+      {'legacy-1', 'opt-1'},
+    );
+  });
+
+  testWidgets('required groups block AGREGAR until satisfied; optional ones never do', (tester) async {
+    final viewModel = await _pumpDialog(
+      tester,
+      productWith([
+        group('grp-1', 'Leche', minSelected: 1, maxSelected: 1, options: [option('opt-1', 'Entera', 5)]),
+        group('grp-2', 'Extras', minSelected: 0, maxSelected: 3, options: [option('opt-2', 'Crema', 10)]),
+      ]),
     );
 
-    await _pumpDialog(tester, product);
+    await tester.tap(find.text('AGREGAR'));
+    await tester.pumpAndSettle();
+    expect(viewModel.addedProducts, isEmpty);
+    expect(find.text('Falta elegir una opción en «Leche»'), findsOneWidget);
 
-    // One modifier system on screen: the grouped selector, never the old
-    // flat list.
-    expect(find.text('Modificadores:'), findsNothing);
-    expect(find.text('Viejo'), findsNothing);
+    // Satisfying the group clears the error and the add goes through.
+    await tester.tap(find.text('Entera (+C\$ 5)'));
+    await tester.pumpAndSettle();
+    expect(find.text('Falta elegir una opción en «Leche»'), findsNothing);
+    await tester.tap(find.text('AGREGAR'));
+    await tester.pumpAndSettle();
+    expect(viewModel.addedProducts, hasLength(1));
+    expect(viewModel.addedModifiers.last.map((m) => m.id), ['opt-1']);
   });
 
   testWidgets('copy guard: no internal or technical copy anywhere in the dialog', (tester) async {
@@ -318,9 +371,9 @@ void main() {
       averageCost: 0,
       sellPrice: 60,
       availableModifierGroups: [
-        group('grp-radio', 'Leche', maxSelected: 1, options: [
-          option('opt-1', 'Entera', 5, isDefault: true),
-        ]),
+        // Required group WITHOUT default: AGREGAR surfaces the inline error
+        // so the guard covers the error copy too.
+        group('grp-radio', 'Leche', minSelected: 1, maxSelected: 1, options: [option('opt-1', 'Entera', 5)]),
         group('grp-check', 'Extras', maxSelected: 3, options: [
           option('opt-2', 'Crema', 10),
         ]),
@@ -332,7 +385,12 @@ void main() {
 
     await _pumpDialog(tester, product);
 
-    // Every visible Text (labels, hints, buttons) plus the dialog title.
+    // Surface the inline error state too: a required group satisfied only
+    // AFTER the guard has seen the error text.
+    await tester.tap(find.text('AGREGAR'));
+    await tester.pumpAndSettle();
+
+    // Every visible Text (labels, hints, buttons, error included).
     final combined = tester
         .widgetList<Text>(find.byType(Text))
         .map((text) => text.data ?? '')
@@ -348,5 +406,8 @@ void main() {
       combined,
       isNot(matches(RegExp(r'\b(uuid|tenant|freezed|zod|snapshot)\b', caseSensitive: false))),
     );
+
+    // The error itself is business copy naming the group.
+    expect(find.textContaining('Falta elegir'), findsOneWidget);
   });
 }

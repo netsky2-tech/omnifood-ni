@@ -1024,12 +1024,16 @@ class ProductOptionsDialog extends StatefulWidget {
 
 class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   String? _selectedVariantId;
+  // Legacy flat modifiers: unreachable today, but never a silent sink.
+  final List<Modifier> _selectedLegacyModifiers = [];
   // Grouped selection state, keyed per GROUP for radios and per OPTION for
   // checkboxes and quantities. Checkbox and quantity groups start EMPTY:
   // the operator opts in, the dialog never silently adds price.
   final Map<String, String> _selectedRadioOption = {};
   final Map<String, bool> _checkedOptions = {};
   final Map<String, int> _optionQuantities = {};
+  // Inline error shows only while the required group is still unsatisfied.
+  bool _showMissingGroupError = false;
 
   @override
   void initState() {
@@ -1065,6 +1069,24 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
     return 'Elige hasta ${group.maxSelected}';
   }
 
+  /// First group whose selected total is below its minimum, if any: radio
+  /// groups count 0/1, checkboxes count checked options, quantity groups
+  /// sum their steppers.
+  String? _firstUnsatisfiedGroupName() {
+    for (final group in widget.product.availableModifierGroups) {
+      final total = group.maxSelected == 1
+          ? (_selectedRadioOption[group.id] != null ? 1 : 0)
+          : group.allowQuantities
+              ? group.options.fold<int>(
+                  0, (sum, o) => sum + (_optionQuantities[o.id] ?? 0))
+              : group.options
+                  .where((o) => _checkedOptions[o.id] == true)
+                  .length;
+      if (total < group.minSelected) return group.name;
+    }
+    return null;
+  }
+
   void _incrementQuantity(
     EffectiveModifierGroup group,
     EffectiveModifierOption option,
@@ -1082,6 +1104,10 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    // The inline error shows only while the group is still unsatisfied, so
+    // it clears itself the moment the operator fixes the selection.
+    final missingGroup =
+        _showMissingGroupError ? _firstUnsatisfiedGroupName() : null;
     return AlertDialog(
       title: Text(widget.product.name),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: colorScheme.outline, width: 2)),
@@ -1107,9 +1133,36 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                 ),
                 const Divider(),
               ],
+              // Legacy flat modifiers: unreachable in today's read path, but
+              // rendered (same look as before the grouped selector) so they
+              // are never silently dropped.
+              if (widget.product.availableModifiers.isNotEmpty) ...[
+                const Text('Modificadores:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...widget.product.availableModifiers.map((m) => CheckboxListTile(
+                  dense: true,
+                  title: Text('${m.name} (+C\$ ${m.extraPrice})'),
+                  value: _selectedLegacyModifiers.contains(m),
+                  onChanged: (selected) => setState(() {
+                    if (selected == true) {
+                      _selectedLegacyModifiers.add(m);
+                    } else {
+                      _selectedLegacyModifiers.remove(m);
+                    }
+                  }),
+                )),
+                const Divider(),
+              ],
               // One section per group, in the order the resolver produced
               // (category-inherited first, product exceptions last — already
               // deterministic; never re-sorted here).
+              if (missingGroup != null) ...[
+                Text(
+                  'Falta elegir una opción en «$missingGroup»',
+                  style: TextStyle(color: colorScheme.error),
+                ),
+                const SizedBox(height: 8),
+              ],
               for (final group in widget.product.availableModifierGroups) ...[
                 Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                 Text(
@@ -1190,9 +1243,21 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                               '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
                             ),
                             value: _checkedOptions[option.id] ?? false,
-                            onChanged: (selected) => setState(
-                              () => _checkedOptions[option.id] = selected ?? false,
-                            ),
+                            onChanged: (selected) => setState(() {
+                              if (selected != true) {
+                                // Unchecking is always allowed.
+                                _checkedOptions[option.id] = false;
+                                return;
+                              }
+                              // Same total-bound as the steppers: the
+                              // header promises 'Elige hasta N', so a full
+                              // group ignores the extra tap.
+                              final checkedCount = group.options
+                                  .where((o) => _checkedOptions[o.id] == true)
+                                  .length;
+                              if (checkedCount >= group.maxSelected) return;
+                              _checkedOptions[option.id] = true;
+                            }),
                           ),
                         )
                         .toList(),
@@ -1207,12 +1272,19 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
         ElevatedButton(
           onPressed: () {
+            // A required group left empty blocks the add: nothing reaches
+            // the cart and the dialog stays open with a friendly hint.
+            if (_firstUnsatisfiedGroupName() != null) {
+              setState(() => _showMissingGroupError = true);
+              return;
+            }
             // Puente hacia el carrito: cada opción elegida se entrega como
             // un modificador del modelo existente, con su precio extra ya
             // multiplicado por la cantidad cuando el grupo la permite; las
             // opciones sin selección no generan entrada. Así el carrito, el
             // recibo y la factura siguen funcionando sin cambios.
             final selectedModifiers = <Modifier>[];
+            selectedModifiers.addAll(_selectedLegacyModifiers);
             for (final group in widget.product.availableModifierGroups) {
               for (final option in group.options) {
                 if (group.maxSelected == 1) {
