@@ -1577,6 +1577,87 @@ void main() {
     );
   });
 
+  group('processSale with a persisted escPosNetwork printer profile (#70 T1)', () {
+    test(
+        'records the printer failure in lastPrintError and still completes the sale (non-blocking)',
+        () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'u-net-1',
+          name: 'Cajero Red',
+          role: UserRole.cashier,
+          isActive: true,
+        ),
+      );
+      when(
+        mockSalesRepo.saveSale(
+          invoice: anyNamed('invoice'),
+          items: anyNamed('items'),
+          payments: anyNamed('payments'),
+        ),
+      ).thenAnswer((_) async {});
+
+      // A terminal that selected the removed 'Red TCP/IP' driver before the
+      // option was withdrawn still has it persisted in local_configs.
+      await fakeLocalConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: PrinterConfigService.driverTypeKey,
+          value: 'ESCPOS_NETWORK',
+        ),
+      );
+      await fakeLocalConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'commercial_exchange_rate',
+          value: '36.50',
+        ),
+      );
+      await fakeLocalConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'bcn_official_exchange_rate',
+          value: '36.6241',
+        ),
+      );
+
+      // No injected printer port: the production resolver path must decide
+      // what the persisted profile maps to.
+      final vm = SaleViewModel(
+        mockSalesRepo,
+        mockInventoryRepo,
+        mockAuthRepo,
+        mockDb,
+        null,
+        true,
+        FakeTenantConfigService(fakeLocalConfigDao),
+        FakeKitchenOrderService(mockDb),
+        PrinterConfigService(fakeLocalConfigDao),
+        null,
+      );
+      await vm.loadExchangeRates();
+      vm.addToCart(
+        Product(
+          id: 'p-net-1',
+          sku: 'SKU-NET',
+          name: 'Prod Red',
+          uom: 'unit',
+          sellPrice: 100,
+          stock: 10,
+          averageCost: 10,
+        ),
+      );
+
+      // Must not throw: printing is non-blocking after the sale commits.
+      await vm.processSale([PaymentMethod.cash]);
+
+      expect(vm.errorMessage, isNull);
+      expect(vm.cart, isEmpty);
+      expect(vm.lastPrintError, isNotNull);
+      expect(vm.lastPrintError, contains('no está disponible'));
+      expect(vm.lastPrintError, contains('Sunmi V2s'));
+      expect(vm.lastPrintError, contains('Q80'));
+      vm.dispose();
+    });
+  });
+
   group('Open accounts (F1): re-parking a recalled account REPLACES, never accumulates', () {
     late AppDatabase realDb;
     late TableOrderService realTableOrderService;
