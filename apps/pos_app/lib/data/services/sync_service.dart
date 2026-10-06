@@ -33,12 +33,9 @@ import '../models/customer/customer_point_transaction_entity.dart';
 import '../models/loyalty/loyalty_program_entity.dart';
 import '../models/loyalty/loyalty_reward_entity.dart';
 import '../models/sales/promotion_entity.dart';
-import '../models/modifiers/modifier_group_entity.dart';
-import '../models/modifiers/modifier_option_entity.dart';
-import '../models/modifiers/category_modifier_group_entity.dart';
-import '../models/modifiers/product_modifier_group_entity.dart';
 import '../models/sales/cashier_session_entity.dart';
 import '../models/sales/cash_movement_entity.dart';
+import '../models/sales/payment_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import '../../core/utils/numeric_utils.dart';
@@ -495,6 +492,20 @@ class SyncService {
         _logOutboxCountFailure('loyalty point transactions', e, st);
       }
 
+      // S1a (backlog #68): the reconciliation outbox rides on the payments
+      // table, so the count is a raw read (no extra DAO surface) — same
+      // fault-isolated shape as every domain above. A reconciliation pending
+      // here is unconfirmed work: the cloud does not have it yet.
+      try {
+        final rows = await database.database.rawQuery(
+          "SELECT COUNT(*) AS pending FROM payments "
+          "WHERE reconciliation_sync_status = 'pending'",
+        );
+        count += _scalarCount(rows);
+      } catch (e, st) {
+        _logOutboxCountFailure('payment reconciliations', e, st);
+      }
+
       try {
         final rows = await database.database.rawQuery(
           "SELECT COUNT(*) AS pending FROM fulfillment_outbox_events "
@@ -562,6 +573,11 @@ class SyncService {
       'loyalty oldest pending',
       "SELECT MIN(created_at) AS oldest FROM customer_point_transactions "
       "WHERE sync_status = 'pending'",
+    );
+    await readOldest(
+      'reconciliations oldest pending',
+      "SELECT MIN(reconciled_at) AS oldest FROM payments "
+      "WHERE reconciliation_sync_status = 'pending'",
     );
 
     if (oldestTimestampsMs.isEmpty) return null;
@@ -773,6 +789,22 @@ class SyncService {
       if (!cashShiftSuccess) {
         hasFailure = true;
         domainErrors.add('CashShifts');
+      }
+
+      // 1e. Push card/voucher reconciliations (S1a, backlog #68): a
+      // reconciliation is performed on the terminal AFTER the sale synced,
+      // and re-pushing the sale is a dead end (same idempotency key →
+      // DUPLICATE_REPLAY; the sale payload hash excludes reconciliation
+      // fields), so this is a dedicated payment-level transport.
+      // Fault-isolated like every other domain: a failure never aborts
+      // later domains.
+      final reconciliationSuccess = await _runDomain(
+        'reconciliation',
+        _syncPaymentReconciliations,
+      );
+      if (!reconciliationSuccess) {
+        hasFailure = true;
+        domainErrors.add('Conciliaciones');
       }
 
       // 2. Sync inventory outbox deltas
@@ -1283,10 +1315,10 @@ class SyncService {
     final response = await _dio.post(
       '/sales/shifts/sync',
       data: {
-        'sessions': sessionBatch
+        'sessions': await Future.wait(sessionBatch
             .map((session) =>
                 _buildCashShiftSessionPayload(session, userNamesById))
-            .toList(growable: false),
+            .toList(growable: false)),
         'movements': movementBatch
             .map(_buildCashMovementPayload)
             .toList(growable: false),
@@ -1317,12 +1349,19 @@ class SyncService {
   /// resolves server-side (its last resort remains the cashier id, so the
   /// NOT NULL column is still satisfied — a UUID never originates here when
   /// a name exists).
-  Map<String, Object?> _buildCashShiftSessionPayload(
+  ///
+  /// S2 (backlog #68): a CLOSED session also carries the shift's voucher
+  /// reconciliation state — the counts of card payments attached to the
+  /// shift's invoices by reconciliation status (pending / reconciled /
+  /// manually overridden). The keys are omitted for a still-OPEN session:
+  /// the shift's voucher state is a close-time fact, and the backend maps
+  /// the absent keys to NULL columns (the later closed push carries them).
+  Future<Map<String, Object?>> _buildCashShiftSessionPayload(
     CashierSessionEntity session,
     Map<String, String> userNamesById,
-  ) {
+  ) async {
     final cashierName = userNamesById[session.userId];
-    return {
+    final payload = {
       'id': session.id,
       'terminalId': session.terminalId,
       'cashierId': session.userId,
@@ -1355,6 +1394,22 @@ class SyncService {
       if (session.supervisorId != null) 'supervisorId': session.supervisorId,
       if (session.notes != null) 'notes': session.notes,
     };
+
+    if (session.isClosed) {
+      final paymentDao = _database?.paymentDao;
+      if (paymentDao != null) {
+        payload['cardVouchersPending'] =
+            await paymentDao.countPendingCardPaymentsForShift(session.id) ?? 0;
+        payload['cardVouchersReconciled'] =
+            await paymentDao.countReconciledCardPaymentsForShift(session.id) ??
+                0;
+        payload['cardVouchersOverridden'] =
+            await paymentDao.countOverriddenCardPaymentsForShift(session.id) ??
+                0;
+      }
+    }
+
+    return payload;
   }
 
   /// Maps a local cash movement row onto the cloud ingestion contract
@@ -1415,6 +1470,87 @@ class SyncService {
             item['status'] == 'FAILED' &&
             item['idempotencyKey'] is String)
           item['idempotencyKey'] as String,
+    };
+  }
+
+  /// S1a (backlog #68): pushes pending card/voucher reconciliations to the
+  /// cloud in bounded batches. Rows stay 'pending' on any failure and are
+  /// retried on the next sync pass; rows the backend reports as FAILED
+  /// per-record (UNKNOWN_PAYMENT, INVOICE_MISMATCH, INVALID_STATUS,
+  /// PERSISTENCE_ERROR) also stay pending instead of being lost. The
+  /// backend upserts `invoice_payments` by payment id, so re-pushing an
+  /// accepted reconciliation is an idempotent no-op server-side.
+  Future<void> _syncPaymentReconciliations() async {
+    final database = _database;
+    if (database == null) return;
+    final paymentDao = database.paymentDao;
+    // DAO-level filter (not a Dart filter): the payments table grows with
+    // every sale.
+    final pending = await paymentDao.getPendingReconciliations();
+    if (pending.isEmpty) return;
+
+    final batch = pending.take(_batchEnvelopeLimit).toList(growable: false);
+
+    developer.log(
+      'Reconciliation sync: posting ${batch.length} payment reconciliations',
+      name: 'SyncService',
+    );
+    final response = await _dio.post(
+      '/sales/payment-reconciliations/sync',
+      data: {
+        'reconciliations': batch
+            .map(_buildPaymentReconciliationPayload)
+            .toList(growable: false),
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final acceptedKeys = _acceptedReconciliationSyncKeys(response.data);
+      for (final payment in batch) {
+        if (!acceptedKeys.contains(payment.id)) continue;
+        await paymentDao
+            .updateReconciliationSyncStatus(payment.id, 'synced');
+      }
+    }
+  }
+
+  /// Maps a local payment row onto the cloud ingestion contract
+  /// (PaymentReconciliationSyncItemDto). `reconciledAt` is sent as ISO-8601
+  /// (the DTO requires a non-empty string); the optional correlation fields
+  /// are omitted when absent, never sent as null.
+  Map<String, Object?> _buildPaymentReconciliationPayload(
+    PaymentEntity payment,
+  ) {
+    return {
+      'paymentId': payment.id,
+      'invoiceId': payment.invoiceId,
+      'reconciliationStatus': payment.reconciliationStatus ?? 'PENDIENTE',
+      'reconciledAt': payment.reconciledAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(
+              payment.reconciledAt!,
+              isUtc: true,
+            ).toIso8601String()
+          : DateTime.now().toUtc().toIso8601String(),
+      'reconciledByUserId':
+          payment.reconciledByUserId ?? 'unknown-terminal-operator',
+      if (payment.voucherCode != null) 'voucherCode': payment.voucherCode,
+      if (payment.batchNumber != null) 'batchNumber': payment.batchNumber,
+      if (payment.last4 != null) 'last4': payment.last4,
+    };
+  }
+
+  /// Extracts the payment ids the backend accepted (per-record outcomes).
+  /// Results are keyed by `paymentId` (PaymentReconciliationSyncIngestionService).
+  Set<String> _acceptedReconciliationSyncKeys(dynamic responseData) {
+    if (responseData is! Map) return const <String>{};
+    final results = responseData['results'];
+    if (results is! List) return const <String>{};
+    return {
+      for (final item in results)
+        if (item is Map &&
+            item['status'] == 'ACCEPTED' &&
+            item['paymentId'] is String)
+          item['paymentId'] as String,
     };
   }
 
@@ -3410,11 +3546,6 @@ class SyncService {
               sku: map['sku'] as String? ?? existing?.sku,
               barcode: map['barcode'] as String? ?? existing?.barcode,
               category: map['category'] as String? ?? existing?.category,
-              // T0.5c: absent key (older backend) keeps the previously
-              // resolved id; an explicit null is authoritative and clears it.
-              categoryId: map.containsKey('categoryId')
-                  ? map['categoryId']?.toString()
-                  : existing?.categoryId,
               isPrepared: pType == 'PREPARED' || pType == 'COMPOUND',
               productType: pType,
               mappingVersionId: map['mappingVersionId'] as String?,
@@ -4157,177 +4288,6 @@ class SyncService {
         }
         if (customerEntities.isNotEmpty) {
           await _database!.customerDao.saveCustomers(customerEntities);
-        }
-
-        // 5f. Modifier mirrors (full-snapshot deltas). Presence-correct per
-        // key: a key ABSENT (older backend) leaves its tables untouched — NO
-        // wipe; a key PRESENT, even empty, is authoritative and replaces.
-        // Each builder on the backend ships the COMPLETE tenant state for
-        // its type (attachments hard-DELETE on detach, so only a full
-        // snapshot propagates removals), and groups ride together with their
-        // options. Malformed rows are skipped individually.
-        final rawModifierGroups = rawDeltas['modifierGroups'];
-        if (rawModifierGroups is List) {
-          final groupEntities = <ModifierGroupEntity>[];
-          final optionEntities = <ModifierOptionEntity>[];
-          for (final row in rawModifierGroups) {
-            if (row is! Map) continue;
-            final map = Map<String, dynamic>.from(row);
-            final id = map['id']?.toString();
-            final name = map['name']?.toString();
-            if (id == null || id.isEmpty || name == null || name.isEmpty) {
-              developer.log(
-                '[SYNC_MODIFIERS] skipped malformed cloud modifier group row (id=$id)',
-                name: 'SyncService',
-              );
-              continue;
-            }
-            groupEntities.add(
-              ModifierGroupEntity(
-                id: id,
-                name: name,
-                minSelected: asInt(map['minSelected']) ?? 0,
-                maxSelected: asInt(map['maxSelected']) ?? 1,
-                allowQuantities: map['allowQuantities'] as bool? ?? false,
-                sortOrder: asInt(map['sortOrder']) ?? 0,
-                isActive: map['isActive'] as bool? ?? true,
-              ),
-            );
-            final rawOptions = map['options'] as List<dynamic>? ?? const [];
-            for (final optionRow in rawOptions) {
-              if (optionRow is! Map) continue;
-              final optionMap = Map<String, dynamic>.from(optionRow);
-              final optionId = optionMap['id']?.toString();
-              final optionName = optionMap['name']?.toString();
-              if (optionId == null ||
-                  optionId.isEmpty ||
-                  optionName == null ||
-                  optionName.isEmpty) {
-                developer.log(
-                  '[SYNC_MODIFIERS] skipped malformed cloud modifier option row (id=$optionId)',
-                  name: 'SyncService',
-                );
-                continue;
-              }
-              optionEntities.add(
-                ModifierOptionEntity(
-                  id: optionId,
-                  groupId: id,
-                  name: optionName,
-                  priceDelta: asDouble(optionMap['priceDelta']) ?? 0.0,
-                  isDefault: optionMap['isDefault'] as bool? ?? false,
-                  sortOrder: asInt(optionMap['sortOrder']) ?? 0,
-                  isActive: optionMap['isActive'] as bool? ?? true,
-                ),
-              );
-            }
-          }
-          // Groups and options replace TOGETHER. Attachment keys absent in
-          // this envelope: their current rows are read and re-inserted so
-          // the replace-all touches only what the envelope carried.
-          final currentCategoryAttachments = await _database!
-              .modifierDao
-              .getAllCategoryModifierGroups();
-          final currentProductAttachments = await _database!
-              .modifierDao
-              .getAllProductModifierGroups();
-          await _database!.modifierDao.replaceAllModifierData(
-            groupEntities,
-            optionEntities,
-            currentCategoryAttachments,
-            currentProductAttachments,
-          );
-        }
-
-        final rawCategoryAttachments = rawDeltas['categoryModifierGroups'];
-        if (rawCategoryAttachments is List) {
-          final attachmentEntities = <CategoryModifierGroupEntity>[];
-          for (final row in rawCategoryAttachments) {
-            if (row is! Map) continue;
-            final map = Map<String, dynamic>.from(row);
-            final id = map['id']?.toString();
-            final catalogValueId = map['catalogValueId']?.toString();
-            final groupId = map['groupId']?.toString();
-            if (id == null ||
-                id.isEmpty ||
-                catalogValueId == null ||
-                catalogValueId.isEmpty ||
-                groupId == null ||
-                groupId.isEmpty) {
-              developer.log(
-                '[SYNC_MODIFIERS] skipped malformed cloud category attachment row (id=$id)',
-                name: 'SyncService',
-              );
-              continue;
-            }
-            attachmentEntities.add(
-              CategoryModifierGroupEntity(
-                id: id,
-                catalogValueId: catalogValueId,
-                catalogCode: map['catalogCode']?.toString() ?? '',
-                groupId: groupId,
-                sortOrder: asInt(map['sortOrder']) ?? 0,
-              ),
-            );
-          }
-          // Groups/options key absent in this envelope: read and re-insert
-          // the current mirror so only the attachments replace.
-          final currentGroups = await _database!.modifierDao.getAllModifierGroups();
-          final currentOptions = await _database!.modifierDao.getAllModifierOptions();
-          final currentProductAttachments = await _database!
-              .modifierDao
-              .getAllProductModifierGroups();
-          await _database!.modifierDao.replaceAllModifierData(
-            currentGroups,
-            currentOptions,
-            attachmentEntities,
-            currentProductAttachments,
-          );
-        }
-
-        final rawProductAttachments = rawDeltas['productModifierGroups'];
-        if (rawProductAttachments is List) {
-          final attachmentEntities = <ProductModifierGroupEntity>[];
-          for (final row in rawProductAttachments) {
-            if (row is! Map) continue;
-            final map = Map<String, dynamic>.from(row);
-            final id = map['id']?.toString();
-            final productId = map['productId']?.toString();
-            final groupId = map['groupId']?.toString();
-            if (id == null ||
-                id.isEmpty ||
-                productId == null ||
-                productId.isEmpty ||
-                groupId == null ||
-                groupId.isEmpty) {
-              developer.log(
-                '[SYNC_MODIFIERS] skipped malformed cloud product attachment row (id=$id)',
-                name: 'SyncService',
-              );
-              continue;
-            }
-            attachmentEntities.add(
-              ProductModifierGroupEntity(
-                id: id,
-                productId: productId,
-                groupId: groupId,
-                sortOrder: asInt(map['sortOrder']) ?? 0,
-              ),
-            );
-          }
-          // Groups/options and category keys absent: re-insert the current
-          // mirror so only the product attachments replace.
-          final currentGroups = await _database!.modifierDao.getAllModifierGroups();
-          final currentOptions = await _database!.modifierDao.getAllModifierOptions();
-          final currentCategoryAttachments = await _database!
-              .modifierDao
-              .getAllCategoryModifierGroups();
-          await _database!.modifierDao.replaceAllModifierData(
-            currentGroups,
-            currentOptions,
-            currentCategoryAttachments,
-            attachmentEntities,
-          );
         }
 
         // 6. Fiscal Configuration projection

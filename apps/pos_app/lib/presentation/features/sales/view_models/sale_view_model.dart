@@ -52,36 +52,6 @@ import '../../../../domain/services/sales/tip_engine.dart';
 import '../../../../domain/services/sales/split_bill_engine.dart';
 import '../../../../domain/services/config/business_mode_evaluator.dart';
 
-/// #67/T2a: why a recorded exchange rate could not be resolved. Recorded per
-/// rate so the failure can be surfaced and diagnosed instead of silently
-/// collapsing into a default number.
-enum FxRateResolutionFailure {
-  /// No configuration row exists for the key.
-  absent,
-
-  /// The stored value is not parseable as a number.
-  unparseable,
-
-  /// The stored value parses but is not a usable rate (<= 0).
-  nonPositive,
-
-  /// The DAO read itself failed.
-  readError,
-}
-
-/// #67/T2a: named fail-closed state — one of the two recorded exchange rates
-/// is absent, corrupt or unreadable, so no reliable rate exists and the
-/// terminal must not sell. Its [message] is the directive Spanish text the
-/// operator sees verbatim (same contract as FiscalSequenceUnconfiguredError).
-class FiscalExchangeRateUnconfiguredError implements Exception {
-  final String message;
-
-  const FiscalExchangeRateUnconfiguredError(this.message);
-
-  @override
-  String toString() => 'FiscalExchangeRateUnconfiguredError: $message';
-}
-
 class SaleViewModel extends ChangeNotifier {
   final SalesRepository _salesRepository;
   final InventoryRepository _inventoryRepository;
@@ -623,28 +593,11 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
-  // #67/T2a: an absent, corrupt or unreadable rate is a STATE, never a
-  // number. 0.0 means "unknown"; the reliability flags below are the ONLY
-  // signal a reader may consult before producing a fiscal artifact. A reader
-  // that forgets to check cannot fabricate a fiscal figure: the domain
-  // calculator throws on a non-positive rate and finalization fails closed.
-  double _commercialRate = 0.0;
+  double _commercialRate = 36.50;
   double get commercialRate => _commercialRate;
 
-  double _bcnOfficialRate = 0.0;
+  double _bcnOfficialRate = 36.6241;
   double get bcnOfficialRate => _bcnOfficialRate;
-
-  bool _hasCommercialRate = false;
-  bool get hasCommercialRate => _hasCommercialRate;
-
-  bool _hasBcnOfficialRate = false;
-  bool get hasBcnOfficialRate => _hasBcnOfficialRate;
-
-  FxRateResolutionFailure? _commercialRateFailure;
-  FxRateResolutionFailure? get commercialRateFailure => _commercialRateFailure;
-
-  FxRateResolutionFailure? _bcnRateFailure;
-  FxRateResolutionFailure? get bcnOfficialRateFailure => _bcnRateFailure;
 
   String _checkoutFxMode = 'COMMERCIAL';
   String get checkoutFxMode => _checkoutFxMode;
@@ -652,127 +605,34 @@ class SaleViewModel extends ChangeNotifier {
   double get activeCheckoutRate =>
       _checkoutFxMode == 'BCN_OFFICIAL' ? _bcnOfficialRate : _commercialRate;
 
-  String get activeCheckoutRateLabel {
-    if (_checkoutFxMode == 'BCN_OFFICIAL') {
-      return _hasBcnOfficialRate
-          ? 'TC BCN: ${_bcnOfficialRate.toStringAsFixed(4)}'
-          : 'TC BCN: no configurada';
-    }
-    return _hasCommercialRate
-        ? 'TC Comercial: ${_commercialRate.toStringAsFixed(2)}'
-        : 'TC Comercial: no configurada';
-  }
+  String get activeCheckoutRateLabel => _checkoutFxMode == 'BCN_OFFICIAL'
+      ? 'TC BCN: ${_bcnOfficialRate.toStringAsFixed(4)}'
+      : 'TC Comercial: ${_commercialRate.toStringAsFixed(2)}';
 
   Future<void> loadExchangeRates() async {
-    // #67/T2a: each rate is resolved independently; any absent, corrupt,
-    // non-positive or unreadable value leaves that rate UNKNOWN (0.0) with
-    // the failure reason recorded. There is no default FX rate anymore.
-    Future<void> resolveRate(
-      String key,
-      void Function(double value) onValid,
-      void Function(FxRateResolutionFailure failure) onUnknown,
-    ) async {
-      try {
-        final row = await _database.localConfigDao.getConfigByKey(key);
-        if (row == null) {
-          onUnknown(FxRateResolutionFailure.absent);
-          return;
-        }
-        final parsed = double.tryParse(row.value);
-        if (parsed == null) {
-          onUnknown(FxRateResolutionFailure.unparseable);
-          return;
-        }
-        if (parsed <= 0) {
-          onUnknown(FxRateResolutionFailure.nonPositive);
-          return;
-        }
-        onValid(parsed);
-      } catch (_) {
-        onUnknown(FxRateResolutionFailure.readError);
-      }
-    }
-
-    await resolveRate(
-      'commercial_exchange_rate',
-      (value) {
-        _commercialRate = value;
-        _hasCommercialRate = true;
-        _commercialRateFailure = null;
-      },
-      (failure) {
-        _commercialRate = 0.0;
-        _hasCommercialRate = false;
-        _commercialRateFailure = failure;
-      },
-    );
-    await resolveRate(
-      'bcn_official_exchange_rate',
-      (value) {
-        _bcnOfficialRate = value;
-        _hasBcnOfficialRate = true;
-        _bcnRateFailure = null;
-      },
-      (failure) {
-        _bcnOfficialRate = 0.0;
-        _hasBcnOfficialRate = false;
-        _bcnRateFailure = failure;
-      },
-    );
     try {
+      final commVal = await _database.localConfigDao.getConfigByKey(
+        'commercial_exchange_rate',
+      );
+      if (commVal != null) {
+        _commercialRate = double.tryParse(commVal.value) ?? 36.50;
+      }
+      final bcnVal = await _database.localConfigDao.getConfigByKey(
+        'bcn_official_exchange_rate',
+      );
+      if (bcnVal != null) {
+        _bcnOfficialRate = double.tryParse(bcnVal.value) ?? 36.6241;
+      }
       final modeVal = await _database.localConfigDao.getConfigByKey(
         'checkout_fx_mode',
       );
       if (modeVal != null && modeVal.value.isNotEmpty) {
         _checkoutFxMode = modeVal.value;
       }
-    } catch (_) {
-      // Non-blocking: the mode default keeps the last known value.
-    }
-    notifyListeners();
-  }
-
-  static const _msgCommercialRateAbsent =
-      'No se puede vender: la tasa de cambio comercial no está configurada en este terminal. Pedile al dueño o a un encargado que la configure en Perfil del Negocio.';
-  static const _msgCommercialRateUnverifiable =
-      'No se puede vender: la tasa de cambio comercial no pudo verificarse en este terminal. Pedile al dueño o a un encargado que la revise en Perfil del Negocio.';
-  static const _msgBcnRateAbsent =
-      'No se puede vender: la tasa oficial BCN no está configurada en este terminal. Pedile al dueño o a un encargado que la configure en Perfil del Negocio.';
-  static const _msgBcnRateUnverifiable =
-      'No se puede vender: la tasa oficial BCN no pudo verificarse en este terminal. Pedile al dueño o a un encargado que la revise en Perfil del Negocio.';
-
-  /// #67/T2a: the directive Spanish reason the sale is blocked when either
-  /// recorded rate is unreliable (both are persisted AND printed on every
-  /// invoice), or null when the checkout may proceed. The message names who
-  /// can fix it: the FX fields are owner/manager-only since #66, so it must
-  /// point at the owner or a manager in Perfil del Negocio, never at an
-  /// action the cashier could perform.
-  String? _fxRateBlockReason() {
-    if (!_hasCommercialRate) {
-      return _commercialRateFailure == FxRateResolutionFailure.absent
-          ? _msgCommercialRateAbsent
-          : _msgCommercialRateUnverifiable;
-    }
-    if (!_hasBcnOfficialRate) {
-      return _bcnRateFailure == FxRateResolutionFailure.absent
-          ? _msgBcnRateAbsent
-          : _msgBcnRateUnverifiable;
-    }
-    return null;
-  }
-
-  /// Checkout seam: called by the view right after loadExchangeRates() and
-  /// BEFORE the checkout dialog opens, so the operator learns about the
-  /// missing rate before ringing up the whole sale, not after COBRAR.
-  /// Surfaces the reason through the standard error path and returns it
-  /// (null when the checkout may proceed).
-  String? gateCheckoutOnFxRates() {
-    final reason = _fxRateBlockReason();
-    if (reason != null) {
-      _errorMessage = reason;
       notifyListeners();
+    } catch (_) {
+      // Fallback to default FX rates
     }
-    return reason;
   }
 
   final List<CartItem> _cart = [];
@@ -793,11 +653,12 @@ class SaleViewModel extends ChangeNotifier {
   CashierSession? _activeSession;
   CashierSession? get activeSession => _activeSession;
 
-  // T7 (open-accounts slice): the in-memory `_sessionExpected` counter was
-  // retired with CloseBoxDialog. It reset on every checkActiveSession and
-  // ignored movements/USD, so the drawer expectation it fed was weaker than
-  // the Corte Z figure (CashShiftViewModel.effectiveExpectedNio/Usd), which
-  // re-queries the DB at close time.
+  Map<PaymentMethod, double> _sessionExpected = {
+    PaymentMethod.cash: 0.0,
+    PaymentMethod.card: 0.0,
+    PaymentMethod.qr: 0.0,
+  };
+  Map<PaymentMethod, double> get sessionExpected => _sessionExpected;
 
   bool _isGlobalTaxExempt = false;
   bool get isGlobalTaxExempt => _isGlobalTaxExempt;
@@ -880,25 +741,14 @@ class SaleViewModel extends ChangeNotifier {
   static const _fiscalCalculator = InvoiceFiscalCalculator();
 
   FiscalCalculationResult get currentFiscalCalculation {
-    // #67/T2a: an unknown rate must not fabricate a USD figure, but the NIO
-    // figures (tax included) never depend on a rate, so the preview keeps
-    // them exact and withholds only totalUsd. The missing-REGIME case still
-    // degrades to the zero-tax baseline below.
-    final ratesUsable = _hasCommercialRate && _hasBcnOfficialRate;
     try {
       return _fiscalCalculator.calculate(
         cart: _cart,
         taxRegime: _companyTaxRegime,
         isGlobalTaxExempt: _isGlobalTaxExempt,
         totalDiscounts: totalDiscounts,
-        // T2b/#67: the fiscal snapshot must carry the conversion actually
-        // APPLIED at checkout. In BCN_OFFICIAL mode that is the BCN rate, so
-        // invoice.commercialRate and totalUsd follow the charged conversion;
-        // the office configuration itself lives in local_configs / the
-        // business-profile mirror, and bcnOfficialRate keeps the BCN snapshot.
-        commercialRate: activeCheckoutRate,
+        commercialRate: _commercialRate,
         bcnOfficialRate: _bcnOfficialRate,
-        requireFiscalRates: ratesUsable,
       );
     } on FiscalConfigurationException {
       // Cart browsing must remain usable before the business configures
@@ -943,9 +793,9 @@ class SaleViewModel extends ChangeNotifier {
         exemptSubtotal: subtotal,
         totalTax: 0.0,
         total: subtotal,
-        commercialRate: activeCheckoutRate,
+        commercialRate: _commercialRate,
         bcnOfficialRate: _bcnOfficialRate,
-        totalUsd: activeCheckoutRate > 0 ? subtotal / activeCheckoutRate : 0.0,
+        totalUsd: _commercialRate > 0 ? subtotal / _commercialRate : 0.0,
       );
     }
   }
@@ -982,10 +832,7 @@ class SaleViewModel extends ChangeNotifier {
     tipType: _tipType,
     customPercentage: _customTipPercentage,
     fixedAmount: _fixedTipAmount,
-    // T2b/#67: the tip USD snapshot converts at the rate actually applied
-    // at checkout (the BCN rate in BCN_OFFICIAL mode), matching the
-    // invoice's own conversion.
-    commercialRate: activeCheckoutRate,
+    commercialRate: _commercialRate,
   );
 
   double get tipAmount => tipCalculation.tipAmountNio;
@@ -1117,14 +964,9 @@ class SaleViewModel extends ChangeNotifier {
     if (_cart.isEmpty) return;
 
     if (_activeLoadedHoldTicket != null) {
-      // F1 (open accounts fix): a recalled account's cart is its COMPLETE
-      // state, so re-parking REPLACES the stored contents (and applies the
-      // typed name). The old appendItemsToOrder call here doubled the
-      // balance on every recover+save cycle and discarded the name.
-      await _tableOrderService.replaceOrderItems(
+      await _tableOrderService.appendItemsToOrder(
         ticketId: _activeLoadedHoldTicket!.id,
-        name: name,
-        items: List.from(_cart),
+        newItems: List.from(_cart),
         expectedVersion: _activeLoadedHoldTicket!.version,
       );
     } else {
@@ -1161,25 +1003,6 @@ class SaleViewModel extends ChangeNotifier {
     clearCart();
   }
 
-  /// F4 (open accounts fix): discard a parked account the operator decided
-  /// never to invoice. A hold ticket is pre-invoice local SQLite state — it
-  /// never emitted a DGI document, so discarding it is not a fiscal deletion
-  /// and needs no cancellation record. Parking never dispatches a kitchen
-  /// comanda either, so nothing can be orphaned.
-  ///
-  /// Reuses the existing safe deletion path (`liquidateOrder` →
-  /// `deleteHoldTicketWithItems`), which also releases the occupied table.
-  Future<void> abandonHoldTicket(HoldTicket ticket) async {
-    await _tableOrderService.liquidateOrder(ticket.id);
-
-    if (_activeLoadedHoldTicket?.id == ticket.id) {
-      _activeLoadedHoldTicket = null;
-      clearCart();
-    }
-
-    await loadHoldTickets();
-  }
-
   Future<void> checkActiveSession() async {
     await loadCompanyTaxRegime();
     // Issue #552: the open-session lookup is scoped to BOTH the acting user
@@ -1196,6 +1019,11 @@ class SaleViewModel extends ChangeNotifier {
             .getActiveSessionForUserAndTerminal(user.id, effectiveTerminalId);
     if (sessionEntity != null) {
       _activeSession = SalesMapper.toSessionDomain(sessionEntity);
+      _sessionExpected = {
+        PaymentMethod.cash: _activeSession!.openingBalance,
+        PaymentMethod.card: 0.0,
+        PaymentMethod.qr: 0.0,
+      };
     } else {
       _activeSession = null;
     }
@@ -1248,6 +1076,34 @@ class SaleViewModel extends ChangeNotifier {
       SalesMapper.toSessionEntity(session),
     );
     _activeSession = session;
+    _sessionExpected = {
+      PaymentMethod.cash: balance,
+      PaymentMethod.card: 0.0,
+      PaymentMethod.qr: 0.0,
+    };
+    notifyListeners();
+  }
+
+  Future<void> closeSession(double closingBalance) async {
+    if (_activeSession == null) return;
+
+    final totalSales =
+        _sessionExpected.values.fold(0.0, (sum, v) => sum + v) -
+        _activeSession!.openingBalance;
+
+    final updated = _activeSession!.copyWith(
+      isClosed: true,
+      closedAt: DateTime.now(),
+      closingBalance: closingBalance,
+      closingCountedNio: closingBalance,
+      totalSales: totalSales,
+      totalExpected: _sessionExpected[PaymentMethod.cash] ?? 0.0,
+      expectedNio: _sessionExpected[PaymentMethod.cash] ?? 0.0,
+    );
+    await _database.cashierSessionDao.updateSession(
+      SalesMapper.toSessionEntity(updated),
+    );
+    _activeSession = null;
     notifyListeners();
   }
 
@@ -1301,7 +1157,6 @@ class SaleViewModel extends ChangeNotifier {
           unitPrice: unitPrice,
           taxRate: itemTaxRate,
           category: product.category,
-          categoryId: product.categoryId,
           variantId: variantId,
           selectedModifiers: modifiers,
         ),
@@ -1447,26 +1302,6 @@ class SaleViewModel extends ChangeNotifier {
       throw StateError('Usuario no autenticado');
     }
 
-    // #67/T2a: fail closed BEFORE any DGI sequence number is consumed — the
-    // guard runs ahead of the repository/numbering path, so a blocked sale
-    // never touches the consecutivo. Both rates are validated because every
-    // invoice persists AND prints both.
-    // A never-resolved state (no rate ever loaded on this terminal) is not a
-    // verdict: resolve once, then judge. A genuine absent/corrupt/read
-    // failure still blocks with its own message.
-    if (!_hasCommercialRate &&
-        !_hasBcnOfficialRate &&
-        _commercialRateFailure == null &&
-        _bcnRateFailure == null) {
-      await loadExchangeRates();
-    }
-    final fxBlockReason = _fxRateBlockReason();
-    if (fxBlockReason != null) {
-      _errorMessage = fxBlockReason;
-      notifyListeners();
-      throw FiscalExchangeRateUnconfiguredError(fxBlockReason);
-    }
-
     if (_companyTaxRegime == null) {
       await loadCompanyTaxRegime();
     }
@@ -1484,10 +1319,8 @@ class SaleViewModel extends ChangeNotifier {
     // confirmed — fiscal total + voluntary tip. The tip stays OUT of the
     // taxable total below (DGI INV-16.1); it is charged ON TOP of it.
     final grandTotalNio = grandTotalWithTip;
-    // T2b/#67: same applied-rate convention as the fiscal snapshot — the
-    // BCN rate in BCN_OFFICIAL mode, the commercial rate otherwise.
-    final totalUsd = activeCheckoutRate > 0
-        ? ((total / activeCheckoutRate) * 100).round() / 100
+    final totalUsd = _commercialRate > 0
+        ? ((total / _commercialRate) * 100).round() / 100
         : 0.0;
 
     final effectiveBuzzer =
@@ -1567,10 +1400,7 @@ class SaleViewModel extends ChangeNotifier {
                   method: m,
                   amount: grandTotalNio / methods.length,
                   currency: 'NIO',
-                  // T2b/#67: the payment records the conversion actually
-                  // applied at checkout, not the office's configured
-                  // commercial rate (they differ in BCN_OFFICIAL mode).
-                  exchangeRate: activeCheckoutRate,
+                  exchangeRate: _commercialRate,
                   amountNio: grandTotalNio / methods.length,
                   changeGiven: 0.0,
                   changeCurrency: 'NIO',
@@ -1711,22 +1541,23 @@ class SaleViewModel extends ChangeNotifier {
         );
       }
 
-      // T7 (open-accounts slice): the per-payment `_sessionExpected`
-      // increment (and its carteraMesero non-cash skip) was retired with
-      // the weak close path. The drawer expectation is the Corte Z figure:
-      // CashShiftViewModel recomputes net cash per payment row from the DB
-      // (getCashPaymentsForShift) at close time.
+      // Update expected totals
+      for (final p in payments) {
+        if (_activeSession?.tipoModelo == CashSessionModel.carteraMesero &&
+            p.method != PaymentMethod.cash) {
+          continue;
+        }
+        final effectiveCashNio =
+            (p.method == PaymentMethod.cash && p.amountNio > 0)
+            ? (p.amountNio - p.changeGiven)
+            : p.amount;
+        _sessionExpected[p.method] =
+            (_sessionExpected[p.method] ?? 0.0) + effectiveCashNio;
+      }
 
       if (_activeLoadedHoldTicket != null) {
         await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);
         _activeLoadedHoldTicket = null;
-        // K1 (device verification): liquidateOrder deletes the SQLite row, but
-        // _holdTickets is the list the recall dialog renders. Without this
-        // refresh the billed account stays on screen as if it were still open,
-        // and recalling it invites a second charge of an account that no
-        // longer exists. The list must agree with the DB the moment the sale
-        // commits.
-        await loadHoldTickets();
       } else {
         // Direct counter sale: dispatch to kitchen KDS if items exist
         if (_cart.isNotEmpty) {
@@ -1848,10 +1679,6 @@ class SaleViewModel extends ChangeNotifier {
       // operator acts on — surface the directive message without the raw
       // error wrapper.
       if (e is FiscalSequenceUnconfiguredError) {
-        _errorMessage = e.message;
-      } else if (e is FiscalExchangeRateUnconfiguredError) {
-        // #67/T2a: same directive-message contract — the operator acts on
-        // the configuration state, verbatim.
         _errorMessage = e.message;
       } else {
         // Go-live fix (NHILOS §4.1): user-facing copy never carries raw

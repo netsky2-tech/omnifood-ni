@@ -98,13 +98,6 @@ void main() {
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
       );
-      // #67/T2a: the controlled sale fails closed without BOTH recorded FX rates.
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
-      );
 
       // Seed fiscal configuration
       await database.fiscalConfigLocalDao.applyFiscalConfig(

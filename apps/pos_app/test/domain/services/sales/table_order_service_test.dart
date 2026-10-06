@@ -99,129 +99,51 @@ void main() {
     });
   });
 
-  group('TableOrderService - Optimistic Locking & Replace Order Items (F1 open accounts fix)', () {
-    // Device numbers (S23 rig, A5): 3 lines / C\$440.00 pre-tax.
-    final americano = const CartItem(
-      productId: 'prod-americano',
-      productName: 'Americano 8oz',
-      quantity: 2,
-      unitPrice: 90.0,
-      taxRate: 0.15,
-    );
-    final espresso = const CartItem(
-      productId: 'prod-espresso',
-      productName: 'Espresso Doble',
-      quantity: 1,
-      unitPrice: 130.0,
-      taxRate: 0.15,
-    );
-    final latte = const CartItem(
-      productId: 'prod-latte',
-      productName: 'Latte',
-      quantity: 1,
-      unitPrice: 130.0,
-      taxRate: 0.15,
-    );
-
-    test(
-        'replaceOrderItems with the SAME cart keeps 3 lines and C\$440 (reproduces device bug A5)',
-        () async {
-      final cart = [americano, espresso, latte]; // 2*90 + 130 + 130 = 440
-      final ticket = await service.parkOrder(
-        tableId: 'tbl-2',
-        name: 'Cuenta 1',
-        waiterId: 'usr-10',
-        waiterName: 'Mesero Mario',
-        guestCount: 3,
-        isGlobalTaxExempt: true,
-        items: cart,
-      );
-
-      // Recall + re-park sends the SAME cart back under a new name.
-      final updated = await service.replaceOrderItems(
-        ticketId: ticket.id,
-        name: 'Cuenta 2',
-        items: cart,
-        expectedVersion: 1,
-      );
-
-      expect(updated.version, 2);
-      expect(updated.name, 'Cuenta 2');
-      expect(updated.items, hasLength(3),
-          reason: 'the old append path doubled 3 -> 6 lines per recover+park cycle');
-      expect(updated.items.fold<double>(0, (sum, item) => sum + item.grossAmount), 440.0,
-          reason: 'the old append path doubled C\$440 -> C\$880 per recover+park cycle');
-
-      // Preserved from the STORED entity, not the replace call.
-      expect(updated.id, ticket.id);
-      expect(updated.tableId, 'tbl-2');
-      expect(updated.guestCount, 3);
-      expect(updated.waiterId, 'usr-10');
-      expect(updated.waiterName, 'Mesero Mario');
-      expect(updated.isGlobalTaxExempt, isTrue);
-
-      final reloaded = await service.getOrderById(ticket.id);
-      expect(reloaded?.version, 2);
-      expect(reloaded?.name, 'Cuenta 2');
-      expect(reloaded?.items, hasLength(3));
-      expect(reloaded?.tableId, 'tbl-2');
-      expect(reloaded?.isGlobalTaxExempt, isTrue);
-    });
-
-    test('replaceOrderItems replaces the contents wholesale (not accumulation)', () async {
-      final ticket = await service.parkOrder(
-        tableId: 'tbl-2',
-        name: 'Mesa 2',
-        items: [americano],
-      );
-
-      final updated = await service.replaceOrderItems(
-        ticketId: ticket.id,
-        name: 'Mesa 2',
-        items: [espresso, latte],
-        expectedVersion: 1,
-      );
-
-      expect(updated.version, 2);
-      expect(updated.items.map((i) => i.productName), ['Espresso Doble', 'Latte'],
-          reason: 'the stored items must be GONE, not combined with the new ones');
-
-      final reloaded = await service.getOrderById(ticket.id);
-      expect(reloaded?.items.map((i) => i.productName), ['Espresso Doble', 'Latte']);
-    });
-
-    test('throws OptimisticLockException when expectedVersion does not match and leaves the stored ticket unmodified',
-        () async {
+  group('TableOrderService - Optimistic Locking & Append Items (Slice 4.2)', () {
+    test('appendItems increases version and updates total items', () async {
       final initialTicket = await service.parkOrder(
         tableId: 'tbl-2',
         name: 'Mesa 2',
-        items: [americano],
+        items: [burgerItem],
       );
 
-      // Terminal A updates the ticket to version 2.
-      await service.replaceOrderItems(
+      final updatedTicket = await service.appendItemsToOrder(
         ticketId: initialTicket.id,
-        name: 'Mesa 2',
-        items: [americano, espresso],
+        newItems: [cokeItem],
         expectedVersion: 1,
       );
 
-      // Terminal B attempts to update using stale version 1.
-      await expectLater(
-        service.replaceOrderItems(
+      expect(updatedTicket.version, 2);
+      expect(updatedTicket.items.length, 2);
+
+      final reloaded = await service.getOrderById(initialTicket.id);
+      expect(reloaded?.version, 2);
+      expect(reloaded?.items.length, 2);
+    });
+
+    test('throws OptimisticLockException when expectedVersion does not match', () async {
+      final initialTicket = await service.parkOrder(
+        tableId: 'tbl-2',
+        name: 'Mesa 2',
+        items: [burgerItem],
+      );
+
+      // Simulate terminal A updating the ticket to version 2
+      await service.appendItemsToOrder(
+        ticketId: initialTicket.id,
+        newItems: [cokeItem],
+        expectedVersion: 1,
+      );
+
+      // Terminal B attempts to update using stale version 1
+      expect(
+        () => service.appendItemsToOrder(
           ticketId: initialTicket.id,
-          name: 'Mesa 2 (otra terminal)',
-          items: [latte],
+          newItems: [burgerItem],
           expectedVersion: 1,
         ),
         throwsA(isA<OptimisticLockException>()),
       );
-
-      // The stale attempt must not have touched the stored state.
-      final reloaded = await service.getOrderById(initialTicket.id);
-      expect(reloaded?.version, 2);
-      expect(reloaded?.name, 'Mesa 2');
-      expect(reloaded?.items, hasLength(2));
     });
   });
 

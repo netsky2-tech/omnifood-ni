@@ -155,9 +155,6 @@ void main() {
       await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_current_number', value: '1'));
       await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_range_end', value: '1000'));
       await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
-      // #67/T2a: the controlled sale fails closed without BOTH recorded FX rates.
-      await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'));
-      await database.localConfigDao.saveConfig(LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'));
 
       await database.userDao.insertUsers([
         UserEntity(id: cashierId, name: 'Cajero Offline', role: 'CASHIER', pinHash: '', isActive: true, tenantId: tenantId),

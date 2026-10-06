@@ -37,7 +37,6 @@ function buildEnvelope(overrides: {
           isTaxExempt: false,
           isActive: true,
           isPerishable: false,
-          categoryId: null,
           warehouseId: null,
           productType: 'SIMPLE',
           mappingVersionId: null,

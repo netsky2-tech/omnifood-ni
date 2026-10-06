@@ -1531,6 +1531,64 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
       ) as _i52.Future<int?>);
 
   @override
+  _i52.Future<int?> countPendingCardPaymentsForShift(String? shiftId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #countPendingCardPaymentsForShift,
+          [shiftId],
+        ),
+        returnValue: _i52.Future<int?>.value(),
+      ) as _i52.Future<int?>);
+
+  @override
+  _i52.Future<int?> countReconciledCardPaymentsForShift(String? shiftId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #countReconciledCardPaymentsForShift,
+          [shiftId],
+        ),
+        returnValue: _i52.Future<int?>.value(),
+      ) as _i52.Future<int?>);
+
+  @override
+  _i52.Future<int?> countOverriddenCardPaymentsForShift(String? shiftId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #countOverriddenCardPaymentsForShift,
+          [shiftId],
+        ),
+        returnValue: _i52.Future<int?>.value(),
+      ) as _i52.Future<int?>);
+
+  @override
+  _i52.Future<List<_i59.PaymentEntity>> getPendingReconciliations() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPendingReconciliations,
+          [],
+        ),
+        returnValue:
+            _i52.Future<List<_i59.PaymentEntity>>.value(<_i59.PaymentEntity>[]),
+      ) as _i52.Future<List<_i59.PaymentEntity>>);
+
+  @override
+  _i52.Future<void> updateReconciliationSyncStatus(
+    String? paymentId,
+    String? syncStatus,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateReconciliationSyncStatus,
+          [
+            paymentId,
+            syncStatus,
+          ],
+        ),
+        returnValue: _i52.Future<void>.value(),
+        returnValueForMissingStub: _i52.Future<void>.value(),
+      ) as _i52.Future<void>);
+
+  @override
   _i52.Future<void> updatePayment(_i59.PaymentEntity? payment) =>
       (super.noSuchMethod(
         Invocation.method(

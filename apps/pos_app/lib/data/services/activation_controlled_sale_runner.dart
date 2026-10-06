@@ -90,37 +90,6 @@ class ActivationControlledSaleRunner {
     );
   }
 
-  /// #67/T2a: the controlled verification sale is a REAL DGI invoice, so its
-  /// rates follow the SAME reliability rule as the sale path
-  /// (SaleViewModel.loadExchangeRates): the config row must exist, parse as a
-  /// number and be > 0. Anything else leaves the rate unresolved and the
-  /// controlled sale fails closed — the terminal must never invent a rate,
-  /// not even for the verification sale. The [absent] flag keeps the two
-  /// failure copies apart: 'not configured' (fix: configure it) vs 'could
-  /// not be verified' (fix: review/repair it).
-  Future<(double?, bool)> _resolveConfiguredRate(String key) async {
-    try {
-      final row = await _database.localConfigDao.getConfigByKey(key);
-      if (row == null) return (null, true);
-      final parsed = double.tryParse(row.value);
-      if (parsed == null || parsed <= 0) return (null, false);
-      return (parsed, false);
-    } catch (_) {
-      return (null, false);
-    }
-  }
-
-  /// #67/T2a: directive Spanish copy for an unreliable rate on the
-  /// verification sale. Same shape as the sale path's messages and, since
-  /// #66, it must name who can fix it: the FX fields are owner/manager-only,
-  /// never an action the cashier could perform.
-  String _fxRateBlockError(String rateLabel, bool absent) =>
-      'EXCHANGE_RATE_${absent ? 'NOT_CONFIGURED' : 'UNVERIFIABLE'}: '
-      'No se puede emitir la venta de verificación: la tasa $rateLabel '
-      '${absent ? 'no está configurada' : 'no pudo verificarse'} en este '
-      'terminal. Pedile al dueño o a un encargado que la '
-      '${absent ? 'configure' : 'revise'} en Perfil del Negocio.';
-
   Future<ControlledSaleResult> executeControlledOfflineSale(
     ControlledSaleParams params,
   ) async {
@@ -283,32 +252,6 @@ class ActivationControlledSaleRunner {
       ticketSyncStatus = existingInvoice.syncStatus;
     } else {
       // 4. Production Checkout Path Execution (Real Sales Save)
-      // #67/T2a: fail closed BEFORE the invoice is built or any DGI sequence
-      // number is consumed — the verification sale is a real fiscal
-      // document, and a terminal reaching it is expected to have the
-      // business profile configured (the DGI prefix above comes from that
-      // same profile).
-      final (commercialRate, commercialAbsent) = await _resolveConfiguredRate(
-        'commercial_exchange_rate',
-      );
-      if (commercialRate == null) {
-        return ControlledSaleResult(
-          isSuccess: false,
-          attemptStatus: attempt.localStatus,
-          errors: [_fxRateBlockError('de cambio comercial', commercialAbsent)],
-        );
-      }
-      final (bcnOfficialRate, bcnAbsent) = await _resolveConfiguredRate(
-        'bcn_official_exchange_rate',
-      );
-      if (bcnOfficialRate == null) {
-        return ControlledSaleResult(
-          isSuccess: false,
-          attemptStatus: attempt.localStatus,
-          errors: [_fxRateBlockError('oficial BCN', bcnAbsent)],
-        );
-      }
-
       ticketId = const Uuid().v4();
       final total = expectedAmount;
 
@@ -324,8 +267,6 @@ class ActivationControlledSaleRunner {
         paymentStatus: PaymentStatus.paid,
         idempotencyKey: saleIdempotencyKey,
         terminalId: attempt.candidateTerminalId,
-        commercialRate: commercialRate,
-        bcnOfficialRate: bcnOfficialRate,
       );
 
       final item = InvoiceItem(
@@ -443,10 +384,6 @@ class ActivationControlledSaleRunner {
         userId: trimmedCashierId,
         syncStatus: SyncStatus.pending,
         paymentStatus: PaymentStatus.paid,
-        // #67/T2a: the printed receipt carries the rates PERSISTED with the
-        // invoice — never the model defaults.
-        commercialRate: persistedInvoice.commercialRate,
-        bcnOfficialRate: persistedInvoice.bcnOfficialRate,
       );
       final receiptItem = InvoiceItem(
         id: const Uuid().v4(),

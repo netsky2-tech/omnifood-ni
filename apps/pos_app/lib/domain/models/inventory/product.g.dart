@@ -18,7 +18,6 @@ _$ProductImpl _$$ProductImplFromJson(Map<String, dynamic> json) =>
       sku: json['sku'] as String?,
       barcode: json['barcode'] as String?,
       category: json['category'] as String?,
-      categoryId: json['categoryId'] as String?,
       isPrepared: json['isPrepared'] as bool? ?? false,
       productType: json['productType'] as String? ?? 'SIMPLE',
       mappingVersionId: json['mappingVersionId'] as String?,
@@ -37,12 +36,6 @@ _$ProductImpl _$$ProductImplFromJson(Map<String, dynamic> json) =>
               ?.map((e) => Modifier.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
-      availableModifierGroups: (json['availableModifierGroups']
-                  as List<dynamic>?)
-              ?.map((e) =>
-                  EffectiveModifierGroup.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          const [],
     );
 
 Map<String, dynamic> _$$ProductImplToJson(_$ProductImpl instance) =>
@@ -57,7 +50,6 @@ Map<String, dynamic> _$$ProductImplToJson(_$ProductImpl instance) =>
       'sku': instance.sku,
       'barcode': instance.barcode,
       'category': instance.category,
-      'categoryId': instance.categoryId,
       'isPrepared': instance.isPrepared,
       'productType': instance.productType,
       'mappingVersionId': instance.mappingVersionId,
@@ -69,7 +61,6 @@ Map<String, dynamic> _$$ProductImplToJson(_$ProductImpl instance) =>
       'isTaxExempt': instance.isTaxExempt,
       'variants': instance.variants,
       'availableModifiers': instance.availableModifiers,
-      'availableModifierGroups': instance.availableModifierGroups,
     };
 
 const _$InventoryPolicyEnumMap = {
@@ -98,7 +89,6 @@ _$ModifierImpl _$$ModifierImplFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       name: json['name'] as String,
       extraPrice: (json['extraPrice'] as num).toDouble(),
-      quantity: json['quantity'] as int? ?? 1,
     );
 
 Map<String, dynamic> _$$ModifierImplToJson(_$ModifierImpl instance) =>
@@ -106,51 +96,4 @@ Map<String, dynamic> _$$ModifierImplToJson(_$ModifierImpl instance) =>
       'id': instance.id,
       'name': instance.name,
       'extraPrice': instance.extraPrice,
-      'quantity': instance.quantity,
-    };
-
-_$EffectiveModifierOptionImpl _$$EffectiveModifierOptionImplFromJson(
-        Map<String, dynamic> json) =>
-    _$EffectiveModifierOptionImpl(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      priceDelta: (json['priceDelta'] as num).toDouble(),
-      isDefault: json['isDefault'] as bool,
-    );
-
-Map<String, dynamic> _$$EffectiveModifierOptionImplToJson(
-        _$EffectiveModifierOptionImpl instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'name': instance.name,
-      'priceDelta': instance.priceDelta,
-      'isDefault': instance.isDefault,
-    };
-
-_$EffectiveModifierGroupImpl _$$EffectiveModifierGroupImplFromJson(
-        Map<String, dynamic> json) =>
-    _$EffectiveModifierGroupImpl(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      minSelected: json['minSelected'] as int,
-      maxSelected: json['maxSelected'] as int,
-      allowQuantities: json['allowQuantities'] as bool,
-      source: json['source'] as String,
-      options: (json['options'] as List<dynamic>?)
-              ?.map((e) =>
-                  EffectiveModifierOption.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          const [],
-    );
-
-Map<String, dynamic> _$$EffectiveModifierGroupImplToJson(
-        _$EffectiveModifierGroupImpl instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'name': instance.name,
-      'minSelected': instance.minSelected,
-      'maxSelected': instance.maxSelected,
-      'allowQuantities': instance.allowQuantities,
-      'source': instance.source,
-      'options': instance.options,
     };

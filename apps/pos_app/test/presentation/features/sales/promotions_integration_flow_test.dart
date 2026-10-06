@@ -81,7 +81,6 @@ void main() {
     sellPrice: 50,
     taxRate: 0.15,
     category: 'Bebidas',
-    categoryId: 'cat-bebidas',
   );
 
   final pBurger = const Product(
@@ -93,7 +92,6 @@ void main() {
     sellPrice: 120,
     taxRate: 0.15,
     category: 'Comida',
-    categoryId: 'cat-comida',
   );
 
   setUpAll(() {
@@ -105,13 +103,6 @@ void main() {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
     await database.localConfigDao.saveConfig(
       LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
-    );
-    // #67/T2a: the sale path fails closed without BOTH recorded FX rates.
-    await database.localConfigDao.saveConfig(
-      LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-    );
-    await database.localConfigDao.saveConfig(
-      LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
     );
     salesRepo = FakeSalesRepository();
     inventoryRepo = FakeInventoryRepository();
@@ -174,8 +165,7 @@ void main() {
           id: 'promo-cat-10',
           name: '10% Descuento en Bebidas',
           type: 'percentageDiscount',
-          // T0.5c: strict catalog_values.id, never free text.
-          targetCategoryId: 'cat-bebidas',
+          targetCategoryId: 'Bebidas',
           discountValue: 10.0, // 10%
           priority: 5,
           isActive: true,

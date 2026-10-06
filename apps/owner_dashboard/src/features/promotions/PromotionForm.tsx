@@ -19,7 +19,6 @@ import { promotionFormSchema, type PromotionFormData } from './schema';
 import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/promotions';
 import { DAYS_OF_WEEK, cn } from '@/lib/utils';
 import { useCreatePromotion, useUpdatePromotion } from '@/hooks/use-promotions';
-import { useCatalogValues } from '@/features/catalog/use-catalog';
 import { toast } from '@/hooks/use-toast';
 import { DialogFooter } from '@/components/ui/dialog';
 import { getApiErrorMessage } from '@/lib/api-error';
@@ -35,12 +34,6 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   const createPromotion = useCreatePromotion();
   const updatePromotion = useUpdatePromotion();
   const isSubmitting = createPromotion.isPending || updatePromotion.isPending;
-
-  // T0.5'd: the category target is picked from the synced catalog, never
-  // typed. Inactive rows are included so a promotion whose stored target
-  // was deactivated still renders its own value — with an active-only list
-  // the select would silently fall back to '' (global) on save.
-  const { data: catalogCategories } = useCatalogValues('SALES_PRODUCT_CATEGORY', true);
 
   const form = useForm<PromotionFormData>({
     resolver: zodResolver(promotionFormSchema),
@@ -67,7 +60,6 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
 
   const watchedType = form.watch('type');
   const watchedDays = form.watch('days_of_week');
-  const watchedCategoryId = form.watch('target_category_id');
 
   useEffect(() => {
     if (initialData) {
@@ -102,29 +94,12 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   };
 
   const onSubmit = async (data: PromotionFormData) => {
-    // T0.5'd submit normalization: '' means "nothing selected".
-    // - CREATE: omit the key entirely so the backend treats it as global
-    //   (an empty string is rejected by the backend guard).
-    // - UPDATE: send an explicit null so Object.assign clears the column
-    //   (omitting the key would leave the old target untouched).
-    // A selected uuid is always sent unchanged.
-    const { target_category_id, ...rest } = data;
     try {
       if (isEditing) {
-        // T0.5'd: '' -> explicit null (clear to global); a selected uuid is
-        // sent unchanged.
-        const dto = {
-          ...rest,
-          target_category_id: target_category_id ? target_category_id : null,
-        };
-        await updatePromotion.mutateAsync({ id: initialData!.id, dto });
+        await updatePromotion.mutateAsync({ id: initialData!.id, dto: data });
         toast({ variant: 'success', title: 'Promoción actualizada' });
       } else {
-        const payload = {
-          ...rest,
-          ...(target_category_id ? { target_category_id } : {}),
-        };
-        await createPromotion.mutateAsync(payload);
+        await createPromotion.mutateAsync(data);
         toast({ variant: 'success', title: 'Promoción creada' });
       }
       onSuccess();
@@ -192,29 +167,11 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
           </div>
           <div>
             <Label htmlFor="target_category_id">Categoría Objetivo (opcional)</Label>
-            {/* Native select on purpose: Radix Select forbids empty-string
-                option values, and '' is the explicit "Global" choice.
-                Controlled (watch + setValue), like the type picker above. */}
-            <select
+            <Input
               id="target_category_id"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              value={watchedCategoryId ?? ''}
-              onChange={(e) =>
-                form.setValue('target_category_id', e.target.value, { shouldValidate: true })
-              }
-            >
-              <option value="">Global (sin categoría)</option>
-              {(catalogCategories ?? []).map((value) => (
-                <option key={value.id} value={value.id}>
-                  {value.is_active ? value.name : `${value.name} (inactiva)`}
-                </option>
-              ))}
-            </select>
-            {form.formState.errors.target_category_id && (
-              <p className="text-sm text-destructive mt-1">
-                {form.formState.errors.target_category_id.message}
-              </p>
-            )}
+              placeholder="ID de la categoría"
+              {...form.register('target_category_id')}
+            />
           </div>
         </div>
 

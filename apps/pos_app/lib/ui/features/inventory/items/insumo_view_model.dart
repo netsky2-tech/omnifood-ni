@@ -255,6 +255,26 @@ class InsumoViewModel with ChangeNotifier {
     }
   }
 
+  Future<void> saveProductOptions({
+    required String productId,
+    required List<ProductVariant> variants,
+    required List<Modifier> modifiers,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await repository.saveProductOptions(
+        productId: productId,
+        variants: variants,
+        modifiers: modifiers,
+      );
+      await loadInitialData();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> _evaluateStockAlterationAlert(
     Insumo previous,
     Insumo next,

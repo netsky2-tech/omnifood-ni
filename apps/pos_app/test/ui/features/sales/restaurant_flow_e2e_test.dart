@@ -214,10 +214,7 @@ void main() {
       expect(holdItems.length, 2);
       expect(holdItems.first.modifiersJson, contains('Extra Queso'));
 
-      // --- STEP 2: Customer orders dessert later (full-cart replace with Optimistic Lock) ---
-      // F1 semantics: the caller sends the COMPLETE new contents of the
-      // account. The old appendItemsToOrder call here enshrined the
-      // accumulation defect that doubled open-account balances on device.
+      // --- STEP 2: Customer orders dessert later (Append Items with Optimistic Lock) ---
       final dessertItem = const CartItem(
         productId: 'prod-dessert',
         productName: 'Flan Casero',
@@ -226,10 +223,9 @@ void main() {
         taxRate: 0.15,
       );
 
-      final updatedTicket = await tableOrderService.replaceOrderItems(
+      final updatedTicket = await tableOrderService.appendItemsToOrder(
         ticketId: parkedTicket.id,
-        name: 'Mesa 1 - Cumplea\u00f1os',
-        items: [...parkedTicket.items, dessertItem],
+        newItems: [dessertItem],
         expectedVersion: 1,
       );
 
@@ -393,24 +389,20 @@ void main() {
 
       expect(initialTicket.version, 1);
 
-      // Tablet A replaces the ticket contents (expectedVersion = 1 -> version becomes 2)
-      final tabletAItems = [
-        const CartItem(productId: 'p-1', productName: 'Item 1', quantity: 1, unitPrice: 50.0, taxRate: 0.0),
-        const CartItem(productId: 'p-2', productName: 'Item 2', quantity: 1, unitPrice: 60.0, taxRate: 0.0),
-      ];
-      await tableOrderService.replaceOrderItems(
+      // Tablet A updates ticket (expectedVersion = 1 -> version becomes 2)
+      await tableOrderService.appendItemsToOrder(
         ticketId: initialTicket.id,
-        name: 'Mesa 1 - Concurrencia',
-        items: tabletAItems,
+        newItems: [
+          const CartItem(productId: 'p-2', productName: 'Item 2', quantity: 1, unitPrice: 60.0, taxRate: 0.0),
+        ],
         expectedVersion: 1,
       );
 
-      // Tablet B attempts an update with stale expectedVersion = 1
+      // Tablet B attempts update with stale expectedVersion = 1
       expect(
-        () async => await tableOrderService.replaceOrderItems(
+        () async => await tableOrderService.appendItemsToOrder(
           ticketId: initialTicket.id,
-          name: 'Mesa 1 - Concurrencia',
-          items: [
+          newItems: [
             const CartItem(productId: 'p-3', productName: 'Item 3', quantity: 1, unitPrice: 70.0, taxRate: 0.0),
           ],
           expectedVersion: 1,

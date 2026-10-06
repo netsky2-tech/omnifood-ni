@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
-import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/customer/customer_entity.dart';
 import 'package:pos_app/data/models/loyalty/loyalty_program_entity.dart';
 import 'package:pos_app/data/models/loyalty/loyalty_reward_entity.dart';
@@ -122,13 +121,6 @@ void main() {
 
   setUp(() async {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
-    // #67/T2a: the sale path fails closed without BOTH recorded FX rates.
-    await database.localConfigDao.saveConfig(
-      LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-    );
-    await database.localConfigDao.saveConfig(
-      LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
-    );
     salesRepo = TestSalesRepository();
     inventoryRepo = TestInventoryRepository();
     authRepo = TestAuthRepository();

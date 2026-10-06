@@ -170,12 +170,6 @@ void main() {
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'tax_regime', value: taxRegimeConfig),
       );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
-      );
 
       // 2. User & profile
       await database.userDao.insertUsers([
@@ -554,142 +548,6 @@ void main() {
       expect(receiptCheck, isNotNull);
       expect(receiptCheck!.status, equals('FAIL'));
     });
-
-    group('#67/T2a — the verification sale must never invent a rate', () {
-      test(
-        'an absent rate fails the controlled sale closed: no invoice, no DGI sequence consumed',
-        () async {
-          await seedPrerequisites();
-          // The absent-rate case: remove both rows the fixture seeded.
-          await database.localConfigDao.deleteConfig(
-            'commercial_exchange_rate',
-          );
-          await database.localConfigDao.deleteConfig(
-            'bcn_official_exchange_rate',
-          );
-
-          final result = await saleRunner.executeControlledOfflineSale(
-            const ControlledSaleParams(
-              tenantId: tenantId,
-              attemptId: attemptId,
-              cashierUserId: cashierId,
-            ),
-          );
-
-          // RED: today the sale succeeds with the fabricated model defaults.
-          expect(result.isSuccess, isFalse);
-          expect(result.errors.join(' '), contains('Perfil del Negocio'));
-          expect(await database.invoiceDao.getAllInvoices(), isEmpty);
-          final cursor = await database.localConfigDao.getConfigByKey(
-            'dgi_current_number',
-          );
-          expect(
-            cursor?.value,
-            '1',
-            reason: 'a blocked verification sale must not consume a folio',
-          );
-          final attemptAfter = await database.activationAttemptLocalDao
-              .getAttemptById(attemptId);
-          expect(attemptAfter!.localStatus, 'RUNNING');
-        },
-      );
-
-      test(
-        'a corrupt rate value fails the controlled sale closed',
-        () async {
-          await seedPrerequisites();
-          await database.localConfigDao.saveConfig(
-            LocalConfigEntity(
-              key: 'commercial_exchange_rate',
-              value: 'abc',
-            ),
-          );
-
-          final result = await saleRunner.executeControlledOfflineSale(
-            const ControlledSaleParams(
-              tenantId: tenantId,
-              attemptId: attemptId,
-              cashierUserId: cashierId,
-            ),
-          );
-
-          expect(result.isSuccess, isFalse);
-          expect(result.errors.join(' '), contains('no pudo verificarse'));
-          expect(await database.invoiceDao.getAllInvoices(), isEmpty);
-          final cursor = await database.localConfigDao.getConfigByKey(
-            'dgi_current_number',
-          );
-          expect(cursor?.value, '1');
-        },
-      );
-
-      test(
-        'an absent BCN rate fails the controlled sale closed',
-        () async {
-          await seedPrerequisites();
-          // Only the BCN row is absent.
-          await database.localConfigDao.deleteConfig(
-            'bcn_official_exchange_rate',
-          );
-          await database.localConfigDao.saveConfig(
-            LocalConfigEntity(
-              key: 'commercial_exchange_rate',
-              value: '36.50',
-            ),
-          );
-
-          final result = await saleRunner.executeControlledOfflineSale(
-            const ControlledSaleParams(
-              tenantId: tenantId,
-              attemptId: attemptId,
-              cashierUserId: cashierId,
-            ),
-          );
-
-          expect(result.isSuccess, isFalse);
-          expect(result.errors.join(' '), contains('tasa oficial BCN'));
-          expect(await database.invoiceDao.getAllInvoices(), isEmpty);
-        },
-      );
-
-      test(
-        'both reliable rates persist on the verification invoice exactly as configured',
-        () async {
-          await seedPrerequisites();
-          // Non-default values: they must be distinguishable from the Invoice
-          // model defaults (36.50 / 36.6241), so this case proves the runner
-          // wires the RESOLVED config values, not the model defaults.
-          await database.localConfigDao.saveConfig(
-            LocalConfigEntity(
-              key: 'commercial_exchange_rate',
-              value: '37.25',
-            ),
-          );
-          await database.localConfigDao.saveConfig(
-            LocalConfigEntity(
-              key: 'bcn_official_exchange_rate',
-              value: '36.80',
-            ),
-          );
-
-          final result = await saleRunner.executeControlledOfflineSale(
-            const ControlledSaleParams(
-              tenantId: tenantId,
-              attemptId: attemptId,
-              cashierUserId: cashierId,
-            ),
-          );
-
-          expect(result.isSuccess, isTrue);
-          final invoice = await database.invoiceDao.getInvoiceById(
-            result.verificationTicketId!,
-          );
-          expect(invoice, isNotNull);
-          expect(invoice!.commercialRate, 37.25);
-          expect(invoice.bcnOfficialRate, 36.80);
-        },
-      );
-    });
   });
 
   group('ONB1.8D — Outbox Durability & Multi-Tenant Isolation', () {
@@ -713,12 +571,6 @@ void main() {
       );
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
       );
 
       await database.userDao.insertUsers([
@@ -905,12 +757,6 @@ void main() {
         );
         await diskDb1.localConfigDao.saveConfig(
           LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
-        );
-        await diskDb1.localConfigDao.saveConfig(
-          LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-        );
-        await diskDb1.localConfigDao.saveConfig(
-          LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
         );
         await diskDb1.productDao.insertProducts([
           ProductEntity(
@@ -1161,12 +1007,6 @@ void main() {
         await database.localConfigDao.saveConfig(
           LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
         );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
-      );
 
         await database.userDao.insertUsers([
           UserEntity(
@@ -1318,8 +1158,6 @@ void main() {
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'));
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'dgi_current_number', value: '1'));
           await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
-          await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'));
-          await diskDb.localConfigDao.saveConfig(LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'));
           await diskDb.userDao.insertUsers([
             UserEntity(id: cashierId, name: 'Cajero Offline', role: 'CASHIER', pinHash: '', isActive: true, tenantId: tenantId),
           ]);
@@ -1425,12 +1263,6 @@ void main() {
       );
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
       );
       await database.userDao.insertUsers([
         UserEntity(
@@ -1647,12 +1479,6 @@ void main() {
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
       );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
-      );
 
       await database.userDao.insertUsers([
         UserEntity(
@@ -1780,12 +1606,6 @@ void main() {
     Future<void> seedG2bScenario({required String attemptId}) async {
       await database.localConfigDao.saveConfig(
         LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-      );
-      await database.localConfigDao.saveConfig(
-        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
       );
       await database.userDao.insertUsers([
         UserEntity(

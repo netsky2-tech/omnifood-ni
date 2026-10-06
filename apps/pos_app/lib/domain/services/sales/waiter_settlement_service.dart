@@ -2,21 +2,13 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import '../../../../data/database/app_database.dart';
 import '../../../../data/models/sales/cashier_session_entity.dart';
 import '../../../../data/models/sales/payment_entity.dart';
-import '../../models/sales/hold_ticket.dart';
 
 part 'waiter_settlement_service.freezed.dart';
 part 'waiter_settlement_service.g.dart';
 
 class OpenTablesPendingException implements Exception {
   final List<String> openTableNames;
-
-  /// T8 (cuentas abiertas): per-account detail (domain hold tickets) so a
-  /// blocking close can name each account with its line count and total
-  /// without re-querying. The waiter-shift path throws without it (names
-  /// only); the cash Corte Z gate populates it.
-  final List<HoldTicket> openAccounts;
-
-  OpenTablesPendingException(this.openTableNames, {this.openAccounts = const []});
+  OpenTablesPendingException(this.openTableNames);
 
   @override
   String toString() =>

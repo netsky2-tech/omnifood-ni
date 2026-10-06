@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'cash_shift_view_model.dart';
+import 'card_voucher_reconciliation_view_model.dart';
 import 'widgets/open_shift_dialog.dart';
 import 'widgets/cash_movement_dialog.dart';
 import 'widgets/close_shift_dialog.dart';
 import 'widgets/z_report_dialog.dart';
 import 'widgets/x_report_dialog.dart';
+import 'widgets/card_voucher_reconciliation_dialog.dart';
 import '../../design_system/nhilos_tokens.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../../core/localization/display_name_resolver.dart';
@@ -330,7 +332,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
-                    onPressed: () => openVoucherReconciliationDialog(context, vm),
+                    onPressed: () => _openVoucherReconciliationDialog(context, vm),
                     icon: const Icon(Icons.receipt_long, size: 16),
                     label: const Text('Conciliar Vouchers'),
                     style: FilledButton.styleFrom(
@@ -359,7 +361,8 @@ class _CashShiftViewState extends State<CashShiftView> {
                 children: [
                   if (vm.paymentDao != null)
                     OutlinedButton.icon(
-                      onPressed: () => openVoucherReconciliationDialog(context, vm),
+                      onPressed: () =>
+                          _openVoucherReconciliationDialog(context, vm),
                       icon: const Icon(Icons.receipt_long),
                       label: Text(vm.hasPendingVouchers
                           ? 'Vouchers (${vm.pendingVouchersCount})'
@@ -382,14 +385,6 @@ class _CashShiftViewState extends State<CashShiftView> {
                         // blind count and the Z close use.
                         effectiveExpectedNio: vm.effectiveExpectedNio,
                         effectiveExpectedUsd: vm.effectiveExpectedUsd,
-                        // T9 (cuentas abiertas): informational line, fed by
-                        // the same loader the Z gate re-checks. The verified
-                        // flag travels too, so an unverified read renders the
-                        // honest "No se pudieron verificar" row instead of a
-                        // silent report that implies zero accounts.
-                        openAccountsVerified: vm.openAccountsVerified,
-                        openAccountsCount: vm.openAccountsCount,
-                        openAccountsTotalNio: vm.openAccountsTotalNio,
                       ),
                     ),
                     icon: const Icon(Icons.assessment_outlined),
@@ -417,10 +412,43 @@ class _CashShiftViewState extends State<CashShiftView> {
                     ),
                   ),
                   ElevatedButton.icon(
-                    // T7 (unified close): the pre-gate + dialog live in
-                    // showCloseShiftFlow so the sale screen's ⋮ Cerrar Caja
-                    // entry runs the exact same Corte Z flow.
-                    onPressed: () => showCloseShiftFlow(context, vm),
+                    onPressed: () async {
+                      if (vm.hasPendingVouchers) {
+                        final goToReconcile = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Bloqueo de Corte Z Fiscal'),
+                            content: Text(
+                              'Existen ${vm.pendingVouchersCount} vouchers de datáfono en estado PENDIENTE.\n\nPor disposición de control fiscal y auditoría, debe conciliar o autorizar el override de todos los vouchers antes de emitir el Reporte Z.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(false),
+                                child: const Text('CANCELAR'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.of(ctx).pop(true),
+                                child: const Text('IR A RECONCILIACIÓN'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (goToReconcile == true && context.mounted) {
+                          _openVoucherReconciliationDialog(context, vm);
+                        }
+                        return;
+                      }
+
+                      showDialog<bool>(
+                        context: context,
+                        builder: (_) => ChangeNotifierProvider<CashShiftViewModel>.value(
+                          value: vm,
+                          // R-18: pass the id→name map so the Z report opened
+                          // by the close flow shows the resolved cashier.
+                          child: CloseShiftDialog(usersById: _usersById),
+                        ),
+                      );
+                    },
                     icon: const Icon(Icons.lock),
                     label: const Text('Cerrar Turno (Corte Z)'),
                     style: ElevatedButton.styleFrom(
@@ -517,6 +545,21 @@ class _CashShiftViewState extends State<CashShiftView> {
         ],
       ),
     );
+  }
+
+  void _openVoucherReconciliationDialog(
+      BuildContext context, CashShiftViewModel vm) {
+    if (vm.paymentDao == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (_) => ChangeNotifierProvider<CardVoucherReconciliationViewModel>(
+        create: (_) => CardVoucherReconciliationViewModel(
+          paymentDao: vm.paymentDao!,
+          currentUserId: vm.currentUserId,
+        )..loadPendingVouchers(),
+        child: const CardVoucherReconciliationDialog(),
+      ),
+    ).then((_) => vm.refreshPendingVouchersCount());
   }
 
   Widget _buildMetricTile({

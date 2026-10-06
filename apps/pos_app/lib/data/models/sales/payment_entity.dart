@@ -45,6 +45,15 @@ class PaymentEntity {
   final int? reconciledAt;
   @ColumnInfo(name: 'reconciled_by_user_id')
   final String? reconciledByUserId;
+  // S1a (backlog #68): per-row outbox for the card/voucher reconciliation
+  // push. Default 'synced' is deliberate — a freshly created payment already
+  // travels inside the sale sync, so only a LATER reconciliation change
+  // creates outbox work. Seeding historical rows as pending would re-deliver
+  // states the cloud already has.
+  // Floor 1.5.0's ColumnInfo carries no defaultValue; the SQLite default is
+  // declared in migration60_61 and the Dart-side default in the constructor.
+  @ColumnInfo(name: 'reconciliation_sync_status')
+  final String reconciliationSyncStatus;
   @ColumnInfo(name: 'created_at')
   final int? createdAt;
 
@@ -67,6 +76,7 @@ class PaymentEntity {
     this.batchNumber,
     this.reconciledAt,
     this.reconciledByUserId,
+    this.reconciliationSyncStatus = 'synced',
     this.createdAt,
   });
 }

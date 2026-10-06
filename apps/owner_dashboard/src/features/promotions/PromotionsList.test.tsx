@@ -3,12 +3,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { PromotionsList } from './PromotionsList';
 import { PromotionType, type Promotion } from '@/types/promotions';
 import { usePromotions, useTogglePromotion, useDeletePromotion, useCreatePromotion, useUpdatePromotion } from '@/hooks/use-promotions';
-import { useCatalogValues } from '@/features/catalog/use-catalog';
 import { toast } from '@/hooks/use-toast';
 
 vi.mock('@/hooks/use-promotions');
 vi.mock('@/hooks/use-toast');
-vi.mock('@/features/catalog/use-catalog');
 vi.mock('@tanstack/react-query', () => ({
   useQuery: vi.fn(),
   useMutation: vi.fn(),
@@ -64,31 +62,6 @@ const mockPromotions: Promotion[] = [
   },
 ];
 
-const mockCatalogCategories = [
-  {
-    id: 'cat-pizza',
-    tenant_id: 'tenant-A',
-    catalog_type: 'SALES_PRODUCT_CATEGORY',
-    code: 'PIZZA',
-    name: 'Pizzas',
-    is_active: true,
-    sort_order: 1,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'cat-drinks',
-    tenant_id: 'tenant-A',
-    catalog_type: 'SALES_PRODUCT_CATEGORY',
-    code: 'DRINKS',
-    name: 'Bebidas',
-    is_active: false,
-    sort_order: 2,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
-
 describe('PromotionsList', () => {
   const mockTogglePromotion = { mutateAsync: vi.fn() };
   const mockDeletePromotion = { mutateAsync: vi.fn() };
@@ -107,7 +80,6 @@ describe('PromotionsList', () => {
     (useDeletePromotion as any).mockReturnValue(mockDeletePromotion);
     (useCreatePromotion as any).mockReturnValue(mockCreatePromotion);
     (useUpdatePromotion as any).mockReturnValue(mockUpdatePromotion);
-    (useCatalogValues as any).mockReturnValue({ data: mockCatalogCategories });
     (toast as any).mockImplementation(vi.fn());
   });
 
@@ -251,47 +223,5 @@ describe('PromotionsList', () => {
     render(<PromotionsList />);
     
     expect(screen.getByText(/error al cargar promociones/i)).toBeInTheDocument();
-  });
-
-  // T0.5'd: target_category_id is a uuid; the list must show the category
-  // NAME from the synced catalog (including inactive rows), never a bare
-  // uuid, and never "Global" for a non-null id.
-  describe('target category display (T0.5\'d)', () => {
-    it('reads the full category catalog including inactive rows', () => {
-      render(<PromotionsList />);
-      expect(useCatalogValues).toHaveBeenCalledWith('SALES_PRODUCT_CATEGORY', true);
-    });
-
-    it('resolves a known category id to its name', () => {
-      render(<PromotionsList />);
-      expect(screen.getByText('Categoría: Pizzas')).toBeInTheDocument();
-      expect(screen.queryByText('Categoría: cat-pizza')).not.toBeInTheDocument();
-    });
-
-    it('falls back to a short id display for an id missing from the catalog', () => {
-      (usePromotions as any).mockReturnValue({
-        data: [
-          {
-            ...mockPromotions[1],
-            id: 'promo-x',
-            target_category_id: 'aaaaaaaa-bbbb-cccc-dddd-1234567890ab',
-          },
-        ],
-        isLoading: false,
-        error: null,
-        refetch: vi.fn(),
-      });
-      render(<PromotionsList />);
-      expect(screen.getByText('Categoría: …567890ab')).toBeInTheDocument();
-      expect(screen.queryByText('Categoría: aaaaaaaa-bbbb-cccc-dddd-1234567890ab')).not.toBeInTheDocument();
-      expect(screen.queryByText('Global')).not.toBeInTheDocument();
-    });
-
-    it('resolves the category name in the detail dialog too', () => {
-      render(<PromotionsList />);
-      fireEvent.click(screen.getAllByRole('button', { name: 'Ver detalles' })[1]!);
-      expect(screen.getByText('Pizzas')).toBeInTheDocument();
-      expect(screen.queryByText('cat-pizza')).not.toBeInTheDocument();
-    });
   });
 });

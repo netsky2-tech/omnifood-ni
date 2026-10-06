@@ -153,36 +153,13 @@ class InvoiceFiscalCalculator {
     TaxRegime? taxRegime,
     bool isGlobalTaxExempt = false,
     double totalDiscounts = 0.0,
-    required double commercialRate,
-    required double bcnOfficialRate,
-
-    /// #67/T2a: production callers keep the default (true) — a non-positive
-    /// rate is a configuration error, never a fabricable default. The sale
-    /// view model's cart PREVIEW passes false: an unknown rate withholds the
-    /// USD block (totalUsd 0.0) instead of throwing, while every NIO figure
-    /// (tax included — the DGI tax base never uses a rate) stays exact.
-    bool requireFiscalRates = true,
+    double commercialRate = 36.50,
+    double bcnOfficialRate = 36.6241,
   }) {
     if (taxRegime == null) {
       throw const FiscalConfigurationException(
         'No se puede calcular una venta fiscal sin un régimen fiscal DGI configurado.',
       );
-    }
-
-    // #67/T2a: a rate the terminal did not resolve is NEVER fabricated.
-    // Both recorded rates must be positive; otherwise this is a
-    // configuration error, not a self-healed default.
-    if (requireFiscalRates) {
-      if (commercialRate <= 0) {
-        throw const FiscalConfigurationException(
-          'No se puede calcular una venta fiscal sin la tasa de cambio comercial configurada.',
-        );
-      }
-      if (bcnOfficialRate <= 0) {
-        throw const FiscalConfigurationException(
-          'No se puede calcular una venta fiscal sin la tasa oficial BCN configurada.',
-        );
-      }
     }
 
     // 1. Calculate line gross amounts
@@ -345,7 +322,8 @@ class InvoiceFiscalCalculator {
     final finalExempt = _round(exemptAccum);
     final finalTotalTax = taxRegime.isRegimenGeneral ? _round(taxAccum) : 0.0;
     final finalTotal = _round(finalSubtotal + finalTotalTax);
-    final totalUsd = requireFiscalRates ? _round(finalTotal / commercialRate) : 0.0;
+    final commRate = commercialRate > 0 ? commercialRate : 36.50;
+    final totalUsd = _round(finalTotal / commRate);
 
     return FiscalCalculationResult(
       taxRegime: taxRegime,
@@ -357,8 +335,8 @@ class InvoiceFiscalCalculator {
       exemptSubtotal: finalExempt,
       totalTax: finalTotalTax,
       total: finalTotal,
-      commercialRate: commercialRate,
-      bcnOfficialRate: bcnOfficialRate,
+      commercialRate: commRate,
+      bcnOfficialRate: bcnOfficialRate > 0 ? bcnOfficialRate : 36.6241,
       totalUsd: totalUsd,
     );
   }

@@ -247,7 +247,17 @@ class _InsumoViewState extends State<InsumoView> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ItemOptionsEditor(product: product),
+        builder: (context) => ItemOptionsEditor(
+          product: product,
+          onSave: (variants, modifiers) async {
+            await context.read<InsumoViewModel>().saveProductOptions(
+              productId: product.id,
+              variants: variants,
+              modifiers: modifiers,
+            );
+            if (context.mounted) Navigator.pop(context);
+          },
+        ),
       ),
     );
   }

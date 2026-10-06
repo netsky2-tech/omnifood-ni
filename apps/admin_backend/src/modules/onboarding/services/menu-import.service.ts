@@ -8,8 +8,6 @@ import {
   MenuImportSummary,
 } from '../dto/menu-import.dto';
 import { Insumo } from '../../inventory/entities/insumo.entity';
-import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
-import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
 import {
   RecipeOrigin,
@@ -69,17 +67,10 @@ const TEMPLATE_INSTRUCTIONS = [
 ] as const;
 
 const round4 = (value: number): number => Number(value.toFixed(ROUND_4));
-const roundPrice = (value: number): number =>
-  Number(value.toFixed(ROUND_PRICE));
+const roundPrice = (value: number): number => Number(value.toFixed(ROUND_PRICE));
 
 /** The five BOM columns every sheet must declare (accent/case tolerant). */
-const MENU_COLUMNS = [
-  'producto',
-  'precio',
-  'insumo',
-  'cantidad',
-  'unidad',
-] as const;
+const MENU_COLUMNS = ['producto', 'precio', 'insumo', 'cantidad', 'unidad'] as const;
 type MenuColumn = (typeof MENU_COLUMNS)[number];
 
 /**
@@ -106,24 +97,6 @@ function normalizeMenuHeader(raw: string): MenuColumn | null {
  * trimmed lowercased name within the tenant).
  */
 const nameKey = (raw: string): string => raw.trim().toLowerCase();
-
-/**
- * Canonical catalog code for a worksheet-derived menu category: trim,
- * collapse internal whitespace to `_`, strip accents/diacritics, uppercase,
- * then drop every character that is not A-Z, 0-9 or `_`. The result is the
- * stable `catalog_values.code` key (unique per tenant and catalog type) that
- * the POS uses to reference a `SALES_PRODUCT_CATEGORY` value. Pure and
- * deterministic so the same sheet name always yields the same code.
- */
-export function canonicalCategoryCode(raw: string): string {
-  return raw
-    .trim()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '_')
-    .toUpperCase()
-    .replace(/[^A-Z0-9_]/g, '');
-}
 
 /** One raw Excel data row (defensively extracted from the sheet). */
 interface ParsedMenuRow {
@@ -177,10 +150,7 @@ export class MenuImportService {
    * execute. No writes; runs inside a tenant-bound transaction so the
    * existing-state reads (insumos, products, recipe versions) respect RLS.
    */
-  async preview(
-    tenantId: string,
-    payload: MenuImportRequestDto,
-  ): Promise<MenuImportSummary> {
+  async preview(tenantId: string, payload: MenuImportRequestDto): Promise<MenuImportSummary> {
     const trimmedTenant = resolveTenantContextId(tenantId);
     const parsed = await this.parseWorkbook(payload.fileBase64);
     return runInTenantTransaction(this.dataSource, trimmedTenant, (manager) =>
@@ -193,10 +163,7 @@ export class MenuImportService {
    * staging), fails closed on any row error, then performs all writes inside
    * one tenant-bound transaction.
    */
-  async commit(
-    tenantId: string,
-    payload: MenuImportRequestDto,
-  ): Promise<MenuImportSummary> {
+  async commit(tenantId: string, payload: MenuImportRequestDto): Promise<MenuImportSummary> {
     const trimmedTenant = resolveTenantContextId(tenantId);
     const parsed = await this.parseWorkbook(payload.fileBase64);
     return runInTenantTransaction(this.dataSource, trimmedTenant, (manager) =>
@@ -211,9 +178,7 @@ export class MenuImportService {
   private async parseWorkbook(base64: string): Promise<ParsedSheet[]> {
     const trimmed = base64?.trim();
     if (!trimmed) {
-      throw new BadRequestException(
-        'fileBase64 is required: send the .xlsx workbook encoded as base64',
-      );
+      throw new BadRequestException('fileBase64 is required: send the .xlsx workbook encoded as base64');
     }
     if (trimmed.length > MAX_BASE64_LENGTH) {
       throw new BadRequestException(
@@ -384,10 +349,8 @@ export class MenuImportService {
           )
           .join('');
       }
-      if ('result' in record)
-        return this.cellText(record.result as ExcelJS.CellValue);
-      if ('text' in record)
-        return this.cellText(record.text as ExcelJS.CellValue);
+      if ('result' in record) return this.cellText(record.result as ExcelJS.CellValue);
+      if ('text' in record) return this.cellText(record.text as ExcelJS.CellValue);
     }
     return '';
   }
@@ -437,19 +400,6 @@ export class MenuImportService {
     const groups = new Map<string, ProductGroup>();
 
     for (const sheet of sheets) {
-      // Fail closed before any write: a worksheet whose name normalizes to
-      // an empty canonical code would otherwise create a `category_code
-      // = ''` catalog row (a brand-new orphan) and stamp it on every
-      // product from that sheet.
-      if (!canonicalCategoryCode(sheet.name)) {
-        errors.push({
-          sheet: sheet.name,
-          row: 1,
-          message:
-            `Sheet name '${sheet.name}' produces an empty category code: ` +
-            `rename the worksheet so its name contains letters or numbers (e.g. 'BEBIDAS')`,
-        });
-      }
       if (sheet.rows.length === 0) {
         warnings.push({
           sheet: sheet.name,
@@ -576,10 +526,7 @@ export class MenuImportService {
       for (const ingredient of group.ingredients) {
         const key = nameKey(ingredient.name);
         if (!insumoMap.has(key) && !missingInsumos.has(key)) {
-          missingInsumos.set(key, {
-            name: ingredient.name,
-            unit: ingredient.unit,
-          });
+          missingInsumos.set(key, { name: ingredient.name, unit: ingredient.unit });
         }
       }
     }
@@ -625,102 +572,11 @@ export class MenuImportService {
       }
     }
 
-    // 1b. Resolve every worksheet-derived category to a canonical
-    //     SALES_PRODUCT_CATEGORY code. First-seen sheet order wins
-    //     (matching the idempotency rule above MENU_COLUMNS); only
-    //     categories actually referenced by a product group become catalog
-    //     rows. Existing rows are reused by their derived `code` — never
-    //     fuzzy-matched by label — so the import cannot silently merge
-    //     distinct categories the owner already administered in /catalogs.
-    const categoryLabels: string[] = [];
-    for (const group of groups) {
-      if (!categoryLabels.includes(group.category)) {
-        categoryLabels.push(group.category);
-      }
-    }
-    const existingCategories = await manager.find(CatalogValue, {
-      where: {
-        tenant_id: tenantId,
-        catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
-      },
-    });
-    const categoriesByCode = new Map<string, CatalogValue>();
-    for (const row of existingCategories) {
-      categoriesByCode.set(row.code, row);
-    }
-    // New rows continue after the highest existing sort_order so the
-    // first-seen sheet order stays stable and deterministic across runs.
-    let nextSortOrder =
-      existingCategories.reduce(
-        (max, row) => Math.max(max, row.sort_order ?? 0),
-        -1,
-      ) + 1;
-    const categoryCodeByLabel = new Map<string, string>();
-    for (const label of categoryLabels) {
-      const code = canonicalCategoryCode(label);
-      categoryCodeByLabel.set(label, code);
-      if (categoriesByCode.has(code)) continue;
-      if (mode === 'commit') {
-        // Single-statement race handling: `ON CONFLICT DO NOTHING` cannot
-        // abort the surrounding transaction. A try/catch around save()
-        // is unrecoverable here — after one failed statement inside a
-        // PostgreSQL transaction every subsequent statement errors with
-        // 25P02 — so recovery must never rely on a caught error.
-        const values = {
-          tenant_id: tenantId,
-          catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
-          code,
-          // The label keeps the owner's worksheet wording (accents
-          // and case preserved), e.g. 'Café caliente'.
-          name: label,
-          is_active: true,
-          sort_order: nextSortOrder++,
-        };
-        const result = await manager
-          .createQueryBuilder()
-          .insert()
-          .into(CatalogValue)
-          .values(values)
-          .orIgnore()
-          .execute();
-        const inserted = (result?.identifiers?.length ?? 0) > 0;
-        if (inserted) {
-          // This import created the row; tell the owner what it added.
-          categoriesByCode.set(code, manager.create(CatalogValue, values));
-          warnings.push({
-            sheet: label,
-            row: 1,
-            message: `Created new category '${label}' (code '${code}') in /catalogs`,
-          });
-        } else {
-          // The insert was ignored: a concurrent transaction committed the
-          // same (tenant_id, catalog_type, code) after the read above. No
-          // statement failed, so this read-back on the same tenant-bound
-          // manager is safe.
-          const raced = await manager.findOne(CatalogValue, {
-            where: {
-              tenant_id: tenantId,
-              catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
-              code,
-            },
-          });
-          if (!raced) {
-            throw new BadRequestException(
-              `Category '${label}' (code '${code}') could not be created or found in /catalogs`,
-            );
-          }
-          categoriesByCode.set(code, raced);
-        }
-      }
-    }
-
     // 2. Create or price-update products.
     for (const group of groups) {
       const existing = productMap.get(nameKey(group.name));
       if (existing) {
-        if (
-          roundPrice(Number(existing.sellPrice)) !== roundPrice(group.price)
-        ) {
+        if (roundPrice(Number(existing.sellPrice)) !== roundPrice(group.price)) {
           summary.productsToUpdate++;
           if (mode === 'commit') {
             // Price-only update: never touch name, recipe, or type.
@@ -749,8 +605,8 @@ export class MenuImportService {
             product_type: group.ingredients.length
               ? ProductType.COMPOUND
               : ProductType.SIMPLE,
-            // Canonical catalog code derived from the worksheet name.
-            category_code: categoryCodeByLabel.get(group.category),
+            // The sheet is the menu category.
+            category_code: group.category,
           }),
         );
         productMap.set(nameKey(group.name), created);

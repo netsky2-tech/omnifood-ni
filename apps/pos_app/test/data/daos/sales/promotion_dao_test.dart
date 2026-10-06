@@ -89,9 +89,9 @@ void main() {
       expect(byProduct.length, equals(1));
       expect(byProduct.first.name, equals('Descuento Hamburguesa'));
 
-      // T0.5c: getPromotionsByCategory was deleted (zero callers — the engine
-      // now matches promotions strictly by category id in memory, never via a
-      // free-text category DAO lookup).
+      final byCat = await database.promotionDao.getPromotionsByCategory('Comida');
+      expect(byCat.length, equals(1));
+      expect(byCat.first.name, equals('Descuento Comida'));
     });
 
     test('SalesMapper convierte bidireccionalmente todos los campos de Promotion', () {

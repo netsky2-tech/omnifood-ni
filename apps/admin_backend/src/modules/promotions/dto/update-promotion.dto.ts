@@ -6,7 +6,6 @@ import {
   IsInt,
   IsBoolean,
   IsArray,
-  IsUUID,
   Min,
 } from 'class-validator';
 import { PromotionType } from '../entities/promotion.entity';
@@ -24,14 +23,9 @@ export class UpdatePromotionDto {
   @IsString()
   target_product_id?: string;
 
-  // T0.5'a: a uuid referencing catalog_values(tenant_id, id); the service
-  // additionally requires it to be a SALES_PRODUCT_CATEGORY row of the
-  // caller's tenant. T0.5'd: an explicit JSON null is also accepted and
-  // means "clear to global" (the column is set to NULL); an empty string
-  // is still rejected by the service guard.
   @IsOptional()
-  @IsUUID()
-  target_category_id?: string | null;
+  @IsString()
+  target_category_id?: string;
 
   @IsOptional()
   @IsInt()

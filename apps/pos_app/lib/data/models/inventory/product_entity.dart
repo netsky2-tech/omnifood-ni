@@ -17,11 +17,6 @@ class ProductEntity {
   final String? barcode;
   @ColumnInfo(name: 'category')
   final String? category;
-  /// T0.5c: resolved category identity (catalog_values.id) shipped by the
-  /// cloud product delta. Strict promotion matching keys on this id; the
-  /// free-text [category] remains display-only.
-  @ColumnInfo(name: 'category_id')
-  final String? categoryId;
   @ColumnInfo(name: 'is_prepared')
   final bool isPrepared;
   @ColumnInfo(name: 'product_type')
@@ -54,7 +49,6 @@ class ProductEntity {
     this.sku,
     this.barcode,
     this.category,
-    this.categoryId,
     this.isPrepared = false,
     this.productType = 'SIMPLE',
     this.mappingVersionId,

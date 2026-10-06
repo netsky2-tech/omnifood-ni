@@ -1,9 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:convert';
 import 'package:mockito/mockito.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
-import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
@@ -33,8 +31,6 @@ import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart';
 import 'package:pos_app/data/daos/sales/tax_config_dao.dart';
-import 'package:pos_app/data/models/sales/restaurant_area_entity.dart';
-import 'package:pos_app/data/models/sales/restaurant_table_entity.dart';
 import 'package:pos_app/data/models/sales/tax_config_entity.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/services/sales/invoice_fiscal_calculator.dart';
@@ -153,15 +149,6 @@ void main() {
     fakeLocalConfigDao = FakeLocalConfigDao();
     fakeLocalConfigDao.saveConfig(
       LocalConfigEntity(key: 'tax_regime', value: 'CUOTA_FIJA'),
-    );
-    // #67/T2a: the terminal no longer invents FX rates — the sale path only
-    // proceeds when BOTH recorded rates are configured, so the checkout
-    // fixtures seed them explicitly.
-    fakeLocalConfigDao.saveConfig(
-      LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
-    );
-    fakeLocalConfigDao.saveConfig(
-      LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
     );
 
     when(mockDb.cashierSessionDao).thenReturn(mockSessionDao);
@@ -341,7 +328,7 @@ void main() {
     verifyNever(mockSessionDao.insertSession(any));
   });
 
-  test('finalizeSale in CARTERA_MESERO persists the cash/card split the Z figure aggregates', () async {
+  test('finalizeSale in CARTERA_MESERO tracks only cash expected', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(
         id: 'u-1',
@@ -379,29 +366,15 @@ void main() {
 
     await viewModel.finalizeSale([PaymentMethod.cash, PaymentMethod.card]);
 
-    // T7 (unified close): the in-memory sessionExpected counter was retired
-    // with CloseBoxDialog. The Corte Z figure (effectiveExpectedNio/Usd) is
-    // computed from the PERSISTED payment rows, so the surviving contract at
-    // the VM level is that the split reaches the repository intact: net cash
-    // = total/2, card = total/2.
-    final captured = verify(
-      mockSalesRepo.saveSale(
-        invoice: anyNamed('invoice'),
-        items: anyNamed('items'),
-        payments: captureAnyNamed('payments'),
-      ),
-    ).captured.single as List<Payment>;
-    expect(captured, hasLength(2));
-
-    final cashPayment = captured.firstWhere((p) => p.method == PaymentMethod.cash);
-    final cardPayment = captured.firstWhere((p) => p.method == PaymentMethod.card);
-    expect(cashPayment.amountNio - cashPayment.changeGiven,
-        closeTo(totalBeforeFinalize / 2, 0.0001));
-    expect(cardPayment.amount, closeTo(totalBeforeFinalize / 2, 0.0001));
+    expect(
+      viewModel.sessionExpected[PaymentMethod.cash],
+      closeTo(100 + (totalBeforeFinalize / 2), 0.0001),
+    );
+    expect(viewModel.sessionExpected[PaymentMethod.card], 0.0);
   });
 
   test(
-    'finalizeSale in CAJA_CENTRAL persists the cash and card split the Z figure aggregates',
+    'finalizeSale in CAJA_CENTRAL tracks cash and card expected totals',
     () async {
       when(mockAuthRepo.getCurrentUser()).thenAnswer(
         (_) async => const User(
@@ -438,25 +411,8 @@ void main() {
 
       await viewModel.finalizeSale([PaymentMethod.cash, PaymentMethod.card]);
 
-      // T7 (unified close): per-method totals are now asserted on the
-      // persisted payment rows — the input the Corte Z close re-queries via
-      // getCashPaymentsForShift — instead of the retired in-memory counter.
-      final captured = verify(
-        mockSalesRepo.saveSale(
-          invoice: anyNamed('invoice'),
-          items: anyNamed('items'),
-          payments: captureAnyNamed('payments'),
-        ),
-      ).captured.single as List<Payment>;
-      expect(captured, hasLength(2));
-      expect(
-        captured.firstWhere((p) => p.method == PaymentMethod.cash).amount,
-        greaterThan(0),
-      );
-      expect(
-        captured.firstWhere((p) => p.method == PaymentMethod.card).amount,
-        greaterThan(0),
-      );
+      expect(viewModel.sessionExpected[PaymentMethod.cash], greaterThan(100));
+      expect(viewModel.sessionExpected[PaymentMethod.card], greaterThan(0));
     },
   );
 
@@ -1575,253 +1531,6 @@ void main() {
         ).called(1);
       },
     );
-  });
-
-  group('processSale with a persisted escPosNetwork printer profile (#70 T1)', () {
-    test(
-        'records the printer failure in lastPrintError and still completes the sale (non-blocking)',
-        () async {
-      when(mockAuthRepo.getCurrentUser()).thenAnswer(
-        (_) async => const User(
-          id: 'u-net-1',
-          name: 'Cajero Red',
-          role: UserRole.cashier,
-          isActive: true,
-        ),
-      );
-      when(
-        mockSalesRepo.saveSale(
-          invoice: anyNamed('invoice'),
-          items: anyNamed('items'),
-          payments: anyNamed('payments'),
-        ),
-      ).thenAnswer((_) async {});
-
-      // A terminal that selected the removed 'Red TCP/IP' driver before the
-      // option was withdrawn still has it persisted in local_configs.
-      await fakeLocalConfigDao.saveConfig(
-        LocalConfigEntity(
-          key: PrinterConfigService.driverTypeKey,
-          value: 'ESCPOS_NETWORK',
-        ),
-      );
-      await fakeLocalConfigDao.saveConfig(
-        LocalConfigEntity(
-          key: 'commercial_exchange_rate',
-          value: '36.50',
-        ),
-      );
-      await fakeLocalConfigDao.saveConfig(
-        LocalConfigEntity(
-          key: 'bcn_official_exchange_rate',
-          value: '36.6241',
-        ),
-      );
-
-      // No injected printer port: the production resolver path must decide
-      // what the persisted profile maps to.
-      final vm = SaleViewModel(
-        mockSalesRepo,
-        mockInventoryRepo,
-        mockAuthRepo,
-        mockDb,
-        null,
-        true,
-        FakeTenantConfigService(fakeLocalConfigDao),
-        FakeKitchenOrderService(mockDb),
-        PrinterConfigService(fakeLocalConfigDao),
-        null,
-      );
-      await vm.loadExchangeRates();
-      vm.addToCart(
-        Product(
-          id: 'p-net-1',
-          sku: 'SKU-NET',
-          name: 'Prod Red',
-          uom: 'unit',
-          sellPrice: 100,
-          stock: 10,
-          averageCost: 10,
-        ),
-      );
-
-      // Must not throw: printing is non-blocking after the sale commits.
-      await vm.processSale([PaymentMethod.cash]);
-
-      expect(vm.errorMessage, isNull);
-      expect(vm.cart, isEmpty);
-      expect(vm.lastPrintError, isNotNull);
-      expect(vm.lastPrintError, contains('no está disponible'));
-      expect(vm.lastPrintError, contains('Sunmi V2s'));
-      expect(vm.lastPrintError, contains('Q80'));
-      vm.dispose();
-    });
-  });
-
-  group('Open accounts (F1): re-parking a recalled account REPLACES, never accumulates', () {
-    late AppDatabase realDb;
-    late TableOrderService realTableOrderService;
-    late SaleViewModel holdVm;
-
-    setUpAll(() {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    });
-
-    setUp(() async {
-      realDb = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
-      realTableOrderService = TableOrderService(realDb);
-      holdVm = SaleViewModel(
-        mockSalesRepo,
-        mockInventoryRepo,
-        mockAuthRepo,
-        realDb,
-        realTableOrderService,
-        false,
-      );
-    });
-
-    tearDown(() async {
-      holdVm.dispose();
-      await realDb.close();
-    });
-
-    Product productAt(double price, String id, String name) => Product(
-          id: id,
-          sku: id,
-          name: name,
-          uom: 'UND',
-          stock: 100,
-          averageCost: price / 2,
-          sellPrice: price,
-          taxRate: 0.15,
-        );
-
-    test(
-        'park -> recall -> re-park keeps the exact 3 lines / C\$440 instead of doubling (device bug A5)',
-        () async {
-      // Same shape the S23 rig reproduced: 3 lines / C\$440.00 pre-tax.
-      holdVm.addToCart(productAt(180, 'p-plato', 'Plato Fuerte'));
-      holdVm.addToCart(productAt(130, 'p-espresso', 'Espresso Doble'));
-      holdVm.addToCart(productAt(130, 'p-latte', 'Latte'));
-      expect(holdVm.cart, hasLength(3));
-      expect(holdVm.subtotal, 440.0);
-
-      // A1: park as "Cuenta 1" — cart clears, exactly one open account.
-      await holdVm.holdCurrentTicket('Cuenta 1');
-      expect(holdVm.cart, isEmpty);
-      expect(holdVm.holdTickets, hasLength(1));
-
-      // A2: recall loads the WHOLE ticket back into the cart.
-      final cuenta1 = holdVm.holdTickets.single;
-      await holdVm.recallTicket(cuenta1);
-      expect(holdVm.cart, hasLength(3));
-      expect(holdVm.subtotal, 440.0);
-
-      // A4/A5: re-parking under a NEW name must rename the SAME account and
-      // replace its contents with the cart — never accumulate on top of it.
-      await holdVm.holdCurrentTicket('Cuenta 2');
-
-      expect(holdVm.holdTickets, hasLength(1),
-          reason: 'a typed name renames the existing account; it never creates a second one');
-      final reparked = holdVm.holdTickets.single;
-      expect(reparked.id, cuenta1.id);
-      expect(reparked.name, 'Cuenta 2',
-          reason: 'the typed name was discarded by the old append branch (A4)');
-      expect(reparked.version, 2);
-      expect(reparked.items, hasLength(3),
-          reason: 'A5 device bug: each recover+park cycle doubled 3 -> 6 lines');
-      final gross = reparked.items.fold<double>(0, (sum, item) => sum + item.grossAmount);
-      expect(gross, 440.0,
-          reason: 'A5 device bug: each recover+park cycle doubled C\$440 -> C\$880');
-    });
-  });
-
-  group('Open accounts (F4): abandoning a held account discards it and releases its table', () {
-    late AppDatabase realDb;
-    late TableOrderService realTableOrderService;
-    late SaleViewModel holdVm;
-
-    setUpAll(() {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    });
-
-    setUp(() async {
-      realDb = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
-      realTableOrderService = TableOrderService(realDb);
-      holdVm = SaleViewModel(
-        mockSalesRepo,
-        mockInventoryRepo,
-        mockAuthRepo,
-        realDb,
-        realTableOrderService,
-        false,
-      );
-      await realDb.restaurantAreaDao.insertArea(
-        RestaurantAreaEntity(id: 'area-1', name: 'Salón Principal', displayOrder: 1),
-      );
-      await realDb.restaurantTableDao.insertTables([
-        RestaurantTableEntity(
-            id: 'tbl-9', areaId: 'area-1', tableNumber: 'Mesa 9', capacity: 4),
-      ]);
-    });
-
-    tearDown(() async {
-      holdVm.dispose();
-      await realDb.close();
-    });
-
-    Product productAt(double price, String id, String name) => Product(
-          id: id,
-          sku: id,
-          name: name,
-          uom: 'UND',
-          stock: 100,
-          averageCost: price / 2,
-          sellPrice: price,
-          taxRate: 0.15,
-        );
-
-    test(
-        'abandonHoldTicket removes the account from the open orders and releases its occupied table',
-        () async {
-      holdVm.addToCart(productAt(180, 'p-plato', 'Plato Fuerte'));
-      await holdVm.holdCurrentTicket('Mesa 9', tableId: 'tbl-9');
-      expect(holdVm.holdTickets, hasLength(1));
-
-      // Parking occupied the table; the abandonment must hand it back.
-      final occupied = await realDb.restaurantTableDao.getTableById('tbl-9');
-      expect(occupied?.status, 'OCUPADA');
-      expect(occupied?.currentTicketId, holdVm.holdTickets.single.id);
-
-      await holdVm.abandonHoldTicket(holdVm.holdTickets.single);
-
-      expect(holdVm.holdTickets, isEmpty,
-          reason: 'the abandoned account must disappear from getAllOpenOrders()');
-      final released = await realDb.restaurantTableDao.getTableById('tbl-9');
-      expect(released?.status, 'DISPONIBLE',
-          reason: 'liquidateOrder must release the occupied table');
-      expect(released?.currentTicketId, isNull);
-    });
-
-    test('abandoning the currently loaded account clears the cart and the loaded ticket', () async {
-      holdVm.addToCart(productAt(180, 'p-plato', 'Plato Fuerte'));
-      holdVm.addToCart(productAt(130, 'p-espresso', 'Espresso Doble'));
-      await holdVm.holdCurrentTicket('Cuenta 1');
-      await holdVm.recallTicket(holdVm.holdTickets.single);
-      expect(holdVm.cart, hasLength(2));
-      expect(holdVm.activeLoadedHoldTicket, isNotNull);
-
-      final loaded = holdVm.activeLoadedHoldTicket!;
-      await holdVm.abandonHoldTicket(loaded);
-
-      expect(holdVm.cart, isEmpty,
-          reason: 'the cart was the abandoned account; it must not linger as a phantom sale');
-      expect(holdVm.activeLoadedHoldTicket, isNull,
-          reason: 're-parking after abandonment must create a NEW account, never resurrect it');
-      expect(holdVm.holdTickets, isEmpty);
-    });
   });
 }
 

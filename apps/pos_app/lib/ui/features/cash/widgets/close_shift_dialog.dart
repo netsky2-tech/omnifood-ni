@@ -2,155 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../design_system/responsive_layout.dart';
 import '../../../../core/localization/display_name_resolver.dart';
-import '../../../../domain/models/sales/cart_item.dart';
-import '../../../../domain/models/sales/hold_ticket.dart';
-import '../../../../domain/services/sales/waiter_settlement_service.dart';
 import '../cash_shift_view_model.dart';
-import '../card_voucher_reconciliation_view_model.dart';
-import 'card_voucher_reconciliation_dialog.dart';
 import 'z_report_dialog.dart';
 import '../../../design_system/nhilos_tokens.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
-
-/// T7 (unified close): THE single Corte Z close entry point. Both the
-/// Control de Caja button and the sale screen's ⋮ Cerrar Caja (after its
-/// supervisor override) run this identical pre-gate + dialog, so the weak
-/// parallel close (CloseBoxDialog / SaleViewModel.closeSession) cannot
-/// bypass the pending-voucher fiscal gate anymore.
-///
-/// The cash VM is re-synced from the database first ([CashShiftViewModel.init])
-/// so the gate and the dialog see the shift and voucher state as of NOW,
-/// not as of the last screen load.
-Future<void> showCloseShiftFlow(
-  BuildContext context,
-  CashShiftViewModel vm,
-) async {
-  await vm.init();
-  if (!context.mounted) return;
-
-  // T8 (INV-16.5): hard block — no Corte Z while open accounts exist.
-  // Deliberate order: accounts BEFORE the pending-voucher gate below,
-  // because resolving a tab paid by card creates a pending voucher — the
-  // operator clears accounts first and then reconciles the vouchers that
-  // action produced. Hard block: no supervisor override, no bypass, no
-  // "close anyway" — the only way through is to resolve the accounts.
-  // R1-stale-open-accounts-init (native review, slice F5): if init could
-  // not verify the open-account state, the pre-gate must not fall through
-  // as if it had verified "no open accounts" — same fail-closed posture
-  // as the VM's close gate. Checked BEFORE the hasOpenAccounts branch.
-  if (!vm.openAccountsVerified) {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Bloqueo de Corte Z — Cuentas Abiertas'),
-        content: const Text(
-          'No se pudieron verificar las cuentas abiertas de esta terminal.\n\n'
-          'Por disposición de control fiscal (INV-16.5), sin verificación no se emite Reporte Z. Intente de nuevo.',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ENTENDIDO'),
-          ),
-        ],
-      ),
-    );
-    return;
-  }
-
-  if (vm.hasOpenAccounts) {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Bloqueo de Corte Z — Cuentas Abiertas'),
-        content: Text(openAccountsBlockMessage(vm.openAccounts)),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('ENTENDIDO'),
-          ),
-        ],
-      ),
-    );
-    return;
-  }
-
-  // Invariante Fiscal DGI: no Corte Z with pending card vouchers.
-  if (vm.hasPendingVouchers) {
-    final goToReconcile = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Bloqueo de Corte Z Fiscal'),
-        content: Text(
-          'Existen ${vm.pendingVouchersCount} vouchers de datáfono en estado PENDIENTE.\n\nPor disposición de control fiscal y auditoría, debe conciliar o autorizar el override de todos los vouchers antes de emitir el Reporte Z.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('CANCELAR'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('IR A RECONCILIACIÓN'),
-          ),
-        ],
-      ),
-    );
-    if (goToReconcile == true && context.mounted) {
-      await openVoucherReconciliationDialog(context, vm);
-    }
-    return;
-  }
-
-  await showDialog<bool>(
-    context: context,
-    builder: (_) => ChangeNotifierProvider<CashShiftViewModel>.value(
-      value: vm,
-      child: const CloseShiftDialog(),
-    ),
-  );
-}
-
-/// T8: the operator-facing block message for open accounts. Names each
-/// account with its line count and total, states that nothing is invoiced
-/// and no Z is emitted while accounts remain open, and tells the operator
-/// exactly what to do (Ventas en Espera — cobrar o abandonar). No
-/// continuation is offered anywhere this message is shown.
-String openAccountsBlockMessage(List<HoldTicket> accounts) {
-  final lines = accounts.map((a) {
-    final total = a.items.fold<double>(0, (sum, i) => sum + i.grossAmount);
-    final n = a.items.length;
-    return '• ${a.name} — $n ${n == 1 ? 'línea' : 'líneas'} · C\$ ${total.toStringAsFixed(2)}';
-  }).join('\n');
-  return 'Existen ${accounts.length} '
-      '${accounts.length == 1 ? 'cuenta abierta' : 'cuentas abiertas'} '
-      'en esta terminal:\n\n'
-      '$lines\n\n'
-      'Por disposición de control fiscal (INV-16.5), mientras haya cuentas '
-      'abiertas no se factura nada y no se emite Reporte Z.\n\n'
-      'Resuelva cada cuenta en Ventas en Espera: cóbrela o abandónela. '
-      'Abandonar la descarta definitivamente: no se puede deshacer. '
-      'Luego vuelva a intentar el cierre.';
-}
-
-/// Opens the voucher reconciliation dialog for [vm]'s payment DAO and
-/// refreshes the pending-voucher count once it closes.
-Future<void> openVoucherReconciliationDialog(
-  BuildContext context,
-  CashShiftViewModel vm,
-) async {
-  if (vm.paymentDao == null) return;
-  await showDialog<void>(
-    context: context,
-    builder: (_) => ChangeNotifierProvider<CardVoucherReconciliationViewModel>(
-      create: (_) => CardVoucherReconciliationViewModel(
-        paymentDao: vm.paymentDao!,
-        currentUserId: vm.currentUserId,
-      )..loadPendingVouchers(),
-      child: const CardVoucherReconciliationDialog(),
-    ),
-  ).then((_) => vm.refreshPendingVouchersCount());
-}
 
 class CloseShiftDialog extends StatefulWidget {
   const CloseShiftDialog({super.key, this.usersById = const {}});
@@ -220,29 +75,14 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
       _error = null;
     });
 
-    bool success;
-    try {
-      success = await vm.closeShiftWithBlindCount(
-        countedNio: countedNio,
-        countedUsd: countedUsd,
-        notes: _notesController.text.trim().isNotEmpty
-            ? _notesController.text.trim()
-            : null,
-        supervisorId: null,
-      );
-    } on OpenTablesPendingException catch (e) {
-      // T8 stale-read defence: an account parked between the pre-gate and
-      // this write resurfaces HERE, at the VM's fresh re-check. Same block,
-      // same copy, and still no continuation.
-      if (!mounted) return;
-      setState(() {
-        _submitting = false;
-        _error = e.openAccounts.isEmpty
-            ? 'Existen cuentas abiertas. Resuélvalas en Ventas en Espera antes de emitir el Corte Z.'
-            : openAccountsBlockMessage(e.openAccounts);
-      });
-      return;
-    }
+    final success = await vm.closeShiftWithBlindCount(
+      countedNio: countedNio,
+      countedUsd: countedUsd,
+      notes: _notesController.text.trim().isNotEmpty
+          ? _notesController.text.trim()
+          : null,
+      supervisorId: null,
+    );
 
     if (mounted) {
       if (success) {

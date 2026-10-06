@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 import 'package:pos_app/data/daos/inventory/recipe_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
-import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
 import 'package:pos_app/data/models/inventory/product_entity.dart';
@@ -83,23 +82,8 @@ class FakeAuthorityProjectionDao extends Fake
 }
 
 class FakeLocalConfigDao extends Fake implements LocalConfigDao {
-  // #67/T2a: the sale path fails closed without BOTH recorded FX rates, so
-  // the checkout fixture seeds them. Every other key stays absent, exactly
-  // as before.
-  final Map<String, String> _configs = {
-    'commercial_exchange_rate': '36.50',
-    'bcn_official_exchange_rate': '36.6241',
-  };
-
   @override
-  Future<String?> getConfigValue(String? key) async => _configs[key];
-
-  @override
-  Future<LocalConfigEntity?> getConfigByKey(String key) async {
-    final value = _configs[key];
-    if (value == null) return null;
-    return LocalConfigEntity(key: key, value: value);
-  }
+  Future<String?> getConfigValue(String? key) async => null;
 }
 
 class FakeAppDatabase extends Fake implements AppDatabase {

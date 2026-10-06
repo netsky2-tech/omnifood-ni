@@ -1730,6 +1730,21 @@ class MockAuthRepository extends _i1.Mock implements _i82.AuthRepository {
       ) as bool);
 
   @override
+  bool get isReauthenticationRequired => (super.noSuchMethod(
+        Invocation.getter(#isReauthenticationRequired),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  void notifyReauthenticationRequired() => super.noSuchMethod(
+        Invocation.method(
+          #notifyReauthenticationRequired,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   _i55.Future<_i62.User?> loginOnline(
     String? email,
     String? password, {
@@ -3149,6 +3164,18 @@ class MockPromotionDao extends _i1.Mock implements _i36.PromotionDao {
         Invocation.method(
           #getPromotionsByProduct,
           [productId],
+        ),
+        returnValue: _i55.Future<List<_i89.PromotionEntity>>.value(
+            <_i89.PromotionEntity>[]),
+      ) as _i55.Future<List<_i89.PromotionEntity>>);
+
+  @override
+  _i55.Future<List<_i89.PromotionEntity>> getPromotionsByCategory(
+          String? categoryId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPromotionsByCategory,
+          [categoryId],
         ),
         returnValue: _i55.Future<List<_i89.PromotionEntity>>.value(
             <_i89.PromotionEntity>[]),

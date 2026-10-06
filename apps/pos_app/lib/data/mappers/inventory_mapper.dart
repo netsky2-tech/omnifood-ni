@@ -263,9 +263,6 @@ class InventoryMapper {
     ProductEntity entity, {
     List<ProductVariant> variants = const [],
     List<Modifier> modifiers = const [],
-    /// T2.3: effective modifier groups resolved by the caller from the
-    /// local mirror. Legacy flat [modifiers] stays untouched.
-    List<EffectiveModifierGroup> modifierGroups = const [],
   }) {
     return Product(
       id: entity.id,
@@ -278,7 +275,6 @@ class InventoryMapper {
       sku: entity.sku,
       barcode: entity.barcode,
       category: entity.category,
-      categoryId: entity.categoryId,
       isPrepared: entity.isPrepared,
       productType: entity.productType,
       mappingVersionId: entity.mappingVersionId,
@@ -290,7 +286,6 @@ class InventoryMapper {
       isTaxExempt: entity.isTaxExempt,
       variants: variants,
       availableModifiers: modifiers,
-      availableModifierGroups: modifierGroups,
     );
   }
 
@@ -306,7 +301,6 @@ class InventoryMapper {
       sku: domain.sku,
       barcode: domain.barcode,
       category: domain.category,
-      categoryId: domain.categoryId,
       isPrepared: domain.isPrepared,
       productType: domain.productType,
       mappingVersionId: domain.mappingVersionId,

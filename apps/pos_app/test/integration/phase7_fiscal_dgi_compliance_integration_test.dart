@@ -150,8 +150,7 @@ void main() {
       final resGeneral = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
-        commercialRate: 36.50,
-        bcnOfficialRate: 36.6241,);
+      );
       expect(resGeneral.subtotal, equals(100.00));
       expect(resGeneral.totalTax, equals(15.00));
       expect(resGeneral.total, equals(115.00));
@@ -171,8 +170,7 @@ void main() {
       final resCuotaFija = calculator.calculate(
         cart: cart,
         taxRegime: TaxRegime.cuotaFija,
-        commercialRate: 36.50,
-        bcnOfficialRate: 36.6241,);
+      );
       expect(resCuotaFija.subtotal, equals(100.00));
       expect(resCuotaFija.totalTax, equals(0.00));
       expect(resCuotaFija.total, equals(100.00));
@@ -206,8 +204,7 @@ void main() {
       final resGeneral = calculator.calculate(
         cart: cartExempt,
         taxRegime: TaxRegime.regimenGeneral,
-        commercialRate: 36.50,
-        bcnOfficialRate: 36.6241,);
+      );
       expect(resGeneral.subtotal, equals(200.00));
       expect(resGeneral.taxableSubtotal, equals(0.00));
       expect(resGeneral.exemptSubtotal, equals(200.00)); // Reconocido como exento
@@ -224,8 +221,7 @@ void main() {
       final resCuotaFija = calculator.calculate(
         cart: cartExempt,
         taxRegime: TaxRegime.cuotaFija,
-        commercialRate: 36.50,
-        bcnOfficialRate: 36.6241,);
+      );
       expect(resCuotaFija.subtotal, equals(200.00));
       expect(resCuotaFija.taxableSubtotal, equals(0.00));
       expect(resCuotaFija.exemptSubtotal, equals(0.00)); // En Cuota Fija no hay subtotal exento
@@ -251,8 +247,7 @@ void main() {
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
         totalDiscounts: 1.00,
-        commercialRate: 36.50,
-        bcnOfficialRate: 36.6241,);
+      );
 
       expect(res.grossSubtotal, equals(300.00));
       expect(res.totalDiscount, equals(1.00));
@@ -278,9 +273,7 @@ void main() {
 
       // calculate() with null regime MUST throw — no silent IVA default
       expect(
-        () => calculator.calculate(cart: cart, taxRegime: null,
-        commercialRate: 36.50,
-        bcnOfficialRate: 36.6241,),
+        () => calculator.calculate(cart: cart, taxRegime: null),
         throwsA(isA<FiscalConfigurationException>()),
       );
     });
@@ -295,8 +288,7 @@ void main() {
         cart: cart,
         taxRegime: TaxRegime.regimenGeneral,
         totalDiscounts: 20.00,
-        commercialRate: 36.50,
-        bcnOfficialRate: 36.6241,);
+      );
 
       final directDoc = calculator.buildReceiptDocument(
         calculation: calc,

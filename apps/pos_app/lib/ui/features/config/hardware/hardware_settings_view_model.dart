@@ -49,14 +49,6 @@ class HardwareSettingsViewModel extends ChangeNotifier {
   bool get isTesting => _isTesting;
   String? get statusMessage => _statusMessage;
   bool get isProfileConfigured => _isProfileConfigured;
-
-  /// #70 T1: the persisted profile selected a driver that is no longer
-  /// offered in the selector ('Red TCP/IP'). The screen must render it as
-  /// unsupported and force the operator to pick a real driver, instead of
-  /// presenting it as a working printer.
-  bool get isPersistedDriverUnsupported =>
-      _isProfileConfigured &&
-      _config.driverType == PrinterDriverType.escPosNetwork;
   PrinterDriverType? get pendingDriverType => _pendingDriverType;
   int? get pendingPaperWidth => _pendingPaperWidth;
   bool get canConfirmPrinterProfile =>

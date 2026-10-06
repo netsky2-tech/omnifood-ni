@@ -5,6 +5,7 @@ import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
+import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
@@ -94,6 +95,11 @@ void main() {
     when(mockViewModel.buzzerNumber).thenReturn(null);
     when(mockViewModel.canManageCashDrawer).thenReturn(true);
     when(mockViewModel.currentUserRole).thenReturn(UserRole.cashier);
+    when(mockViewModel.sessionExpected).thenReturn({
+      PaymentMethod.cash: 100,
+      PaymentMethod.card: 0,
+      PaymentMethod.qr: 0,
+    });
     when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => currentUser);
   });
 

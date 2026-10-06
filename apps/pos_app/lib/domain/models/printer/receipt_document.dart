@@ -10,24 +10,12 @@ class ReceiptModifierDisplay {
   final String name;
   final String? displayAmount;
   final String scope;
-  /// Units of this option the line includes; legacy payloads default to 1.
-  final int quantity;
 
-  const ReceiptModifierDisplay({
-    required this.name,
-    this.displayAmount,
-    this.scope = 'unit',
-    this.quantity = 1,
-  });
+  const ReceiptModifierDisplay({required this.name, this.displayAmount, this.scope = 'unit'});
 
-  /// The quantity rides on the NAME when above one ('2x Extra Shot'); the
-  /// amount stays per-unit under its 'por unidad' scope.
-  String get printableText {
-    final labeledName = quantity > 1 ? '${quantity}x $name' : name;
-    return displayAmount == null || displayAmount!.isEmpty
-        ? labeledName
-        : '$labeledName ($scope: $displayAmount)';
-  }
+  String get printableText => displayAmount == null || displayAmount!.isEmpty
+      ? name
+      : '$name ($scope: $displayAmount)';
 }
 
 /// Single item line in a printed or previewed receipt, already fiscally calculated.
@@ -76,11 +64,7 @@ class ReceiptLine {
   }) {
     final qty = item.quantity;
     final unitPrice = item.unitPrice;
-    // Per-unit price × each modifier's quantity, times the line quantity:
-    // identical formula to CartItemX.modifiersTotal. Legacy modifiers
-    // without quantity default to 1 (old persisted invoices keep totaling
-    // exactly as before).
-    final modifiersTotal = item.selectedModifiers.fold(0.0, (sum, m) => sum + m.extraPrice * m.quantity) * qty;
+    final modifiersTotal = item.selectedModifiers.fold(0.0, (sum, m) => sum + m.extraPrice) * qty;
     final gross = (unitPrice * qty) + modifiersTotal;
     final discount = item.discount;
     final lineSubtotal = gross - discount > 0 ? gross - discount : 0.0;
@@ -113,7 +97,6 @@ class ReceiptLine {
 
     final modifierDisplays = item.selectedModifiers.map((m) => ReceiptModifierDisplay(
           name: m.name,
-          quantity: m.quantity,
           displayAmount: m.extraPrice > 0 ? 'C\$ ${m.extraPrice.toStringAsFixed(2)}' : null,
           scope: 'por unidad',
         )).toList();

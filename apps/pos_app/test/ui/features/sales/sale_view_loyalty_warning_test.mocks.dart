@@ -320,6 +320,12 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
         returnValueForMissingStub: <_i17.HoldTicket>[],
       ) as List<_i17.HoldTicket>);
 
+  @override
+  Map<_i18.PaymentMethod, double> get sessionExpected => (super.noSuchMethod(
+        Invocation.getter(#sessionExpected),
+        returnValue: <_i18.PaymentMethod, double>{},
+        returnValueForMissingStub: <_i18.PaymentMethod, double>{},
+      ) as Map<_i18.PaymentMethod, double>);
 
   @override
   bool get isGlobalTaxExempt => (super.noSuchMethod(
@@ -990,6 +996,15 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
         returnValueForMissingStub: _i19.Future<void>.value(),
       ) as _i19.Future<void>);
 
+  @override
+  _i19.Future<void> closeSession(double? closingBalance) => (super.noSuchMethod(
+        Invocation.method(
+          #closeSession,
+          [closingBalance],
+        ),
+        returnValue: _i19.Future<void>.value(),
+        returnValueForMissingStub: _i19.Future<void>.value(),
+      ) as _i19.Future<void>);
 
   @override
   void addToCart(
@@ -1210,6 +1225,22 @@ class MockAuthRepository extends _i1.Mock implements _i24.AuthRepository {
         returnValue: false,
         returnValueForMissingStub: false,
       ) as bool);
+
+  @override
+  bool get isReauthenticationRequired => (super.noSuchMethod(
+        Invocation.getter(#isReauthenticationRequired),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
+  void notifyReauthenticationRequired() => super.noSuchMethod(
+        Invocation.method(
+          #notifyReauthenticationRequired,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   _i19.Future<_i25.User?> loginOnline(
@@ -1607,6 +1638,16 @@ class MockSyncService extends _i1.Mock implements _i10.SyncService {
       ) as Duration);
 
   @override
+  void notifyAuthBlocked([String? reason = r'AUTH_BLOCKED']) =>
+      super.noSuchMethod(
+        Invocation.method(
+          #notifyAuthBlocked,
+          [reason],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   _i19.Future<int> getPendingOutboxCount() => (super.noSuchMethod(
         Invocation.method(
           #getPendingOutboxCount,
@@ -1615,6 +1656,16 @@ class MockSyncService extends _i1.Mock implements _i10.SyncService {
         returnValue: _i19.Future<int>.value(0),
         returnValueForMissingStub: _i19.Future<int>.value(0),
       ) as _i19.Future<int>);
+
+  @override
+  _i19.Future<Duration?> getOldestPendingItemAge() => (super.noSuchMethod(
+        Invocation.method(
+          #getOldestPendingItemAge,
+          [],
+        ),
+        returnValue: _i19.Future<Duration?>.value(),
+        returnValueForMissingStub: _i19.Future<Duration?>.value(),
+      ) as _i19.Future<Duration?>);
 
   @override
   _i19.Future<int> getPendingAuditCount() => (super.noSuchMethod(

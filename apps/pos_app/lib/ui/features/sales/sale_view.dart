@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/sales/cart_item.dart';
-import '../../../domain/services/printer/kitchen_modifier_lines.dart';
-import '../../../domain/models/sales/hold_ticket.dart';
 import '../../../data/services/sync_service.dart';
 import '../../../domain/models/sales/payment.dart';
 import '../../../domain/models/sales/promotion.dart';
@@ -18,7 +16,6 @@ import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
-import '../cash/widgets/close_shift_dialog.dart' show showCloseShiftFlow;
 import 'widgets/product_card_thumbnail.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/tip_dialog.dart';
@@ -30,34 +27,6 @@ import '../config/business_profile/fiscal_authorization_expiry_notice_widget.dar
 import '../../../presentation/features/sales/widgets/loyalty_compact_widget.dart';
 import '../../../presentation/features/sales/widgets/reward_cta_widget.dart';
 import '../../../presentation/features/sales/widgets/reward_confirmation_dialog.dart';
-
-/// F3b: the REPLACE semantics of a re-parked account are a deliberate
-/// decision, but the operator must see in numbers what a save discards.
-/// Disclosure only: this never blocks the normal "add a product and save"
-/// flow, which is by far the most common edit.
-String _editAccountBanner(HoldTicket account, List<CartItem> cart) {
-  String count(int n) => n == 1 ? 'producto' : 'productos';
-  String money(double v) => 'C\$ ${v.toStringAsFixed(2)}';
-  double totalOf(List<CartItem> items) =>
-      items.fold<double>(0, (sum, i) => sum + i.grossAmount);
-
-  final storedTotal = totalOf(account.items);
-  final cartTotal = totalOf(cart);
-  final dropped = storedTotal - cartTotal;
-
-  final buffer = StringBuffer()
-    ..write('Está editando la cuenta abierta "${account.name}". ')
-    ..write('Al guardar, sus ${account.items.length} ${count(account.items.length)} ')
-    ..write('por ${money(storedTotal)} pasan a ser los ${cart.length} ')
-    ..write('${count(cart.length)} del carrito, por ${money(cartTotal)}. ')
-    ..write('No se crea una cuenta nueva.');
-
-  if (dropped > 0.005) {
-    buffer.write('\n\nSe pierden ${money(dropped)} de productos que no están '
-        'en el carrito.');
-  }
-  return buffer.toString();
-}
 
 class SaleView extends StatefulWidget {
   const SaleView({super.key});
@@ -74,11 +43,7 @@ class SaleView extends StatefulWidget {
       return;
     }
 
-    // F3 (open accounts fix): when a recalled account is loaded, the operator
-    // is EDITING that account — seed the field with its name and say so, so
-    // they are never blind to what a save will replace.
-    final loadedAccount = vm.activeLoadedHoldTicket;
-    final controller = TextEditingController(text: loadedAccount?.name ?? '');
+    final controller = TextEditingController();
     List<dynamic> tables = [];
     try {
       final database = context.read<AppDatabase>();
@@ -97,9 +62,7 @@ class SaleView extends StatefulWidget {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: Text(loadedAccount != null
-                ? 'Editar Cuenta Abierta'
-                : 'Poner Venta en Espera'),
+            title: const Text('Poner Venta en Espera'),
             content: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 380),
               child: SingleChildScrollView(
@@ -107,32 +70,6 @@ class SaleView extends StatefulWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (loadedAccount != null) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.edit_note,
-                                size: 20,
-                                color: Theme.of(context).colorScheme.onSecondaryContainer),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _editAccountBanner(loadedAccount, vm.cart),
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
                     TextField(
                       controller: controller,
                       decoration: const InputDecoration(
@@ -195,9 +132,7 @@ class SaleView extends StatefulWidget {
                   Navigator.pop(dialogCtx);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(loadedAccount != null
-                          ? 'Cuenta "$name" actualizada con éxito.'
-                          : 'Venta "$name" puesta en espera con éxito.'),
+                      content: Text('Venta "$name" puesta en espera con éxito.'),
                       duration: const Duration(seconds: 2),
                     ),
                   );
@@ -654,13 +589,20 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   // TODO: Implementar funcionalidad de devoluciones/notas de crédito
   // void _showReturnsDialog(BuildContext context) { ... }
 
+  void _showCloseBoxDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => const CloseBoxDialog(),
+    );
+  }
+
   Future<void> _requestSupervisorOverrideForCloseBox() async {
     final authRepo = context.read<AuthRepository>();
     final currentUser = await authRepo.getCurrentUser();
-
-    // Si el usuario ya es Owner o Manager, abrir directamente el corte Z
+    
+    // Si el usuario ya es Owner o Manager, abrir directamente el arqueo de cierre
     if (currentUser?.role == UserRole.owner || currentUser?.role == UserRole.manager) {
-      if (mounted) await _openUnifiedZClose();
+      if (mounted) _showCloseBoxDialog(context);
       return;
     }
 
@@ -692,17 +634,8 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
 
     if (!mounted) return;
     if (authorized == true) {
-      await _openUnifiedZClose();
+      _showCloseBoxDialog(context);
     }
-  }
-
-  /// T7 (unified close): the weak parallel close (CloseBoxDialog /
-  /// SaleViewModel.closeSession, in-memory expected map) was retired. Both
-  /// this entry and Control de Caja run the identical Corte Z pre-gate and
-  /// blind-count dialog from the root CashShiftViewModel.
-  Future<void> _openUnifiedZClose() async {
-    final cashVm = context.read<CashShiftViewModel>();
-    await showCloseShiftFlow(context, cashVm);
   }
 
   Future<void> _requestSupervisorOverrideForManualDrawer() async {
@@ -767,6 +700,85 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   }
 }
 
+class CloseBoxDialog extends StatefulWidget {
+  const CloseBoxDialog({super.key});
+
+  @override
+  State<CloseBoxDialog> createState() => _CloseBoxDialogState();
+}
+
+class _CloseBoxDialogState extends State<CloseBoxDialog> {
+  late final TextEditingController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = TextEditingController(text: '0.00');
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = context.watch<SaleViewModel>();
+    final expected = viewModel.sessionExpected;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AlertDialog(
+      title: const Text('Cierre de Caja - Arqueo'),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: colorScheme.primary, width: 2)),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Resumen de Ventas:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            DataTable(
+              columns: const [
+                DataColumn(label: Text('Método')),
+                DataColumn(label: Text('Esperado')),
+              ],
+              rows: expected.entries.map((e) => DataRow(cells: [
+                DataCell(Text(localize(e.key.name, kPaymentMethodLabels))),
+                DataCell(Text('C\$ ${e.value.toStringAsFixed(2)}')),
+              ])).toList(),
+            ),
+            const Divider(),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(labelText: 'Efectivo Real en Caja'),
+              keyboardType: TextInputType.number,
+              onTap: () {
+                controller.selection = TextSelection(baseOffset: 0, extentOffset: controller.text.length);
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
+        ElevatedButton(
+          onPressed: () async {
+            final balance = double.tryParse(controller.text) ?? 0.0;
+            await context.read<SaleViewModel>().closeSession(balance);
+            if (context.mounted) {
+              try {
+                context.read<CashShiftViewModel>().init();
+              } catch (_) {}
+              Navigator.pop(context);
+            }
+          }, 
+          child: const Text('CERRAR CAJA'),
+        ),
+      ],
+    );
+  }
+}
 
 class SearchBarWidget extends StatefulWidget {
   const SearchBarWidget({super.key});
@@ -777,27 +789,11 @@ class SearchBarWidget extends StatefulWidget {
 
 class _SearchBarWidgetState extends State<SearchBarWidget> {
   final TextEditingController _controller = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
 
   @override
   void dispose() {
     _controller.dispose();
-    _focusNode.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Flutter's route FocusScope remembers its focused child while this
-    // route is covered by another one and restores it when the route is
-    // revealed again (push + pop navigation), which reopened the keyboard
-    // on every re-entry to the Sales screen. Drop focus while the route is
-    // not current so there is nothing left to restore.
-    final ModalRoute<dynamic>? route = ModalRoute.of(context);
-    if (route != null && !route.isCurrent) {
-      _focusNode.unfocus();
-    }
   }
 
   @override
@@ -825,12 +821,6 @@ class _SearchBarWidgetState extends State<SearchBarWidget> {
       ),
       child: TextField(
         controller: _controller,
-        focusNode: _focusNode,
-        // Flutter's default tap-outside behavior intentionally keeps focus
-        // for touch events on mobile platforms (the operator's POS
-        // terminal), leaving the cursor and keyboard stuck on the search
-        // field. Dismiss them on any tap outside the field.
-        onTapOutside: (_) => _focusNode.unfocus(),
         onChanged: (val) => context.read<SaleViewModel>().setSearchQuery(val),
         onSubmitted: (val) {
           context.read<SaleViewModel>().searchAndAddToCart(val);
@@ -872,100 +862,26 @@ class RecallTicketsDialog extends StatelessWidget {
       title: const Text('Ventas en Espera'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400),
-        child: viewModel.holdTickets.isEmpty
+        child: viewModel.holdTickets.isEmpty 
           ? const Text('No hay ventas en espera.')
-          // F4: bounded scrollable column instead of a shrinkWrap ListView —
-          // AlertDialog measures its content with IntrinsicWidth and a
-          // ShrinkWrappingViewport cannot compute intrinsics (crash whenever
-          // the list had at least one ticket).
-          : ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 420),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final ticket in viewModel.holdTickets)
-                      _holdTicketRow(context, viewModel, ticket),
-                  ],
-                ),
-              ),
+          : ListView.builder(
+              shrinkWrap: true,
+              itemCount: viewModel.holdTickets.length,
+              itemBuilder: (context, index) {
+                final ticket = viewModel.holdTickets[index];
+                return ListTile(
+                  title: Text(ticket.name),
+                  subtitle: Text('${ticket.items.length} productos'),
+                  trailing: Text('C\$ ${ticket.items.fold(0.0, (sum, i) => sum + i.grossAmount).toStringAsFixed(2)}'),
+                  onTap: () {
+                    viewModel.recallTicket(ticket);
+                    Navigator.pop(context);
+                  },
+                );
+              },
             ),
       ),
     );
-  }
-
-  Widget _holdTicketRow(
-    BuildContext context,
-    SaleViewModel viewModel,
-    HoldTicket ticket,
-  ) {
-    return ListTile(
-      title: Text(ticket.name),
-      subtitle: Text('${ticket.items.length} productos'),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('C\$ ${ticket.items.fold(0.0, (sum, i) => sum + i.grossAmount).toStringAsFixed(2)}'),
-          const SizedBox(width: 4),
-          // F4 (open accounts fix): discard an account that will never be
-          // invoiced. Destructive styling (error color) separates it from
-          // the frequent, safe recall tap, per the nhilos experience
-          // standard (§12.5, §23).
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            color: Theme.of(context).colorScheme.error,
-            tooltip: 'Abandonar cuenta',
-            onPressed: () => _confirmAbandon(context, viewModel, ticket),
-          ),
-        ],
-      ),
-      onTap: () {
-        viewModel.recallTicket(ticket);
-        Navigator.pop(context);
-      },
-    );
-  }
-
-  Future<void> _confirmAbandon(
-    BuildContext context,
-    SaleViewModel viewModel,
-    HoldTicket ticket,
-  ) async {
-    final total = ticket.items.fold<double>(0, (sum, i) => sum + i.grossAmount);
-    final lineCount = ticket.items.length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('¿Abandonar cuenta?'),
-        content: Text(
-          'La cuenta "${ticket.name}" tiene $lineCount '
-          '${lineCount == 1 ? 'producto' : 'productos'} por '
-          'C\$ ${total.toStringAsFixed(2)}.\n\n'
-          'Nada de esto ha sido facturado. Al abandonarla se descarta '
-          'definitivamente: no se puede deshacer.',
-        ),
-        actions: [
-          // Cancel is the safe/default action (autofocused); the destructive
-          // verb is explicit, per the nhilos standard (§23.1, §23.3).
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: const Text('CANCELAR'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(dialogCtx).colorScheme.error,
-              foregroundColor: Theme.of(dialogCtx).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text('ABANDONAR'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-    await viewModel.abandonHoldTicket(ticket);
   }
 }
 
@@ -1084,9 +1000,7 @@ class ProductGrid extends StatelessWidget {
   }
 
   void _showProductOptions(BuildContext context, Product product) {
-    if (product.variants.isEmpty &&
-        product.availableModifiers.isEmpty &&
-        product.availableModifierGroups.isEmpty) {
+    if (product.variants.isEmpty && product.availableModifiers.isEmpty) {
       context.read<SaleViewModel>().addToCart(product);
       return;
     }
@@ -1108,16 +1022,7 @@ class ProductOptionsDialog extends StatefulWidget {
 
 class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   String? _selectedVariantId;
-  // Legacy flat modifiers: unreachable today, but never a silent sink.
-  final List<Modifier> _selectedLegacyModifiers = [];
-  // Grouped selection state, keyed per GROUP for radios and per OPTION for
-  // checkboxes and quantities. Checkbox and quantity groups start EMPTY:
-  // the operator opts in, the dialog never silently adds price.
-  final Map<String, String> _selectedRadioOption = {};
-  final Map<String, bool> _checkedOptions = {};
-  final Map<String, int> _optionQuantities = {};
-  // Inline error shows only while the required group is still unsatisfied.
-  bool _showMissingGroupError = false;
+  final List<Modifier> _selectedModifiers = [];
 
   @override
   void initState() {
@@ -1125,73 +1030,11 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
     if (widget.product.variants.isNotEmpty) {
       _selectedVariantId = widget.product.variants.first.id;
     }
-    // Radio groups preselect the option flagged as default, when present.
-    for (final group in widget.product.availableModifierGroups) {
-      if (group.maxSelected == 1) {
-        for (final option in group.options) {
-          if (option.isDefault) {
-            _selectedRadioOption[group.id] = option.id;
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  /// Whole-price display for deltas ('+C$ 5'), consistent with the variant
-  /// idiom but without the trailing '.0' doubles would print.
-  String _formatDelta(double priceDelta) =>
-      priceDelta % 1 == 0 ? priceDelta.toInt().toString() : '$priceDelta';
-
-  String _groupHint(EffectiveModifierGroup group) {
-    if (group.maxSelected == 1) {
-      return 'Elige una opción';
-    }
-    if (group.allowQuantities) {
-      return 'Elige hasta ${group.maxSelected} · puedes repetir';
-    }
-    return 'Elige hasta ${group.maxSelected}';
-  }
-
-  /// First group whose selected total is below its minimum, if any: radio
-  /// groups count 0/1, checkboxes count checked options, quantity groups
-  /// sum their steppers.
-  String? _firstUnsatisfiedGroupName() {
-    for (final group in widget.product.availableModifierGroups) {
-      final total = group.maxSelected == 1
-          ? (_selectedRadioOption[group.id] != null ? 1 : 0)
-          : group.allowQuantities
-              ? group.options.fold<int>(
-                  0, (sum, o) => sum + (_optionQuantities[o.id] ?? 0))
-              : group.options
-                  .where((o) => _checkedOptions[o.id] == true)
-                  .length;
-      if (total < group.minSelected) return group.name;
-    }
-    return null;
-  }
-
-  void _incrementQuantity(
-    EffectiveModifierGroup group,
-    EffectiveModifierOption option,
-  ) {
-    setState(() {
-      final currentTotal = group.options
-          .fold<int>(0, (sum, o) => sum + (_optionQuantities[o.id] ?? 0));
-      // The TOTAL quantity across the group's options never exceeds the
-      // group's limit; the minus button floors each option at zero.
-      if (currentTotal >= group.maxSelected) return;
-      _optionQuantities[option.id] = (_optionQuantities[option.id] ?? 0) + 1;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    // The inline error shows only while the group is still unsatisfied, so
-    // it clears itself the moment the operator fixes the selection.
-    final missingGroup =
-        _showMissingGroupError ? _firstUnsatisfiedGroupName() : null;
     return AlertDialog(
       title: Text(widget.product.name),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: colorScheme.outline, width: 2)),
@@ -1217,136 +1060,22 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                 ),
                 const Divider(),
               ],
-              // Legacy flat modifiers: unreachable in today's read path, but
-              // rendered (same look as before the grouped selector) so they
-              // are never silently dropped.
               if (widget.product.availableModifiers.isNotEmpty) ...[
                 const Text('Modificadores:', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 ...widget.product.availableModifiers.map((m) => CheckboxListTile(
-                  dense: true,
                   title: Text('${m.name} (+C\$ ${m.extraPrice})'),
-                  value: _selectedLegacyModifiers.contains(m),
-                  onChanged: (selected) => setState(() {
-                    if (selected == true) {
-                      _selectedLegacyModifiers.add(m);
-                    } else {
-                      _selectedLegacyModifiers.remove(m);
-                    }
-                  }),
-                )),
-                const Divider(),
-              ],
-              // One section per group, in the order the resolver produced
-              // (category-inherited first, product exceptions last — already
-              // deterministic; never re-sorted here).
-              if (missingGroup != null) ...[
-                Text(
-                  'Falta elegir una opción en «$missingGroup»',
-                  style: TextStyle(color: colorScheme.error),
-                ),
-                const SizedBox(height: 8),
-              ],
-              for (final group in widget.product.availableModifierGroups) ...[
-                Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(
-                  _groupHint(group),
-                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 4),
-                if (group.maxSelected == 1)
-                  RadioGroup<String>(
-                    groupValue: _selectedRadioOption[group.id] ?? '',
-                    onChanged: (val) => setState(() {
-                      // A null callback value clears the selection.
-                      if (val == null) {
-                        _selectedRadioOption.remove(group.id);
+                  value: _selectedModifiers.contains(m),
+                  onChanged: (val) {
+                    setState(() {
+                      if (val == true) {
+                        _selectedModifiers.add(m);
                       } else {
-                        _selectedRadioOption[group.id] = val;
+                        _selectedModifiers.remove(m);
                       }
-                    }),
-                    child: Column(
-                      children: group.options
-                          .map(
-                            (option) => RadioListTile<String>(
-                              dense: true,
-                              title: Text(
-                                '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
-                              ),
-                              value: option.id,
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  )
-                else if (group.allowQuantities)
-                  Column(
-                    children: [
-                      for (final option in group.options)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
-                              ),
-                            ),
-                            IconButton(
-                              key: Key('modifier_qty_minus_${option.id}'),
-                              icon: const Icon(Icons.remove_circle_outline),
-                              onPressed: () => setState(() {
-                                final current = _optionQuantities[option.id] ?? 0;
-                                if (current > 0) {
-                                  _optionQuantities[option.id] = current - 1;
-                                }
-                              }),
-                            ),
-                            Text(
-                              '${_optionQuantities[option.id] ?? 0}',
-                              key: Key('modifier_qty_count_${option.id}'),
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            IconButton(
-                              key: Key('modifier_qty_plus_${option.id}'),
-                              icon: const Icon(Icons.add_circle_outline),
-                              onPressed: () => _incrementQuantity(group, option),
-                            ),
-                          ],
-                        ),
-                    ],
-                  )
-                else
-                  Column(
-                    children: group.options
-                        .map(
-                          (option) => CheckboxListTile(
-                            dense: true,
-                            title: Text(
-                              '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
-                            ),
-                            value: _checkedOptions[option.id] ?? false,
-                            onChanged: (selected) => setState(() {
-                              if (selected != true) {
-                                // Unchecking is always allowed.
-                                _checkedOptions[option.id] = false;
-                                return;
-                              }
-                              // Same total-bound as the steppers: the
-                              // header promises 'Elige hasta N', so a full
-                              // group ignores the extra tap.
-                              final checkedCount = group.options
-                                  .where((o) => _checkedOptions[o.id] == true)
-                                  .length;
-                              if (checkedCount >= group.maxSelected) return;
-                              _checkedOptions[option.id] = true;
-                            }),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                const Divider(),
+                    });
+                  },
+                )),
               ],
             ],
           ),
@@ -1356,65 +1085,13 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
         ElevatedButton(
           onPressed: () {
-            // A required group left empty blocks the add: nothing reaches
-            // the cart and the dialog stays open with a friendly hint.
-            if (_firstUnsatisfiedGroupName() != null) {
-              setState(() => _showMissingGroupError = true);
-              return;
-            }
-            // Puente hacia el carrito: cada opción elegida se entrega como
-            // un modificador del modelo existente con su precio POR UNIDAD
-            // y su cantidad explícita; las opciones sin selección no generan
-            // entrada. Así los totales, el recibo y la comanda de cocina
-            // muestran la cantidad real sin tocar el modelo del carrito.
-            final selectedModifiers = <Modifier>[];
-            selectedModifiers.addAll(_selectedLegacyModifiers);
-            for (final group in widget.product.availableModifierGroups) {
-              for (final option in group.options) {
-                if (group.maxSelected == 1) {
-                  if (_selectedRadioOption[group.id] == option.id) {
-                    selectedModifiers.add(
-                      Modifier(
-                        id: option.id,
-                        name: option.name,
-                        extraPrice: option.priceDelta,
-                        quantity: 1,
-                      ),
-                    );
-                  }
-                } else if (group.allowQuantities) {
-                  final quantity = _optionQuantities[option.id] ?? 0;
-                  if (quantity > 0) {
-                    selectedModifiers.add(
-                      Modifier(
-                        id: option.id,
-                        name: option.name,
-                        // Precio POR UNIDAD: la cantidad viaja en su campo
-                        // propio para que totales y comanda sepan cuántas.
-                        extraPrice: option.priceDelta,
-                        quantity: quantity,
-                      ),
-                    );
-                  }
-                } else if (_checkedOptions[option.id] == true) {
-                  selectedModifiers.add(
-                    Modifier(
-                      id: option.id,
-                      name: option.name,
-                      extraPrice: option.priceDelta,
-                      quantity: 1,
-                    ),
-                  );
-                }
-              }
-            }
             context.read<SaleViewModel>().addToCart(
               widget.product,
               variantId: _selectedVariantId,
-              modifiers: selectedModifiers,
+              modifiers: List.from(_selectedModifiers),
             );
             Navigator.pop(context);
-          },
+          }, 
           child: const Text('AGREGAR'),
         ),
       ],
@@ -1691,29 +1368,8 @@ class CartSidebar extends StatelessWidget {
                     dense: isMobileSheet,
                     contentPadding: EdgeInsets.zero,
                     title: Text(item.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    subtitle: Row(
                       children: [
-                        if (item.selectedModifiers.isNotEmpty)
-                          Text(
-                            // Mismo formato que la comanda de cocina:
-                            // '<cantidad>x <nombre>' por cada opción.
-                            item.selectedModifiers
-                                .map(
-                                  (modifier) => KitchenModifierLines
-                                      .quantityLabel(
-                                    modifier.quantity,
-                                    modifier.name,
-                                  ),
-                                )
-                                .join(', '),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        Row(
-                          children: [
                         IconButton(
                           icon: Icon(Icons.remove_circle_outline, size: 22, color: colorScheme.primary),
                           onPressed: () => viewModel.updateQuantity(
@@ -1732,8 +1388,6 @@ class CartSidebar extends StatelessWidget {
                             variantId: item.variantId,
                             modifiers: item.selectedModifiers,
                           ),
-                        ),
-                      ],
                         ),
                       ],
                     ),
@@ -1997,13 +1651,8 @@ class CartSummary extends StatelessWidget {
     // (business profile edit, or a synced fiscal config) would not reach an
     // already-running terminal until the POS was restarted — wrong USD
     // equivalents on the day of the change.
-    final vm = context.read<SaleViewModel>();
-    await vm.loadExchangeRates();
+    await context.read<SaleViewModel>().loadExchangeRates();
     if (!context.mounted) return;
-    // #67/T2a: with an unreliable rate the checkout dialog never opens —
-    // the operator learns BEFORE ringing up the whole sale, not after
-    // pressing COBRAR. The directive message rides the standard error path.
-    if (vm.gateCheckoutOnFxRates() != null) return;
     showDialog(
       context: context,
       builder: (context) => const MultiCurrencyCheckoutDialog(),
@@ -2013,33 +1662,20 @@ class CartSummary extends StatelessWidget {
   /// D-7: direct tip entry on the checkout (independent of the gated
   /// DIVIDIR CUENTA flow).
   Future<void> _showTipDialog(BuildContext context) async {
-    // #67/T2a: same gate as the checkout and split dialogs — an unknown rate
-    // must not render tip USD equivalents computed from a fabricated number.
-    final vm = context.read<SaleViewModel>();
-    await vm.loadExchangeRates();
-    if (!context.mounted) return;
-    if (vm.gateCheckoutOnFxRates() != null) return;
     await TipDialog.show(context);
   }
 
   Future<void> _showSplitBillDialog(BuildContext context) async {
     final vm = context.read<SaleViewModel>();
     // D-5: same refresh as the checkout — the split dialog prints the
-    // checkout rate and computes share equivalents from it. T2b/#67: that
-    // rate is the APPLIED one (vm.activeCheckoutRate, the BCN rate in
-    // BCN_OFFICIAL mode), so what the operator sees matches what is
-    // charged — the office's commercial configuration lives in
-    // local_configs / the business-profile mirror, not on this dialog.
+    // commercial rate and computes share equivalents from it.
     await vm.loadExchangeRates();
     if (!context.mounted) return;
-    // #67/T2a: same gate as the checkout — an unknown rate must not render
-    // split equivalents computed from a fabricated number.
-    if (vm.gateCheckoutOnFxRates() != null) return;
     showDialog(
       context: context,
       builder: (context) => SplitBillDialog(
         cart: vm.cart,
-        commercialRate: vm.activeCheckoutRate,
+        commercialRate: vm.commercialRate,
         taxRegime: vm.companyTaxRegime,
         onPayShare: (share) {
           Navigator.of(context).pop();

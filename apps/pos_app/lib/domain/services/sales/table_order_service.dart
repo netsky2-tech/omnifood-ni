@@ -103,17 +103,9 @@ class TableOrderService {
     return orders;
   }
 
-  /// F1 (open accounts fix): wholesale replacement of a hold ticket's
-  /// contents with [items]. The cart of a recalled account already IS the
-  /// account's complete state, so re-parking must REPLACE, never accumulate.
-  /// [name] is applied too, so a typed new name renames the same account
-  /// (A4) instead of being discarded.
-  /// Everything not replaceable (id, tableId, areaId, guestCount, waiter,
-  /// tax exemption) is preserved from the STORED entity.
-  Future<HoldTicket> replaceOrderItems({
+  Future<HoldTicket> appendItemsToOrder({
     required String ticketId,
-    required String name,
-    required List<CartItem> items,
+    required List<CartItem> newItems,
     required int expectedVersion,
   }) async {
     final entity = await _database.holdTicketDao.getHoldTicketById(ticketId);
@@ -126,13 +118,15 @@ class TableOrderService {
     }
 
     final currentItemEntities = await _database.holdTicketDao.getItemsByHoldTicketId(ticketId);
-    final storedDomain = SalesMapper.toHoldTicketDomain(entity, currentItemEntities);
+    final currentDomain = SalesMapper.toHoldTicketDomain(entity, currentItemEntities);
 
-    final updatedDomain = storedDomain.copyWith(
-      name: name,
-      items: List<CartItem>.from(items),
+    final combinedItems = List<CartItem>.from(currentDomain.items)..addAll(newItems);
+    final now = DateTime.now();
+
+    final updatedDomain = currentDomain.copyWith(
+      items: combinedItems,
       version: entity.version + 1,
-      updatedAt: DateTime.now(),
+      updatedAt: now,
     );
 
     final updatedEntity = SalesMapper.toHoldTicketEntity(updatedDomain);

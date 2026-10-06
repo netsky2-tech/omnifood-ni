@@ -476,8 +476,6 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   { controller: 'FulfillmentRolloutController', transport: 'human' },
   { controller: 'PromotionsController', transport: 'human' },
   { controller: 'CatalogController', transport: 'human' },
-  // T1.2: modifier groups/options/attachments are owner-dashboard CRUD.
-  { controller: 'ModifiersController', transport: 'human' },
   { controller: 'LoyaltyController', transport: 'human' },
   // Batch 5 slice 5b (finding H2): POS-pushed loyalty point transactions.
   // Dedicated device surface (`LoyaltySyncController`) so the human loyalty

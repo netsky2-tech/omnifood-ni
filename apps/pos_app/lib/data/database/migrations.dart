@@ -2647,96 +2647,23 @@ final migration59_60 = Migration(59, 60, (database) async {
   }
 });
 
-// T0.5c: the products table gains the nullable resolved-category identity
-// column (`category_id` = catalog_values.id) shipped by the cloud product
-// delta. Promotions match strictly by this id; the free-text `category`
-// column stays for display. Nullable TEXT with no default — full parity with
-// the Floor entity field: a product without a resolved category legitimately
-// has null, so no NOT NULL/DEFAULT trade-off exists (same shape argument as
-// migration59_60). Each guard (table existence + column probe) makes the
-// migration safe to re-run (SQLite has no ADD COLUMN IF NOT EXISTS).
-final migration60_61 = Migration(60, 61, (database) async {
-  final tables = await database.rawQuery(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='products'",
+final migration63_64 = Migration(63, 64, (database) async {
+  // S1a (backlog #68): per-row outbox for the card/voucher reconciliation
+  // push (`POST /sales/payment-reconciliations/sync`). NOT NULL DEFAULT
+  // 'synced' is deliberate: a freshly created payment already travels inside
+  // the sale sync, so only a LATER reconciliation change (reconcileVoucher /
+  // overrideMissingVoucher) creates outbox work; seeding historical rows as
+  // 'pending' would re-deliver states the cloud already has. The generated
+  // DDL on a fresh install produces the identical column shape. Guarded
+  // (SQLite has no ADD COLUMN IF NOT EXISTS), so the migration is safe to
+  // re-run.
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(payments)',
   );
-  if (tables.isEmpty) return;
-  final columns = await database.rawQuery('PRAGMA table_info(products)');
   final names = columns.map((row) => row['name'] as String).toSet();
-  if (!names.contains('category_id')) {
+  if (!names.contains('reconciliation_sync_status')) {
     await database.execute(
-      'ALTER TABLE products ADD COLUMN category_id TEXT',
-    );
-  }
-});
-
-/// v61 → v62: modifier-group mirror tables (groups, options and the two
-/// attachment tables). Fresh-install parity: the same CREATE IF NOT EXISTS
-/// statements the entities generate, so a probe-style guard keeps the
-/// migration re-runnable (second run must be a no-op).
-final migration61_62 = Migration(61, 62, (database) async {
-  await database.execute('''
-    CREATE TABLE IF NOT EXISTS modifier_groups (
-      id TEXT NOT NULL PRIMARY KEY,
-      name TEXT NOT NULL,
-      min_selected INTEGER NOT NULL,
-      max_selected INTEGER NOT NULL,
-      allow_quantities INTEGER NOT NULL,
-      sort_order INTEGER NOT NULL,
-      is_active INTEGER NOT NULL
-    )
-  ''');
-  await database.execute('''
-    CREATE TABLE IF NOT EXISTS modifier_options (
-      id TEXT NOT NULL PRIMARY KEY,
-      group_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      price_delta REAL NOT NULL,
-      is_default INTEGER NOT NULL,
-      sort_order INTEGER NOT NULL,
-      is_active INTEGER NOT NULL
-    )
-  ''');
-  await database.execute('''
-    CREATE TABLE IF NOT EXISTS category_modifier_groups (
-      id TEXT NOT NULL PRIMARY KEY,
-      catalog_value_id TEXT NOT NULL,
-      catalog_code TEXT NOT NULL,
-      group_id TEXT NOT NULL,
-      sort_order INTEGER NOT NULL
-    )
-  ''');
-  await database.execute('''
-    CREATE TABLE IF NOT EXISTS product_modifier_groups (
-      id TEXT NOT NULL PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      group_id TEXT NOT NULL,
-      sort_order INTEGER NOT NULL
-    )
-  ''');
-  await database.execute(
-    'CREATE INDEX IF NOT EXISTS idx_modifier_options_group_id ON modifier_options (group_id)',
-  );
-  await database.execute(
-    'CREATE INDEX IF NOT EXISTS idx_category_modifier_groups_catalog_value_id ON category_modifier_groups (catalog_value_id)',
-  );
-  await database.execute(
-    'CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_product_id ON product_modifier_groups (product_id)',
-  );
-});
-
-/// v62 → v63: modifier quantity on the invoice-item modifiers table. The
-/// column is NOT NULL DEFAULT 1 so every pre-quantity row (old invoices,
-/// reprints) reads as one unit — the same default the domain model uses.
-final migration62_63 = Migration(62, 63, (database) async {
-  final tables = await database.rawQuery(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='invoice_item_modifiers'",
-  );
-  if (tables.isEmpty) return;
-  final columns = await database.rawQuery('PRAGMA table_info(invoice_item_modifiers)');
-  final names = columns.map((row) => row['name'] as String).toSet();
-  if (!names.contains('quantity')) {
-    await database.execute(
-      'ALTER TABLE invoice_item_modifiers ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1',
+      "ALTER TABLE payments ADD COLUMN reconciliation_sync_status TEXT NOT NULL DEFAULT 'synced'",
     );
   }
 });
@@ -2792,9 +2719,7 @@ final allMigrations = [
   migration57_58,
   migration58_59,
   migration59_60,
-  migration60_61,
-  migration61_62,
-  migration62_63,
+  migration63_64,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

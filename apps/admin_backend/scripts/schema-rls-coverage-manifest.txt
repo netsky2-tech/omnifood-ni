@@ -38,7 +38,7 @@
 #
 # The three declared command sets, and why each group is declared as it is:
 #
-#   direct:SIUD (52) — ordinary business tables whose lifecycle reads, inserts,
+#   direct:SIUD (47) — ordinary business tables whose lifecycle reads, inserts,
 #                   updates AND deletes rows; their write paths mutate and
 #                   remove state as part of normal operation.
 #   direct:SI    (10) — append-only ledgers (sync credential events, human-auth
@@ -63,13 +63,12 @@
 
 # ---------------------------------------------------------------------------
 # direct — tenant_id + ENABLE + FORCE + a declared per-command policy set
-# (68 entries: 52 direct:SIUD + 10 direct:SI + 6 direct:SIU; entry ORDER is
-# unchanged from the pre-slice-10 manifest for pre-existing entries)
+# (64 entries: 48 direct:SIUD + 10 direct:SI + 6 direct:SIU; entry ORDER is
+# unchanged from the pre-slice-10 manifest)
 # ---------------------------------------------------------------------------
 batches|direct:SIUD
 cash_movements|direct:SIUD
 cash_shift_sessions|direct:SIUD
-category_modifier_groups|direct:SIUD
 catalog_values|direct:SIUD
 change_log|direct:SIUD
 customer_loyalty_account_projection|direct:SIUD
@@ -103,8 +102,6 @@ kardex_recalculate_queue|direct:SIU
 legacy_onboarding_migration_receipts|direct:SIUD
 loyalty_programs|direct:SIUD
 loyalty_rewards|direct:SIUD
-modifier_groups|direct:SIUD
-modifier_options|direct:SIUD
 onboarding_activation_attempts|direct:SIUD
 onboarding_activation_check_results|direct:SIUD
 onboarding_activation_follow_ups|direct:SIUD
@@ -114,7 +111,6 @@ onboarding_telemetry_events|direct:SIUD
 onboarding_template_applications|direct:SIUD
 onboarding_template_seed_links|direct:SIUD
 product_inventory_mapping_versions|direct:SIUD
-product_modifier_groups|direct:SIUD
 products|direct:SIUD
 production_batch_history|direct:SIUD
 production_orders|direct:SIUD

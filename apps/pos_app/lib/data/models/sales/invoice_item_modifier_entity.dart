@@ -19,14 +19,11 @@ class InvoiceItemModifierEntity {
   final String name;
   @ColumnInfo(name: 'extra_price')
   final double extraPrice;
-  @ColumnInfo(name: 'quantity')
-  final int quantity;
 
   InvoiceItemModifierEntity({
     required this.id,
     required this.invoiceItemId,
     required this.name,
     required this.extraPrice,
-    this.quantity = 1,
   });
 }

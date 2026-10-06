@@ -7,7 +7,6 @@ import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/fiscal_config_local_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
-import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/ui/features/config/business_profile/business_profile_view_model.dart';
 
@@ -25,11 +24,6 @@ void main() {
   setUp(() {
     mockConfigDao = _MockLocalConfigDao();
     viewModel = BusinessProfileViewModel(mockConfigDao);
-    // T1 (#66): the pre-existing suites assume an authorized operator —
-    // owner/manager behavior must stay byte-identical to today. The denied
-    // roles (cashier/waiter/unset) are covered explicitly by the dedicated
-    // role-guard group below.
-    viewModel.setCurrentUserRole(UserRole.owner);
   });
 
   group('BusinessProfileViewModel FX Rates & Business Config', () {
@@ -748,94 +742,6 @@ void main() {
         reason: 'the stale form value must never overwrite the cloud value',
       );
       expect(viewModel.isCommercialRateCloudManaged, isTrue);
-    });
-  });
-
-  group('T1 #66: role guard on the FX fields', () {
-    void stubDao() {
-      when(() => mockConfigDao.getConfigByKey(any()))
-          .thenAnswer((_) async => null);
-      when(() => mockConfigDao.saveConfig(any())).thenAnswer((_) async {});
-    }
-
-    List<LocalConfigEntity> writtenEntries() => verify(() =>
-            mockConfigDao.saveConfig(captureAny()))
-        .captured
-        .whereType<LocalConfigEntity>()
-        .toList();
-
-    test('cashier: saveConfig drops the three FX keys but still persists a non-FX key in the same call',
-        () async {
-      viewModel.setCurrentUserRole(UserRole.cashier);
-      stubDao();
-      expect(viewModel.canEditExchangeRates, isFalse);
-
-      await viewModel.saveConfig({
-        'business_name': 'Café Managua',
-        'commercial_exchange_rate': '99.99',
-        'bcn_official_exchange_rate': '40.00',
-        'checkout_fx_mode': 'BCN_OFFICIAL',
-      });
-
-      final byKey = {for (final e in writtenEntries()) e.key: e.value};
-      expect(byKey.containsKey('commercial_exchange_rate'), isFalse);
-      expect(byKey.containsKey('bcn_official_exchange_rate'), isFalse);
-      expect(byKey.containsKey('checkout_fx_mode'), isFalse);
-      expect(byKey['business_name'], 'Café Managua');
-    });
-
-    test('unset role is denied (fail closed): FX keys are dropped from the save',
-        () async {
-      // A VM whose role was never set (the view resolves the role
-      // asynchronously) must deny, never allow.
-      final vm = BusinessProfileViewModel(mockConfigDao);
-      stubDao();
-      expect(vm.canEditExchangeRates, isFalse);
-
-      await vm.saveConfig({
-        'business_name': 'Café Managua',
-        'commercial_exchange_rate': '99.99',
-      });
-
-      final byKey = {for (final e in writtenEntries()) e.key: e.value};
-      expect(byKey.containsKey('commercial_exchange_rate'), isFalse);
-      expect(byKey['business_name'], 'Café Managua');
-    });
-
-    test('cashier: fetchOfficialBcnRate throws and leaves the stored BCN row untouched',
-        () async {
-      viewModel.setCurrentUserRole(UserRole.cashier);
-      stubDao();
-
-      var fetcherCalled = false;
-      await expectLater(
-        viewModel.fetchOfficialBcnRate(() async {
-          fetcherCalled = true;
-          return 40.0;
-        }),
-        throwsA(isA<Exception>()),
-      );
-
-      // Refused before any write and without mutating the in-memory config.
-      expect(fetcherCalled, isFalse);
-      verifyNever(() => mockConfigDao.saveConfig(any()));
-      expect(viewModel.config['bcn_official_exchange_rate'], '36.6241');
-      expect(viewModel.isFetchingBcnRate, isFalse);
-    });
-
-    test('manager: saveConfig still persists the FX keys (owner covered by the existing suites)',
-        () async {
-      viewModel.setCurrentUserRole(UserRole.manager);
-      stubDao();
-      expect(viewModel.canEditExchangeRates, isTrue);
-
-      await viewModel.saveConfig({
-        'business_name': 'Café Managua',
-        'commercial_exchange_rate': '37.10',
-      });
-
-      final byKey = {for (final e in writtenEntries()) e.key: e.value};
-      expect(byKey['commercial_exchange_rate'], '37.10');
     });
   });
 }

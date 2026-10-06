@@ -3,7 +3,6 @@ import type { UserRole } from "@/types";
 
 export type AppAction =
   | "promotions.write"
-  | "modifiers.write"
   | "catalog.write"
   | "products.write"
   | "recipes.write"
@@ -32,9 +31,6 @@ export type AppAction =
  * - /catalog: OWNER, MANAGER
  * - /products: OWNER, MANAGER
  * - /promotions: OWNER, MANAGER, CASHIER, WAITER (Read-only for staff)
- * - /modifiers: OWNER, MANAGER (management screen — pure configuration,
- *   every backend mutation requires OWNER or MANAGER and staff has no
- *   read-only job here, unlike /promotions)
  * - /recipes: OWNER, MANAGER
  * - /users: OWNER
  * - /customers: OWNER, MANAGER, CASHIER, WAITER
@@ -53,7 +49,6 @@ export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/catalog": ["OWNER", "MANAGER"],
   "/products": ["OWNER", "MANAGER"],
   "/promotions": ["OWNER", "MANAGER", "CASHIER", "WAITER"],
-  "/modifiers": ["OWNER", "MANAGER"],
   "/recipes": ["OWNER", "MANAGER"],
   "/users": ["OWNER"],
   "/customers": ["OWNER", "MANAGER", "CASHIER", "WAITER"],
@@ -65,7 +60,6 @@ export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
 
 export const ACTION_ROLE_PERMISSIONS: Record<AppAction, UserRole[]> = {
   "promotions.write": ["OWNER", "MANAGER"],
-  "modifiers.write": ["OWNER", "MANAGER"],
   "catalog.write": ["OWNER", "MANAGER"],
   "products.write": ["OWNER", "MANAGER"],
   "recipes.write": ["OWNER", "MANAGER"],

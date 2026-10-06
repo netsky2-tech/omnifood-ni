@@ -1814,6 +1814,22 @@ class MockAuthRepository extends _i1.Mock implements _i82.AuthRepository {
       ) as bool);
 
   @override
+  bool get isReauthenticationRequired => (super.noSuchMethod(
+        Invocation.getter(#isReauthenticationRequired),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
+  void notifyReauthenticationRequired() => super.noSuchMethod(
+        Invocation.method(
+          #notifyReauthenticationRequired,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   _i55.Future<_i62.User?> loginOnline(
     String? email,
     String? password, {
@@ -2906,6 +2922,69 @@ class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
         returnValue: _i55.Future<int?>.value(),
         returnValueForMissingStub: _i55.Future<int?>.value(),
       ) as _i55.Future<int?>);
+
+  @override
+  _i55.Future<int?> countPendingCardPaymentsForShift(String? shiftId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #countPendingCardPaymentsForShift,
+          [shiftId],
+        ),
+        returnValue: _i55.Future<int?>.value(),
+        returnValueForMissingStub: _i55.Future<int?>.value(),
+      ) as _i55.Future<int?>);
+
+  @override
+  _i55.Future<int?> countReconciledCardPaymentsForShift(String? shiftId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #countReconciledCardPaymentsForShift,
+          [shiftId],
+        ),
+        returnValue: _i55.Future<int?>.value(),
+        returnValueForMissingStub: _i55.Future<int?>.value(),
+      ) as _i55.Future<int?>);
+
+  @override
+  _i55.Future<int?> countOverriddenCardPaymentsForShift(String? shiftId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #countOverriddenCardPaymentsForShift,
+          [shiftId],
+        ),
+        returnValue: _i55.Future<int?>.value(),
+        returnValueForMissingStub: _i55.Future<int?>.value(),
+      ) as _i55.Future<int?>);
+
+  @override
+  _i55.Future<List<_i85.PaymentEntity>> getPendingReconciliations() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPendingReconciliations,
+          [],
+        ),
+        returnValue:
+            _i55.Future<List<_i85.PaymentEntity>>.value(<_i85.PaymentEntity>[]),
+        returnValueForMissingStub:
+            _i55.Future<List<_i85.PaymentEntity>>.value(<_i85.PaymentEntity>[]),
+      ) as _i55.Future<List<_i85.PaymentEntity>>);
+
+  @override
+  _i55.Future<void> updateReconciliationSyncStatus(
+    String? paymentId,
+    String? syncStatus,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateReconciliationSyncStatus,
+          [
+            paymentId,
+            syncStatus,
+          ],
+        ),
+        returnValue: _i55.Future<void>.value(),
+        returnValueForMissingStub: _i55.Future<void>.value(),
+      ) as _i55.Future<void>);
 
   @override
   _i55.Future<void> updatePayment(_i85.PaymentEntity? payment) =>

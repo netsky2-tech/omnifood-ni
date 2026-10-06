@@ -37,9 +37,6 @@ const ProductPage = lazyWithRetry(() =>
 const PromotionsPage = lazyWithRetry(() =>
   import("@/features/promotions/promotions-page").then((m) => ({ default: m.PromotionsPage })),
 );
-const ModifiersPage = lazyWithRetry(() =>
-  import("@/features/modifiers/modifiers-page").then((m) => ({ default: m.ModifiersPage })),
-);
 const RecipesPage = lazyWithRetry(() =>
   import("@/features/recipes/recipes-page").then((m) => ({ default: m.RecipesPage })),
 );
@@ -173,16 +170,6 @@ export const router = createBrowserRouter([
           <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/promotions"]}>
             <SuspenseWrapper>
               <PromotionsPage />
-            </SuspenseWrapper>
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: "modifiers",
-        element: (
-          <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/modifiers"]}>
-            <SuspenseWrapper>
-              <ModifiersPage />
             </SuspenseWrapper>
           </ProtectedRoute>
         ),

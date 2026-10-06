@@ -24,9 +24,8 @@ abstract class PromotionDao {
   @Query('SELECT * FROM promotions WHERE target_product_id = :productId AND is_active = 1')
   Future<List<PromotionEntity>> getPromotionsByProduct(String productId);
 
-  // T0.5c: getPromotionsByCategory was deleted — it had zero callers (the
-  // engine matches promotions strictly in memory by category id, never via a
-  // free-text category DAO lookup).
+  @Query('SELECT * FROM promotions WHERE target_category_id = :categoryId AND is_active = 1')
+  Future<List<PromotionEntity>> getPromotionsByCategory(String categoryId);
 
   @Query('DELETE FROM promotions WHERE id = :id')
   Future<void> deletePromotionById(String id);

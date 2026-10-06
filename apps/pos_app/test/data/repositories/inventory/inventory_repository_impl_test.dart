@@ -19,20 +19,12 @@ import 'package:dio/dio.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
-import 'package:pos_app/data/models/inventory/product_entity.dart';
 import 'package:pos_app/data/models/inventory/production_order_document_entity.dart';
 import 'package:pos_app/data/models/inventory/recipe_version_document_entity.dart';
 import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/inventory/production_order_document.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
-import 'package:pos_app/data/daos/modifiers/modifier_dao.dart';
-import 'package:pos_app/data/models/modifiers/modifier_group_entity.dart';
-import 'package:pos_app/data/models/modifiers/modifier_option_entity.dart';
-import 'package:pos_app/data/models/modifiers/category_modifier_group_entity.dart';
-import 'package:pos_app/data/models/modifiers/product_modifier_group_entity.dart';
-import 'package:pos_app/data/mappers/inventory_mapper.dart';
-import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 
 import 'inventory_repository_impl_test.mocks.dart';
@@ -52,8 +44,6 @@ import 'inventory_repository_impl_test.mocks.dart';
   ForensicAlertDao,
   Dio,
   AppDatabase,
-  ProductDao,
-  ModifierDao,
 ])
 class FakeLocalConfigDao extends Fake implements LocalConfigDao {
   @override
@@ -70,9 +60,6 @@ void main() {
   late MockMovementSyncStateDao mockMovementSyncStateDao;
   late MockInsumoDao mockInsumoDao;
   late MockRecipeVersionDocumentDao mockRecipeVersionDocumentDao;
-  late MockProductDao mockProductDao;
-  late MockModifierDao mockModifierDao;
-  late MockAppDatabase mockDb;
 
   setUp(() {
     mockDio = MockDio();
@@ -80,12 +67,8 @@ void main() {
     mockMovementSyncStateDao = MockMovementSyncStateDao();
     mockInsumoDao = MockInsumoDao();
     mockRecipeVersionDocumentDao = MockRecipeVersionDocumentDao();
-    mockDb = MockAppDatabase();
-    mockProductDao = MockProductDao();
-    mockModifierDao = MockModifierDao();
+    final mockDb = MockAppDatabase();
     when(mockDb.localConfigDao).thenReturn(FakeLocalConfigDao());
-    when(mockDb.productDao).thenReturn(mockProductDao);
-    when(mockDb.modifierDao).thenReturn(mockModifierDao);
     repository = InventoryRepositoryImpl(
       insumoDao: mockInsumoDao,
       recipeDao: MockRecipeDao(),
@@ -994,198 +977,6 @@ void main() {
       final result = await repository.getActiveRecipeVersionId('burger-1');
 
       expect(result, isNull);
-    });
-  });
-
-  group('InventoryRepositoryImpl - Effective modifier groups (T2.3)', () {
-    ProductEntity productEntity(
-      String id, {
-      String? categoryId,
-      bool isActive = true,
-    }) =>
-        ProductEntity(
-          id: id,
-          name: 'Producto $id',
-          uom: 'UND',
-          stock: 10,
-          averageCost: 0,
-          sellPrice: 0,
-          isActive: isActive,
-          categoryId: categoryId,
-        );
-
-    ModifierGroupEntity mirrorGroup(
-      String id,
-      String name, {
-      bool isActive = true,
-      int sortOrder = 0,
-    }) =>
-        ModifierGroupEntity(
-          id: id,
-          name: name,
-          minSelected: 0,
-          maxSelected: 2,
-          allowQuantities: false,
-          sortOrder: sortOrder,
-          isActive: isActive,
-        );
-
-    test('getActiveProducts resolves the effective groups per product in one snapshot', () async {
-      final entities = [
-        productEntity('prod-1', categoryId: 'cat-bebidas'),
-        productEntity('prod-2', categoryId: null),
-      ];
-      when(mockProductDao.findAllActiveProducts())
-          .thenAnswer((_) async => entities);
-      when(mockModifierDao.getAllModifierGroups()).thenAnswer(
-        (_) async => [
-          mirrorGroup('grp-1', 'Leche'),
-          mirrorGroup('grp-2', 'Extras'),
-          mirrorGroup('grp-off', 'Apagado', isActive: false),
-        ],
-      );
-      when(mockModifierDao.getAllModifierOptions()).thenAnswer(
-        (_) async => [
-          ModifierOptionEntity(
-            id: 'opt-1',
-            groupId: 'grp-1',
-            name: 'Entera',
-            priceDelta: 5,
-            isDefault: true,
-            sortOrder: 0,
-            isActive: true,
-          ),
-        ],
-      );
-      when(mockModifierDao.getAllCategoryModifierGroups()).thenAnswer(
-        (_) async => [
-          CategoryModifierGroupEntity(
-            id: 'catt-1',
-            catalogValueId: 'cat-bebidas',
-            catalogCode: 'BEBIDAS',
-            groupId: 'grp-1',
-            sortOrder: 0,
-          ),
-        ],
-      );
-      when(mockModifierDao.getAllProductModifierGroups()).thenAnswer(
-        (_) async => [
-          ProductModifierGroupEntity(
-            id: 'patt-1',
-            productId: 'prod-2',
-            groupId: 'grp-2',
-            sortOrder: 0,
-          ),
-        ],
-      );
-
-      final products = await repository.getActiveProducts();
-
-      // prod-1 inherits through its category uuid; prod-2 carries its own
-      // exception. The inactive group drops for both.
-      final prod1 = products.firstWhere((p) => p.id == 'prod-1');
-      expect(prod1.availableModifierGroups, hasLength(1));
-      expect(prod1.availableModifierGroups.first.id, 'grp-1');
-      expect(prod1.availableModifierGroups.first.source, 'category');
-      expect(prod1.availableModifierGroups.first.options, hasLength(1));
-      final prod2 = products.firstWhere((p) => p.id == 'prod-2');
-      expect(prod2.availableModifierGroups, hasLength(1));
-      expect(prod2.availableModifierGroups.first.id, 'grp-2');
-      expect(prod2.availableModifierGroups.first.source, 'product');
-
-      // Single snapshot: the four mirror reads happen exactly once, never
-      // per product.
-      verify(mockModifierDao.getAllModifierGroups()).called(1);
-      verify(mockModifierDao.getAllModifierOptions()).called(1);
-      verify(mockModifierDao.getAllCategoryModifierGroups()).called(1);
-      verify(mockModifierDao.getAllProductModifierGroups()).called(1);
-    });
-
-    test('getProductById resolves the effective groups for the one product', () async {
-      when(mockProductDao.findProductById('prod-1'))
-          .thenAnswer((_) async => productEntity('prod-1', categoryId: 'cat-bebidas'));
-      when(mockDb.modifierDao).thenReturn(mockModifierDao);
-      when(mockModifierDao.getAllModifierGroups())
-          .thenAnswer((_) async => [mirrorGroup('grp-1', 'Leche')]);
-      when(mockModifierDao.getAllModifierOptions()).thenAnswer((_) async => []);
-      when(mockModifierDao.getAllCategoryModifierGroups()).thenAnswer(
-        (_) async => [
-          CategoryModifierGroupEntity(
-            id: 'catt-1',
-            catalogValueId: 'cat-bebidas',
-            catalogCode: 'BEBIDAS',
-            groupId: 'grp-1',
-            sortOrder: 0,
-          ),
-        ],
-      );
-      when(mockModifierDao.getAllProductModifierGroups())
-          .thenAnswer((_) async => []);
-
-      final product = await repository.getProductById('prod-1');
-
-      expect(product, isNotNull);
-      expect(product!.availableModifierGroups, hasLength(1));
-      expect(product.availableModifierGroups.first.id, 'grp-1');
-      expect(product.availableModifierGroups.first.source, 'category');
-    });
-
-    test('empty mirror resolves to empty availableModifierGroups', () async {
-      when(mockProductDao.findAllActiveProducts())
-          .thenAnswer((_) async => [productEntity('prod-1', categoryId: 'cat-bebidas')]);
-      when(mockDb.modifierDao).thenReturn(mockModifierDao);
-      when(mockModifierDao.getAllModifierGroups()).thenAnswer((_) async => []);
-      when(mockModifierDao.getAllModifierOptions()).thenAnswer((_) async => []);
-      when(mockModifierDao.getAllCategoryModifierGroups())
-          .thenAnswer((_) async => []);
-      when(mockModifierDao.getAllProductModifierGroups())
-          .thenAnswer((_) async => []);
-
-      final products = await repository.getActiveProducts();
-
-      expect(products.single.availableModifierGroups, isEmpty);
-    });
-
-    test('no products means no modifier reads at all', () async {
-      when(mockProductDao.findAllActiveProducts()).thenAnswer((_) async => []);
-      when(mockDb.modifierDao).thenReturn(mockModifierDao);
-
-      final products = await repository.getActiveProducts();
-
-      expect(products, isEmpty);
-      verifyNever(mockModifierDao.getAllModifierGroups());
-      verifyNever(mockModifierDao.getAllModifierOptions());
-      verifyNever(mockModifierDao.getAllCategoryModifierGroups());
-      verifyNever(mockModifierDao.getAllProductModifierGroups());
-    });
-
-    test('mapper pass-through: toProductDomain maps modifierGroups into availableModifierGroups', () {
-      final domain = InventoryMapper.toProductDomain(
-        productEntity('prod-1', categoryId: 'cat-bebidas'),
-        modifierGroups: const [
-          EffectiveModifierGroup(
-            id: 'grp-1',
-            name: 'Leche',
-            minSelected: 0,
-            maxSelected: 1,
-            allowQuantities: false,
-            source: 'category',
-            options: [
-              EffectiveModifierOption(
-                id: 'opt-1',
-                name: 'Entera',
-                priceDelta: 5,
-                isDefault: true,
-              ),
-            ],
-          ),
-        ],
-      );
-
-      expect(domain.availableModifierGroups, hasLength(1));
-      expect(domain.availableModifierGroups.first.options.first.name, 'Entera');
-      // Legacy flat modifiers stay untouched.
-      expect(domain.availableModifiers, isEmpty);
     });
   });
 }
