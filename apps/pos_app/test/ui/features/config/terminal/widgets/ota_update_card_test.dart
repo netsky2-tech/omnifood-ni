@@ -99,6 +99,77 @@ void main() {
       expect(button.enabled, isFalse);
     });
 
+    testWidgets('renders recheck button in blocked OtaUpdateAvailable state', (tester) async {
+      when(() => mockCoordinator.state).thenReturn(
+        OtaUpdateAvailable(
+          manifest: sampleManifest,
+          fiscalVerdict: const FiscalGateBlocked(
+            reasons: [FiscalBlockReason.shiftOpen],
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(createWidget());
+
+      expect(find.byKey(const Key('ota_recheck_button')), findsOneWidget);
+      expect(find.text('Buscar actualizaciones'), findsOneWidget);
+    });
+
+    testWidgets('tapping recheck button calls checkForUpdate on coordinator', (tester) async {
+      when(() => mockCoordinator.state).thenReturn(
+        OtaUpdateAvailable(
+          manifest: sampleManifest,
+          fiscalVerdict: const FiscalGateBlocked(
+            reasons: [FiscalBlockReason.shiftOpen],
+          ),
+        ),
+      );
+      when(() => mockCoordinator.checkForUpdate()).thenAnswer((_) async {});
+
+      await tester.pumpWidget(createWidget());
+
+      await tester.tap(find.byKey(const Key('ota_recheck_button')));
+      await tester.pump();
+
+      verify(() => mockCoordinator.checkForUpdate()).called(1);
+    });
+
+    testWidgets('recheck button is enabled while install button stays disabled in blocked state', (tester) async {
+      when(() => mockCoordinator.state).thenReturn(
+        OtaUpdateAvailable(
+          manifest: sampleManifest,
+          fiscalVerdict: const FiscalGateBlocked(
+            reasons: [FiscalBlockReason.shiftOpen],
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(createWidget());
+
+      final installFinder = find.byKey(const Key('ota_install_button'));
+      expect(installFinder, findsOneWidget);
+      final installButton = tester.widget<ElevatedButton>(installFinder);
+      expect(installButton.enabled, isFalse);
+
+      final recheckFinder = find.byKey(const Key('ota_recheck_button'));
+      expect(recheckFinder, findsOneWidget);
+      final recheckButton = tester.widget<OutlinedButton>(recheckFinder);
+      expect(recheckButton.enabled, isTrue);
+    });
+
+    testWidgets('does not render recheck button when gate is clear', (tester) async {
+      when(() => mockCoordinator.state).thenReturn(
+        OtaUpdateAvailable(
+          manifest: sampleManifest,
+          fiscalVerdict: const FiscalGateClear(),
+        ),
+      );
+
+      await tester.pumpWidget(createWidget());
+
+      expect(find.byKey(const Key('ota_recheck_button')), findsNothing);
+    });
+
     testWidgets('renders progress indicator in OtaDownloading state', (tester) async {
       when(() => mockCoordinator.state).thenReturn(
         OtaDownloading(
