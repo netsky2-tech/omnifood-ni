@@ -88,9 +88,13 @@ class ModifierResolutionService {
       );
     }
 
-    // Product-side group ids: a group attached at BOTH levels resolves
-    // through the product side only (the exception wins over inheritance).
-    final productGroupIds = productAttachments
+    // The product's OWN exceptions (this product only) are computed FIRST:
+    // the dedup is per-product, so an exception on product A must never
+    // leak into product B's inherited list.
+    final ownAttachments = productAttachments
+        .where((attachment) => attachment.productId == productId)
+        .toList();
+    final productGroupIds = ownAttachments
         .map((attachment) => attachment.groupId)
         .toSet();
     final inheritedAttachments = categoryAttachments
@@ -100,9 +104,6 @@ class ModifierResolutionService {
               attachment.catalogValueId == categoryId &&
               !productGroupIds.contains(attachment.groupId),
         )
-        .toList();
-    final ownAttachments = productAttachments
-        .where((attachment) => attachment.productId == productId)
         .toList();
 
     String attachmentTiebreak(

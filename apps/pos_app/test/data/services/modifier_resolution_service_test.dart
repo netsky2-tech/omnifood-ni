@@ -201,6 +201,47 @@ void main() {
       expect(result.first.source, 'product');
     });
 
+    test('an exception on one product never suppresses the inherited group of its siblings (per-product dedup)', () {
+      final groups = [groupRow('grp-1', 'Leche'), groupRow('grp-2', 'Extras')];
+      final categoryAttachments = [
+        categoryAttachment('catt-1', 'cat-bebidas', 'grp-1', 0),
+        categoryAttachment('catt-2', 'cat-bebidas', 'grp-2', 1),
+      ];
+      final productAttachments = [
+        productAttachment('patt-1', 'prod-A', 'grp-1', 0),
+        // Several exceptions exist — but for OTHER products.
+        productAttachment('patt-2', 'prod-C', 'grp-2', 0),
+      ];
+
+      final forA = ModifierResolutionService.resolveEffective(
+        productId: 'prod-A',
+        categoryId: 'cat-bebidas',
+        groups: groups,
+        options: const [],
+        categoryAttachments: categoryAttachments,
+        productAttachments: productAttachments,
+      );
+      // A owns grp-1 ONCE as its own exception; grp-2 stays inherited
+      // (prod-C's exception must not leak into A).
+      expect(forA.map((entry) => entry.id).toList(), ['grp-2', 'grp-1']);
+      expect(forA.map((entry) => entry.source).toList(),
+          ['category', 'product']);
+
+      // B owns nothing: BOTH groups stay inherited. The bug under test made
+      // B resolve NOTHING here.
+      final forB = ModifierResolutionService.resolveEffective(
+        productId: 'prod-B',
+        categoryId: 'cat-bebidas',
+        groups: groups,
+        options: const [],
+        categoryAttachments: categoryAttachments,
+        productAttachments: productAttachments,
+      );
+      expect(forB.map((entry) => entry.id).toList(), ['grp-1', 'grp-2']);
+      expect(forB.map((entry) => entry.source).toList(),
+          everyElement('category'));
+    });
+
     test('a dangling attachment (group not in the loaded set) is skipped, never a crash', () {
       final result = ModifierResolutionService.resolveEffective(
         productId: 'prod-1',
