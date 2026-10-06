@@ -411,6 +411,12 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as List<_i12.Product>);
 
   @override
+  bool get isProcessingSale => (super.noSuchMethod(
+        Invocation.getter(#isProcessingSale),
+        returnValue: false,
+      ) as bool);
+
+  @override
   bool get hasListeners => (super.noSuchMethod(
         Invocation.getter(#hasListeners),
         returnValue: false,
@@ -822,14 +828,17 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
   @override
   _i16.Future<void> openSession(
     double? balance, {
-    double? balanceUsd,
+    double? balanceUsd = 0.0,
     _i18.CashSessionModel? tipoModelo = _i18.CashSessionModel.cajaCentral,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
           #openSession,
           [balance],
-          {#balanceUsd: balanceUsd, #tipoModelo: tipoModelo},
+          {
+            #balanceUsd: balanceUsd,
+            #tipoModelo: tipoModelo,
+          },
         ),
         returnValue: _i16.Future<void>.value(),
         returnValueForMissingStub: _i16.Future<void>.value(),

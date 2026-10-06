@@ -127,6 +127,8 @@ void main() {
       final stored = await database.paymentDao.getPaymentsByInvoiceId('inv-rec-01');
       expect(stored.first.voucherCode, '654321');
       expect(stored.first.reconciliationStatus, 'CONCILIADO');
+      // S1a #68: the reconciliation write itself creates the outbox work.
+      expect(stored.first.reconciliationSyncStatus, 'pending');
       expect(stored.first.batchNumber, '003');
       expect(stored.first.last4, '1122');
       expect(stored.first.reconciledByUserId, 'cajero-01');
@@ -163,6 +165,8 @@ void main() {
 
       final stored = await database.paymentDao.getPaymentsByInvoiceId('inv-rec-01');
       expect(stored.first.reconciliationStatus, 'MANUAL_OVERRIDE');
+      // S1a #68: the override write also creates the outbox work.
+      expect(stored.first.reconciliationSyncStatus, 'pending');
       expect(stored.first.reconciledByUserId, 'sup-01');
       expect(stored.first.voucherCode, contains('Ticket de datáfono salió en blanco'));
     });

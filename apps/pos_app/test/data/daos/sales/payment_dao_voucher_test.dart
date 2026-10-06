@@ -165,5 +165,113 @@ void main() {
       expect(retrieved.first.last4, '9876');
       expect(retrieved.first.reconciledByUserId, 'supervisor-01');
     });
+
+    group('reconciliation sync outbox (S1a #68)', () {
+      test('a freshly inserted payment defaults reconciliation_sync_status to synced', () async {
+        final now = DateTime.now().millisecondsSinceEpoch;
+
+        final payment = PaymentEntity(
+          id: 'pay-default-synced',
+          invoiceId: 'inv-test-01',
+          method: 'card',
+          amount: 100.0,
+          amountNio: 100.0,
+          voucherCode: 'PENDIENTE',
+          reconciliationStatus: 'PENDIENTE',
+          createdAt: now,
+        );
+
+        await database.paymentDao.insertPayments([payment]);
+
+        // A payment created at checkout travels inside the sale sync, so it
+        // must not create reconciliation outbox work.
+        expect(
+          await database.paymentDao.getPendingReconciliations(),
+          isEmpty,
+        );
+
+        final stored =
+            await database.paymentDao.getPaymentsByInvoiceId('inv-test-01');
+        expect(stored.first.reconciliationSyncStatus, 'synced');
+      });
+
+      test('getPendingReconciliations returns only rows with sync status pending', () async {
+        final now = DateTime.now().millisecondsSinceEpoch;
+
+        final pendingRow = PaymentEntity(
+          id: 'pay-outbox-pending',
+          invoiceId: 'inv-test-01',
+          method: 'card',
+          amount: 450.0,
+          amountNio: 450.0,
+          voucherCode: '778899',
+          reconciliationStatus: 'CONCILIADO',
+          reconciliationSyncStatus: 'pending',
+          batchNumber: '007',
+          last4: '4321',
+          reconciledAt: now,
+          reconciledByUserId: 'cajero-01',
+          createdAt: now,
+        );
+        final syncedRow = PaymentEntity(
+          id: 'pay-outbox-synced',
+          invoiceId: 'inv-test-01',
+          method: 'card',
+          amount: 350.0,
+          amountNio: 350.0,
+          voucherCode: '112233',
+          reconciliationStatus: 'CONCILIADO',
+          createdAt: now,
+        );
+
+        await database.paymentDao.insertPayments([pendingRow, syncedRow]);
+
+        final pending = await database.paymentDao.getPendingReconciliations();
+        expect(pending, hasLength(1));
+        expect(pending.single.id, 'pay-outbox-pending');
+        expect(pending.single.reconciliationSyncStatus, 'pending');
+      });
+
+      test('updateReconciliationSyncStatus flips only the target row', () async {
+        final now = DateTime.now().millisecondsSinceEpoch;
+
+        final rowA = PaymentEntity(
+          id: 'pay-sync-a',
+          invoiceId: 'inv-test-01',
+          method: 'card',
+          amount: 450.0,
+          amountNio: 450.0,
+          voucherCode: '778899',
+          reconciliationStatus: 'CONCILIADO',
+          reconciliationSyncStatus: 'pending',
+          createdAt: now,
+        );
+        final rowB = PaymentEntity(
+          id: 'pay-sync-b',
+          invoiceId: 'inv-test-01',
+          method: 'card',
+          amount: 350.0,
+          amountNio: 350.0,
+          voucherCode: '112233',
+          reconciliationStatus: 'CONCILIADO',
+          reconciliationSyncStatus: 'pending',
+          createdAt: now,
+        );
+
+        await database.paymentDao.insertPayments([rowA, rowB]);
+        expect(
+          await database.paymentDao.getPendingReconciliations(),
+          hasLength(2),
+        );
+
+        await database.paymentDao
+            .updateReconciliationSyncStatus('pay-sync-a', 'synced');
+
+        final stillPending =
+            await database.paymentDao.getPendingReconciliations();
+        expect(stillPending, hasLength(1));
+        expect(stillPending.single.id, 'pay-sync-b');
+      });
+    });
   });
 }

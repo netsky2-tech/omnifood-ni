@@ -29,6 +29,20 @@ abstract class PaymentDao {
   @Query("SELECT COUNT(*) FROM payments WHERE method = 'card' AND reconciliation_status = 'PENDIENTE'")
   Future<int?> countPendingCardPayments();
 
+  /// S1a (backlog #68): pending rows of the card/voucher reconciliation
+  /// outbox — reconciliations whose push to
+  /// `POST /sales/payment-reconciliations/sync` has not been ACKed yet.
+  /// DAO-level filter (not a Dart filter): the payments table grows with
+  /// every sale.
+  @Query("SELECT * FROM payments WHERE reconciliation_sync_status = 'pending'")
+  Future<List<PaymentEntity>> getPendingReconciliations();
+
+  /// S1a: flips the reconciliation outbox state without rewriting the
+  /// payment's reconciliation columns — 'synced' after a backend ACK,
+  /// 'pending' (re)queued, failures stay pending.
+  @Query("UPDATE payments SET reconciliation_sync_status = :syncStatus WHERE id = :paymentId")
+  Future<void> updateReconciliationSyncStatus(String paymentId, String syncStatus);
+
   @Update(onConflict: OnConflictStrategy.replace)
   Future<void> updatePayment(PaymentEntity payment);
 

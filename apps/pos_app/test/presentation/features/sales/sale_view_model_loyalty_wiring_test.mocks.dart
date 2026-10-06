@@ -1730,6 +1730,21 @@ class MockAuthRepository extends _i1.Mock implements _i82.AuthRepository {
       ) as bool);
 
   @override
+  bool get isReauthenticationRequired => (super.noSuchMethod(
+        Invocation.getter(#isReauthenticationRequired),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  void notifyReauthenticationRequired() => super.noSuchMethod(
+        Invocation.method(
+          #notifyReauthenticationRequired,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   _i55.Future<_i62.User?> loginOnline(
     String? email,
     String? password, {

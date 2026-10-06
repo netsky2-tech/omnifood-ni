@@ -35,6 +35,7 @@ import '../models/loyalty/loyalty_reward_entity.dart';
 import '../models/sales/promotion_entity.dart';
 import '../models/sales/cashier_session_entity.dart';
 import '../models/sales/cash_movement_entity.dart';
+import '../models/sales/payment_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import '../../core/utils/numeric_utils.dart';
@@ -491,6 +492,20 @@ class SyncService {
         _logOutboxCountFailure('loyalty point transactions', e, st);
       }
 
+      // S1a (backlog #68): the reconciliation outbox rides on the payments
+      // table, so the count is a raw read (no extra DAO surface) — same
+      // fault-isolated shape as every domain above. A reconciliation pending
+      // here is unconfirmed work: the cloud does not have it yet.
+      try {
+        final rows = await database.database.rawQuery(
+          "SELECT COUNT(*) AS pending FROM payments "
+          "WHERE reconciliation_sync_status = 'pending'",
+        );
+        count += _scalarCount(rows);
+      } catch (e, st) {
+        _logOutboxCountFailure('payment reconciliations', e, st);
+      }
+
       try {
         final rows = await database.database.rawQuery(
           "SELECT COUNT(*) AS pending FROM fulfillment_outbox_events "
@@ -558,6 +573,11 @@ class SyncService {
       'loyalty oldest pending',
       "SELECT MIN(created_at) AS oldest FROM customer_point_transactions "
       "WHERE sync_status = 'pending'",
+    );
+    await readOldest(
+      'reconciliations oldest pending',
+      "SELECT MIN(reconciled_at) AS oldest FROM payments "
+      "WHERE reconciliation_sync_status = 'pending'",
     );
 
     if (oldestTimestampsMs.isEmpty) return null;
@@ -769,6 +789,22 @@ class SyncService {
       if (!cashShiftSuccess) {
         hasFailure = true;
         domainErrors.add('CashShifts');
+      }
+
+      // 1e. Push card/voucher reconciliations (S1a, backlog #68): a
+      // reconciliation is performed on the terminal AFTER the sale synced,
+      // and re-pushing the sale is a dead end (same idempotency key →
+      // DUPLICATE_REPLAY; the sale payload hash excludes reconciliation
+      // fields), so this is a dedicated payment-level transport.
+      // Fault-isolated like every other domain: a failure never aborts
+      // later domains.
+      final reconciliationSuccess = await _runDomain(
+        'reconciliation',
+        _syncPaymentReconciliations,
+      );
+      if (!reconciliationSuccess) {
+        hasFailure = true;
+        domainErrors.add('Conciliaciones');
       }
 
       // 2. Sync inventory outbox deltas
@@ -1411,6 +1447,87 @@ class SyncService {
             item['status'] == 'FAILED' &&
             item['idempotencyKey'] is String)
           item['idempotencyKey'] as String,
+    };
+  }
+
+  /// S1a (backlog #68): pushes pending card/voucher reconciliations to the
+  /// cloud in bounded batches. Rows stay 'pending' on any failure and are
+  /// retried on the next sync pass; rows the backend reports as FAILED
+  /// per-record (UNKNOWN_PAYMENT, INVOICE_MISMATCH, INVALID_STATUS,
+  /// PERSISTENCE_ERROR) also stay pending instead of being lost. The
+  /// backend upserts `invoice_payments` by payment id, so re-pushing an
+  /// accepted reconciliation is an idempotent no-op server-side.
+  Future<void> _syncPaymentReconciliations() async {
+    final database = _database;
+    if (database == null) return;
+    final paymentDao = database.paymentDao;
+    // DAO-level filter (not a Dart filter): the payments table grows with
+    // every sale.
+    final pending = await paymentDao.getPendingReconciliations();
+    if (pending.isEmpty) return;
+
+    final batch = pending.take(_batchEnvelopeLimit).toList(growable: false);
+
+    developer.log(
+      'Reconciliation sync: posting ${batch.length} payment reconciliations',
+      name: 'SyncService',
+    );
+    final response = await _dio.post(
+      '/sales/payment-reconciliations/sync',
+      data: {
+        'reconciliations': batch
+            .map(_buildPaymentReconciliationPayload)
+            .toList(growable: false),
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final acceptedKeys = _acceptedReconciliationSyncKeys(response.data);
+      for (final payment in batch) {
+        if (!acceptedKeys.contains(payment.id)) continue;
+        await paymentDao
+            .updateReconciliationSyncStatus(payment.id, 'synced');
+      }
+    }
+  }
+
+  /// Maps a local payment row onto the cloud ingestion contract
+  /// (PaymentReconciliationSyncItemDto). `reconciledAt` is sent as ISO-8601
+  /// (the DTO requires a non-empty string); the optional correlation fields
+  /// are omitted when absent, never sent as null.
+  Map<String, Object?> _buildPaymentReconciliationPayload(
+    PaymentEntity payment,
+  ) {
+    return {
+      'paymentId': payment.id,
+      'invoiceId': payment.invoiceId,
+      'reconciliationStatus': payment.reconciliationStatus ?? 'PENDIENTE',
+      'reconciledAt': payment.reconciledAt != null
+          ? DateTime.fromMillisecondsSinceEpoch(
+              payment.reconciledAt!,
+              isUtc: true,
+            ).toIso8601String()
+          : DateTime.now().toUtc().toIso8601String(),
+      'reconciledByUserId':
+          payment.reconciledByUserId ?? 'unknown-terminal-operator',
+      if (payment.voucherCode != null) 'voucherCode': payment.voucherCode,
+      if (payment.batchNumber != null) 'batchNumber': payment.batchNumber,
+      if (payment.last4 != null) 'last4': payment.last4,
+    };
+  }
+
+  /// Extracts the payment ids the backend accepted (per-record outcomes).
+  /// Results are keyed by `paymentId` (PaymentReconciliationSyncIngestionService).
+  Set<String> _acceptedReconciliationSyncKeys(dynamic responseData) {
+    if (responseData is! Map) return const <String>{};
+    final results = responseData['results'];
+    if (results is! List) return const <String>{};
+    return {
+      for (final item in results)
+        if (item is Map &&
+            item['status'] == 'ACCEPTED' &&
+            item['paymentId'] is String)
+          item['paymentId'] as String,
     };
   }
 

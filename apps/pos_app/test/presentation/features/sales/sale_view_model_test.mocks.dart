@@ -1702,6 +1702,21 @@ class MockAuthRepository extends _i1.Mock implements _i81.AuthRepository {
       ) as bool);
 
   @override
+  bool get isReauthenticationRequired => (super.noSuchMethod(
+        Invocation.getter(#isReauthenticationRequired),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  void notifyReauthenticationRequired() => super.noSuchMethod(
+        Invocation.method(
+          #notifyReauthenticationRequired,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   _i55.Future<_i61.User?> loginOnline(
     String? email,
     String? password, {
@@ -2970,6 +2985,34 @@ class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
         ),
         returnValue: _i55.Future<int?>.value(),
       ) as _i55.Future<int?>);
+
+  @override
+  _i55.Future<List<_i87.PaymentEntity>> getPendingReconciliations() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPendingReconciliations,
+          [],
+        ),
+        returnValue:
+            _i55.Future<List<_i87.PaymentEntity>>.value(<_i87.PaymentEntity>[]),
+      ) as _i55.Future<List<_i87.PaymentEntity>>);
+
+  @override
+  _i55.Future<void> updateReconciliationSyncStatus(
+    String? paymentId,
+    String? syncStatus,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateReconciliationSyncStatus,
+          [
+            paymentId,
+            syncStatus,
+          ],
+        ),
+        returnValue: _i55.Future<void>.value(),
+        returnValueForMissingStub: _i55.Future<void>.value(),
+      ) as _i55.Future<void>);
 
   @override
   _i55.Future<void> updatePayment(_i87.PaymentEntity? payment) =>

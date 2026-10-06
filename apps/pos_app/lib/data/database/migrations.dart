@@ -2647,6 +2647,27 @@ final migration59_60 = Migration(59, 60, (database) async {
   }
 });
 
+final migration60_61 = Migration(60, 61, (database) async {
+  // S1a (backlog #68): per-row outbox for the card/voucher reconciliation
+  // push (`POST /sales/payment-reconciliations/sync`). NOT NULL DEFAULT
+  // 'synced' is deliberate: a freshly created payment already travels inside
+  // the sale sync, so only a LATER reconciliation change (reconcileVoucher /
+  // overrideMissingVoucher) creates outbox work; seeding historical rows as
+  // 'pending' would re-deliver states the cloud already has. The generated
+  // DDL on a fresh install produces the identical column shape. Guarded
+  // (SQLite has no ADD COLUMN IF NOT EXISTS), so the migration is safe to
+  // re-run.
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(payments)',
+  );
+  final names = columns.map((row) => row['name'] as String).toSet();
+  if (!names.contains('reconciliation_sync_status')) {
+    await database.execute(
+      "ALTER TABLE payments ADD COLUMN reconciliation_sync_status TEXT NOT NULL DEFAULT 'synced'",
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2698,6 +2719,7 @@ final allMigrations = [
   migration57_58,
   migration58_59,
   migration59_60,
+  migration60_61,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open
