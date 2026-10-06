@@ -8331,7 +8331,8 @@ void main() {
           database: database,
         );
         // Groups key PRESENT and empty: authoritative wipe of groups and
-        // their options. Attachment keys absent: attachments stay.
+        // their options. Attachment keys absent: attachment rows are not
+        // replaced, but dangling ones ride out with their group (R3-001).
         capturedGets['/v1/sync/inbound/deltas'] = modifierEnvelope(
           groups: [],
         );
@@ -8340,14 +8341,16 @@ void main() {
 
         expect(await dao.getAllModifierGroups(), isEmpty);
         expect(await dao.getAllModifierOptions(), isEmpty);
-        // Absent attachment keys: untouched (no wipe).
+        // Absent attachment keys: retained rows survive the wipe EXCEPT
+        // dangling ones — attachments whose group was authoritatively removed
+        // are dropped, never kept as orphans (R3-001).
         expect(
           await dao.getCategoryAttachmentsByCatalogValue('cat-x'),
-          hasLength(1),
+          isEmpty,
         );
         expect(
           await dao.getProductAttachmentsByProduct('prod-x'),
-          hasLength(1),
+          isEmpty,
         );
       } finally {
         await database.close();

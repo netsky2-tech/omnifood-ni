@@ -2743,9 +2743,14 @@ final migration62_63 = Migration(62, 63, (database) async {
 
 
 final migration63_64 = Migration(63, 64, (database) async {
+  // The payments table is only created by Floor's fresh-install schema —
+  // no migration creates it — so a synthetic legacy fixture (or a device
+  // whose schema predates the payments entity) has no table to alter.
+  // An empty PRAGMA result means the table is absent: nothing to do.
   final columns = await database.rawQuery(
     'PRAGMA table_info(payments)',
   );
+  if (columns.isEmpty) return;
   final names = columns.map((row) => row['name'] as String).toSet();
   if (!names.contains('reconciliation_sync_status')) {
     await database.execute(
