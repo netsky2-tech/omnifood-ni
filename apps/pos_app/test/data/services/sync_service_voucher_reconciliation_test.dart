@@ -269,4 +269,17 @@ void main() {
       expect(await syncService.getPendingOutboxCount(), 1);
     },
   );
+
+  test(
+    'pending reconciliations age feeds getOldestPendingItemAge for R-16 stall detection',
+    () async {
+      expect(await syncService.getOldestPendingItemAge(), isNull);
+
+      await seedReconciledPayment('pay-recon-age-1');
+
+      final age = await syncService.getOldestPendingItemAge();
+      expect(age, isNotNull);
+      expect(age!.inSeconds, greaterThanOrEqualTo(0));
+    },
+  );
 }
