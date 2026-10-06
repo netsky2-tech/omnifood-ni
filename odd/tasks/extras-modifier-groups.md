@@ -1473,3 +1473,64 @@ R3-003 (`seed-soho-modifier-groups.ts:211-215`).
 
 **Estado de T4.3:** siembra local HECHA y verificada (arriba); falta la **verificación en
 S23** con el aparato real — pendiente de coordinación con el usuario.
+
+## T4.3b — Verificación funcional en S23 (2026-10-06) ✅ CON CLASES DE DEFECTO
+
+**Release verificada: `1.1.0+7017`** (bump `17ca2b90`, build fleet limpio, publicada a
+pilot en BD remota Y local con el gate digest verde en ambas; filas `9017/8017/11017`,
+`min_from=1`, sha = manifest; APKs legacy v16 movidos a `dist/legacy_v16/`).
+
+**Camino OTA del device (9016 → 9017):**
+- Endpoint E2E desde el device por túnel (`/releases/latest?channel=pilot&abi=arm64-v8a`
+  → `versionCode 9017`, sha `6bddfa95…` = manifest). `currentVersionCode=9017` → **204**.
+- Estado bloqueado con turno abierto ("Instalación temporalmente pausada", botón
+  deshabilitado) — build 9016 no tiene el botón de reintentar (llega con 9017).
+- Cierre de turno real: Arqueo Ciego C$500/$100 → **Corte Z-0007**, varianza 0.00/0.00.
+- Tras reinicio de app: gate pasó → **Descargar e Instalar habilitado** → instalación
+  autorizada → `versionCode=9017` verificado por `pm list --show-versioncode`.
+- Post-update: **"El sistema está al día (compilación 9017)"** — sin re-oferta, sin loop.
+
+**Checklist funcional (9017):**
+- ✅ **Fix del foco**: 9016 dejaba el teclado pegado al tocar fuera (RED observado en
+  device); 9017: `mInputShown=true` al tocar buscador → `false` al tocar fuera (GREEN).
+- ✅ **Selector de modificadores** (Americanoo 8oz/12oz por categoría `CAFE_CALIENTE`):
+  Leche "Elige una opción" (Entera/Descremada/Almendras+20/Soya+20), Endulzante 0-2,
+  Extras 0-3 "puedes repetir" con steppers → Extra shot ×2.
+- ✅ **Carrito**: `1x Enterera, 2x Extra shot` → C$120 (90+2×15); Subtotal 320 + promo
+  automática −9 = **C$311** en la primera venta; cobro efectivo C$320 exacto → venta
+  sincronizada (`SYNC-BATCH key=sale:S23TEST:b3224767…`).
+- ✅ **Hold tickets**: EN ESPERA → "PruebaOTA" (C$320, 2 productos) en ⋮→Ventas en Espera
+  → reanudar restaura carrito completo con línea de modificadores.
+- ✅ **KDS (venta directa)**: ticket nuevo **2 min** con `1x Americano 8oz` + bullets
+  amarillos **• Enterera / • Extra shot**; conteo 10→11.
+- ✅ **Sync**: cloud verde, pulls de deltas cada 5 min, sync-batch de ventas al backend.
+
+**⚠️ DEFECTOS CLASE descubiertos en la verificación (→ backlog):**
+1. **D1 — Ventas reanudadas desde hold NUNCA llegan al KDS.**
+   `sale_view_model.dart:1544`: la rama `_activeLoadedHoldTicket != null` sólo hace
+   `liquidateOrder` (libera mesa + borra fila hold) y salta `sendDirectSaleToKitchen`.
+   `KitchenOrderService.sendTicketToKitchen` (HoldTicket→KDS) **sólo se invoca desde
+   tests** (código muerto en lib/). Evidencia: venta hold+cobro no movió el conteo KDS;
+   venta directa idéntica sí (10→11).
+2. **D2 — Campos nuevos del payload no re-llegan al device (clase de sync)**: el device
+   no recibió `product.categoryId` (uuid de catálogo, nuevo en el DTO T0.5'b) porque
+   `fetchProductDeltas` filtra por `updated_at > sinceDate` y las filas no se tocaron →
+   resolución §30 vacía → selector nunca abría. **Workaround aplicado**: `UPDATE products
+   SET updated_at = now()` en SOHO → siguiente pull → selector OK. Riesgo para el terminal
+   de campo: mismo hueco en el upgrade. Fix de clase: cursor por familia de tablas /
+   handshake de schema del cliente (`ohacPosBuild` ya viaja) / re-emit bootstrap al
+   detectar cliente sin esas tablas. **El usuario lo marcó explícitamente**: si un dueño
+   crea algo por la mañana y el device no lo recibe, es una traba.
+   (Los grupos/opciones/enganches SÍ viajan como snapshot en cada pull — sin cursor —
+   esa parte del diseño se comportó bien.)
+3. **D3 — KDS pierde la cantidad del modificador repetido**: `2x Extra shot` se muestra
+   como `• Extra shot` (KitchenOrderItem.modifiers = sólo nombres).
+4. **D4 — La promo −9 no se reaplica tras hold→reanudar** (cobrado C$320 vs C$111 en
+   venta directa equivalente). Verificar regla de la promo antes de decidir si es bug.
+5. **D5 (menor)** — La tarjeta OTA en proceso retenía estado blocked al re-entrar sin
+   re-chequeo; en 9017 hay botón explícito ("Buscar de nuevo"/reintentar), aceptable.
+
+**Infra del entorno**: `adb reverse tcp:3000` cae en re-enumeración USB y tras
+instalación OTA (re-armar: `adb -s R5CWB2LQJDJ reverse tcp:3000 tcp:3000`); los builds
+release no emiten `developer.log` a logcat (debug de sync sólo por SQL/backend);
+`force-stop` exige re-login de administrador.
