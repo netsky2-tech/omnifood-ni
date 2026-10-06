@@ -150,7 +150,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 - [x] **T3.1** Selector agrupado: radio cuando `max=1`, checkbox cuando no, y cantidades cuando
       `allow_quantities`.
 - [x] **T3.2** Validación local de min/max al tocar AGREGAR — *absorbida dentro de la corrección de T3.1 (ver §37), tests como evidencia*.
-- [ ] **T3.3** Totales con cantidad y ticket de cocina `[MOD] 2x Extra Shot`.
+- [x] **T3.3** Totales con cantidad y ticket de cocina `[MOD] 2x Extra Shot`.
 
 ### Fase 4 — Cierre
 
@@ -1341,3 +1341,37 @@ aserciones mandadas. Queda como deuda menor de cobertura.
 aprobado. **Recibo QUEMADO**: `consumed_revision sha256:4ca2d8b6…`, target
 `sha256:8446eb24…`. Suite POS en su mejor número de la rama (3014 + flake rotativo,
 individuales verdes), `analyze` limpio.
+
+## 38. T3.3 — Cantidades de primera clase + ticket de cocina (dd4cc77e, RECIBO QUEMADO)
+
+**Unidad.** 21 ficheros / 648 líneas (+609/−39 tracked tras reventar el churn de mocks):
+- `Modifier.quantity` (`@Default(1)`) con compatibilidad obligatoria: payloads viejos sin la
+  clave (historial de facturas) deserializan como cantidad 1 — probado en carrito, recibo y
+  roundtrip JSON.
+- Puente AGREGAR con `extraPrice` **por unidad** + `quantity` explícito (el test de T3.1 se
+  actualizó honestamente: 2×15 dejó de ser `30` y pasó a `15` + `qty 2`).
+- `modifiersTotal` en `CartItemX` **y** `ReceiptLine.fromInvoiceItem` con la fórmula idéntica:
+  `Σ(extraPrice × quantity) × cantidad_línea`.
+- Persistencia fail-closed: JSON de checkout con `quantity` + columna en
+  `invoice_item_modifiers` vía migración **62→63** re-ejecutable — una reimpresión nunca
+  pierde el conteo.
+- Recibo: `2x Extra Shot (por unidad: C$ 15.00)`.
+- **Cocina**: helper único `KitchenModifierLines.forItem` → `[MOD] 2x Extra Shot` (sin
+  dinero) consumido por el formateador que los 3 adaptadores (mock/sunmi/ipos) ya llaman —
+  antes los tickets no llevaban conteos.
+- Tile del carrito lista `2x Extra Shot, 1x Crema`.
+
+**Cobertura.** RED primero (errores de compilación por el campo nuevo + tests de comportamiento
+que esperaban `30`), GREEN 25 tests nuevos; dos expectativas existentes actualizadas con
+honestidad (conteos explícitos en formateador, cadena de migraciones 62→63). Suite POS en su
+mejor número: **3024** + flake rotativo (individuales verdes), `analyze` limpio. Churn de
+mockito (6 ficheros ~4.3k líneas) revocado en la terminal — diff real del commit: **+609/−39**.
+
+**Revisión.** `review-094ea9de125206f3` (medium, 1 lente): **4 intentos** con JSON truncado
+(4728 → replay → 1695 → replay) — el mismo síntoma de relay de §35, resuelto **otra vez con
+reinicio de Pi al primer intento post-restart** (patrón confirmado ×2: si el reviewer corta
+JSON, reiniciar es el fix). **Recibo QUEMADO**: `consumed_revision sha256:38436d30…`.
+4 advisory → backlog: R3-001 (`app_database.g.dart:273`), R3-002 (`product.g.dart:101`),
+R3-003 (`kitchen_modifier_lines.dart:12-13`), R3-004 (`invoice_modifier_quantity_test.dart:55-85`).
+
+**FASE 3 COMPLETA** (T3.1 + T3.2 absorbida + T3.3).
