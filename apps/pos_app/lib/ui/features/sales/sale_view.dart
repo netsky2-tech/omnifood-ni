@@ -777,11 +777,27 @@ class SearchBarWidget extends StatefulWidget {
 
 class _SearchBarWidgetState extends State<SearchBarWidget> {
   final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Flutter's route FocusScope remembers its focused child while this
+    // route is covered by another one and restores it when the route is
+    // revealed again (push + pop navigation), which reopened the keyboard
+    // on every re-entry to the Sales screen. Drop focus while the route is
+    // not current so there is nothing left to restore.
+    final ModalRoute<dynamic>? route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) {
+      _focusNode.unfocus();
+    }
   }
 
   @override
@@ -809,6 +825,12 @@ class _SearchBarWidgetState extends State<SearchBarWidget> {
       ),
       child: TextField(
         controller: _controller,
+        focusNode: _focusNode,
+        // Flutter's default tap-outside behavior intentionally keeps focus
+        // for touch events on mobile platforms (the operator's POS
+        // terminal), leaving the cursor and keyboard stuck on the search
+        // field. Dismiss them on any tap outside the field.
+        onTapOutside: (_) => _focusNode.unfocus(),
         onChanged: (val) => context.read<SaleViewModel>().setSearchQuery(val),
         onSubmitted: (val) {
           context.read<SaleViewModel>().searchAndAddToCart(val);
