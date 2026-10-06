@@ -154,7 +154,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 
 ### Fase 4 — Cierre
 
-- [ ] **T4.1** El editor de opciones del BOH pasa a lectura, explicando que se administra desde la web
+- [x] **T4.1** El editor de opciones del BOH pasa a lectura, explicando que se administra desde la web
       (decisión 2). Esto elimina de raíz la clase de divergencia del editor del BOH.
 - [ ] **T4.2** Retirar o corregir con el editor viejo los dos defectos del campo de dinero: el `0.0`
       pre-cargado que concatena (`15 → 0.015`, clase D-16) y el prefijo `$` en vez de `C$`.
@@ -1375,3 +1375,35 @@ JSON, reiniciar es el fix). **Recibo QUEMADO**: `consumed_revision sha256:38436d
 R3-003 (`kitchen_modifier_lines.dart:12-13`), R3-004 (`invoice_modifier_quantity_test.dart:55-85`).
 
 **FASE 3 COMPLETA** (T3.1 + T3.2 absorbida + T3.3).
+
+## 39. T4.1 — Editor de opciones del BOH a sólo lectura (0de4ead9, RECIBO QUEMADO)
+
+**Unidad.** 4 ficheros (+281/−209): el editor se vuelve pantalla stateless de consulta —
+se eliminan la barra "GUARDAR CAMBIOS", el callback `onSave` y el método huérfano
+`saveProductOptions` del viewmodel. La pestaña MODIFICADORES renderiza
+`availableModifierGroups` (la verdad real desde T2.3) con deltas `+C$` y el banner
+"Los modificadores se administran desde el panel web, en Gestión → Modificadores"; la
+legacy plana se borra (dato muerto que mentiría). VARIANTES en display con su empty state
+**sin claim de web** (esa superficie no existe — mentir sería peor que un tab vacío).
+Copy guard como test sobre todos los strings renderizados.
+
+**Peligro de borrado descubierto en la exploración y cerrado aquí:** el editor abría
+**vacío** en ambas pestañas (carga por `getActiveProducts()`, que no puebla variants ni
+modifiers al dominio) y "GUARDAR CAMBIOS" ejecutaba un `replaceProductOptions` con listas
+vacías = **wipe** de las tablas legacy. Sin la ruta de guardado, el hazard es
+inalcanzable desde la UI. (Evidencia S23 de §1 — "al reabrir la lista estaba vacía" —
+queda explicada: la reapertura lee el dominio, no la tabla.)
+
+**Código muerto inventariado (NO borrado — unidad futura):** `InventoryRepository
+.saveProductOptions` (+impl), `ProductDao.replaceProductOptions`, `findVariantsByProductId`
+/ `findModifiersByProductId` — lectores sin llamadores de producción.
+
+**Revisión.** `review-95cbd425008be9d6` (medium, 1 lente): **approved al primer intento**
+con 1 advisory (R3-001 en el test, informativo → backlog). **RECIBO QUEMADO**:
+`consumed_revision sha256:d2d6871d…`. Verificación del orquestador: alcance exacto (3 lib +
+1 test), audit de copy limpio, inventario UI **114/114**, suite completa **3011** con sólo
+el flake rotativo (5 ficheros, todos verdes individuales), `analyze` limpio.
+
+**Nota de proceso:** el primer worker de esta unidad murió por infraestructura
+("process cleanup unconfirmed; capacity quarantined") dejando el árbol LIMPIO (verificado
+antes de relanzar); relanzado como tarea nueva con el contrato completo.
