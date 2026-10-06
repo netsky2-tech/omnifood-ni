@@ -1,31 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../../../domain/models/inventory/product.dart';
-import 'package:uuid/uuid.dart';
 
-class ItemOptionsEditor extends StatefulWidget {
+/// Read-only options screen for a product. The terminal does not edit
+/// options: modifier groups are administered from the web panel, so this
+/// screen only shows the effective configuration already loaded into the
+/// domain ([Product.availableModifierGroups]) and the product variants.
+class ItemOptionsEditor extends StatelessWidget {
   final Product product;
-  final Function(List<ProductVariant> variants, List<Modifier> modifiers) onSave;
 
-  const ItemOptionsEditor({
-    super.key,
-    required this.product,
-    required this.onSave,
-  });
-
-  @override
-  State<ItemOptionsEditor> createState() => _ItemOptionsEditorState();
-}
-
-class _ItemOptionsEditorState extends State<ItemOptionsEditor> {
-  late List<ProductVariant> _variants;
-  late List<Modifier> _modifiers;
-
-  @override
-  void initState() {
-    super.initState();
-    _variants = List.from(widget.product.variants);
-    _modifiers = List.from(widget.product.availableModifiers);
-  }
+  const ItemOptionsEditor({super.key, required this.product});
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +16,7 @@ class _ItemOptionsEditorState extends State<ItemOptionsEditor> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: Text('Opciones: ${widget.product.name}'),
+          title: Text('Opciones: ${product.name}'),
           bottom: const TabBar(
             tabs: [
               Tab(text: 'VARIANTES (Tallas/Tipos)'),
@@ -47,187 +30,119 @@ class _ItemOptionsEditorState extends State<ItemOptionsEditor> {
             _buildModifiersTab(),
           ],
         ),
-        bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.save),
-                label: const Text('GUARDAR CAMBIOS'),
-                onPressed: () => widget.onSave(_variants, _modifiers),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }
 
   Widget _buildProductVariantsTab() {
-    return Column(
-      children: [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text('Las variantes permiten definir diferentes versiones del producto (ej: Pequeño, Mediano, Grande) con ajustes de precio.'),
-        ),
-        Expanded(
-          child: ListView.builder(
-            itemCount: _variants.length,
-            itemBuilder: (context, index) {
-              final v = _variants[index];
-              return ListTile(
-                title: Text(v.name),
-                subtitle: Text('Ajuste de precio: +\$${v.priceAdjustment.toStringAsFixed(2)}'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => setState(() => _variants.removeAt(index)),
-                ),
-                onTap: () => _showProductVariantForm(variant: v, index: index),
-              );
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('AGREGAR VARIANTE'),
-            onPressed: () => _showProductVariantForm(),
-          ),
-        ),
-      ],
+    final variants = product.variants;
+    if (variants.isEmpty) {
+      return const _ReadOnlyEmptyState(
+        message: 'Este producto no tiene variantes.',
+      );
+    }
+    return ListView.builder(
+      itemCount: variants.length,
+      itemBuilder: (context, index) {
+        final variant = variants[index];
+        return ListTile(
+          title: Text(variant.name),
+          subtitle:
+              Text('Ajuste de precio: +C\$ ${_formatAmount(variant.priceAdjustment)}'),
+        );
+      },
     );
   }
 
   Widget _buildModifiersTab() {
+    final groups = product.availableModifierGroups;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text('Los modificadores son extras u opciones opcionales que el cliente puede elegir (ej: Extra Queso, Sin Cebolla).'),
+        const Material(
+          color: Color(0xFFFFF8E1),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, size: 20),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Los modificadores se administran desde el panel web, en Gestión → Modificadores.',
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemCount: _modifiers.length,
-            itemBuilder: (context, index) {
-              final m = _modifiers[index];
-              return ListTile(
-                title: Text(m.name),
-                subtitle: Text('Precio extra: +\$${m.extraPrice.toStringAsFixed(2)}'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  onPressed: () => setState(() => _modifiers.removeAt(index)),
+          child: groups.isEmpty
+              ? const _ReadOnlyEmptyState(
+                  message: 'Este producto todavía no tiene modificadores.',
+                )
+              : ListView.builder(
+                  itemCount: groups.length,
+                  itemBuilder: (context, index) {
+                    final group = groups[index];
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                          child: Text(
+                            group.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        ...group.options.map(
+                          (option) => ListTile(
+                            dense: true,
+                            title: Text(option.name),
+                            trailing: Text(
+                              '+C\$ ${_formatAmount(option.priceDelta)}',
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                onTap: () => _showModifierForm(modifier: m, index: index),
-              );
-            },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('AGREGAR MODIFICADOR'),
-            onPressed: () => _showModifierForm(),
-          ),
         ),
       ],
     );
   }
 
-  void _showProductVariantForm({ProductVariant? variant, int? index}) {
-    final nameController = TextEditingController(text: variant?.name ?? '');
-    final priceController = TextEditingController(text: variant?.priceAdjustment.toString() ?? '0.0');
+  /// Mirrors the sales screen formatting: whole numbers without decimals,
+  /// fractional amounts as written (e.g. 15 -> "15", 20.5 -> "20.5").
+  static String _formatAmount(double amount) =>
+      amount % 1 == 0 ? amount.toInt().toString() : '$amount';
+}
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(variant == null ? 'Nueva variante' : 'Editar variante'),
-        content: Column(
+class _ReadOnlyEmptyState extends StatelessWidget {
+  final String message;
+
+  const _ReadOnlyEmptyState({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Nombre (ej: Grande)'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: priceController,
-              decoration: const InputDecoration(labelText: 'Ajuste de Precio', prefixText: '\$ '),
-              keyboardType: TextInputType.number,
+            const Icon(Icons.inventory_2_outlined, size: 40),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
-          ElevatedButton(
-            onPressed: () {
-              final newProductVariant = ProductVariant(
-                id: variant?.id ?? const Uuid().v4(),
-                name: nameController.text,
-                priceAdjustment: double.tryParse(priceController.text) ?? 0.0,
-              );
-              setState(() {
-                if (index != null) {
-                  _variants[index] = newProductVariant;
-                } else {
-                  _variants.add(newProductVariant);
-                }
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('ACEPTAR'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showModifierForm({Modifier? modifier, int? index}) {
-    final nameController = TextEditingController(text: modifier?.name ?? '');
-    final priceController = TextEditingController(text: modifier?.extraPrice.toString() ?? '0.0');
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(modifier == null ? 'Nuevo Modificador' : 'Editar Modificador'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(labelText: 'Nombre (ej: Extra Queso)'),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: priceController,
-              decoration: const InputDecoration(labelText: 'Precio Extra', prefixText: '\$ '),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
-          ElevatedButton(
-            onPressed: () {
-              final newModifier = Modifier(
-                id: modifier?.id ?? const Uuid().v4(),
-                name: nameController.text,
-                extraPrice: double.tryParse(priceController.text) ?? 0.0,
-              );
-              setState(() {
-                if (index != null) {
-                  _modifiers[index] = newModifier;
-                } else {
-                  _modifiers.add(newModifier);
-                }
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('ACEPTAR'),
-          ),
-        ],
       ),
     );
   }
