@@ -33,6 +33,10 @@ import '../models/customer/customer_point_transaction_entity.dart';
 import '../models/loyalty/loyalty_program_entity.dart';
 import '../models/loyalty/loyalty_reward_entity.dart';
 import '../models/sales/promotion_entity.dart';
+import '../models/modifiers/modifier_group_entity.dart';
+import '../models/modifiers/modifier_option_entity.dart';
+import '../models/modifiers/category_modifier_group_entity.dart';
+import '../models/modifiers/product_modifier_group_entity.dart';
 import '../models/sales/cashier_session_entity.dart';
 import '../models/sales/cash_movement_entity.dart';
 import 'fiscal_inbox_handler.dart';
@@ -3406,6 +3410,11 @@ class SyncService {
               sku: map['sku'] as String? ?? existing?.sku,
               barcode: map['barcode'] as String? ?? existing?.barcode,
               category: map['category'] as String? ?? existing?.category,
+              // T0.5c: absent key (older backend) keeps the previously
+              // resolved id; an explicit null is authoritative and clears it.
+              categoryId: map.containsKey('categoryId')
+                  ? map['categoryId']?.toString()
+                  : existing?.categoryId,
               isPrepared: pType == 'PREPARED' || pType == 'COMPOUND',
               productType: pType,
               mappingVersionId: map['mappingVersionId'] as String?,
@@ -4148,6 +4157,177 @@ class SyncService {
         }
         if (customerEntities.isNotEmpty) {
           await _database!.customerDao.saveCustomers(customerEntities);
+        }
+
+        // 5f. Modifier mirrors (full-snapshot deltas). Presence-correct per
+        // key: a key ABSENT (older backend) leaves its tables untouched — NO
+        // wipe; a key PRESENT, even empty, is authoritative and replaces.
+        // Each builder on the backend ships the COMPLETE tenant state for
+        // its type (attachments hard-DELETE on detach, so only a full
+        // snapshot propagates removals), and groups ride together with their
+        // options. Malformed rows are skipped individually.
+        final rawModifierGroups = rawDeltas['modifierGroups'];
+        if (rawModifierGroups is List) {
+          final groupEntities = <ModifierGroupEntity>[];
+          final optionEntities = <ModifierOptionEntity>[];
+          for (final row in rawModifierGroups) {
+            if (row is! Map) continue;
+            final map = Map<String, dynamic>.from(row);
+            final id = map['id']?.toString();
+            final name = map['name']?.toString();
+            if (id == null || id.isEmpty || name == null || name.isEmpty) {
+              developer.log(
+                '[SYNC_MODIFIERS] skipped malformed cloud modifier group row (id=$id)',
+                name: 'SyncService',
+              );
+              continue;
+            }
+            groupEntities.add(
+              ModifierGroupEntity(
+                id: id,
+                name: name,
+                minSelected: asInt(map['minSelected']) ?? 0,
+                maxSelected: asInt(map['maxSelected']) ?? 1,
+                allowQuantities: map['allowQuantities'] as bool? ?? false,
+                sortOrder: asInt(map['sortOrder']) ?? 0,
+                isActive: map['isActive'] as bool? ?? true,
+              ),
+            );
+            final rawOptions = map['options'] as List<dynamic>? ?? const [];
+            for (final optionRow in rawOptions) {
+              if (optionRow is! Map) continue;
+              final optionMap = Map<String, dynamic>.from(optionRow);
+              final optionId = optionMap['id']?.toString();
+              final optionName = optionMap['name']?.toString();
+              if (optionId == null ||
+                  optionId.isEmpty ||
+                  optionName == null ||
+                  optionName.isEmpty) {
+                developer.log(
+                  '[SYNC_MODIFIERS] skipped malformed cloud modifier option row (id=$optionId)',
+                  name: 'SyncService',
+                );
+                continue;
+              }
+              optionEntities.add(
+                ModifierOptionEntity(
+                  id: optionId,
+                  groupId: id,
+                  name: optionName,
+                  priceDelta: asDouble(optionMap['priceDelta']) ?? 0.0,
+                  isDefault: optionMap['isDefault'] as bool? ?? false,
+                  sortOrder: asInt(optionMap['sortOrder']) ?? 0,
+                  isActive: optionMap['isActive'] as bool? ?? true,
+                ),
+              );
+            }
+          }
+          // Groups and options replace TOGETHER. Attachment keys absent in
+          // this envelope: their current rows are read and re-inserted so
+          // the replace-all touches only what the envelope carried.
+          final currentCategoryAttachments = await _database!
+              .modifierDao
+              .getAllCategoryModifierGroups();
+          final currentProductAttachments = await _database!
+              .modifierDao
+              .getAllProductModifierGroups();
+          await _database!.modifierDao.replaceAllModifierData(
+            groupEntities,
+            optionEntities,
+            currentCategoryAttachments,
+            currentProductAttachments,
+          );
+        }
+
+        final rawCategoryAttachments = rawDeltas['categoryModifierGroups'];
+        if (rawCategoryAttachments is List) {
+          final attachmentEntities = <CategoryModifierGroupEntity>[];
+          for (final row in rawCategoryAttachments) {
+            if (row is! Map) continue;
+            final map = Map<String, dynamic>.from(row);
+            final id = map['id']?.toString();
+            final catalogValueId = map['catalogValueId']?.toString();
+            final groupId = map['groupId']?.toString();
+            if (id == null ||
+                id.isEmpty ||
+                catalogValueId == null ||
+                catalogValueId.isEmpty ||
+                groupId == null ||
+                groupId.isEmpty) {
+              developer.log(
+                '[SYNC_MODIFIERS] skipped malformed cloud category attachment row (id=$id)',
+                name: 'SyncService',
+              );
+              continue;
+            }
+            attachmentEntities.add(
+              CategoryModifierGroupEntity(
+                id: id,
+                catalogValueId: catalogValueId,
+                catalogCode: map['catalogCode']?.toString() ?? '',
+                groupId: groupId,
+                sortOrder: asInt(map['sortOrder']) ?? 0,
+              ),
+            );
+          }
+          // Groups/options key absent in this envelope: read and re-insert
+          // the current mirror so only the attachments replace.
+          final currentGroups = await _database!.modifierDao.getAllModifierGroups();
+          final currentOptions = await _database!.modifierDao.getAllModifierOptions();
+          final currentProductAttachments = await _database!
+              .modifierDao
+              .getAllProductModifierGroups();
+          await _database!.modifierDao.replaceAllModifierData(
+            currentGroups,
+            currentOptions,
+            attachmentEntities,
+            currentProductAttachments,
+          );
+        }
+
+        final rawProductAttachments = rawDeltas['productModifierGroups'];
+        if (rawProductAttachments is List) {
+          final attachmentEntities = <ProductModifierGroupEntity>[];
+          for (final row in rawProductAttachments) {
+            if (row is! Map) continue;
+            final map = Map<String, dynamic>.from(row);
+            final id = map['id']?.toString();
+            final productId = map['productId']?.toString();
+            final groupId = map['groupId']?.toString();
+            if (id == null ||
+                id.isEmpty ||
+                productId == null ||
+                productId.isEmpty ||
+                groupId == null ||
+                groupId.isEmpty) {
+              developer.log(
+                '[SYNC_MODIFIERS] skipped malformed cloud product attachment row (id=$id)',
+                name: 'SyncService',
+              );
+              continue;
+            }
+            attachmentEntities.add(
+              ProductModifierGroupEntity(
+                id: id,
+                productId: productId,
+                groupId: groupId,
+                sortOrder: asInt(map['sortOrder']) ?? 0,
+              ),
+            );
+          }
+          // Groups/options and category keys absent: re-insert the current
+          // mirror so only the product attachments replace.
+          final currentGroups = await _database!.modifierDao.getAllModifierGroups();
+          final currentOptions = await _database!.modifierDao.getAllModifierOptions();
+          final currentCategoryAttachments = await _database!
+              .modifierDao
+              .getAllCategoryModifierGroups();
+          await _database!.modifierDao.replaceAllModifierData(
+            currentGroups,
+            currentOptions,
+            currentCategoryAttachments,
+            attachmentEntities,
+          );
         }
 
         // 6. Fiscal Configuration projection

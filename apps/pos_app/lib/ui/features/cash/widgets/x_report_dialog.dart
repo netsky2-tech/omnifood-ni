@@ -21,6 +21,21 @@ class XReportDialog extends StatelessWidget {
   /// renders the honest fallback label, never the raw user id.
   final String? cashierName;
 
+  /// T9 (cuentas abiertas): informational only. Open accounts never reached
+  /// an invoice, so they are not in the drawer expectation above — but the
+  /// operator doing a mid-shift reading must see them. The X never blocks
+  /// on them (it writes nothing); the hard block lives in the Corte Z flow.
+  final int openAccountsCount;
+  final double openAccountsTotalNio;
+
+  /// Fail-closed representation (R1-stale-open-accounts-init, slice F5):
+  /// true only when the caller's open-account read SUCCEEDED. Defaults to
+  /// FALSE (UNVERIFIED) so an omitted argument can never render a clean
+  /// report that implies "no open accounts" — the safest default is the
+  /// one that admits it does not know, same posture as the view model's
+  /// nullable `_openAccounts` and the close gate's fail-closed re-query.
+  final bool openAccountsVerified;
+
   const XReportDialog({
     super.key,
     required this.shift,
@@ -28,6 +43,9 @@ class XReportDialog extends StatelessWidget {
     required this.effectiveExpectedNio,
     required this.effectiveExpectedUsd,
     this.cashierName,
+    this.openAccountsCount = 0,
+    this.openAccountsTotalNio = 0.0,
+    this.openAccountsVerified = false,
   });
 
   String _formatNio(double amount) => 'C\$ ${amount.toStringAsFixed(2)}';
@@ -111,6 +129,21 @@ class XReportDialog extends StatelessWidget {
                     // D-14: a person's name where the id used to be shown.
                     _buildRow('Cajero', cashierName ?? kUnresolvedUserNameLabel),
                     _buildRow('Fecha/Hora Apertura', openedStr),
+                    // T9 (cuentas abiertas): same row language as the rows
+                    // above, fed by the same loader the close gate uses —
+                    // exactly one source of truth. Fail closed: an
+                    // UNVERIFIED state renders the honest "could not
+                    // verify" row (tone of the Corte Z block copy), never
+                    // an absent row that would read as "no open accounts";
+                    // only a VERIFIED read may render the count or stay
+                    // silent on zero.
+                    if (!openAccountsVerified)
+                      _buildRow('Cuentas abiertas', 'No se pudieron verificar')
+                    else if (openAccountsCount > 0)
+                      _buildRow(
+                        'Cuentas abiertas',
+                        '$openAccountsCount · ${_formatNio(openAccountsTotalNio)}',
+                      ),
                   ],
                 ),
               ),

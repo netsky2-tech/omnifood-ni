@@ -250,6 +250,13 @@ class _OtaUpdateCardState extends State<OtaUpdateCard>
                 ),
               ),
               const SizedBox(height: 12),
+              OutlinedButton.icon(
+                key: const Key('ota_recheck_button'),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Buscar actualizaciones'),
+                onPressed: () => widget.coordinator.checkForUpdate(),
+              ),
+              const SizedBox(height: 12),
             ],
             ElevatedButton.icon(
               key: const Key('ota_install_button'),

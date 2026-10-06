@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
 import { usePromotions, useTogglePromotion, useDeletePromotion } from '@/hooks/use-promotions';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { useCatalogValues } from '@/features/catalog/use-catalog';
 import { PromotionForm } from './PromotionForm';
 import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/promotions';
 import { formatCurrency, formatDate, DAYS_OF_WEEK } from '@/lib/utils';
@@ -43,6 +44,16 @@ export function PromotionsList() {
   const { data: promotions, isLoading, error, refetch } = usePromotions();
   const togglePromotion = useTogglePromotion();
   const deletePromotion = useDeletePromotion();
+  // T0.5'd: target_category_id is a uuid — resolve it to the category NAME
+  // with the same synced-catalog query the form uses, including inactive
+  // rows so an inactive target still renders as itself.
+  const { data: catalogCategories } = useCatalogValues('SALES_PRODUCT_CATEGORY', true);
+  const categoryNameById = useMemo(
+    () => new Map((catalogCategories ?? []).map((value) => [value.id, value.name])),
+    [catalogCategories],
+  );
+  const formatCategoryTarget = (id: string) =>
+    categoryNameById.get(id) ?? `…${id.slice(-8)}`;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -221,7 +232,7 @@ export function PromotionsList() {
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {promotion.target_product_id ? `Producto: ${promotion.target_product_id}` : ''}
-                    {promotion.target_category_id ? `Categoría: ${promotion.target_category_id}` : ''}
+                    {promotion.target_category_id ? `Categoría: ${formatCategoryTarget(promotion.target_category_id)}` : ''}
                     {!promotion.target_product_id && !promotion.target_category_id ? 'Global' : ''}
                   </TableCell>
                   <TableCell className="text-sm">
@@ -376,7 +387,7 @@ export function PromotionsList() {
                 {viewingPromotion.target_category_id && (
                   <div className="col-span-2">
                     <p className="text-muted-foreground">Categoría objetivo</p>
-                    <p className="font-medium">{viewingPromotion.target_category_id}</p>
+                    <p className="font-medium">{formatCategoryTarget(viewingPromotion.target_category_id)}</p>
                   </div>
                 )}
               </div>

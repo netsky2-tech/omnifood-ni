@@ -17,6 +17,7 @@ import { ProductInventoryMappingVersion } from '../../inventory/entities/product
 import { ForensicAlert } from '../../inventory/entities/forensic-alert.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
+import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import {
@@ -31,6 +32,10 @@ import { LoyaltyProgram } from '../../loyalty/entities/loyalty-program.entity';
 import { RewardDefinition } from '../../loyalty/entities/reward-definition.entity';
 import { Promotion } from '../../promotions/entities/promotion.entity';
 import { Customer } from '../../customers/entities/customer.entity';
+import { ModifierGroup } from '../../modifiers/entities/modifier-group.entity';
+import { ModifierOption } from '../../modifiers/entities/modifier-option.entity';
+import { CategoryModifierGroup } from '../../modifiers/entities/category-modifier-group.entity';
+import { ProductModifierGroup } from '../../modifiers/entities/product-modifier-group.entity';
 import {
   InboundSyncQueryDto,
   InboundSyncResponseDto,
@@ -46,6 +51,10 @@ import {
   InboundSyncLoyaltyRewardDto,
   InboundSyncPromotionDto,
   InboundSyncCustomerDto,
+  InboundSyncModifierGroupDto,
+  InboundSyncModifierOptionDto,
+  InboundSyncCategoryModifierGroupDto,
+  InboundSyncProductModifierGroupDto,
 } from '../dto/inbound-sync.dto';
 import {
   FiscalAckDto,
@@ -205,6 +214,21 @@ export class InboundSyncService {
       customers: requestedTypes.has('customers')
         ? await this.fetchCustomerDeltas(tenantId, sinceDate, entityManager)
         : [],
+      modifierGroups:
+        requestedTypes.has('modifiergroups') ||
+        requestedTypes.has('modifier_groups')
+          ? await this.fetchModifierGroupDeltas(tenantId, entityManager)
+          : [],
+      categoryModifierGroups:
+        requestedTypes.has('categorymodifiergroups') ||
+        requestedTypes.has('category_modifier_groups')
+          ? await this.fetchCategoryModifierGroupDeltas(tenantId, entityManager)
+          : [],
+      productModifierGroups:
+        requestedTypes.has('productmodifiergroups') ||
+        requestedTypes.has('product_modifier_groups')
+          ? await this.fetchProductModifierGroupDeltas(tenantId, entityManager)
+          : [],
       alerts: requestedTypes.has('alerts')
         ? await this.fetchAlertDeltas(tenantId, sinceDate, entityManager)
         : [],
@@ -437,6 +461,12 @@ export class InboundSyncService {
         'loyaltyprograms',
         'promotions',
         'customers',
+        'modifiergroups',
+        'modifier_groups',
+        'categorymodifiergroups',
+        'category_modifier_groups',
+        'productmodifiergroups',
+        'product_modifier_groups',
         'alerts',
         'fiscal',
         'fiscal_config',
@@ -507,6 +537,66 @@ export class InboundSyncService {
       : [];
     const mappingByProductId = new Map(mappings.map((m) => [m.product_id, m]));
 
+    // T0.5'b: resolve each product's canonical `category_code` to its
+    // `catalog_values.id` within the same tenant, so the POS can match
+    // promotions by category identity instead of free-text category names.
+    // One batched read for the whole page (no N+1), riding the same
+    // tenant-bound manager as the product read — the RLS contract does not
+    // change. A product whose code is empty or has no catalog row emits
+    // null; it never blocks the sync.
+    const categoryCodes = new Set<string>();
+    for (const item of items) {
+      const code = item.category_code?.trim();
+      if (code) {
+        categoryCodes.add(code);
+      }
+    }
+    const categoryIdByCode = new Map<string, string>();
+    if (categoryCodes.size > 0) {
+      const categoryRows = await entityManager
+        .getRepository(CatalogValue)
+        .createQueryBuilder('catalog')
+        .where('catalog.tenant_id = :tenantId', { tenantId })
+        .andWhere('catalog.catalog_type = :catalogType', {
+          catalogType: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+        })
+        .andWhere('catalog.code IN (:...codes)', {
+          codes: [...categoryCodes],
+        })
+        .getMany();
+      // No unique constraint guarantees one row per (tenant, type, code),
+      // so the same code can legitimately match several rows. Group them
+      // and resolve deterministically (created_at, then id) instead of
+      // trusting database return order, warning when a code is ambiguous.
+      const rowsByCode = new Map<string, CatalogValue[]>();
+      for (const row of categoryRows) {
+        const candidates = rowsByCode.get(row.code);
+        if (candidates) {
+          candidates.push(row);
+        } else {
+          rowsByCode.set(row.code, [row]);
+        }
+      }
+      for (const [code, candidates] of rowsByCode) {
+        if (candidates.length > 1) {
+          this.logger.warn(
+            `Inbound product sync: ${candidates.length} catalog_values rows matched tenant=${tenantId} catalog_type=${CATALOG_TYPE.SALES_PRODUCT_CATEGORY} code=${code}; resolving deterministically by created_at then id`,
+          );
+        }
+        const [chosen] = [...candidates].sort((a, b) => {
+          const byCreatedAt =
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          if (byCreatedAt !== 0) {
+            return byCreatedAt;
+          }
+          return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+        });
+        if (chosen) {
+          categoryIdByCode.set(code, chosen.id);
+        }
+      }
+    }
+
     return items.map((p) => {
       const mapping = mappingByProductId.get(p.id);
       return {
@@ -523,6 +613,9 @@ export class InboundSyncService {
         isTaxExempt: p.is_tax_exempt,
         isActive: p.is_active,
         isPerishable: p.is_perishable,
+        categoryId: p.category_code?.trim()
+          ? (categoryIdByCode.get(p.category_code.trim()) ?? null)
+          : null,
         warehouseId: p.warehouse_id ?? null,
         productType: p.product_type,
         mappingVersionId: mapping ? mapping.id : null,
@@ -1122,6 +1215,160 @@ export class InboundSyncService {
       isActive: c.is_active,
       createdAt: c.created_at,
       updatedAt: c.updated_at,
+    }));
+  }
+
+  /**
+   * Modifier-groups delta: every group of the tenant with its FULL option
+   * closure. These three modifier builders deliberately take NO `sinceDate`
+   * and return the COMPLETE tenant state on every sync, gated only by the
+   * request type: the attachment tables use HARD DELETE on detach, so an
+   * incremental `created_at > since` read could never propagate a removal —
+   * the detached row no longer exists to be seen. The tables are small
+   * (dozens to hundreds of rows per tenant), so a full snapshot per request
+   * is the correct delta semantics here. Inactive groups and options are
+   * shipped too: the POS mirrors soft-deletes from tombstones instead of
+   * guessing.
+   */
+  private async fetchModifierGroupDeltas(
+    tenantId: string,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncModifierGroupDto[]> {
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound modifier group sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const groups = await entityManager
+      .getRepository(ModifierGroup)
+      .createQueryBuilder('group')
+      .where('group.tenant_id = :tenantId', { tenantId })
+      .orderBy('group.sort_order', 'ASC')
+      .addOrderBy('group.name', 'ASC')
+      .addOrderBy('group.id', 'ASC')
+      .getMany();
+    // One batched read for the whole tenant's options (no N+1), grouped in
+    // memory by their parent id.
+    const options = await entityManager
+      .getRepository(ModifierOption)
+      .createQueryBuilder('option')
+      .where('option.tenant_id = :tenantId', { tenantId })
+      .orderBy('option.sort_order', 'ASC')
+      .addOrderBy('option.name', 'ASC')
+      .addOrderBy('option.id', 'ASC')
+      .getMany();
+    const optionsByGroupId = new Map<string, InboundSyncModifierOptionDto[]>();
+    for (const option of options) {
+      const list = optionsByGroupId.get(option.group_id) ?? [];
+      list.push({
+        id: option.id,
+        groupId: option.group_id,
+        name: option.name,
+        // `numeric` columns surface as strings through the driver.
+        priceDelta: Number(option.price_delta),
+        isDefault: option.is_default,
+        sortOrder: option.sort_order,
+        isActive: option.is_active,
+      });
+      optionsByGroupId.set(option.group_id, list);
+    }
+    return groups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      minSelected: group.min_selected,
+      maxSelected: group.max_selected,
+      allowQuantities: group.allow_quantities,
+      sortOrder: group.sort_order,
+      isActive: group.is_active,
+      options: optionsByGroupId.get(group.id) ?? [],
+    }));
+  }
+
+  /**
+   * Category-attachment delta: full snapshot (see fetchModifierGroupDeltas
+   * for why no `sinceDate`). Each row embeds the resolved catalog `code` of
+   * its category (`catalog_type = 'SALES_PRODUCT_CATEGORY'`). A join row
+   * whose catalog row is missing is impossible via FK, but if it ever
+   * happens the row is skipped with a warn — a fabricated code would be
+   * worse than a missing attachment.
+   */
+  private async fetchCategoryModifierGroupDeltas(
+    tenantId: string,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncCategoryModifierGroupDto[]> {
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound category modifier group sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const attachments = await entityManager
+      .getRepository(CategoryModifierGroup)
+      .createQueryBuilder('attachment')
+      .where('attachment.tenant_id = :tenantId', { tenantId })
+      .orderBy('attachment.sort_order', 'ASC')
+      .addOrderBy('attachment.id', 'ASC')
+      .getMany();
+    if (attachments.length === 0) {
+      return [];
+    }
+    // One batched catalog read for the whole page (no N+1).
+    const catalogValueIds = [
+      ...new Set(attachments.map((attachment) => attachment.catalog_value_id)),
+    ];
+    const catalogRows = await entityManager
+      .getRepository(CatalogValue)
+      .createQueryBuilder('catalog')
+      .where('catalog.tenant_id = :tenantId', { tenantId })
+      .andWhere('catalog.id IN (:...catalogValueIds)', { catalogValueIds })
+      .getMany();
+    const codeByCatalogValueId = new Map(
+      catalogRows.map((row) => [row.id, row.code]),
+    );
+    const result: InboundSyncCategoryModifierGroupDto[] = [];
+    for (const attachment of attachments) {
+      const code = codeByCatalogValueId.get(attachment.catalog_value_id);
+      if (!code) {
+        this.logger.warn(
+          `Skipping category modifier attachment ${attachment.id} for tenant ${tenantId}: catalog value ${attachment.catalog_value_id} has no catalog row`,
+        );
+        continue;
+      }
+      result.push({
+        id: attachment.id,
+        catalogValueId: attachment.catalog_value_id,
+        catalogCode: code,
+        groupId: attachment.group_id,
+        sortOrder: attachment.sort_order,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Product-attachment delta: full snapshot (see fetchModifierGroupDeltas
+   * for why no `sinceDate`).
+   */
+  private async fetchProductModifierGroupDeltas(
+    tenantId: string,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncProductModifierGroupDto[]> {
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound product modifier group sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const attachments = await entityManager
+      .getRepository(ProductModifierGroup)
+      .createQueryBuilder('attachment')
+      .where('attachment.tenant_id = :tenantId', { tenantId })
+      .orderBy('attachment.sort_order', 'ASC')
+      .addOrderBy('attachment.id', 'ASC')
+      .getMany();
+    return attachments.map((attachment) => ({
+      id: attachment.id,
+      productId: attachment.product_id,
+      groupId: attachment.group_id,
+      sortOrder: attachment.sort_order,
     }));
   }
 }

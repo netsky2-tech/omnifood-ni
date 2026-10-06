@@ -103,9 +103,12 @@ class PromotionsEngine {
             for (final item in cart) {
               final matchesProduct = promo.targetProductId != null &&
                   item.productId == promo.targetProductId;
+              // T0.5c strict category identity: a non-null target matches a
+              // line iff the ids are exactly equal (no case folding, no
+              // trimming, no free-text comparison). A line with a null
+              // categoryId matches no non-global promotion.
               final matchesCategory = promo.targetCategoryId != null &&
-                  item.category?.toLowerCase() ==
-                      promo.targetCategoryId!.toLowerCase();
+                  item.categoryId == promo.targetCategoryId;
               final isGlobal = promo.targetProductId == null &&
                   promo.targetCategoryId == null;
 
@@ -125,9 +128,11 @@ class PromotionsEngine {
             for (final item in cart) {
               final matchesProduct = promo.targetProductId != null &&
                   item.productId == promo.targetProductId;
+              // T0.5c strict category identity (see percentageDiscount): exact
+              // id equality only; null line categoryId matches nothing
+              // non-global.
               final matchesCategory = promo.targetCategoryId != null &&
-                  item.category?.toLowerCase() ==
-                      promo.targetCategoryId!.toLowerCase();
+                  item.categoryId == promo.targetCategoryId;
               final isGlobal = promo.targetProductId == null &&
                   promo.targetCategoryId == null;
 
