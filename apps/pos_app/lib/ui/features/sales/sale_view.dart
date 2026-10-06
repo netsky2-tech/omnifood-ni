@@ -1000,7 +1000,9 @@ class ProductGrid extends StatelessWidget {
   }
 
   void _showProductOptions(BuildContext context, Product product) {
-    if (product.variants.isEmpty && product.availableModifiers.isEmpty) {
+    if (product.variants.isEmpty &&
+        product.availableModifiers.isEmpty &&
+        product.availableModifierGroups.isEmpty) {
       context.read<SaleViewModel>().addToCart(product);
       return;
     }
@@ -1022,7 +1024,12 @@ class ProductOptionsDialog extends StatefulWidget {
 
 class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   String? _selectedVariantId;
-  final List<Modifier> _selectedModifiers = [];
+  // Grouped selection state, keyed per GROUP for radios and per OPTION for
+  // checkboxes and quantities. Checkbox and quantity groups start EMPTY:
+  // the operator opts in, the dialog never silently adds price.
+  final Map<String, String> _selectedRadioOption = {};
+  final Map<String, bool> _checkedOptions = {};
+  final Map<String, int> _optionQuantities = {};
 
   @override
   void initState() {
@@ -1030,6 +1037,46 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
     if (widget.product.variants.isNotEmpty) {
       _selectedVariantId = widget.product.variants.first.id;
     }
+    // Radio groups preselect the option flagged as default, when present.
+    for (final group in widget.product.availableModifierGroups) {
+      if (group.maxSelected == 1) {
+        for (final option in group.options) {
+          if (option.isDefault) {
+            _selectedRadioOption[group.id] = option.id;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  /// Whole-price display for deltas ('+C$ 5'), consistent with the variant
+  /// idiom but without the trailing '.0' doubles would print.
+  String _formatDelta(double priceDelta) =>
+      priceDelta % 1 == 0 ? priceDelta.toInt().toString() : '$priceDelta';
+
+  String _groupHint(EffectiveModifierGroup group) {
+    if (group.maxSelected == 1) {
+      return 'Elige una opción';
+    }
+    if (group.allowQuantities) {
+      return 'Elige hasta ${group.maxSelected} · puedes repetir';
+    }
+    return 'Elige hasta ${group.maxSelected}';
+  }
+
+  void _incrementQuantity(
+    EffectiveModifierGroup group,
+    EffectiveModifierOption option,
+  ) {
+    setState(() {
+      final currentTotal = group.options
+          .fold<int>(0, (sum, o) => sum + (_optionQuantities[o.id] ?? 0));
+      // The TOTAL quantity across the group's options never exceeds the
+      // group's limit; the minus button floors each option at zero.
+      if (currentTotal >= group.maxSelected) return;
+      _optionQuantities[option.id] = (_optionQuantities[option.id] ?? 0) + 1;
+    });
   }
 
   @override
@@ -1060,22 +1107,97 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                 ),
                 const Divider(),
               ],
-              if (widget.product.availableModifiers.isNotEmpty) ...[
-                const Text('Modificadores:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                ...widget.product.availableModifiers.map((m) => CheckboxListTile(
-                  title: Text('${m.name} (+C\$ ${m.extraPrice})'),
-                  value: _selectedModifiers.contains(m),
-                  onChanged: (val) {
-                    setState(() {
-                      if (val == true) {
-                        _selectedModifiers.add(m);
+              // One section per group, in the order the resolver produced
+              // (category-inherited first, product exceptions last — already
+              // deterministic; never re-sorted here).
+              for (final group in widget.product.availableModifierGroups) ...[
+                Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  _groupHint(group),
+                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 4),
+                if (group.maxSelected == 1)
+                  RadioGroup<String>(
+                    groupValue: _selectedRadioOption[group.id] ?? '',
+                    onChanged: (val) => setState(() {
+                      // A null callback value clears the selection.
+                      if (val == null) {
+                        _selectedRadioOption.remove(group.id);
                       } else {
-                        _selectedModifiers.remove(m);
+                        _selectedRadioOption[group.id] = val;
                       }
-                    });
-                  },
-                )),
+                    }),
+                    child: Column(
+                      children: group.options
+                          .map(
+                            (option) => RadioListTile<String>(
+                              dense: true,
+                              title: Text(
+                                '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                              ),
+                              value: option.id,
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  )
+                else if (group.allowQuantities)
+                  Column(
+                    children: [
+                      for (final option in group.options)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                              ),
+                            ),
+                            IconButton(
+                              key: Key('modifier_qty_minus_${option.id}'),
+                              icon: const Icon(Icons.remove_circle_outline),
+                              onPressed: () => setState(() {
+                                final current = _optionQuantities[option.id] ?? 0;
+                                if (current > 0) {
+                                  _optionQuantities[option.id] = current - 1;
+                                }
+                              }),
+                            ),
+                            Text(
+                              '${_optionQuantities[option.id] ?? 0}',
+                              key: Key('modifier_qty_count_${option.id}'),
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            IconButton(
+                              key: Key('modifier_qty_plus_${option.id}'),
+                              icon: const Icon(Icons.add_circle_outline),
+                              onPressed: () => _incrementQuantity(group, option),
+                            ),
+                          ],
+                        ),
+                    ],
+                  )
+                else
+                  Column(
+                    children: group.options
+                        .map(
+                          (option) => CheckboxListTile(
+                            dense: true,
+                            title: Text(
+                              '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                            ),
+                            value: _checkedOptions[option.id] ?? false,
+                            onChanged: (selected) => setState(
+                              () => _checkedOptions[option.id] = selected ?? false,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                const Divider(),
               ],
             ],
           ),
@@ -1085,13 +1207,53 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
         ElevatedButton(
           onPressed: () {
+            // Puente hacia el carrito: cada opción elegida se entrega como
+            // un modificador del modelo existente, con su precio extra ya
+            // multiplicado por la cantidad cuando el grupo la permite; las
+            // opciones sin selección no generan entrada. Así el carrito, el
+            // recibo y la factura siguen funcionando sin cambios.
+            final selectedModifiers = <Modifier>[];
+            for (final group in widget.product.availableModifierGroups) {
+              for (final option in group.options) {
+                if (group.maxSelected == 1) {
+                  if (_selectedRadioOption[group.id] == option.id) {
+                    selectedModifiers.add(
+                      Modifier(
+                        id: option.id,
+                        name: option.name,
+                        extraPrice: option.priceDelta,
+                      ),
+                    );
+                  }
+                } else if (group.allowQuantities) {
+                  final quantity = _optionQuantities[option.id] ?? 0;
+                  if (quantity > 0) {
+                    selectedModifiers.add(
+                      Modifier(
+                        id: option.id,
+                        name: option.name,
+                        extraPrice: option.priceDelta * quantity,
+                      ),
+                    );
+                  }
+                } else if (_checkedOptions[option.id] == true) {
+                  selectedModifiers.add(
+                    Modifier(
+                      id: option.id,
+                      name: option.name,
+                      extraPrice: option.priceDelta,
+                    ),
+                  );
+                }
+              }
+            }
             context.read<SaleViewModel>().addToCart(
               widget.product,
               variantId: _selectedVariantId,
-              modifiers: List.from(_selectedModifiers),
+              modifiers: selectedModifiers,
             );
             Navigator.pop(context);
-          }, 
+          },
           child: const Text('AGREGAR'),
         ),
       ],

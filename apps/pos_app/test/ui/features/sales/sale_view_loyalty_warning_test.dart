@@ -7,6 +7,7 @@ import 'package:pos_app/domain/models/sales/cashier_session.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/services/config/business_mode_evaluator.dart';
@@ -176,5 +177,86 @@ void main() {
       findsOneWidget,
     );
     verify(mockViewModel.consumePendingLoyaltyWarning()).called(1);
+  });
+
+  group('Product options gate (grouped modifier groups)', () {
+    final groupedOnlyProduct = Product(
+      id: 'prod-grp',
+      name: 'Café con Grupos',
+      uom: 'UND',
+      stock: 10,
+      averageCost: 0,
+      sellPrice: 50,
+      availableModifierGroups: const [
+        EffectiveModifierGroup(
+          id: 'grp-1',
+          name: 'Leche',
+          minSelected: 0,
+          maxSelected: 1,
+          allowQuantities: false,
+          source: 'category',
+          options: [
+            EffectiveModifierOption(
+              id: 'opt-1',
+              name: 'Entera',
+              priceDelta: 5,
+              isDefault: true,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final plainProduct = Product(
+      id: 'prod-plain',
+      name: 'Café Simple',
+      uom: 'UND',
+      stock: 10,
+      averageCost: 0,
+      sellPrice: 30,
+    );
+
+    testWidgets('a grouped-only product opens the selector instead of adding directly',
+        (tester) async {
+      when(mockViewModel.filteredProducts).thenReturn([groupedOnlyProduct]);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Café con Grupos'));
+      await tester.pumpAndSettle();
+
+      // The dialog rendered with the group section (the bug under test made
+      // the product add directly over empty modifiers).
+      expect(find.text('Leche'), findsWidgets);
+      verifyNever(
+        mockViewModel.addToCart(
+          any,
+          quantity: anyNamed('quantity'),
+          variantId: anyNamed('variantId'),
+          modifiers: anyNamed('modifiers'),
+        ),
+      );
+    });
+
+    testWidgets('a product with no options keeps adding directly', (tester) async {
+      when(mockViewModel.filteredProducts).thenReturn([plainProduct]);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Café Simple'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Leche'), findsNothing);
+      verify(
+        mockViewModel.addToCart(
+          any,
+          quantity: anyNamed('quantity'),
+          variantId: anyNamed('variantId'),
+          modifiers: anyNamed('modifiers'),
+        ),
+      ).called(1);
+    });
   });
 }
