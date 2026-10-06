@@ -118,7 +118,7 @@ authorization.
 | Task | Status | Evidence |
 |---|---|---|
 | Recon + founder decisions | done | this document |
-| S1a (POS outbox + push) | pending | — |
-| S1b (backend endpoint + ingestion) | pending | — |
-| S2 (shift payload carries voucher state) | pending | — |
+| S1a (POS outbox + push) | done | `78986baf`, `077a1ac1` (outbox, migration60_61, DAO, push y stall signal R-16) |
+| S1b (backend endpoint + ingestion) | done | `f6a39fc4` (endpoint /sales/payment-reconciliations/sync, 7/7 Postgres DB specs + 11/11 unit specs) |
+| S2 (shift payload carries voucher state) | done | `9fb139bc` (conteo por shift en POS, shift close sync payload, migration 1809580000000 y DB specs) |
 | Authorization hardening | deferred, own item | see above |
