@@ -139,7 +139,7 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
       en `InboundSyncDeltasDto` (`inbound-sync.dto.ts:292`), su gating (`inbound-sync.service.ts:163-210`)
       y el ingest del POS (`sync_service.dart:3215-3410`).
 - [x] **T2.2** Tablas locales espejo + DAOs (ingest POS absorbido aquí, ver §35).
-- [ ] **T2.3** **Resolver los grupos efectivos al cargar el producto** — el punto exacto donde hoy se
+- [x] **T2.3** **Resolver los grupos efectivos al cargar el producto** — el punto exacto donde hoy se
       descartan las opciones. Acá se cierra el defecto de raíz.
 - [ ] **T2.4** *(redefinida por §7.1)* **Agregar las keys nuevas al set default de `parseRequestedTypes()`**
       (`inbound-sync.service.ts:427-444`). El POS **no manda `types`** (`sync_service.dart:3179-3197`), así
@@ -1267,3 +1267,36 @@ R3-003 (`sync_service.dart:4077`). El payload truncado reveló de paso un hallaz
 cubierto por el resultado completo — está en los advisory.
 
 **Recibo QUEMADO**: `consumed_revision sha256:4e5e72fc…`, target `sha256:f4820c2b…`.
+
+## 36. T2.3 — Resolución efectiva en el dispositivo (308345bc + 56b458ae, RECIBO QUEMADO)
+
+**El defecto raíz está cerrado.** `toProductDomain` aceptaba `modifiers` con default vacío y su
+único llamador no los pasaba: todo producto cargaba sin modificadores y el selector decía
+"agregar directo" sobre dato vacío (lógica correcta, dato inexistente). Ahora:
+
+- `Product.availableModifierGroups` (freezed `EffectiveModifierGroup/Option` nuevos, el
+  `Modifier` plano legacy intacto).
+- `ModifierResolutionService.resolveEffective`: función pura estática **espejo exacto de §30** —
+  lado categoría por `product.category_id` (el uuid ya resuelto desde T0.5'b, equivalente al
+  `code → catálogo` del servidor), lado producto, dedup con victoria del producto, orden
+  bloque categoría → bloque producto `(sort_order, name, id)`, filtros `is_active`
+  fail-closed, attachments colgados saltados sin crash.
+- Los 2 sitios de carga piden el snapshot de 4 datasets **una vez** y resuelven en memoria
+  (nunca queries por producto). UI fuera de alcance a propósito → T3.1.
+
+**Corrección R3-001 (CRITICAL, determinista): `56b458ae`** — `productGroupIds` se construía con
+**toda** la tabla de attachments: la excepción de un producto suprimía el grupo heredado para
+**todos** los demás productos de la categoría. Fix: `ownAttachments` (filtrado por producto)
+primero, el set derive de él. Plan **70**, usado **54**. RED reprodujo el fallo exacto
+(el producto hermano resolvía `[]`). La suite de paridad no lo había visto: su caso de
+doble-enganche usaba un solo producto — **lección: los tests de §30 deben sembrar DOS productos**.
+
+**Revisión.** `review-0cf9ebd78f2f51ff` (medium, 1 lente) → corrección → validador dirigido
+**aprobado sin advisories**. **Recibo QUEMADO**: `consumed_revision sha256:551e6267…`,
+target `sha256:f2c108f7…`. Ritual post-reinicio confirmado: `workspaceRoot` explícito en todo
+capture/ack.
+
+**Verificación del orquestador:** 32 tests nuevos (8 paridad + 5 wiring + fix), mocks de
+mockito fuera de superficie revertidos (6 ficheros, `analyze` + suites verdes sin ellos),
+suite completa con sólo el flake rotativo `flutter_tester` (todos verdes individuales).
+**FASE 2 COMPLETA** (T2.1-T2.4).
