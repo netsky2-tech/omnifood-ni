@@ -11,8 +11,9 @@ import '../../../../presentation/features/sales/view_models/sale_view_model.dart
 /// empty — it is NEVER behind the FOODPARK_QSR `isSplitBillAllowed` gate
 /// that guards `DIVIDIR CUENTA`. It covers the full [TipType] set:
 /// none / suggested 10% / custom percentage (validated 0-100) / fixed NIO /
-/// fixed USD ([TipEngine] converts the USD amount through the commercial
-/// rate, so the USD option is first-class).
+/// fixed USD ([TipEngine] converts the USD amount through the applied
+/// checkout rate — the BCN rate in BCN_OFFICIAL mode, the commercial rate
+/// otherwise — so the USD option is first-class).
 ///
 /// The live preview shows the tip and `Total con propina`; applying writes
 /// through [SaleViewModel.setTip] / [SaleViewModel.clearTip]. The tip is
@@ -98,7 +99,9 @@ class _TipDialogState extends State<TipDialog> {
           : _selected == TipType.fixedAmountUsd
               ? (_fixedUsdValue > 0 ? _fixedUsdValue : 0.0)
               : 0.0,
-      commercialRate: vm.commercialRate,
+      // T2b/#67: preview at the rate actually applied at checkout (the BCN
+      // rate in BCN_OFFICIAL mode), mirroring [SaleViewModel.tipCalculation].
+      commercialRate: vm.activeCheckoutRate,
     );
   }
 

@@ -4,6 +4,7 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
@@ -98,6 +99,15 @@ void main() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+    // #67/T2a: the sale path fails closed without BOTH recorded FX rates.
+    // 36.50 keeps the existing USD conversion expectations exact
+    // (\$10 × 36.50 = C$ 365.00).
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
+    );
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
+    );
   });
 
   tearDownAll(() async {
@@ -141,6 +151,11 @@ void main() {
       MockPrinterAdapter(),
     );
     saleViewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
+
+    // #67/T2a: the view model is built with autoLoad=false, so the seeded FX
+    // rows must be resolved through the same path production uses before the
+    // dialog can convert USD tenders at 36.50. No expectation below changes.
+    await saleViewModel.loadExchangeRates();
 
     // Set 1000 NIO total (tax exempt for clean rounding in test)
     saleViewModel.toggleGlobalTaxExempt();

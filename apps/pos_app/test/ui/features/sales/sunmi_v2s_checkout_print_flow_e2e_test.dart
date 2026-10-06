@@ -37,8 +37,21 @@ import 'sunmi_v2s_checkout_print_flow_e2e_test.mocks.dart';
 /// behaviour for this flow: a blank tenant resolves to the legacy inventory
 /// path, exactly as before that change. Do not remove this override.
 class _StubLocalConfigDao extends Mock implements LocalConfigDao {
+  // Backed by a tiny map so the FX seeds can coexist with the original
+  // contract: every unlisted key (the `tenant_id` terminal binding included)
+  // still resolves to null, exactly as before. #67/T2a: the sale path fails
+  // closed without BOTH recorded FX rates, so this flow seeds them.
+  final Map<String, String> _configs = {
+    'commercial_exchange_rate': '36.50',
+    'bcn_official_exchange_rate': '36.6241',
+  };
+
   @override
-  Future<LocalConfigEntity?> getConfigByKey(String key) async => null;
+  Future<LocalConfigEntity?> getConfigByKey(String key) async {
+    final value = _configs[key];
+    if (value == null) return null;
+    return LocalConfigEntity(key: key, value: value);
+  }
 }
 
 @GenerateNiceMocks([

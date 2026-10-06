@@ -1,11 +1,19 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../../core/navigation/route_observer.dart';
 import '../../../../core/utils/nicaragua_fiscal_validator.dart';
 import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/config/tenant_operation_mode.dart';
+import '../../../../domain/repositories/auth_repository.dart';
 import 'business_profile_view_model.dart';
 import 'fiscal_authorization_expiry_notice_widget.dart';
+
+/// T1 (#66): role-restricted FX controls must explain why they are inert
+/// (POS standard AP-17, disabled dead end). Deliberately DISTINCT from the
+/// cloud-managed copy — the two reasons must never be conflated.
+const String _roleRestrictedFxHelperText =
+    'Solo el propietario o un gerente puede modificar este valor.';
 
 class BusinessProfileView extends StatefulWidget {
   /// D-21 (#554) U4: test-only clock override for the fiscal expiry notice.
@@ -18,7 +26,7 @@ class BusinessProfileView extends StatefulWidget {
   State<BusinessProfileView> createState() => _BusinessProfileViewState();
 }
 
-class _BusinessProfileViewState extends State<BusinessProfileView> {
+class _BusinessProfileViewState extends State<BusinessProfileView> with RouteAware {
   /// D-21 (#554): strict yyyy-MM-dd shape + a real calendar date.
   static bool _isValidIsoDate(String value) {
     if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return false;
@@ -41,6 +49,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
   final Map<String, TextEditingController> _controllers = {};
   Map<String, String> _lastSyncedConfig = {};
   late BusinessProfileViewModel _viewModel;
+  ModalRoute<void>? _modalRoute;
 
   @override
   void initState() {
@@ -53,19 +62,58 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
     // Listen to ViewModel changes to sync controllers (not in build!)
     _viewModel.addListener(_onViewModelChanged);
 
+    // T1 (#66): resolve the signed-in role the same way app_drawer.dart does
+    // (async getCurrentUser). Until it resolves, the view model stays unset
+    // — which denies — so the guard fails closed.
+    _loadCurrentUser();
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _viewModel.loadConfig();
       _syncControllersFromViewModel(_viewModel);
     });
   }
 
+  Future<void> _loadCurrentUser() async {
+    final authRepo = context.read<AuthRepository>();
+    final user = await authRepo.getCurrentUser();
+    if (mounted) {
+      _viewModel.setCurrentUserRole(user?.role);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // T1 (#66): the profile route stays mounted while /lock is pushed on top
+    // of it ("Cambiar operador"), so its initState-cached role goes stale when
+    // a different operator unlocks. Subscribe like sale_view.dart so the role
+    // is re-resolved when the route is re-exposed.
+    final route = ModalRoute.of(context);
+    if (route != null && route != _modalRoute) {
+      appRouteObserver.unsubscribe(this);
+      _modalRoute = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     _viewModel.removeListener(_onViewModelChanged);
     for (final controller in _controllers.values) {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    if (!mounted) return;
+    // T1 (#66): the covering route was popped — re-resolve the signed-in
+    // operator so the FX guard reflects the CURRENT role, not the one cached
+    // at initState. setCurrentUserRole notifies listeners, so no extra
+    // refresh path is needed.
+    _loadCurrentUser();
   }
 
   void _onViewModelChanged() {
@@ -95,6 +143,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<BusinessProfileViewModel>();
     final colorScheme = Theme.of(context).colorScheme;
+    final canEditExchangeRates = viewModel.canEditExchangeRates;
 
     return Scaffold(
       appBar: AppBar(
@@ -190,16 +239,20 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       value: viewModel.checkoutFxMode,
                       decoration: InputDecoration(
                         labelText: 'Tasa a Utilizar en Pantalla de Cobro (POS)',
-                        prefixIcon: Icon(viewModel.isCheckoutFxModeCloudManaged
+                        prefixIcon: Icon(viewModel.isCheckoutFxModeCloudManaged || !canEditExchangeRates
                             ? Icons.lock
                             : Icons.price_change),
                         // BXW-007 U3 (#734): honest classification — when the
                         // office asserts this field, the terminal says so
                         // instead of showing an editable control that never
-                        // persists the operator's choice.
+                        // persists the operator's choice. T1 (#66): when the
+                        // role is restricted, it says so instead — the two
+                        // reasons are never conflated.
                         helperText: viewModel.isCheckoutFxModeCloudManaged
                             ? 'Definido por la oficina: este valor se administra desde la configuración central y este terminal no puede modificarlo.'
-                            : 'Seleccione cuál de las dos tasas se aplicará para convertir cobros en USD y dar vuelto.',
+                            : !canEditExchangeRates
+                                ? _roleRestrictedFxHelperText
+                                : 'Seleccione cuál de las dos tasas se aplicará para convertir cobros en USD y dar vuelto.',
                       ),
                       items: const [
                         DropdownMenuItem(
@@ -211,7 +264,7 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                           child: Text('Tasa Oficial BCN (Banco Central de Nicaragua)', overflow: TextOverflow.ellipsis),
                         ),
                       ],
-                      onChanged: viewModel.isCheckoutFxModeCloudManaged
+                      onChanged: viewModel.isCheckoutFxModeCloudManaged || !canEditExchangeRates
                           ? null
                           : (mode) {
                               if (mode != null) {
@@ -228,16 +281,18 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                       // snapshot, the field is read-only and honestly labelled
                       // (same pattern as the checkout-FX dropdown above,
                       // BXW-007 R-5/R-6) instead of silently reverting edits.
-                      readOnly: viewModel.isCommercialRateCloudManaged,
+                      readOnly: viewModel.isCommercialRateCloudManaged || !canEditExchangeRates,
                       decoration: InputDecoration(
                         labelText: 'Tipo de Cambio Comercial (POS / Atención al Cliente)',
                         hintText: '36.50',
-                        prefixIcon: Icon(viewModel.isCommercialRateCloudManaged
+                        prefixIcon: Icon(viewModel.isCommercialRateCloudManaged || !canEditExchangeRates
                             ? Icons.lock
                             : Icons.currency_exchange),
                         helperText: viewModel.isCommercialRateCloudManaged
                             ? 'Definido por la oficina: este valor se administra desde la configuración central y este terminal no puede modificarlo.'
-                            : 'Tasa utilizada para precios al público, cobro en USD y cálculo de vuelto en córdobas.',
+                            : !canEditExchangeRates
+                                ? _roleRestrictedFxHelperText
+                                : 'Tasa utilizada para precios al público, cobro en USD y cálculo de vuelto en córdobas.',
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       validator: (v) {
@@ -257,8 +312,14 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                             decoration: InputDecoration(
                               labelText: 'Tipo de Cambio Oficial BCN (Base Fiscal DGI)',
                               hintText: '36.6241',
-                              prefixIcon: const Icon(Icons.account_balance),
-                              helperText: 'Tasa oficial del Banco Central de Nicaragua utilizada para base fiscal DGI.',
+                              // T1 (#66): the BCN rate is the DGI fiscal base
+                              // — restricted operators cannot edit it.
+                              prefixIcon: Icon(!canEditExchangeRates
+                                  ? Icons.lock
+                                  : Icons.account_balance),
+                              helperText: !canEditExchangeRates
+                                  ? _roleRestrictedFxHelperText
+                                  : 'Tasa oficial del Banco Central de Nicaragua utilizada para base fiscal DGI.',
                               suffixIcon: viewModel.isFetchingBcnRate
                                   ? const Padding(
                                       padding: EdgeInsets.all(12),
@@ -271,7 +332,12 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                                   : IconButton(
                                       icon: const Icon(Icons.sync),
                                       tooltip: 'Consultar Web Service BCN',
-                                      onPressed: () async {
+                                      // T1 (#66): this button is a direct write
+                                      // path that bypasses saveConfig — a
+                                      // restricted operator cannot trigger it.
+                                      onPressed: !canEditExchangeRates
+                                          ? null
+                                          : () async {
                                         try {
                                           final rate = await viewModel.fetchOfficialBcnRate();
                                           _controllers['bcn_official_exchange_rate']?.text =
@@ -300,6 +366,9 @@ class _BusinessProfileViewState extends State<BusinessProfileView> {
                                     ),
                             ),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            // T1 (#66): the BCN rate is the DGI fiscal base —
+                            // restricted operators cannot edit it.
+                            readOnly: !canEditExchangeRates,
                             validator: (v) {
                               if (v == null || v.isEmpty) return 'Requerido';
                               final val = double.tryParse(v);
