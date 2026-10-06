@@ -1,4 +1,13 @@
 # Manual de Usuario del Punto de Venta (POS)
+
+## Changelog
+
+| Versión | Fecha | Cambios |
+|---|---|---|
+| 1.0 | 2026-10-03 | Reemplazo completo de sección 6 (Cuentas Abiertas): ya no es "Retención y Recuperación de Cuentas" sino un flujo completo de cuentas abiertas con 5 secciones (crear, recuperar/editar, múltiples, abandonar, copiar). Actualización de secciones 11.1 (Corte X) y 11.2 (Corte Z) con bloqueos y listados de cuentas abiertas. |
+| 0.1 | 2026-??-?? | Primera versión básica de retención y recuperación de tickets (hold simples). |
+
+
 ## NHILOS POS — Terminal MIRAY Q80 / iPOS
 
 **Document ID:** NH-MAN-POS-001 (CD-11)  
@@ -88,14 +97,74 @@ En negocios de especialidad como cafeterías, muchos productos admiten personali
 
 ---
 
-## 6. Retención y Recuperación de Cuentas (Tickets en Espera / Hold)
+## 6. Cuentas Abiertas (Ventas en Espera / Hold Tickets)
 
-Si un cliente está ordenando pero debe esperar a un acompañante, o si se atiende una mesa que seguirá consumiendo:
+El sistema permite mantener múltiples cuentas abiertas simultáneamente para atender mesas o clientes que siguen consumiendo. Cada cuenta se guarda de forma independiente con su propio nombre, lista de productos y total.
 
-1. **Poner en Espera:** En la parte inferior del ticket actual, presioná **"Retener Ticket"** (*Hold*).
-2. Podés asignarle un identificador rápido (ej. *"Mesa 3"* o *"Cliente Camisa Azul"*).
-3. La pantalla de venta quedará limpia inmediatamente para atender al siguiente cliente en fila.
-4. **Recuperar Ticket:** Tocá el botón **"Tickets en Espera"** en la barra superior, seleccioná la orden retenida y presioná **"Reanudar"**. Podés agregar más productos o proceder al cobro.
+### 6.1 Crear una Cuenta Nueva
+
+Cuando terminás de armar un pedido para un cliente que seguirá en el local:
+
+1. **Armar el pedido** en el carrito (agregar productos como de costumbre).
+2. **Poner en Espera:** Presioná el ícono **⏸️ (Poner en Espera)** en la barra inferior del carrito.
+3. Se abre el diálogo "Poner Venta en Espera":
+   * **Nombre / Identificador:** Escribí un nombre para la cuenta (ej: "Mesa 3", "Cliente 2", "Juan Pérez").
+   * **Mesa Asignada (Opcional):** Seleccioná la mesa del local si se trata de una comanda.
+   * **Invitados:** Cantidad de personas (opcional).
+4. Presioná **"GUARDAR"**. La cuenta se guarda y el carrito queda vacío para atender al siguiente cliente.
+
+> **Importante:** Una vez guardada, la cuenta no se puede modificar desde el catálogo. Para cambiar productos o nombre, debés recuperarla primero (sección 6.2).
+
+### 6.2 Recuperar y Editar una Cuenta Existente
+
+Para continuar atendiendo una cuenta abierta:
+
+1. **Abrir Cuentas Abiertas:** Tocá el botón **⏸️ (Cuentas Abiertas)** en la barra superior del menú principal. Verás todas las cuentas activas con su nombre, cantidad de productos y total.
+2. **Recuperar:** Presioná sobre la cuenta que querés editar. El pedido se cargará en el carrito.
+3. **Editar:** Podés agregar productos, modificar cantidades o quitar items como en cualquier venta normal.
+4. **Re-guardar (Editar Nombre):** Si querés cambiar el nombre de la cuenta o re-guardar con los productos actualizados:
+   * Presioná el botón **⏸️ (Editar Cuenta Abierta)** en la barra inferior.
+   * Aparecerá un banner que muestra exactamente lo que se va a cambiar: cuántos productos tenés guardados, el total actual, cuántos productos tiene el carrito ahora y la diferencia.
+   * Ejemplo: *"Al guardar, sus 2 productos por C$ 250 pasan a ser los 3 productos del carrito, por C$ 150. Se pierden C$ 100 de productos que no están en el carrito."*
+   * Cambiá el nombre si querés (se renombra la cuenta, no se crea una nueva).
+   * Presioná **"GUARDAR"** para aplicar los cambios.
+
+> **Re-guardar reemplaza, no acumula:** Cuando re-parkkeás una cuenta recuperada, el contenido se **reemplaza** por completo con lo que hay en el carrito. No se suman productos a la cuenta original. Esto evita duplicidades y asegura que cada cuenta refleje exactamente su estado actual.
+
+### 6.3 Múltiples Cuentas Abiertas Simultáneas
+
+Podés tener varias cuentas abiertas a la vez (por ejemplo, Mesa 3 y Mesa 5 atendiendo al mismo tiempo):
+
+* Cada cuenta se muestra de forma independiente en el listado.
+* Cada una tiene su propio total y cantidad de productos.
+* Podés cobrar una cuenta sin afectar a las demás.
+* Al cobrar, esa cuenta desaparece del listado y se emite factura.
+
+### 6.4 Abandonar una Cuenta (Eliminar)
+
+Si una cuenta ya no será cobrada (ej: cliente que se fue sin pagar):
+
+1. Abrí el listado de Cuentas Abiertas (⏸️ en barra superior).
+2. Tocá el ícono de papelera roja **🗑️** al lado de la cuenta que querés eliminar.
+3. El sistema muestra una confirmación con:
+   * El nombre de la cuenta
+   * La cantidad de productos
+   * El total monetario
+   * Advertencia: *"Nada de esto ha sido facturado. Al abandonarla se descarta definitivamente: no se puede deshacer."*
+4. Presioná **"ABANDONAR"** para eliminar la cuenta. Si presionás **"CANCELAR"**, la cuenta se mantiene.
+
+> **Importante:** Una cuenta abandonada **no se puede recuperar**. No genera factura ni nota de crédito, ya que es estado pre-fiscal (SQLite local).
+
+### 6.5 Copiar una Cuenta
+
+Si necesitás duplicar una cuenta existente (ej: un pedido similar para otra mesa):
+
+1. Abrí el listado de Cuentas Abiertas.
+2. Seleccioná la cuenta que querés copiar.
+3. El sistema abre el diálogo para crear una nueva cuenta con los mismos productos.
+4. Asignale un nuevo nombre o número de mesa y presioná **"GUARDAR"**.
+
+> **Nota:** La cuenta copiada es independiente. Modificaciones a una no afectan a la otra.
 
 ---
 
@@ -200,9 +269,25 @@ Al acceder a **Control de Caja y Turnos** desde el menú lateral:
 
 ![Lectura Parcial Corte X](images/pos_15_lectura_parcial_corte_x.png)
 
+* El Corte X muestra información completa incluyendo:
+  * Totales por medio de pago (efectivo, tarjeta, QR, etc.)
+  * **Cuentas abiertas:** Se listan las cuentas activas con su cantidad de productos y total acumulado (ej: "Cuentas abiertas · 2 · C$ 350.00")
+  * El pie del reporte aclara: *"La lectura X es informativa y no cierra el turno de caja."*
+
+> **Importante:** Las cuentas abiertas no forman parte del ingreso bruto en el Corte X. Se muestran solo como referencia para que el cajero sepa qué pendientes quedan por cobrar.
+
 ### 11.2 Arqueo Ciego y Cierre Definitivo (Corte Z)
 * Al finalizar el turno, presioná el botón rojo **"Cerrar Turno (Corte Z)"**.
-* El sistema presenta la modalidad de **Arqueo Ciego**: el cajero debe contar físicamente el efectivo en gaveta e ingresarlo sin ver los totales del sistema para garantizar transparencia y evitar manipulaciones:
+* **Bloqueo de Cuentas Abiertas:** Si existieran cuentas abiertas (ventas en espera) que no se cobraron, el sistema **bloquea el cierre** y muestra un diálogo informativo enumerando cada cuenta abierta con su total:
+
+![Bloqueo de Corte Z — Cuentas Abiertas](images/pos_16b_cierre_con_cuentas_abiertas.png)
+
+* El cierre no se inicia hasta que todas las cuentas abiertas se liquidaron (se cobraron o abandonaron).
+* El cajero debe confirmar que cada cuenta se liquidó o que abandonó las que no se cobrarán.
+* Una vez que no quedan cuentas pendientes, se procede con el arqueo ciego:
+  1. El cajero cuenta físicamente el efectivo en gaveta.
+  2. Ingresá el total sin ver los totales del sistema (arqueo ciego).
+  3. Presioná **"ENTENDIDO"** para confirmar.
 
 ![Arqueo Ciego y Cierre de Turno Corte Z](images/pos_16_cierre_turno_corte_z.png)
 
