@@ -147,9 +147,9 @@ Lo que falta es **definirlos, con reglas, y bajarlos**.
 
 ### Fase 3 — POS
 
-- [ ] **T3.1** Selector agrupado: radio cuando `max=1`, checkbox cuando no, y cantidades cuando
+- [x] **T3.1** Selector agrupado: radio cuando `max=1`, checkbox cuando no, y cantidades cuando
       `allow_quantities`.
-- [ ] **T3.2** Validación local de min/max al tocar AGREGAR (offline, sin red).
+- [x] **T3.2** Validación local de min/max al tocar AGREGAR — *absorbida dentro de la corrección de T3.1 (ver §37), tests como evidencia*.
 - [ ] **T3.3** Totales con cantidad y ticket de cocina `[MOD] 2x Extra Shot`.
 
 ### Fase 4 — Cierre
@@ -1300,3 +1300,44 @@ capture/ack.
 mockito fuera de superficie revertidos (6 ficheros, `analyze` + suites verdes sin ellos),
 suite completa con sólo el flake rotativo `flutter_tester` (todos verdes individuales).
 **FASE 2 COMPLETA** (T2.1-T2.4).
+
+## 37. T3.1 — Selector agrupado (30b4d471 + corrección 1837c89c, RECIBO QUEMADO)
+
+**Unidad.** `30b4d471` (3 ficheros, 632 líneas): la puerta abre con `availableModifierGroups`
+(productos agrupados ya no se agregan directo — síntoma visible del defecto original), el
+diálogo renderiza por grupo **en orden del resolver**: radio (`max=1`, preselección sólo con
+`isDefault`), checkbox (`max>1`), stepper `−/n/+` con **tope del total del grupo** en
+`allow_quantities`. Encabezados en palabras de negocio ("Elige hasta 3 · puedes repetir"),
+nunca enteros de configuración. Puente a la `List<Modifier>` plana con
+`extraPrice = cantidad × delta` (la aritmética del recibo queda correcta hoy; totales con
+cantidad y ticket de cocina son T3.3). Sección legacy plana eliminada (dato muerto).
+
+**Corrección — 3 CRITICAL deterministas (`1837c89c`):**
+1. `R3-CHECKBOX-MAX-UNENFORCED` — el checkbox no respetaba `maxSelected` mientras el header
+   prometía el tope. *(Gap del contrato del orquestador: el tope sólo lo pedí a los steppers.)*
+2. `R3-LEGACY-FLAT-DROP` — la puerta mantenía `availableModifiers` y el diálogo ya no lo
+   renderizaba → área vacía y AGREGAR como foso silencioso. Sección restaurada tras guard
+   `isNotEmpty` + puente legacy.
+3. `R3-MINSELECTED-UNENFORCED` — AGREGAR nunca leía `minSelected`: grupos obligatorios
+   saltables. Ahora bloquea con error inline en español ("Falta elegir una opción en «Leche»")
+   que se limpia solo al satisfacer.
+
+**Presupuesto.** Plan declarado **170**, real **199** (source 78 + tests 121 tras comprimir
+con builders compartidos y fusión de tests) — **techo del proveedor 200 respetado**, y la
+validación **no** mide contra la estimación declarada (confirmado empíricamente: pasó con
+199 > 170). Lección: declarar cerca del techo cuando el alcance tenga 3 hallazgos.
+
+**T3.2 ABSORBIDA**: la validación local min/max al tocar AGREGAR quedó dentro de esta
+corrección; sus tests (bloqueo por grupo obligatorio, liberación al satisfacer, grupo
+opcional nunca bloquea) son la evidencia de cierre.
+
+**Discrepancia de reporte (verificada contra disco):** el worker reportó 14 tests y nombró un
+test "legacy-only" inexistente; el inventario real es **8 dialog + 5 gate = 13**, todo verde.
+El escenario legacy-only comparte la rama `isNotEmpty` con el test de coexistencia (fuente
+verificada por el orquestador); el techo de 200 impedía sumar el test faltante sin sacrificar
+aserciones mandadas. Queda como deuda menor de cobertura.
+
+**Revisión.** `review-805e9c2427429ae7` (medium, 1 lente) → corrección → validador
+aprobado. **Recibo QUEMADO**: `consumed_revision sha256:4ca2d8b6…`, target
+`sha256:8446eb24…`. Suite POS en su mejor número de la rama (3014 + flake rotativo,
+individuales verdes), `analyze` limpio.
