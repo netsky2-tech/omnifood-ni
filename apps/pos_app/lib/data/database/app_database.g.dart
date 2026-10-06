@@ -3872,6 +3872,30 @@ class _$PaymentDao extends PaymentDao {
   }
 
   @override
+  Future<int?> countPendingCardPaymentsForShift(String shiftId) async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM payments p     INNER JOIN invoices i ON p.invoice_id = i.id     WHERE i.shift_id = ?1       AND p.method = \'card\'       AND p.reconciliation_status = \'PENDIENTE\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [shiftId]);
+  }
+
+  @override
+  Future<int?> countReconciledCardPaymentsForShift(String shiftId) async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM payments p     INNER JOIN invoices i ON p.invoice_id = i.id     WHERE i.shift_id = ?1       AND p.method = \'card\'       AND p.reconciliation_status = \'CONCILIADO\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [shiftId]);
+  }
+
+  @override
+  Future<int?> countOverriddenCardPaymentsForShift(String shiftId) async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM payments p     INNER JOIN invoices i ON p.invoice_id = i.id     WHERE i.shift_id = ?1       AND p.method = \'card\'       AND p.reconciliation_status = \'MANUAL_OVERRIDE\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [shiftId]);
+  }
+
+  @override
   Future<List<PaymentEntity>> getPendingReconciliations() async {
     return _queryAdapter.queryList(
         'SELECT * FROM payments WHERE reconciliation_sync_status = \'pending\'',

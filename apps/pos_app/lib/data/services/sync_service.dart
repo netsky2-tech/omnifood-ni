@@ -1315,10 +1315,10 @@ class SyncService {
     final response = await _dio.post(
       '/sales/shifts/sync',
       data: {
-        'sessions': sessionBatch
+        'sessions': await Future.wait(sessionBatch
             .map((session) =>
                 _buildCashShiftSessionPayload(session, userNamesById))
-            .toList(growable: false),
+            .toList(growable: false)),
         'movements': movementBatch
             .map(_buildCashMovementPayload)
             .toList(growable: false),
@@ -1349,12 +1349,19 @@ class SyncService {
   /// resolves server-side (its last resort remains the cashier id, so the
   /// NOT NULL column is still satisfied — a UUID never originates here when
   /// a name exists).
-  Map<String, Object?> _buildCashShiftSessionPayload(
+  ///
+  /// S2 (backlog #68): a CLOSED session also carries the shift's voucher
+  /// reconciliation state — the counts of card payments attached to the
+  /// shift's invoices by reconciliation status (pending / reconciled /
+  /// manually overridden). The keys are omitted for a still-OPEN session:
+  /// the shift's voucher state is a close-time fact, and the backend maps
+  /// the absent keys to NULL columns (the later closed push carries them).
+  Future<Map<String, Object?>> _buildCashShiftSessionPayload(
     CashierSessionEntity session,
     Map<String, String> userNamesById,
-  ) {
+  ) async {
     final cashierName = userNamesById[session.userId];
-    return {
+    final payload = {
       'id': session.id,
       'terminalId': session.terminalId,
       'cashierId': session.userId,
@@ -1387,6 +1394,22 @@ class SyncService {
       if (session.supervisorId != null) 'supervisorId': session.supervisorId,
       if (session.notes != null) 'notes': session.notes,
     };
+
+    if (session.isClosed) {
+      final paymentDao = _database?.paymentDao;
+      if (paymentDao != null) {
+        payload['cardVouchersPending'] =
+            await paymentDao.countPendingCardPaymentsForShift(session.id) ?? 0;
+        payload['cardVouchersReconciled'] =
+            await paymentDao.countReconciledCardPaymentsForShift(session.id) ??
+                0;
+        payload['cardVouchersOverridden'] =
+            await paymentDao.countOverriddenCardPaymentsForShift(session.id) ??
+                0;
+      }
+    }
+
+    return payload;
   }
 
   /// Maps a local cash movement row onto the cloud ingestion contract

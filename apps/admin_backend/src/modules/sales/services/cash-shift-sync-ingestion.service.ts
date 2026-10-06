@@ -250,6 +250,12 @@ export class CashShiftSyncIngestionService {
       difference_nio: record.differenceNio ?? null,
       difference_usd: record.differenceUsd ?? null,
       z_report_sequence: record.zReportSequence ?? null,
+      // S2 (backlog #68): the shift's voucher reconciliation counts. A
+      // legacy or still-OPEN payload omits them; absence maps to NULL (the
+      // "not reported" sentinel), never to a fabricated zero.
+      card_vouchers_pending: record.cardVouchersPending ?? null,
+      card_vouchers_reconciled: record.cardVouchersReconciled ?? null,
+      card_vouchers_overridden: record.cardVouchersOverridden ?? null,
       supervisor_id: record.supervisorId ?? null,
       notes: record.notes ?? null,
     };

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/payment_entity.dart';
 import 'package:pos_app/data/services/sync_service.dart';
@@ -62,6 +63,7 @@ void main() {
   late Dio dio;
   late SyncService syncService;
   late List<Map<String, dynamic>> capturedReconciliationRequests;
+  late List<Map<String, dynamic>> capturedShiftSyncRequests;
 
   setUp(() async {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
@@ -96,10 +98,39 @@ void main() {
     );
 
     capturedReconciliationRequests = [];
+    capturedShiftSyncRequests = [];
     dio = Dio();
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) {
+          if (options.path == '/sales/shifts/sync') {
+            capturedShiftSyncRequests.add(
+              Map<String, dynamic>.from(options.data as Map),
+            );
+            final body = options.data as Map;
+            final records = [
+              ...(body['sessions'] as List),
+              ...(body['movements'] as List),
+            ];
+            return handler.resolve(
+              Response(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'received': records.length,
+                  'processed': records.length,
+                  'failed': 0,
+                  'results': [
+                    for (final record in records)
+                      {
+                        'idempotencyKey': (record as Map)['id'],
+                        'status': 'ACCEPTED',
+                      },
+                  ],
+                },
+              ),
+            );
+          }
           if (options.path == '/sales/payment-reconciliations/sync') {
             capturedReconciliationRequests.add(
               Map<String, dynamic>.from(options.data as Map),
@@ -251,6 +282,146 @@ void main() {
         await database.paymentDao.getPendingReconciliations(),
         isEmpty,
       );
+    },
+  );
+
+  /// S2 (#68): seeds a shift session, an invoice bound to it, and card
+  /// payments in the three reconciliation states plus a cash payment.
+  Future<void> seedShiftWithVoucherState(
+    String shiftId, {
+    required bool isClosed,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await database.cashierSessionDao.insertSession(
+      CashierSessionEntity(
+        id: shiftId,
+        userId: 'user-cajero',
+        terminalId: 'pos-01',
+        openedAt: now - 3600000,
+        closedAt: isClosed ? now : null,
+        isClosed: isClosed,
+        expectedNio: 1000,
+        syncStatus: 'pending',
+      ),
+    );
+    await database.invoiceDao.insertInvoice(
+      InvoiceEntity(
+        id: 'inv-$shiftId',
+        number: '001-001-01-00000077',
+        createdAt: now,
+        userId: 'user-cajero',
+        subtotal: 1000.0,
+        totalTax: 150.0,
+        total: 1150.0,
+        isCanceled: false,
+        syncStatus: 'synced',
+        paymentStatus: 'paid',
+        type: 'regular',
+        terminalId: 'pos-01',
+        shiftId: shiftId,
+      ),
+    );
+    await database.paymentDao.insertPayments([
+      for (final (index, status) in const ['PENDIENTE', 'PENDIENTE'].indexed)
+        PaymentEntity(
+          id: 'pay-$shiftId-pending-$index',
+          invoiceId: 'inv-$shiftId',
+          method: 'card',
+          amount: 100.0,
+          amountNio: 100.0,
+          voucherCode: 'PENDIENTE',
+          reconciliationStatus: status,
+          createdAt: now,
+        ),
+      PaymentEntity(
+        id: 'pay-$shiftId-reconciled',
+        invoiceId: 'inv-$shiftId',
+        method: 'card',
+        amount: 200.0,
+        amountNio: 200.0,
+        voucherCode: '654321',
+        reconciliationStatus: 'CONCILIADO',
+        createdAt: now,
+      ),
+      PaymentEntity(
+        id: 'pay-$shiftId-override',
+        invoiceId: 'inv-$shiftId',
+        method: 'card',
+        amount: 300.0,
+        amountNio: 300.0,
+        voucherCode: 'OVERRIDE: sin voucher',
+        reconciliationStatus: 'MANUAL_OVERRIDE',
+        createdAt: now,
+      ),
+      PaymentEntity(
+        id: 'pay-$shiftId-cash',
+        invoiceId: 'inv-$shiftId',
+        method: 'cash',
+        amount: 50.0,
+        amountNio: 50.0,
+        createdAt: now,
+      ),
+    ]);
+  }
+
+  test(
+    'a CLOSED shift payload carries the shift\'s voucher reconciliation counts (S2 #68)',
+    () async {
+      await seedShiftWithVoucherState('shift-vsync-closed', isClosed: true);
+
+      await syncService.triggerManualSync();
+
+      expect(
+        syncService.lastSyncError ?? '',
+        isNot(contains('Turnos')),
+      );
+      final shiftPosts = capturedShiftSyncRequests
+          .map((body) => body['sessions'] as List)
+          .expand((records) => records.cast<Map>())
+          .where((session) => session['id'] == 'shift-vsync-closed')
+          .toList(growable: false);
+      expect(shiftPosts, hasLength(1));
+
+      final session = shiftPosts.single;
+      expect(session['status'], 'CLOSED');
+      // 2 pending, 1 reconciled, 1 overridden: the shift's voucher state
+      // rides the close push, and the cash payment is never counted.
+      expect(session['cardVouchersPending'], 2);
+      expect(session['cardVouchersReconciled'], 1);
+      expect(session['cardVouchersOverridden'], 1);
+
+      // The closed session was accepted and is marked synced.
+      final stored = await database.cashierSessionDao
+          .getSessionById('shift-vsync-closed');
+      expect(stored!.syncStatus, 'synced');
+    },
+  );
+
+  test(
+    'an OPEN shift payload omits the voucher counts (close-time fact only)',
+    () async {
+      await seedShiftWithVoucherState('shift-vsync-open', isClosed: false);
+
+      await syncService.triggerManualSync();
+
+      final shiftPosts = capturedShiftSyncRequests
+          .map((body) => body['sessions'] as List)
+          .expand((records) => records.cast<Map>())
+          .where((session) => session['id'] == 'shift-vsync-open')
+          .toList(growable: false);
+      expect(shiftPosts, hasLength(1));
+
+      final session = shiftPosts.single;
+      expect(session['status'], 'OPEN');
+      expect(session.containsKey('cardVouchersPending'), isFalse);
+      expect(session.containsKey('cardVouchersReconciled'), isFalse);
+      expect(session.containsKey('cardVouchersOverridden'), isFalse);
+
+      // A still-OPEN session intentionally stays pending: the later closed
+      // push carries the voucher state.
+      final stored = await database.cashierSessionDao
+          .getSessionById('shift-vsync-open');
+      expect(stored!.syncStatus, 'pending');
     },
   );
 

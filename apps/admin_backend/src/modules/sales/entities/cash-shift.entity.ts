@@ -70,6 +70,22 @@ export class CashShiftSession {
   @Column({ type: 'int', nullable: true })
   z_report_sequence: number | null;
 
+  /**
+   * S2 (backlog #68): the shift's card-voucher reconciliation state at
+   * close time, pushed by the POS in the shift-session sync payload.
+   * Nullable with no backfill: shifts closed before this column existed
+   * have no voucher-count snapshot (D-9), and an OPEN session pushes no
+   * counts at all. NULL means "not reported", never zero.
+   */
+  @Column({ type: 'int', nullable: true, default: null })
+  card_vouchers_pending: number | null;
+
+  @Column({ type: 'int', nullable: true, default: null })
+  card_vouchers_reconciled: number | null;
+
+  @Column({ type: 'int', nullable: true, default: null })
+  card_vouchers_overridden: number | null;
+
   @Column({ type: 'varchar', length: 100, nullable: true })
   supervisor_id: string | null;
 

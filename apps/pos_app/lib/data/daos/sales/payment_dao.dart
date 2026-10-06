@@ -29,6 +29,40 @@ abstract class PaymentDao {
   @Query("SELECT COUNT(*) FROM payments WHERE method = 'card' AND reconciliation_status = 'PENDIENTE'")
   Future<int?> countPendingCardPayments();
 
+  /// S2 (backlog #68): voucher reconciliation state of a cash shift,
+  /// counted at shift-close push time. Each query counts the card payments
+  /// attached to the shift's invoices by reconciliation status, so the
+  /// cloud shift-session payload carries the shift's voucher state
+  /// (pending / reconciled / manually overridden) and the owner dashboard
+  /// can see a shift that closed with overrides instead of only the
+  /// pre-close Corte-Z guard.
+  @Query('''
+    SELECT COUNT(*) FROM payments p
+    INNER JOIN invoices i ON p.invoice_id = i.id
+    WHERE i.shift_id = :shiftId
+      AND p.method = 'card'
+      AND p.reconciliation_status = 'PENDIENTE'
+  ''')
+  Future<int?> countPendingCardPaymentsForShift(String shiftId);
+
+  @Query('''
+    SELECT COUNT(*) FROM payments p
+    INNER JOIN invoices i ON p.invoice_id = i.id
+    WHERE i.shift_id = :shiftId
+      AND p.method = 'card'
+      AND p.reconciliation_status = 'CONCILIADO'
+  ''')
+  Future<int?> countReconciledCardPaymentsForShift(String shiftId);
+
+  @Query('''
+    SELECT COUNT(*) FROM payments p
+    INNER JOIN invoices i ON p.invoice_id = i.id
+    WHERE i.shift_id = :shiftId
+      AND p.method = 'card'
+      AND p.reconciliation_status = 'MANUAL_OVERRIDE'
+  ''')
+  Future<int?> countOverriddenCardPaymentsForShift(String shiftId);
+
   /// S1a (backlog #68): pending rows of the card/voucher reconciliation
   /// outbox — reconciliations whose push to
   /// `POST /sales/payment-reconciliations/sync` has not been ACKed yet.

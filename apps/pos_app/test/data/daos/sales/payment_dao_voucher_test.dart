@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/payment_entity.dart';
 
@@ -164,6 +165,195 @@ void main() {
       expect(retrieved.first.reconciliationStatus, 'CONCILIADO');
       expect(retrieved.first.last4, '9876');
       expect(retrieved.first.reconciledByUserId, 'supervisor-01');
+    });
+
+    group('shift voucher counts (S2 #68)', () {
+      late final now = DateTime.now().millisecondsSinceEpoch;
+
+      Future<void> seedShiftInvoicesAndPayments() async {
+        // The invoices' shift_id carries a real FK to cashier_sessions.
+        await database.cashierSessionDao.insertSession(
+          CashierSessionEntity(
+            id: 'shift-A',
+            userId: 'user-01',
+            terminalId: 'pos-01',
+            openedAt: now - 7200000,
+            expectedNio: 0,
+          ),
+        );
+        await database.cashierSessionDao.insertSession(
+          CashierSessionEntity(
+            id: 'shift-B',
+            userId: 'user-01',
+            terminalId: 'pos-01',
+            openedAt: now - 3600000,
+            expectedNio: 0,
+          ),
+        );
+
+        // Two invoices in shift-A (one canceled), one in shift-B.
+        await database.invoiceDao.insertInvoice(
+          InvoiceEntity(
+            id: 'inv-shift-a-1',
+            number: '001-001-01-00000011',
+            createdAt: now,
+            userId: 'user-01',
+            subtotal: 100.0,
+            totalTax: 15.0,
+            total: 115.0,
+            isCanceled: false,
+            syncStatus: 'synced',
+            paymentStatus: 'paid',
+            type: 'regular',
+            terminalId: 'pos-01',
+            shiftId: 'shift-A',
+          ),
+        );
+        await database.invoiceDao.insertInvoice(
+          InvoiceEntity(
+            id: 'inv-shift-a-canceled',
+            number: '001-001-01-00000012',
+            createdAt: now,
+            userId: 'user-01',
+            subtotal: 100.0,
+            totalTax: 15.0,
+            total: 115.0,
+            isCanceled: true,
+            syncStatus: 'synced',
+            paymentStatus: 'paid',
+            type: 'regular',
+            terminalId: 'pos-01',
+            shiftId: 'shift-A',
+          ),
+        );
+        await database.invoiceDao.insertInvoice(
+          InvoiceEntity(
+            id: 'inv-shift-b-1',
+            number: '001-001-01-00000013',
+            createdAt: now,
+            userId: 'user-01',
+            subtotal: 100.0,
+            totalTax: 15.0,
+            total: 115.0,
+            isCanceled: false,
+            syncStatus: 'synced',
+            paymentStatus: 'paid',
+            type: 'regular',
+            terminalId: 'pos-01',
+            shiftId: 'shift-B',
+          ),
+        );
+
+        PaymentEntity cardPayment(
+          String id,
+          String invoiceId,
+          String status,
+        ) =>
+            PaymentEntity(
+              id: id,
+              invoiceId: invoiceId,
+              method: 'card',
+              amount: 100.0,
+              amountNio: 100.0,
+              voucherCode: status == 'PENDIENTE' ? 'PENDIENTE' : '654321',
+              reconciliationStatus: status,
+              cardBrand: 'VISA',
+              cardType: 'CREDITO',
+              bankPos: 'BAC',
+              createdAt: now,
+            );
+
+        await database.paymentDao.insertPayments([
+          // shift-A: 2 pending, 1 reconciled, 1 overridden, 1 cash.
+          cardPayment('pay-a-pend-1', 'inv-shift-a-1', 'PENDIENTE'),
+          cardPayment('pay-a-pend-2', 'inv-shift-a-1', 'PENDIENTE'),
+          cardPayment('pay-a-reconciled', 'inv-shift-a-1', 'CONCILIADO'),
+          cardPayment('pay-a-override', 'inv-shift-a-1', 'MANUAL_OVERRIDE'),
+          PaymentEntity(
+            id: 'pay-a-cash',
+            invoiceId: 'inv-shift-a-1',
+            method: 'cash',
+            amount: 50.0,
+            amountNio: 50.0,
+            createdAt: now,
+          ),
+          // The canceled invoice's card payment rides the same shift-A
+          // join; the spec'd shift queries filter only method + status.
+          cardPayment('pay-a-canceled', 'inv-shift-a-canceled', 'PENDIENTE'),
+          // shift-B: 1 pending only — must never leak into shift-A.
+          cardPayment('pay-b-pend', 'inv-shift-b-1', 'PENDIENTE'),
+        ]);
+      }
+
+      test('counts card payments by reconciliation status for the shift',
+          () async {
+        await seedShiftInvoicesAndPayments();
+
+        // 2 on the live invoice + 1 on the canceled one: the spec'd shift
+        // queries filter only method + reconciliation status, and the
+        // canceled invoice's rows belong to the same shift.
+        expect(
+          await database.paymentDao.countPendingCardPaymentsForShift('shift-A'),
+          3,
+        );
+        expect(
+          await database.paymentDao
+              .countReconciledCardPaymentsForShift('shift-A'),
+          1,
+        );
+        expect(
+          await database.paymentDao
+              .countOverriddenCardPaymentsForShift('shift-A'),
+          1,
+        );
+      });
+
+      test('counts are scoped to the shift and zero for an unknown shift',
+          () async {
+        await seedShiftInvoicesAndPayments();
+
+        expect(
+          await database.paymentDao.countPendingCardPaymentsForShift('shift-B'),
+          1,
+        );
+        expect(
+          await database.paymentDao
+              .countReconciledCardPaymentsForShift('shift-B'),
+          0,
+        );
+        expect(
+          await database.paymentDao
+              .countOverriddenCardPaymentsForShift('shift-B'),
+          0,
+        );
+        expect(
+          await database.paymentDao
+              .countPendingCardPaymentsForShift('shift-unknown'),
+          0,
+        );
+        expect(
+          await database.paymentDao
+              .countReconciledCardPaymentsForShift('shift-unknown'),
+          0,
+        );
+        expect(
+          await database.paymentDao
+              .countOverriddenCardPaymentsForShift('shift-unknown'),
+          0,
+        );
+      });
+
+      test('non-card payments are never counted', () async {
+        await seedShiftInvoicesAndPayments();
+
+        // shift-A carries one cash payment; the pending count stays at the
+        // three card rows even though the shift has 4 non-reconciled rows
+        // total.
+        expect(
+          await database.paymentDao.countPendingCardPaymentsForShift('shift-A'),
+          3,
+        );
+      });
     });
 
     group('reconciliation sync outbox (S1a #68)', () {
