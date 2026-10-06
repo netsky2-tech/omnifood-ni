@@ -1463,3 +1463,13 @@ JSON y `destroy` en `finally`.
 4 del runner con fakes). Suite backend **3648**, tsc/eslint/prettier limpios. Ni el worker
 ni el orquestador ejecutamos migraciones/seed sin pasar por el plan: dry-run primero,
 después apply con evidencia SQL.
+
+**Revisión de T4.3a.** `review-6f427853e6fa19b7` (medium, 1 lente): 4 intentos con fallos
+de relay (`length` → `stop` → JSON truncado → replay) + `stop` post-reinicio; resuelto al
+**2º intento tras el tercer reinicio de Pi** (patrón establecido ×3). **RECIBO QUEMADO**:
+`consumed_revision sha256:4c858c1c…`, target `sha256:21095ff7…`. 3 advisory → backlog:
+R3-001 (`run-pending-migrations.ts:39-42`), R3-002 (`seed-soho-modifier-groups.ts:227-246`),
+R3-003 (`seed-soho-modifier-groups.ts:211-215`).
+
+**Estado de T4.3:** siembra local HECHA y verificada (arriba); falta la **verificación en
+S23** con el aparato real — pendiente de coordinación con el usuario.
