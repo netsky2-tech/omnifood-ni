@@ -36,6 +36,11 @@ class _MultiCurrencyCheckoutDialogState
   final TextEditingController _buzzerController = TextEditingController();
   final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _customerTaxIdController = TextEditingController();
+  // odd/factura-con-nombre (post-review ITEM 3): distinguishes "operator
+  // explicitly cleared the prefilled RUC/Cédula" from "the field was never
+  // touched (nothing to prefill)". The programmatic initState prefill does
+  // not fire onChanged, so only real operator edits set this flag.
+  bool _customerTaxIdTouched = false;
   String? _buzzerValidationMessage;
 
   // Card Datáfono State
@@ -280,7 +285,18 @@ class _MultiCurrencyCheckoutDialogState
         customPayments: [payment],
         buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
         customerName: customerNameText.isNotEmpty ? customerNameText : null,
-        customerTaxId: customerTaxIdText.isNotEmpty ? customerTaxIdText : null,
+        // odd/factura-con-nombre (post-review ITEM 3): the tax id is
+        // tri-state at this boundary —
+        //  - non-empty → used verbatim (the operator typed/kept a value);
+        //  - EMPTY but the field was touched → the operator EXPLICITLY
+        //    cleared the prefilled RUC/Cédula: pass '' so the view model
+        //    stamps NO tax id on the invoice snapshot (never the catalog
+        //    value — the snapshot records what was printed);
+        //  - null (empty and never touched) → "not supplied": the legacy
+        //    prefill contract for callers that do not render this field.
+        customerTaxId: customerTaxIdText.isNotEmpty
+            ? customerTaxIdText
+            : (_customerTaxIdTouched ? '' : null),
       );
       HapticFeedback.mediumImpact();
       if (mounted) {
@@ -335,7 +351,10 @@ class _MultiCurrencyCheckoutDialogState
         customPayments: _splitCalculator.payments,
         buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
         customerName: customerNameText.isNotEmpty ? customerNameText : null,
-        customerTaxId: customerTaxIdText.isNotEmpty ? customerTaxIdText : null,
+        // Same explicit-clear contract as the single-tender path above.
+        customerTaxId: customerTaxIdText.isNotEmpty
+            ? customerTaxIdText
+            : (_customerTaxIdTouched ? '' : null),
       );
       HapticFeedback.mediumImpact();
       if (mounted) {
@@ -532,7 +551,10 @@ class _MultiCurrencyCheckoutDialogState
                 ),
               ),
               textCapitalization: TextCapitalization.characters,
-              onChanged: (val) => viewModel.setCustomerTaxId(val.trim()),
+              onChanged: (val) {
+                _customerTaxIdTouched = true;
+                viewModel.setCustomerTaxId(val.trim());
+              },
             ),
           ],
         ),

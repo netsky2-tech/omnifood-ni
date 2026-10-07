@@ -1429,6 +1429,15 @@ class SaleViewModel extends ChangeNotifier {
     List<Payment>? customPayments,
     String? buzzerNumber,
     String? customerName,
+
+    /// The customer tax id to stamp on the invoice snapshot. Tri-state at
+    /// the checkout boundary (odd/factura-con-nombre, post-review ITEM 3):
+    ///  - `null`  → not supplied: legacy prefill from the selected customer
+    ///    (a freshly opened dialog must not force the operator to retype).
+    ///  - empty/whitespace → EXPLICITLY CLEARED by the operator: the invoice
+    ///    snapshot carries NO tax id, never the catalog value — the snapshot
+    ///    records what was printed, not the catalog.
+    ///  - non-empty → used verbatim (trimmed, uppercased).
     String? customerTaxId,
   }) async {
     if (_isProcessingSale) {
@@ -1513,12 +1522,23 @@ class SaleViewModel extends ChangeNotifier {
         (customerName != null && customerName.trim().isNotEmpty)
         ? customerName.trim()
         : _customerName;
-    final effectiveCustomerTaxId =
-        (customerTaxId != null && customerTaxId.trim().isNotEmpty)
-        ? customerTaxId.trim().toUpperCase()
-        : ((_selectedCustomer?.taxId != null && _selectedCustomer!.taxId!.trim().isNotEmpty)
-            ? _selectedCustomer!.taxId!.trim().toUpperCase()
-            : _customerTaxId);
+    // odd/factura-con-nombre (post-review ITEM 3): distinguish "not
+    // supplied" from "explicitly cleared" at the checkout boundary.
+    //  - null → not supplied: prefill from the selected customer (legacy
+    //    contract; the freshly opened dialog must not force a retype).
+    //  - empty/whitespace → the operator ERASED the RUC/Cédula field: the
+    //    snapshot carries NO tax id — never the catalog value.
+    //  - non-empty → used verbatim.
+    final String? effectiveCustomerTaxId;
+    if (customerTaxId == null) {
+      effectiveCustomerTaxId =
+          ((_selectedCustomer?.taxId != null && _selectedCustomer!.taxId!.trim().isNotEmpty)
+              ? _selectedCustomer!.taxId!.trim().toUpperCase()
+              : _customerTaxId);
+    } else {
+      effectiveCustomerTaxId =
+          customerTaxId.trim().isNotEmpty ? customerTaxId.trim().toUpperCase() : null;
+    }
 
     final calc = currentFiscalCalculation;
     // Batch 7 Slice 2 (PRD §21 / §33.4 / AD-10): the tip snapshot is fixed
