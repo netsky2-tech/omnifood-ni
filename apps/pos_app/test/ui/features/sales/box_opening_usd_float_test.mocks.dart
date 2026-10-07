@@ -628,6 +628,15 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       );
 
   @override
+  void setCustomerTaxId(String? taxId) => super.noSuchMethod(
+        Invocation.method(
+          #setCustomerTaxId,
+          [taxId],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   _i17.Future<List<_i6.Customer>> searchCustomers(String? query) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1087,6 +1096,7 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
     List<_i20.Payment>? customPayments,
     String? buzzerNumber,
     String? customerName,
+    String? customerTaxId,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1096,6 +1106,7 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
             #customPayments: customPayments,
             #buzzerNumber: buzzerNumber,
             #customerName: customerName,
+            #customerTaxId: customerTaxId,
           },
         ),
         returnValue: _i17.Future<void>.value(),

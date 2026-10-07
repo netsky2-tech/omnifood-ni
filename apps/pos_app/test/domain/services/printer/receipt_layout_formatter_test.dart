@@ -657,7 +657,7 @@ void main() {
     );
 
     test(
-      'Never prints "Cliente: N/A" or "RUC: N/A" when customer info is absent',
+      'Prints "Cliente: Contado" on anonymous sale and never prints "Cliente: N/A" or "RUC: N/A"',
       () {
         final f58 = ReceiptLayoutFormatter.format58mm();
         final anonymousInvoice = Invoice(
@@ -680,12 +680,88 @@ void main() {
           customerRuc: 'N/A',
         );
 
+        expect(ticket, contains('Cliente:'));
+        expect(ticket, contains('Contado'));
         expect(ticket, isNot(contains('Cliente: N/A')));
-        expect(ticket, isNot(contains('Cliente:')));
         expect(ticket, isNot(contains('RUC/Cedula: N/A')));
         expect(ticket, isNot(contains('RUC/Cedula:')));
       },
     );
+
+    test('Decision 1 & 2: Named invoice prints customer name and omits RUC when RUC is absent', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final invoice = Invoice(
+        id: 'inv-named-1',
+        number: '001-001-01-00000004',
+        createdAt: DateTime.now(),
+        userId: 'user-01',
+        subtotal: 100.0,
+        totalTax: 15.0,
+        total: 115.0,
+        customerName: 'Carlos Potosme',
+      );
+
+      final ticket = f58.formatInvoiceText(
+        invoice,
+        items: [],
+        payments: [],
+      );
+
+      expect(ticket, contains('Cliente:'));
+      expect(ticket, contains('Carlos Potosme'));
+      expect(ticket, isNot(contains('Cliente: Contado')));
+      expect(ticket, isNot(contains('RUC/Cedula:')));
+    });
+
+    test('Decision 1 & 2: Named invoice prints both customer name and RUC/Cedula when provided', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final invoice = Invoice(
+        id: 'inv-named-2',
+        number: '001-001-01-00000005',
+        createdAt: DateTime.now(),
+        userId: 'user-01',
+        subtotal: 100.0,
+        totalTax: 15.0,
+        total: 115.0,
+        customerName: 'Inversiones del Sur S.A.',
+        customerTaxId: 'J0310000005555',
+      );
+
+      final ticket = f58.formatInvoiceText(
+        invoice,
+        items: [],
+        payments: [],
+      );
+
+      expect(ticket, contains('Cliente:'));
+      expect(ticket, contains('Inversiones del Sur'));
+      expect(ticket, contains('RUC/Cedula:'));
+      expect(ticket, contains('J0310000005555'));
+    });
+
+    test('D-2 / #97: customerId UUID is NEVER printed as customer name on the ticket', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final invoice = Invoice(
+        id: 'inv-uuid-check',
+        number: '001-001-01-00000006',
+        createdAt: DateTime.now(),
+        userId: 'user-01',
+        subtotal: 100.0,
+        totalTax: 15.0,
+        total: 115.0,
+        customerId: 'd82373f7-1f5d-4fcc-a49a-04cb4bdef201',
+      );
+
+      final ticket = f58.formatInvoiceText(
+        invoice,
+        items: [],
+        payments: [],
+      );
+
+      expect(ticket, contains('Cliente:'));
+      expect(ticket, contains('Contado'));
+      expect(ticket, isNot(contains('d82373f7-1f5d-4fcc-a49a-04cb4bdef201')));
+    });
 
     test('Discounts are only shown when discountTotal > 0', () {
       final f58 = ReceiptLayoutFormatter.format58mm();
@@ -1509,6 +1585,468 @@ void main() {
       expect(decoded, contains('ANULADO'));
       expect(decoded, contains('Motivo:'));
       expect(decoded, contains('Error de captura del cajero'));
+    });
+  });
+
+  group('Legacy ESC/POS path: customer key-value label integrity (formatInvoiceEscPos)', () {
+    final escPosInvoice = Invoice(
+      id: 'inv-escpos-loyalty',
+      number: '001-001-01-00000077',
+      createdAt: DateTime(2026, 9, 1, 11, 0),
+      userId: 'user-01',
+      subtotal: 150.00,
+      totalTax: 22.50,
+      total: 172.50,
+    );
+    final escPosItems = [
+      InvoiceItem(
+        id: 'item-1',
+        invoiceId: 'inv-escpos-loyalty',
+        productId: 'prod-1',
+        productName: 'Café Latte',
+        quantity: 1,
+        unitPrice: 150.0,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 22.50,
+        total: 172.50,
+      ),
+    ];
+    const escPosPayments = [
+      Payment(
+        id: 'pay-1',
+        invoiceId: 'inv-escpos-loyalty',
+        method: PaymentMethod.cash,
+        amount: 172.50,
+      ),
+    ];
+
+    // Reconstructs the printed text lines from the ESC/POS byte stream by
+    // skipping the command bytes of the EscPosBuilder grammar (ESC @, ESC a/E/-/d n,
+    // ESC p m t1 t2, GS ! n, GS V B 0), so width assertions measure only the
+    // characters that actually reach the paper.
+    List<String> decodeEscPosLines(List<int> bytes) {
+      final lines = <String>[];
+      final buffer = StringBuffer();
+      var i = 0;
+      while (i < bytes.length) {
+        final b = bytes[i];
+        if (b == 0x0A) {
+          lines.add(buffer.toString());
+          buffer.clear();
+          i++;
+        } else if (b == 0x1B) {
+          final cmd = i + 1 < bytes.length ? bytes[i + 1] : -1;
+          i += cmd == 0x40
+              ? 2 // ESC @ (no param)
+              : cmd == 0x70
+                  ? 5 // ESC p m t1 t2 (drawer pulse)
+                  : 3; // ESC a/E/-/d + 1 param
+        } else if (b == 0x1D) {
+          final cmd = i + 1 < bytes.length ? bytes[i + 1] : -1;
+          i += cmd == 0x56 ? 4 : 3; // GS V B 0 (cut) | GS ! n (font size)
+        } else {
+          buffer.writeCharCode(b);
+          i++;
+        }
+      }
+      if (buffer.isNotEmpty) lines.add(buffer.toString());
+      return lines;
+    }
+
+    void expectLabelsIntactAndBounded(
+      List<int> bytes, {
+      required int maxCols,
+      required bool assertWholeTicketWidth,
+    }) {
+      final lines = decodeEscPosLines(bytes);
+
+      // Labels must never truncate, whatever the value length.
+      expect(
+        lines.any((line) => line.startsWith('Cliente:')),
+        isTrue,
+        reason: 'a emitted line must start with the intact "Cliente:" label',
+      );
+      expect(
+        lines.any((line) => line.startsWith('RUC/Cedula:')),
+        isTrue,
+        reason: 'a emitted line must start with the intact "RUC/Cedula:" label',
+      );
+
+      if (assertWholeTicketWidth) {
+        // Width invariant of the paper width under test.
+        for (final line in lines) {
+          expect(
+            line.length,
+            lessThanOrEqualTo(maxCols),
+            reason: 'Line exceeds $maxCols cols: "$line" (${line.length})',
+          );
+        }
+      } else {
+        // 80mm legacy path only: the PRE-EXISTING item grid header
+        // ('CANT'+'DESCRIPCION'+'P.UNIT'+'TOTAL' = 48 cols) is owned by
+        // other work items and must not be touched here, so the width
+        // invariant is asserted over the customer block this fix owns
+        // (from the "Cliente:" line up to the next divider).
+        final clienteIdx = lines.indexWhere((l) => l.startsWith('Cliente:'));
+        expect(clienteIdx, isNonNegative);
+        final blockEnd = lines
+            .indexWhere((l) => l.startsWith('---'), clienteIdx);
+        final customerBlock = lines.sublist(
+          clienteIdx,
+          blockEnd == -1 ? lines.length : blockEnd,
+        );
+        for (final line in customerBlock) {
+          expect(
+            line.length,
+            lessThanOrEqualTo(maxCols),
+            reason: 'Line exceeds $maxCols cols: "$line" (${line.length})',
+          );
+        }
+      }
+    }
+
+    // The truncation band is width-driven: formatTwoColumns clips the LEFT
+    // label whenever `width - value.length - 1 < label.length` while the value
+    // is still shorter than the width (a value >= width already delegates to
+    // the lossless formatKeyValue branch). So each paper width needs its own
+    // reproducer, otherwise the assertion passes vacuously:
+    //   58mm (32 cols): 'Cliente:' clips at 24-31, 'RUC/Cedula:' at 20-31
+    //   80mm (40 cols): 'Cliente:' clips at 32-39, 'RUC/Cedula:' at 28-39
+    test('58mm: long customer name keeps "Cliente:" / "RUC/Cedula:" labels intact and every line <= 32 cols', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      const name = 'Distribuidora El Soho Central'; // 29 cols -> inside 24-31
+      const ruc = 'J0310000000000EXT2024'; // 21 cols -> inside 20-31
+
+      // Pin the defect class: the pre-fix idiom really did clip the label.
+      expect(name.length, inInclusiveRange(24, 31));
+      expect(ruc.length, inInclusiveRange(20, 31));
+      expect(
+        f58.formatTwoColumns('Cliente:', name),
+        isNot(startsWith('Cliente:')),
+        reason: 'the legacy formatTwoColumns idiom must still clip long-left labels',
+      );
+      expect(
+        f58.formatTwoColumns('RUC/Cedula:', ruc),
+        isNot(startsWith('RUC/Cedula:')),
+        reason: 'the legacy formatTwoColumns idiom must still clip long-left labels',
+      );
+
+      final bytes = f58.formatInvoiceEscPos(
+        escPosInvoice,
+        items: escPosItems,
+        payments: escPosPayments,
+        customerName: name,
+        customerRuc: ruc,
+      );
+
+      expectLabelsIntactAndBounded(bytes, maxCols: 32, assertWholeTicketWidth: true);
+    });
+
+    test('80mm: long customer name keeps "Cliente:" / "RUC/Cedula:" labels intact and every customer-block line <= 40 cols', () {
+      final f80 = ReceiptLayoutFormatter.format80mm();
+      const name = 'Corporacion Turistica De Nicaragua'; // 34 -> inside 32-39
+      const ruc = 'J0310000000000EXT2024ABCDEFGH'; // 29 cols -> clips at 40: maxLeftLen = 40-29-1 = 10 < 11 ('RUC/Cedula:')
+
+      expect(name.length, inInclusiveRange(32, 39));
+      // 'RUC/Cedula:' (11 chars) clips iff width - value.length - 1 < 11,
+      // i.e. value length >= 29 at 40 cols.
+      expect(ruc.length, inInclusiveRange(29, 39));
+      expect(
+        f80.formatTwoColumns('Cliente:', name),
+        isNot(startsWith('Cliente:')),
+        reason: 'the legacy formatTwoColumns idiom must still clip long-left labels',
+      );
+      expect(
+        f80.formatTwoColumns('RUC/Cedula:', ruc),
+        isNot(startsWith('RUC/Cedula:')),
+        reason: 'the legacy formatTwoColumns idiom must still clip long-left labels',
+      );
+
+      final bytes = f80.formatInvoiceEscPos(
+        escPosInvoice,
+        items: escPosItems,
+        payments: escPosPayments,
+        customerName: name,
+        customerRuc: ruc,
+      );
+
+      expectLabelsIntactAndBounded(bytes, maxCols: 40, assertWholeTicketWidth: false);
+    });
+
+    test('58mm: invoice.customerName literal "N/A" sentinel never reaches paper (falls back to Contado)', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final sentinelInvoice = escPosInvoice.copyWith(customerName: 'N/A');
+
+      final bytes = f58.formatInvoiceEscPos(
+        sentinelInvoice,
+        items: escPosItems,
+        payments: escPosPayments,
+      );
+      final lines = decodeEscPosLines(bytes);
+
+      expect(
+        lines.where((line) => line.contains('N/A')),
+        isEmpty,
+        reason: 'the "N/A" sentinel must never reach the printed ticket',
+      );
+      final clienteLines = lines.where((line) => line.startsWith('Cliente:')).toList();
+      expect(clienteLines.length, 1, reason: 'exactly one Cliente line must be emitted');
+      expect(clienteLines.single, contains('Contado'), reason: 'the sentinel falls back to Contado');
+    });
+
+    test('58mm: short customer values keep byte-identical geometry as the legacy formatTwoColumns idiom', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      const name = 'Ana Diaz'; // 8 chars: comfortably inside the single-line band
+      const ruc = 'J0310000000000'; // 14 chars: comfortably inside the single-line band
+
+      final bytes = f58.formatInvoiceEscPos(
+        escPosInvoice,
+        items: escPosItems,
+        payments: escPosPayments,
+        customerName: name,
+        customerRuc: ruc,
+      );
+      final lines = decodeEscPosLines(bytes);
+
+      // The lossless formatKeyValue path must emit, for short values, the
+      // exact same right-aligned single line the direct legacy idiom produced.
+      expect(
+        lines.contains(f58.formatTwoColumns('Cliente:', name)),
+        isTrue,
+        reason: 'the emitted Cliente line must equal the legacy formatTwoColumns output',
+      );
+      expect(
+        lines.contains(f58.formatTwoColumns('RUC/Cedula:', ruc)),
+        isTrue,
+        reason: 'the emitted RUC/Cedula line must equal the legacy formatTwoColumns output',
+      );
+    });
+  });
+
+  /// Owner decision (odd/factura-con-nombre, post-review ITEM 2):
+  /// tax-id-only must NOT print a `Cliente:` line. The contradictory pair
+  /// `Cliente: Contado` + `RUC/Cedula: <id>` is forbidden. The rule:
+  ///   name present              -> `Cliente: <name>` (+ RUC when present)
+  ///   name absent, tax id present  -> NO Cliente line, only `RUC/Cedula:`
+  ///   both absent               -> exactly one `Cliente: Contado`, no RUC
+  /// Applied to ALL render paths so the same data never renders three
+  /// different documents.
+  group('Customer block rule: tax-id-only omits the Cliente line', () {
+    Invoice invoiceWith({String? name, String? taxId}) => Invoice(
+          id: 'inv-cust-rule',
+          number: '001-001-01-00000099',
+          createdAt: DateTime(2026, 10, 6, 12, 0),
+          userId: 'user-01',
+          subtotal: 100.0,
+          totalTax: 15.0,
+          total: 115.0,
+          customerName: name,
+          customerTaxId: taxId,
+        );
+
+    void expectPrimaryTextRule(ReceiptLayoutFormatter f, Invoice invoice) {
+      final ticket = f.formatReceiptDocumentText(
+        ReceiptDocument.fromInvoice(
+          invoice,
+          items: const [],
+          payments: [],
+          taxRegime: TaxRegime.regimenGeneral,
+        ),
+      );
+      final lines = ticket.split('\n').map((l) => l.replaceAll('\r', '').trim()).toList();
+      final clienteLines = lines.where((l) => l.startsWith('Cliente:')).toList();
+      final rucLines = lines.where((l) => l.startsWith('RUC/Cedula:')).toList();
+
+      if (invoice.customerName?.trim().isNotEmpty == true) {
+        expect(clienteLines, hasLength(1), reason: 'name-only/both: exactly one Cliente line');
+        expect(clienteLines.single, contains(invoice.customerName!.trim()));
+      } else if (invoice.customerTaxId?.trim().isNotEmpty == true) {
+        expect(clienteLines, isEmpty,
+            reason: 'tax-id-only must NOT print any Cliente line (no "Cliente: Contado" + RUC contradiction)');
+      } else {
+        expect(clienteLines, hasLength(1), reason: 'anonymous: exactly one Cliente line');
+        expect(RegExp(r'^Cliente:\s+Contado$').hasMatch(clienteLines.single), isTrue);
+      }
+
+      if (invoice.customerTaxId?.trim().isNotEmpty == true) {
+        expect(rucLines, hasLength(1), reason: 'exactly one RUC/Cedula line');
+        expect(rucLines.single, contains(invoice.customerTaxId!.trim()));
+      } else {
+        expect(rucLines, isEmpty, reason: 'no RUC line without a tax id');
+      }
+    }
+
+    void expectPrimaryEscPosRule(ReceiptLayoutFormatter f, Invoice invoice, List<String> lines) {
+      final clienteLines = lines.where((l) => l.startsWith('Cliente:')).toList();
+      final rucLines = lines.where((l) => l.startsWith('RUC/Cedula:')).toList();
+
+      if (invoice.customerName?.trim().isNotEmpty == true) {
+        expect(clienteLines, hasLength(1));
+        expect(clienteLines.single, contains(invoice.customerName!.trim()));
+      } else if (invoice.customerTaxId?.trim().isNotEmpty == true) {
+        expect(clienteLines, isEmpty,
+            reason: 'ESC/POS primary path: tax-id-only must NOT print a Cliente line');
+      } else {
+        expect(clienteLines, hasLength(1));
+        expect(RegExp(r'^Cliente:\s+Contado$').hasMatch(clienteLines.single), isTrue);
+      }
+
+      if (invoice.customerTaxId?.trim().isNotEmpty == true) {
+        expect(rucLines, hasLength(1));
+        expect(rucLines.single, contains(invoice.customerTaxId!.trim()));
+      } else {
+        expect(rucLines, isEmpty);
+      }
+    }
+
+    final widths = <(String, ReceiptLayoutFormatter)>[
+      ('58mm', ReceiptLayoutFormatter.format58mm()),
+      ('80mm', ReceiptLayoutFormatter.format80mm()),
+    ];
+    for (final (label, f) in widths) {
+      test('primary text path ($label): (a) tax id only -> no Cliente line, exactly one RUC line', () {
+        expectPrimaryTextRule(f, invoiceWith(taxId: '001-150885-0002Y'));
+      });
+
+      test('primary text path ($label): (b) neither -> exactly one Cliente: Contado, no RUC line', () {
+        expectPrimaryTextRule(f, invoiceWith());
+      });
+
+      test('primary text path ($label): (c) name only -> Cliente line, no RUC line', () {
+        expectPrimaryTextRule(f, invoiceWith(name: 'Carlos Mendoza'));
+      });
+
+      test('primary ESC/POS path ($label): tax id only -> no Cliente line, exactly one RUC line', () {
+        final doc = ReceiptDocument.fromInvoice(
+          invoiceWith(taxId: '001-150885-0002Y'),
+          items: const [],
+          payments: [],
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+        final bytes = f.formatReceiptDocumentEscPos(doc);
+        final decoded = String.fromCharCodes(bytes);
+        expectPrimaryEscPosRule(f, invoiceWith(taxId: '001-150885-0002Y'), decoded.split('\n'));
+      });
+
+      test('primary ESC/POS path ($label): neither -> exactly one Cliente: Contado, no RUC line', () {
+        final doc = ReceiptDocument.fromInvoice(
+          invoiceWith(),
+          items: const [],
+          payments: [],
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+        final bytes = f.formatReceiptDocumentEscPos(doc);
+        final decoded = String.fromCharCodes(bytes);
+        expectPrimaryEscPosRule(f, invoiceWith(), decoded.split('\n'));
+      });
+
+      test('primary ESC/POS path ($label): name only -> Cliente line, no RUC line', () {
+        final doc = ReceiptDocument.fromInvoice(
+          invoiceWith(name: 'Carlos Mendoza'),
+          items: const [],
+          payments: [],
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+        final bytes = f.formatReceiptDocumentEscPos(doc);
+        final decoded = String.fromCharCodes(bytes);
+        expectPrimaryEscPosRule(f, invoiceWith(name: 'Carlos Mendoza'), decoded.split('\n'));
+      });
+    }
+
+    test('legacy text path (formatInvoiceText): tax id only -> no Cliente line, exactly one RUC line', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final ticket = f58.formatInvoiceText(
+        invoiceWith(taxId: '001-150885-0002Y'),
+        items: const [],
+        payments: [],
+      );
+      final lines = ticket.split('\n').map((l) => l.trim()).toList();
+      expect(lines.where((l) => l.startsWith('Cliente:')), isEmpty,
+          reason: 'tax-id-only must NOT print a Cliente line (no Contado + RUC contradiction)');
+      expect(lines.where((l) => l.startsWith('RUC/Cedula:')), hasLength(1));
+      expect(ticket, contains('001-150885-0002Y'));
+    });
+
+    test('legacy ESC/POS path (formatInvoiceEscPos): tax id only -> no Cliente line, exactly one RUC line', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final bytes = f58.formatInvoiceEscPos(
+        invoiceWith(taxId: '001-150885-0002Y'),
+        items: const [],
+        payments: [],
+      );
+      final decoded = String.fromCharCodes(bytes);
+      final lines = decoded.split('\n');
+      expect(lines.where((l) => l.startsWith('Cliente:')), isEmpty,
+          reason: 'legacy ESC/POS: tax-id-only must NOT print a Cliente line');
+      expect(lines.where((l) => l.startsWith('RUC/Cedula:')), hasLength(1));
+      expect(lines.join('\n'), contains('001-150885-0002Y'));
+    });
+    // Post-review normalization: the legacy 'N/A' placeholder is the same
+    // absence of fact regardless of case, and all four render paths must treat
+    // it identically. Before this, the legacy text path filtered it
+    // case-insensitively while the primary paths compared case-sensitively, and
+    // an explicit 'N/A' argument was never filtered at all — so one sale could
+    // print the literal 'Cliente: N/A' on paper depending on which path rendered
+    // it. Absence must stay absence (odd/factura-con-nombre).
+    test('the "N/A" sentinel is never printed as a customer name, in any case, on all four paths', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final sentinelNoName = invoiceWith(name: 'n/a');
+      final sentinelWithRuc = invoiceWith(name: 'n/a', taxId: 'J0310000000000');
+
+      for (final invoice in [sentinelNoName, sentinelWithRuc]) {
+        final doc = ReceiptDocument.fromInvoice(
+          invoice,
+          items: const [],
+          payments: [],
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+        final paths = <String, List<String>>{
+          'primary text': f58
+              .formatReceiptDocumentText(doc)
+              .split('\n')
+              .map((l) => l.replaceAll('\r', '').trim())
+              .toList(),
+          'primary escpos': String.fromCharCodes(f58.formatReceiptDocumentEscPos(doc))
+              .split('\n')
+              .map((l) => l.trim())
+              .toList(),
+          'legacy text': f58
+              .formatInvoiceText(invoice, items: const [], payments: [])
+              .split('\n')
+              .map((l) => l.trim())
+              .toList(),
+          'legacy escpos': String.fromCharCodes(
+            f58.formatInvoiceEscPos(invoice, items: const [], payments: []),
+          )
+              .split('\n')
+              .map((l) => l.trim())
+              .toList(),
+        };
+
+        paths.forEach((label, lines) {
+          final clienteLines = lines.where((l) => l.startsWith('Cliente:')).toList();
+          for (final line in clienteLines) {
+            expect(line.toUpperCase(), isNot(contains('N/A')),
+                reason: '$label rendered the placeholder as a customer name: "$line"');
+          }
+          if (invoice.customerTaxId == null) {
+            // 'n/a' is not a name and there is no tax id: a true anonymous sale.
+            expect(clienteLines, hasLength(1),
+                reason: '$label must print exactly one Cliente line for an anonymous sale');
+            expect(RegExp(r'^Cliente:\s+Contado$').hasMatch(clienteLines.single), isTrue,
+                reason: '$label must fall back to Contado, not to the placeholder');
+          } else {
+            expect(clienteLines, isEmpty,
+                reason: '$label must omit the Cliente line when only a tax id is a fact');
+            expect(
+              lines.where((l) => l.startsWith('RUC/Cedula:')),
+              hasLength(1),
+              reason: '$label must still print the tax id',
+            );
+          }
+        });
+      }
     });
   });
 }
