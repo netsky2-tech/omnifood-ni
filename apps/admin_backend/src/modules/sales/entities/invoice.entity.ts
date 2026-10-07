@@ -56,6 +56,12 @@ export class Invoice {
   @Column({ nullable: true, name: 'customer_id' })
   customerId: string;
 
+  @Column({ name: 'customer_name', type: 'varchar', nullable: true })
+  customerName?: string | null;
+
+  @Column({ name: 'customer_tax_id', type: 'varchar', nullable: true })
+  customerTaxId?: string | null;
+
   @Column({ default: false, name: 'global_tax_override' })
   globalTaxOverride: boolean;
 
