@@ -346,3 +346,104 @@ que es por lo que los tool calls devolvían `No result provided`. Receta de trab
 | Backend migration `.db.spec.ts` sobre Postgres real | **3/3** (nuevo en `dc712ca9`) |
 
 Commits de remediación: `b72a7506`, `80fbdc21`, `2d7dafa0`, `7e94e363`, `8f886cbf`, `13045cd2`, `dc712ca9`.
+
+## 9. Entrega en cadena y estado de la revisión nativa
+
+Main había avanzado 12 commits desde la base. Se integró con `merge` (no rebase), respetando la convención del
+repo (416 merge commits, PRs fusionados como `Merge pull request #NNN`). `git merge-tree` anticipó cero conflictos
+y el merge efectivamente salió limpio: el único archivo en común era `sale_view_model.dart`, y la revisión del
+commit nuevo de main (`8fc4a1e7`, `_dispatchCartToKitchen`) confirmó que **no abre un agujero en el snapshot**:
+solo despacho de comanda al KDS; la venta y el papel siguen pasando por `processSale` → `_processSaleInternal`
+(1427 → 1580/1583 → 1786), y la liquidación de hold ocurre dentro de ese mismo flujo.
+
+### Por qué cadena y no un PR
+
+`gentle_review start` sobre el rango completo rechazó el candidato en preflight con `lens_context_budget_exceeded`
+(48 paths, 1030 líneas lógicas). El provider lo dice explícitamente: la evidencia inmutable del candidato nunca se
+trunca y reintentar **ese mismo** candidato no puede funcionar; hay que partirlo. No se creó autoridad
+(`mutation_outcome: not_started`), así que no hubo nada que abandonar ni reparar.
+
+### Cómo se cortó la cadena (y por qué no por historia de commits)
+
+El primer intento fue cherry-pick por unidad de trabajo y **falló**: los commits intercalan capas, así que un slice
+que crea un archivo y otro que lo modifica pelean al reordenarlos (`named_invoice_integration_test.dart`,
+modify/delete). El corte bueno es por **grafo de archivos con frontera de compilación**, no por carpeta. Dos trampas
+que solo vio el compilador:
+
+- Los mocks regenerados tienen que viajar con el cambio de firma que los genera. `hardware_settings_view_test.mocks.dart`
+  en otro slice producía `invalid_override` de `MockPrinterPort.printInvoice` (el analizador lo cazó; `flutter test` aislado no).
+- Los mocks generados mockean `PrinterPort` **y** `SaleViewModel` a la vez. Con la firma del puerto en un slice y
+  `setCustomerTaxId` en otro, ningún mock puede vivir en el medio: o le falta un parámetro del puerto, o sobredefine
+  un método del VM que todavía no existe. Por eso `setCustomerTaxId` se movió al slice de impresión.
+
+Se excluyó deliberadamente `test/data/repositories/audit_repository_impl_test.mocks.dart` (+16 líneas): trae
+`isReauthenticationRequired`, que existe en `auth_repository.dart:9` de main pero estaba ausente del mock commiteado.
+Es **drift de mocks preexistente de main**, no deste feature; `build_runner` lo levantó de paso y meterlo acá era
+ensuciar el diff. Queda como follow-up de higiene del repo.
+
+| PR | Rama | Base | Archivos | Líneas | Label |
+|---|---|---|---|---|---|
+| #797 | `feat/factura-p1-pos-snapshot` | `main` | 12 | 461 | `type:feature` |
+| #798 | `feat/factura-p2-impresion` | #797 | 17 | 836 (52 mocks) | `type:feature` |
+| #799 | `feat/factura-p3-ui-checkout` | #798 | 6 | 3696 (2841 mockito) | `type:feature` + `size:exception` |
+| #800 | `feat/factura-p4-backend-espejo` | #799 | 9 | 561 | `type:feature` |
+| #801 | `feat/factura-p5-backend-export` | #800 | 2 | 595 | `type:bug` |
+| #802 | `feat/factura-p6-docs` | #801 | 1 | 261 | `type:docs` |
+
+`size:exception` en #799 lo aceptó el dueño: las 2841 líneas son salida de `build_runner` del test de integración
+que vive en el mismo commit; separarlas rompe compilación. Superficie escrita a mano: ~855 líneas.
+
+### Verificación propia por rama
+
+No se heredó la verificación del tip final: cada rama se checkouteó y se corrió.
+
+| Rama | Chequeo | Resultado |
+|---|---|---|
+| p1 | `flutter test test/data` | 1401/1401 |
+| p2 | printer + fulfillment | 188/188 |
+| p3 | `flutter test --concurrency=2` | 3200 pasan + 3 fallos de **carga** (`shift_fk_migration` 5, `sunmi_printer_adapter` 14, `void_decision` 18 pasan aislados) |
+| p4/p5 | `npx jest --maxWorkers=2` | **3700/3700**, `tsc --noEmit` exit 0 |
+| todas | `flutter analyze --no-pub` | sin issues |
+| cadena | `git diff tip…6a948d5a` | 1 archivo, +16 (el mock de auditoría excluido a propósito) |
+
+CI: **POS App CI en verde** en las tres ramas Flutter. `Cloudflare Pages` y `Admin Backend CI` están rotos en main
+independientemente de este trabajo: mismo spec (`cash-shift-sync-ingestion.service.db.spec.ts`), 3 failed/317 en main
+contra 3 failed/320 en la rama. Lección de método: comparar **totales** contra main antes de atribuirse un rojo, y
+no declarar un label "puesto" sin leer el estado real del PR (mis primeros `gh pr edit --add-label` fallaron en
+silencio por Projects (classic); hubo que aplicarlos por REST).
+
+### Revisión nativa: intentada, no disponible
+
+Se congeló el slice p1 (`lineage review-75107ffde7dd9222`, tier medium, lente único `review-reliability`, presupuesto
+de corrección 200) y la captura del reviewer falló en admisión:
+
+```
+lens provider result admission incomplete: 5 arrays opened, 4 closed; scan ended at byte 4672
+```
+
+Diagnóstico con la evidencia en disco: el sobre externo **sí es JSON válido**; lo roto es el campo `raw`, que mide
+exactamente 4672 caracteres, el mismo byte donde muere el parser. Dos intentos de captura dejaron **un solo archivo**
+rechazado con el mismo hash (`review-reliability-1-3453f28fc4dd.json`), o sea el host relay re-admitió bytes cacheados
+en vez de correr de nuevo al reviewer. El defecto es de transporte, no del candidato, y reintentar es determinístico.
+No se quemaron los otros 5 slices a ciegas por lo mismo.
+
+Decisión del dueño: **cerrar así**. El lineage queda abierto en `reviewing` con el slot sin consumir; no se hizo
+`ABANDON` (es destructivo sobre el registro de auditoría y requiere decisión explícita). `gentle_review assess` con
+`nativeReviewOutcome: unavailable` registró el estado: `outcome_source: explicit`, riesgo medium,
+`writerProfile: large (runtime)`, `writerSelfVerification: true`, `independentVerifier: false`,
+`reviewDue: true / slice_budget_reached`. La evidencia de reemplazo son las dos rondas de verificación externa y los
+3 slices de `jd-judge` de la sección 8 (9 defectos confirmados y corregidos).
+
+### Follow-ups
+
+- **FU-7 (nuevo)**: el host relay trunca la respuesta del reviewer en 4672 caracteres y cachea el artefacto roto →
+  ninguna revisión nativa puede completarse en esta máquina hasta arreglar el transporte. Bloqueante para RDD.
+- **FU-8 (nuevo)**: drift de mocks commiteados en main (`audit_repository_impl_test.mocks.dart` sin
+  `isReauthenticationRequired`). Un `build_runner` limpio en main debería ser no-op; hoy no lo es.
+- **FU-9 (nuevo)**: `npm test` a 11 workers revienta el VM de WSL2 y mata `engram`. Receta: `--maxWorkers=2`.
+- FU-1 a FU-6 (secciones anteriores) siguen abiertos.
+
+### Orden de fusión
+
+#797 → #798 → #799 → #800 → #801 → #802, en ese orden, cada uno sobre su rama padre. Fusionar fuera de orden deja
+bases huérfanas que hay que retargetear.
