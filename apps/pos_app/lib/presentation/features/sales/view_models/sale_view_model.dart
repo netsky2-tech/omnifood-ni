@@ -1457,6 +1457,34 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
+  /// Issue #785 (legacy-path parity): single kitchen KDS dispatch point for
+  /// the checkout commit path. Called from BOTH the direct-sale branch and
+  /// the hold-ticket branch so the two paths cannot drift. Fire-and-forget
+  /// semantics are identical to the original direct-sale dispatch: an
+  /// offline/missing kitchen backend never blocks a committed fiscal
+  /// invoice (offline-first).
+  Future<void> _dispatchCartToKitchen({
+    required String invoiceId,
+    required String invoiceNumber,
+    required String? effectiveBuzzer,
+    required String? effectiveCustomerName,
+    required String waiterName,
+  }) async {
+    if (_cart.isEmpty) return;
+    try {
+      await _kitchenOrderService.sendDirectSaleToKitchen(
+        invoiceId: invoiceId,
+        invoiceNumber: invoiceNumber,
+        items: List.from(_cart),
+        buzzerNumber: effectiveBuzzer,
+        customerName: effectiveCustomerName,
+        waiterName: waiterName,
+      );
+    } catch (_) {
+      // Graceful fallback for offline tests/setups
+    }
+  }
+
   Future<void> _processSaleInternal(
     List<PaymentMethod> methods, {
     List<Payment>? customPayments,
@@ -1765,6 +1793,17 @@ class SaleViewModel extends ChangeNotifier {
       // (getCashPaymentsForShift) at close time.
 
       if (_activeLoadedHoldTicket != null) {
+        // Issue #785 (legacy-path parity): a sale resumed from a hold ticket
+        // must reach the kitchen exactly like a direct counter sale. Dispatch
+        // BEFORE liquidation so the kitchen comanda exists even if the hold
+        // liquidation fails.
+        await _dispatchCartToKitchen(
+          invoiceId: invoiceId,
+          invoiceNumber: invoice.number,
+          effectiveBuzzer: effectiveBuzzer,
+          effectiveCustomerName: effectiveCustomerName,
+          waiterName: user.name,
+        );
         await _tableOrderService.liquidateOrder(_activeLoadedHoldTicket!.id);
         _activeLoadedHoldTicket = null;
         // K1 (device verification): liquidateOrder deletes the SQLite row, but
@@ -1776,20 +1815,13 @@ class SaleViewModel extends ChangeNotifier {
         await loadHoldTickets();
       } else {
         // Direct counter sale: dispatch to kitchen KDS if items exist
-        if (_cart.isNotEmpty) {
-          try {
-            await _kitchenOrderService.sendDirectSaleToKitchen(
-              invoiceId: invoiceId,
-              invoiceNumber: invoice.number,
-              items: List.from(_cart),
-              buzzerNumber: effectiveBuzzer,
-              customerName: effectiveCustomerName,
-              waiterName: user.name,
-            );
-          } catch (_) {
-            // Graceful fallback for offline tests/setups
-          }
-        }
+        await _dispatchCartToKitchen(
+          invoiceId: invoiceId,
+          invoiceNumber: invoice.number,
+          effectiveBuzzer: effectiveBuzzer,
+          effectiveCustomerName: effectiveCustomerName,
+          waiterName: user.name,
+        );
       }
 
       // Auto-Printing & Hardware Drawer Kick (PRD Batch 7)

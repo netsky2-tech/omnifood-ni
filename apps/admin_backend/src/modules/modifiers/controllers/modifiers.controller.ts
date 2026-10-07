@@ -11,7 +11,10 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { ModifiersService } from '../services/modifiers.service';
+import {
+  ModifiersService,
+  ModifierGroupStatusFilter,
+} from '../services/modifiers.service';
 import { CreateModifierGroupDto } from '../dto/create-modifier-group.dto';
 import { UpdateModifierGroupDto } from '../dto/update-modifier-group.dto';
 import { CreateModifierOptionDto } from '../dto/create-modifier-option.dto';
@@ -46,10 +49,14 @@ export class ModifiersController {
     @GetTenantId() tenantId?: string,
     @Query('category_id') categoryId?: string,
     @Query('product_id') productId?: string,
+    @Query('status') status?: string,
   ) {
+    // status is validated inside the service (normalizeStatusFilter,
+    // same doctrine as assertUuid): invalid values are a clean 400.
     return this.modifiersService.findAll(this.requireTenant(tenantId), {
       category_id: categoryId,
       product_id: productId,
+      status: status as ModifierGroupStatusFilter | undefined,
     });
   }
 

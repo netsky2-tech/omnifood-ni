@@ -30,6 +30,12 @@
 1. **Protección de Tarifa Fundadora:** La tarifa preferencial de **US$ 79.00 / mes** se mantendrá congelada durante un período de **veinticuatro (24) meses** contados a partir de la fecha de puesta en marcha aceptada, siempre que el CLIENTE mantenga una (1) sucursal, un (1) terminal y sus pagos al día. Al término de dicho plazo, aplicará la tarifa pública vigente, con notificación previa de 60 días.
 2. **Gatillo de Inicio de Facturación Recurrente:** **No existe mes de prueba gratuito.** La facturación mensual comenzará a computarse estrictamente a partir de la firma satisfactoria del **Acta de Aceptación de Go-Live (`CD-07`)**.
 3. **Modalidad de Pago en Etapa Fundadora:** Los pagos se realizarán mediante transferencia bancaria o efectivo en dólares estadounidenses (USD) o su equivalente en córdobas (NIO) al tipo de cambio oficial del día, respaldados mediante recibo simple comercial no fiscal emitido por el PROVEEDOR, conforme a la cláusula fiscal del Contrato Marco (`NH-SA-0001`).
+4. **Política de Usuarios y Límites Operativos:**
+   - **Usuarios Operativos de Caja/Turno (POS):** Ilimitados incluidos sin costo adicional para el terminal contratado. Para garantizar la trazabilidad forense, arqueos independientes y control de auditoría RBAC, cada cajero, supervisor o empleado operativo debe contar con su propio usuario y PIN personal intransferible.
+   - **Cuentas de Acceso al Portal de Propietario (Owner Dashboard):** Hasta dos (2) cuentas administrativas simultáneas incluidas.
+5. **Régimen de Adicionales y Expansión (Add-ons):**
+   - **Terminales Físicos Adicionales (Misma Sucursal):** La incorporación de un segundo terminal de cobro o comandera física tiene un costo mensual preferencial de **US$ 35.00 / mes** por terminal adicional, más un cargo único de configuración e inducción física de **US$ 50.00**.
+   - **Sucursales Adicionales:** Cada nueva ubicación física constituye una contratación independiente sujeta a implementación inicial y abono base de suscripción.
 
 ---
 

@@ -10,22 +10,38 @@ import {
   createModifierGroup,
   updateModifierGroup,
   deactivateModifierGroup,
+  reactivateModifierGroup,
   createModifierOption,
   updateModifierOption,
   deactivateModifierOption,
+  reactivateModifierOption,
 } from "./modifiers-api";
 import type { ModifierGroupInput, ModifierOptionInput } from "./types";
+import type { ModifierGroupStatus } from "./modifiers-api";
 
 /**
  * react-query hooks for the modifier-groups screen, following the same
  * invalidation conventions as the catalog feature: one tenant-scoped key
  * for the list, and every mutation invalidates it so the list re-fetches.
  */
-export function useModifierGroups() {
+/**
+ * Listing of modifier groups, optionally filtered by lifecycle status.
+ * `active` (or no argument) keeps the exact legacy query key and request:
+ * existing cache entries and tenant-prefix invalidations stay valid.
+ * `inactive`/`all` extend the key with the status so both listings get
+ * their own cache slot under the same invalidation prefix.
+ */
+export function useModifierGroups(status?: ModifierGroupStatus) {
   const tenantId = useTenantId();
+  const isDefaultListing = !status || status === "active";
   return useQuery({
-    queryKey: ["modifiers", tenantId],
-    queryFn: ({ signal }) => fetchModifierGroups({}, { signal }),
+    queryKey: isDefaultListing
+      ? ["modifiers", tenantId]
+      : ["modifiers", tenantId, "status", status],
+    queryFn: ({ signal }) =>
+      fetchModifierGroups(isDefaultListing ? {} : { status: status! }, {
+        signal,
+      }),
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -171,6 +187,18 @@ export function useDeactivateModifierGroup() {
   });
 }
 
+export function useReactivateModifierGroup() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: (id: string) => reactivateModifierGroup(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["modifiers", tenantId] });
+    },
+  });
+}
+
 export function useCreateModifierOption() {
   const queryClient = useQueryClient();
   const tenantId = useTenantId();
@@ -221,6 +249,24 @@ export function useDeactivateModifierOption() {
       groupId: string;
       optionId: string;
     }) => deactivateModifierOption(groupId, optionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["modifiers", tenantId] });
+    },
+  });
+}
+
+export function useReactivateModifierOption() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      optionId,
+    }: {
+      groupId: string;
+      optionId: string;
+    }) => reactivateModifierOption(groupId, optionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["modifiers", tenantId] });
     },

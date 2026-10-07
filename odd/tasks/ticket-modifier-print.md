@@ -104,3 +104,14 @@ preview, `esc_pos_builder.dart`, `receipt_58mm_formatter.dart`.
   dispositivo".
 - Tamaño propuesto: **18 px (3/4 de 24)** para runs de modificadores — constante tunable,
   ajustable tras la prueba física en terminal.
+
+## Estado de cierre (2026-10-06)
+
+- **Implementado, revisado y pusheado**: commit `c85e53c5` (recibo RDD `f7bad6ce…`
+  quemado). 175 tests de printer verdes + analyze + `gradlew :app:compileDebugKotlin`.
+- **Aceptación física → FOLLOW-UP**: el dispositivo iPOS/Nyx está en manos del cliente;
+  la prueba de impresión real (extras en letra menor bajo el item, layout intacto) se
+  coordina con él cuando tenga un escenario de venta con extras. Si la talla18 px no se
+  ve bien en el papel, es una constante tunable (`IPosPrinterAdapter.smallModifierTextSize`).
+- Advisories del review (informativos, backlog): R3-001..003 en `IPosPrinterHandler.kt`
+  (:193/:219/:206).

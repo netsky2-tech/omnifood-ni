@@ -12,13 +12,23 @@ import type { EffectiveModifierGroup } from "./effective-types";
  * header conventions as the catalog feature; the backend prefixes all
  * routes under /modifier-groups.
  */
+/** Listing filter for soft-deleted vs active modifier groups. */
+export type ModifierGroupStatus = "active" | "inactive" | "all";
+
 export function fetchModifierGroups(
-  filters: { category_id?: string; product_id?: string } = {},
+  filters: {
+    category_id?: string;
+    product_id?: string;
+    status?: ModifierGroupStatus;
+  } = {},
   opts?: ApiClientMethodOptions,
 ) {
   const params = new URLSearchParams();
   if (filters.category_id) params.set("category_id", filters.category_id);
   if (filters.product_id) params.set("product_id", filters.product_id);
+  // Omitted when absent: the backend defaults to the active listing, which
+  // keeps the legacy URL (and its caching) unchanged.
+  if (filters.status) params.set("status", filters.status);
   const qs = params.toString();
   return api.get<ModifierGroup[]>(
     `/modifier-groups${qs ? `?${qs}` : ""}`,
@@ -106,6 +116,18 @@ export function deactivateModifierGroup(
   return api.delete<{ success: boolean }>(`/modifier-groups/${id}`, opts);
 }
 
+/** Restores a soft-deleted group; attachments and history are preserved. */
+export function reactivateModifierGroup(
+  id: string,
+  opts?: ApiClientMethodOptions,
+) {
+  return api.patch<ModifierGroup>(
+    `/modifier-groups/${id}`,
+    { is_active: true },
+    opts,
+  );
+}
+
 export function createModifierOption(
   groupId: string,
   input: ModifierOptionInput,
@@ -142,6 +164,19 @@ export function deactivateModifierOption(
   );
 }
 
+/** Restores a soft-deleted option; its group must already be active. */
+export function reactivateModifierOption(
+  groupId: string,
+  optionId: string,
+  opts?: ApiClientMethodOptions,
+) {
+  return api.patch<ModifierOption>(
+    `/modifier-groups/${groupId}/options/${optionId}`,
+    { is_active: true },
+    opts,
+  );
+}
+
 interface ApiErrorShape {
   status?: number;
   statusCode?: number;
@@ -164,7 +199,7 @@ export function describeModifierError(
     (error as ApiErrorShape | null)?.statusCode;
 
   if (status === 409) {
-    return "Ya existe un grupo con ese nombre";
+    return "Ya existe un grupo con ese nombre. Revise la vista «Inactivos»: quizá es un grupo desactivado que puede reactivarse.";
   }
   if (status === 400) {
     return "Revise los datos del formulario: hay valores que no son válidos";

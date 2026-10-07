@@ -46,7 +46,8 @@ La sesión se convertirá en go-live aceptado únicamente si los criterios contr
 - Catálogo inicial acordado, inventario, recetas con consumo de ingredientes, costo de los productos vendidos, margen bruto y mermas.
 - Funciones implementadas y configuradas según el alcance acordado: códigos temporales de un solo uso para autorizaciones de supervisor, auditoría, promociones, lealtad, producción y cuentas divididas.
 - Sincronización y reportes en la nube cuando exista conectividad.
-- Portal para propietarios, de consulta y disponible en el go-live aceptado.
+- Portal para propietarios, de consulta y disponible en el go-live aceptado (hasta 2 cuentas administrativas incluidas).
+- Usuarios operativos de caja y turno en el terminal ilimitados sin costo adicional, promoviendo el uso de PINs individuales y auditoría por persona.
 - Capacitación inicial breve para los usuarios responsables designados por SOHO.
 - Respaldos y procedimiento de recuperación descritos en el anexo de soporte y respaldos.
 - Mantenimiento del producto mediante parches correctivos y de seguridad, además de actualizaciones generales de la plataforma.
@@ -63,7 +64,7 @@ La entrega queda sujeta a un checklist físico de aceptación del Sunmi V2s que 
 - Compra, alquiler, garantía, reparación o reemplazo de hardware.
 - Continuidad durante cortes de energía eléctrica o fallas físicas del equipo.
 - Instalación o soporte de internet y redes del cliente.
-- Operación de varios dispositivos conectados en la red local del negocio, pantallas digitales de cocina o licencias para terminales adicionales.
+- Operación de varios dispositivos conectados en la red local del negocio, pantallas digitales de cocina o licencias para terminales adicionales (disponibles como add-on de terminal adicional a US$35/mes en plan fundador / US$40/mes en plan público, más setup de enrolamiento).
 - Compatibilidad universal con equipos Windows/Linux o periféricos no aceptados.
 - Facturación electrónica DGI mediante archivos electrónicos estructurados y firma digital, certificación bancaria o integración certificada con datáfonos.
 - Módulo automatizado de vigilancia fiscal (“Fiscal Sentinel”) completo, incluidas alertas al 90%, control de expiración u otras automatizaciones no aceptadas expresamente.

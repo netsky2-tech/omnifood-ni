@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -14,10 +15,11 @@ import {
   useCreateModifierOption,
   useUpdateModifierOption,
   useDeactivateModifierOption,
+  useReactivateModifierOption,
 } from "./use-modifiers";
 import { modifierGroupFormSchema, type ModifierGroupFormData } from "./schema";
 import { describeModifierError } from "./modifiers-api";
-import { type ModifierGroup } from "./types";
+import { type ModifierGroup, type ModifierOption } from "./types";
 
 interface ModifierGroupFormProps {
   initialData?: ModifierGroup | null;
@@ -32,7 +34,14 @@ interface OptionRowState {
   price_delta: number;
   is_default: boolean;
   sort_order: number;
+  /** False only for options loaded from an inactive/all group listing. */
+  is_active?: boolean;
 }
+
+// Backend option payloads carry `is_active` (soft-delete state); the shared
+// ModifierOption type omits it, so it is read through this local widening
+// instead of changing the shared type for one screen.
+type OptionWithActiveState = ModifierOption & { is_active?: boolean };
 
 let optionRowCounter = 0;
 const nextOptionRowKey = () => `option-row-${++optionRowCounter}`;
@@ -55,6 +64,7 @@ export function ModifierGroupForm({
   const createOption = useCreateModifierOption();
   const updateOption = useUpdateModifierOption();
   const deactivateOption = useDeactivateModifierOption();
+  const reactivateOption = useReactivateModifierOption();
   const isSubmitting =
     createGroup.isPending ||
     updateGroup.isPending ||
@@ -101,6 +111,7 @@ export function ModifierGroupForm({
           price_delta: option.price_delta,
           is_default: option.is_default,
           sort_order: option.sort_order,
+          is_active: (option as OptionWithActiveState).is_active,
         }));
       setOptionRows(rows);
       setRemovedOptionIds([]);
@@ -136,6 +147,33 @@ export function ModifierGroupForm({
       }
       return rows.filter((row) => row.key !== key);
     });
+  };
+
+  // Reactivating a soft-deleted option is its own PATCH, deliberately kept
+  // OUT of the save flow: the submit path never bulk-restores options, so
+  // an accidental save cannot silently reactivate deactivated rows.
+  const handleActivateOption = async (key: string) => {
+    const row = optionRows.find((r) => r.key === key);
+    if (!row?.id || !initialData) return;
+    try {
+      await reactivateOption.mutateAsync({
+        groupId: initialData.id,
+        optionId: row.id,
+      });
+      setOptionRows((rows) =>
+        rows.map((r) => (r.key === key ? { ...r, is_active: true } : r)),
+      );
+      toast({ variant: "success", title: "Opción activada" });
+    } catch (error) {
+      toast({
+        title: "Error al activar",
+        description: describeModifierError(
+          error,
+          "No se pudo activar la opción",
+        ),
+        variant: "destructive",
+      });
+    }
   };
 
   const optionLabelSuffix = (row: OptionRowState, index: number) =>
@@ -353,6 +391,21 @@ export function ModifierGroupForm({
                           )
                         }
                       />
+                      {row.id && row.is_active === false && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="outline">Desactivada</Badge>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleActivateOption(row.key)}
+                            disabled={reactivateOption.isPending}
+                            aria-label={`Activar opción ${optionLabelSuffix(row, index)}`}
+                          >
+                            Activar
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="col-span-4 sm:col-span-3">
                       <Label

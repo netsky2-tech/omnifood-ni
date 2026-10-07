@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Plus, Edit, PowerOff } from "lucide-react";
+import { Plus, Edit, PowerOff, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -18,11 +20,17 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ModifierGroupForm } from "./modifier-group-form";
+import {
+  ModifierGroupForm,
+} from "./modifier-group-form";
 import { CategoryAttachments } from "./category-attachments";
 import { ProductExceptions } from "./product-exceptions";
-import { useModifierGroups, useDeactivateModifierGroup } from "./use-modifiers";
-import { describeModifierError } from "./modifiers-api";
+import {
+  useModifierGroups,
+  useDeactivateModifierGroup,
+  useReactivateModifierGroup,
+} from "./use-modifiers";
+import { describeModifierError, type ModifierGroupStatus } from "./modifiers-api";
 import { formatSelectionRange } from "./format";
 import { type ModifierGroup } from "./types";
 import { toast } from "@/hooks/use-toast";
@@ -35,6 +43,12 @@ const TABS: { id: ModifiersTab; label: string }[] = [
   { id: "grupos", label: "Grupos" },
   { id: "categoria", label: "Por categoría" },
   { id: "producto", label: "Por producto" },
+];
+
+const STATUS_FILTERS: { id: ModifierGroupStatus; label: string }[] = [
+  { id: "active", label: "Activos" },
+  { id: "inactive", label: "Inactivos" },
+  { id: "all", label: "Todos" },
 ];
 
 export function ModifiersPage() {
@@ -82,12 +96,17 @@ export function ModifiersPage() {
 function GroupsTab() {
   const { canPerformAction } = useRbac();
   const canWrite = canPerformAction("modifiers.write");
-  const { data: groups, isLoading, error, refetch } = useModifierGroups();
+  const [statusFilter, setStatusFilter] = useState<ModifierGroupStatus>("active");
+  const [search, setSearch] = useState("");
+  const { data: groups, isLoading, error, refetch } = useModifierGroups(statusFilter);
   const deactivateGroup = useDeactivateModifierGroup();
+  const reactivateGroup = useReactivateModifierGroup();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<ModifierGroup | null>(null);
   const [deactivatingGroup, setDeactivatingGroup] =
+    useState<ModifierGroup | null>(null);
+  const [reactivatingGroup, setReactivatingGroup] =
     useState<ModifierGroup | null>(null);
 
   const handleEdit = (group: ModifierGroup) => {
@@ -121,6 +140,23 @@ function GroupsTab() {
     }
   };
 
+  const handleConfirmReactivate = async () => {
+    if (!reactivatingGroup) return;
+    try {
+      await reactivateGroup.mutateAsync(reactivatingGroup.id);
+      toast({ variant: "success", title: "Grupo activado" });
+    } catch (err) {
+      toast({
+        title: "Error al activar",
+        description: describeModifierError(err, "No se pudo activar el grupo"),
+        variant: "destructive",
+      });
+    } finally {
+      setReactivatingGroup(null);
+      refetch();
+    }
+  };
+
   if (isLoading) {
     return (
       <div
@@ -150,10 +186,34 @@ function GroupsTab() {
   }
 
   const groupList = groups ?? [];
+  // Client-side name search on top of the API-filtered (status) list.
+  const trimmedSearch = search.trim().toLowerCase();
+  const filteredGroups = trimmedSearch
+    ? groupList.filter((group) =>
+        group.name.toLowerCase().includes(trimmedSearch),
+      )
+    : groupList;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div
+          role="group"
+          aria-label="Filtrar grupos por estado"
+          className="inline-flex rounded-md border p-1 gap-1"
+        >
+          {STATUS_FILTERS.map((filter) => (
+            <Button
+              key={filter.id}
+              variant={statusFilter === filter.id ? "secondary" : "ghost"}
+              size="sm"
+              aria-pressed={statusFilter === filter.id}
+              onClick={() => setStatusFilter(filter.id)}
+            >
+              {filter.label}
+            </Button>
+          ))}
+        </div>
         {canWrite && (
           <Button
             onClick={() => {
@@ -166,6 +226,17 @@ function GroupsTab() {
             Nuevo grupo
           </Button>
         )}
+      </div>
+
+      <div className="max-w-sm">
+        <Label htmlFor="group-search">Buscar grupo</Label>
+        <Input
+          id="group-search"
+          type="search"
+          placeholder="Ej: Leche, Extras"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       <div className="rounded-md border">
@@ -193,10 +264,29 @@ function GroupsTab() {
                   </p>
                 </TableCell>
               </TableRow>
+            ) : filteredGroups.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={5}
+                  className="text-center py-8 text-muted-foreground"
+                >
+                  <p>
+                    No hay grupos que coincidan con «{search.trim()}».
+                  </p>
+                  <p>Limpie la búsqueda para ver el listado completo.</p>
+                </TableCell>
+              </TableRow>
             ) : (
-              groupList.map((group) => (
+              filteredGroups.map((group) => (
                 <TableRow key={group.id}>
-                  <TableCell className="font-medium">{group.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{group.name}</span>
+                      {!group.is_active && (
+                        <Badge variant="outline">Desactivado</Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="text-sm">
@@ -223,24 +313,39 @@ function GroupsTab() {
                   <TableCell className="text-right">
                     {canWrite && (
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(group)}
-                          aria-label={`Editar grupo ${group.name}`}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeactivatingGroup(group)}
-                          disabled={deactivateGroup.isPending}
-                          className="text-destructive hover:text-destructive"
-                          aria-label={`Desactivar grupo ${group.name}`}
-                        >
-                          <PowerOff className="h-4 w-4" />
-                        </Button>
+                        {group.is_active && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(group)}
+                              aria-label={`Editar grupo ${group.name}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeactivatingGroup(group)}
+                              disabled={deactivateGroup.isPending}
+                              className="text-destructive hover:text-destructive"
+                              aria-label={`Desactivar grupo ${group.name}`}
+                            >
+                              <PowerOff className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                        {!group.is_active && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setReactivatingGroup(group)}
+                            disabled={reactivateGroup.isPending}
+                            aria-label={`Activar grupo ${group.name}`}
+                          >
+                            <Power className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     )}
                   </TableCell>
@@ -302,6 +407,38 @@ function GroupsTab() {
             </Button>
           </DialogFooter>
         </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!reactivatingGroup}
+        onOpenChange={(open) => !open && setReactivatingGroup(null)}
+      >
+        {reactivatingGroup && (
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Activar grupo</DialogTitle>
+              <DialogDescription>
+                El grupo «{reactivatingGroup.name}» volverá a mostrarse al
+                ordenar y podrá asignarse a productos nuevamente. Sus opciones
+                y asignaciones anteriores se conservan.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setReactivatingGroup(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleConfirmReactivate}
+                disabled={reactivateGroup.isPending}
+              >
+                Activar grupo
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
       </Dialog>
     </div>
   );

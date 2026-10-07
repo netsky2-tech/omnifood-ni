@@ -287,12 +287,10 @@ describe("ModifiersPage tabs", () => {
   });
 
   describe("Por producto", () => {
-    const selectProduct = () => {
+    const selectProduct = (name = "Cerveza Toña") => {
       render(<ModifiersPage />);
       openTab("Por producto");
-      fireEvent.change(screen.getByLabelText("Producto"), {
-        target: { value: "prod-1" },
-      });
+      fireEvent.click(screen.getByRole("option", { name }));
     };
 
     it("splits the effective groups into inherited (no remove) and exceptions (with remove)", () => {
@@ -345,9 +343,7 @@ describe("ModifiersPage tabs", () => {
       mockAttachProduct.mutateAsync.mockResolvedValue({});
       const view = render(<ModifiersPage />);
       openTab("Por producto");
-      fireEvent.change(screen.getByLabelText("Producto"), {
-        target: { value: "prod-1" },
-      });
+      fireEvent.click(screen.getByRole("option", { name: "Cerveza Toña" }));
       fireEvent.change(screen.getByLabelText("Grupo"), {
         target: { value: "group-1" },
       });
@@ -399,18 +395,56 @@ describe("ModifiersPage tabs", () => {
       });
     });
 
-    it("filters the product selector by search text", () => {
+    it("filters the visible product rows by search text", () => {
       render(<ModifiersPage />);
       openTab("Por producto");
 
       fireEvent.change(screen.getByLabelText("Buscar producto"), {
         target: { value: "Cerve" },
       });
-      const options = screen
-        .getAllByRole("option")
-        .map((option) => option.textContent);
-      expect(options.some((text) => text?.includes("Cerveza Toña"))).toBe(true);
-      expect(options.some((text) => text?.includes("Pinolero"))).toBe(false);
+      expect(
+        screen.getByRole("option", { name: "Cerveza Toña" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("option", { name: "Pinolero" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("selects a product by clicking its row and loads the effective panel", () => {
+      render(<ModifiersPage />);
+      openTab("Por producto");
+
+      expect(
+        screen.getByText(/seleccione un producto para ver sus grupos/i),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("option", { name: "Pinolero" }));
+      expect(useEffectiveGroups).toHaveBeenCalledWith("prod-2");
+      expect(
+        screen.getByText("Heredado de la categoría"),
+      ).toBeInTheDocument();
+    });
+
+    it("marks the selected product row with aria-selected", () => {
+      render(<ModifiersPage />);
+      openTab("Por producto");
+
+      const row = screen.getByRole("option", { name: "Cerveza Toña" });
+      expect(row).toHaveAttribute("aria-selected", "false");
+      fireEvent.click(row);
+      expect(row).toHaveAttribute("aria-selected", "true");
+    });
+
+    it("shows the empty state when the product search matches nothing", () => {
+      render(<ModifiersPage />);
+      openTab("Por producto");
+
+      fireEvent.change(screen.getByLabelText("Buscar producto"), {
+        target: { value: "Zzz" },
+      });
+      expect(
+        screen.getByText("No se encontraron productos."),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("option")).not.toBeInTheDocument();
     });
 
     it("shows a friendly empty state when the product has no groups", () => {

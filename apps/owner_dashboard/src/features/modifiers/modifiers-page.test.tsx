@@ -5,6 +5,7 @@ import { type ModifierGroup } from "./types";
 import {
   useModifierGroups,
   useDeactivateModifierGroup,
+  useReactivateModifierGroup,
   useCreateModifierGroup,
   useUpdateModifierGroup,
   useCreateModifierOption,
@@ -71,8 +72,28 @@ const mockGroups: ModifierGroup[] = [
   },
 ];
 
+const inactiveGroup: ModifierGroup = {
+  id: "group-3",
+  name: "Endulzante",
+  min_selected: 0,
+  max_selected: 1,
+  allow_quantities: false,
+  sort_order: 3,
+  is_active: false,
+  options: [
+    {
+      id: "opt-3",
+      name: "Azúcar",
+      price_delta: 0,
+      is_default: false,
+      sort_order: 0,
+    },
+  ],
+};
+
 describe("ModifiersPage", () => {
   const mockDeactivateGroup = { mutateAsync: vi.fn(), isPending: false };
+  const mockReactivateGroup = { mutateAsync: vi.fn(), isPending: false };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,6 +104,7 @@ describe("ModifiersPage", () => {
       refetch: vi.fn(),
     });
     (useDeactivateModifierGroup as any).mockReturnValue(mockDeactivateGroup);
+    (useReactivateModifierGroup as any).mockReturnValue(mockReactivateGroup);
     (useCreateModifierGroup as any).mockReturnValue({
       mutateAsync: vi.fn(),
       isPending: false,
@@ -188,6 +210,169 @@ describe("ModifiersPage", () => {
         expect.objectContaining({ title: "Grupo desactivado" }),
       );
     });
+  });
+
+  it("renders the Activos/Inactivos/Todos status control defaulting to the active listing", () => {
+    render(<ModifiersPage />);
+
+    const statusGroup = screen.getByRole("group", {
+      name: "Filtrar grupos por estado",
+    });
+    expect(statusGroup).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Activos" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Inactivos" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("button", { name: "Todos" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    // Default listing: the hook is called with the default (active) status.
+    expect(useModifierGroups).toHaveBeenCalledWith("active");
+  });
+
+  it("refetches with the inactive filter when selecting Inactivos", () => {
+    render(<ModifiersPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inactivos" }));
+
+    expect(useModifierGroups).toHaveBeenLastCalledWith("inactive");
+    expect(
+      screen.getByRole("button", { name: "Inactivos" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("renders the group search input above the table", () => {
+    render(<ModifiersPage />);
+
+    const search = screen.getByLabelText("Buscar grupo");
+    expect(search).toBeInTheDocument();
+    expect(search).toHaveAttribute("placeholder", "Ej: Leche, Extras");
+  });
+
+  it("filters the visible groups by search text, ignoring case and surrounding spaces", () => {
+    render(<ModifiersPage />);
+
+    fireEvent.change(screen.getByLabelText("Buscar grupo"), {
+      target: { value: "  extra " },
+    });
+    expect(screen.getByText("Extras")).toBeInTheDocument();
+    expect(screen.queryByText("Leche")).not.toBeInTheDocument();
+  });
+
+  it("shows a filtered-no-results empty state distinct from the no-groups state", () => {
+    render(<ModifiersPage />);
+
+    fireEvent.change(screen.getByLabelText("Buscar grupo"), {
+      target: { value: "Sopa" },
+    });
+    expect(
+      screen.getByText(/no hay grupos que coincidan con «sopa»/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/limpie la búsqueda/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/aún no hay grupos/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("composes the search with the Inactivos status filter", () => {
+    // Simulate the API-level status filtering the real hook performs.
+    (useModifierGroups as any).mockImplementation((status: string) => ({
+      data: status === "inactive" ? [inactiveGroup] : mockGroups,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    }));
+    render(<ModifiersPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inactivos" }));
+    expect(useModifierGroups).toHaveBeenLastCalledWith("inactive");
+
+    fireEvent.change(screen.getByLabelText("Buscar grupo"), {
+      target: { value: "Endu" },
+    });
+    expect(screen.getByText("Endulzante")).toBeInTheDocument();
+
+    // A name matching only an active group yields no results under Inactivos.
+    fireEvent.change(screen.getByLabelText("Buscar grupo"), {
+      target: { value: "Leche" },
+    });
+    expect(screen.queryByText("Leche")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/no hay grupos que coincidan/i),
+    ).toBeInTheDocument();
+  });
+
+  it("restores the full list when the search is cleared", () => {
+    render(<ModifiersPage />);
+
+    const search = screen.getByLabelText("Buscar grupo");
+    fireEvent.change(search, { target: { value: "Leche" } });
+    expect(screen.queryByText("Extras")).not.toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "" } });
+    expect(screen.getByText("Leche")).toBeInTheDocument();
+    expect(screen.getByText("Extras")).toBeInTheDocument();
+  });
+
+  it("shows a Desactivado badge and an Activar action that opens the confirm dialog for inactive rows", () => {
+    (useModifierGroups as any).mockReturnValue({
+      data: [inactiveGroup],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<ModifiersPage />);
+
+    expect(screen.getByText("Desactivado")).toBeInTheDocument();
+
+    // Confirmation FIRST: the reactivate mutation must not run before
+    // the owner confirms.
+    fireEvent.click(screen.getByLabelText("Activar grupo Endulzante"));
+    expect(mockReactivateGroup.mutateAsync).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Activar grupo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/volverá a mostrarse al ordenar/i),
+    ).toBeInTheDocument();
+  });
+
+  it("reactivates the group after confirmation and notifies success", async () => {
+    (useModifierGroups as any).mockReturnValue({
+      data: [inactiveGroup],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    mockReactivateGroup.mutateAsync.mockResolvedValue({ success: true });
+    render(<ModifiersPage />);
+
+    fireEvent.click(screen.getByLabelText("Activar grupo Endulzante"));
+    fireEvent.click(screen.getByRole("button", { name: "Activar grupo" }));
+
+    await waitFor(() => {
+      expect(mockReactivateGroup.mutateAsync).toHaveBeenCalledWith("group-3");
+    });
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Grupo activado" }),
+      );
+    });
+  });
+
+  it("does not offer the desactivar action for an already inactive row", () => {
+    (useModifierGroups as any).mockReturnValue({
+      data: [inactiveGroup],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<ModifiersPage />);
+
+    expect(
+      screen.queryByLabelText("Desactivar grupo Endulzante"),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the edit form pre-filled when clicking the row edit action", async () => {

@@ -103,6 +103,24 @@ describe('ModifiersController', () => {
     });
   });
 
+  it('passes the status query parameter through to the service filters', async () => {
+    await controller.findAll('tenant-1', undefined, undefined, 'inactive');
+    expect(service.findAll).toHaveBeenCalledWith('tenant-1', {
+      category_id: undefined,
+      product_id: undefined,
+      status: 'inactive',
+    });
+  });
+
+  it('omits status from the filters when the query parameter is absent', async () => {
+    await controller.findAll('tenant-1', undefined, undefined, undefined);
+    expect(service.findAll).toHaveBeenCalledWith('tenant-1', {
+      category_id: undefined,
+      product_id: undefined,
+      status: undefined,
+    });
+  });
+
   it('maps findOne to the service', async () => {
     const group = await controller.findOne('group-1', 'tenant-1');
     expect(group.id).toBe('group-1');

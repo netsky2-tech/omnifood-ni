@@ -4215,6 +4215,324 @@ void main() {
       );
     });
 
+    group('inbound pull build-reset cursor (issue #786)', () {
+      const cursorSent = '1787700000000';
+      const cursorReceived = 1787750000000;
+      const currentBuild = '2.3.4+11';
+      const previousBuild = '2.3.4+10';
+
+      void mockCurrentBuild({
+        String version = '2.3.4',
+        String buildNumber = '11',
+      }) {
+        PackageInfo.setMockInitialValues(
+          appName: 'OmniFood POS',
+          packageName: 'com.omnifood.pos',
+          version: version,
+          buildNumber: buildNumber,
+          buildSignature: '',
+        );
+      }
+
+      Future<void> seedNegotiableTerminal(AppDatabase database) async {
+        await database.ohacDeliveryDao.insertTerminalState(
+          OhacTerminalStateEntity(
+            tenantId: 'tenant-1',
+            terminalId: 'dev-1',
+            state: 'ACTIVE',
+            activeSequence: 9,
+            activeDigest: 'sha256:${'c' * 64}',
+            candidateSequence: 0,
+            candidateDigest: '',
+            serverFloorSequence: 5,
+            serverFloorDigest: 'sha256:${'c' * 64}',
+            negotiatedPosBuild: '',
+            negotiatedBackendBuild: '',
+            negotiatedPolicySchema: '',
+            negotiatedAssertionSchema: '',
+            integrityClassification: '',
+            localAuthorizationSequence: 0,
+            revision: 1,
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          ),
+        );
+      }
+
+      Future<void> seedCursor(AppDatabase database, {String? build}) async {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(
+            key: 'last_inbound_sync_version',
+            value: cursorSent,
+          ),
+        );
+        if (build != null) {
+          await database.localConfigDao.saveConfig(
+            LocalConfigEntity(key: 'last_inbound_sync_build', value: build),
+          );
+        }
+      }
+
+      /// Captures the deltas request's query parameters and answers with a
+      /// successful delta payload (empty by default, so the ingest
+      /// succeeds and the watermark/build persistence path runs).
+      Dio deltasDio(
+        Map<String, dynamic> captured, {
+        Map<String, dynamic>? deltas,
+      }) {
+        final testDio = Dio();
+        testDio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.path == '/v1/sync/inbound/deltas') {
+                captured
+                  ..clear()
+                  ..addAll(Map<String, dynamic>.from(options.queryParameters));
+                handler.resolve(
+                  Response<dynamic>(
+                    statusCode: 200,
+                    requestOptions: options,
+                    data: {
+                      'status': 'success',
+                      'serverTime': '2026-08-26T18:30:00.000Z',
+                      'currentVersion': cursorReceived,
+                      'deltas':
+                          deltas ??
+                          {
+                            'products': [],
+                            'catalogValues': [],
+                            'insumos': [],
+                            'recipes': [],
+                            'users': [],
+                          },
+                    },
+                  ),
+                );
+                return;
+              }
+              handler.resolve(
+                Response<dynamic>(
+                  statusCode: 200,
+                  requestOptions: options,
+                  data: {'ok': true},
+                ),
+              );
+            },
+          ),
+        );
+        return testDio;
+      }
+
+      SyncService serviceWithDb(AppDatabase database, Dio testDio) =>
+          SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            testDio,
+            database: database,
+          );
+
+      test(
+        'omits sinceVersion (full re-emit) when no build was recorded yet',
+        () async {
+          mockCurrentBuild();
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            await seedNegotiableTerminal(database);
+            // Fresh upgrade: a pre-release cursor exists, but no build was
+            // ever recorded next to it — the new build must get one full
+            // re-emit, so the cursor must not be sent.
+            await seedCursor(database);
+
+            final captured = <String, dynamic>{};
+            await serviceWithDb(database, deltasDio(captured))
+                .pullInboundDeltas();
+
+            expect(captured.containsKey('sinceVersion'), isFalse);
+            // Only the cursor is dropped: everything else, including the
+            // OHAC negotiation parameters, is sent unchanged.
+            expect(captured['terminalId'], 'dev-1');
+            expect(captured['ohacPosBuild'], currentBuild);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'omits sinceVersion (full re-emit) when the stored build differs '
+        'from the current build',
+        () async {
+          mockCurrentBuild();
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            await seedNegotiableTerminal(database);
+            await seedCursor(database, build: previousBuild);
+
+            final captured = <String, dynamic>{};
+            await serviceWithDb(database, deltasDio(captured))
+                .pullInboundDeltas();
+
+            expect(captured.containsKey('sinceVersion'), isFalse);
+            expect(captured['ohacPosBuild'], currentBuild);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'sends sinceVersion when the stored build matches the current build',
+        () async {
+          mockCurrentBuild();
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            await seedNegotiableTerminal(database);
+            await seedCursor(database, build: currentBuild);
+
+            final captured = <String, dynamic>{};
+            await serviceWithDb(database, deltasDio(captured))
+                .pullInboundDeltas();
+
+            // Byte-identical status quo while the build is unchanged.
+            expect(captured['sinceVersion'], cursorSent);
+            expect(captured['ohacPosBuild'], currentBuild);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'persists the current build alongside the cursor after a '
+        'successful pull',
+        () async {
+          mockCurrentBuild();
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            await seedNegotiableTerminal(database);
+            await seedCursor(database, build: previousBuild);
+
+            await serviceWithDb(database, deltasDio({})).pullInboundDeltas();
+
+            final persistedBuild = await database.localConfigDao
+                .getConfigByKey('last_inbound_sync_build');
+            expect(persistedBuild?.value, currentBuild);
+            final persistedCursor = await database.localConfigDao
+                .getConfigByKey('last_inbound_sync_version');
+            expect(persistedCursor?.value, '$cursorReceived');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'does not persist the build when the ingest fails (the next pull '
+        'still resets)',
+        () async {
+          mockCurrentBuild();
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            await seedNegotiableTerminal(database);
+            await seedCursor(database, build: previousBuild);
+            // Force a real ingest error: the products table is gone, so
+            // hydrating the product delta throws mid-pull.
+            await database.database.execute('DROP TABLE products');
+
+            final captured = <String, dynamic>{};
+            await expectLater(
+              serviceWithDb(
+                database,
+                deltasDio(
+                  captured,
+                  deltas: {
+                    'products': [
+                      {
+                        'id': 'prod-101',
+                        'name': 'Café Espresso Doble',
+                        'uom': 'CUP',
+                        'stock': 25.0,
+                        'averageCost': 12.0,
+                        'sellPrice': 55.0,
+                        'isActive': true,
+                        'isPerishable': false,
+                        'createdAt': '2026-08-26T10:00:00.000Z',
+                        'categoryId': 'cat-uuid-espresso-101',
+                      },
+                    ],
+                    'catalogValues': [],
+                    'insumos': [],
+                    'recipes': [],
+                    'users': [],
+                  },
+                ),
+              ).pullInboundDeltas(),
+              throwsA(anything),
+            );
+
+            // Neither the cursor nor the build may advance on a failed
+            // pull: the stored build still differs from the current one,
+            // so the retry keeps reset semantics until it succeeds.
+            final persistedCursor = await database.localConfigDao
+                .getConfigByKey('last_inbound_sync_version');
+            expect(persistedCursor?.value, cursorSent);
+            final persistedBuild = await database.localConfigDao
+                .getConfigByKey('last_inbound_sync_build');
+            expect(persistedBuild?.value, previousBuild);
+          } finally {
+            await database.close();
+          }
+        },
+      );
+
+      test(
+        'keeps the cursor behavior when the current build is unreadable '
+        '(no full-emit storm)',
+        () async {
+          // The null-build unreadable leg (failing platform) cannot be
+          // re-created after package_info_plus caches its first successful
+          // read (see the order-coupled negotiation test above); the blank
+          // leg of the same unreadable predicate is pinned here instead.
+          mockCurrentBuild(version: '', buildNumber: '');
+          final database = await $FloorAppDatabase
+              .inMemoryDatabaseBuilder()
+              .build();
+
+          try {
+            await seedNegotiableTerminal(database);
+            await seedCursor(database);
+
+            final captured = <String, dynamic>{};
+            await serviceWithDb(database, deltasDio(captured))
+                .pullInboundDeltas();
+
+            // Unreadable build: today's cursor behavior is preserved — no
+            // reset, no full-emit storm on every pull.
+            expect(captured['sinceVersion'], cursorSent);
+            // The blank build still rides the OHAC parameters verbatim.
+            expect(captured['ohacPosBuild'], '');
+          } finally {
+            await database.close();
+          }
+        },
+      );
+    });
+
     group('OHAC pull epoch consumption (B2c-3b, design §4.2/§5/§9)', () {
       const ohacTenant = '11111111-1111-4111-8111-111111111111';
       const ohacPosBuild = '2.3.4+11';
