@@ -14,6 +14,7 @@ import * as ExcelJS from 'exceljs';
 import PDFDocument = require('pdfkit');
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { FiscalSetupService } from '../../onboarding/services/fiscal-setup.service';
+import { Customer } from '../../customers/entities/customer.entity';
 import { Invoice } from '../entities/invoice.entity';
 import {
   CashShiftSession,
@@ -157,15 +158,51 @@ export class SalesExportService {
     // pooled find silently returned zero rows under the production
     // NOBYPASSRLS role. Bound read, identical query semantics (mirrors
     // exportZReports' binding pattern).
-    const invoices = await runInTenantTransaction(
+    //
+    // Post-review fix (HIGH): the read ALSO resolves legacy display names
+    // inside the SAME tenant transaction — invoices migrated with a NULL
+    // customer_name snapshot must never surface the opaque internal
+    // customerId UUID in the DGI sales book ("Cliente" column).
+    const { invoices, customerNamesById } = await runInTenantTransaction(
       this.dataSource,
       tenantId,
-      (manager) =>
-        manager.getRepository(Invoice).find({
+      async (manager) => {
+        const readInvoices = await manager.getRepository(Invoice).find({
           where: whereClause,
           relations: ['items'],
           order: { created_at: 'ASC' },
-        }),
+        });
+        // Distinct, non-blank customerIds of invoices whose trimmed
+        // customerName snapshot is empty — the only rows needing a
+        // catalog lookup.
+        const unresolvedIds = [
+          ...new Set(
+            readInvoices
+              .filter(
+                (inv) =>
+                  !(inv.customerName ?? '').trim() &&
+                  !!(inv.customerId ?? '').trim(),
+              )
+              .map((inv) => (inv.customerId ?? '').trim()),
+          ),
+        ];
+
+        const customerNamesById = new Map<string, string>();
+        if (unresolvedIds.length > 0) {
+          const customers = await manager.getRepository(Customer).find({
+            where: { tenant_id: tenantId, id: In(unresolvedIds) },
+            select: ['id', 'name'],
+          });
+          for (const customer of customers) {
+            const name = (customer.name ?? '').trim();
+            if (name) {
+              customerNamesById.set(customer.id, name);
+            }
+          }
+        }
+
+        return { invoices: readInvoices, customerNamesById };
+      },
     );
 
     let totalGrossNio = 0;
@@ -236,7 +273,7 @@ export class SalesExportService {
         date: dateStr,
         invoiceNumber: inv.number || 'N/A',
         documentType: docType,
-        customerName: inv.customerName || (inv.customerId || 'CONSUMIDOR FINAL'),
+        customerName: this.resolveCustomerDisplayName(inv, customerNamesById),
         exemptSubtotalNio: round2(exemptSubtotalNio),
         taxableSubtotalNio: round2(taxableSubtotalNio),
         taxAmountNio: round2(totalTax),
@@ -311,6 +348,34 @@ export class SalesExportService {
       contentType: 'application/json',
       data: exportData,
     };
+  }
+
+  /**
+   * Post-review fix (HIGH): DGI sales book "Cliente" resolution. Fiscal
+   * precedence:
+   *   a. the invoice's customerName snapshot taken at sale time always wins —
+   *      the catalog must never be applied retroactively to a fiscal document;
+   *   b. else the current catalog name resolved from the internal customerId
+   *      (legacy rows whose migration left customer_name NULL);
+   *   c. else the literal 'CONSUMIDOR FINAL'.
+   * The opaque internal customerId UUID must NEVER appear in the returned
+   * value, and the fallback is never an empty string.
+   */
+  private resolveCustomerDisplayName(
+    inv: Invoice,
+    namesById: Map<string, string>,
+  ): string {
+    const snapshot = (inv.customerName ?? '').trim();
+    if (snapshot) {
+      return snapshot;
+    }
+    const catalogName = inv.customerId
+      ? namesById.get(inv.customerId.trim())
+      : undefined;
+    if (catalogName) {
+      return catalogName;
+    }
+    return 'CONSUMIDOR FINAL';
   }
 
   async exportZReports(

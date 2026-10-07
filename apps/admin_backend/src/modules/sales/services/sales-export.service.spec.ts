@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { SalesExportService } from './sales-export.service';
@@ -14,6 +14,7 @@ import {
   CashMovement,
   CashMovementType,
 } from '../entities/cash-movement.entity';
+import { Customer } from '../../customers/entities/customer.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 
 describe('SalesExportService', () => {
@@ -28,6 +29,12 @@ describe('SalesExportService', () => {
   // bound transaction manager; the pooled token only feeds DI and the
   // runtime-teeth tripwires below.
   let mockMovementRepo: {
+    find: jest.Mock;
+  };
+  // Post-review fix (HIGH): legacy invoices whose customerName snapshot is
+  // NULL resolve their display name through the customer catalog — never
+  // through the raw internal customerId UUID.
+  let mockCustomerRepo: {
     find: jest.Mock;
   };
   // B2e U3 (D-3): the export IVA labels derive from the tenant's effective
@@ -56,7 +63,9 @@ describe('SalesExportService', () => {
           ? mockInvoiceRepo
           : entity === CashMovement
             ? mockMovementRepo
-            : mockShiftRepo,
+            : entity === Customer
+              ? mockCustomerRepo
+              : mockShiftRepo,
       ),
     };
     transactionalDataSource = {
@@ -73,6 +82,9 @@ describe('SalesExportService', () => {
     };
     mockMovementRepo = {
       find: jest.fn(),
+    };
+    mockCustomerRepo = {
+      find: jest.fn().mockResolvedValue([]),
     };
     mockFiscalSetup = {
       getFiscalSetup: jest.fn().mockResolvedValue({
@@ -95,6 +107,10 @@ describe('SalesExportService', () => {
         {
           provide: getRepositoryToken(CashMovement),
           useValue: mockMovementRepo,
+        },
+        {
+          provide: getRepositoryToken(Customer),
+          useValue: mockCustomerRepo,
         },
         { provide: DataSource, useValue: transactionalDataSource },
         {
@@ -119,7 +135,7 @@ describe('SalesExportService', () => {
         total: 1150,
         totalUsd: 31.51,
         isCanceled: false,
-        customerId: 'J0310000000000',
+        customerId: 'cust-uuid-0000-0001',
         created_at: new Date('2026-08-26T10:00:00.000Z'),
         items: [
           {
@@ -166,7 +182,12 @@ describe('SalesExportService', () => {
       expect(jsonResult.data.totalGrossNio).toBe(1150);
       expect(jsonResult.data.totalTaxNio).toBe(150);
       expect(jsonResult.data.records[0].documentType).toBe('FACTURA');
-      expect(jsonResult.data.records[0].customerName).toBe('J0310000000000');
+      // Post-review fix (HIGH): the catalog lookup mock resolves empty by
+      // default, so the legacy id falls back to the fiscal literal — the
+      // internal UUID must NEVER surface in the sales book.
+      expect(jsonResult.data.records[0].customerName).toBe(
+        'CONSUMIDOR FINAL',
+      );
       expect(jsonResult.data.records[1].documentType).toBe('ANULADA');
       expect(jsonResult.data.records[1].status).toBe('ANULADA');
 
@@ -180,11 +201,13 @@ describe('SalesExportService', () => {
         '"Fecha","Numero Factura","Tipo Documento","Cliente","Subtotal Exento (NIO)","Subtotal Gravado 15% (NIO)","IVA 15% (NIO)","Descuento (NIO)","Total (NIO)","Total (USD)","Estado"',
       );
       expect(csvResult.content).toContain(
-        '"2026-08-26","001-001-01-00000001","FACTURA","J0310000000000",0.00,1000.00,150.00,0.00,1150.00,31.51,"VALIDA"',
+        '"2026-08-26","001-001-01-00000001","FACTURA","CONSUMIDOR FINAL",0.00,1000.00,150.00,0.00,1150.00,31.51,"VALIDA"',
       );
       expect(csvResult.content).toContain(
         '"2026-08-26","001-001-01-00000002","ANULADA","CONSUMIDOR FINAL",0.00,300.00,45.00,0.00,345.00,9.45,"ANULADA"',
       );
+      // No internal customer id may leak into any exported column.
+      expect(csvResult.content).not.toContain('cust-uuid-0000-0001');
     });
 
     it('uses the customerName snapshot when present, avoiding customerId fallback', async () => {
@@ -216,6 +239,93 @@ describe('SalesExportService', () => {
       expect(jsonResult.data.records[0].customerName).toBe(
         'Comercializadora Managua S.A.',
       );
+    });
+
+    // Post-review fix (HIGH): invoices migrated with a NULL customerName
+    // snapshot resolve the display name through the customer catalog read
+    // inside the SAME tenant transaction — and the internal customerId UUID
+    // must never leak into any exported column.
+    it('resolves a legacy customerId through the customer catalog without leaking the id', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([
+        {
+          id: 'inv-legacy',
+          tenant_id: tenantId,
+          number: '001-001-01-00000100',
+          type: 'regular',
+          subtotal: 200,
+          totalTax: 30,
+          total: 230,
+          totalUsd: 6.3,
+          isCanceled: false,
+          customerId: 'cust-uuid-1234',
+          created_at: new Date('2026-08-26T13:00:00.000Z'),
+          items: [],
+        } as unknown as Invoice,
+      ]);
+      mockCustomerRepo.find.mockResolvedValue([
+        { id: 'cust-uuid-1234', name: 'SOHO Cliente SRL' },
+      ]);
+
+      const jsonResult = await service.exportSalesBook(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'json',
+      });
+
+      expect(jsonResult.data.records[0].customerName).toBe('SOHO Cliente SRL');
+
+      // The catalog read is bounded: one call, tenant-scoped, filtered to the
+      // ids that actually need resolution (In(...) operator).
+      expect(mockCustomerRepo.find).toHaveBeenCalledTimes(1);
+      const findArgs = mockCustomerRepo.find.mock.calls[0][0];
+      expect(findArgs.where.tenant_id).toBe(tenantId);
+      expect(findArgs.where.id).toEqual(In(['cust-uuid-1234']));
+      expect(findArgs.select).toEqual(['id', 'name']);
+
+      const csvResult = await service.exportSalesBook(tenantId, {
+        format: 'csv',
+      });
+      expect(csvResult.content).toContain('"SOHO Cliente SRL"');
+      expect(csvResult.content).not.toContain('cust-uuid-1234');
+    });
+
+    // Post-review fix (HIGH): the fiscal snapshot taken at sale time always
+    // wins — the catalog is never applied retroactively to a fiscal document.
+    // An invoice with a present snapshot must not trigger any catalog read.
+    it('keeps the invoice snapshot over the catalog name', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([
+        {
+          id: 'inv-snapshot',
+          tenant_id: tenantId,
+          number: '001-001-01-00000101',
+          type: 'regular',
+          subtotal: 400,
+          totalTax: 60,
+          total: 460,
+          totalUsd: 12.6,
+          isCanceled: false,
+          customerName: 'Nombre Al Momento De La Venta',
+          customerId: 'cust-uuid-1234',
+          created_at: new Date('2026-08-26T14:00:00.000Z'),
+          items: [],
+        } as unknown as Invoice,
+      ]);
+      mockCustomerRepo.find.mockResolvedValue([
+        { id: 'cust-uuid-1234', name: 'Nombre Actual Del Catalogo' },
+      ]);
+
+      const jsonResult = await service.exportSalesBook(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'json',
+      });
+
+      // Snapshot wins — the catalog is never mutated retroactively.
+      expect(jsonResult.data.records[0].customerName).toBe(
+        'Nombre Al Momento De La Venta',
+      );
+      // No ids needing resolution → no catalog read at all.
+      expect(mockCustomerRepo.find).not.toHaveBeenCalled();
     });
 
     // B2e U3 (D-3): the configured rate governs the label — with a 15%
