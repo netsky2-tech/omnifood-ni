@@ -1872,14 +1872,25 @@ class ReceiptLayoutFormatter {
         : (invoice.customerName != null && invoice.customerName!.trim().isNotEmpty
             ? invoice.customerName!.trim()
             : 'Contado');
-    builder.textLine(formatTwoColumns('Cliente:', clientDisplayName));
+    // Post-review fix (MEDIUM): formatTwoColumns truncates the LEFT label
+    // when the value is long (58mm: 24-31 chars; 80mm: 32-39 chars), so a
+    // long customer name used to print "Cliente" / "Client" / no label at
+    // all. The lossless formatKeyValue idiom (same as the primary
+    // ReceiptDocument path) keeps the label intact and wraps the value under
+    // a 2-space indent. ONLY these two customer emissions use it — Fecha:
+    // / Atendido por: / Tel: / Caja: are owned by other work items.
+    for (final line in formatKeyValue('Cliente:', clientDisplayName)) {
+      builder.textLine(line);
+    }
     final effectiveRuc = (customerRuc != null && customerRuc.trim().isNotEmpty && customerRuc.trim() != 'N/A')
         ? customerRuc.trim()
         : (invoice.customerTaxId != null && invoice.customerTaxId!.trim().isNotEmpty && invoice.customerTaxId!.trim() != 'N/A'
             ? invoice.customerTaxId!.trim()
             : null);
     if (effectiveRuc != null) {
-      builder.textLine(formatTwoColumns('RUC/Cedula:', effectiveRuc));
+      for (final line in formatKeyValue('RUC/Cedula:', effectiveRuc)) {
+        builder.textLine(line);
+      }
     }
 
     builder.textLine(drawLine('-'));

@@ -1587,4 +1587,179 @@ void main() {
       expect(decoded, contains('Error de captura del cajero'));
     });
   });
+
+  group('Legacy ESC/POS path: customer key-value label integrity (formatInvoiceEscPos)', () {
+    final escPosInvoice = Invoice(
+      id: 'inv-escpos-loyalty',
+      number: '001-001-01-00000077',
+      createdAt: DateTime(2026, 9, 1, 11, 0),
+      userId: 'user-01',
+      subtotal: 150.00,
+      totalTax: 22.50,
+      total: 172.50,
+    );
+    final escPosItems = [
+      InvoiceItem(
+        id: 'item-1',
+        invoiceId: 'inv-escpos-loyalty',
+        productId: 'prod-1',
+        productName: 'Café Latte',
+        quantity: 1,
+        unitPrice: 150.0,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 22.50,
+        total: 172.50,
+      ),
+    ];
+    const escPosPayments = [
+      Payment(
+        id: 'pay-1',
+        invoiceId: 'inv-escpos-loyalty',
+        method: PaymentMethod.cash,
+        amount: 172.50,
+      ),
+    ];
+
+    // Reconstructs the printed text lines from the ESC/POS byte stream by
+    // skipping the command bytes of the EscPosBuilder grammar (ESC @, ESC a/E/-/d n,
+    // ESC p m t1 t2, GS ! n, GS V B 0), so width assertions measure only the
+    // characters that actually reach the paper.
+    List<String> decodeEscPosLines(List<int> bytes) {
+      final lines = <String>[];
+      final buffer = StringBuffer();
+      var i = 0;
+      while (i < bytes.length) {
+        final b = bytes[i];
+        if (b == 0x0A) {
+          lines.add(buffer.toString());
+          buffer.clear();
+          i++;
+        } else if (b == 0x1B) {
+          final cmd = i + 1 < bytes.length ? bytes[i + 1] : -1;
+          i += cmd == 0x40
+              ? 2 // ESC @ (no param)
+              : cmd == 0x70
+                  ? 5 // ESC p m t1 t2 (drawer pulse)
+                  : 3; // ESC a/E/-/d + 1 param
+        } else if (b == 0x1D) {
+          final cmd = i + 1 < bytes.length ? bytes[i + 1] : -1;
+          i += cmd == 0x56 ? 4 : 3; // GS V B 0 (cut) | GS ! n (font size)
+        } else {
+          buffer.writeCharCode(b);
+          i++;
+        }
+      }
+      if (buffer.isNotEmpty) lines.add(buffer.toString());
+      return lines;
+    }
+
+    void expectLabelsIntactAndBounded(
+      List<int> bytes, {
+      required int maxCols,
+      required bool assertWholeTicketWidth,
+    }) {
+      final lines = decodeEscPosLines(bytes);
+
+      // Labels must never truncate, whatever the value length.
+      expect(
+        lines.any((line) => line.startsWith('Cliente:')),
+        isTrue,
+        reason: 'a emitted line must start with the intact "Cliente:" label',
+      );
+      expect(
+        lines.any((line) => line.startsWith('RUC/Cedula:')),
+        isTrue,
+        reason: 'a emitted line must start with the intact "RUC/Cedula:" label',
+      );
+
+      if (assertWholeTicketWidth) {
+        // Width invariant of the paper width under test.
+        for (final line in lines) {
+          expect(
+            line.length,
+            lessThanOrEqualTo(maxCols),
+            reason: 'Line exceeds $maxCols cols: "$line" (${line.length})',
+          );
+        }
+      } else {
+        // 80mm legacy path only: the PRE-EXISTING item grid header
+        // ('CANT'+'DESCRIPCION'+'P.UNIT'+'TOTAL' = 48 cols) is owned by
+        // other work items and must not be touched here, so the width
+        // invariant is asserted over the customer block this fix owns
+        // (from the "Cliente:" line up to the next divider).
+        final clienteIdx = lines.indexWhere((l) => l.startsWith('Cliente:'));
+        expect(clienteIdx, isNonNegative);
+        final blockEnd = lines
+            .indexWhere((l) => l.startsWith('---'), clienteIdx);
+        final customerBlock = lines.sublist(
+          clienteIdx,
+          blockEnd == -1 ? lines.length : blockEnd,
+        );
+        for (final line in customerBlock) {
+          expect(
+            line.length,
+            lessThanOrEqualTo(maxCols),
+            reason: 'Line exceeds $maxCols cols: "$line" (${line.length})',
+          );
+        }
+      }
+    }
+
+    // The truncation band is width-driven: formatTwoColumns clips the LEFT
+    // label whenever `width - value.length - 1 < label.length` while the value
+    // is still shorter than the width (a value >= width already delegates to
+    // the lossless formatKeyValue branch). So each paper width needs its own
+    // reproducer, otherwise the assertion passes vacuously:
+    //   58mm (32 cols): 'Cliente:' clips at 24-31, 'RUC/Cedula:' at 20-31
+    //   80mm (40 cols): 'Cliente:' clips at 32-39, 'RUC/Cedula:' at 28-39
+    test('58mm: long customer name keeps "Cliente:" / "RUC/Cedula:" labels intact and every line <= 32 cols', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      const name = 'Distribuidora El Soho Central'; // 29 cols -> inside 24-31
+      const ruc = 'J0310000000000EXT2024'; // 21 cols -> inside 20-31
+
+      // Pin the defect class: the pre-fix idiom really did clip the label.
+      expect(name.length, inInclusiveRange(24, 31));
+      expect(ruc.length, inInclusiveRange(20, 31));
+      expect(
+        f58.formatTwoColumns('Cliente:', name),
+        isNot(startsWith('Cliente:')),
+        reason: 'the legacy formatTwoColumns idiom must still clip long-left labels',
+      );
+
+      final bytes = f58.formatInvoiceEscPos(
+        escPosInvoice,
+        items: escPosItems,
+        payments: escPosPayments,
+        customerName: name,
+        customerRuc: ruc,
+      );
+
+      expectLabelsIntactAndBounded(bytes, maxCols: 32, assertWholeTicketWidth: true);
+    });
+
+    test('80mm: long customer name keeps "Cliente:" / "RUC/Cedula:" labels intact and every customer-block line <= 40 cols', () {
+      final f80 = ReceiptLayoutFormatter.format80mm();
+      const name = 'Corporacion Turistica De Nicaragua'; // 34 -> inside 32-39
+      const ruc = 'J0310000000000EXT2024ABCDEFG'; // 28 -> inside 28-39
+
+      expect(name.length, inInclusiveRange(32, 39));
+      expect(ruc.length, inInclusiveRange(28, 39));
+      expect(
+        f80.formatTwoColumns('Cliente:', name),
+        isNot(startsWith('Cliente:')),
+        reason: 'the legacy formatTwoColumns idiom must still clip long-left labels',
+      );
+
+      final bytes = f80.formatInvoiceEscPos(
+        escPosInvoice,
+        items: escPosItems,
+        payments: escPosPayments,
+        customerName: name,
+        customerRuc: ruc,
+      );
+
+      expectLabelsIntactAndBounded(bytes, maxCols: 40, assertWholeTicketWidth: false);
+    });
+  });
 }

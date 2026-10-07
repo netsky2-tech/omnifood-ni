@@ -212,10 +212,38 @@ void main() {
       expect(capturedInvoice!.customerTaxId, isNull);
 
       final printed = mockPrinter.lastPrintedText!;
-      expect(printed, contains('Cliente:'));
-      expect(printed, contains('Contado'));
+      final printedLines = printed.split('\n');
+
+      // Pinned layout contract: the value is right-aligned by the shared
+      // formatKeyValue idiom (house style used by Fecha:/Atendido por:), so
+      // "Cliente:" and "Contado" sit on the SAME line separated by padding —
+      // never left-adjacent, and exactly once.
+      final clienteLines = printedLines
+          .where((line) => line.trim().startsWith('Cliente:'))
+          .toList();
+      expect(clienteLines, hasLength(1));
+      expect(
+        RegExp(r'^Cliente:\s+Contado$').hasMatch(clienteLines.single.trim()),
+        isTrue,
+        reason: 'anonymous sale must print exactly one "Cliente:      Contado" line',
+      );
+
+      // No RUC line for an anonymous sale.
+      expect(printedLines.any((line) => line.contains('RUC/Cedula:')), isFalse);
+
+      // Width invariant: the ticket is 58mm — every printed line <= 32 cols.
+      for (final line in printedLines) {
+        expect(
+          line.length,
+          lessThanOrEqualTo(32),
+          reason: 'Line exceeds 32 cols: "$line" (${line.length})',
+        );
+      }
+
+      // No internal customer id may leak into the printed ticket.
+      expect(printedLines.any((line) => line.contains('cust-uuid')), isFalse);
+
       expect(printed, isNot(contains('Cliente: N/A')));
-      expect(printed, isNot(contains('RUC/Cedula:')));
       expect(printed, isNot(contains('user-manager-1')));
     });
 

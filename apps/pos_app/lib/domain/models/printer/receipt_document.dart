@@ -447,9 +447,9 @@ class ReceiptDocument {
           : (invoice.customerName != null && invoice.customerName!.trim().isNotEmpty
               ? invoice.customerName!.trim()
               : null),
-      customerRuc: (customerRuc != null && customerRuc.trim().isNotEmpty && customerRuc != 'N/A')
+      customerRuc: (customerRuc != null && customerRuc.trim().isNotEmpty && customerRuc.trim() != 'N/A')
           ? customerRuc.trim()
-          : (invoice.customerTaxId != null && invoice.customerTaxId!.trim().isNotEmpty && invoice.customerTaxId != 'N/A'
+          : (invoice.customerTaxId != null && invoice.customerTaxId!.trim().isNotEmpty && invoice.customerTaxId!.trim() != 'N/A'
               ? invoice.customerTaxId!.trim()
               : null),
       originInvoiceId: invoice.originInvoiceId,
