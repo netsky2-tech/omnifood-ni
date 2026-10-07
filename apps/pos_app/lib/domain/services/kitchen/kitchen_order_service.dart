@@ -486,6 +486,51 @@ class KitchenOrderService {
     await _database.kitchenOrderDao.deleteOrdersByTicketId(ticketId);
   }
 
+  /// Issue #795/U2: retitles kitchen comandas that were created while the
+  /// invoice number was still the 'PENDING' placeholder (e.g. dispatched
+  /// before the fiscal transaction assigned the DGI sequential number) to
+  /// the committed fiscal number.
+  ///
+  /// Only placeholder/default labels are rewritten — a real buzzer label
+  /// ('Buzzer #12') or a customer-name label is preserved untouched, and
+  /// lifecycle state (status/timestamps) is never modified.
+  Future<void> updateTicketInvoiceNumber({
+    required String ticketId,
+    required String invoiceNumber,
+  }) async {
+    final orders = await _database.kitchenOrderDao.getOrdersByTicketId(ticketId);
+    for (final order in orders) {
+      final currentName = order.tableName ?? '';
+      final isPlaceholder =
+          currentName.isEmpty ||
+          currentName.contains('PENDING') ||
+          currentName.startsWith('Ticket ');
+      if (!isPlaceholder) continue;
+
+      final updated = KitchenOrder(
+        id: order.id,
+        ticketId: order.ticketId,
+        tableNumber: order.tableNumber,
+        tableName: 'Ticket $invoiceNumber',
+        waiterName: order.waiterName,
+        station: order.station,
+        status: order.status,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(order.createdAt),
+        startedAt: order.startedAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(order.startedAt!)
+            : null,
+        readyAt: order.readyAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(order.readyAt!)
+            : null,
+        servedAt: order.servedAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(order.servedAt!)
+            : null,
+        notes: order.notes,
+      );
+      await _database.kitchenOrderDao.updateOrder(KitchenMapper.toEntity(updated));
+    }
+  }
+
   /// Retrieves an order by its ID
   Future<KitchenOrder?> getOrderById(String orderId) async {
     final entity = await _database.kitchenOrderDao.getOrderById(orderId);

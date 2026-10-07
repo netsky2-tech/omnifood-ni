@@ -1792,6 +1792,23 @@ class SaleViewModel extends ChangeNotifier {
       // CashShiftViewModel recomputes net cash per payment row from the DB
       // (getCashPaymentsForShift) at close time.
 
+      // Issue #795/U2: the in-memory invoice still carries the 'PENDING'
+      // placeholder at this point — the real DGI sequential number is
+      // assigned inside the repository's saveSale fiscal transaction, which
+      // has ALREADY committed above. Re-read the persisted invoice ONCE and
+      // use its number for BOTH the kitchen dispatch and the printed ticket,
+      // so the KDS shows 'Ticket 001-001-01-00000005', never 'Ticket
+      // PENDING'. If the re-read fails (offline edge or unstubbed test mock)
+      // we fall back to the in-memory invoice — offline-first: a committed
+      // sale is never blocked by a relabel.
+      Invoice? savedInvoice;
+      try {
+        savedInvoice = await _salesRepository.getInvoiceById(invoiceId);
+      } catch (_) {
+        // Non-blocking fallback for offline environments or unstubbed test mocks
+      }
+      final invoiceToProcess = savedInvoice ?? invoice;
+
       if (_activeLoadedHoldTicket != null) {
         // Issue #785 (legacy-path parity): a sale resumed from a hold ticket
         // must reach the kitchen exactly like a direct counter sale. Dispatch
@@ -1799,7 +1816,7 @@ class SaleViewModel extends ChangeNotifier {
         // liquidation fails.
         await _dispatchCartToKitchen(
           invoiceId: invoiceId,
-          invoiceNumber: invoice.number,
+          invoiceNumber: invoiceToProcess.number,
           effectiveBuzzer: effectiveBuzzer,
           effectiveCustomerName: effectiveCustomerName,
           waiterName: user.name,
@@ -1817,21 +1834,29 @@ class SaleViewModel extends ChangeNotifier {
         // Direct counter sale: dispatch to kitchen KDS if items exist
         await _dispatchCartToKitchen(
           invoiceId: invoiceId,
-          invoiceNumber: invoice.number,
+          invoiceNumber: invoiceToProcess.number,
           effectiveBuzzer: effectiveBuzzer,
           effectiveCustomerName: effectiveCustomerName,
           waiterName: user.name,
         );
       }
 
-      // Auto-Printing & Hardware Drawer Kick (PRD Batch 7)
-      Invoice? savedInvoice;
+      // Issue #795/U2: if any kitchen comanda for this invoice was already
+      // created with the 'PENDING' placeholder label, retitle it to the
+      // committed fiscal number. Buzzer/customer labels are preserved by the
+      // service. Fire-and-forget: a KDS relabel failure never blocks a
+      // committed fiscal invoice (offline-first).
       try {
-        savedInvoice = await _salesRepository.getInvoiceById(invoiceId);
+        await _kitchenOrderService.updateTicketInvoiceNumber(
+          ticketId: invoiceId,
+          invoiceNumber: invoiceToProcess.number,
+        );
       } catch (_) {
-        // Non-blocking fallback for offline environments or unstubbed test mocks
+        // Non-blocking fallback: KDS relabel is best-effort.
       }
-      final invoiceToPrint = savedInvoice ?? invoice;
+
+      // Auto-Printing & Hardware Drawer Kick (PRD Batch 7)
+      final invoiceToPrint = invoiceToProcess;
       _lastProcessedInvoice = invoiceToPrint;
       _lastPrintError = null;
 

@@ -251,5 +251,74 @@ void main() {
       active = await kitchenService.getActiveOrders();
       expect(active, isEmpty);
     });
+
+    test(
+      'issue #795/U2: updateTicketInvoiceNumber retitles PENDING comandas to the committed fiscal number',
+      () async {
+        // A direct sale dispatched while the invoice number was still the
+        // 'PENDING' placeholder produces two comandas labeled 'Ticket PENDING'.
+        final orders = await kitchenService.sendDirectSaleToKitchen(
+          invoiceId: 'tick-795',
+          invoiceNumber: 'PENDING',
+          items: const [
+            CartItem(productId: 'p-pizza', productName: 'Pizza Margarita', quantity: 1, unitPrice: 180, taxRate: 0.15),
+            CartItem(productId: 'p-mojito', productName: 'Mojito Clásico', quantity: 1, unitPrice: 80, taxRate: 0.15),
+          ],
+        );
+        expect(orders.length, 2);
+        expect(orders.every((o) => o.tableName == 'Ticket PENDING'), isTrue);
+
+        await kitchenService.updateTicketInvoiceNumber(
+          ticketId: 'tick-795',
+          invoiceNumber: '001-001-01-00000005',
+        );
+
+        final active = await kitchenService.getActiveOrders();
+        expect(active.length, 2);
+        expect(
+          active.every((o) => o.tableName == 'Ticket 001-001-01-00000005'),
+          isTrue,
+        );
+        // The relabel must not touch lifecycle state.
+        expect(active.every((o) => o.status == 'PENDIENTE'), isTrue);
+      },
+    );
+
+    test(
+      'issue #795/U2: updateTicketInvoiceNumber preserves buzzer and customer labels',
+      () async {
+        await kitchenService.sendDirectSaleToKitchen(
+          invoiceId: 'tick-795-buzzer',
+          invoiceNumber: 'PENDING',
+          items: const [
+            CartItem(productId: 'p-pizza', productName: 'Pizza Margarita', quantity: 1, unitPrice: 180, taxRate: 0.15),
+          ],
+          buzzerNumber: '12',
+        );
+        await kitchenService.sendDirectSaleToKitchen(
+          invoiceId: 'tick-795-customer',
+          invoiceNumber: 'PENDING',
+          items: const [
+            CartItem(productId: 'p-taco', productName: 'Tacos al Pastor', quantity: 1, unitPrice: 100, taxRate: 0.15),
+          ],
+          customerName: 'Juan Pérez',
+        );
+
+        await kitchenService.updateTicketInvoiceNumber(
+          ticketId: 'tick-795-buzzer',
+          invoiceNumber: '001-001-01-00000006',
+        );
+        await kitchenService.updateTicketInvoiceNumber(
+          ticketId: 'tick-795-customer',
+          invoiceNumber: '001-001-01-00000007',
+        );
+
+        final active = await kitchenService.getActiveOrders();
+        final buzzer = active.firstWhere((o) => o.ticketId == 'tick-795-buzzer');
+        final customer = active.firstWhere((o) => o.ticketId == 'tick-795-customer');
+        expect(buzzer.tableName, 'Buzzer #12');
+        expect(customer.tableName, 'Juan Pérez');
+      },
+    );
   });
 }

@@ -222,8 +222,9 @@ void main() {
       final barraOrder = createdKitchenOrders.firstWhere((o) => o.station == 'BARRA');
 
       expect(cocinaOrder.items.length, 2);
-      expect(cocinaOrder.items.first.modifiers, contains('Extra Queso'));
-      expect(cocinaOrder.items.first.modifiers, contains('Sin Cebolla'));
+      // #795 U1: KDS modifier lines are quantity-explicit.
+      expect(cocinaOrder.items.first.modifiers, contains('1x Extra Queso'));
+      expect(cocinaOrder.items.first.modifiers, contains('1x Sin Cebolla'));
       expect(cocinaOrder.items.last.notes, 'Término Medio');
 
       expect(barraOrder.items.length, 2);
