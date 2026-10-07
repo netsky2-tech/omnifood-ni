@@ -575,8 +575,26 @@ class SalesMapper {
       'paymentStatus': invoice.paymentStatus.name,
       'type': invoice.type.name,
       'customerId': invoice.customerId,
-      'customerName': invoice.customerName,
-      'customerTaxId': invoice.customerTaxId,
+      // odd/factura-con-nombre: the customer snapshot keys are emitted ONLY
+      // when populated. The backend idempotency receipt hashes the transformed
+      // DTO with stableStringify (invoices.service.ts), which filters
+      // `undefined` but KEEPS `null`, and the outbox re-serializes from the
+      // entity on every retry. An unconditional `"customerName": null` would
+      // change the payload hash of every anonymous sale already receipted
+      // before this feature shipped: a retried event would be answered
+      // IDEMPOTENCY_MISMATCH (CRITICAL_PAYLOAD_MISMATCH, retryable: false)
+      // and the fiscal document would never reach the cloud mirror (the
+      // D-10 outbox-never-drains family). A null/blank snapshot emits NO key
+      // at all so the anonymous payload stays byte-identical to the
+      // pre-feature shape; the backend hash retaining nulls is intentional
+      // (existing receipts for voidReason/shiftId/tipAmount* depend on it) —
+      // do not "fix" stableStringify there. A sale that actually carries a
+      // name/tax id cannot have been receipted before the feature, so
+      // emitting the populated key is hash-safe.
+      if (invoice.customerName?.trim().isNotEmpty ?? false)
+        'customerName': invoice.customerName,
+      if (invoice.customerTaxId?.trim().isNotEmpty ?? false)
+        'customerTaxId': invoice.customerTaxId,
       'globalTaxOverride': invoice.globalTaxOverride,
       'relatedInvoiceId': invoice.relatedInvoiceId,
       // #551: the shift-membership facts travel so the backend can enforce
