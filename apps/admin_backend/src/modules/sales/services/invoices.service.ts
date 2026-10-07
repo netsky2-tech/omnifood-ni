@@ -2495,16 +2495,40 @@ export class InvoicesService {
     return dto.type === 'creditNote';
   }
 
+  /**
+   * Remediation (ITEM 4): normalize a customer-snapshot string for
+   * persistence — trim, and treat blank/whitespace-only as null. The
+   * reconciled model rule is that an anonymous sale stores
+   * `customer_name IS NULL`, so a blank string must never reach the row or
+   * the DGI report. Defense in depth alongside the DTO-level @Transform:
+   * direct service callers (replay scripts, tests) bypass plainToInstance.
+   */
+  private normalizeCustomerSnapshotField(value?: string | null): string | null {
+    if (value === null || value === undefined) return null;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  }
+
   private normalizeInvoiceProvenanceForPersistence(
     dto: SyncInvoiceDto,
     allowCreditNotes: boolean,
   ): InvoiceForPersistence {
+    const customerSnapshot = {
+      customerName: this.normalizeCustomerSnapshotField(dto.customerName),
+      customerTaxId: this.normalizeCustomerSnapshotField(dto.customerTaxId),
+    };
+
     if (allowCreditNotes && this.isCreditNoteInvoice(dto)) {
-      return { ...dto, items: dto.items ?? [] };
+      return {
+        ...dto,
+        ...customerSnapshot,
+        items: dto.items ?? [],
+      };
     }
 
     return {
       ...dto,
+      ...customerSnapshot,
       originInvoiceId: null,
       refundReasonCode: null,
       refundReasonPolicy: null,

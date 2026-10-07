@@ -222,5 +222,32 @@ describe('SyncInvoiceDto fx-rate fiscal fields (D-6)', () => {
       expect(withTaxIdOnly.dto.customerName).toBeUndefined();
       expect(withTaxIdOnly.dto.customerTaxId).toBe('001-120590-0001A');
     });
+
+    // Remediation (ITEM 4): a blank/whitespace string must never reach the
+    // invoices row — the reconciled model rule is that an anonymous sale
+    // stores customer_name IS NULL. The payload is NORMALIZED (trim +
+    // blank→null), never rejected: a fiscal sale must never be blocked over
+    // a blank optional field (explicit product rule).
+    it('normalizes blank and whitespace-only snapshot strings to null without rejecting the payload', () => {
+      const empty = validate({
+        ...basePayload,
+        customerName: '',
+        customerTaxId: '   ',
+      });
+      expect(empty.errors).toEqual([]);
+      expect(empty.dto.customerName).toBeNull();
+      expect(empty.dto.customerTaxId).toBeNull();
+    });
+
+    it('trims surrounding whitespace from customer snapshot values', () => {
+      const padded = validate({
+        ...basePayload,
+        customerName: '  Juan Perez  ',
+        customerTaxId: ' J0310000001234 ',
+      });
+      expect(padded.errors).toEqual([]);
+      expect(padded.dto.customerName).toBe('Juan Perez');
+      expect(padded.dto.customerTaxId).toBe('J0310000001234');
+    });
   });
 });
