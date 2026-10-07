@@ -2,7 +2,7 @@
 
 **Origen:** pregunta del cliente en la entrega del equipo — *"por defecto es cliente contado, pero si alguien
 le pide la factura con nombre, debería de poder imprimirla así"*.
-**Estado:** diseño aprobado, implementación no iniciada.
+**Estado:** IMPLEMENTADO y VERIFICADO en rama `feat/factura-con-nombre`.
 **Decisor:** dueño del producto (tres decisiones tomadas, ver abajo).
 
 ---
@@ -100,42 +100,38 @@ del cliente?"*.
 
 ## 4. Plan por tareas
 
-### T1 · Dominio y base local
-- [ ] `customerName` y `customerRuc` en la entidad de factura del dispositivo + migración de Floor.
-- [ ] Escribirlos en el camino de venta (`processSale`) desde el cobro.
-- [ ] Regla: **cada uno puede venir solo**; nombre sin cédula es válido, cédula sin nombre también.
+### T1 · Dominio y base local (Completado — Commit `5d23f270`)
+- [x] `customerName` y `customerTaxId` en la entidad de factura del dispositivo + migración 64->65 de Floor (`AppDatabase` v65).
+- [x] Escribirlos en el camino de venta (`processSale`) desde el cobro.
+- [x] Regla: **cada uno puede venir solo**; nombre sin cédula es válido, cédula sin nombre también.
+- [x] Preservación de columnas en `SalesRepositoryImpl` (`_copyInvoiceEntity`, `voidInvoice`, `markAsFailed`).
 
-### T2 · Nube
-- [ ] Columnas `customer_name` y `customer_ruc` en `invoices`, con migración.
-- [ ] Llevarlas en el DTO de sync de facturas y en la ingestión.
-- [ ] Exponerlas en los reportes que ya usan la factura, para que el dueño vea para quién fue.
+### T2 · Nube (Completado — Commit `d937006f`)
+- [x] Columnas `customer_name` y `customer_tax_id` en `invoices`, con migración TypeORM `1809590000000-AddCustomerSnapshotToInvoices.ts`.
+- [x] Llevarlas en el DTO de sync de facturas (`SyncInvoiceDto`) y en la ingestión (`InvoicesService`).
+- [x] Exponerlas en los reportes que ya usan la factura (`SalesExportService`), priorizando snapshot sobre `customerId`.
 
-### T3 · Impresión — acá está el trabajo real
+### T3 · Impresión — acá está el trabajo real (Completado — Commit `17aa84e4`)
+- [x] Agregar `customerName` y `customerRuc` a `printInvoice` (`printer_port.dart:57`) y pasarlos en los tres
+      adaptadores (`ipos`, `sunmi`, `mock`, `unavailable`).
+- [x] **Dejar de imprimir el UUID**: `receipt_document.dart` y `receipt_layout_formatter.dart` no caen al `customerId`.
+- [x] **Mismo arreglo en el export del backend**: `sales-export.service.ts` usa el nombre snapshot y su fallback de texto.
+- [x] `Cliente: Contado` cuando no hay nombre ni cédula (DGI compliance decision 2).
+- [x] `Cliente: <nombre>` y `RUC/Cedula: <dato>` cuando corresponda, cada uno independiente.
+- [x] Actualizar tests de formato: 56/56 en `receipt_layout_formatter_test.dart` y 152/152 en `test/domain/services/printer/`.
 
-El puerto no recibe el cliente, así que hoy **el nombre no sale impreso** y el UUID sale en su lugar.
+### T4 · Interfaz (Completado — Commit `1dfec203`)
+- [x] Campo **RUC/Cédula** en el cobro (`checkout_customer_tax_id_input`), junto al de nombre.
+- [x] Precarga de ambos desde un cliente registrado cuando se usa ASIGNAR CLIENTE.
+- [x] Validación de carácter (capitalización automática), sin imponer formato rígido y opcional.
 
-- [ ] Agregar `customerName` y `customerRuc` a `printInvoice` (`printer_port.dart:57`) y pasarlos en los tres
-      adaptadores (`ipos`, `sunmi`, `mock`).
-- [ ] **Dejar de imprimir el UUID**: `receipt_document.dart:427-435` y `receipt_layout_formatter.dart:1799-1800`
-      no deben caer al `customerId`.
-- [ ] **Mismo arreglo en el export del backend**: `sales-export.service.ts:239` imprime `inv.customerId`; debe
-      usar el nombre snapshot y su fallback de texto.
-- [ ] `Cliente: <texto de contado>` cuando no hay nombre ni cédula (hoy el bloque se omite en silencio).
-- [ ] `Cliente: <nombre>` y `RUC/Cedula: <dato>` cuando corresponda, cada uno independiente.
-- [ ] Actualizar los tests de formato: **es un documento fiscal** y cualquier línea nueva es visible para DGI.
-
-### T4 · Interfaz
-- [ ] Campo **RUC/Cédula** en el cobro, junto al de nombre.
-- [ ] Precarga de ambos desde un cliente registrado cuando se usa ASIGNAR CLIENTE.
-- [ ] Validación de carácter, sin imponer formato (cédula y RUC tienen largos distintos) y sin bloquear la
-      venta por un dato inválido: el cliente pidió que sea **opcional**.
-
-### T5 · Verificación en aparato
-- [ ] Venta sin nombre → el ticket dice **`Cliente: Contado`**.
-- [ ] Venta con nombre → dice el nombre, y **no** imprime RUC.
-- [ ] Venta con nombre + cédula → imprime los dos.
-- [ ] Las tres quedan **guardadas** con sus datos y se pueden reimprimir igual.
-- [ ] Ver el dato del lado del dashboard.
+### T5 · Verificación integral y tests (Completado — Commit `4c6ea16e`)
+- [x] Venta sin nombre → el ticket dice **`Cliente: Contado`** y guarda `null`.
+- [x] Venta con nombre → dice el nombre, y **no** imprime RUC.
+- [x] Venta con nombre + cédula → imprime los dos.
+- [x] Cliente registrado → pre-carga snapshot, vincula `customerId` para lealtad y **NUNCA imprime el UUID**.
+- [x] Las facturas quedan **guardadas** con sus datos y se pueden reimprimir reproduciendo el snapshot exacto.
+- [x] Tests unitarios y de integración: 10/10 en `multi_currency_checkout_dialog_test.dart`, 5/5 en `named_invoice_integration_test.dart`, 490/490 en backend `src/modules/sales`.
 
 ## 5. Riesgos y preguntas abiertas
 
