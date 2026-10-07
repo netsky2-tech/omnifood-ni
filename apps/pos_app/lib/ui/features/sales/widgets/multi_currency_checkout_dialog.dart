@@ -35,6 +35,7 @@ class _MultiCurrencyCheckoutDialogState
   // Buzzer & Customer metadata
   final TextEditingController _buzzerController = TextEditingController();
   final TextEditingController _customerNameController = TextEditingController();
+  final TextEditingController _customerTaxIdController = TextEditingController();
   String? _buzzerValidationMessage;
 
   // Card Datáfono State
@@ -79,6 +80,9 @@ class _MultiCurrencyCheckoutDialogState
     if (vm.customerName != null && vm.customerName!.isNotEmpty) {
       _customerNameController.text = vm.customerName!;
     }
+    if (vm.customerTaxId != null && vm.customerTaxId!.isNotEmpty) {
+      _customerTaxIdController.text = vm.customerTaxId!;
+    }
   }
 
   @override
@@ -86,6 +90,7 @@ class _MultiCurrencyCheckoutDialogState
     _tenderAmountController.dispose();
     _buzzerController.dispose();
     _customerNameController.dispose();
+    _customerTaxIdController.dispose();
     _authCodeController.dispose();
     _last4Controller.dispose();
     _batchController.dispose();
@@ -258,6 +263,7 @@ class _MultiCurrencyCheckoutDialogState
     }
     final buzzerText = _buzzerController.text.trim();
     final customerNameText = _customerNameController.text.trim();
+    final customerTaxIdText = _customerTaxIdController.text.trim();
 
     if (vm.tenantConfig?.buzzerPagerRequired == true && buzzerText.isEmpty) {
       setState(() {
@@ -274,6 +280,7 @@ class _MultiCurrencyCheckoutDialogState
         customPayments: [payment],
         buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
         customerName: customerNameText.isNotEmpty ? customerNameText : null,
+        customerTaxId: customerTaxIdText.isNotEmpty ? customerTaxIdText : null,
       );
       HapticFeedback.mediumImpact();
       if (mounted) {
@@ -310,6 +317,7 @@ class _MultiCurrencyCheckoutDialogState
 
     final buzzerText = _buzzerController.text.trim();
     final customerNameText = _customerNameController.text.trim();
+    final customerTaxIdText = _customerTaxIdController.text.trim();
 
     if (vm.tenantConfig?.buzzerPagerRequired == true && buzzerText.isEmpty) {
       setState(() {
@@ -327,6 +335,7 @@ class _MultiCurrencyCheckoutDialogState
         customPayments: _splitCalculator.payments,
         buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
         customerName: customerNameText.isNotEmpty ? customerNameText : null,
+        customerTaxId: customerTaxIdText.isNotEmpty ? customerTaxIdText : null,
       );
       HapticFeedback.mediumImpact();
       if (mounted) {
@@ -498,6 +507,32 @@ class _MultiCurrencyCheckoutDialogState
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              key: const Key('checkout_customer_tax_id_input'),
+              controller: _customerTaxIdController,
+              decoration: const InputDecoration(
+                labelText: 'RUC / Cédula (Opcional)',
+                hintText: 'Ej: 001-120590-0001A o J0310000000001',
+                isDense: true,
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: NhilosRadii.buttonRadius,
+                  borderSide: BorderSide(color: NhilosColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: NhilosRadii.buttonRadius,
+                  borderSide: BorderSide(color: NhilosColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: NhilosRadii.buttonRadius,
+                  borderSide: BorderSide(color: NhilosColors.brandPrimary, width: 1.5),
+                ),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              onChanged: (val) => viewModel.setCustomerTaxId(val.trim()),
             ),
           ],
         ),

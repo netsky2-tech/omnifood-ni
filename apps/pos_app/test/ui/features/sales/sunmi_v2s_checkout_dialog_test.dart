@@ -31,6 +31,7 @@ void main() {
     when(mockSaleViewModel.supportsTables).thenReturn(true);
     when(mockSaleViewModel.buzzerNumber).thenReturn(null);
     when(mockSaleViewModel.customerName).thenReturn(null);
+    when(mockSaleViewModel.customerTaxId).thenReturn(null);
     when(mockSaleViewModel.tenantConfig).thenReturn(
       const TenantConfig(
         operationMode: TenantOperationMode.foodparkQsr,
