@@ -88,7 +88,42 @@ En la sección **Productos** del menú lateral:
 
 ---
 
-## 6. Módulo de Inventario, Recetas y Mermas (Fase Operativa Avanzada)
+## 6. Módulo de Modificadores y Extras (Centro de Operaciones)
+
+En la sección **Modificadores** del menú lateral (acceso con rol **Owner** o **Manager**), el sistema ofrece un centro de control unificado para administrar opciones compartidas (leches, endulzantes, adicionales, jarabes o salsas):
+
+![Centro de Operaciones de Modificadores — Pestaña Grupos](images/dsh_07_modificadores_grupos.png)
+
+### 6.1 Pestaña «Grupos»
+Permite definir los conjuntos de opciones y sus reglas matemáticas:
+* **Creación de Grupos:** Botón **"Nuevo grupo"** para especificar:
+  * **Nombre del grupo:** (ej. *Leche*, *Extras*, *Endulzante*).
+  * **Rango de selección:** Cantidad mínima (`min`) y máxima (`max`) requerida (ej. `min=1, max=1` para selección única obligatoria; `min=0, max=3` para opcionales).
+  * **Cantidades por opción (`allow_quantities`):** Activar cuando el cliente pueda solicitar unidades repetidas (ej. 2 shots de espresso o 2 raciones de sirope).
+  * **Lista de Opciones:** Cada opción con su nombre, costo adicional en Córdobas (**Price Delta**, ej. `+C$ 15.00` o `C$ 0.00`) y opción por defecto opcional.
+
+![Diálogo para Crear o Editar un Grupo de Modificadores](images/dsh_09_crear_grupo_modificador.png)
+
+* **Buscador y Filtro de Estados:**  
+  * Buscador rápido para filtrar grupos por nombre o por opciones internas.  
+  * Selector de estado (**Activos**, **Inactivos**, **Todos**) que permite auditar grupos archivados y **reactivarlos** con un solo clic sin perder la parametrización histórica.
+
+### 6.2 Pestaña «Por categoría» (Asignación Masiva)
+Permite vincular grupos de modificadores directamente a una categoría completa del catálogo de ventas (ej. colgar *Leche*, *Endulzante* y *Extras* a la categoría `CAFÉ CALIENTE`):
+
+![Asignación de Modificadores por Categoría](images/dsh_08_modificadores_categoria.png)
+
+* **Herencia Automática:** Todo producto existente o futuro que pertenezca a esa categoría heredará de inmediato estos modificadores en el POS al sincronizar.
+* **Orden de Presentación:** Podés definir el orden en el que aparecerán los grupos en la pantalla de la cajera (ej. 1º Leche, 2º Endulzante, 3º Extras).
+
+### 6.3 Pestaña «Por producto» (Excepciones y Personalización Específica)
+Permite gestionar excepciones a nivel de producto individual:
+* Visualiza la lista de grupos heredados de su categoría con el distintivo *«Heredado de categoría»*.
+* Permite agregar modificadores específicos exclusivos de ese producto o anular un grupo heredado para un caso particular.
+
+---
+
+## 7. Módulo de Inventario, Recetas y Mermas (Fase Operativa Avanzada)
 
 > **Nota para SOHO Día 1:** Durante la jornada inicial de puesta en marcha, el catálogo opera con productos en modalidad **SIMPLE** (solo precio y venta). Cuando se carguen las recetas e insumos, se habilitarán las siguientes capacidades analíticas:
 
@@ -101,7 +136,7 @@ En la sección **Productos** del menú lateral:
 
 ---
 
-## 7. Módulo Fiscal y Reportes para Contabilidad
+## 8. Módulo Fiscal y Reportes para Contabilidad
 
 En la sección **Fiscal** del menú lateral:
 
@@ -117,7 +152,7 @@ En la sección **Fiscal** del menú lateral:
 
 ---
 
-## 8. Gestión de Usuarios, Roles y Seguridad de Acceso
+## 9. Gestión de Usuarios, Roles y Seguridad de Acceso
 
 En la sección **Ajustes > Usuarios y Permisos**:
 
@@ -132,7 +167,7 @@ En la sección **Ajustes > Usuarios y Permisos**:
 
 ---
 
-## 9. Monitoreo de Terminales de Flota
+## 10. Monitoreo de Terminales de Flota
 
 En la sección **Ajustes > Dispositivos**:
 
@@ -142,7 +177,7 @@ En la sección **Ajustes > Dispositivos**:
 
 ---
 
-## 10. Canales de Asistencia y Preguntas Frecuentes
+## 11. Canales de Asistencia y Preguntas Frecuentes
 
 * **WhatsApp de Asistencia para Propietarios:** [Número de Contacto Directo]
 * **Correo de Soporte Técnico:** `soporte@nhilospos.com`

@@ -86,14 +86,37 @@ La pantalla principal de venta se divide en dos áreas visuales:
 
 ## 5. Manejo de Modificadores, Tamaños y Extras
 
-En negocios de especialidad como cafeterías, muchos productos admiten personalización:
+En negocios gastronómicos y cafeterías de especialidad, los productos admiten personalización estructurada según las reglas configuradas en el portal de administración:
 
-1. **Productos con Variantes / Tamaños:** Al seleccionar un producto configurado con opciones, se desplegará una ventana modal.
-2. **Selección de Extras:**
-   * Podés marcar agregados como *Shot Adicional*, *Sirope de Vainilla*, *Leche de Almendra* o *Crema Batida*.
-   * Si el extra tiene costo adicional, se sumará de forma transparente al precio unitario del producto en el ticket.
-3. **Notas Especiales:** Podés presionar sobre una línea del ticket para añadir una instrucción breve para preparación (ej. *"con poca azúcar"* o *"muy caliente"*).
-4. Tocá **"Aceptar"** para confirmar las opciones en el pedido.
+### 5.1 Selección en el Catálogo y Modal de Opciones
+Al tocar cualquier producto que posea modificadores (por categoría o por producto, ej. *Americano 8oz*, *Cappuccino 12oz* o *Latte*), se despliega automáticamente el modal de configuración antes de ingresar al carrito:
+
+![Modal de Selección de Modificadores en POS](images/pos_05e_modal_modificadores.png)
+
+1. **Grupos con Selección Obligatoria / Exclusiva (`min=1, max=1`):**  
+   * Se presentan con botones de opción tipo radio (ej. **Leche**: *Entera*, *Descremada*, *Almendras +C$20*, *Soya +C$20*).  
+   * Exige elegir exactamente una opción antes de permitir agregar el ítem.
+2. **Grupos Opcionales con Límite (`min=0, max=N`):**  
+   * Permiten seleccionar de 0 hasta el máximo indicado (ej. **Endulzante**: *Normal*, *Sin azúcar*, *Stevia* hasta 2 opciones).
+3. **Grupos con Cantidad Repetible (`allow_quantities` con steppers `+` / `-`):**  
+   * Grupos como **Extras** (ej. *Extra shot +C$15*, *Leche extra +C$10*, *Vainilla +C$15*, *Canela +C$5*) permiten seleccionar unidades repetidas mediante los controles `+` y `-`.
+   * El indicador muestra la cantidad acumulada por opción y respeta el tope máximo del grupo (ej. *"Elige hasta 3 · puedes repetir"*).
+4. **Validación Automática:**  
+   * Si no se cumplen las reglas mínimas requeridas, el botón **AGREGAR** avisa con el requisito pendiente.  
+   * Presioná **AGREGAR** para consolidar el producto con sus extras al pedido, o **CANCELAR** para descartar.
+
+### 5.2 Visualización en el Carrito de Ventas
+Una vez agregado el producto, el carrito desglosa claramente la personalización:
+
+![Carrito con Producto y Línea de Modificadores](images/pos_05f_carrito_con_modificadores.png)
+
+* Debajo del nombre principal se detalla la selección (ej. `Americano 8oz` seguido de `2x Extra shot`).
+* El precio total de la línea refleja con exactitud la suma del precio base más los deltas de cada extra seleccionado (ej. C$ 90 base + 2×C$ 15 = **C$ 120.00**).
+* Las promociones automáticas del comercio (ej. descuentos por categoría o 2x1) continúan aplicándose limpiamente sobre el subtotal.
+
+### 5.3 Impresión en Ticket y Envío a Cocina / Barra (KDS)
+* **Ticket del Cliente:** En impresoras térmicas de terminales compactos e integrados (iPOS / Nyx), los extras seleccionados se imprimen inmediatamente debajo del producto en **letra de menor tamaño (18 px)**, manteniendo el comprobante compacto, legible y profesional.
+* **Comanda en Cocina / KDS:** Tanto en la comanda impresa como en la pantalla de cocina (KDS), los modificadores se transmiten resaltados con viñetas para que el barista o cocinero prepare la orden sin confusiones.
 
 ---
 
