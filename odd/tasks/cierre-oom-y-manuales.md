@@ -80,9 +80,11 @@ El writer entregó texto fiel al estilo pero con tres afirmaciones no sustentada
 
 ## 3. Verificación
 
-- `npm test` sin flags con el tope en config: 329 suites, muestra `src/modules/sales` 499/499,
-  `jest --showConfig` reporta `"maxWorkers": 2`. El run completo no imprimió resumen, así que no se
-  afirma 3700/3700 de ese run; sí que no falló y que el tope es efectivo. y el comando de CI sigue siendo el mismo.
+- `npm test` sin flags con el tope en config: **3700 passed, 8 skipped, 3708 total** (326 suites
+  passed + 3 skipped) en 35 s. `jest --showConfig` sin flags reporta `"maxWorkers": 2`, y
+  `src/modules/sales` aislado 499/499. Nota de método: la primera vez leí mal esa salida y
+  reporté "no imprimió resumen"; el resumen de jest va por stderr y sí estaba, así que el número
+  completo sí está medido. y el comando de CI sigue siendo el mismo.
 - Manual: cada imagen referenciada debe existir en `docs/nhilos/manuals/images/`.
 - Ninguna afirmación del manual puede exceder lo que el código imprime (contrato §0).
 
