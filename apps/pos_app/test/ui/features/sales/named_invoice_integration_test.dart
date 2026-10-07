@@ -1,24 +1,31 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/adapters/printer/mock_printer_adapter.dart';
+import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/daos/customer/customer_dao.dart';
 import 'package:pos_app/data/daos/customer/customer_point_transaction_dao.dart';
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 import 'package:pos_app/data/daos/inventory/recipe_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/daos/sales/invoice_item_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
+import 'package:pos_app/data/mappers/sales_mapper.dart';
+import 'package:pos_app/data/models/customer/customer_entity.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/inventory/product_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/models/sales/payment_entity.dart';
-import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/repositories/sales/sales_repository_impl.dart';
 import 'package:pos_app/domain/models/config/printer_config.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/customer/customer.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
@@ -26,9 +33,13 @@ import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
+import 'package:pos_app/domain/models/printer/receipt_document.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../../../data/repositories/sales/sales_repository_impl_test.mocks.dart' as repo_mocks;
 import 'named_invoice_integration_test.mocks.dart';
 
 class _StubLocalConfigDao extends Mock implements LocalConfigDao {
@@ -88,6 +99,21 @@ class _StubInvoiceItemDao extends Mock implements InvoiceItemDao {
   ];
 }
 
+/// Post-review ITEM 4: records every catalog write so the
+/// "ad-hoc named sale must not pollute the customer catalog" claim is
+/// FALSIFIABLE — a regression that saves an ad-hoc customer would call
+/// [saveCustomerCalls] and fail the assertion.
+class _RecordingCustomerDao extends Fake implements CustomerDao {
+  int saveCustomerCalls = 0;
+  final List<CustomerEntity> saved = [];
+
+  @override
+  Future<void> saveCustomer(CustomerEntity customer) async {
+    saveCustomerCalls++;
+    saved.add(customer);
+  }
+}
+
 class _StubPaymentDao extends Mock implements PaymentDao {
   @override
   Future<List<PaymentEntity>> getPaymentsByInvoiceId(String invoiceId) async => [
@@ -119,6 +145,7 @@ void main() {
   late MockPrinterConfigService mockConfigService;
   late MockPrinterAdapter mockPrinter;
   late SaleViewModel viewModel;
+  late _RecordingCustomerDao recordingCustomerDao;
 
   final currentUser = const User(
     id: 'user-manager-1',
@@ -155,6 +182,8 @@ void main() {
     when(mockDb.customerPointTransactionDao).thenReturn(_StubCustomerPointTransactionDao());
     when(mockDb.invoiceItemDao).thenReturn(_StubInvoiceItemDao());
     when(mockDb.paymentDao).thenReturn(_StubPaymentDao());
+    recordingCustomerDao = _RecordingCustomerDao();
+    when(mockDb.customerDao).thenReturn(recordingCustomerDao);
 
     when(mockAuthRepo.getCurrentUser()).thenAnswer((_) async => currentUser);
     when(mockConfigService.getPrinterConfig()).thenAnswer((_) async => const PrinterConfig(
@@ -264,8 +293,14 @@ void main() {
       );
 
       expect(capturedInvoice, isNotNull);
-      // Crucial architectural invariant: ad-hoc customer MUST NOT pollute catalog
+      // Crucial architectural invariant: ad-hoc customer MUST NOT pollute catalog.
+      // Post-review ITEM 4: the claim is now falsifiable — the (stubbed)
+      // customer DAO records every save, so a regression that persists an
+      // ad-hoc customer can no longer slip through an unstubbed nice-mock.
       expect(capturedInvoice!.customerId, isNull);
+      expect(recordingCustomerDao.saveCustomerCalls, 0,
+          reason: 'an ad-hoc named sale must NEVER write the customer catalog');
+      expect(recordingCustomerDao.saved, isEmpty);
       expect(capturedInvoice!.customerName, 'María Eugenia Flores');
       expect(capturedInvoice!.customerTaxId, isNull);
 
@@ -409,6 +444,219 @@ void main() {
       expect(printed, contains('Corporación Turística S.A.'));
       expect(printed, contains('RUC/Cedula:'));
       expect(printed, contains('J0310000008888'));
+    });
+  });
+
+  /// Post-review ITEM 4: real repository-level persistence coverage. The
+  /// widget scenarios above inspect in-memory objects handed to a mocked
+  /// repository, so they cannot catch a Floor mapper/migration regression
+  /// on the customer snapshot columns. These tests drive the REAL DAO path
+  /// (in-memory Floor database via sqflite_common_ffi, same harness as
+  /// sales_repository_reprint_test.dart / sales_repository_void_test.dart).
+  group('Named invoice REAL persistence: Floor round trip, void preservation, reprint provenance', () {
+    late AppDatabase database;
+    late SalesRepositoryImpl repository;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    setUp(() async {
+      database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+
+      final numberingService = repo_mocks.MockDgiNumberingService();
+      final auditRepository = repo_mocks.MockAuditRepository();
+      final reverseInventoryUseCase = repo_mocks.MockReverseSaleInventoryUseCase();
+      final processInventoryUseCase = repo_mocks.MockProcessSaleInventoryUseCase();
+      when(processInventoryUseCase.execute(any))
+          .thenAnswer((_) async => const <InventoryMovement>[]);
+      final inventoryRepository = repo_mocks.MockInventoryRepository();
+      when(inventoryRepository.getProductById(any)).thenAnswer((_) async => null);
+      when(numberingService.getNextNumber())
+          .thenAnswer((_) async => '001-001-01-00000042');
+      when(numberingService.incrementNumber()).thenAnswer((_) async {});
+      when(auditRepository.log(any, metadata: anyNamed('metadata')))
+          .thenAnswer((_) async {});
+      when(auditRepository.prepareLog(any, metadata: anyNamed('metadata')))
+          .thenAnswer((_) async => null);
+      when(reverseInventoryUseCase.execute(any, any))
+          .thenAnswer((_) async => []);
+
+      repository = SalesRepositoryImpl(
+        database: database,
+        invoiceDao: database.invoiceDao,
+        itemDao: database.invoiceItemDao,
+        paymentDao: database.paymentDao,
+        transactionDao: database.salesTransactionDao,
+        numberingService: numberingService,
+        movementEngine: repo_mocks.MockMovementEngine(),
+        auditRepository: auditRepository,
+        processInventoryUseCase: processInventoryUseCase,
+        reverseInventoryUseCase: reverseInventoryUseCase,
+        inventoryRepository: inventoryRepository,
+      );
+    });
+
+    tearDown(() async {
+      await database.close();
+    });
+
+    Future<void> seedIssuanceConfig() async {
+      // The real DGI transaction reads and advances the sequence itself
+      // (fiscal authority lives in SQLite, not in the numbering service).
+      await database.localConfigDao
+          .saveConfig(LocalConfigEntity(key: 'dgi_current_number', value: '42'));
+      await database.localConfigDao
+          .saveConfig(LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01-'));
+      await database.localConfigDao.saveConfig(LocalConfigEntity(
+        key: 'printer_header_business_name',
+        value: 'SOHO COFFEE',
+      ));
+      await database.localConfigDao
+          .saveConfig(LocalConfigEntity(key: 'ruc', value: 'J0310000001234'));
+      await database.localConfigDao.saveConfig(LocalConfigEntity(
+        key: 'printer_header_address',
+        value: 'Plaza Jean Paul Genie',
+      ));
+      await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'printer_header_phone', value: '+505 2270-0000'));
+      await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'dgi_authorization_code', value: 'AUTH-999'));
+      await database.localConfigDao
+          .saveConfig(LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'));
+    }
+
+    Invoice namedInvoice() => Invoice(
+          id: 'inv-named-persist-1',
+          number: 'PENDING',
+          createdAt: DateTime(2026, 10, 6, 9, 30),
+          userId: 'user-manager-1',
+          subtotal: 100.0,
+          totalTax: 15.0,
+          total: 115.0,
+          customerId: 'cust-named-1',
+          customerName: 'Corporación Turística S.A.',
+          customerTaxId: 'J0310000008888',
+          commercialRate: 36.5,
+          bcnOfficialRate: 36.6241,
+          totalUsd: 3.14,
+        );
+
+    Future<void> saveNamedSale() async {
+      await database.customerDao.saveCustomer(CustomerEntity(
+        id: 'cust-named-1',
+        name: 'Corporación Turística S.A.',
+        taxId: 'J0310000008888',
+        createdAt: 1700000000000,
+        updatedAt: 1700000000000,
+      ));
+      await seedIssuanceConfig();
+      await repository.saveSale(
+        invoice: namedInvoice(),
+        items: const [
+          InvoiceItem(
+            id: 'item-named-persist-1',
+            invoiceId: 'inv-named-persist-1',
+            productId: 'prod-cafe',
+            productName: 'Café Latte',
+            quantity: 1,
+            unitPrice: 100.0,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 15.0,
+            total: 115.0,
+          ),
+        ],
+        payments: [
+          Payment(
+            id: 'pay-named-persist-1',
+            invoiceId: 'inv-named-persist-1',
+            method: PaymentMethod.cash,
+            amount: 115.0,
+            currency: 'NIO',
+            exchangeRate: 36.5,
+            createdAt: DateTime(2026, 10, 6, 9, 30),
+          ),
+        ],
+      );
+    }
+
+    test('a named sale persists customerName/customerTaxId through the REAL DAO path and reads back unchanged', () async {
+      await saveNamedSale();
+
+      final persisted = await database.invoiceDao.getInvoiceById('inv-named-persist-1');
+      expect(persisted, isNotNull, reason: 'the sale must exist in SQLite after saveSale');
+      expect(persisted!.number, '001-001-01-00000042',
+          reason: 'the DGI numbering path must have run (real DAO, not a mock)');
+      expect(persisted.customerName, 'Corporación Turística S.A.',
+          reason: 'the fiscal snapshot name must survive the DB round trip');
+      expect(persisted.customerTaxId, 'J0310000008888',
+          reason: 'the fiscal snapshot tax id must survive the DB round trip');
+
+      final domain = SalesMapper.toInvoiceDomain(persisted);
+      expect(domain.customerName, 'Corporación Turística S.A.');
+      expect(domain.customerTaxId, 'J0310000008888');
+    });
+
+    test('a VOID of the named invoice preserves the fiscal snapshot unchanged (DGI: cancellation never rewrites the document)', () async {
+      await saveNamedSale();
+
+      await repository.voidInvoice('inv-named-persist-1', 'ERROR_DE_CAPTURA');
+
+      final voided = await database.invoiceDao.getInvoiceById('inv-named-persist-1');
+      expect(voided, isNotNull);
+      expect(voided!.isCanceled, isTrue);
+      expect(voided.voidReason, contains('ERROR_DE_CAPTURA'));
+      expect(voided.customerName, 'Corporación Turística S.A.',
+          reason: 'DGI DT 09-2007: cancellation must not rewrite the fiscal snapshot');
+      expect(voided.customerTaxId, 'J0310000008888',
+          reason: 'DGI DT 09-2007: cancellation must not rewrite the fiscal snapshot');
+    });
+
+    test('reprint takes the customer snapshot from the PERSISTED ROW, not the live catalog or live config', () async {
+      await saveNamedSale();
+
+      // Change BOTH provenance sources the reprint must NOT read: the
+      // customer catalog entry and the live fiscal config.
+      await database.customerDao.saveCustomer(CustomerEntity(
+        id: 'cust-named-1',
+        name: 'Cliente Renombrado S.A.',
+        taxId: 'X9999999999999',
+        createdAt: 1700000000000,
+        updatedAt: 1800000000000,
+      ));
+      await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'printer_header_business_name', value: 'Café Renombrado S.A.'));
+      await database.localConfigDao
+          .saveConfig(LocalConfigEntity(key: 'ruc', value: 'B999888777000'));
+
+      final preparation = await repository.prepareReprintInvoice(
+        'inv-named-persist-1',
+        'CLIENTE_PERDIO_TICKET',
+      );
+
+      expect(preparation.invoice.customerName, 'Corporación Turística S.A.',
+          reason: 'the reprint invoice must carry the ISSUED snapshot, not the renamed catalog entry');
+      expect(preparation.invoice.customerTaxId, 'J0310000008888');
+      expect(preparation.fiscalHeader['businessName'], 'SOHO COFFEE',
+          reason: 'the header comes from the issuance snapshot, never live config');
+
+      final document = ReceiptDocument.fromInvoice(
+        preparation.invoice,
+        items: preparation.items,
+        payments: preparation.payments,
+        taxRegime: preparation.taxRegime,
+        isReprint: true,
+        reprintAt: DateTime(2026, 10, 7, 9, 0),
+        businessName: preparation.fiscalHeader['businessName'],
+        ruc: preparation.fiscalHeader['ruc'],
+      );
+      expect(document.customerName, 'Corporación Turística S.A.');
+      expect(document.customerRuc, 'J0310000008888');
+      // The live (renamed) values must be absent from the document.
+      expect(document.customerName, isNot('Cliente Renombrado S.A.'));
+      expect(document.customerRuc, isNot('X9999999999999'));
     });
   });
 }
