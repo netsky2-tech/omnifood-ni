@@ -339,7 +339,8 @@ describe("ModifierGroupForm", () => {
     await waitFor(() => {
       expect(toast).toHaveBeenCalledWith(
         expect.objectContaining({
-          description: "Ya existe un grupo con ese nombre",
+          description:
+            "Ya existe un grupo con ese nombre. Revise la vista «Inactivos»: quizá es un grupo desactivado que puede reactivarse.",
         }),
       );
     });

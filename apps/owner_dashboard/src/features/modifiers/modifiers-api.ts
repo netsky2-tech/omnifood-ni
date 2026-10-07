@@ -199,7 +199,7 @@ export function describeModifierError(
     (error as ApiErrorShape | null)?.statusCode;
 
   if (status === 409) {
-    return "Ya existe un grupo con ese nombre";
+    return "Ya existe un grupo con ese nombre. Revise la vista «Inactivos»: quizá es un grupo desactivado que puede reactivarse.";
   }
   if (status === 400) {
     return "Revise los datos del formulario: hay valores que no son válidos";
