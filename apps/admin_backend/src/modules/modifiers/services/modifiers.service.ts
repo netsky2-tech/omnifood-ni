@@ -27,10 +27,14 @@ import {
 const UUID_PATTERN =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
+/** Listing scope for groups: active is the POS/sync contract default. */
+export type ModifierGroupStatusFilter = 'active' | 'inactive' | 'all';
+
 /** Query filters for listing groups: at most one attachment filter. */
 export interface ModifierGroupFilters {
   category_id?: string;
   product_id?: string;
+  status?: ModifierGroupStatusFilter;
 }
 
 /** A group enriched with its active options, the API read shape. */
@@ -84,7 +88,7 @@ export class ModifiersService {
     filters: ModifierGroupFilters = {},
   ): Promise<ModifierGroupWithOption[]> {
     return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
-      this.findActiveGroupsWithOptions(manager, tenantId, filters),
+      this.findGroupsWithOptions(manager, tenantId, filters),
     );
   }
 
@@ -581,11 +585,12 @@ export class ModifiersService {
    * `where` keeps the explicit `tenant_id` filter: binding is additive, it
    * never replaces the per-query tenant scoping.
    */
-  private async findActiveGroupsWithOptions(
+  private async findGroupsWithOptions(
     manager: EntityManager,
     tenantId: string,
     filters: ModifierGroupFilters,
   ): Promise<ModifierGroupWithOption[]> {
+    const status = this.normalizeStatusFilter(filters.status);
     let groupIds: string[] | undefined;
     if (filters.category_id !== undefined) {
       this.assertUuid(filters.category_id, 'category_id');
@@ -608,10 +613,15 @@ export class ModifiersService {
       groupIds = attachments.map((attachment) => attachment.group_id);
     }
 
+    // Group predicate follows the status filter: `active` keeps the
+    // POS/sync contract, `inactive`/`all` relax it. The attachment
+    // narrowing (id: In(...)) is preserved on soft-delete by design.
+    const groupIsActive =
+      status === 'active' ? true : status === 'inactive' ? false : undefined;
     const groups = await manager.getRepository(ModifierGroup).find({
       where: {
         tenant_id: tenantId,
-        is_active: true,
+        ...(groupIsActive !== undefined ? { is_active: groupIsActive } : {}),
         ...(groupIds ? { id: In(groupIds) } : {}),
       },
       order: { sort_order: 'ASC', name: 'ASC' },
@@ -619,11 +629,21 @@ export class ModifiersService {
     if (groups.length === 0) {
       return [];
     }
-    const options = await this.findActiveOptionsOfGroups(
-      manager,
-      tenantId,
-      groups.map((group) => group.id),
-    );
+    const groupIdsList = groups.map((group) => group.id);
+    // Options are is_active-filtered ONLY for the default active listing;
+    // the reactivation UI needs to see soft-deleted options of a
+    // soft-deleted group, so inactive/all listings load them all.
+    const options =
+      status === 'active'
+        ? await this.findActiveOptionsOfGroups(
+            manager,
+            tenantId,
+            groupIdsList,
+          )
+        : await manager.getRepository(ModifierOption).find({
+            where: { tenant_id: tenantId, group_id: In(groupIdsList) },
+            order: { sort_order: 'ASC', name: 'ASC' },
+          });
     const optionsByGroup = new Map<string, ModifierOption[]>();
     for (const option of options) {
       const list = optionsByGroup.get(option.group_id) ?? [];
@@ -645,6 +665,23 @@ export class ModifiersService {
       where: { tenant_id: tenantId, is_active: true, group_id: In(groupIds) },
       order: { sort_order: 'ASC', name: 'ASC' },
     });
+  }
+
+  /**
+   * Validates the optional `status` listing filter and defaults to
+   * `active` (the unchanged POS/sync contract). Same doctrine as
+   * assertUuid: invalid input is a clean 400 naming the parameter.
+   */
+  private normalizeStatusFilter(status?: string): ModifierGroupStatusFilter {
+    if (status === undefined) {
+      return 'active';
+    }
+    if (status === 'active' || status === 'inactive' || status === 'all') {
+      return status;
+    }
+    throw new BadRequestException(
+      'status must be one of: active, inactive, all',
+    );
   }
 
   private async findActiveGroupById(

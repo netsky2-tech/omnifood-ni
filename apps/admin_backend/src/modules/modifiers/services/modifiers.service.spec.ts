@@ -1,13 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, In } from 'typeorm';
 import {
   BadRequestException,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
-import { ModifiersService } from './modifiers.service';
+import {
+  ModifiersService,
+  ModifierGroupStatusFilter,
+} from './modifiers.service';
 import { ModifierGroup } from '../entities/modifier-group.entity';
 import { ModifierOption } from '../entities/modifier-option.entity';
 import { CategoryModifierGroup } from '../entities/category-modifier-group.entity';
@@ -284,6 +287,98 @@ describe('ModifiersService', () => {
       ).rejects.toThrow(BadRequestException);
       expect(productAttachmentRepo.find).not.toHaveBeenCalled();
       expect(groupRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('status=inactive returns only inactive groups with ALL their options (no is_active filter on options)', async () => {
+      groupRepo.find.mockResolvedValue([
+        mockGroup({ is_active: false, name: 'Inactivo' }),
+      ]);
+      optionRepo.find.mockResolvedValue([
+        mockOption({ is_active: false, name: 'Opcion soft-deleted' }),
+      ]);
+
+      const list = await service.findAll('tenant-1', { status: 'inactive' });
+
+      expect(list).toHaveLength(1);
+      expect(list[0].is_active).toBe(false);
+      // Reactivation UI must see soft-deleted options of a soft-deleted
+      // group: the options predicate carries NO is_active filter.
+      expect(groupRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenant_id: 'tenant-1',
+            is_active: false,
+          }),
+        }),
+      );
+      const optionWhere = optionRepo.find.mock.calls[0][0]
+        .where as Record<string, unknown>;
+      expect(optionWhere).not.toHaveProperty('is_active');
+      expect(optionWhere).toEqual(
+        expect.objectContaining({ tenant_id: 'tenant-1' }),
+      );
+    });
+
+    it('status=all returns every group regardless of is_active, options unfiltered', async () => {
+      groupRepo.find.mockResolvedValue([
+        mockGroup(),
+        mockGroup({ id: 'group-uuid-2', is_active: false }),
+      ]);
+      optionRepo.find.mockResolvedValue([mockOption()]);
+
+      const list = await service.findAll('tenant-1', { status: 'all' });
+
+      expect(list).toHaveLength(2);
+      const groupWhere = groupRepo.find.mock.calls[0][0]
+        .where as Record<string, unknown>;
+      const optionWhere = optionRepo.find.mock.calls[0][0]
+        .where as Record<string, unknown>;
+      expect(groupWhere).not.toHaveProperty('is_active');
+      expect(optionWhere).not.toHaveProperty('is_active');
+    });
+
+    it('rejects an invalid status value with 400 naming the parameter', async () => {
+      await expect(
+        service.findAll('tenant-1', {
+          // The controller forwards the raw query string; the service must
+          // reject it at runtime, not only at compile time.
+          status: 'bogus' as unknown as ModifierGroupStatusFilter,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(groupRepo.find).not.toHaveBeenCalled();
+      expect(optionRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('status=inactive combined with product_id still narrows group ids through the attachment junction', async () => {
+      productAttachmentRepo.find.mockResolvedValue([
+        { group_id: 'group-uuid-1' },
+      ]);
+      groupRepo.find.mockResolvedValue([
+        mockGroup({ is_active: false }),
+      ]);
+
+      await service.findAll('tenant-1', {
+        status: 'inactive',
+        product_id: '22222222-2222-4222-8222-222222222222',
+      });
+
+      expect(productAttachmentRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenant_id: 'tenant-1',
+            product_id: '22222222-2222-4222-8222-222222222222',
+          }),
+        }),
+      );
+      expect(groupRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenant_id: 'tenant-1',
+            is_active: false,
+            id: In(['group-uuid-1']),
+          }),
+        }),
+      );
     });
   });
 
