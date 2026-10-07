@@ -478,6 +478,9 @@ class SaleViewModel extends ChangeNotifier {
   String? _customerName;
   String? get customerName => _customerName;
 
+  String? _customerTaxId;
+  String? get customerTaxId => _customerTaxId;
+
   Customer? _selectedCustomer;
   Customer? get selectedCustomer => _selectedCustomer;
 
@@ -486,6 +489,7 @@ class SaleViewModel extends ChangeNotifier {
   Future<void> selectCustomer(Customer? customer) async {
     _selectedCustomer = customer;
     _customerName = customer?.name;
+    _customerTaxId = customer?.taxId;
     _pointsToRedeem = 0.0;
     clearReward();
     await _reEvaluateLoyalty();
@@ -495,6 +499,7 @@ class SaleViewModel extends ChangeNotifier {
   void clearCustomer() {
     _selectedCustomer = null;
     _customerName = null;
+    _customerTaxId = null;
     _pointsToRedeem = 0.0;
     _currentEvaluation = null;
     clearReward();
@@ -538,6 +543,13 @@ class SaleViewModel extends ChangeNotifier {
   void setCustomerName(String? name) {
     _customerName = (name != null && name.trim().isNotEmpty)
         ? name.trim()
+        : null;
+    notifyListeners();
+  }
+
+  void setCustomerTaxId(String? taxId) {
+    _customerTaxId = (taxId != null && taxId.trim().isNotEmpty)
+        ? taxId.trim().toUpperCase()
         : null;
     notifyListeners();
   }
@@ -1417,6 +1429,16 @@ class SaleViewModel extends ChangeNotifier {
     List<Payment>? customPayments,
     String? buzzerNumber,
     String? customerName,
+
+    /// The customer tax id to stamp on the invoice snapshot. Tri-state at
+    /// the checkout boundary (odd/factura-con-nombre, post-review ITEM 3):
+    ///  - `null`  → not supplied: legacy prefill from the selected customer
+    ///    (a freshly opened dialog must not force the operator to retype).
+    ///  - empty/whitespace → EXPLICITLY CLEARED by the operator: the invoice
+    ///    snapshot carries NO tax id, never the catalog value — the snapshot
+    ///    records what was printed, not the catalog.
+    ///  - non-empty → used verbatim (trimmed, uppercased).
+    String? customerTaxId,
   }) async {
     if (_isProcessingSale) {
       throw StateError('A sale attempt is already in progress');
@@ -1428,6 +1450,7 @@ class SaleViewModel extends ChangeNotifier {
         customPayments: customPayments,
         buzzerNumber: buzzerNumber,
         customerName: customerName,
+        customerTaxId: customerTaxId,
       );
     } finally {
       _isProcessingSale = false;
@@ -1467,6 +1490,7 @@ class SaleViewModel extends ChangeNotifier {
     List<Payment>? customPayments,
     String? buzzerNumber,
     String? customerName,
+    String? customerTaxId,
   }) async {
     final user = await _authRepository.getCurrentUser();
     if (user == null) {
@@ -1526,6 +1550,23 @@ class SaleViewModel extends ChangeNotifier {
         (customerName != null && customerName.trim().isNotEmpty)
         ? customerName.trim()
         : _customerName;
+    // odd/factura-con-nombre (post-review ITEM 3): distinguish "not
+    // supplied" from "explicitly cleared" at the checkout boundary.
+    //  - null → not supplied: prefill from the selected customer (legacy
+    //    contract; the freshly opened dialog must not force a retype).
+    //  - empty/whitespace → the operator ERASED the RUC/Cédula field: the
+    //    snapshot carries NO tax id — never the catalog value.
+    //  - non-empty → used verbatim.
+    final String? effectiveCustomerTaxId;
+    if (customerTaxId == null) {
+      effectiveCustomerTaxId =
+          ((_selectedCustomer?.taxId != null && _selectedCustomer!.taxId!.trim().isNotEmpty)
+              ? _selectedCustomer!.taxId!.trim().toUpperCase()
+              : _customerTaxId);
+    } else {
+      effectiveCustomerTaxId =
+          customerTaxId.trim().isNotEmpty ? customerTaxId.trim().toUpperCase() : null;
+    }
 
     final calc = currentFiscalCalculation;
     // Batch 7 Slice 2 (PRD §21 / §33.4 / AD-10): the tip snapshot is fixed
@@ -1564,6 +1605,12 @@ class SaleViewModel extends ChangeNotifier {
       createdAt: DateTime.now(),
       userId: user.id,
       customerId: _selectedCustomer?.id,
+      customerName: (effectiveCustomerName != null && effectiveCustomerName.trim().isNotEmpty)
+          ? effectiveCustomerName.trim()
+          : null,
+      customerTaxId: (effectiveCustomerTaxId != null && effectiveCustomerTaxId.trim().isNotEmpty)
+          ? effectiveCustomerTaxId.trim()
+          : null,
       subtotal: calc.subtotal,
       totalTax: calc.totalTax,
       total: calc.total,
