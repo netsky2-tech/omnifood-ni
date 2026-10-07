@@ -243,6 +243,78 @@ describe("ModifiersPage", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("renders the group search input above the table", () => {
+    render(<ModifiersPage />);
+
+    const search = screen.getByLabelText("Buscar grupo");
+    expect(search).toBeInTheDocument();
+    expect(search).toHaveAttribute("placeholder", "Ej: Leche, Extras");
+  });
+
+  it("filters the visible groups by search text, ignoring case and surrounding spaces", () => {
+    render(<ModifiersPage />);
+
+    fireEvent.change(screen.getByLabelText("Buscar grupo"), {
+      target: { value: "  extra " },
+    });
+    expect(screen.getByText("Extras")).toBeInTheDocument();
+    expect(screen.queryByText("Leche")).not.toBeInTheDocument();
+  });
+
+  it("shows a filtered-no-results empty state distinct from the no-groups state", () => {
+    render(<ModifiersPage />);
+
+    fireEvent.change(screen.getByLabelText("Buscar grupo"), {
+      target: { value: "Sopa" },
+    });
+    expect(
+      screen.getByText(/no hay grupos que coincidan con «sopa»/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/limpie la búsqueda/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/aún no hay grupos/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("composes the search with the Inactivos status filter", () => {
+    // Simulate the API-level status filtering the real hook performs.
+    (useModifierGroups as any).mockImplementation((status: string) => ({
+      data: status === "inactive" ? [inactiveGroup] : mockGroups,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    }));
+    render(<ModifiersPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Inactivos" }));
+    expect(useModifierGroups).toHaveBeenLastCalledWith("inactive");
+
+    fireEvent.change(screen.getByLabelText("Buscar grupo"), {
+      target: { value: "Endu" },
+    });
+    expect(screen.getByText("Endulzante")).toBeInTheDocument();
+
+    // A name matching only an active group yields no results under Inactivos.
+    fireEvent.change(screen.getByLabelText("Buscar grupo"), {
+      target: { value: "Leche" },
+    });
+    expect(screen.queryByText("Leche")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/no hay grupos que coincidan/i),
+    ).toBeInTheDocument();
+  });
+
+  it("restores the full list when the search is cleared", () => {
+    render(<ModifiersPage />);
+
+    const search = screen.getByLabelText("Buscar grupo");
+    fireEvent.change(search, { target: { value: "Leche" } });
+    expect(screen.queryByText("Extras")).not.toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "" } });
+    expect(screen.getByText("Leche")).toBeInTheDocument();
+    expect(screen.getByText("Extras")).toBeInTheDocument();
+  });
+
   it("shows a Desactivado badge and an Activar action that opens the confirm dialog for inactive rows", () => {
     (useModifierGroups as any).mockReturnValue({
       data: [inactiveGroup],

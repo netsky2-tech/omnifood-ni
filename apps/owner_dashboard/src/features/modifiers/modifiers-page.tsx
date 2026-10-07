@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Plus, Edit, PowerOff, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -95,6 +97,7 @@ function GroupsTab() {
   const { canPerformAction } = useRbac();
   const canWrite = canPerformAction("modifiers.write");
   const [statusFilter, setStatusFilter] = useState<ModifierGroupStatus>("active");
+  const [search, setSearch] = useState("");
   const { data: groups, isLoading, error, refetch } = useModifierGroups(statusFilter);
   const deactivateGroup = useDeactivateModifierGroup();
   const reactivateGroup = useReactivateModifierGroup();
@@ -183,6 +186,13 @@ function GroupsTab() {
   }
 
   const groupList = groups ?? [];
+  // Client-side name search on top of the API-filtered (status) list.
+  const trimmedSearch = search.trim().toLowerCase();
+  const filteredGroups = trimmedSearch
+    ? groupList.filter((group) =>
+        group.name.toLowerCase().includes(trimmedSearch),
+      )
+    : groupList;
 
   return (
     <div className="space-y-6">
@@ -218,6 +228,17 @@ function GroupsTab() {
         )}
       </div>
 
+      <div className="max-w-sm">
+        <Label htmlFor="group-search">Buscar grupo</Label>
+        <Input
+          id="group-search"
+          type="search"
+          placeholder="Ej: Leche, Extras"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -243,8 +264,20 @@ function GroupsTab() {
                   </p>
                 </TableCell>
               </TableRow>
+            ) : filteredGroups.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={5}
+                  className="text-center py-8 text-muted-foreground"
+                >
+                  <p>
+                    No hay grupos que coincidan con «{search.trim()}».
+                  </p>
+                  <p>Limpie la búsqueda para ver el listado completo.</p>
+                </TableCell>
+              </TableRow>
             ) : (
-              groupList.map((group) => (
+              filteredGroups.map((group) => (
                 <TableRow key={group.id}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">

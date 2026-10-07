@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { useProducts } from "@/features/catalog/use-product";
+import { cn } from "@/lib/utils";
 import { describeModifierError } from "./modifiers-api";
 import {
   useModifierGroups,
@@ -159,20 +160,34 @@ export function ProductExceptions() {
           />
         </div>
         <div>
-          <Label htmlFor="product-select">Producto</Label>
-          <select
-            id="product-select"
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-          >
-            <option value="">Seleccione un producto</option>
-            {filteredProducts.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.name}
-              </option>
-            ))}
-          </select>
+          <Label>Producto</Label>
+          <div className="max-h-64 overflow-y-auto rounded-md border">
+            {filteredProducts.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">
+                No se encontraron productos.
+              </p>
+            ) : (
+              <div role="listbox" aria-label="Productos">
+                {filteredProducts.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    role="option"
+                    aria-selected={productId === product.id}
+                    aria-label={product.name}
+                    onClick={() => setProductId(product.id)}
+                    className={cn(
+                      "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:bg-muted/60",
+                      productId === product.id &&
+                        "bg-primary/10 font-medium text-primary",
+                    )}
+                  >
+                    {product.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

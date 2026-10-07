@@ -128,3 +128,17 @@ attaching extras to sales, and it has real gaps.
   - Deliberately untouched: desactivar flow/copy for active rows; inactive
     rows expose only Activar (no edit — not requested; no re-deactivate —
     meaningless); `types.ts` not modified (local type widening instead).
+- U3 DELIVERED by worker `muxga3pv-1-q2oq` (verified by orchestrator): RED
+  13F/34P → GREEN 47/47 focused vitest re-run + `tsc --noEmit` exit 0.
+  Diff confined to the 4 allowed surfaces (+182/−28).
+  - Grupos: «Buscar grupo» input composes client-side ON TOP of the status
+    list (status stays API-level); distinct filtered-no-results empty state
+    («No hay grupos que coincidan…») — empty-API state branch wins when both
+    apply.
+  - Por producto: collapsed native <select> replaced by a visible scrollable
+    listbox of <button> rows (aria-selected + accent, «No se encontraron
+    productos.» empty state); keyboard access rides native button
+    focusability; effective-groups panel behavior untouched.
+  - Converted the pre-existing «filters the product selector» test from
+    <option> assertions to visible-row assertions (it had only ever proven
+    option-level filtering — the invisibility defect).
