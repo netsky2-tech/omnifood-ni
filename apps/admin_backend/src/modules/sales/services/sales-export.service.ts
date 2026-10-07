@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
+  EntityManager,
   FindOptionsWhere,
   In,
   LessThanOrEqual,
@@ -81,6 +82,25 @@ const escapeCsv = (
   return `"${str.replace(/"/g, '""')}"`;
 };
 
+/**
+ * Post-review remediation (ITEM 3): conservative fixed chunk size for the
+ * legacy customer-id catalog read. Postgres' bind-parameter ceiling is
+ * 65535; a wide date range over high-rotation retail data can produce far
+ * more distinct legacy ids than one statement may bind, so the list is read
+ * in bounded chunks and merged.
+ */
+export const CUSTOMER_ID_CHUNK_SIZE = 1000;
+
+/**
+ * Post-review remediation (ITEM 2): the savepoint that isolates the catalog
+ * resolution inside the export transaction. A statement error (missing
+ * table/grant, RLS policy error) aborts the surrounding transaction, so a
+ * plain try/catch cannot degrade safely — the failure must be rolled back
+ * to this savepoint before the export continues.
+ */
+export const CUSTOMER_SNAPSHOT_RESOLUTION_SAVEPOINT =
+  'customer_snapshot_resolution';
+
 const buildPdfBuffer = (doc: PDFKit.PDFDocument): Promise<Buffer> =>
   new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -91,6 +111,8 @@ const buildPdfBuffer = (doc: PDFKit.PDFDocument): Promise<Buffer> =>
 
 @Injectable()
 export class SalesExportService {
+  private readonly logger = new Logger(SalesExportService.name);
+
   constructor(
     @InjectRepository(Invoice)
     private readonly invoiceRepo: Repository<Invoice>,
@@ -189,16 +211,12 @@ export class SalesExportService {
 
         const customerNamesById = new Map<string, string>();
         if (unresolvedIds.length > 0) {
-          const customers = await manager.getRepository(Customer).find({
-            where: { tenant_id: tenantId, id: In(unresolvedIds) },
-            select: ['id', 'name'],
-          });
-          for (const customer of customers) {
-            const name = (customer.name ?? '').trim();
-            if (name) {
-              customerNamesById.set(customer.id, name);
-            }
-          }
+          await this.resolveLegacyCustomerNames(
+            manager,
+            tenantId,
+            unresolvedIds,
+            customerNamesById,
+          );
         }
 
         return { invoices: readInvoices, customerNamesById };
@@ -348,6 +366,75 @@ export class SalesExportService {
       contentType: 'application/json',
       data: exportData,
     };
+  }
+
+  /**
+   * Post-review remediation (ITEMs 1–3): legacy customer-name resolution.
+   *
+   * ITEM 1 — TEXT comparison: `customers.id` is a uuid primary key while
+   * `invoices.customer_id` is a plain varchar with NO foreign key and NO
+   * validation, so a repository `In([...])` on the uuid column forces
+   * Postgres to cast every literal to uuid and ANY legacy or manually-
+   * inserted non-UUID id raises 22P02 (invalid input syntax for type uuid),
+   * aborting the WHOLE DGI sales-book export. Comparing `id::text` never
+   * attempts the cast, so a legacy id can only miss — never throw. The
+   * explicit `tenant_id` predicate stays: binding is additive, never a
+   * replacement, and this must not become a cross-tenant read.
+   *
+   * ITEM 2 — SAVEPOINT degradation: the catalog read is a NON-ESSENTIAL
+   * enrichment inside the SAME tenant transaction. Postgres aborts the
+   * surrounding transaction after a statement error, so a plain try/catch
+   * cannot degrade safely; the resolution runs inside a savepoint that is
+   * rolled back to on failure (and released), letting the export survive
+   * and degrade unresolved rows to 'CONSUMIDOR FINAL'. The degradation is
+   * logged with a stable code — observable, never silent.
+   *
+   * ITEM 3 — bounded chunks: the distinct id list is read in fixed-size
+   * chunks so a wide date range cannot exceed Postgres' 65535 bind-parameter
+   * ceiling; chunk results merge into one map.
+   */
+  private async resolveLegacyCustomerNames(
+    manager: EntityManager,
+    tenantId: string,
+    unresolvedIds: string[],
+    customerNamesById: Map<string, string>,
+  ): Promise<void> {
+    const savepoint = CUSTOMER_SNAPSHOT_RESOLUTION_SAVEPOINT;
+    await manager.query(`SAVEPOINT ${savepoint}`);
+    try {
+      for (
+        let offset = 0;
+        offset < unresolvedIds.length;
+        offset += CUSTOMER_ID_CHUNK_SIZE
+      ) {
+        const chunk = unresolvedIds.slice(offset, offset + CUSTOMER_ID_CHUNK_SIZE);
+        const customers = await manager
+          .getRepository(Customer)
+          .createQueryBuilder('customer')
+          .select(['customer.id', 'customer.name'])
+          .where('customer.tenant_id = :tenantId', { tenantId })
+          .andWhere('customer.id::text IN (:...ids)', { ids: chunk })
+          .getMany();
+        for (const customer of customers) {
+          const name = (customer.name ?? '').trim();
+          if (name) {
+            customerNamesById.set(customer.id, name);
+          }
+        }
+      }
+      await manager.query(`RELEASE SAVEPOINT ${savepoint}`);
+    } catch (error) {
+      // Postgres aborted the surrounding transaction on the statement
+      // error: roll back to the savepoint (then release it) so the export
+      // transaction stays usable and the read degrades gracefully.
+      await manager.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      await manager.query(`RELEASE SAVEPOINT ${savepoint}`);
+      this.logger.warn(
+        `CUSTOMER_SNAPSHOT_RESOLUTION_DEGRADED: legacy customer-name catalog read failed; affected sales-book rows export as 'CONSUMIDOR FINAL' (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      );
+    }
   }
 
   /**

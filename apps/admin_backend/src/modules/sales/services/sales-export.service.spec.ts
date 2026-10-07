@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { DataSource, In } from 'typeorm';
+import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { SalesExportService } from './sales-export.service';
@@ -34,8 +34,23 @@ describe('SalesExportService', () => {
   // Post-review fix (HIGH): legacy invoices whose customerName snapshot is
   // NULL resolve their display name through the customer catalog — never
   // through the raw internal customerId UUID.
+  //
+  // Remediation: the catalog read goes through a QUERY BUILDER with a TEXT
+  // comparison (`customer.id::text IN (:...ids)`), because customers.id is a
+  // uuid column while invoices.customer_id is a plain varchar with no FK and
+  // no validation — a repository `In([...])` on the uuid column casts every
+  // literal to uuid and ANY legacy non-UUID id raises 22P02, aborting the
+  // whole sales-book export. The fake below therefore exposes a query
+  // builder, not `find`, so the SQL contract is assertable.
+  let customerQueryBuilder: {
+    select: jest.Mock;
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    getMany: jest.Mock;
+  };
   let mockCustomerRepo: {
     find: jest.Mock;
+    createQueryBuilder: jest.Mock;
   };
   // B2e U3 (D-3): the export IVA labels derive from the tenant's effective
   // fiscal configuration through FiscalSetupService; the mock defaults to a
@@ -83,8 +98,15 @@ describe('SalesExportService', () => {
     mockMovementRepo = {
       find: jest.fn(),
     };
+    customerQueryBuilder = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+    };
     mockCustomerRepo = {
-      find: jest.fn().mockResolvedValue([]),
+      find: jest.fn(),
+      createQueryBuilder: jest.fn(() => customerQueryBuilder),
     };
     mockFiscalSetup = {
       getFiscalSetup: jest.fn().mockResolvedValue({
@@ -135,7 +157,10 @@ describe('SalesExportService', () => {
         total: 1150,
         totalUsd: 31.51,
         isCanceled: false,
-        customerId: 'cust-uuid-0000-0001',
+        // REAL UUIDv4: fixtures must match production shape. The previous
+        // fake ids ('cust-uuid-0000-0001') were themselves invalid UUIDs, so
+        // the uuid-cast 22P02 failure mode was invisible to the suite.
+        customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
         created_at: new Date('2026-08-26T10:00:00.000Z'),
         items: [
           {
@@ -207,7 +232,9 @@ describe('SalesExportService', () => {
         '"2026-08-26","001-001-01-00000002","ANULADA","CONSUMIDOR FINAL",0.00,300.00,45.00,0.00,345.00,9.45,"ANULADA"',
       );
       // No internal customer id may leak into any exported column.
-      expect(csvResult.content).not.toContain('cust-uuid-0000-0001');
+      expect(csvResult.content).not.toContain(
+        '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
+      );
     });
 
     it('uses the customerName snapshot when present, avoiding customerId fallback', async () => {
@@ -222,7 +249,7 @@ describe('SalesExportService', () => {
           total: 575,
           totalUsd: 15.75,
           isCanceled: false,
-          customerId: 'cust-uuid-1234',
+          customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
           customerName: 'Comercializadora Managua S.A.',
           customerTaxId: 'J0310000009999',
           created_at: new Date('2026-08-26T12:00:00.000Z'),
@@ -245,7 +272,12 @@ describe('SalesExportService', () => {
     // snapshot resolve the display name through the customer catalog read
     // inside the SAME tenant transaction — and the internal customerId UUID
     // must never leak into any exported column.
-    it('resolves a legacy customerId through the customer catalog without leaking the id', async () => {
+    //
+    // Remediation (SQL contract): the read MUST compare as TEXT
+    // (`customer.id::text IN (:...ids)`) — a repository `In([...])` on the
+    // uuid primary key casts every literal to uuid, so one legacy non-UUID
+    // customer_id would raise 22P02 and abort the entire export.
+    it('resolves a legacy customerId through the customer catalog without leaking the id (text-comparison SQL contract)', async () => {
       mockInvoiceRepo.find.mockResolvedValue([
         {
           id: 'inv-legacy',
@@ -257,13 +289,13 @@ describe('SalesExportService', () => {
           total: 230,
           totalUsd: 6.3,
           isCanceled: false,
-          customerId: 'cust-uuid-1234',
+          customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
           created_at: new Date('2026-08-26T13:00:00.000Z'),
           items: [],
         } as unknown as Invoice,
       ]);
-      mockCustomerRepo.find.mockResolvedValue([
-        { id: 'cust-uuid-1234', name: 'SOHO Cliente SRL' },
+      customerQueryBuilder.getMany.mockResolvedValue([
+        { id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01', name: 'SOHO Cliente SRL' },
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {
@@ -274,19 +306,236 @@ describe('SalesExportService', () => {
 
       expect(jsonResult.data.records[0].customerName).toBe('SOHO Cliente SRL');
 
-      // The catalog read is bounded: one call, tenant-scoped, filtered to the
-      // ids that actually need resolution (In(...) operator).
-      expect(mockCustomerRepo.find).toHaveBeenCalledTimes(1);
-      const findArgs = mockCustomerRepo.find.mock.calls[0][0];
-      expect(findArgs.where.tenant_id).toBe(tenantId);
-      expect(findArgs.where.id).toEqual(In(['cust-uuid-1234']));
-      expect(findArgs.select).toEqual(['id', 'name']);
+      // The catalog read is a bounded, tenant-scoped QUERY BUILDER read
+      // restricted to the ids that actually need resolution.
+      expect(mockCustomerRepo.createQueryBuilder).toHaveBeenCalledWith(
+        'customer',
+      );
+      expect(customerQueryBuilder.select).toHaveBeenCalledWith([
+        'customer.id',
+        'customer.name',
+      ]);
+      // The explicit tenant_id predicate survives: binding is additive,
+      // never a replacement — this must not become a cross-tenant read.
+      expect(customerQueryBuilder.where).toHaveBeenCalledWith(
+        'customer.tenant_id = :tenantId',
+        { tenantId },
+      );
+      // THE CONTRACT: text comparison, never an uuid-cast In([...]).
+      expect(customerQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'customer.id::text IN (:...ids)',
+        { ids: ['3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01'] },
+      );
 
       const csvResult = await service.exportSalesBook(tenantId, {
         format: 'csv',
       });
       expect(csvResult.content).toContain('"SOHO Cliente SRL"');
-      expect(csvResult.content).not.toContain('cust-uuid-1234');
+      expect(csvResult.content).not.toContain(
+        '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
+      );
+    });
+
+    // Remediation (ITEM 1): a NON-UUID legacy customer_id (varchar column,
+    // no FK, no validation) must NOT abort the export with 22P02 — it must
+    // degrade that row to 'CONSUMIDOR FINAL' while other rows still resolve.
+    // NOTE: the 22P02 Postgres error itself is only provable against REAL
+    // Postgres (a mocked repository cannot raise it); what is provable here
+    // is the SQL contract that prevents it — the id predicate is a text
+    // comparison (`id::text IN`), never an `In([...])` on the uuid column.
+    it('degrades a NON-UUID legacy customerId to CONSUMIDOR FINAL without aborting the export', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([
+        {
+          id: 'inv-legacy-nonuuid',
+          tenant_id: tenantId,
+          number: '001-001-01-00000110',
+          type: 'regular',
+          subtotal: 150,
+          totalTax: 0,
+          total: 150,
+          totalUsd: 4.11,
+          isCanceled: false,
+          // 'J0310000000000' — a RUC-shaped value this repo has used as a
+          // fixture; NOT a valid UUID.
+          customerId: 'J0310000000000',
+          created_at: new Date('2026-08-26T15:00:00.000Z'),
+          items: [],
+        } as unknown as Invoice,
+        {
+          id: 'inv-legacy-uuid',
+          tenant_id: tenantId,
+          number: '001-001-01-00000111',
+          type: 'regular',
+          subtotal: 200,
+          totalTax: 30,
+          total: 230,
+          totalUsd: 6.3,
+          isCanceled: false,
+          customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
+          created_at: new Date('2026-08-26T15:05:00.000Z'),
+          items: [],
+        } as unknown as Invoice,
+      ]);
+      customerQueryBuilder.getMany.mockResolvedValue([
+        { id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01', name: 'SOHO Cliente SRL' },
+      ]);
+
+      const jsonResult = await service.exportSalesBook(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'json',
+      });
+
+      // The export completed: the non-UUID row degraded, the UUID row
+      // resolved, and no internal id leaked.
+      expect(jsonResult.data.totalRecords).toBe(2);
+      expect(jsonResult.data.records[0].customerName).toBe(
+        'CONSUMIDOR FINAL',
+      );
+      expect(jsonResult.data.records[1].customerName).toBe('SOHO Cliente SRL');
+
+      // SQL contract: the non-UUID id went through the text comparison.
+      expect(customerQueryBuilder.andWhere).toHaveBeenCalledWith(
+        'customer.id::text IN (:...ids)',
+        expect.objectContaining({
+          ids: expect.arrayContaining(['J0310000000000']),
+        }),
+      );
+      // Tenant predicate stays additive.
+      expect(customerQueryBuilder.where).toHaveBeenCalledWith(
+        'customer.tenant_id = :tenantId',
+        { tenantId },
+      );
+    });
+
+    // Remediation (ITEM 2): the catalog read is a NON-ESSENTIAL enrichment —
+    // a failure (renamed/missing table, missing SELECT grant, RLS policy
+    // error) must never fail a previously working export. A plain try/catch
+    // inside the transaction is NOT enough: Postgres aborts the surrounding
+    // transaction after a statement error, so the resolution loop is wrapped
+    // in a SAVEPOINT and rolled back to it on failure. The invoice read and
+    // the export itself survive, degrading unresolved rows to the fiscal
+    // literal.
+    it('survives a failing catalog read via SAVEPOINT: export degrades to CONSUMIDOR FINAL and keeps the invoice read', async () => {
+      mockInvoiceRepo.find.mockResolvedValue([
+        {
+          id: 'inv-degrade-1',
+          tenant_id: tenantId,
+          number: '001-001-01-00000120',
+          type: 'regular',
+          subtotal: 300,
+          totalTax: 45,
+          total: 345,
+          totalUsd: 9.45,
+          isCanceled: false,
+          customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
+          created_at: new Date('2026-08-26T16:00:00.000Z'),
+          items: [],
+        } as unknown as Invoice,
+        {
+          id: 'inv-degrade-2',
+          tenant_id: tenantId,
+          number: '001-001-01-00000121',
+          type: 'regular',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          totalUsd: 3.15,
+          isCanceled: false,
+          customerName: 'Snapshot Siempre Gana',
+          created_at: new Date('2026-08-26T16:05:00.000Z'),
+          items: [],
+        } as unknown as Invoice,
+      ]);
+      customerQueryBuilder.getMany.mockRejectedValue(
+        new Error('permission denied for table customers'),
+      );
+      const savepointStatements: string[] = [];
+      transactionalManager.query.mockImplementation(async (sql: string) => {
+        savepointStatements.push(sql);
+        return [];
+      });
+
+      const jsonResult = await service.exportSalesBook(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'json',
+      });
+
+      // The export survived the catalog failure.
+      expect(jsonResult.data.totalRecords).toBe(2);
+      expect(jsonResult.data.records[0].customerName).toBe(
+        'CONSUMIDOR FINAL',
+      );
+      // The present snapshot is untouched by the degradation.
+      expect(jsonResult.data.records[1].customerName).toBe(
+        'Snapshot Siempre Gana',
+      );
+
+      // The degradation ran INSIDE the same transaction through a savepoint:
+      // SAVEPOINT → ROLLBACK TO → RELEASE, so the surrounding transaction
+      // (and its invoice read) is not aborted.
+      expect(savepointStatements).toContain(
+        'SAVEPOINT customer_snapshot_resolution',
+      );
+      expect(savepointStatements).toContain(
+        'ROLLBACK TO SAVEPOINT customer_snapshot_resolution',
+      );
+      expect(savepointStatements).toContain(
+        'RELEASE SAVEPOINT customer_snapshot_resolution',
+      );
+      // The invoice read is not lost: it happened once, before the failure.
+      expect(mockInvoiceRepo.find).toHaveBeenCalledTimes(1);
+    });
+
+    // Remediation (ITEM 3): the distinct-id list is de-duplicated but must
+    // also be CHUNKED — a wide date range can exceed Postgres' 65535
+    // bind-parameter ceiling. Reads must arrive in bounded chunks (1000)
+    // whose results merge.
+    it('chunks the catalog id list into bounded reads and merges the results', async () => {
+      const totalIds = 1050; // > the 1000 chunk size
+      const chunkInvoices: Partial<Invoice>[] = Array.from(
+        { length: totalIds },
+        (_, i) => ({
+          id: `inv-chunk-${i}`,
+          tenant_id: tenantId,
+          number: `001-001-01-${String(i).padStart(8, '0')}`,
+          type: 'regular',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          totalUsd: 3.15,
+          isCanceled: false,
+          customerId: `legacy-customer-${i}`,
+          created_at: new Date('2026-08-26T17:00:00.000Z'),
+          items: [],
+        }),
+      );
+      mockInvoiceRepo.find.mockResolvedValue(chunkInvoices);
+
+      const chunkCalls: string[][] = [];
+      customerQueryBuilder.andWhere.mockImplementation(
+        (_sql: string, params: { ids: string[] }) => {
+          chunkCalls.push(params.ids);
+          return customerQueryBuilder;
+        },
+      );
+      customerQueryBuilder.getMany.mockResolvedValue([]);
+
+      const jsonResult = await service.exportSalesBook(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+        format: 'json',
+      });
+
+      expect(jsonResult.data.totalRecords).toBe(totalIds);
+      // Multiple BOUNDED reads, never one unbounded read: 1000 + 50.
+      expect(chunkCalls).toHaveLength(2);
+      expect(chunkCalls[0]).toHaveLength(1000);
+      expect(chunkCalls[1]).toHaveLength(50);
+      // Every id reached a chunk exactly once (no dedupe loss, no overlap).
+      const flattened = chunkCalls.flat();
+      expect(new Set(flattened).size).toBe(totalIds);
     });
 
     // Post-review fix (HIGH): the fiscal snapshot taken at sale time always
@@ -305,13 +554,13 @@ describe('SalesExportService', () => {
           totalUsd: 12.6,
           isCanceled: false,
           customerName: 'Nombre Al Momento De La Venta',
-          customerId: 'cust-uuid-1234',
+          customerId: 'a1b2c3d4-e5f6-4789-8abc-def012345678',
           created_at: new Date('2026-08-26T14:00:00.000Z'),
           items: [],
         } as unknown as Invoice,
       ]);
-      mockCustomerRepo.find.mockResolvedValue([
-        { id: 'cust-uuid-1234', name: 'Nombre Actual Del Catalogo' },
+      customerQueryBuilder.getMany.mockResolvedValue([
+        { id: 'a1b2c3d4-e5f6-4789-8abc-def012345678', name: 'Nombre Actual Del Catalogo' },
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {
@@ -325,7 +574,7 @@ describe('SalesExportService', () => {
         'Nombre Al Momento De La Venta',
       );
       // No ids needing resolution → no catalog read at all.
-      expect(mockCustomerRepo.find).not.toHaveBeenCalled();
+      expect(mockCustomerRepo.createQueryBuilder).not.toHaveBeenCalled();
     });
 
     // B2e U3 (D-3): the configured rate governs the label — with a 15%
@@ -665,15 +914,38 @@ describe('SalesExportService', () => {
       };
 
       const setConfigCalls: Array<[string, string[]]> = [];
+      // Remediation (ITEM 2): the resolution loop issues SAVEPOINT/RELEASE
+      // statements through manager.query inside the SAME transaction. They
+      // are tenant-neutral statements (no bound parameters), so the binding
+      // invariant stays exactly one set_config bind per transaction;
+      // savepoint statements are captured separately to keep the guard
+      // honest without weakening the assertion.
+      const savepointStatements: string[] = [];
       const boundManager = {
         query: jest.fn(async (sql: string, params: string[]) => {
+          if (sql.includes('SAVEPOINT')) {
+            savepointStatements.push(sql);
+            return [];
+          }
           setConfigCalls.push([sql, params]);
           return [];
         }),
         getRepository: jest.fn((entity: unknown) =>
           entity === Invoice
             ? boundInvoice
-            : { find: jest.fn().mockResolvedValue([]) },
+            : entity === Customer
+              ? {
+                  createQueryBuilder: () => ({
+                    select: () => ({
+                      where: () => ({
+                        andWhere: () => ({
+                          getMany: async () => [],
+                        }),
+                      }),
+                    }),
+                  }),
+                }
+              : { find: jest.fn().mockResolvedValue([]) },
         ),
       };
       const boundDataSource = {
@@ -713,9 +985,17 @@ describe('SalesExportService', () => {
 
       // ONE logical read unit, ONE transaction, bound exactly once with the
       // production set_config SQL carrying the tenant id as a parameter.
+      // The savepoint statements around the catalog resolution are extra
+      // traffic on the same manager but never an extra tenant bind.
       expect(boundDataSource.transaction).toHaveBeenCalledTimes(1);
       expect(setConfigCalls).toEqual([
         [TENANT_CONTEXT_SET_CONFIG_SQL, [tenantId]],
+      ]);
+      // The savepoint lifecycle closed cleanly (RELEASE, no ROLLBACK) inside
+      // the SAME transaction — the read was never split across transactions.
+      expect(savepointStatements).toEqual([
+        'SAVEPOINT customer_snapshot_resolution',
+        'RELEASE SAVEPOINT customer_snapshot_resolution',
       ]);
 
       // Identical query semantics: same where, relations, and ordering.
