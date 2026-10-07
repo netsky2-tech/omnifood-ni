@@ -456,6 +456,10 @@ void main() {
   group('Named invoice REAL persistence: Floor round trip, void preservation, reprint provenance', () {
     late AppDatabase database;
     late SalesRepositoryImpl repository;
+    // Group-level so the credit-note case can allocate a DISTINCT fiscal
+    // number (invoices carries a UNIQUE number index; the note must not
+    // collide with the origin's number).
+    late repo_mocks.MockDgiNumberingService numberingService;
 
     setUpAll(() {
       sqfliteFfiInit();
@@ -465,7 +469,7 @@ void main() {
     setUp(() async {
       database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
 
-      final numberingService = repo_mocks.MockDgiNumberingService();
+      numberingService = repo_mocks.MockDgiNumberingService();
       final auditRepository = repo_mocks.MockAuditRepository();
       final reverseInventoryUseCase = repo_mocks.MockReverseSaleInventoryUseCase();
       final processInventoryUseCase = repo_mocks.MockProcessSaleInventoryUseCase();
@@ -657,6 +661,38 @@ void main() {
       // The live (renamed) values must be absent from the document.
       expect(document.customerName, isNot('Cliente Renombrado S.A.'));
       expect(document.customerRuc, isNot('X9999999999999'));
+    });
+
+    /// Post-review ITEM 5: DGI rule — a credit note must carry the origin
+    /// invoice's customer identity AS ISSUED (the fiscal snapshot copied at
+    /// issuance, sales_repository_impl.createCreditNote), never re-derived
+    /// from the catalog. A regression that nulls the note's snapshot must
+    /// fail this suite. Drives the REAL Floor path end to end.
+    test('a credit note issued from a named invoice inherits the origin fiscal snapshot (as-issued identity, never re-derived)', () async {
+      await saveNamedSale();
+
+      // Distinct fiscal number: the notes table has a UNIQUE number index.
+      when(numberingService.getNextNumber())
+          .thenAnswer((_) async => '001-001-NC-00000001');
+
+      final creditNoteId = await repository.createCreditNote(
+        originalInvoiceId: 'inv-named-persist-1',
+        reason: 'ERROR_DE_CAPTURA',
+        authorizedByUserId: 'user-manager-1',
+        authorizedByRole: UserRole.manager,
+        refundReasonPolicy: RefundReasonPolicy.financialOnly,
+      );
+
+      final persistedNote = await database.invoiceDao.getInvoiceById(creditNoteId);
+      expect(persistedNote, isNotNull,
+          reason: 'the credit note must exist in SQLite after createCreditNote');
+      expect(persistedNote!.type, 'creditNote');
+      expect(persistedNote.number, '001-001-NC-00000001',
+          reason: 'the DGI numbering path must have allocated the note number');
+      expect(persistedNote.customerName, 'Corporación Turística S.A.',
+          reason: 'the credit note must inherit the origin ISSUED customerName snapshot');
+      expect(persistedNote.customerTaxId, 'J0310000008888',
+          reason: 'the credit note must inherit the origin ISSUED customerTaxId snapshot');
     });
   });
 }

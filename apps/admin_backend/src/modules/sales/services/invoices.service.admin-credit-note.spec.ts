@@ -371,4 +371,34 @@ describe('InvoicesService.createAdminCreditNote', () => {
 
     expect(invoiceRepo.insert).not.toHaveBeenCalled();
   });
+
+  // Remediation (ITEM 5): DGI rule — a credit note must carry the origin
+  // invoice's customer identity AS ISSUED (the fiscal snapshot copied at
+  // creation), never re-derived from the catalog, and a regression that
+  // nulls the credit note's fiscal snapshot must fail this suite.
+  it('inherits the origin invoice customer snapshot as issued; anonymous origin inherits null', async () => {
+    invoiceRepo.findOne.mockResolvedValue({
+      ...originInvoice,
+      customerName: 'Corporación Turística S.A.',
+      customerTaxId: 'J0310000008888',
+    });
+
+    await service.createAdminCreditNote('tenant-1', dto(), authorizer);
+
+    const namedInsert = invoiceRepo.insert.mock.calls[0][0];
+    expect(namedInsert.customerName).toBe('Corporación Turística S.A.');
+    expect(namedInsert.customerTaxId).toBe('J0310000008888');
+
+    invoiceRepo.findOne.mockResolvedValue({
+      ...originInvoice,
+      customerName: null,
+      customerTaxId: null,
+    });
+
+    await service.createAdminCreditNote('tenant-1', dto(), authorizer);
+
+    const anonymousInsert = invoiceRepo.insert.mock.calls[1][0];
+    expect(anonymousInsert.customerName).toBeNull();
+    expect(anonymousInsert.customerTaxId).toBeNull();
+  });
 });
