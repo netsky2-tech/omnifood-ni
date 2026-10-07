@@ -80,3 +80,35 @@ attaching extras to sales, and it has real gaps.
   `modifiers.service.ts` + spec, `modifiers.controller.ts` + spec. Contract:
   `status=active|inactive|all` (default active = unchanged POS contract;
   inactive/all return options regardless of their `is_active`).
+- U1 VERIFIED independently (git diff 168+/11-, jest `src/modules/modifiers`
+  88/88 re-run by orchestrator, callers of the renamed private checked — only
+  `findAll` uses it, `effective` path untouched) → commit `beb3383e` → RDD
+  lineage `review-6864344615b2a78f` (medium, 261 lines, budget 131):
+  capture failed twice (`length` real run, `stop` at 992ms replay), third
+  attempt APPROVED (lens review-reliability, 1110B verdict) → burne con
+  `acknowledge-approved` (consumed `1640d58d…`).
+  - Facade quirk recorded: an explicit `baseRef` must be the FULL COMMIT id
+    (`da78d3adbf…`), never the projected base-tree (`08746ce1…` is a tree and
+    START rejects it as `base-ref-unresolvable`).
+- U2 dispatched (`muxdnc0t-3-y1th`): status control Activos/Inactivos/Todos,
+  activate actions for groups (list) and options (form), api/hook `status`
+  param, component tests. Backend needs nothing more: PATCH group lookup is
+  active-agnostic (reactivation works), option PATCH only requires the parent
+  group to be active.
+
+### U4 gaps sweep findings (read-only, no code touched)
+
+1. **POS device side is clean** for deactivation semantics:
+   `modifier_resolution_service.dart:24-25,51,79` fail-closes on
+   `isActive` for both groups and options — mirrors only ever contain active
+   rows (U1 default keeps the sync contract byte-identical).
+2. **Name collision with soft-deleted rows is BY DESIGN and correct**:
+   `uq_modifier_groups_tenant_name UNIQUE (tenant_id, name)` + service-side
+   `assertGroupNameAvailable` (no is_active filter) → creating a group whose
+   name belongs to a deactivated one is a 409, not a 500. The dashboard's
+   `describeModifierError` already maps 409 to a Spanish message. UX follow-up
+   (folded into U2/U3 copy): when a create/edit fails with a name conflict,
+   hint that the name may belong to a deactivated group and point at the
+   «Inactivos» view. No backend change.
+3. Deactivate dialog already promises reactivation — U2 makes it true; dialog
+   copy stays as is.
