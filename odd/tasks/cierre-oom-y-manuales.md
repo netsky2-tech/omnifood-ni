@@ -67,7 +67,7 @@ Brechas confirmadas contra el código entregado:
       §7.1, nota de inmutabilidad en §10, fila de changelog.
 - [x] **T19** — Manual Owner Dashboard: columna `Cliente` / `Cliente / RUC` en §8.2, precedencia de
       resolución y divergencia `Contado` vs `CONSUMIDOR FINAL`, fila de changelog.
-- [ ] **T20** — Verificación: `npm test` verde con el tope puesto, `flutter analyze`, links de
+- [x] **T20** — Verificación: `npm test` verde con el tope puesto, `flutter analyze`, links de
       imágenes de los manuales, y dos PRs (`chore(devex)` y `docs(nhilos)`) con su issue.
 
 ## 2b. Correcciones al borrador del writer (registradas porque son el tipo de error que la doc delegada produce)
@@ -93,3 +93,29 @@ El writer entregó texto fiel al estilo pero con tres afirmaciones no sustentada
 - Screenshots reales del modal con los campos nuevos (requiere el equipo físico / emulador).
 - Unificar `Contado` y `CONSUMIDOR FINAL` (decisión de producto, es FU-3).
 - Cambiar la memoria del host sin reinicio, o cualquier edición directa de `/mnt/c`.
+
+## 5. Cierre (2026-10-07)
+
+Ambos frentes entregados y verificados sobre el main integrado:
+
+| PR | Merge en main | Issue |
+|---|---|---|
+| #809 `chore(devex)` | `c61ef6bb` | #807 |
+| #810 `docs(nhilos)` | `9cd6dd9c` | #808 |
+
+Verificación post-fusión sobre `origin/main`: `npx jest --showConfig` sin flags reporta
+`"maxWorkers": 2`; `src/modules/sales` + `src/modules/customers` **516/516**; `flutter analyze` sin
+issues (ningún `.dart` cambió en estos dos PRs, es chequeo de control); los dos manuales contienen
+7.5 / nota DGI / columna de cliente exportada.
+
+Rojo preexistente confirmado como tal con el log: `lint-and-test` de #809 falló en
+`cash-shift-sync-ingestion.service.db.spec.ts` con `3 failed / 317 passed / 320 total`, idéntico a la
+línea base de main. El tope nuevo no lo toca: `test:db` corre con `--config ./test/jest-db.json` y
+`--runInBand`, o sea ni lee el bloque `jest` de `package.json`.
+
+Queda como acción del dueño, no de la repo: aplicar `docs/devex/wsl2/.wslconfig` (16 GiB / 8 GiB)
+cuando corres `wsl --shutdown`. Sin eso, el techo sigue siendo 12 GiB + 4 GiB y el guardrail de
+`maxWorkers: 2` es lo que sostiene.
+
+FU-9 (OOM) queda cerrado en la capa que el repo puede controlar. FU-7 (relay de revisión nativa que
+trunca en 4672 caracteres) sigue abierto y bloquea RDD en esta máquina.
