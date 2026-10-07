@@ -379,7 +379,8 @@ que solo vio el compilador:
 Se excluyó deliberadamente `test/data/repositories/audit_repository_impl_test.mocks.dart` (+16 líneas): trae
 `isReauthenticationRequired`, que existe en `auth_repository.dart:9` de main pero estaba ausente del mock commiteado.
 Es **drift de mocks preexistente de main**, no deste feature; `build_runner` lo levantó de paso y meterlo acá era
-ensuciar el diff. Queda como follow-up de higiene del repo.
+ensuciar el diff. Se entregó aparte en `chore(test): regenerate the stale audit repository mock` (issue #803, PR #804,
+fusionado en `4ab429d9`); ver FU-8.
 
 | PR | Rama | Base | Archivos | Líneas | Label |
 |---|---|---|---|---|---|
@@ -438,12 +439,60 @@ Decisión del dueño: **cerrar así**. El lineage queda abierto en `reviewing` c
 
 - **FU-7 (nuevo)**: el host relay trunca la respuesta del reviewer en 4672 caracteres y cachea el artefacto roto →
   ninguna revisión nativa puede completarse en esta máquina hasta arreglar el transporte. Bloqueante para RDD.
-- **FU-8 (nuevo)**: drift de mocks commiteados en main (`audit_repository_impl_test.mocks.dart` sin
-  `isReauthenticationRequired`). Un `build_runner` limpio en main debería ser no-op; hoy no lo es.
+- **FU-8 (CERRADO por #804 en `4ab429d9`)**: drift de mocks commiteados en main
+  (`audit_repository_impl_test.mocks.dart` sin `isReauthenticationRequired`). Medido y fijado: tras la regeneración
+  forzada, `build_runner clean` + `build` sobre el main final deja **0 archivos modificados**, así que codegen volvió a
+  ser usable como señal de revisión. Método para medir drift de generados, con dos falsos negativos que hay que evitar:
+  un `build_runner build` incremental reused la caché y reportó `0 actions` (parece "sin drift", no mide nada), y
+  `--force` **no es flag válido** en este build_runner — muere en el parseo de opciones y el árbol limpio que resulta
+  tampoco prueba nada. La única medición honesta es `clean` + `build`.
 - **FU-9 (nuevo)**: `npm test` a 11 workers revienta el VM de WSL2 y mata `engram`. Receta: `--maxWorkers=2`.
 - FU-1 a FU-6 (secciones anteriores) siguen abiertos.
 
-### Orden de fusión
+### Fusión y limpieza
 
-#797 → #798 → #799 → #800 → #801 → #802, en ese orden, cada uno sobre su rama padre. Fusionar fuera de orden deja
-bases huérfanas que hay que retargetear.
+Fusionado el 2026-10-07 en orden #797 → #802. Main quedó en `4ab429d9`.
+
+| PR | Merge commit |
+|---|---|
+| #797 | `baa587bc` |
+| #798 | `f378ab0c` |
+| #799 | `26a5268a` |
+| #800 | `7496e31d` |
+| #801 | `c9cf86fd` |
+| #802 | `26fa162c` |
+| #804 (higiene de mocks) | `4ab429d9` |
+
+La trampa de una cadena apilada: **`gh pr merge` fusiona contra la base del PR**, y en una cadena la base de cada PR
+es la rama del anterior. Sin retargetear, los seis habrían caído en sus ramas padre y main no habría recibido nada.
+La receta es, por PR: `gh api -X PATCH repos/<r>/pulls/<n> -f base=main` → esperar `mergeable` != `UNKNOWN` →
+`gh pr merge <n> --merge` → `git fetch`.
+
+Mientras la cadena estaba abierta, main volvió a avanzar (`e935b85d` → `9e72ceed`, solo manuales). El riesgo que git
+no ve es que otra sesión ocupe **Floor `schemaVersion` 65**: las ramas seguirían "mergeables" y el resultado sería un
+esquema corrupto, no un conflicto. Se verificó antes de fusionar: main en `version: 64`, sin `migration64_65`, cero
+solape con las 48 rutas del feature, y orden limpio de migraciones TypeORM (`1809570` → `1809580` → `1809590`).
+
+Verificación sobre el estado integrado (checkout detached de `origin/main`, no sobre la rama):
+
+| Chequeo | Resultado |
+|---|---|
+| `flutter analyze --no-pub` | sin issues |
+| POS printer + sales repo + integration + mappers | 305/305 |
+| Backend `npx jest --maxWorkers=2` | **3700/3700** |
+| `tsc --noEmit` | exit 0 |
+| POS App CI | `success` en `baa587bc`, `f378ab0c`, `26a5268a` |
+| Admin Backend CI | rojo **idéntico** a la línea base: mismo spec, `3 failed / 56 passed`; totales 317 → **320** (+3 db-specs propios) |
+
+Limpieza de ramas: las 6 ramas de la cadena se borraron (remoto + local) **después** de verificar
+`git rev-list --count origin/main..<rama> == 0` en cada una. Se eliminó también una rama basura creada por un error
+de índices en un script propio, comprobando antes que apuntaba a un commit ya en main.
+
+`feat/factura-con-nombre` **no se fusionó y no se borró**: su único delta de contenido era el drift de #804. Es el
+único ref donde existen los 13 SHA citados arriba como evidencia de remediación (los commits de la cadena son
+equivalentes de contenido con SHA distinto), así que borrarla habría dejado este documento referenciando commits
+inexistentes. Queda archivada en `origin/feat/factura-con-nombre = 6a948d5a`.
+
+Un `flutter analyze`/`flutter test` corrido desde la raíz del monorepo imprime "This command should be run from the
+root of your Flutter project"; pipeado a `tail -1` ese error se ve como un analyze sin salida. Hay que correrlos
+desde `apps/pos_app`.
