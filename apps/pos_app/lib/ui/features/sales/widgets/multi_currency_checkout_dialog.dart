@@ -35,6 +35,12 @@ class _MultiCurrencyCheckoutDialogState
   // Buzzer & Customer metadata
   final TextEditingController _buzzerController = TextEditingController();
   final TextEditingController _customerNameController = TextEditingController();
+  final TextEditingController _customerTaxIdController = TextEditingController();
+  // odd/factura-con-nombre (post-review ITEM 3): distinguishes "operator
+  // explicitly cleared the prefilled RUC/Cédula" from "the field was never
+  // touched (nothing to prefill)". The programmatic initState prefill does
+  // not fire onChanged, so only real operator edits set this flag.
+  bool _customerTaxIdTouched = false;
   String? _buzzerValidationMessage;
 
   // Card Datáfono State
@@ -79,6 +85,9 @@ class _MultiCurrencyCheckoutDialogState
     if (vm.customerName != null && vm.customerName!.isNotEmpty) {
       _customerNameController.text = vm.customerName!;
     }
+    if (vm.customerTaxId != null && vm.customerTaxId!.isNotEmpty) {
+      _customerTaxIdController.text = vm.customerTaxId!;
+    }
   }
 
   @override
@@ -86,6 +95,7 @@ class _MultiCurrencyCheckoutDialogState
     _tenderAmountController.dispose();
     _buzzerController.dispose();
     _customerNameController.dispose();
+    _customerTaxIdController.dispose();
     _authCodeController.dispose();
     _last4Controller.dispose();
     _batchController.dispose();
@@ -258,6 +268,7 @@ class _MultiCurrencyCheckoutDialogState
     }
     final buzzerText = _buzzerController.text.trim();
     final customerNameText = _customerNameController.text.trim();
+    final customerTaxIdText = _customerTaxIdController.text.trim();
 
     if (vm.tenantConfig?.buzzerPagerRequired == true && buzzerText.isEmpty) {
       setState(() {
@@ -274,6 +285,18 @@ class _MultiCurrencyCheckoutDialogState
         customPayments: [payment],
         buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
         customerName: customerNameText.isNotEmpty ? customerNameText : null,
+        // odd/factura-con-nombre (post-review ITEM 3): the tax id is
+        // tri-state at this boundary —
+        //  - non-empty → used verbatim (the operator typed/kept a value);
+        //  - EMPTY but the field was touched → the operator EXPLICITLY
+        //    cleared the prefilled RUC/Cédula: pass '' so the view model
+        //    stamps NO tax id on the invoice snapshot (never the catalog
+        //    value — the snapshot records what was printed);
+        //  - null (empty and never touched) → "not supplied": the legacy
+        //    prefill contract for callers that do not render this field.
+        customerTaxId: customerTaxIdText.isNotEmpty
+            ? customerTaxIdText
+            : (_customerTaxIdTouched ? '' : null),
       );
       HapticFeedback.mediumImpact();
       if (mounted) {
@@ -310,6 +333,7 @@ class _MultiCurrencyCheckoutDialogState
 
     final buzzerText = _buzzerController.text.trim();
     final customerNameText = _customerNameController.text.trim();
+    final customerTaxIdText = _customerTaxIdController.text.trim();
 
     if (vm.tenantConfig?.buzzerPagerRequired == true && buzzerText.isEmpty) {
       setState(() {
@@ -327,6 +351,10 @@ class _MultiCurrencyCheckoutDialogState
         customPayments: _splitCalculator.payments,
         buzzerNumber: buzzerText.isNotEmpty ? buzzerText : null,
         customerName: customerNameText.isNotEmpty ? customerNameText : null,
+        // Same explicit-clear contract as the single-tender path above.
+        customerTaxId: customerTaxIdText.isNotEmpty
+            ? customerTaxIdText
+            : (_customerTaxIdTouched ? '' : null),
       );
       HapticFeedback.mediumImpact();
       if (mounted) {
@@ -498,6 +526,35 @@ class _MultiCurrencyCheckoutDialogState
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              key: const Key('checkout_customer_tax_id_input'),
+              controller: _customerTaxIdController,
+              decoration: const InputDecoration(
+                labelText: 'RUC / Cédula (Opcional)',
+                hintText: 'Ej: 001-120590-0001A o J0310000000001',
+                isDense: true,
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: NhilosRadii.buttonRadius,
+                  borderSide: BorderSide(color: NhilosColors.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: NhilosRadii.buttonRadius,
+                  borderSide: BorderSide(color: NhilosColors.border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: NhilosRadii.buttonRadius,
+                  borderSide: BorderSide(color: NhilosColors.brandPrimary, width: 1.5),
+                ),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              onChanged: (val) {
+                _customerTaxIdTouched = true;
+                viewModel.setCustomerTaxId(val.trim());
+              },
             ),
           ],
         ),

@@ -35,6 +35,7 @@ void main() {
     when(mockSaleViewModel.errorMessage).thenReturn(null);
     when(mockSaleViewModel.buzzerNumber).thenReturn(null);
     when(mockSaleViewModel.customerName).thenReturn(null);
+    when(mockSaleViewModel.customerTaxId).thenReturn(null);
     when(mockSaleViewModel.tenantConfig).thenReturn(null);
     when(mockSaleViewModel.cart).thenReturn([
       CartItem(

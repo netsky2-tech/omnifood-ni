@@ -36,6 +36,7 @@ void main() {
     when(mockSaleViewModel.errorMessage).thenReturn(null);
     when(mockSaleViewModel.buzzerNumber).thenReturn(null);
     when(mockSaleViewModel.customerName).thenReturn(null);
+    when(mockSaleViewModel.customerTaxId).thenReturn(null);
     when(mockSaleViewModel.tenantConfig).thenReturn(null);
     when(mockSaleViewModel.cart).thenReturn([
       CartItem(
@@ -277,6 +278,7 @@ void main() {
       customPayments: anyNamed('customPayments'),
       buzzerNumber: anyNamed('buzzerNumber'),
       customerName: anyNamed('customerName'),
+      customerTaxId: anyNamed('customerTaxId'),
     )).thenAnswer((_) async {});
 
     await tester.pumpWidget(buildTestWidget());
@@ -302,6 +304,102 @@ void main() {
       customPayments: anyNamed('customPayments'),
       buzzerNumber: '14',
       customerName: anyNamed('customerName'),
+      customerTaxId: anyNamed('customerTaxId'),
     )).called(1);
+  });
+
+  testWidgets('renders RUC/Cedula input, preloads customer snapshot, and passes them to processSale', (tester) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    when(mockSaleViewModel.supportsBuzzerPager).thenReturn(true);
+    when(mockSaleViewModel.customerName).thenReturn('Empresa Modelo S.A.');
+    when(mockSaleViewModel.customerTaxId).thenReturn('J0310000009999');
+    when(mockSaleViewModel.processSale(
+      any,
+      customPayments: anyNamed('customPayments'),
+      buzzerNumber: anyNamed('buzzerNumber'),
+      customerName: anyNamed('customerName'),
+      customerTaxId: anyNamed('customerTaxId'),
+    )).thenAnswer((_) async {});
+
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pumpAndSettle();
+
+    final nameInput = find.byKey(const Key('checkout_customer_name_input'));
+    final taxIdInput = find.byKey(const Key('checkout_customer_tax_id_input'));
+
+    expect(nameInput, findsOneWidget);
+    expect(taxIdInput, findsOneWidget);
+
+    expect(find.text('Empresa Modelo S.A.'), findsOneWidget);
+    expect(find.text('J0310000009999'), findsOneWidget);
+
+    // Edit taxId
+    await tester.enterText(taxIdInput, '001-120590-0001A');
+    await tester.pumpAndSettle();
+
+    verify(mockSaleViewModel.setCustomerTaxId('001-120590-0001A')).called(1);
+
+    // Submit sale
+    final submitButton = find.widgetWithText(FilledButton, 'COBRAR');
+    await tester.tap(submitButton);
+    await tester.pumpAndSettle();
+
+    verify(mockSaleViewModel.processSale(
+      [PaymentMethod.cash],
+      customPayments: anyNamed('customPayments'),
+      buzzerNumber: null,
+      customerName: 'Empresa Modelo S.A.',
+      customerTaxId: '001-120590-0001A',
+    )).called(1);
+  });
+
+  testWidgets('clearing the RUC field sends the EXPLICIT-CLEAR signal, not the catalog value (registered customer)', (tester) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    when(mockSaleViewModel.supportsBuzzerPager).thenReturn(true);
+    when(mockSaleViewModel.customerName).thenReturn('Carlos Mendoza');
+    when(mockSaleViewModel.customerTaxId).thenReturn('001-150885-0002Y');
+    when(mockSaleViewModel.processSale(
+      any,
+      customPayments: anyNamed('customPayments'),
+      buzzerNumber: anyNamed('buzzerNumber'),
+      customerName: anyNamed('customerName'),
+      customerTaxId: anyNamed('customerTaxId'),
+    )).thenAnswer((_) async {});
+
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pumpAndSettle();
+
+    final taxIdInput = find.byKey(const Key('checkout_customer_tax_id_input'));
+    expect(taxIdInput, findsOneWidget);
+
+    // The operator ERASES the prefilled RUC/Cédula: the fiscal snapshot must
+    // record NO tax id — the checkout boundary must distinguish "explicitly
+    // cleared" from "not supplied" so the view model cannot silently
+    // re-persist the catalog value (_selectedCustomer.taxId).
+    await tester.enterText(taxIdInput, '');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'COBRAR'));
+    await tester.pumpAndSettle();
+
+    final verification = verify(mockSaleViewModel.processSale(
+      [PaymentMethod.cash],
+      customPayments: anyNamed('customPayments'),
+      buzzerNumber: anyNamed('buzzerNumber'),
+      customerName: 'Carlos Mendoza',
+      customerTaxId: captureAnyNamed('customerTaxId'),
+    ))..called(1);
+    final capturedTaxId = verification.captured[0] as String?;
+    // The dialog passes the trimmed field value verbatim: an EMPTY string is
+    // the explicit "operator cleared it" signal; the view model must turn it
+    // into NO tax id on the invoice snapshot (never the catalog value).
+    expect(capturedTaxId, '',
+        reason: 'an explicitly cleared RUC field must NOT fall back to the customer catalog tax id');
   });
 }
