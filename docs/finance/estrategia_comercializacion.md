@@ -27,14 +27,33 @@ SOHO aporta y conserva la propiedad de un Sunmi V2s. OmniFood puede recomendar p
 
 La suscripción incluye **mantenimiento del producto**: parches correctivos y de seguridad, además de actualizaciones generales de la plataforma.
 
+### Política de licenciamiento, usuarios y adicionales (Add-ons)
+
+La métrica de valor del software se basa en **terminales físicos activos (cajas/puntos de cobro)** y **sucursales físicas**, no en usuarios nominales de punto de venta.
+
+1. **Usuarios operativos POS (Cajeros, Supervisores, Meseros): Ilimitados incluidos sin costo por terminal.**
+   - *Fundamento técnico y de negocio:* Cobrar por usuario en gastronomía incentiva la mala práctica de compartir credenciales y PINs únicos en post-its, destruyendo el RBAC, los arqueos de caja por turno y la bitácora de auditoría inmutable. El costo marginal en servidor de almacenar registros en la tabla de usuarios es prácticamente nulo.
+2. **Cuentas administrativas Web (Owner Dashboard):** Se incluyen hasta dos (2) cuentas simultáneas por tenant (propietario/socio y administrador). Cuentas adicionales de backoffice: US$10/mes.
+3. **Puntos de cobro / Terminales físicos adicionales:** La concurrencia de hardware y sincronización sí genera consumo y valor operativo directo.
+   - *SOHO fundador:* US$35/mes por terminal adicional (en la misma sucursal). Setup de enrolamiento e inducción de terminal: US$50 (pago único).
+   - *Oferta pública:* US$40/mes por terminal adicional. Setup de enrolamiento: US$75 (pago único).
+4. **Sucursales adicionales:** Cada local o punto geográfico independiente requiere una nueva suscripción base (con su respectiva tarifa de implementación y abono recurrente).
+
+### Catálogo de servicios y extras
+
 El **soporte incluido** se limita al diagnóstico, contención y corrección de defectos reproducibles del producto, incidentes de sincronización o infraestructura bajo control de OmniFood e incidentes de integridad o seguridad. También cubre orientación de recuperación específica para el incidente atendido. No incluye orientación general ilimitada, consultoría ni acompañamiento operativo.
 
-| Servicio adicional | Precio | Condición |
-| --- | ---: | --- |
-| Asistencia remota | US$40/hora | Sin mínimo de horas |
-| Asistencia presencial | US$50/hora | Mínimo dos horas más transporte |
-| OmniFood Care | US$99/mes | Dos horas remotas no acumulables y agenda prioritaria |
-| Trabajo adicional con Care | US$40/hora | Previa autorización |
+| Concepto / Servicio adicional | Precio Fundador (SOHO) | Precio Público | Condición |
+| --- | ---: | ---: | --- |
+| **Usuarios operativos POS** | **US$0 (Incluidos)** | **US$0 (Incluidos)** | Sin límite por terminal contratado |
+| **Cuentas Owner Dashboard** | 2 incluidas (extra US$10/mes) | 2 incluidas (extra US$10/mes) | Acceso analítico y configuración |
+| **Terminal POS adicional** | US$35/mes | US$40/mes | Misma sucursal; hardware del cliente |
+| **Setup terminal adicional** | US$50 | US$75 | Configuración física, APK y pruebas |
+| **Sucursal adicional** | US$200 setup + US$79/mes | US$250 setup + US$89/mes | Nueva ubicación física completa |
+| **Asistencia remota** | US$40/hora | US$40/hora | Sin mínimo de horas |
+| **Asistencia presencial** | US$50/hora | US$50/hora | Mínimo dos horas más transporte |
+| **OmniFood Care** | US$99/mes | US$99/mes | Dos horas remotas no acumulables y agenda prioritaria |
+| **Trabajo adicional con Care** | US$40/hora | US$40/hora | Previa autorización |
 
 Capacitación adicional, carga extraordinaria de datos, personalizaciones, operación del negocio y fallas de internet, energía o hardware del cliente se cotizan o atienden fuera del soporte de plataforma.
 
