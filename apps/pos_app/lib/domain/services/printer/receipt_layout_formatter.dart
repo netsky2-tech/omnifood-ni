@@ -508,18 +508,22 @@ class ReceiptLayoutFormatter {
       }
     }
 
-    // Only display customer fields if actual data exists (never print "Cliente: N/A")
-    if (doc.customerName != null &&
-        doc.customerName!.isNotEmpty &&
-        doc.customerName != 'N/A') {
-      for (final l in formatKeyValue('Cliente:', doc.customerName!)) {
-        buffer.writeln(l);
-      }
+    // Decision 2 (odd/factura-con-nombre):
+    // Venta anónima -> "Cliente: Contado" explícito.
+    // Venta con nombre -> "Cliente: <nombre>".
+    // Venta con RUC/Cédula -> "RUC/Cedula: <ruc>" (sólo si no es N/A ni vacío).
+    final clientDisplayName = (doc.customerName != null &&
+            doc.customerName!.trim().isNotEmpty &&
+            doc.customerName!.trim() != 'N/A')
+        ? doc.customerName!.trim()
+        : 'Contado';
+    for (final l in formatKeyValue('Cliente:', clientDisplayName)) {
+      buffer.writeln(l);
     }
     if (doc.customerRuc != null &&
-        doc.customerRuc!.isNotEmpty &&
-        doc.customerRuc != 'N/A') {
-      for (final l in formatKeyValue('RUC/Cedula:', doc.customerRuc!)) {
+        doc.customerRuc!.trim().isNotEmpty &&
+        doc.customerRuc!.trim() != 'N/A') {
+      for (final l in formatKeyValue('RUC/Cedula:', doc.customerRuc!.trim())) {
         buffer.writeln(l);
       }
     }
@@ -980,17 +984,20 @@ class ReceiptLayoutFormatter {
         marginTextLine(builder, l);
       }
     }
-    if (doc.customerName != null &&
-        doc.customerName!.isNotEmpty &&
-        doc.customerName != 'N/A') {
-      for (final l in formatKeyValue('Cliente:', doc.customerName!)) {
-        marginTextLine(builder, l);
-      }
+    // Decision 2 (odd/factura-con-nombre):
+    // Venta anónima -> "Cliente: Contado" explícito.
+    final clientDisplayName = (doc.customerName != null &&
+            doc.customerName!.trim().isNotEmpty &&
+            doc.customerName!.trim() != 'N/A')
+        ? doc.customerName!.trim()
+        : 'Contado';
+    for (final l in formatKeyValue('Cliente:', clientDisplayName)) {
+      marginTextLine(builder, l);
     }
     if (doc.customerRuc != null &&
-        doc.customerRuc!.isNotEmpty &&
-        doc.customerRuc != 'N/A') {
-      for (final l in formatKeyValue('RUC/Cedula:', doc.customerRuc!)) {
+        doc.customerRuc!.trim().isNotEmpty &&
+        doc.customerRuc!.trim() != 'N/A') {
+      for (final l in formatKeyValue('RUC/Cedula:', doc.customerRuc!.trim())) {
         marginTextLine(builder, l);
       }
     }
@@ -1534,18 +1541,21 @@ class ReceiptLayoutFormatter {
     if (cashierName != null && cashierName.isNotEmpty) {
       buffer.writeln(formatTwoColumns('Atendido por:', cashierName));
     }
-    final printableCustomerName = customerName?.trim().isNotEmpty == true
+    final printableCustomerName = (customerName?.trim().isNotEmpty == true
         ? customerName!.trim()
-        : invoice.customerId?.trim();
-    if (printableCustomerName != null &&
-        printableCustomerName.isNotEmpty &&
+        : (invoice.customerName?.trim().isNotEmpty == true
+            ? invoice.customerName!.trim()
+            : 'Contado'));
+    if (printableCustomerName.isNotEmpty &&
         printableCustomerName.toUpperCase() != 'N/A') {
       buffer.writeln('Cliente:');
       for (final line in wrap(printableCustomerName)) {
         buffer.writeln(line);
       }
     }
-    final printableCustomerRuc = customerRuc?.trim();
+    final printableCustomerRuc = customerRuc?.trim().isNotEmpty == true
+        ? customerRuc!.trim()
+        : invoice.customerTaxId?.trim();
     if (printableCustomerRuc != null &&
         printableCustomerRuc.isNotEmpty &&
         printableCustomerRuc.toUpperCase() != 'N/A') {
@@ -1789,6 +1799,8 @@ class ReceiptLayoutFormatter {
     String? address,
     String? phone,
     String? cashierName,
+    String? customerName,
+    String? customerRuc,
     TaxRegime taxRegime = TaxRegime.regimenGeneral,
     bool isTaxExempt = false,
     List<int>? logoRasterBytes,
@@ -1855,8 +1867,19 @@ class ReceiptLayoutFormatter {
     if (cashierName != null && cashierName.isNotEmpty) {
       builder.textLine(formatTwoColumns('Atendido por:', cashierName));
     }
-    if (invoice.customerId != null && invoice.customerId!.isNotEmpty) {
-      builder.textLine(formatTwoColumns('Cliente:', invoice.customerId!));
+    final clientDisplayName = (customerName != null && customerName.trim().isNotEmpty)
+        ? customerName.trim()
+        : (invoice.customerName != null && invoice.customerName!.trim().isNotEmpty
+            ? invoice.customerName!.trim()
+            : 'Contado');
+    builder.textLine(formatTwoColumns('Cliente:', clientDisplayName));
+    final effectiveRuc = (customerRuc != null && customerRuc.trim().isNotEmpty && customerRuc.trim() != 'N/A')
+        ? customerRuc.trim()
+        : (invoice.customerTaxId != null && invoice.customerTaxId!.trim().isNotEmpty && invoice.customerTaxId!.trim() != 'N/A'
+            ? invoice.customerTaxId!.trim()
+            : null);
+    if (effectiveRuc != null) {
+      builder.textLine(formatTwoColumns('RUC/Cedula:', effectiveRuc));
     }
 
     builder.textLine(drawLine('-'));

@@ -51,6 +51,8 @@ class UnavailablePrinterAdapter implements PrinterPort {
     String? address,
     String? phone,
     String? cashierName,
+    String? customerName,
+    String? customerRuc,
     List<int>? logoRasterBytes,
     required TaxRegime taxRegime,
     bool isTaxExempt = false,

@@ -444,12 +444,14 @@ class ReceiptDocument {
       cashierName: (cashierName != null && cashierName.trim().isNotEmpty) ? cashierName.trim() : null,
       customerName: (customerName != null && customerName.trim().isNotEmpty)
           ? customerName.trim()
-          : (invoice.customerId != null && invoice.customerId!.trim().isNotEmpty && invoice.customerId != 'N/A'
-              ? invoice.customerId!.trim()
+          : (invoice.customerName != null && invoice.customerName!.trim().isNotEmpty
+              ? invoice.customerName!.trim()
               : null),
       customerRuc: (customerRuc != null && customerRuc.trim().isNotEmpty && customerRuc != 'N/A')
           ? customerRuc.trim()
-          : null,
+          : (invoice.customerTaxId != null && invoice.customerTaxId!.trim().isNotEmpty && invoice.customerTaxId != 'N/A'
+              ? invoice.customerTaxId!.trim()
+              : null),
       originInvoiceId: invoice.originInvoiceId,
       // REQ-8 (slice 8a): same honesty rule as the other header facts — a
       // blank-looking reference can never reach the paper.

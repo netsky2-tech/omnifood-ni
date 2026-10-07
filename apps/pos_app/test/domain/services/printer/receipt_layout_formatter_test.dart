@@ -657,7 +657,7 @@ void main() {
     );
 
     test(
-      'Never prints "Cliente: N/A" or "RUC: N/A" when customer info is absent',
+      'Prints "Cliente: Contado" on anonymous sale and never prints "Cliente: N/A" or "RUC: N/A"',
       () {
         final f58 = ReceiptLayoutFormatter.format58mm();
         final anonymousInvoice = Invoice(
@@ -680,12 +680,88 @@ void main() {
           customerRuc: 'N/A',
         );
 
+        expect(ticket, contains('Cliente:'));
+        expect(ticket, contains('Contado'));
         expect(ticket, isNot(contains('Cliente: N/A')));
-        expect(ticket, isNot(contains('Cliente:')));
         expect(ticket, isNot(contains('RUC/Cedula: N/A')));
         expect(ticket, isNot(contains('RUC/Cedula:')));
       },
     );
+
+    test('Decision 1 & 2: Named invoice prints customer name and omits RUC when RUC is absent', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final invoice = Invoice(
+        id: 'inv-named-1',
+        number: '001-001-01-00000004',
+        createdAt: DateTime.now(),
+        userId: 'user-01',
+        subtotal: 100.0,
+        totalTax: 15.0,
+        total: 115.0,
+        customerName: 'Carlos Potosme',
+      );
+
+      final ticket = f58.formatInvoiceText(
+        invoice,
+        items: [],
+        payments: [],
+      );
+
+      expect(ticket, contains('Cliente:'));
+      expect(ticket, contains('Carlos Potosme'));
+      expect(ticket, isNot(contains('Cliente: Contado')));
+      expect(ticket, isNot(contains('RUC/Cedula:')));
+    });
+
+    test('Decision 1 & 2: Named invoice prints both customer name and RUC/Cedula when provided', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final invoice = Invoice(
+        id: 'inv-named-2',
+        number: '001-001-01-00000005',
+        createdAt: DateTime.now(),
+        userId: 'user-01',
+        subtotal: 100.0,
+        totalTax: 15.0,
+        total: 115.0,
+        customerName: 'Inversiones del Sur S.A.',
+        customerTaxId: 'J0310000005555',
+      );
+
+      final ticket = f58.formatInvoiceText(
+        invoice,
+        items: [],
+        payments: [],
+      );
+
+      expect(ticket, contains('Cliente:'));
+      expect(ticket, contains('Inversiones del Sur'));
+      expect(ticket, contains('RUC/Cedula:'));
+      expect(ticket, contains('J0310000005555'));
+    });
+
+    test('D-2 / #97: customerId UUID is NEVER printed as customer name on the ticket', () {
+      final f58 = ReceiptLayoutFormatter.format58mm();
+      final invoice = Invoice(
+        id: 'inv-uuid-check',
+        number: '001-001-01-00000006',
+        createdAt: DateTime.now(),
+        userId: 'user-01',
+        subtotal: 100.0,
+        totalTax: 15.0,
+        total: 115.0,
+        customerId: 'd82373f7-1f5d-4fcc-a49a-04cb4bdef201',
+      );
+
+      final ticket = f58.formatInvoiceText(
+        invoice,
+        items: [],
+        payments: [],
+      );
+
+      expect(ticket, contains('Cliente:'));
+      expect(ticket, contains('Contado'));
+      expect(ticket, isNot(contains('d82373f7-1f5d-4fcc-a49a-04cb4bdef201')));
+    });
 
     test('Discounts are only shown when discountTotal > 0', () {
       final f58 = ReceiptLayoutFormatter.format58mm();
