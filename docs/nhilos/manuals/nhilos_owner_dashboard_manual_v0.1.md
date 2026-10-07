@@ -149,6 +149,12 @@ En la sección **Fiscal** del menú lateral:
    * Registro completo de comprobantes anulados (ningún número se salta ni se destruye).
 2. **Exportación de Datos para Contador:**
    * Pestaña de **Exportaciones**: Descargá reportes consolidados mensuales en formato **Excel (.xlsx)** o **CSV** para entrega directa a la administración contable.
+   * **Columna de cliente:** El archivo exportado incluye una columna que identifica a quién se le facturó cada venta:
+     * En **Excel (.xlsx)** el encabezado es `Cliente / RUC`; en **CSV** el encabezado es `Cliente`.
+     * Si la venta se cobró en caja con nombre o RUC/Cédula del cliente, ese dato queda grabado en la factura y **siempre** es el que aparece en la exportación.
+     * Para ventas antiguas sin ese dato grabado, se usa el nombre actual del cliente en el catálogo (si existe) o, en su defecto, el texto `CONSUMIDOR FINAL`.
+     * Nunca aparece un identificador interno del cliente ni una celda vacía: siempre hay un nombre legible.
+   * **Nota de terminología:** El ticket térmico de caja imprime `Cliente: Contado` para las ventas sin datos del cliente, mientras que la exportación del dashboard usa `CONSUMIDOR FINAL` para el mismo caso. Ambos textos significan lo mismo (venta a un consumidor final sin datos fiscales) y hoy conviven tal cual.
 
 ---
 

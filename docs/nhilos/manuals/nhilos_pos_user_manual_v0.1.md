@@ -4,6 +4,7 @@
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 1.1 | 2026-10-07 | Nueva subsección 7.5 (Cobro con Facturación a Cliente con Nombre): campos **Nombre Cliente** y **RUC / Cédula (Opcional)** en el modal de cobro, reglas de impresión del ticket y semántica fiscal del snapshot. Corrección del paso 2 de 7.1: el *Buzzer / Pager* es entrega en barra; el nombre/RUC es dato fiscal. Nota en sección 10 sobre el snapshot inmutable de nombre/RUC en facturas emitidas. |
 | 1.0 | 2026-10-03 | Reemplazo completo de sección 6 (Cuentas Abiertas): ya no es "Retención y Recuperación de Cuentas" sino un flujo completo de cuentas abiertas con 5 secciones (crear, recuperar/editar, múltiples, abandonar, copiar). Actualización de secciones 11.1 (Corte X) y 11.2 (Corte Z) con bloqueos y listados de cuentas abiertas. |
 | 0.1 | 2026-??-?? | Primera versión básica de retención y recuperación de tickets (hold simples). |
 
@@ -209,7 +210,7 @@ Cuando la orden esté lista, presioná el botón verde **"COBRAR"** en la parte 
 
 ### 7.1 Cobro en Efectivo en Córdobas (NIO)
 1. El total se muestra destacado en Córdobas (C$) junto con el equivalente en Dólares al tipo de cambio comercial (ej. C$ 36.62).
-2. Podés asociar un número de *Buzzer / Pager* o el nombre del cliente para entrega en barra.
+2. Podés asociar un número de **Nº Buzzer** (*buzzer / pager*) para entrega en barra. Los campos de cliente que aparecen más abajo en el modal (**Nombre Cliente** y **RUC / Cédula**) no son de entrega: son datos fiscales de facturación (ver 7.5).
 3. Ingresá el monto de dinero recibido usando el teclado o los botones rápidos de billetes comunes (C$ 225, C$ 300, C$ 400, C$ 500, C$ 1000).
 
 ![Cobro en Efectivo con Vuelto en Verde](images/pos_07_cobro_efectivo_vuelto.png)
@@ -238,6 +239,28 @@ Cuando la orden esté lista, presioná el botón verde **"COBRAR"** en la parte 
 3. Ingresá primero el monto en efectivo recibido (ej. C$ 100).
 4. El sistema restará ese valor y mostrará el saldo restante pendiente.
 5. Seleccioná **"Tarjeta"** para el saldo restante, pasá el cobro por el datáfono y confirmá la transacción.
+
+### 7.5 Cobro con Facturación a Cliente con Nombre (Nombre Cliente y RUC/Cédula)
+Si el cliente pide su factura a nombre de una persona o empresa, podés capturar sus datos fiscales en el mismo modal de cobro (el de la imagen del inicio de la sección 7), junto a los métodos de pago:
+
+1. **Nombre Cliente:** Escribí el nombre del cliente (ej. `Juan`). Es opcional: si lo dejás vacío y tampoco cargás el RUC/Cédula, el ticket se imprime con la línea `Cliente: Contado`, que en este comprobante significa venta a un consumidor final sin datos fiscales (no tiene relación con la forma de pago).
+2. **RUC / Cédula (Opcional):** Ingresá el número fiscal del cliente si lo tenés (ej. `001-120590-0001A` o `J0310000000001`). Copiá el número tal como figura en su comprobante o constancia de la DGI: el formato varía según el tipo de contribuyente y una misma empresa puede aparecer con cualquiera de los dos.
+3. Los valores vacíos, con solo espacios o `N/A` se consideran como si no se hubieran ingresado.
+4. Continuá con el cobro como de costumbre (efectivo, USD, tarjeta o pago dividido, según las subsecciones 7.1 a 7.4).
+
+> ⚠️ Captura pendiente: falta una captura de pantalla del modal de cobro mostrando los campos **Nombre Cliente** y **RUC / Cédula (Opcional)**. Mientras tanto, ubicá el modal en la imagen del inicio de la sección 7.
+
+**Cómo se imprime el ticket térmico:**
+* Venta sin nombre y sin RUC/Cédula: el ticket imprime `Cliente: Contado`.
+* Venta solo con nombre: el ticket imprime `Cliente: <nombre>`.
+* Venta con nombre y RUC/Cédula: el ticket imprime ambas líneas (`Cliente: <nombre>` y `RUC/Cedula: <ruc>`).
+* Si ingresás RUC/Cédula pero no nombre: el ticket imprime únicamente la línea `RUC/Cedula: <ruc>` y **no** imprime línea de cliente. El sistema nunca combina `Cliente: Contado` con un RUC/Cédula, porque en términos DGI "Contado" identifica a un consumidor final sin datos fiscales.
+
+**Reglas fiscales importantes:**
+* El nombre y el RUC/Cédula quedan grabados en la factura en el momento del cobro, como una foto fija. Si después editás o borrás al cliente del catálogo, las facturas ya emitidas **no cambian**: es cumplimiento DGI deliberado, no un error.
+* Escribir un nombre en el cobro **no crea ni modifica** clientes del catálogo.
+* La acumulación de lealtad/puntos a partir de estos datos todavía no está implementada.
+* Recordá (sección 10): las facturas nunca se eliminan, solo se anulan.
 
 ---
 
@@ -285,6 +308,8 @@ Por estrictas disposiciones de cumplimiento normativo (DGI de Nicaragua), **las 
 ![Diálogo Formal de Motivo de Anulación](images/pos_13_dialogo_anular_factura.png)
 
 5. Seleccioná el motivo correspondiente (*Error de captura*, *Cliente desiste*, *Ticket duplicado*, *Otro*) y confirmá la acción.
+
+> **Datos congelados en la factura:** El nombre y el RUC/Cédula impresos en una factura emitida son una captura fija tomada al momento del cobro. Si después editás o borrás al cliente en el catálogo, la factura emitida no se actualiza ni sigue esos cambios.
 
 ---
 
