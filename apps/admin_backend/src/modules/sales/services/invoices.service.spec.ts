@@ -282,6 +282,57 @@ describe('InvoicesService', () => {
       );
     });
 
+    // Remediation (ITEM 4): the ingestion boundary normalizes the customer
+    // snapshot — trim, and blank becomes null — so the anonymous-sale
+    // invariant (customer_name IS NULL) can never be defeated by '' or
+    // whitespace. The payload is never rejected: a fiscal sale must not be
+    // blocked over a blank optional field (explicit product rule).
+    it('normalizes blank customer snapshot fields to null and trims padded values before persistence (anonymous-sale invariant)', async () => {
+      const tenantId = 'tenant-1';
+      const base = {
+        number: '001-001-01-00000200',
+        createdAt: new Date().toISOString(),
+        userId: 'user-1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        paymentStatus: 'PAID',
+        items: [],
+        payments: [],
+      };
+      const blankDto: SyncInvoiceDto = {
+        ...base,
+        id: 'inv-snap-blank',
+        number: '001-001-01-00000201',
+        customerName: '   ',
+        customerTaxId: '',
+      };
+      const paddedDto: SyncInvoiceDto = {
+        ...base,
+        id: 'inv-snap-padded',
+        number: '001-001-01-00000202',
+        customerName: '  Juan Perez  ',
+        customerTaxId: ' J0310000001234 ',
+      };
+
+      await service.syncInvoices(tenantId, [blankDto, paddedDto]);
+
+      const calls = invoiceRepo.upsert.mock.calls as Array<
+        [Record<string, unknown>, string[]]
+      >;
+      const blank = calls.find(([payload]) => payload.id === 'inv-snap-blank');
+      expect(blank).toBeDefined();
+      expect(blank![0].customerName).toBeNull();
+      expect(blank![0].customerTaxId).toBeNull();
+
+      const padded = calls.find(
+        ([payload]) => payload.id === 'inv-snap-padded',
+      );
+      expect(padded).toBeDefined();
+      expect(padded![0].customerName).toBe('Juan Perez');
+      expect(padded![0].customerTaxId).toBe('J0310000001234');
+    });
+
     it('persists the fx-rate fiscal snapshot as sent, not the column defaults (D-6)', async () => {
       // D-6 regression guard: a payload carrying the checkout-applied
       // commercial rate must reach the upsert verbatim. If the ingestion

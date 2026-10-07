@@ -291,6 +291,30 @@ export class SyncInvoiceDto {
   @IsOptional()
   customerId?: string;
 
+  // Remediation (ITEM 4): the customer snapshot is NORMALIZED at the
+  // ingestion boundary — trimmed, and blank/whitespace-only becomes null —
+  // so the anonymous-sale invariant (anonymous sales store customer_name IS
+  // NULL) can never be defeated by an empty string. The payload is never
+  // rejected: a fiscal sale must not be blocked over a blank optional field
+  // (explicit product rule).
+  @Transform(({ value }: { value: unknown }) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  })
+  @IsString()
+  @IsOptional()
+  customerName?: string | null;
+
+  @Transform(({ value }: { value: unknown }) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  })
+  @IsString()
+  @IsOptional()
+  customerTaxId?: string | null;
+
   @IsBoolean()
   @IsOptional()
   globalTaxOverride?: boolean;

@@ -411,6 +411,8 @@ export class InvoicesService {
             isCanceled: false,
             paymentStatus: 'pending',
             customerId: origin.customerId ?? null,
+            customerName: origin.customerName ?? null,
+            customerTaxId: origin.customerTaxId ?? null,
             type: 'creditNote',
             originInvoiceId: dto.originInvoiceId,
             refundReasonCode: dto.refundReasonCode,
@@ -2027,6 +2029,8 @@ export class InvoicesService {
       voidReason: existing.voidReason,
       paymentStatus: existing.paymentStatus,
       customerId: existing.customerId,
+      customerName: existing.customerName ?? null,
+      customerTaxId: existing.customerTaxId ?? null,
       globalTaxOverride: existing.globalTaxOverride,
       type: existing.type,
       relatedInvoiceId: existing.relatedInvoiceId,
@@ -2491,16 +2495,40 @@ export class InvoicesService {
     return dto.type === 'creditNote';
   }
 
+  /**
+   * Remediation (ITEM 4): normalize a customer-snapshot string for
+   * persistence — trim, and treat blank/whitespace-only as null. The
+   * reconciled model rule is that an anonymous sale stores
+   * `customer_name IS NULL`, so a blank string must never reach the row or
+   * the DGI report. Defense in depth alongside the DTO-level @Transform:
+   * direct service callers (replay scripts, tests) bypass plainToInstance.
+   */
+  private normalizeCustomerSnapshotField(value?: string | null): string | null {
+    if (value === null || value === undefined) return null;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  }
+
   private normalizeInvoiceProvenanceForPersistence(
     dto: SyncInvoiceDto,
     allowCreditNotes: boolean,
   ): InvoiceForPersistence {
+    const customerSnapshot = {
+      customerName: this.normalizeCustomerSnapshotField(dto.customerName),
+      customerTaxId: this.normalizeCustomerSnapshotField(dto.customerTaxId),
+    };
+
     if (allowCreditNotes && this.isCreditNoteInvoice(dto)) {
-      return { ...dto, items: dto.items ?? [] };
+      return {
+        ...dto,
+        ...customerSnapshot,
+        items: dto.items ?? [],
+      };
     }
 
     return {
       ...dto,
+      ...customerSnapshot,
       originInvoiceId: null,
       refundReasonCode: null,
       refundReasonPolicy: null,
@@ -2528,6 +2556,8 @@ export class InvoicesService {
           voidReason: dto.voidReason ?? null,
           paymentStatus: dto.paymentStatus,
           customerId: dto.customerId ?? null,
+          customerName: dto.customerName ?? null,
+          customerTaxId: dto.customerTaxId ?? null,
           globalTaxOverride: dto.globalTaxOverride ?? false,
           type: dto.type ?? 'regular',
           relatedInvoiceId: dto.relatedInvoiceId ?? null,
