@@ -142,3 +142,29 @@ attaching extras to sales, and it has real gaps.
   - Converted the pre-existing «filters the product selector» test from
     <option> assertions to visible-row assertions (it had only ever proven
     option-level filtering — the invisibility defect).
+
+## Closure (2026-10-06)
+
+- **U1** `beb3383e` — backend `status` filter (receipt `review-6864344615b2a78f`
+  burned, consumed `1640d58d…`).
+- **U2** `907296f1` — reactivation UI for groups and options (receipt
+  `review-e7b185a10c74c52f` burned, consumed `80f7a755…`; advisories R3-1/2/3 →
+  backlog).
+- **U3** `b5203824` — group search + visible product listbox (receipt
+  `review-bc031e874290f1a3` burned, consumed `25fc4d6f…`; advisories R3-001/002
+  on the listbox → backlog).
+- **U4** `0d060a13` — 409 name-conflict copy points at «Inactivos» (receipt
+  `review-3607a7e63e730d14` burned, consumed `2e743a09…`). Sweep findings
+  (POS fail-closed intact; unique-name constraint includes soft-deleted rows by
+  design) recorded above.
+- Verification: full owner_dashboard suite **1408 passed / 4 skipped (98
+  files)** + `tsc --noEmit` exit 0 at `b5203824`; focused modifiers suite 47/47
+  re-run by the orchestrator per unit.
+- Infra lesson burned into Engram (`rdd/relay-length-root-cause`): reviewer
+  routing lives in `~/.pi/gentle-ai/models.json`, NOT in `PI_MODEL`;
+  `review-reliability.thinking` was lowered high→medium after 7 consecutive
+  `stopReason: length` failures on the 479-line U2 candidate. Backup:
+  `models.json.bak-20261006-relaylength`.
+- Outstanding for this feature: nothing in-code. User field validation on a
+  live dashboard session remains with the product owner; insumo/recipe linkage
+  for extras tracked under #527.
