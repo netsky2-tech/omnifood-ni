@@ -24,6 +24,7 @@ import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/tip_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
+import 'widgets/fx_rate_block_banner.dart';
 import 'tables/table_layout_view.dart';
 import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
 import '../config/business_profile/fiscal_authorization_expiry_notice_widget.dart';
@@ -1951,6 +1952,10 @@ class CartSummary extends StatelessWidget {
           onApplyReward: () => _showRewardConfirmationDialog(context, viewModel),
         ),
         const SizedBox(height: 8),
+        // #805 U4: the FX checkout block reason is a persistent banner in
+        // the same column as the checkout action, directly above it, so it
+        // can never be covered or lost as a transient SnackBar.
+        const FxRateBlockBanner(),
         Row(
           children: [
             Expanded(
