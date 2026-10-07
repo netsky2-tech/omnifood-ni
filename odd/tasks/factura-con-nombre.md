@@ -230,3 +230,119 @@ Sobre el último punto: los archivos que fallan **cambian entre corridas** (prim
 error es de conexión al proceso `flutter_tester` y **los cinco pasan al correrlos aislados**. Es flakiness del
 runner en paralelo bajo 3000+ tests en un host sin display, no una regresión de este diff. Ninguno de esos
 archivos toca impresión ni datos de cliente.
+
+## 8. Ronda de revisión adversarial por slices y remediación
+
+Como el candidato nativo queda fijado al rango completo de la rama (`inspect` ofrece un único START
+`base-ref=39c54130 → HEAD`, 46 paths con ~2.9k líneas generadas), la carga de revisión se **partió en tres
+slices por unidad de trabajo** con judges read-only (`jd-judge-a`), cada uno atacando solo sus commits. Esto
+tampoco es la revisión nativa: es revisión con autoridad humana al mando; entrega y commits siguen la política
+normal del repo.
+
+| Slice | Commits revisados | Hallazgos |
+|---|---|---|
+| A · persistencia | `5d23f270`, `d937006f` | 1 CRÍTICO, 1 CRÍTICO (ya resuelto fuera de slice), 2 WARNING, 1 SUGGESTION |
+| B · impresión | `17aa84e4`, `fb694dc2` | 2 MEDIUM, 4 SUGGESTION |
+| C · UI + tests + export | `1dfec203`, `4c6ea16e`, `3a05c8ef` | 1 HIGH, 5 WARNING, 3 SUGGESTION |
+
+### Defectos confirmados y arreglados
+
+**R-1 · CRÍTICO · el feature rompía la idempotencia del sync cross-version.** `SalesMapper.toSyncJson` emitía
+`customerName`/`customerTaxId` **incondicionalmente**, así que toda venta anónima empezó a serializar
+`"customerName": null`. El recibo de idempotencia se calcula con `stableStringify`
+(`invoices.service.ts:136-143`), que descarta `undefined` pero **conserva `null`**, y el outbox re-serealiza la
+entidad en cada reintento (`getUnsyncedAggregates`). Una venta ya receiptada con la forma vieja, reintentada tras
+el upgrade del POS con ack perdido, hash distinto → `CRITICAL_PAYLOAD_MISMATCH` con `retryable: false` → la
+factura fiscal **nunca llega al espejo de nube**. Es la familia D-10 que el propio método documenta.
+Arreglado en `b72a7506`: emisión **condicional** (clave ausente si el valor es null/blank), siguiendo el
+precedente hash-seguro que ya existe en el mismo mapa (`originInvoiceId`, `inventoryPolicyVersion`). El hash del
+backend se dejó intacto a propósito: filtrar `null` ahí re-hashearía todos los recibos existentes de
+`voidReason`/`shiftId`/`tipAmount*` y provocaría un mismatch masivo.
+
+**R-2 · ALTO · mi propio fix del export podía tumbar el libro de ventas DGI.** `In(unresolvedIds)` comparaba
+`customers.id` (**uuid** PK, `1789000000000:10-15`) contra `invoices.customer_id` (**varchar**, sin FK y sin
+validación, `1759000000002:393`). Postgres castea cada literal a uuid: cualquier `customer_id` legacy no-UUID en
+el rango lanza `22P02` y **aborta el export completo**. Peor todavía: mis fixtures (`cust-uuid-1234`,
+`cust-uuid-0000-0001`) **no son UUID válidos**, o sea el test pasaba con exactamente el input que revienta
+producción. Arreglado en `8f886cbf`: comparación como texto (`customer.id::text IN`), predicado `tenant_id`
+apto (binding aditivo, nunca cross-tenant), fixtures con UUIDv4 reales.
+
+**R-3 · MEDIA · dependencia dura dentro de la transacción.** La lectura del catálogo estaba dentro de la misma
+`runInTenantTransaction` que la lectura de invoices: tabla movida, falta de grant o error de RLS mataban un
+export que antes funcionaba. Un `try/catch` adentro no alcanza porque Postgres aborta la transacción tras un
+statement error. Arreglado en `8f886cbf` con **SAVEPOINT** (`customer_snapshot_resolution`) que se libera o se
+revierte, degradando a `CONSUMIDOR FINAL` con log code estable
+`CUSTOMER_SNAPSHOT_RESOLUTION_DEGRADED`. Se preserva el invariante #581 WU1: una transacción, un `set_config`.
+
+**R-4 · MEDIA · `''` y espacios llegaban a la fila fiscal.** `@IsString() @IsOptional()` acepta blank y la
+ingestión lo escribía verbatim, rompiendo "venta anónima guarda `customer_name IS NULL`". Arreglado en
+`13045cd2`: normalización trim/blank→null en el DTO y en la frontera de persistencia. **Nunca se rechaza el
+payload**: una venta fiscal no puede bloquearse por un campo opcional vacío.
+
+**R-5 · MEDIA · herencia de snapshot en nota de crédito sin ningún test.** Implementada en ambos lados
+(`sales_repository_impl.dart` ~:1036, `invoices.service.ts` ~:414-415) pero sin cobertura: una regresión que la
+anulara pasaba verde. Arreglado en `dc712ca9`.
+
+**R-6 · MEDIA · el centinela `N/A` sí llegaba al papel.** Tres reglas convivían: los caminos primarios
+comparaban `!= 'N/A'` case-sensitive, el legacy texto comparaba `toUpperCase()`, y el `customerName` **explícito**
+no se filtraba en ningún lado. Verificado con RED: `CLIENTE:                     N/A` impreso. Arreglado en
+`80fbdc21` con `isPrintableCustomerValue` como regla única en los cuatro caminos más el modelo.
+
+**R-7 · MEDIA · etiquetas truncadas en el path de lealtad ESC/POS** (`formatTwoColumns` recorta la etiqueta
+izquierda cuando el valor es largo) y **guard `N/A` sin `trim()`** en `receipt_document.dart`. Arreglado en
+`80fbdc21`.
+
+**R-8 · MEDIA · borrar el RUC pre-cargado de un cliente registrado era ignorado.** El dialog mandaba `null` y el
+VM caía de vuelta a `_selectedCustomer.taxId`, re-persistiendo el valor del catálogo: no se podía hacer una
+factura a nombre de un registrado **sin** su RUC. Arreglado en `2d7dafa0` con tri-state en la frontera de cobro
+(`null` = no provisto → prefill; `''` = borrado explícito → sin tax id; no-empty = verbatim), en pago simple y
+dividido.
+
+**R-9 · MEDIA · los tests de integración daban falsa confianza.** `saveSale` y `prepareReprintInvoice` estaban
+mockeados, así que "persiste" solo probaba que el ViewModel pasó el campo y el escenario de reimpresión pasaba
+también con el feature revertido. Arreglado en `7e94e363` con grupos reales sobre Floor
+(`sqflite_common_ffi`): round-trip por el DAO real, void que preserva el snapshot, y procedencia de reimpresión
+falsificable (se renombra el catálogo y se cambia la config **después** de emitir; el papel sigue con el snapshot
+original).
+
+### Decisión de producto tomada en esta ronda
+
+**Vendido con RUC/cédula y sin nombre → se OMITE la línea `Cliente:`.** La decisión 2 decía "sin nombre →
+`Cliente: Contado`", lo que producía el par contradictorio `Cliente: Contado` + `RUC/Cedula: <id>`. El dueño elige
+omitir la línea de presentación cuando sí hay dato fiscal. `Cliente: Contado` queda reservado para venta
+verdaderamente anónima (ni nombre ni cédula). Implementado en los cuatro caminos de render (`80fbdc21`).
+
+### Rechazado con evidencia
+
+- **`down` no-op de la migración.** Un judge lo marcó como contrato de revert roto. Es **convención deliberada
+del repo**: la hermana `1809400000000-AddShiftIdAndLocalIssueDateToInvoices.ts:27-32` usa el mismo `SELECT 1` con
+la misma justificación DGI (las facturas no se destruyen). Se **asserte** el comportamiento en el nuevo
+`.db.spec.ts`, no se cambia.
+- **"los loading errors de Flutter son flakiness" como explicación final.** Se intentó y se descartó: no hay
+variables de proxy en el entorno, la memoria estaba holgada (9 Gi disponibles) y persisten con
+`--concurrency=1`. Quedan characterizados, no resueltos: cambian de archivo en cada corrida, son de carga
+(`WebSocketException: Invalid WebSocket upgrade request` al conectar con `flutter_tester`) y **cada archivo que
+falla pasa al correrlo aislado**, incluidos los dos de esta ronda (`fiscal_inbox_handler` 47/47,
+`loyalty_evaluation` 5/5). Ninguno toca este feature. Lección metodológica: un "falla aislado" debe verificar la
+**ruta** antes de afirmarse — mi primer intento usó `domain/services/loyalty` en vez de `domain/models/loyalty` y
+el fallo era inexistente.
+
+### Coste ambiental de la ronda (WSL)
+
+Las corridas completas de backend reventaban el VM. `.wslconfig` fija `memory=12 GiB` y `swap=4 GiB` sobre un
+host de 24 GB; jest con 11 workers sobre 329 suites de NestJS supera el techo y el kernel mata procesos por OOM
+global (`global_oom` en `/var/log/kern.log`) — entre ellos **`engram`, el servidor de memoria de esta sesión**,
+que es por lo que los tool calls devolvían `No result provided`. Receta de trabajo: `npx jest --maxWorkers=2`
+(3694/3694, pico ~1.5 Gi) y `flutter test --concurrency=2` por bloques.
+
+### Estado final de la rama
+
+| Suite | Resultado |
+|---|---|
+| POS full (`--concurrency=2`) | 3176 pasan + 2 fallos de carga intermitentes (pasan aislados) |
+| POS `flutter analyze` | sin issues |
+| Backend `npm test` full (`--maxWorkers=2`) | **3694/3694** (8 skipped preexistentes) |
+| Backend `tsc --noEmit` | exit 0 |
+| Backend migration `.db.spec.ts` sobre Postgres real | **3/3** (nuevo en `dc712ca9`) |
+
+Commits de remediación: `b72a7506`, `80fbdc21`, `2d7dafa0`, `7e94e363`, `8f886cbf`, `13045cd2`, `dc712ca9`.
