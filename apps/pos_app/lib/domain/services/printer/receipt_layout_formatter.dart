@@ -154,6 +154,17 @@ class ReceiptLayoutFormatter {
     return formatKeyValue(label, value);
   }
 
+  /// A customer-block value is printable only when it is non-blank AND is not
+  /// the legacy 'N/A' placeholder. The comparison is case-insensitive: 'n/a'
+  /// is the same absence of fact, and all four render paths must agree —
+  /// otherwise the very same sale prints four different fiscal documents
+  /// (odd/factura-con-nombre, post-review). The rule is "never print a
+  /// placeholder as if it were a fact": absence stays absence.
+  static bool isPrintableCustomerValue(String? value) {
+    final trimmed = value?.trim() ?? '';
+    return trimmed.isNotEmpty && trimmed.toUpperCase() != 'N/A';
+  }
+
   /// Formats two strings on the same line, with [leftText] aligned to the left
   /// and [rightText] strictly aligned to the right, strictly fitting in [width] columns.
   String formatTwoColumns(String leftText, String rightText, [int? width]) {
@@ -512,17 +523,22 @@ class ReceiptLayoutFormatter {
     // Venta anónima -> "Cliente: Contado" explícito.
     // Venta con nombre -> "Cliente: <nombre>".
     // Venta con RUC/Cédula -> "RUC/Cedula: <ruc>" (sólo si no es N/A ni vacío).
-    final clientDisplayName = (doc.customerName != null &&
-            doc.customerName!.trim().isNotEmpty &&
-            doc.customerName!.trim() != 'N/A')
-        ? doc.customerName!.trim()
-        : 'Contado';
-    for (final l in formatKeyValue('Cliente:', clientDisplayName)) {
-      buffer.writeln(l);
+    // Owner rule (post-review ITEM 2): name absent + tax id present prints
+    // ONLY the "RUC/Cedula:" line — the contradictory pair
+    // "Cliente: Contado" + RUC is forbidden. "Cliente: Contado" is reserved
+    // for a true anonymous sale (neither name nor tax id).
+    final hasPrintableCustomerName = isPrintableCustomerValue(doc.customerName);
+    final hasPrintableCustomerRuc = isPrintableCustomerValue(doc.customerRuc);
+    if (hasPrintableCustomerName) {
+      for (final l in formatKeyValue('Cliente:', doc.customerName!.trim())) {
+        buffer.writeln(l);
+      }
+    } else if (!hasPrintableCustomerRuc) {
+      for (final l in formatKeyValue('Cliente:', 'Contado')) {
+        buffer.writeln(l);
+      }
     }
-    if (doc.customerRuc != null &&
-        doc.customerRuc!.trim().isNotEmpty &&
-        doc.customerRuc!.trim() != 'N/A') {
+    if (hasPrintableCustomerRuc) {
       for (final l in formatKeyValue('RUC/Cedula:', doc.customerRuc!.trim())) {
         buffer.writeln(l);
       }
@@ -984,19 +1000,23 @@ class ReceiptLayoutFormatter {
         marginTextLine(builder, l);
       }
     }
-    // Decision 2 (odd/factura-con-nombre):
-    // Venta anónima -> "Cliente: Contado" explícito.
-    final clientDisplayName = (doc.customerName != null &&
-            doc.customerName!.trim().isNotEmpty &&
-            doc.customerName!.trim() != 'N/A')
-        ? doc.customerName!.trim()
-        : 'Contado';
-    for (final l in formatKeyValue('Cliente:', clientDisplayName)) {
-      marginTextLine(builder, l);
+    // Decision 2 (odd/factura-con-nombre) + owner rule (post-review ITEM 2):
+    // same customer-block contract as the text renderer — name present
+    // prints "Cliente: <nombre>"; name absent + tax id present prints ONLY
+    // "RUC/Cedula:"; "Cliente: Contado" is reserved for a true anonymous
+    // sale (neither name nor tax id).
+    final hasPrintableCustomerName = isPrintableCustomerValue(doc.customerName);
+    final hasPrintableCustomerRuc = isPrintableCustomerValue(doc.customerRuc);
+    if (hasPrintableCustomerName) {
+      for (final l in formatKeyValue('Cliente:', doc.customerName!.trim())) {
+        marginTextLine(builder, l);
+      }
+    } else if (!hasPrintableCustomerRuc) {
+      for (final l in formatKeyValue('Cliente:', 'Contado')) {
+        marginTextLine(builder, l);
+      }
     }
-    if (doc.customerRuc != null &&
-        doc.customerRuc!.trim().isNotEmpty &&
-        doc.customerRuc!.trim() != 'N/A') {
+    if (hasPrintableCustomerRuc) {
       for (final l in formatKeyValue('RUC/Cedula:', doc.customerRuc!.trim())) {
         marginTextLine(builder, l);
       }
@@ -1541,24 +1561,33 @@ class ReceiptLayoutFormatter {
     if (cashierName != null && cashierName.isNotEmpty) {
       buffer.writeln(formatTwoColumns('Atendido por:', cashierName));
     }
-    final printableCustomerName = (customerName?.trim().isNotEmpty == true
+    // Owner rule (odd/factura-con-nombre, post-review ITEM 2): tax-id-only
+    // prints ONLY the "RUC/Cedula:" line — no "Cliente:" label at all (the
+    // "Cliente:" + "Contado" pair is reserved for a true anonymous sale).
+    // Explicit argument wins only when it is a fact: a literal 'N/A' passed
+    // in must not become a printed customer name (case-insensitive, same rule
+    // as every other path).
+    final hasPrintableCustomerName = isPrintableCustomerValue(customerName)
+        ? true
+        : isPrintableCustomerValue(invoice.customerName);
+    final printableCustomerName = isPrintableCustomerValue(customerName)
         ? customerName!.trim()
-        : (invoice.customerName?.trim().isNotEmpty == true
+        : (isPrintableCustomerValue(invoice.customerName)
             ? invoice.customerName!.trim()
-            : 'Contado'));
-    if (printableCustomerName.isNotEmpty &&
-        printableCustomerName.toUpperCase() != 'N/A') {
+            : 'Contado');
+    final printableCustomerRuc = isPrintableCustomerValue(customerRuc)
+        ? customerRuc!.trim()
+        : (isPrintableCustomerValue(invoice.customerTaxId)
+            ? invoice.customerTaxId!.trim()
+            : null);
+    final hasPrintableCustomerRuc = printableCustomerRuc != null;
+    if (hasPrintableCustomerName || !hasPrintableCustomerRuc) {
       buffer.writeln('Cliente:');
       for (final line in wrap(printableCustomerName)) {
         buffer.writeln(line);
       }
     }
-    final printableCustomerRuc = customerRuc?.trim().isNotEmpty == true
-        ? customerRuc!.trim()
-        : invoice.customerTaxId?.trim();
-    if (printableCustomerRuc != null &&
-        printableCustomerRuc.isNotEmpty &&
-        printableCustomerRuc.toUpperCase() != 'N/A') {
+    if (hasPrintableCustomerRuc) {
       buffer.writeln(formatTwoColumns('RUC/Cedula:', printableCustomerRuc));
     }
     // REQ-8 (slice 8a): the raw originInvoiceId is an internal identifier
@@ -1867,9 +1896,15 @@ class ReceiptLayoutFormatter {
     if (cashierName != null && cashierName.isNotEmpty) {
       builder.textLine(formatTwoColumns('Atendido por:', cashierName));
     }
-    final clientDisplayName = (customerName != null && customerName.trim().isNotEmpty)
-        ? customerName.trim()
-        : (invoice.customerName != null && invoice.customerName!.trim().isNotEmpty
+    // Owner rule (odd/factura-con-nombre, post-review ITEM 2): same
+    // customer-block contract as the primary ReceiptDocument paths — name
+    // present prints "Cliente: <nombre>"; name absent + tax id present
+    // prints ONLY "RUC/Cedula:"; "Cliente: Contado" is reserved for a true
+    // anonymous sale (neither name nor tax id).
+    final hasPrintableExplicitName = isPrintableCustomerValue(customerName);
+    final clientDisplayName = hasPrintableExplicitName
+        ? customerName!.trim()
+        : (isPrintableCustomerValue(invoice.customerName)
             ? invoice.customerName!.trim()
             : 'Contado');
     // Post-review fix (MEDIUM): formatTwoColumns truncates the LEFT label
@@ -1879,14 +1914,23 @@ class ReceiptLayoutFormatter {
     // ReceiptDocument path) keeps the label intact and wraps the value under
     // a 2-space indent. ONLY these two customer emissions use it — Fecha:
     // / Atendido por: / Tel: / Caja: are owned by other work items.
-    for (final line in formatKeyValue('Cliente:', clientDisplayName)) {
-      builder.textLine(line);
-    }
-    final effectiveRuc = (customerRuc != null && customerRuc.trim().isNotEmpty && customerRuc.trim() != 'N/A')
-        ? customerRuc.trim()
-        : (invoice.customerTaxId != null && invoice.customerTaxId!.trim().isNotEmpty && invoice.customerTaxId!.trim() != 'N/A'
+    final effectiveRuc = isPrintableCustomerValue(customerRuc)
+        ? customerRuc!.trim()
+        : (isPrintableCustomerValue(invoice.customerTaxId)
             ? invoice.customerTaxId!.trim()
             : null);
+    // The 'Contado' fallback string is a rendering decision, never a fact
+    // about the customer: decide from the printable-name booleans instead of
+    // comparing the resolved label back against 'Contado' (a real customer
+    // literally named "Contado" must still print their name).
+    final hasPrintableName =
+        hasPrintableExplicitName || isPrintableCustomerValue(invoice.customerName);
+    final showClienteLine = hasPrintableName || effectiveRuc == null;
+    if (showClienteLine) {
+      for (final line in formatKeyValue('Cliente:', clientDisplayName)) {
+        builder.textLine(line);
+      }
+    }
     if (effectiveRuc != null) {
       for (final line in formatKeyValue('RUC/Cedula:', effectiveRuc)) {
         builder.textLine(line);

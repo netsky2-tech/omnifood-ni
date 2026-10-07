@@ -4,6 +4,17 @@ import '../sales/invoice.dart';
 import '../sales/invoice_item.dart';
 import '../sales/payment.dart';
 
+/// A customer-block value counts as a fact only when it is non-blank and is
+/// not the legacy 'N/A' placeholder (case-insensitive). This mirrors
+/// `ReceiptLayoutFormatter.isPrintableCustomerValue`: the model and the
+/// renderer must agree on what counts as absent, or the same sale prints
+/// differently depending on which consumer reads the snapshot first. Kept
+/// here rather than imported so the domain model never depends on a service.
+bool _isPrintableCustomerValue(String? value) {
+  final trimmed = value?.trim() ?? '';
+  return trimmed.isNotEmpty && trimmed.toUpperCase() != 'N/A';
+}
+
 /// A modifier's precomputed, display-ready amount and scope. The renderer prints
 /// [displayAmount] verbatim and never multiplies it by line quantity.
 class ReceiptModifierDisplay {
@@ -442,14 +453,14 @@ class ReceiptDocument {
       documentNumber: invoice.number,
       date: invoice.createdAt,
       cashierName: (cashierName != null && cashierName.trim().isNotEmpty) ? cashierName.trim() : null,
-      customerName: (customerName != null && customerName.trim().isNotEmpty)
-          ? customerName.trim()
-          : (invoice.customerName != null && invoice.customerName!.trim().isNotEmpty
+      customerName: _isPrintableCustomerValue(customerName)
+          ? customerName!.trim()
+          : (_isPrintableCustomerValue(invoice.customerName)
               ? invoice.customerName!.trim()
               : null),
-      customerRuc: (customerRuc != null && customerRuc.trim().isNotEmpty && customerRuc.trim() != 'N/A')
-          ? customerRuc.trim()
-          : (invoice.customerTaxId != null && invoice.customerTaxId!.trim().isNotEmpty && invoice.customerTaxId!.trim() != 'N/A'
+      customerRuc: _isPrintableCustomerValue(customerRuc)
+          ? customerRuc!.trim()
+          : (_isPrintableCustomerValue(invoice.customerTaxId)
               ? invoice.customerTaxId!.trim()
               : null),
       originInvoiceId: invoice.originInvoiceId,
