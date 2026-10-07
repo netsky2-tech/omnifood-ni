@@ -63,12 +63,20 @@ Brechas confirmadas contra el código entregado:
 - [x] **T16** — `AGENTS.md`: sección de límites de recursos para suites locales.
 - [x] **T17** — `docs/devex/wsl2-memory-limits.md` + `.wslconfig` propuesto (16 GiB / 8 GiB) con
       procedimiento de aplicación y verificación.
-- [ ] **T18** — Manual POS: nueva §7.5 "Facturar a nombre de un cliente", corrección del paso 2 de
+- [x] **T18** — Manual POS: nueva §7.5 "Facturar a nombre de un cliente", corrección del paso 2 de
       §7.1, nota de inmutabilidad en §10, fila de changelog.
-- [ ] **T19** — Manual Owner Dashboard: columna `Cliente` / `Cliente / RUC` en §8.2, precedencia de
+- [x] **T19** — Manual Owner Dashboard: columna `Cliente` / `Cliente / RUC` en §8.2, precedencia de
       resolución y divergencia `Contado` vs `CONSUMIDOR FINAL`, fila de changelog.
 - [ ] **T20** — Verificación: `npm test` verde con el tope puesto, `flutter analyze`, links de
       imágenes de los manuales, y dos PRs (`chore(devex)` y `docs(nhilos)`) con su issue.
+
+## 2b. Correcciones al borrador del writer (registradas porque son el tipo de error que la doc delegada produce)
+
+El writer entregó texto fiel al estilo pero con tres afirmaciones no sustentadas en código. Se corrigieron antes de comitear:
+
+1. "si lo dejás vacío, la venta se trata como **venta al contado**" → colisiona con `Condicion: Contado` del mismo ticket, que es forma de pago, no identidad del comprador. Ahora dice qué se imprime y qué significa esa línea en el comprobante.
+2. Mapear `001-…A` a persona y `J031…` a empresa → **falso como regla**: el tenant SOHO es empresa con RUC `0011112930059D`, formato de cédula. Ahora indica copiar el número tal como figura en el documento de la DGI.
+3. "suena cuando el pedido está listo" → comportamiento del buzzer inventado, sin fuente. Eliminado.
 
 ## 3. Verificación
 
