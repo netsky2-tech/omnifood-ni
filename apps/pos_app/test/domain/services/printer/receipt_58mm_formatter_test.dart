@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
@@ -244,6 +246,41 @@ void main() {
       );
 
       expect(ticket, contains('MESA: Mesa 4'));
+    });
+
+    test('formatKitchenOrderEscPos prints the explicit modifier count on the comanda', () {
+      final items = [
+        InvoiceItem(
+          id: 'item-1',
+          invoiceId: 'inv-1',
+          productId: 'p-1',
+          productName: 'Capuccino',
+          quantity: 1,
+          unitPrice: 60,
+          originalTaxRate: 0.15,
+          appliedTaxRate: 0.15,
+          taxAmount: 9,
+          total: 69,
+          selectedModifiers: const [
+            Modifier(id: 'm-1', name: 'Extra Shot', extraPrice: 15, quantity: 2),
+            Modifier(id: 'm-2', name: 'Sin Azúcar', extraPrice: 0, quantity: 1),
+          ],
+        ),
+      ];
+
+      final bytes = Receipt58mmFormatter.formatKitchenOrderEscPos(
+        ticketId: 'TK-044',
+        orderTitle: 'Orden #44',
+        cashierName: 'Maria Cajera',
+        timestamp: DateTime(2026, 8, 26, 12, 25),
+        items: items,
+        tableName: 'Mesa 2',
+      );
+
+      final ticket = latin1.decode(bytes);
+      // The kitchen line always carries the explicit count (Issue #795).
+      expect(ticket, contains('* [MOD] 2x Extra Shot'));
+      expect(ticket, contains('* [MOD] 1x Sin Azúcar'));
     });
   });
 

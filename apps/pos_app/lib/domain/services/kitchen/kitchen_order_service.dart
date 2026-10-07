@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import '../printer/kitchen_modifier_lines.dart';
 import '../../models/kitchen/kitchen_order.dart';
 import '../../models/kitchen/kitchen_order_item.dart';
 import '../../models/sales/hold_ticket.dart';
@@ -225,7 +226,9 @@ class KitchenOrderService {
       final orderId = _uuid.v4();
 
       final kitchenOrderItems = items.map((cartItem) {
-        final modifierNames = cartItem.selectedModifiers.map((m) => m.name).toList();
+        final modifierNames = cartItem.selectedModifiers
+            .map((m) => KitchenModifierLines.quantityLabel(m.quantity, m.name))
+            .toList();
         return KitchenOrderItem(
           id: _uuid.v4(),
           kitchenOrderId: orderId,
@@ -294,7 +297,9 @@ class KitchenOrderService {
       final orderId = _uuid.v4();
 
       final kitchenOrderItems = stationItems.map((cartItem) {
-        final modifierNames = cartItem.selectedModifiers.map((m) => m.name).toList();
+        final modifierNames = cartItem.selectedModifiers
+            .map((m) => KitchenModifierLines.quantityLabel(m.quantity, m.name))
+            .toList();
         return KitchenOrderItem(
           id: _uuid.v4(),
           kitchenOrderId: orderId,
@@ -358,7 +363,9 @@ class KitchenOrderService {
 
       final orderId = _uuid.v4();
       final kitchenOrderItems = items.map((cartItem) {
-        final modifierNames = cartItem.selectedModifiers.map((m) => m.name).toList();
+        final modifierNames = cartItem.selectedModifiers
+            .map((m) => KitchenModifierLines.quantityLabel(m.quantity, m.name))
+            .toList();
         return KitchenOrderItem(
           id: _uuid.v4(),
           kitchenOrderId: orderId,

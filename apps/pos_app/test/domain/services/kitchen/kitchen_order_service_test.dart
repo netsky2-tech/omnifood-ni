@@ -62,7 +62,7 @@ void main() {
       expect(kitchenService.getSlaStatus(baseTime, time20m), KitchenSlaStatus.critical);
     });
 
-    test('routes and persists HoldTicket comanda to separate stations (COCINA vs BARRA)', () async {
+    test('routes and persists HoldTicket comanda to separate stations with formatted modifier quantities', () async {
       final ticket = HoldTicket(
         id: 'tick-301',
         name: 'Mesa 4 - Almuerzo',
@@ -78,7 +78,10 @@ void main() {
             quantity: 2,
             unitPrice: 100,
             taxRate: 0.15,
-            selectedModifiers: [Modifier(id: 'm-1', name: 'Sin Cilantro', extraPrice: 0)],
+            selectedModifiers: [
+              Modifier(id: 'm-1', name: 'Sin Cilantro', extraPrice: 0, quantity: 1),
+              Modifier(id: 'm-2', name: 'Extra Salsa', extraPrice: 15, quantity: 2),
+            ],
           ),
           CartItem(
             productId: 'p-ribeye',
@@ -114,7 +117,8 @@ void main() {
       expect(cocinaOrder.items.length, 2);
       expect(cocinaOrder.tableNumber, 'tbl-4');
       expect(cocinaOrder.tableName, 'Mesa 4 - Almuerzo');
-      expect(cocinaOrder.items.first.modifiers, contains('Sin Cilantro'));
+      expect(cocinaOrder.items.first.modifiers, contains('1x Sin Cilantro'));
+      expect(cocinaOrder.items.first.modifiers, contains('2x Extra Salsa'));
 
       expect(barraOrder.items.length, 2);
       expect(barraOrder.station, 'BARRA');
