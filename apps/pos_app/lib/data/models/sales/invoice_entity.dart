@@ -59,6 +59,10 @@ class InvoiceEntity {
   final String paymentStatus;
   @ColumnInfo(name: 'customer_id')
   final String? customerId;
+  @ColumnInfo(name: 'customer_name')
+  final String? customerName;
+  @ColumnInfo(name: 'customer_tax_id')
+  final String? customerTaxId;
   @ColumnInfo(name: 'global_tax_override')
   final bool globalTaxOverride;
   final String type; // 'regular' | 'creditNote'
@@ -178,6 +182,8 @@ class InvoiceEntity {
     this.syncStatus = 'pending',
     this.paymentStatus = 'pending',
     this.customerId,
+    this.customerName,
+    this.customerTaxId,
     this.globalTaxOverride = false,
     this.type = 'regular',
     this.relatedInvoiceId,

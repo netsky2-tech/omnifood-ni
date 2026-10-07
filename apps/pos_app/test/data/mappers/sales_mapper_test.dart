@@ -389,4 +389,115 @@ void main() {
       expect(json['totalUsd'], isNotNull);
     });
   });
+
+  group('SalesMapper — named invoice customer snapshot (odd/factura-con-nombre)', () {
+    final baseInvoice = Invoice(
+      id: 'inv-named',
+      number: '001-001-01-00000004',
+      createdAt: DateTime(2026, 10, 6),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+    );
+
+    Invoice namedInvoice() => baseInvoice.copyWith(
+          customerName: 'Distribuidora Central S.A.',
+          customerTaxId: 'J0310000001234',
+        );
+
+    test('toInvoiceEntity maps customerName and customerTaxId from domain to entity', () {
+      final entity = SalesMapper.toInvoiceEntity(namedInvoice());
+
+      expect(entity.customerName, 'Distribuidora Central S.A.');
+      expect(entity.customerTaxId, 'J0310000001234');
+    });
+
+    test('toInvoiceEntity leaves customerName and customerTaxId null when anonymous', () {
+      final entity = SalesMapper.toInvoiceEntity(baseInvoice);
+
+      expect(entity.customerName, isNull);
+      expect(entity.customerTaxId, isNull);
+    });
+
+    test('toInvoiceDomain maps customerName and customerTaxId from entity to domain', () {
+      final entity = SalesMapper.toInvoiceEntity(namedInvoice());
+
+      final domain = SalesMapper.toInvoiceDomain(entity);
+
+      expect(domain.customerName, 'Distribuidora Central S.A.');
+      expect(domain.customerTaxId, 'J0310000001234');
+    });
+
+    test('toSyncJson includes customerName and customerTaxId with real values', () {
+      final json = SalesMapper.toSyncJson(namedInvoice(), const [], const []);
+
+      expect(json['customerName'], 'Distribuidora Central S.A.');
+      expect(json['customerTaxId'], 'J0310000001234');
+    });
+
+    test('toSyncJson OMITS customerName/customerTaxId keys for an anonymous sale (cross-version hash stability)', () {
+      // The backend idempotency receipt hashes the canonical payload with a
+      // serializer that filters undefined but KEEPS nulls. An unconditional
+      // `"customerName": null` here would change the payload hash of every
+      // anonymous sale already receipted before this feature shipped: a
+      // retried outbox event would hash differently and be answered
+      // IDEMPOTENCY_MISMATCH (CRITICAL_PAYLOAD_MISMATCH, retryable: false),
+      // so the fiscal document would never reach the cloud mirror (the
+      // D-10 outbox-never-drains family). The anonymous payload must stay
+      // byte-identical to the pre-feature shape: NO key at all.
+      final json = SalesMapper.toSyncJson(baseInvoice, const [], const []);
+
+      expect(json.containsKey('customerName'), isFalse,
+          reason: 'a null snapshot must emit NO customerName key');
+      expect(json.containsKey('customerTaxId'), isFalse,
+          reason: 'a null snapshot must emit NO customerTaxId key');
+    });
+
+    test('toSyncJson OMITS the customer keys for BLANK snapshot values (not just null)', () {
+      final blankInvoice = baseInvoice.copyWith(
+        customerName: '   ',
+        customerTaxId: '',
+      );
+
+      final json = SalesMapper.toSyncJson(blankInvoice, const [], const []);
+
+      expect(json.containsKey('customerName'), isFalse);
+      expect(json.containsKey('customerTaxId'), isFalse);
+    });
+
+    test('toSyncJson emits ONLY the populated customer keys (name only / tax id only / both)', () {
+      final nameOnly = SalesMapper.toSyncJson(
+        baseInvoice.copyWith(customerName: 'Solo Nombre S.A.'),
+        const [],
+        const [],
+      );
+      expect(nameOnly['customerName'], 'Solo Nombre S.A.');
+      expect(nameOnly.containsKey('customerTaxId'), isFalse,
+          reason: 'a sale without tax id cannot have been receipted before the feature, so emitting only customerName is hash-safe');
+
+      final taxIdOnly = SalesMapper.toSyncJson(
+        baseInvoice.copyWith(customerTaxId: 'J0310000001234'),
+        const [],
+        const [],
+      );
+      expect(taxIdOnly['customerTaxId'], 'J0310000001234');
+      expect(taxIdOnly.containsKey('customerName'), isFalse);
+
+      final both = SalesMapper.toSyncJson(namedInvoice(), const [], const []);
+      expect(both['customerName'], 'Distribuidora Central S.A.');
+      expect(both['customerTaxId'], 'J0310000001234');
+    });
+
+    test('customer snapshot round-trips entity → domain → sync JSON unchanged', () {
+      final restored = SalesMapper.toInvoiceDomain(
+        SalesMapper.toInvoiceEntity(namedInvoice()),
+      );
+
+      final json = SalesMapper.toSyncJson(restored, const [], const []);
+
+      expect(json['customerName'], 'Distribuidora Central S.A.');
+      expect(json['customerTaxId'], 'J0310000001234');
+    });
+  });
 }
