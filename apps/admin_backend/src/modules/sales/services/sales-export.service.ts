@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
+  EntityManager,
   FindOptionsWhere,
   In,
   LessThanOrEqual,
@@ -14,6 +15,7 @@ import * as ExcelJS from 'exceljs';
 import PDFDocument = require('pdfkit');
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { FiscalSetupService } from '../../onboarding/services/fiscal-setup.service';
+import { Customer } from '../../customers/entities/customer.entity';
 import { Invoice } from '../entities/invoice.entity';
 import {
   CashShiftSession,
@@ -80,6 +82,25 @@ const escapeCsv = (
   return `"${str.replace(/"/g, '""')}"`;
 };
 
+/**
+ * Post-review remediation (ITEM 3): conservative fixed chunk size for the
+ * legacy customer-id catalog read. Postgres' bind-parameter ceiling is
+ * 65535; a wide date range over high-rotation retail data can produce far
+ * more distinct legacy ids than one statement may bind, so the list is read
+ * in bounded chunks and merged.
+ */
+export const CUSTOMER_ID_CHUNK_SIZE = 1000;
+
+/**
+ * Post-review remediation (ITEM 2): the savepoint that isolates the catalog
+ * resolution inside the export transaction. A statement error (missing
+ * table/grant, RLS policy error) aborts the surrounding transaction, so a
+ * plain try/catch cannot degrade safely — the failure must be rolled back
+ * to this savepoint before the export continues.
+ */
+export const CUSTOMER_SNAPSHOT_RESOLUTION_SAVEPOINT =
+  'customer_snapshot_resolution';
+
 const buildPdfBuffer = (doc: PDFKit.PDFDocument): Promise<Buffer> =>
   new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -90,6 +111,8 @@ const buildPdfBuffer = (doc: PDFKit.PDFDocument): Promise<Buffer> =>
 
 @Injectable()
 export class SalesExportService {
+  private readonly logger = new Logger(SalesExportService.name);
+
   constructor(
     @InjectRepository(Invoice)
     private readonly invoiceRepo: Repository<Invoice>,
@@ -157,15 +180,47 @@ export class SalesExportService {
     // pooled find silently returned zero rows under the production
     // NOBYPASSRLS role. Bound read, identical query semantics (mirrors
     // exportZReports' binding pattern).
-    const invoices = await runInTenantTransaction(
+    //
+    // Post-review fix (HIGH): the read ALSO resolves legacy display names
+    // inside the SAME tenant transaction — invoices migrated with a NULL
+    // customer_name snapshot must never surface the opaque internal
+    // customerId UUID in the DGI sales book ("Cliente" column).
+    const { invoices, customerNamesById } = await runInTenantTransaction(
       this.dataSource,
       tenantId,
-      (manager) =>
-        manager.getRepository(Invoice).find({
+      async (manager) => {
+        const readInvoices = await manager.getRepository(Invoice).find({
           where: whereClause,
           relations: ['items'],
           order: { created_at: 'ASC' },
-        }),
+        });
+        // Distinct, non-blank customerIds of invoices whose trimmed
+        // customerName snapshot is empty — the only rows needing a
+        // catalog lookup.
+        const unresolvedIds = [
+          ...new Set(
+            readInvoices
+              .filter(
+                (inv) =>
+                  !(inv.customerName ?? '').trim() &&
+                  !!(inv.customerId ?? '').trim(),
+              )
+              .map((inv) => (inv.customerId ?? '').trim()),
+          ),
+        ];
+
+        const customerNamesById = new Map<string, string>();
+        if (unresolvedIds.length > 0) {
+          await this.resolveLegacyCustomerNames(
+            manager,
+            tenantId,
+            unresolvedIds,
+            customerNamesById,
+          );
+        }
+
+        return { invoices: readInvoices, customerNamesById };
+      },
     );
 
     let totalGrossNio = 0;
@@ -236,7 +291,7 @@ export class SalesExportService {
         date: dateStr,
         invoiceNumber: inv.number || 'N/A',
         documentType: docType,
-        customerName: inv.customerId || 'CONSUMIDOR FINAL',
+        customerName: this.resolveCustomerDisplayName(inv, customerNamesById),
         exemptSubtotalNio: round2(exemptSubtotalNio),
         taxableSubtotalNio: round2(taxableSubtotalNio),
         taxAmountNio: round2(totalTax),
@@ -311,6 +366,103 @@ export class SalesExportService {
       contentType: 'application/json',
       data: exportData,
     };
+  }
+
+  /**
+   * Post-review remediation (ITEMs 1–3): legacy customer-name resolution.
+   *
+   * ITEM 1 — TEXT comparison: `customers.id` is a uuid primary key while
+   * `invoices.customer_id` is a plain varchar with NO foreign key and NO
+   * validation, so a repository `In([...])` on the uuid column forces
+   * Postgres to cast every literal to uuid and ANY legacy or manually-
+   * inserted non-UUID id raises 22P02 (invalid input syntax for type uuid),
+   * aborting the WHOLE DGI sales-book export. Comparing `id::text` never
+   * attempts the cast, so a legacy id can only miss — never throw. The
+   * explicit `tenant_id` predicate stays: binding is additive, never a
+   * replacement, and this must not become a cross-tenant read.
+   *
+   * ITEM 2 — SAVEPOINT degradation: the catalog read is a NON-ESSENTIAL
+   * enrichment inside the SAME tenant transaction. Postgres aborts the
+   * surrounding transaction after a statement error, so a plain try/catch
+   * cannot degrade safely; the resolution runs inside a savepoint that is
+   * rolled back to on failure (and released), letting the export survive
+   * and degrade unresolved rows to 'CONSUMIDOR FINAL'. The degradation is
+   * logged with a stable code — observable, never silent.
+   *
+   * ITEM 3 — bounded chunks: the distinct id list is read in fixed-size
+   * chunks so a wide date range cannot exceed Postgres' 65535 bind-parameter
+   * ceiling; chunk results merge into one map.
+   */
+  private async resolveLegacyCustomerNames(
+    manager: EntityManager,
+    tenantId: string,
+    unresolvedIds: string[],
+    customerNamesById: Map<string, string>,
+  ): Promise<void> {
+    const savepoint = CUSTOMER_SNAPSHOT_RESOLUTION_SAVEPOINT;
+    await manager.query(`SAVEPOINT ${savepoint}`);
+    try {
+      for (
+        let offset = 0;
+        offset < unresolvedIds.length;
+        offset += CUSTOMER_ID_CHUNK_SIZE
+      ) {
+        const chunk = unresolvedIds.slice(offset, offset + CUSTOMER_ID_CHUNK_SIZE);
+        const customers = await manager
+          .getRepository(Customer)
+          .createQueryBuilder('customer')
+          .select(['customer.id', 'customer.name'])
+          .where('customer.tenant_id = :tenantId', { tenantId })
+          .andWhere('customer.id::text IN (:...ids)', { ids: chunk })
+          .getMany();
+        for (const customer of customers) {
+          const name = (customer.name ?? '').trim();
+          if (name) {
+            customerNamesById.set(customer.id, name);
+          }
+        }
+      }
+      await manager.query(`RELEASE SAVEPOINT ${savepoint}`);
+    } catch (error) {
+      // Postgres aborted the surrounding transaction on the statement
+      // error: roll back to the savepoint (then release it) so the export
+      // transaction stays usable and the read degrades gracefully.
+      await manager.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      await manager.query(`RELEASE SAVEPOINT ${savepoint}`);
+      this.logger.warn(
+        `CUSTOMER_SNAPSHOT_RESOLUTION_DEGRADED: legacy customer-name catalog read failed; affected sales-book rows export as 'CONSUMIDOR FINAL' (${
+          error instanceof Error ? error.message : String(error)
+        })`,
+      );
+    }
+  }
+
+  /**
+   * Post-review fix (HIGH): DGI sales book "Cliente" resolution. Fiscal
+   * precedence:
+   *   a. the invoice's customerName snapshot taken at sale time always wins —
+   *      the catalog must never be applied retroactively to a fiscal document;
+   *   b. else the current catalog name resolved from the internal customerId
+   *      (legacy rows whose migration left customer_name NULL);
+   *   c. else the literal 'CONSUMIDOR FINAL'.
+   * The opaque internal customerId UUID must NEVER appear in the returned
+   * value, and the fallback is never an empty string.
+   */
+  private resolveCustomerDisplayName(
+    inv: Invoice,
+    namesById: Map<string, string>,
+  ): string {
+    const snapshot = (inv.customerName ?? '').trim();
+    if (snapshot) {
+      return snapshot;
+    }
+    const catalogName = inv.customerId
+      ? namesById.get(inv.customerId.trim())
+      : undefined;
+    if (catalogName) {
+      return catalogName;
+    }
+    return 'CONSUMIDOR FINAL';
   }
 
   async exportZReports(
