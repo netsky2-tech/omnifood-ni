@@ -182,6 +182,12 @@ class SyncService {
   final InventoryRepository _inventoryRepository;
   final Dio _dio;
   static const int _batchEnvelopeLimit = 500;
+
+  /// Issue #786: local-config key recording the app build that produced the
+  /// last successfully ingested inbound cursor. A stored build different
+  /// from (or absent next to) the current build omits the cursor for one
+  /// full re-emit per app release per device.
+  static const String _lastInboundSyncBuildKey = 'last_inbound_sync_build';
   final SyncRole _role;
   final AppDatabase? _database;
   final NetworkConnectivityService? _connectivityService;
@@ -3375,10 +3381,12 @@ class SyncService {
 
   /// Builds the four OHAC negotiation query parameters for the inbound pull
   /// (design §11.5 decision 30, §12), or an empty map — the legacy-client
-  /// answer — when they cannot be read.
+  /// answer — when the pre-read POS build is null.
   ///
-  /// Decision 30: the negotiated build is the POS's own package version read
-  /// at runtime, sent verbatim; when that read fails, ALL FOUR parameters
+  /// Decision 30: the negotiated build is the POS's own package version,
+  /// read once per pull by the request builder (issue #786's build-reset
+  /// decision shares that single read so both can never disagree) and sent
+  /// verbatim; when that read is null, ALL FOUR parameters
   /// are omitted so the backend classifies the terminal as a legacy client
   /// and omits the `humanAuthorization` member. A successful read is sent
   /// verbatim even when empty: the backend deliberately distinguishes absent
@@ -3391,11 +3399,12 @@ class SyncService {
   /// nothing else creates the fresh-install sentinel. Any failure reading
   /// the floor state also omits the parameters: a pull that cannot state its
   /// floor coherently must not claim negotiation it cannot support.
-  Future<Map<String, String>> _buildOhacNegotiationQueryParams() async {
+  Future<Map<String, String>> _buildOhacNegotiationQueryParams({
+    required String? posBuild,
+  }) async {
     final database = _database;
     if (database == null) return const {};
 
-    final posBuild = await readOhacPosBuild();
     if (posBuild == null) return const {};
 
     try {
@@ -3481,8 +3490,29 @@ class SyncService {
       );
       final sinceVersion = lastSyncConfig?.value;
 
+      // Issue #786: rows with updated_at <= sinceVersion are never
+      // re-emitted by the backend, so any payload field shipped in a new
+      // app build is invisible to a cursor the device already passed. When
+      // the app build differs from the one recorded at the last successful
+      // pull (or none was recorded), omit the cursor entirely for one full
+      // re-emit per app release per device. An unreadable (null/blank)
+      // build keeps today's cursor behavior — the legacy fail-closed path
+      // must not trigger a full-emit storm on every pull.
+      final currentBuild = await readOhacPosBuild();
+      final storedBuildConfig = await _database!.localConfigDao.getConfigByKey(
+        _lastInboundSyncBuildKey,
+      );
+      final storedBuild = storedBuildConfig?.value.trim();
+      final readableBuild = currentBuild?.trim();
+      final buildChanged =
+          readableBuild != null &&
+          readableBuild.isNotEmpty &&
+          storedBuild != readableBuild;
+
       final queryParams = <String, dynamic>{
-        if (sinceVersion != null && sinceVersion.trim().isNotEmpty)
+        if (sinceVersion != null &&
+            sinceVersion.trim().isNotEmpty &&
+            !buildChanged)
           'sinceVersion': sinceVersion.trim(),
         'terminalId': _auditRepository.deviceId,
       };
@@ -3490,8 +3520,12 @@ class SyncService {
       // OHAC pull negotiation (design §11.5 decision 30, §12). The params
       // are omitted entirely — the fail-closed legacy-client answer — when
       // the POS cannot read its own version; this unit sends the request,
-      // it does not consume the response.
-      queryParams.addAll(await _buildOhacNegotiationQueryParams());
+      // it does not consume the response. The build is read once above and
+      // passed here so the reset decision and the negotiation parameters
+      // can never disagree.
+      queryParams.addAll(
+        await _buildOhacNegotiationQueryParams(posBuild: currentBuild),
+      );
 
       final response = await _dio.get(
         '/v1/sync/inbound/deltas',
@@ -4619,6 +4653,19 @@ class SyncService {
               value: currentVersion.toString(),
             ),
           );
+          // Issue #786: record the build that produced this cursor, only
+          // inside this successful-ingest block — a failed pull leaves the
+          // previous build (or none) recorded, so its retry keeps reset
+          // semantics until it succeeds. An unreadable build is not
+          // recorded, so the next pull keeps the legacy cursor path.
+          if (currentBuild != null && currentBuild.trim().isNotEmpty) {
+            await _database!.localConfigDao.saveConfig(
+              LocalConfigEntity(
+                key: _lastInboundSyncBuildKey,
+                value: currentBuild,
+              ),
+            );
+          }
         }
 
         final result = InboundSyncResult(
