@@ -54,6 +54,30 @@ This document provides essential context and instructions for AI agents working 
 
 ---
 
+## 🧠 Test Execution Limits (Mandatory on WSL2 dev hosts)
+
+The local dev host runs WSL2 with a hard cap (12 GiB RAM + 4 GiB swap). Jest defaults to one
+worker per core (11 on this machine) and each worker compiles TypeScript in memory, so a plain
+`npm test` peak exceeds the cap and the **Linux OOM killer fires globally** — it does not just
+kill the test run, it kills the user-session services (`engram`, `moshi-hook`) that the agent
+harness depends on, which is why runs die mid-session with no useful error.
+
+- **Backend**: `maxWorkers: 2` is pinned in `apps/admin_backend/package.json` (jest config), so
+  `npm test` is already capped. Do not remove it to "speed up" local runs. CI is unaffected
+  (`ubuntu-latest` has 2–4 cores; `test:db` and `test:e2e` already pass `--runInBand`).
+- **Flutter**: run full suites with `flutter test --concurrency=2`, or per-directory blocks.
+  Default concurrency on 12 cores is a known OOM trigger on this host.
+- **Never** launch a full suite (Flutter or Jest) while subagents are still running. Each
+  subagent is its own Node process; the combined peak is what crosses the cliff.
+- If a run dies with `Killed`, or tools start returning no result, check `dmesg`/`/var/log/kern.log`
+  for `oom-kill` before debugging the code — the code is usually fine.
+- `flutter test` WebSocket load flakes (`Invalid WebSocket upgrade request`) that move between
+  files per run are toolchain noise under memory pressure, not test failures: re-run the specific
+  file isolated (`--concurrency=1`) before attributing them to a change.
+- See `docs/devex/wsl2-memory-limits.md` for the host-side `.wslconfig` raise and how to verify it.
+
+---
+
 ## 📚 Reference Documentation
 - **Product Requirement Document**: `docs/Product_Requirement_Document.md`
 - **Change History & Specs**: `openspec/`
