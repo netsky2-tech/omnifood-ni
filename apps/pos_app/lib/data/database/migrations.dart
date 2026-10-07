@@ -2759,6 +2759,24 @@ final migration63_64 = Migration(63, 64, (database) async {
   }
 });
 
+final migration64_65 = Migration(64, 65, (database) async {
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(invoices)',
+  );
+  if (columns.isEmpty) return;
+  final names = columns.map((row) => row['name'] as String).toSet();
+  if (!names.contains('customer_name')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN customer_name TEXT',
+    );
+  }
+  if (!names.contains('customer_tax_id')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN customer_tax_id TEXT',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2814,6 +2832,7 @@ final allMigrations = [
   migration61_62,
   migration62_63,
   migration63_64,
+  migration64_65,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

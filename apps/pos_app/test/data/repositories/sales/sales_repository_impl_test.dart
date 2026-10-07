@@ -2269,6 +2269,8 @@ void main() {
       'sync_status': 'synced',
       'payment_status': 'paid',
       'customer_id': 'cust-777',
+      'customer_name': 'Cliente Preservado',
+      'customer_tax_id': 'J0310000001234',
       'global_tax_override': 1,
       'type': 'regular',
       'related_invoice_id': 'rel-888',
@@ -2393,7 +2395,7 @@ void main() {
       expect(await schemaColumns(), seededRow.keys.toSet());
     });
 
-    test('voidInvoice preserves all 31 columns except its document identity',
+    test('voidInvoice preserves all columns except its document identity',
         () async {
       final before = (await readRow())!;
 
@@ -2424,7 +2426,7 @@ void main() {
       });
     });
 
-    test('markAsFailed preserves all 31 columns it must not change',
+    test('markAsFailed preserves all columns it must not change',
         () async {
       final before = (await readRow())!;
 

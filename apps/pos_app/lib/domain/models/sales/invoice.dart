@@ -26,6 +26,15 @@ class Invoice with _$Invoice {
     @Default(PaymentStatus.pending) PaymentStatus paymentStatus,
     @Default(InvoiceType.regular) InvoiceType type,
     String? customerId,
+
+    /// Factura con nombre: snapshot fiscal del nombre del cliente
+    /// capturado en el cobro o precargado desde un cliente registrado.
+    String? customerName,
+
+    /// Factura con nombre: snapshot fiscal de Cédula o RUC del cliente
+    /// capturado en el cobro o precargado desde un cliente registrado.
+    String? customerTaxId,
+
     @Default(false) bool globalTaxOverride,
     String? relatedInvoiceId, // For Credit Notes
     String? originInvoiceId,
