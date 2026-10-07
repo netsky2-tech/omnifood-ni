@@ -15,6 +15,7 @@ import {
   useCreateModifierOption,
   useUpdateModifierOption,
   useDeactivateModifierOption,
+  useReactivateModifierOption,
 } from "./use-modifiers";
 import { toast } from "@/hooks/use-toast";
 
@@ -164,6 +165,7 @@ describe("ModifierGroupForm", () => {
   const mockCreateOption = { mutateAsync: vi.fn(), isPending: false };
   const mockUpdateOption = { mutateAsync: vi.fn(), isPending: false };
   const mockDeactivateOption = { mutateAsync: vi.fn(), isPending: false };
+  const mockReactivateOption = { mutateAsync: vi.fn(), isPending: false };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -172,6 +174,7 @@ describe("ModifierGroupForm", () => {
     (useCreateModifierOption as any).mockReturnValue(mockCreateOption);
     (useUpdateModifierOption as any).mockReturnValue(mockUpdateOption);
     (useDeactivateModifierOption as any).mockReturnValue(mockDeactivateOption);
+    (useReactivateModifierOption as any).mockReturnValue(mockReactivateOption);
     (toast as any).mockImplementation(vi.fn());
     mockCreateGroup.mutateAsync.mockResolvedValue({
       ...mockGroup,
@@ -359,6 +362,57 @@ describe("ModifierGroupForm", () => {
           description: "No se pudo conectar con el servidor",
         }),
       );
+    });
+  });
+
+  describe("inactive option restoration", () => {
+    // Backend option payloads carry `is_active`; the shared ModifierOption
+    // type omits it, so the fixture casts the extra field.
+    const groupWithInactiveOption: ModifierGroup = {
+      ...mockGroup,
+      options: [
+        mockGroup.options[0]!,
+        { ...mockGroup.options[1]!, is_active: false } as ModifierOption,
+      ],
+    };
+
+    it("shows a Desactivada badge and an inline Activar button for an inactive option", () => {
+      renderForm(groupWithInactiveOption);
+
+      expect(screen.getByText("Desactivada")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Activar opción Deslactosada" }),
+      ).toBeInTheDocument();
+      // Active options get no activation affordance.
+      expect(
+        screen.queryByRole("button", { name: "Activar opción Entera" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("reactivates the option through its own mutation, separate from the save flow", async () => {
+      mockReactivateOption.mutateAsync.mockResolvedValue({ success: true });
+      renderForm(groupWithInactiveOption);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Activar opción Deslactosada" }),
+      );
+
+      await waitFor(() => {
+        expect(mockReactivateOption.mutateAsync).toHaveBeenCalledWith({
+          groupId: "group-1",
+          optionId: "opt-2",
+        });
+      });
+      await waitFor(() => {
+        expect(toast).toHaveBeenCalledWith(
+          expect.objectContaining({ title: "Opción activada" }),
+        );
+      });
+      // The badge clears and the standalone PATCH is NOT folded into the
+      // group/option save submissions.
+      expect(screen.queryByText("Desactivada")).not.toBeInTheDocument();
+      expect(mockUpdateGroup.mutateAsync).not.toHaveBeenCalled();
+      expect(mockUpdateOption.mutateAsync).not.toHaveBeenCalled();
     });
   });
 

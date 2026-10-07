@@ -112,3 +112,19 @@ attaching extras to sales, and it has real gaps.
    «Inactivos» view. No backend change.
 3. Deactivate dialog already promises reactivation — U2 makes it true; dialog
    copy stays as is.
+- U2 DELIVERED by worker `muxdnc0t-3-y1th` (verified by orchestrator, not
+  trusted from the report): RED 22F/17P → GREEN 39/39 focused vitest, plus
+  `modifiers-tabs.test.tsx` 10/10 untouched (its auto-mock of ./use-modifiers
+  never mounts inactive rows — noted as a future-test risk), `tsc --noEmit`
+  exit 0. Diff confined to the 6 allowed surfaces (+434/−29).
+  - API: `ModifierGroupStatus`, `reactivateModifierGroup/Option` (PATCH
+    `{is_active:true}`). Hook: `useModifierGroups(status?)` — default key
+    byte-identical to legacy `["modifiers", tenantId]`; inactive/all extend
+    the key under the same invalidation prefix. Groups tab: Activos/
+    Inactivos/Todos segmented control (aria), «Desactivado» badge,
+    confirm-guarded Power action, toasts «Grupo activado»/«Error al activar».
+    Form: «Desactivada» + per-option «Activar» fully decoupled from the
+    save/reconciliation flow.
+  - Deliberately untouched: desactivar flow/copy for active rows; inactive
+    rows expose only Activar (no edit — not requested; no re-deactivate —
+    meaningless); `types.ts` not modified (local type widening instead).
