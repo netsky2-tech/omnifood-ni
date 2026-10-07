@@ -163,3 +163,70 @@ el export. Familia R-18 / D-14: un identificador donde va el nombre de una perso
 **D-3 · No hay pantalla para editar un cliente.** `CustomerDao.updateCustomer` (`customer_dao.dart:41`) no
 tiene llamadores fuera del código generado, y en el panel del dueño tampoco hay alta ni edición de clientes
 (sólo ajuste de puntos). Un cliente mal cargado no se puede corregir.
+
+## 7. Ronda de verificación externa (post-implementación)
+
+Se corrió un verifier **read-only** sobre el diff completo contra `main`, con foco explícito en que la geometría
+milimétrica del ticket de SOHO no se moviera. Veredicto: geometría **intacta** (ninguna línea supera 32 col en
+58 mm ni 40 col en 80 mm, grilla de ítems e indentación colgante de 4 espacios sin tocar) y dos defectos reales
+que mi pasada por T3 no cubrió:
+
+**V-1 · D-2 quedó a medias en el export (ALTO).** `sales-export.service.ts` seguía con
+`customerName || (customerId || 'CONSUMIDOR FINAL')`. Como la migración deja `customer_name` en `NULL` en todo
+el histórico, cualquier factura vieja con cliente registrado exportaba su **UUID interno** al libro de ventas
+DGI. Arreglado en `3a05c8ef`: los nombres legacy se resuelven contra el catálogo `customers` **dentro de la
+misma** `runInTenantTransaction` (una unidad lógica de lectura, sin segunda transacción, sin dependencias nuevas
+de DI, y la lectura queda atada por RLS como la de invoices, issue #581 WU1). Precedencia: snapshot propio de
+la factura → nombre del catálogo → `'CONSUMIDOR FINAL'`. El `customerId` no puede llegar a ningún formato.
+
+**V-2 · La etiqueta `Cliente:` se truncaba en el path de lealtad ESC/POS (MEDIO).** `formatInvoiceEscPos` usaba
+`formatTwoColumns`, que recorta la **etiqueta izquierda** cuando el valor es largo: a 58 mm un nombre de 24–31
+caracteres imprimía `Cliente` / `Client` / sin etiqueta, y un RUC de 20–31 hacía lo mismo con `RUC/Cedula:` (a
+80 mm: 32–39 y 28–39). Sin cobertura de tests. Arreglado en `fb694dc2`: sólo esas dos emisiones
+pasaron al idiom `formatKeyValue` (etiqueta intacta, valor con wrap bajo indentación de 2 espacios). Los tests
+nuevos **prueban el defecto antes de probar la reparación**: afirman que `formatTwoColumns` sigue recortando la
+etiqueta en la banda exacta de ancho, y recién después que el ticket la conserva.
+
+> **Lección de esta ronda:** un fixture de test mal elegido hace que una aserción pase **vacía**. El primer
+> intento usó un nombre de 34 caracteres para 58 mm; como `formatTwoColumns` deriva a la rama lossless cuando el
+> valor supera el ancho, ese test pasaba también antes del fix y no ejercitaba nada. Las bandas hay que
+calcularlas por ancho de papel, no inventarlas.
+
+**D-2 en el ticket impreso: cerrado.** `receipt_document.dart` ya no cae al `customerId` y el escenario 4 de la
+integración afirma que el UUID no aparece en el papel.
+
+### Decisión de diseño confirmada (no es defecto)
+
+El verifier marcó que la venta anónima no imprime `Cliente: Contado` **adyacente**, sino `Cliente:` + relleno +
+`Contado` alineado a la derecha. Es el estilo de casa de **todos** los key-value del documento (`Fecha:`,
+`Atendido por:`, `SUBTOTAL:`, `IVA:`), que pasan por `formatKeyValue → formatTwoColumns`. Moverlo a la izquierda
+sería alterar la geometría aprobada, así que se deja y en su lugar se **fija el contrato**: el escenario 1 exige
+exactamente una línea que case `^Cliente:\s+Contado$`. Si alguien lo mueve, rompe el test.
+
+### Follow-ups (preexistentes, ajenos a este cambio, no tocados)
+
+- **FU-1 · Cabecera de grilla de ítems en 80 mm = 48 columnas en papel de 40.** En `formatInvoiceEscPos`, la rama
+  `maxCols > 38` arma `'CANT'(4) + 'DESCRIPCION'(22) + 'P.UNIT'(10) + 'TOTAL'(12)`. Existe en el código heredado
+  y se dejó intacto porque la grilla está fuera de la superficie aprobada acá; por eso el test de 80 mm mide el
+  ancho **sólo sobre el bloque de cliente**. Decisión pendiente del dueño.
+- **FU-2 · `Atendido por:` sufre la misma truncación de etiqueta** (13 caracteres) con cajeros largos, por la
+  misma razón (`formatTwoColumns`). Es preexistente y lo posee otro trabajo.
+- **FU-3 · Divergencia de término** (sección 5): `Contado` en el ticket vs `CONSUMIDOR FINAL` en el export vs
+  `Consumidor Final` en la interfaz. Sigue sin resolver; requiere una decisión del dueño, no del código.
+- **FU-4 · D-1 y D-3 siguen abiertos** (sync de clientes de alta local, y falta de pantalla de edición).
+
+### Estado de verificación final de esta rama
+
+| Suite | Resultado |
+|---|---|
+| POS `test/domain/services/printer/` | 154/154 |
+| POS `test/ui/features/sales/` + `test/data/repositories/sales/` + `test/presentation/features/sales/` | 614/614 |
+| POS `flutter analyze` | sin issues |
+| Backend `npm test` (completo) | 3687/3687 (8 skipped preexistentes) |
+| Backend `tsc --noEmit` | exit 0 |
+| POS `flutter test` (suite completa, ~3200) | 3196 pasan + 2 fallos de **carga** (`Unable to connect to flutter_tester process: WebSocketException`) |
+
+Sobre el último punto: los archivos que fallan **cambian entre corridas** (primero 3, después 2 distintos), el
+error es de conexión al proceso `flutter_tester` y **los cinco pasan al correrlos aislados**. Es flakiness del
+runner en paralelo bajo 3000+ tests en un host sin display, no una regresión de este diff. Ninguno de esos
+archivos toca impresión ni datos de cliente.
