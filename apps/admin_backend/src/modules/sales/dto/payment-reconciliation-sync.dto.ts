@@ -64,6 +64,16 @@ export class PaymentReconciliationSyncItemDto {
   batchNumber?: string;
 
   /**
+   * The supervisor credential the operator TYPED at override time
+   * (MANUAL_OVERRIDE), carried verbatim. Declared evidence only: it is
+   * stored as-is and never validated against `users`. Optional and absent
+   * for normal reconciliations, like the other correlation fields.
+   */
+  @IsString()
+  @IsOptional()
+  overrideSupervisorRef?: string;
+
+  /**
    * Carried for correlation with the terminal's datafono record. Deliberately
    * NOT written by this slice: the S1b contract enumerates exactly which
    * `invoice_payments` columns the upsert may touch, and `last4` is not one

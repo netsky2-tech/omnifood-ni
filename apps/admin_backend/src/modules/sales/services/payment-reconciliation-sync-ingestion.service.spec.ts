@@ -73,6 +73,7 @@ const RECONCILIATION_KEYS = [
   'reconciledAt',
   'reconciledByUserId',
   'batchNumber',
+  'overrideSupervisorRef',
 ];
 
 describe('PaymentReconciliationSyncIngestionService', () => {
@@ -104,6 +105,7 @@ describe('PaymentReconciliationSyncIngestionService', () => {
         reconciledAt: new Date('2026-01-01T12:30:00.000Z'),
         reconciledByUserId: 'user-1',
         batchNumber: 'B-001',
+        overrideSupervisorRef: null,
       },
     );
     // Amounts and method are fiscal-snapshot data owned by the sale sync;
@@ -312,6 +314,95 @@ describe('PaymentReconciliationSyncIngestionService', () => {
     expect(payments.update).toHaveBeenCalledWith(
       { id: 'pay-own' },
       expect.objectContaining({ reconciledByUserId: 'user-1' }),
+    );
+  });
+
+  it('persists a MANUAL_OVERRIDE supervisor credential SEPARATELY from the operator actor', async () => {
+    const payments = repoStub();
+    payments.findOne.mockResolvedValue(knownPayment());
+    const service = new PaymentReconciliationSyncIngestionService(
+      makeDataSource(payments).dataSource,
+      payments as never,
+    );
+
+    const result = await service.ingestReconciliationBatch('tenant-1', {
+      reconciliations: [
+        reconciliation({
+          reconciliationStatus: 'MANUAL_OVERRIDE',
+          reconciledByUserId: 'operator-9',
+          overrideSupervisorRef: 'SUP-TYPED-001',
+        }),
+      ],
+    });
+
+    expect(result.failed).toBe(0);
+    // Two distinct identities, two distinct columns: the real operator in
+    // reconciled_by_user_id, the supervisor credential the operator TYPED
+    // (declared evidence, never validated against users) in
+    // override_supervisor_ref.
+    expect(payments.update).toHaveBeenCalledWith(
+      { id: 'pay-001' },
+      expect.objectContaining({
+        reconciledByUserId: 'operator-9',
+        overrideSupervisorRef: 'SUP-TYPED-001',
+      }),
+    );
+  });
+
+  it('keeps overrideSupervisorRef null for a legacy payload that does not send it (backward compatible with the shipped POS)', async () => {
+    const payments = repoStub();
+    payments.findOne.mockResolvedValue(knownPayment());
+    const service = new PaymentReconciliationSyncIngestionService(
+      makeDataSource(payments).dataSource,
+      payments as never,
+    );
+
+    const result = await service.ingestReconciliationBatch('tenant-1', {
+      reconciliations: [reconciliation()],
+    });
+
+    expect(result.failed).toBe(0);
+    expect(payments.update).toHaveBeenCalledWith(
+      { id: 'pay-001' },
+      expect.objectContaining({ overrideSupervisorRef: null }),
+    );
+  });
+
+  it('normalizes an empty or whitespace-only overrideSupervisorRef to null without failing the record', async () => {
+    const payments = repoStub();
+    payments.findOne.mockImplementation(({ where }) =>
+      Promise.resolve(knownPayment({ id: where.id })),
+    );
+    const service = new PaymentReconciliationSyncIngestionService(
+      makeDataSource(payments).dataSource,
+      payments as never,
+    );
+
+    const result = await service.ingestReconciliationBatch('tenant-1', {
+      reconciliations: [
+        reconciliation({ overrideSupervisorRef: '' }),
+        reconciliation({
+          paymentId: 'pay-002',
+          invoiceId: 'inv-001',
+          overrideSupervisorRef: '   ',
+        }),
+      ],
+    });
+
+    // Neither record blows up the batch; both persist as "no supervisor
+    // credential declared".
+    expect(result.received).toBe(2);
+    expect(result.processed).toBe(2);
+    expect(result.failed).toBe(0);
+    expect(payments.update).toHaveBeenNthCalledWith(
+      1,
+      { id: 'pay-001' },
+      expect.objectContaining({ overrideSupervisorRef: null }),
+    );
+    expect(payments.update).toHaveBeenNthCalledWith(
+      2,
+      { id: 'pay-002' },
+      expect.objectContaining({ overrideSupervisorRef: null }),
     );
   });
 
