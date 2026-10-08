@@ -7,11 +7,13 @@ import { CustomersController } from './controllers/customers.controller';
 import { CustomerSyncController } from './controllers/customer-sync.controller';
 import { CustomerSyncIngestionService } from './services/customer-sync-ingestion.service';
 import { IdentityModule } from '../identity/identity.module';
+import { DeviceSyncModule } from '../identity/device-sync.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Customer, CustomerPointTransaction]),
     IdentityModule,
+    DeviceSyncModule,
   ],
   controllers: [CustomersController, CustomerSyncController],
   providers: [CustomersService, CustomerSyncIngestionService],
