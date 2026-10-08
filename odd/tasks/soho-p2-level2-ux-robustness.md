@@ -36,16 +36,18 @@
 
 **Síntoma:** al conciliar vouchers uno por uno, el contador/lista de pendientes del turno no se mueve; sólo se actualiza cuando se cierra el diálogo completo.
 
-**Causa raíz (verificada):** `cash_shift_view.dart:138` `openVoucherReconciliationDialog()` encadena `.then((_) => vm.refreshPendingVouchersCount())`. El refresh ocurre **al descartar el diálogo**, no por voucher conciliado. `CardVoucherReconciliationViewModel.reconcileVoucher()` marca el pago individual y notifica a sus propios listeners, pero el `CashShiftViewModel` padre queda con `pendingVouchersCount` viejo hasta el cierre. El `CloseShiftDialog` no tiene UI de vouchers; el gate vive en `showCloseShiftFlow` (~79-100).
+**Causa raíz (verificada):** `widgets/close_shift_dialog.dart:138-152` — `openVoucherReconciliationDialog()` crea el `CardVoucherReconciliationViewModel` y encadena `.then((_) => vm.refreshPendingVouchersCount())`. El refresh ocurre **al descartar el diálogo completo**, no por voucher conciliado. `CardVoucherReconciliationViewModel.reconcileVoucher()` marca el pago individual y notifica a sus propios listeners, pero el `CashShiftViewModel` padre queda con `pendingVouchersCount` viejo hasta el cierre. El `CloseShiftDialog` no tiene UI de vouchers; el gate vive en `showCloseShiftFlow` (~79-100).
 
 **Fix:**
 1. Notificar al padre de forma **reactiva por voucher**: exponer el `CardVoucherReconciliationViewModel` (o un callback `onVoucherReconciled`) y llamar `refreshPendingVouchersCount()` tras cada conciliación exitosa, manteniendo el diálogo abierto.
 2. Dejar el `.then(...)` del cierre como refresco de seguridad (idempotente), no como el único mecanismo.
 3. Verificar que el estado del turno (gate de cierre) se reevalúe con el contador fresco.
 
-**Superficie:** `apps/pos_app/lib/ui/features/cash/cash_shift_view.dart`, `apps/pos_app/lib/ui/features/cash/widgets/card_voucher_reconciliation_dialog.dart`, view models de cash (+ tests).
+**Anclas exactas:** `widgets/card_voucher_reconciliation_dialog.dart:357-366` (el botón `btn_reconcile_<id>` hace `await viewModel.reconcileVoucher(...)` y no avisa a nadie), `card_voucher_reconciliation_view_model.dart:40-100` (`reconcileVoucher` relee `_pendingVouchers` del hijo; el padre queda viejo), `cash_shift_view_model.dart:257` (`refreshPendingVouchersCount` lee `paymentDao.countPendingCardPayments()`), `cash_shift_view.dart:316` y `:365` (badge y botón `Vouchers (n)` que se ven mal), `widgets/close_shift_dialog.dart:79-100` (el gate de Corte Z lee `vm.hasPendingVouchers` / `vm.pendingVouchersCount`). **Mismo defecto** en el override de voucher extraviado: `overrideMissingVoucher` y `_showOverrideDialog` (dialog:46+) tampoco notifican al padre; debe quedar cubierto por el mismo mecanismo.
 
-**Checks:** test que concilia un voucher dentro del diálogo y afirma que el contador del padre baja sin cerrar el diálogo.
+**Superficie:** `apps/pos_app/lib/ui/features/cash/card_voucher_reconciliation_view_model.dart`, `apps/pos_app/lib/ui/features/cash/widgets/card_voucher_reconciliation_dialog.dart`, `apps/pos_app/lib/ui/features/cash/widgets/close_shift_dialog.dart`, `apps/pos_app/lib/ui/features/cash/cash_shift_view_model.dart` (+ tests en `test/ui/features/cash/`).
+
+**Checks:** test que concilia un voucher dentro del diálogo y afirma que el contador del padre baja **sin** cerrar el diálogo; idem para el override. `flutter analyze` acotado + `flutter test --concurrency=2 test/ui/features/cash`.
 
 **Commit evidencia:** —
 
