@@ -7,7 +7,7 @@
 **Version:** 1.1  
 **Date:** 2026-10-02  
 **Authority:** Contrato de contenido aprobado para la página profunda de producto.  
-**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.2.md` (v1.2) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
+**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.2) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara según el contexto que el prospecto comparte (Sección 12), y los estados de éxito y error le devuelven un siguiente paso definido.
 **DEPENDENCIA PENDIENTE — no existe en el repositorio:** `nhilos_website_homepage_content_v1.1.md` no existe en ningún lugar del repositorio. Este documento NO puede promocionarse para publicación hasta que esa dependencia exista. La alineación con ella y la verificación de capacidades contra builds y evidencia vigentes permanecen como gates separados de publicación.  
 **GATE DE PUBLICACIÓN:** la publicación de esta página está bloqueada por (a) la creación de `nhilos_website_homepage_content_v1.1.md` y (b) la verificación de capacidades contra el build vigente.
@@ -1192,7 +1192,64 @@ Antes de habilitar el formulario:
 
 ---
 
-# 15\. Cross-Section Claim Register
+# 15\. Section 13 — Loyalty & Promotions
+
+> **Nota de trazabilidad:** sección añadida como extensión posterior a la v1.1 aprobada, sin renumerar las secciones 01–12 existentes. Los claims de esta sección citan la extensión loyalty del OD-02 (`PC-LOY-01..06`), registrada en el OD-02 antes de ser citada aquí (orden de gobernanza `G-04`).
+
+## Purpose
+
+Explicar cómo el POS identifica clientes, acumula y canjea puntos, y aplica promociones de forma determinista, con los límites exactos de cada capacidad. La sección debe generar una expectativa correcta sobre lo que la lealtad hace hoy y lo que explícitamente no hace.
+
+## Proposed copy
+
+**Eyebrow**
+
+> Lealtad y promociones
+
+**Headline**
+
+> **Identificás al cliente, acumulás puntos y aplicás promociones sin detener la caja.**
+
+**Supporting copy**
+
+> El cliente se identifica en mostrador por QR, código, teléfono o búsqueda por nombre, incluso sin internet. Los puntos se acumulan en cada venta y se canjean como descuento con reglas visibles: mínimo de puntos, validación de saldo y descuento nunca mayor al total. Las promociones configuradas centralmente se aplican solas y de forma determinista, y el dueño ajusta puntos con actor y motivo.
+
+**Status:** `PROPOSED / EVIDENCE_REQUIRED`
+
+## Situation → Behavior → Effect
+
+- **Situación:** el negocio quiere fidelizar clientes y ejecutar promociones, pero el mostrador no puede depender de una conexión ni de reglas que nadie opera en el momento.
+- **Comportamiento:** el cajero identifica al cliente con datos locales (`NHL1:{code}` por QR, código, teléfono o nombre); al guardar la venta con cliente seleccionado, el sistema acumula puntos a la tasa configurada y registra el canje validado cuando el operador lo inicia; el motor de promociones aplica de forma determinista las promociones activas localmente; las transacciones de puntos sincronizan a la nube con llave de idempotencia.
+- **Efecto:** la fidelización y las promociones operan dentro del flujo de caja sin detener la venta, con la configuración y la economía de recompensas en manos del dueño, deriva de redondeo acotada (hasta 0.5 punto por transacción) y sin paridad exacta de saldo en tiempo real.
+
+## Restrictions
+
+No publicar sin evidencia adicional, ni insinuar:
+
+- acumulación por reglas de programa, sellos o visitas (la tasa es plana);
+- acumulación automática de puntos en la nube desde tickets;
+- recompensas cuyo beneficio (descuento o producto gratis) se aplique solo al total del carrito;
+- ciclo de intención/anulación de canje manejado desde el POS;
+- expiración de puntos, niveles (tiers), campañas o dashboards de KPIs de loyalty;
+- portal del consumidor;
+- paridad exacta de saldo POS↔nube en tiempo real.
+
+## Claim IDs
+
+| ID | Claim | OD-02 source | Evidence needed | Gate |
+| :---- | :---- | :---- | :---- | :---- |
+| LY-001 | Los clientes acumulan puntos automáticamente en cada venta guardada localmente, offline. | PC-LOY-01 | Flujo earn demostrable con cliente seleccionado y tasa plana visible. | Product |
+| LY-002 | Los puntos se canjean como descuento en mostrador con salvaguardas, siempre iniciado por el operador. | PC-LOY-02 | Validaciones de mínimo, saldo y tope al total demostrables; beneficio de catálogo no aplicado al carrito. | Product |
+| LY-003 | Las transacciones de puntos sincronizan a la nube de forma idempotente; los duplicados no cuentan doble. | PC-LOY-03 | Ingesta con llave de idempotencia y prueba de replay; sin promesa de paridad exacta en tiempo real. | Engineering |
+| LY-004 | Los clientes se identifican en mostrador por QR, código, teléfono o búsqueda por nombre, totalmente offline. | PC-LOY-04 | Cliente existente localmente; formato QR `NHL1:{code}`; permiso de cámara para escaneo. | Product |
+| LY-005 | Las promociones (buy-X-get-Y free, porcentaje, monto fijo, combo) se aplican de forma automática y determinista en el POS y se administran centralmente. | PC-LOY-05 | Promoción activa localmente (push de nube recibido); filas malformadas descartadas; sin ligar a reglas de puntos. | Product |
+| LY-006 | El dueño configura programas y recompensas, ajusta puntos con actor y motivo, y ve la economía profit-aware de cada recompensa. | PC-LOY-06 | Rol OWNER/MANAGER; sin KPIs de loyalty, campañas, tiers ni portal del consumidor. | Product / Backoffice |
+
+&nbsp;
+
+---
+
+# 16\. Cross-Section Claim Register
 
 Este registro consolida los claims mínimos de la página y sirve como base para la fase de verificación.
 
@@ -1210,6 +1267,7 @@ Este registro consolida los claims mínimos de la página y sirve como base para
 | SP-001–SP-004 | Support | Canales y condiciones de atención | Operations / Commercial |
 | FAQ-01–FAQ-10 | FAQs | Respuestas públicas | Owners por tema |
 | DM-001–DM-004 | Demo CTA | Conversión y tratamiento de datos | Web / Commercial / Legal |
+| LY-001–LY-006 | Loyalty & Promotions (§15) | Identificación de cliente, puntos, canje y promociones | Product / Engineering |
 
 &nbsp;
 
@@ -1234,7 +1292,7 @@ Un claim no se considera aprobado por estar documentado en un PRD. Se requiere e
 
 ---
 
-# 16\. Publication Gates
+# 17\. Publication Gates
 
 ## Gate A — Product truth
 
@@ -1295,7 +1353,7 @@ Confirmar:
 
 ---
 
-# 17\. Editorial and UX Rules
+# 18\. Editorial and UX Rules
 
 ## Writing rules
 
@@ -1324,7 +1382,7 @@ Alinear la presentación con la identidad NHILOS y el sistema visual del website
 
 ---
 
-# 18\. Open Decisions & Dependencies
+# 19\. Open Decisions & Dependencies
 
 Las siguientes decisiones deben cerrarse antes de la publicación. La tabla registra el estado de cierre verificado contra artefactos del repositorio:
 
@@ -1347,11 +1405,11 @@ Las siguientes decisiones deben cerrarse antes de la publicación. La tabla regi
 
 ---
 
-# 19\. Definition of Done
+# 20\. Definition of Done
 
 La página puede pasar a diseño/implementación cuando:
 
-- [x] las 12 secciones conservan el orden contractual;  
+- [x] las 13 secciones conservan el orden contractual (12 originales + Loyalty & Promotions añadida como Section 13, con renumeración de las secciones de cierre del documento);  
 - [x] cada bloque respeta Situación → Comportamiento → Efecto;  
 - [x] los claims funcionales tienen evidencia o permanecen bloqueados — el registro existe y todo claim sin evidencia verificada permanece bloqueado; la verificación claim por claim es prerrequisito de publicación, no de esta lista;  
 - [x] continuidad describe escenarios concretos y sus límites — escenarios y topología single-terminal Q80 documentados; la evidencia de pruebas es materia de Gate B;  
@@ -1362,14 +1420,14 @@ La página puede pasar a diseño/implementación cuando:
 - [x] las FAQs responden preguntas reales y no contradicen el copy principal;  
 - [ ] la demo tiene un flujo funcional y responsable de seguimiento — flujo definido, receptor web/comercial sin asignar (OD-PP-10);  
 - [ ] privacidad y accesibilidad han sido revisadas — aviso de datos de cliente CLIENT-READY; falta adenda de privacidad del formulario y revisión final de accesibilidad (OD-PP-11, Gate C/E);  
-- [ ] se completaron los publication gates aplicables — estado actual de Gates A–E en §21.3;  
+- [ ] se completaron los publication gates aplicables — estado actual de Gates A–E en §22.3;  
 - [x] existe un registro de claims con responsables y fecha de aprobación — el registro y sus campos obligatorios están definidos; las entradas quedan sujetas a la verificación de claims.
 
-Los ítems marcados `[x]` corresponden a cierre editorial/estructural verificado en la auditoría del contrato. Los ítems `[ ]` son gate-dependent y se rigen por el estado de Gates A–E y por las decisiones OD-PP registradas en §18.
+Los ítems marcados `[x]` corresponden a cierre editorial/estructural verificado en la auditoría del contrato. Los ítems `[ ]` son gate-dependent y se rigen por el estado de Gates A–E y por las decisiones OD-PP registradas en §19.
 
 ---
 
-# 20\. Final Content Contract
+# 21\. Final Content Contract
 
 La página profunda de NHILOS POS debe demostrar el producto desde la operación real: qué situación atiende, qué hace el sistema y qué efecto observable produce. Su función no es maximizar la cantidad de funcionalidades anunciadas, sino reducir la incertidumbre del visitante y facilitar una evaluación informada.
 
@@ -1383,14 +1441,14 @@ La página no debe vender como disponible lo que solo está diseñado, planifica
 
 ---
 
-# 21\. Audit & Promotion Record
+# 22\. Audit & Promotion Record
 
 **Audit:** `CONTENT-CONTRACT AUDIT — CLOSED WITH PUBLICATION BLOCKERS`  
 **Reviewed version:** `1.0`  
 **Promoted version:** `1.1`  
 **Date:** `2026-10-02`
 
-## 21.1 Findings and corrective actions
+## 22.1 Findings and corrective actions
 
 | ID | Finding | Correction / disposition | Closure status |
 | :---- | :---- | :---- | :---- |
@@ -1402,14 +1460,14 @@ La página no debe vender como disponible lo que solo está diseñado, planifica
 | AA-06 | Implementación y soporte podían crear compromisos comerciales no aprobados. | Se condicionan alcance, entregables, canales, cobertura y SLA al modelo comercial/operativo aprobado. | `CLOSED — commercial approval pending` |
 | AA-07 | No existe un expediente de evidencia completo para cada claim. | Se formalizan los campos obligatorios del registro y se mantiene bloqueada la publicación de claims no aprobados. | `CLOSED — evidence collection pending` |
 | AA-08 | Faltaba separar el cierre editorial del permiso de publicación. | Se establece la promoción del contrato como decisión independiente y se conserva `Publication authority: NOT GRANTED`. | `CLOSED` |
-| AA-09 | Las decisiones OD-PP-01 a OD-PP-12 carecían de trazabilidad de estado, evidencia y resolución detallada, impidiendo distinguir cierres reales de pendientes. | Se expande la tabla de §18 con columnas Status, Owner, Evidence / Concrete Artifact Linkage y Detailed Resolution, vinculando cada decisión a artefactos del repositorio (NH-SA-0001, NH-SO-0001, NH-MAN-DSH-001, NH-AUD-POS-001, OP-01/OP-07, CD-05/06/14/15, NH-CHK-HW-001, NH-POL-SUP-001, NH-POL-DAT-001, readiness §14). | `CLOSED — evidence integrated` |
-| AA-10 | La Definition of Done no distinguía ítems editoriales/estructurales verificados de condiciones gate-dependent, lo que permitía leer la lista como bloqueo total o como aprobación total. | Se actualiza §19: los ítems de cierre editorial/estructural verificado quedan marcados `[x]` y los gate-dependent permanecen `[ ]` con referencia explícita a su OD-PP y gate correspondiente. | `CLOSED — delineation applied` |
+| AA-09 | Las decisiones OD-PP-01 a OD-PP-12 carecían de trazabilidad de estado, evidencia y resolución detallada, impidiendo distinguir cierres reales de pendientes. | Se expande la tabla de §19 con columnas Status, Owner, Evidence / Concrete Artifact Linkage y Detailed Resolution, vinculando cada decisión a artefactos del repositorio (NH-SA-0001, NH-SO-0001, NH-MAN-DSH-001, NH-AUD-POS-001, OP-01/OP-07, CD-05/06/14/15, NH-CHK-HW-001, NH-POL-SUP-001, NH-POL-DAT-001, readiness §14). | `CLOSED — evidence integrated` |
+| AA-10 | La Definition of Done no distinguía ítems editoriales/estructurales verificados de condiciones gate-dependent, lo que permitía leer la lista como bloqueo total o como aprobación total. | Se actualiza §20: los ítems de cierre editorial/estructural verificado quedan marcados `[x]` y los gate-dependent permanecen `[ ]` con referencia explícita a su OD-PP y gate correspondiente. | `CLOSED — delineation applied` |
 | AA-11 | El estado de las vistas administrativas y su frescura no contaba con artefacto de referencia, dejando Gate A y la sección de dashboard sin sustento verificable. | Inventario de vistas y contrato de frescura del Owner Dashboard establecidos en NH-MAN-DSH-001 §2–§9; OD-PP-04 pasa a `CLOSED`. | `CLOSED — artifact published` |
-| AA-12 | La lista de blockers residuales no especificaba el estado exacto de cierre de las OD-PP, el estado de Gates A–E ni el prerrequisito de verificación de claims, y carecía de disposición formal de autoridad de publicación. | Se reescribe §21.3 con el estado de cierre exacto de OD-PP-01 a OD-PP-12, el estado por gate (A–E), el prerrequisito de verificación de claims y la declaración final de autoridad de publicación. | `CLOSED — disposition formalized` |
+| AA-12 | La lista de blockers residuales no especificaba el estado exacto de cierre de las OD-PP, el estado de Gates A–E ni el prerrequisito de verificación de claims, y carecía de disposición formal de autoridad de publicación. | Se reescribe §22.3 con el estado de cierre exacto de OD-PP-01 a OD-PP-12, el estado por gate (A–E), el prerrequisito de verificación de claims y la declaración final de autoridad de publicación. | `CLOSED — disposition formalized` |
 
 &nbsp;
 
-## 21.2 Promotion decision
+## 22.2 Promotion decision
 
 Se promueve este documento a:
 
@@ -1417,9 +1475,9 @@ Se promueve este documento a:
 
 La aprobación cubre la arquitectura narrativa, el orden de las doce secciones, los criterios editoriales, el modelo de claims, las restricciones de contenido y los gates de publicación. No certifica que cada funcionalidad descrita esté disponible, ni aprueba capturas, compatibilidad, soporte, condiciones comerciales, privacidad o consistencia final con la homepage.
 
-En la revisión posterior del registro de auditoría se verificó el cierre parcial del conjunto de decisiones OD-PP contra artefactos del repositorio: OD-PP-04 y OD-PP-07 `CLOSED`, OD-PP-09 `CLOSED WITH CONDITION` (unificación de canales DR-0), siete decisiones `PARTIALLY RESOLVED` con evidencia vinculada (OD-PP-01/02/03/05/06/08/11) y dos `OPEN` (OD-PP-10, OD-PP-12 / Gate E). Esta reconciliación se registra en §18 y §21.3 y no modifica el alcance de la aprobación: la promoción sigue siendo una decisión editorial independiente del permiso de publicación, que permanece `NOT GRANTED`.
+En la revisión posterior del registro de auditoría se verificó el cierre parcial del conjunto de decisiones OD-PP contra artefactos del repositorio: OD-PP-04 y OD-PP-07 `CLOSED`, OD-PP-09 `CLOSED WITH CONDITION` (unificación de canales DR-0), siete decisiones `PARTIALLY RESOLVED` con evidencia vinculada (OD-PP-01/02/03/05/06/08/11) y dos `OPEN` (OD-PP-10, OD-PP-12 / Gate E). Esta reconciliación se registra en §19 y §22.3 y no modifica el alcance de la aprobación: la promoción sigue siendo una decisión editorial independiente del permiso de publicación, que permanece `NOT GRANTED`.
 
-## 21.3 Residual publication blockers
+## 22.3 Residual publication blockers
 
 Los siguientes elementos permanecen abiertos y no deben interpretarse como defectos del contrato aprobado; son condiciones de salida a producción. Esta sección es la disposición formal de cierre vigente y sustituye a la lista genérica de la versión 1.0 del registro.
 
@@ -1444,7 +1502,7 @@ Los siguientes elementos permanecen abiertos y no deben interpretarse como defec
 
 ### Prerrequisito de verificación de claims
 
-Ningún claim del registro (§15) puede publicarse sin verificación registrada con versión/build, escenario, responsable, estado y fecha. Los claims sin evidencia permanecen bloqueados; el registro con responsables y fecha de aprobación es prerrequisito de Gate A y Gate D, y su cumplimiento se auditará contra la versión publicada del producto (`1.0.1+6` o posterior).
+Ningún claim del registro (§16) puede publicarse sin verificación registrada con versión/build, escenario, responsable, estado y fecha. Los claims sin evidencia permanecen bloqueados; el registro con responsables y fecha de aprobación es prerrequisito de Gate A y Gate D, y su cumplimiento se auditará contra la versión publicada del producto (`1.0.1+6` o posterior).
 
 ### Disposición final de autoridad de publicación
 
@@ -1463,7 +1521,7 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 
 # Anexo A — Matriz de Trazabilidad de Claims (Product Page → OD-02)
 
-**Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, §Reglas) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.2.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
+**Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, §Reglas) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.3.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`, `LY-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`, `PC-LOY-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
 
 | Claim ID | Sección | Assertion (resumen) | OD-02 ID(s) | Tipo | Estado |
 | :---- | :---- | :---- | :---- | :---- | :---- |
@@ -1516,6 +1574,12 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 | DM-002 | §14 Demo CTA | La demo se prepara según el contexto compartido. | N/A | MARKETING | MARKETING |
 | DM-003 | §14 Demo CTA | La información del formulario se trata conforme a la política publicada. | N/A | MARKETING | MARKETING |
 | DM-004 | §14 Demo CTA | Los mensajes de confirmación reflejan el estado real del envío. | N/A | MARKETING | MARKETING |
+| LY-001 | §15 Loyalty & Promotions | Acumulación automática de puntos por venta guardada localmente, offline. | PC-LOY-01 | TÉCNICO | RESPALDADO |
+| LY-002 | §15 Loyalty & Promotions | Canje de puntos como descuento en mostrador con salvaguardas, iniciado por el operador. | PC-LOY-02 | TÉCNICO | RESPALDADO |
+| LY-003 | §15 Loyalty & Promotions | Sincronización idempotente de transacciones de puntos; duplicados no cuentan doble. | PC-LOY-03 | TÉCNICO | RESPALDADO |
+| LY-004 | §15 Loyalty & Promotions | Identificación del cliente por QR, código, teléfono o nombre, totalmente offline. | PC-LOY-04 | TÉCNICO | RESPALDADO |
+| LY-005 | §15 Loyalty & Promotions | Promociones aplicadas de forma automática y determinista en el POS, administradas centralmente. | PC-LOY-05 | TÉCNICO | RESPALDADO |
+| LY-006 | §15 Loyalty & Promotions | Configuración de programas/recompensas, ajuste de puntos con actor y motivo, economía profit-aware. | PC-LOY-06 | TÉCNICO | RESPALDADO |
 
 Notas de la matriz:
 

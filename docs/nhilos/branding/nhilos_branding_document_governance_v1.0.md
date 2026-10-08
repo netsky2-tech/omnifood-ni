@@ -40,7 +40,7 @@ el set.
    arquitectura de marca, personalidad, comportamiento verbal y no-negociables.
         │
         ▼
-2. product_claim_audit_od02_v1.2.md                    [branding/Recursos/]
+2. product_claim_audit_od02_v1.3.md                    [branding/Recursos/]
    Autoridad de claims. Inventario de lo que el producto REALMENTE hace,
    con evidencia de código y límites declarados. Traduce la realidad técnica
    a claims admisibles.
@@ -98,7 +98,7 @@ a él como upstream. Si un documento necesita una regla que vive arriba, la cita
 | # | Documento (id) | Ruta | Rol | Versión | Estado |
 |---|---|---|---|---|---|
 | 1 | `nhilos_brand_experience_principles_v1.0.md` | `docs/nhilos/` | Constitución de marca | 1.0 | `APPROVED / AUTHORITATIVE` |
-| 2 | `product_claim_audit_od02_v1.2.md` | `branding/Recursos/` | Autoridad de claims | 1.2 | `CLOSED / VERIFIED / RE-ANCHORED` |
+| 2 | `product_claim_audit_od02_v1.3.md` | `branding/Recursos/` | Autoridad de claims | 1.3 | `CLOSED / VERIFIED / RE-ANCHORED` |
 | 3 | `nhilos_website_product_marketing_brief_v1.0.md` | `branding/` | Narrativa de marketing | 1.0 | `APPROVED` |
 | 4 | `nhilos_website_information_architecture_content_wireframe_v1.0.md` | `branding/` | IA y contenido del sitio | 1.0 | `APPROVED` |
 | 5 | `nhilos_pos_product_page_content_v1.1.md` | `branding/` | Contrato de contenido de producto | 1.1 | `APPROVED / PUBLICATION GATED` |

@@ -1,7 +1,7 @@
 # NHILOS — Product Claim Audit / OD-02
 
-**Documento:** `product_claim_audit_od02_v1.2.md`  
-**Versión:** 1.2 (Reconciliación Normativa + Re-anclaje)  
+**Documento:** `product_claim_audit_od02_v1.3.md`  
+**Versión:** 1.3 (Reconciliación Normativa + Re-anclaje + Adenda de Lealtad)  
 **Estado:** `CLOSED / VERIFIED / RE-ANCHORED`  
 **Gate:** OD-02 — Product Claim Inventory  
 **Scope:** NHILOS POS public website  
@@ -9,7 +9,7 @@
 **Downstream:** `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
 **Gobernanza de cadena:** según `nhilos_branding_document_governance_v1.0.md` (§3), este documento es la autoridad de claims y el Marketing Brief es downstream de él.  
 **Fecha de reconciliación:** 2026-10-08  
-**Reconciliation resolutions:** `OD-02-R01` (Claim count 34), `OD-02-R02` (Fiscal conditioning), `OD-02-R03` (Hardened offline wording)  
+**Reconciliation resolutions:** `OD-02-R01` (Claim count 40 — 34 originales + 6 loyalty `PC-LOY-01..06`), `OD-02-R02` (Fiscal conditioning), `OD-02-R03` (Hardened offline wording)  
 
 ---
 
@@ -67,7 +67,7 @@ components:
 
 ---
 
-# 4. Primary Audit Matrix (D1) — 34 Claims Auditados (`OD-02-R01`)
+# 4. Primary Audit Matrix (D1) — 40 Claims Auditados (34 originales + 6 loyalty, `OD-02-R01`)
 
 | ID | Claim | Class | Scope | Code Evidence | Test Evidence | Limitations | Technical Status | Public Status | Website Treatment |
 |---|---|---|---|---|---|---|---|---|---|
@@ -105,6 +105,27 @@ components:
 | **PC-ONB-01** | Plantillas de catálogo preconfiguradas por industria (Cafetería, Food Park, Restaurante, Retail) | `WORKFLOW` | Onboarding | `apps/admin_backend/src/modules/onboarding/entities/industry-template.entity.ts`, `industry-templates-list.tsx` | `apps/admin_backend/src/modules/onboarding/industry-template.e2e-spec.ts` | Permite arrancar un comercio con catálogo base, insumos y recetas sugeridas. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
 | **PC-ONB-02** | Importación asistida de catálogos e insumos desde archivos CSV | `WORKFLOW` | Data Ingestion | `apps/owner_dashboard/src/features/settings/bulk-import-wizard.tsx` | `apps/owner_dashboard/src/__tests__/onboarding-legacy-guardrails.test.tsx` | El archivo debe ceñirse a las columnas de la plantilla oficial de insumos/productos. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
 | **PC-ONB-03** | Setup Center con checklist interactivo y prueba de venta controlada de activación | `OPERATIONAL` | Provisioning | `apps/owner_dashboard/src/features/onboarding/setup-center-view.tsx`, `activation_controlled_sale_runner.dart` | `apps/owner_dashboard/src/__tests__/setup-center-view.test.tsx`, `activation_lifecycle_m6_closure_e2e_test.dart` | Valida que el terminal imprimió ticket, generó folio DGI y sincronizó antes de operar. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
+| **PC-LOY-01** | Acumulación automática de puntos por venta en caja, offline | `LOYALTY` | FOH / POS Checkout | `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart` (flujo earn tras guardar la venta), `apps/pos_app/lib/domain/services/sales/loyalty_service.dart` (tasa de acumulación) | `apps/pos_app/test/domain/services/sales/loyalty_service_test.dart`, `apps/pos_app/test/domain/services/sales/sale_view_model_loyalty_integration_test.dart` | Solo aplica cuando hay cliente seleccionado y la venta se guarda localmente. La tasa de acumulación es una tasa plana configurada y NO sigue reglas de programa (sellos/visitas). Si la escritura local de loyalty falla, la venta igualmente completa y la deriva queda solo registrada en logs. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-LOY-02** | Canje de puntos como descuento en mostrador, con salvaguardas | `LOYALTY` | FOH / POS Checkout | `apps/pos_app/lib/domain/services/sales/loyalty_service.dart` (validación: mínimo de puntos, saldo y descuento no mayor al total de la orden), `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart` (escritura de filas de canje) | `apps/pos_app/test/domain/services/sales/loyalty_service_test.dart`, `apps/pos_app/test/presentation/features/sales/loyalty_viewmodel_integration_test.dart` | El canje siempre es iniciado por el operador en caja, nunca automático. El canje desde el catálogo de recompensas NO aplica el beneficio de la recompensa al total del carrito. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-LOY-03** | Sincronización idempotente de transacciones de puntos a la nube; duplicados no cuentan doble | `LOYALTY` | Sync Layer / Cloud Ledger | `apps/pos_app/lib/data/services/sync_service.dart` (push acotado por lotes de filas pendientes), `apps/admin_backend/src/modules/loyalty/controllers/loyalty-sync.controller.ts`, `apps/admin_backend/src/modules/loyalty/services/loyalty-sync-ingestion.service.ts`, `apps/admin_backend/src/modules/loyalty/services/loyalty-ledger.service.ts` (llave de idempotencia; los replays quedan read-only y no doble-cuentan) | `apps/admin_backend/test/loyalty/customer-loyalty-rls.db.e2e-spec.ts`, `apps/pos_app/test/domain/services/sales/loyalty_sync_service_test.dart` | La nube es eventualmente consistente. El redondeo fraccional de puntos puede derivar hasta 0.5 punto por transacción. No existe aún un test de paridad round-trip: NO debe prometerse paridad exacta de saldo en tiempo real entre POS y nube. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-LOY-04** | Identificación del cliente en mostrador por QR, código, teléfono o búsqueda por nombre, totalmente offline | `LOYALTY` | FOH / Customer Identification | `apps/pos_app/lib/domain/services/sales/customer_identification_service.dart`, `apps/pos_app/lib/data/adapters/customer_identification_adapters.dart`, `apps/pos_app/lib/main.dart` (wiring del servicio) | `apps/pos_app/test/domain/services/sales/customer_identification_service_test.dart`, `apps/pos_app/test/domain/ports/customer_identification_adapters_test.dart` | Requiere que el cliente exista localmente en el terminal. El formato del payload QR es `NHL1:{code}`. El escaneo por cámara requiere permiso concedido. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-LOY-05** | Promociones (buy-X-get-Y free, porcentaje, monto fijo, combo) aplicadas de forma automática y determinista en el POS, con administración central | `LOYALTY / PROMOTIONS` | FOH / Promotions Engine | `apps/pos_app/lib/domain/services/sales/promotions_engine.dart`, `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart` (aplicación en la venta), `apps/admin_backend/src/modules/promotions/` (CRUD en la nube), `apps/pos_app/lib/data/services/sync_service.dart` (ruta de sync por deltas) | `apps/pos_app/test/domain/services/sales/promotions_engine_test.dart`, `apps/pos_app/test/presentation/features/sales/promotions_integration_flow_test.dart`, `apps/admin_backend/test/promotions/promotions-rls.db.e2e-spec.ts` | Requiere que la promoción esté activa localmente (el push desde la nube debe haber llegado). Las filas malformadas provenientes de la nube se descartan. Las promociones NO están ligadas a las reglas de acumulación de puntos. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-LOY-06** | Configuración de programas y recompensas por el dueño, ajuste de puntos con actor y motivo, y economía profit-aware de cada recompensa | `LOYALTY` | Backoffice / Owner Dashboard | `apps/admin_backend/src/modules/loyalty/controllers/loyalty.controller.ts` (incluye API de ajuste de puntos con actor y motivo), `apps/owner_dashboard/src/features/loyalty/loyalty-page.tsx`, `apps/owner_dashboard/src/features/loyalty/reward-profit-aware-dialog.tsx` | `apps/admin_backend/test/loyalty/loyalty-profit-aware.db.e2e-spec.ts`, `apps/owner_dashboard/src/__tests__/w10-loyalty-programs-rewards.test.tsx` | Requiere rol `OWNER` o `MANAGER`. No existen dashboards de KPIs de loyalty, campañas, niveles (tiers) ni portal de consumidor. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+
+### 4.1 Loyalty — lo que el producto NO hace y por lo tanto no debe prometerse
+
+Subsección de cierre de la extensión loyalty (`PC-LOY-01..06`). Ninguno de estos comportamientos existe hoy en código y su promesa pública está prohibida:
+
+- Acumulación por reglas de programa o por sellos/visitas en el POS (la tasa es plana, ver `PC-LOY-01`).
+- Acumulación automática de puntos en la nube a partir de tickets.
+- Beneficios de recompensa (descuento o producto gratis) aplicados al total del carrito en el POS.
+- Ciclo de intención/anulación de canje manejado desde el POS.
+- Expiración de puntos.
+- Niveles (tiers).
+- Campañas.
+- Dashboards de KPIs de loyalty.
+- Portal del consumidor.
+- Paridad exacta de saldo POS↔nube en tiempo real.
 
 ---
 
@@ -155,6 +176,12 @@ Claims rigurosamente autorizados y condicionados para el Website de Marketing de
 - ✅ **"Panel web para dueños con métricas en tiempo real de ventas netas, horas pico y productos top."** (PC-DASH-01 y PC-DASH-03).
 - ✅ **"Monitor de frescura: comprobá al instante si tus cajas están sincronizadas con la nube."** (PC-DASH-02).
 
+### Lealtad y Promociones (`PC-LOY-01..06`)
+- ✅ **"Tus clientes acumulan puntos automáticamente en cada venta, incluso sin internet; el canje es un descuento con salvaguardas en caja y todo sincroniza a la nube sin doble conteo."** (PC-LOY-01, PC-LOY-02, PC-LOY-03; condicionado a cliente seleccionado, venta guardada local y consistencia eventual en la nube).
+- ✅ **"Identificás al cliente en el mostrador por QR, código, teléfono o búsqueda por nombre, todo offline."** (PC-LOY-04; requiere cliente existente localmente y permiso de cámara para escanear).
+- ✅ **"Promociones que se aplican solas y de forma determinista en caja, administradas centralmente."** (PC-LOY-05; requiere promoción activa localmente y no ligada a reglas de puntos).
+- ✅ **"El dueño configura programas y recompensas, ajusta puntos con actor y motivo, y ve la economía de cada recompensa."** (PC-LOY-06; requiere rol OWNER/MANAGER).
+
 ---
 
 # 7. Website Claim Blocklist / Do Not Claim (D5)
@@ -168,6 +195,9 @@ Claims estrictamente **PROHIBIDOS** en la comunicación pública:
 | ❌ *"Red local inalámbrica que conecta meseros y cocina 100% sin internet ni nube"* | El broker mDNS/WebSocket local embebido es el Bloque 18 (no implementado). Los dispositivos sincronizan vía nube (`OD-02-R03`). |
 | ❌ *"Validación en tiempo real contra la base de datos de contribuyentes activos de la DGI"* | No existe API pública de consulta en vivo del padrón de la DGI en Nicaragua; la validación es sintáctica y algorítmica (`OD-02-R02`). |
 | ❌ *"Conexión directa a balanzas electrónicas de peso y escáneres seriales"* | No existe soporte en código para drivers de balanzas o lectores seriales de pesaje continuo. |
+| ❌ *"Suscripciones por niveles, estampitas o visitas: gana puntos según reglas de programa"* | La acumulación es una tasa plana configurada, sin reglas de programa ni sellos (`PC-LOY-01`, §4.1). |
+| ❌ *"Recompensas canjeadas que se descuentan solas del total de la compra"* | El beneficio del catálogo de recompensas no se aplica al carrito; el canje en caja es un descuento iniciado por el operador (`PC-LOY-02`, §4.1). |
+| ❌ *"Saldo de puntos idéntico en tiempo real entre caja y nube"* | Consistencia eventual con deriva de redondeo de hasta 0.5 punto por transacción; sin test de paridad round-trip (`PC-LOY-03`, §4.1). |
 
 ---
 
@@ -193,7 +223,7 @@ Funcionalidades implementadas en código que requieren evidencia visual antes de
 # 10. Exit Criteria Sign-off
 
 - [x] El codebase auditado está identificado por commit/versión (`b4b5ad27`, re-anclaje 2026-10-08).
-- [x] Se construyó el universo completo de claims candidatos (**34 claims analizados**, resolución `OD-02-R01`).
+- [x] Se construyó el universo completo de claims candidatos (**40 claims analizados**: 34 originales + 6 loyalty `PC-LOY-01..06`, resolución `OD-02-R01`).
 - [x] Claims compuestos fueron desagregados en claims unitarios atómicos.
 - [x] Claims funcionales relevantes tienen evidencia concreta de implementación en código (E3).
 - [x] Claims relevantes tienen tests automatizados verificables (E4).
@@ -219,7 +249,7 @@ Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` (
 
 # Reconciliación v1.2 — Re-anclaje a b4b5ad27
 
-Resultado headline: de los 34 claims auditados, **30 sin cambio, 3 con deriva, 0 ya no sostenibles** tras 575 commits (`7af1521…` → `b4b5ad27`, 2026-10-08).
+Resultado headline: de los 34 claims auditados en el re-anclaje original (el registro asciende hoy a 40 con la extensión loyalty `PC-LOY-01..06`), **30 sin cambio, 3 con deriva, 0 ya no sostenibles** tras 575 commits (`7af1521…` → `b4b5ad27`, 2026-10-08).
 
 | # | Corrección | Antes | Después |
 |---|---|---|---|
@@ -280,3 +310,9 @@ Resultado headline: de los 34 claims auditados, **30 sin cambio, 3 con deriva, 0
 | PC-ONB-01 | IM-002 | citado |
 | PC-ONB-02 | — | huérfano |
 | PC-ONB-03 | IM-001, IM-002, IM-004 | citado |
+| PC-LOY-01 | LY-001 | citado |
+| PC-LOY-02 | LY-002 | citado |
+| PC-LOY-03 | LY-003 | citado |
+| PC-LOY-04 | LY-004 | citado |
+| PC-LOY-05 | LY-005 | citado |
+| PC-LOY-06 | LY-006 | citado |

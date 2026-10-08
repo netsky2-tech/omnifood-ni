@@ -3,7 +3,7 @@
 **Documento:** `nhilos_website_product_marketing_brief_v1.0.md`  
 **Versión:** 1.0 (Autorizado para Producción)  
 **Estado:** `APPROVED / READY FOR WEBSITE IA PROMOTION & COPYWRITING`  
-**Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.2.md` (v1.2, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`
+**Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.2, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara y comienza por la operación del propio prospecto (ver Regla de Oro y Sección 5.1).  
   
 **Downstream Gate:** `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
@@ -21,13 +21,13 @@ A diferencia de los sistemas tradicionales en la nube que se congelan cuando el 
 
 ### Regla de Oro del Copywriting
 > **Solo comunicamos lo que el código ya sabe hacer.**  
-> Cada afirmación en el sitio web debe estar respaldada por la auditoría técnica de claims **OD-02 v1.2** (`product_claim_audit_od02_v1.2.md`). No sobreprometemos tecnología experimental ni vendemos intenciones de roadmap.
+> Cada afirmación en el sitio web debe estar respaldada por la auditoría técnica de claims **OD-02 v1.2** (`product_claim_audit_od02_v1.3.md`). No sobreprometemos tecnología experimental ni vendemos intenciones de roadmap.
 
 ---
 
 ## 2. Pilares de Posicionamiento y Propuesta de Valor (Auditoría OD-02 v1.2)
 
-Los cinco pilares innegociables del producto, verificados contra código real:
+Los seis pilares innegociables del producto, verificados contra código real:
 
 ### 1. Offline-First Táctico en Caja: la venta sigue cuando se cae el internet (`OD-02-R03`)
 - **Problema del cliente:** Cuando el proveedor de internet se cae en Managua o en departamentos, el comercio pierde ventas, genera filas o tiene que recurrir al papel y lápiz.
@@ -56,6 +56,12 @@ Los cinco pilares innegociables del producto, verificados contra código real:
 - **NHILOS POS:** Panel web moderno con métricas clave de venta neta, horas pico, ticket promedio, participación de productos top y un indicador visual de frescura de sincronización para saber si cada terminal está al día.
 - **Promesa verificada:** *“Monitoreá tus ventas, productos más vendidos y estado de tus cajas desde cualquier dispositivo con internet.”*
 
+### 6. Lealtad y Promociones con límites declarados (`PC-LOY-01..06`)
+- **Problema del cliente:** Los comercios de alta rotación quieren fidelizar clientes, pero los sistemas de lealtad tradicionales dependen de tarjetas plásticas, servidores en línea o reglas que nadie opera en el mostrador.
+- **NHILOS POS:** El cliente se identifica en caja por QR, código, teléfono o búsqueda por nombre — todo offline — y acumula puntos automáticamente en cada venta guardada localmente (`PC-LOY-01`, `PC-LOY-04`). Los puntos se canjean como descuento en mostrador con salvaguardas: mínimo de puntos, validación de saldo y descuento nunca mayor al total de la orden, siempre iniciado por el operador (`PC-LOY-02`). Las transacciones de puntos sincronizan a la nube de forma idempotente: los duplicados no cuentan doble (`PC-LOY-03`). Las promociones (buy-X-get-Y free, porcentaje, monto fijo, combo) se aplican solas y de forma determinista en el POS, administradas centralmente (`PC-LOY-05`). El dueño configura programas y recompensas, ajusta puntos con actor y motivo, y ve la economía de cada recompensa (`PC-LOY-06`).
+- **Wording normativo condicionado:** *"Tus clientes acumulan puntos en cada venta, incluso sin internet, y los canjean como descuento en caja con reglas claras; las promociones se aplican solas y el dueño ve la economía de cada recompensa."*
+- **Delimitación explícita:** La acumulación requiere cliente seleccionado y venta guardada localmente; la tasa es plana y no sigue reglas de programa. El canje siempre es operado por el cajero y el beneficio del catálogo de recompensas no se aplica al total del carrito. La nube es eventualmente consistente (deriva de redondeo de hasta 0.5 punto por transacción; sin paridad exacta de saldo en tiempo real). Las promociones requieren estar activas localmente y no están ligadas a las reglas de puntos. La configuración requiere rol `OWNER`/`MANAGER`.
+
 ---
 
 ## 3. Delimitación de Producto y Anti-Posicionamiento (Blocklist D5)
@@ -69,6 +75,10 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
 | *"Integración electrónica automática con datáfonos BAC/Banpro por cable o software"* | No existe API electrónica con terminales bancarias en Nicaragua; el flujo es manual desacoplado con captura de código. | *“Registro rápido y conciliación de vouchers de tarjetas de crédito y débito de todos los bancos nacionales (BAC, Banpro).”* |
 | *"Red inalámbrica multi-mesero que se comunica sin internet ni servidor"* | El broker LAN peer-to-peer sin nube (Bloque 18) está en roadmap. Los pedidos multi-terminal sincronizan vía nube (`OD-02-R03`). | *“Terminales autónomos y ágiles diseñados para alta rotación y sincronización en la nube.”* |
 | *"Conexión directa a balanzas de pesaje continuo"* | No hay drivers de balanza serial implementados en el código auditado. | Enfocar en unidades, porciones y recetas estandarizadas. |
+| *"Tus clientes ganan puntos según reglas de programa, estampitas o niveles"* | La tasa de acumulación es plana; no existen reglas de programa, sellos, expiración ni tiers (`PC-LOY-01`, blocklist §4.1 de OD-02). | *"Acumulación simple y transparente en cada venta, sin tarjetas plásticas."* |
+| *"Recompensas canjeadas que se descuentan solas del total"* | El beneficio del catálogo de recompensas no se aplica al carrito en el POS; el canje es un descuento iniciado por el operador (`PC-LOY-02`). | *"Canje de puntos como descuento en caja, con mínimo, validación de saldo y tope al total de la orden."* |
+| *"Saldo de puntos idéntico en tiempo real entre caja y nube"* | Consistencia eventual; deriva de redondeo de hasta 0.5 punto por transacción y sin test de paridad round-trip (`PC-LOY-03`). | *"Sincronización idempotente de puntos: los duplicados no cuentan doble."* |
+| *"Campañas de lealtad, portal del consumidor, dashboards de KPIs de loyalty o expiración de puntos"* | No existen en código: ni campañas, ni portal, ni KPIs de loyalty, ni expiración, ni acumulación automática en la nube desde tickets (§4.1 de OD-02). | Configuración de programas, recompensas y ajustes con actor y motivo desde el Owner Dashboard (`PC-LOY-06`). |
 
 ---
 
@@ -161,6 +171,6 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
 
 ## 7. Próxima Acción y Fuente Autoritativa
 
-Según `nhilos_branding_document_governance_v1.0.md`, este Brief es el paso 3 de la cadena de autoridad: selecciona claims admisibles definidos por el OD-02 (`product_claim_audit_od02_v1.2.md`) y no inventa claims. Con esto se desbloquea:
+Según `nhilos_branding_document_governance_v1.0.md`, este Brief es el paso 3 de la cadena de autoridad: selecciona claims admisibles definidos por el OD-02 (`product_claim_audit_od02_v1.3.md`) y no inventa claims. Con esto se desbloquea:
 1. La reconciliación y promoción del wireframe de arquitectura de información (`nhilos_website_information_architecture_content_wireframe_v1.0.md`).
 2. El inicio de la redacción final de textos (copywriting) para cada página del sitio web.

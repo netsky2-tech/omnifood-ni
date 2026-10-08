@@ -6,7 +6,7 @@
 **Build de producción de origen:** `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED — el build anclado vigente es `b4b5ad27`; los activos deben re-capturarse o re-verificarse contra `b4b5ad27` antes de cualquier publicación, según `G-09` de `nhilos_branding_document_governance_v1.0.md`)
 **Ruta pública:** Página profunda de producto NHILOS POS (`/pos`)
 **Upstream de contenido:** `nhilos_pos_product_page_content_v1.1`
-**Upstream de auditoría técnica:** `product_claim_audit_od02_v1.2.md`
+**Upstream de auditoría técnica:** `product_claim_audit_od02_v1.3.md`
 **Fecha de actualización:** 2026-10-08 (revalidación de evidencia pendiente; captura original 2026-10-02)
 
 > **Nota de conversión (2026-10-08):** este documento reemplaza al binario
@@ -51,7 +51,8 @@ deben re-capturarse o re-verificarse contra `b4b5ad27` antes de cualquier public
 
 La siguiente tabla consolida los doce activos de medios capturados (build de origen
 `7af1521`, revalidación contra `b4b5ad27` pendiente) que componen la biblioteca
-visual de NHILOS POS. Ningún activo está autorizado para publicación en su estado actual.
+visual de NHILOS POS, más un activo nuevo pendiente de captura (`MEDIA-LOY-01`,
+superficie loyalty añadida al contrato de contenido como §15). Ningún activo está autorizado para publicación en su estado actual.
 
 | Asset ID | Pantalla / Workflow | Dispositivo / Formato | Ubicación en Código / Build `7af1521` | Estado Gate D |
 |---|---|---|---|---|
@@ -67,13 +68,15 @@ visual de NHILOS POS. Ningún activo está autorizado para publicación en su es
 | `MEDIA-INV-02` | Kardex Inmutable Delta Ledger y Registro de Mermas | Capture Web / Backoffice Web | `kardex_recalculation_engine.dart` | `APPROVED` |
 | `MEDIA-ONB-01` | Setup Center e Importador CSV de Catálogos e Insumos | Capture Web / Backoffice Web | `setup-center-view.tsx` | `APPROVED` |
 | `MEDIA-FISC-01` | Panel de Reportes Fiscales Exportables DGI y Notas de Crédito | Capture Web / Backoffice Web | `fiscal-page.tsx` | `APPROVED` |
+| `MEDIA-LOY-01` | Identificación de cliente y saldo de puntos en caja (QR `NHL1:{code}`, código, teléfono o nombre) y canje de puntos como descuento | Capture HD / Sunmi V2s & Tablet 10" | `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart` (panel de loyalty y canje), `apps/pos_app/lib/domain/services/sales/customer_identification_service.dart` | `PENDING CAPTURE — NO APPROVED` |
 
 ---
 
 ## 3. Mapeo Exhaustivo por Sección de la Página de Producto (v1.1)
 
-A continuación se detalla la asignación de cada activo visual a las 12 secciones estructuradas
-de la página de producto `/pos`, con los títulos exactos de `nhilos_pos_product_page_content_v1.1.md`,
+A continuación se detalla la asignación de cada activo visual a las 13 secciones estructuradas
+(12 originales + Loyalty & Promotions, §15 de `nhilos_pos_product_page_content_v1.1.md`)
+de la página de producto `/pos`, con los títulos exactos del contrato de contenido,
 definiendo su rol contextual, pie de foto (caption) sugerido y
 texto de accesibilidad (alt text).
 
@@ -234,6 +237,21 @@ texto de accesibilidad (alt text).
 - **Rol Contextual:** Mantener un entorno limpio y accesible para la captura de datos del
   prospecto.
 
+### Sección 13 — Loyalty & Promotions (§15 del contrato de contenido)
+
+- **Activo Principal:** `MEDIA-LOY-01` (Identificación de cliente y saldo de puntos en caja con
+  QR `NHL1:{code}`; **pendiente de captura, no aprobado**).
+- **Rol Contextual:** Demostrar la identificación offline del cliente y el canje de puntos como
+  descuento con salvaguardas (mínimo, saldo y tope al total), dentro del flujo de venta.
+- **Pie de Foto Sugerido:** "Identificás al cliente por QR, código, teléfono o nombre, y los
+  puntos se canjean como descuento con reglas visibles, sin detener la caja."
+- **Texto Alt (a11y):** "Pantalla de venta NHILOS POS mostrando la identificación del cliente y
+  su saldo de puntos durante el cobro."
+- **Estado Gate D:** `PENDING CAPTURE` — la captura debe ejecutarse contra el build anclado
+  vigente (`b4b5ad27`) y pasar Gate D antes de cualquier publicación. Ninguna imagen de esta
+  superficie existe aún; no se marca ningún activo como aprobado.
+- **Claims respaldados (OD-02):** `PC-LOY-01..06` vía `LY-001..LY-006` del contrato de contenido.
+
 ---
 
 ## 4. Ficha Técnica de Captura y Especificaciones Non-Funcionales
@@ -278,7 +296,7 @@ VERIFICACIÓN DE GATE D (EVIDENCIA Y MEDIOS) — NHILOS POS
 [✗] Los activos provienen del commit 7af1521ea077ce8bc1faed1aa7189a6186eac515,
     que ya NO es el build anclado vigente (`b4b5ad27`): la UI del POS cambió
     sustancialmente entre ambos builds (remediación UX Nivel 1/2/3).
-[✓] Mapeo completo de las 12 secciones de la página profunda de producto (/pos)
+[✓] Mapeo completo de las 13 secciones de la página profunda de producto (/pos)
     con los títulos de nhilos_pos_product_page_content_v1.1.md.
 [✓] Textos alternativos (alt text) redactados para cumplimiento WCAG 2.1 AA.
 [✓] Presupuesto de peso y rendimiento web alineados a la spec no funcional

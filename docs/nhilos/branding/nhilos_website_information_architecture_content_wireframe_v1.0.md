@@ -831,6 +831,20 @@ Cada capability se presenta como:
 
 No como nombre de módulo + icono + claim genérico.
 
+### P03-bis --- Loyalty y promociones como argumento de contenido
+
+**Status:** `DERIVED / EVIDENCE_REQUIRED`
+
+Loyalty entra a la página `/pos` como argumento de contenido dentro del flujo operativo, conforme a la regla `N-03` (Capability ≠ top-level navigation): no se crea ningún nodo de navegación ni ruta nueva.
+
+Situación → Comportamiento → Efecto:
+
+- **Situación:** el negocio quiere fidelizar clientes y ejecutar promociones sin depender de conectividad ni de tarjetas plásticas.
+- **Comportamiento:** el cliente se identifica en mostrador por QR (`NHL1:{code}`), código, teléfono o búsqueda por nombre, con datos locales; al guardar la venta con cliente seleccionado se acumulan puntos a la tasa configurada, y el canje es un descuento validado (mínimo, saldo y tope al total) iniciado por el operador; las promociones activas localmente se aplican de forma automática y determinista; las transacciones de puntos sincronizan a la nube de forma idempotente; el dueño configura programas, recompensas y ajustes con actor y motivo.
+- **Efecto:** la fidelización opera dentro del flujo de caja sin detener la venta, con límites declarados: tasa plana (sin reglas de programa ni sellos), beneficio de catálogo de recompensas no aplicado al carrito, consistencia eventual en la nube (deriva de redondeo de hasta 0.5 punto por transacción, sin paridad exacta de saldo en tiempo real) y configuración restringida al rol OWNER/MANAGER.
+
+Claims de los que depende este argumento (OD-02 v1.2, extensión loyalty): `PC-LOY-01`, `PC-LOY-02`, `PC-LOY-03`, `PC-LOY-04`, `PC-LOY-05`, `PC-LOY-06`. Lo no implementado (expiración, tiers, campañas, KPIs de loyalty, portal del consumidor, paridad exacta POS↔nube) no se comunica como capacidad, según §4.1 del OD-02.
+
 ## P04 --- Continuity + control / visibility
 
 La página debe cubrir explícitamente los dos temas que el Website Brief
