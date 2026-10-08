@@ -45,6 +45,8 @@ This document serves as the single source of truth for the platform implementati
 │ Bloque 18: Red Local (LAN Broker), Comandas Satélite & KDS Multi-Dispositivo       │
 ├───────────────────────────────────────────────────────────────────────────────────┤
 │ Bloque 19: Facturación Electrónica DGI Nicaragua & Firma Digital XML             │
+├───────────────────────────────────────────────────────────────────────────────────┤
+│ Bloque 20: Adaptabilidad por Rubro (Multivertical) — Fase 0: Cimientos            │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -61,3 +63,9 @@ This document serves as the single source of truth for the platform implementati
 ### 5. Bloque 19: Facturación Electrónica DGI Nicaragua & Firma Digital XML
 - **PRD Reference**: [`docs/PRDs/prd_modulo_ventas.md`](file:///home/octavio_morales/omnifood-ni/docs/PRDs/prd_modulo_ventas.md)
 - **Alcance**: Estructura XML, firma digital PKCS#12, CUFE, código QR y transmisión asíncrona a la DGI.
+
+### 6. Bloque 20: Adaptabilidad por Rubro (Multivertical) — Fase 0: Cimientos
+- **Plan**: [`docs/plans/multivertical/adaptabilidad_por_rubro_roadmap.md`](file:///home/octavio_morales/omnifood-ni/docs/plans/multivertical/adaptabilidad_por_rubro_roadmap.md)
+- **Issues**: [#818](https://github.com/netsky2-tech/omnifood-ni/issues/818) (dimensión de ubicación, multi-bodega, transferencias), [#819](https://github.com/netsky2-tech/omnifood-ni/issues/819) (perfil de rubro, capas de capacidad, superficies declarativas)
+- **Alcance**: asentar los cuatro seams (VerticalProfile, ItemControlDimensions, LocationModel, SurfaceProfile) y las dimensiones fiscales (serie por sucursal, condición contado/crédito) **antes** de las épicas de rubro. Gate falsable: declarar un rubro nuevo sin tocar código de dominio.
+- **Prerrequisito cruzado**: [#532](https://github.com/netsky2-tech/omnifood-ni/issues/532) (prerequisitos multi-terminal) y [#520](https://github.com/netsky2-tech/omnifood-ni/issues/520) D3/D5 (autoridad de numeración) — la asimetría temporal está registrada en #532 y ordena esta fase internamente.
