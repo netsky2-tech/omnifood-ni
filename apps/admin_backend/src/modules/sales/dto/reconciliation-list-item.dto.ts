@@ -35,6 +35,22 @@ export class ReconciliationListItemDto {
   reconciledByUserId?: string | null;
   /** Supervisor authorization reference (migration 1809600000000). */
   overrideSupervisorRef?: string | null;
+  /**
+   * Terminal that took the payment, resolved through the invoice's shift
+   * (invoices.shift_id → cash_shift_sessions.terminal_id). LEFT-joined and
+   * tenant-scoped, so a legacy invoice with no shift (shift_id NULL) comes
+   * back null instead of dropping the row.
+   */
+  terminalId?: string | null;
+  /**
+   * Display name of the operator who reconciled the payment, resolved from
+   * users.name by reconciled_by_user_id (repo privacy convention: name
+   * only, never email or any other user column). Null means the declared
+   * value could not be resolved to a user — exactly what the owner needs to
+   * see for legacy MANUAL_OVERRIDE rows whose reconciled_by_user_id holds a
+   * typed supervisor string (e.g. 'supervisor-1') matching no user row.
+   */
+  operatorName?: string | null;
   /** ISO 8601 creation timestamp of the payment row. */
   createdAt!: string;
 }

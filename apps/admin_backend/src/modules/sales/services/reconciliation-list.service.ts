@@ -37,6 +37,27 @@ import {
  * Pagination: COUNT(*) over the same WHERE, then ORDER BY p.created_at DESC
  * with LIMIT/OFFSET. No sensitive card payload is ever selected: no last4,
  * no card brand/type, no bank_pos.
+ *
+ * Actionability provenance (both LEFT joins, so rows survive missing
+ * provenance — honest nulls, never dropped rows or fabricated values):
+ *  - terminalId: `LEFT JOIN cash_shift_sessions s ON s.id = i.shift_id`.
+ *    Terminal attribution flows through the SHIFT (invoice_payments has no
+ *    terminal column); legacy invoices with shift_id NULL yield null.
+ *  - operatorName: `LEFT JOIN users u` on the declared reconciler.
+ *    reconciled_by_user_id is a varchar and legacy MANUAL_OVERRIDE rows hold
+ *    non-UUID supervisor strings there, so the join compares `u.id::text`:
+ *    casting the uuid PK to text keeps the join total (a `varchar::uuid`
+ *    cast would throw on 'supervisor-1'-style values and crash the whole
+ *    listing). Unresolvable values simply never match → operatorName null.
+ *    Only users.name is selected — never email or any other user column.
+ *  - Both joined tables are FORCE-RLS-protected and the read runs inside
+ *    the tenant-bound transaction, so cross-tenant rows are invisible to
+ *    the join; `s.tenant_id = $1` / `u.tenant_id = $1` in the ON clauses
+ *    mirror that binding as defense in depth (same shape as the parent
+ *    join's `i.tenant_id = $1`).
+ *  - The COUNT query stays join-free: the provenance joins are keyed on
+ *    unique PKs (s.id, u.id) and cannot filter or multiply rows, so the
+ *    join-free count over the same WHERE provably cannot overcount.
  */
 @Injectable()
 export class ReconciliationListService {
@@ -118,9 +139,15 @@ export class ReconciliationListService {
             p.reconciled_at AS "reconciledAt",
             p.reconciled_by_user_id AS "reconciledByUserId",
             p.override_supervisor_ref AS "overrideSupervisorRef",
+            s.terminal_id AS "terminalId",
+            u.name AS "operatorName",
             p.created_at AS "createdAt"
            FROM invoice_payments p
            JOIN invoices i ON i.id = p.invoice_id
+           LEFT JOIN cash_shift_sessions s
+             ON s.id = i.shift_id AND s.tenant_id = $1
+           LEFT JOIN users u
+             ON u.id::text = p.reconciled_by_user_id AND u.tenant_id = $1
            WHERE ${whereClause}
            ORDER BY p.created_at DESC
            LIMIT ${'$' + (parameters.length + 1)}
@@ -181,6 +208,11 @@ export class ReconciliationListService {
         : null,
       reconciledByUserId: row.reconciledByUserId ?? null,
       overrideSupervisorRef: row.overrideSupervisorRef ?? null,
+      // Honest nulls: null terminal means the invoice has no shift; null
+      // operator means the declared reconciled_by_user_id could not be
+      // resolved to a user (legacy typed supervisor strings, etc.).
+      terminalId: row.terminalId ?? null,
+      operatorName: row.operatorName ?? null,
       createdAt: new Date(row.createdAt).toISOString(),
     };
   }
@@ -199,5 +231,7 @@ interface ReconciliationRow {
   reconciledAt: Date | string | null;
   reconciledByUserId: string | null;
   overrideSupervisorRef: string | null;
+  terminalId: string | null;
+  operatorName: string | null;
   createdAt: Date | string;
 }

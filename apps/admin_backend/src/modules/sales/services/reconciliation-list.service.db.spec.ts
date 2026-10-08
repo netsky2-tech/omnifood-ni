@@ -33,13 +33,22 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
   const invoiceA2Id = randomUUID(); // PENDIENTE with voucher
   const invoiceA3Id = randomUUID(); // CANCELED invoice (payments must be excluded)
   const invoiceA4Id = randomUUID(); // CONCILIADO with voucher (date-range probe)
+  const invoiceA5Id = randomUUID(); // CONCILIADO, linked to shiftA (terminalId/operatorName probe)
   const invoiceB1Id = randomUUID(); // tenant B, isolation probe
 
   const payA1Id = randomUUID();
   const payA2Id = randomUUID();
   const payA3Id = randomUUID();
   const payA4Id = randomUUID();
+  const payA5Id = randomUUID();
   const payB1Id = randomUUID();
+
+  // Provenance fixtures: a real tenant-A operator + shift, and tenant-B
+  // counterparts that must never leak across the new joins.
+  const operatorAUserId = randomUUID();
+  const operatorBUserId = randomUUID();
+  const shiftAId = randomUUID();
+  const shiftBId = randomUUID();
 
   let fixture: Awaited<ReturnType<typeof createMigrationBuiltSchemaFixture>>;
   /** Superuser connection: seeds fixtures and asserts raw row state. */
@@ -129,6 +138,60 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
       ],
     );
 
+    // Provenance rows: one real operator per tenant and one shift per
+    // tenant, so terminalId/operatorName resolution is exercised in BOTH
+    // directions (tenant A must not see tenant B's provenance and vice
+    // versa).
+    await bootstrap.query(
+      `INSERT INTO users (id, tenant_id, name, role) VALUES
+         ($1, $3, 'Ana Operador', 'CASHIER'),
+         ($2, $4, 'Beto Operador', 'CASHIER')`,
+      [operatorAUserId, operatorBUserId, tenantAId, tenantBId],
+    );
+    await bootstrap.query(
+      `INSERT INTO cash_shift_sessions (id, tenant_id, terminal_id, cashier_id, cashier_name) VALUES
+         ($1, $3, 'TERMINAL-01', 'cashier-a', 'Ana'),
+         ($2, $4, 'TERMINAL-B', 'cashier-b', 'Beto')`,
+      [shiftAId, shiftBId, tenantAId, tenantBId],
+    );
+    await bootstrap.query(
+      `INSERT INTO invoices (
+         id, tenant_id, invoice_number, created_at, user_id, subtotal,
+         total_tax, total, is_canceled, payment_status, global_tax_override,
+         type, updated_at
+       ) VALUES
+         ($1, $2, 'RA-005', now(), 'a0000000-0000-4000-8000-00000000000a', 50.00, 7.50, 57.50, false, 'PAID', false, 'regular', now())`,
+      [invoiceA5Id, tenantAId],
+    );
+    // Terminal attribution flows through the SHIFT: link the invoices.
+    await bootstrap.query(`UPDATE invoices SET shift_id = $2 WHERE id = $1`, [
+      invoiceA5Id,
+      shiftAId,
+    ]);
+    await bootstrap.query(`UPDATE invoices SET shift_id = $2 WHERE id = $1`, [
+      invoiceB1Id,
+      shiftBId,
+    ]);
+    await bootstrap.query(
+      `INSERT INTO invoice_payments (
+         id, invoice_id, method, amount, currency, exchange_rate, amount_nio,
+         change_given, change_currency, voucher_code, reconciliation_status,
+         reconciled_at, reconciled_by_user_id, created_at
+       ) VALUES
+         ($1, $2, 'card', 5500.00, 'NIO', 1.0, 5500.00, 0, 'NIO', 'VCH-A5', 'CONCILIADO', '2026-08-20T12:00:00Z', $3, now())`,
+      [payA5Id, invoiceA5Id, operatorAUserId],
+    );
+    // Tenant B gets a fully resolved row too, proving the joins resolve
+    // within the querying tenant only.
+    await bootstrap.query(
+      `UPDATE invoice_payments
+          SET reconciliation_status = 'CONCILIADO',
+              reconciled_at = '2026-08-21T12:00:00Z',
+              reconciled_by_user_id = $2
+        WHERE id = $1`,
+      [payB1Id, operatorBUserId],
+    );
+
     // The service must run exactly like the deployed app: an ordinary
     // non-owner, non-bypassing role against the migration-built schema.
     runtime = new DataSource({
@@ -216,9 +279,9 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
       expect(paymentIds).not.toContain(payA3Id);
       expect(paymentIds).not.toContain(payB1Id);
       expect(paymentIds).toEqual(
-        expect.arrayContaining([payA1Id, payA2Id, payA4Id]),
+        expect.arrayContaining([payA1Id, payA2Id, payA4Id, payA5Id]),
       );
-      expect(result.pagination.total).toBe(3);
+      expect(result.pagination.total).toBe(4);
 
       // Tenant B sees only its own row.
       const tenantBResult = await service.getReconciliationList(
@@ -228,6 +291,63 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
       expect(tenantBResult.reconciliations.map((r) => r.paymentId)).toEqual([
         payB1Id,
       ]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'resolves terminalId/operatorName through the LEFT joins and nulls unresolvable legacy provenance',
+    async () => {
+      const result = await service.getReconciliationList(
+        tenantAId,
+        new ReconciliationListQueryDto(),
+      );
+      const byPayment = new Map(
+        result.reconciliations.map((r) => [r.paymentId, r]),
+      );
+
+      // Resolved row: invoice RA-005 linked to the tenant-A shift, operator
+      // is a real users row.
+      const resolved = byPayment.get(payA5Id)!;
+      expect(resolved.terminalId).toBe('TERMINAL-01');
+      expect(resolved.operatorName).toBe('Ana Operador');
+
+      // Legacy MANUAL_OVERRIDE row: reconciled_by_user_id is a typed string
+      // ('user-1') matching no user row — the row SURVIVES with honest nulls
+      // (no crash, no fabricated operator).
+      const legacy = byPayment.get(payA1Id)!;
+      expect(legacy.reconciledByUserId).toBe('user-1');
+      expect(legacy.operatorName).toBeNull();
+      expect(legacy.terminalId).toBeNull(); // invoice has no shift
+
+      // Never-reconciled row: no operator declared, invoice without shift.
+      expect(byPayment.get(payA2Id)!.terminalId).toBeNull();
+      expect(byPayment.get(payA2Id)!.operatorName).toBeNull();
+
+      // payA4: reconciled by the bogus 'user-2' string, no shift either.
+      expect(byPayment.get(payA4Id)!.terminalId).toBeNull();
+      expect(byPayment.get(payA4Id)!.operatorName).toBeNull();
+
+      // Tenant isolation with the new joins: tenant B's shift/user never
+      // leak into tenant A's listing.
+      expect(result.reconciliations.map((r) => r.terminalId)).not.toContain(
+        'TERMINAL-B',
+      );
+      expect(result.reconciliations.map((r) => r.operatorName)).not.toContain(
+        'Beto Operador',
+      );
+
+      // Tenant B resolves its own provenance (the join works, the nulls
+      // above are isolation, not a broken join).
+      const tenantBResult = await service.getReconciliationList(
+        tenantBId,
+        new ReconciliationListQueryDto(),
+      );
+      const bRow = tenantBResult.reconciliations.find(
+        (r) => r.paymentId === payB1Id,
+      )!;
+      expect(bRow.terminalId).toBe('TERMINAL-B');
+      expect(bRow.operatorName).toBe('Beto Operador');
     },
     TEST_TIMEOUT_MS,
   );

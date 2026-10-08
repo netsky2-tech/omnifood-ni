@@ -202,6 +202,86 @@ describe('ReconciliationListService', () => {
     expect(sql).not.toMatch(/last4|card_brand|card_type|bank_pos/i);
   });
 
+  it('resolves terminalId through a LEFT join on the invoice shift and operatorName from users.name', async () => {
+    bootstrap();
+
+    await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
+
+    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'))!;
+    // Both provenance joins are LEFT: rows survive a missing shift or an
+    // unresolvable operator (honest nulls for legacy data).
+    expect(dataCall.sql).toContain('LEFT JOIN cash_shift_sessions s');
+    expect(dataCall.sql).toContain('ON s.id = i.shift_id AND s.tenant_id = $1');
+    expect(dataCall.sql).toContain('LEFT JOIN users u');
+    expect(dataCall.sql).toContain('ON u.id::text = p.reconciled_by_user_id AND u.tenant_id = $1');
+    // Defense in depth: the joined tables carry the same tenant bind as the
+    // parent join (mirrors the transaction-local RLS binding).
+    expect(dataCall.sql).toContain('s.tenant_id = $1');
+    expect(dataCall.sql).toContain('u.tenant_id = $1');
+    // The selected provenance columns use the DTO property names.
+    expect(dataCall.sql).toContain('s.terminal_id AS "terminalId"');
+    expect(dataCall.sql).toContain('u.name AS "operatorName"');
+  });
+
+  it('exposes only the user display name — never email or any sensitive user column', async () => {
+    bootstrap();
+
+    await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
+
+    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'))!;
+    expect(dataCall.sql).not.toMatch(
+      /email|password|pin_hash|hashed_refresh_token|security_version/i,
+    );
+  });
+
+  it('keeps the count query join-free so the LEFT JOINs can never overcount the total', async () => {
+    bootstrap({ countRow: { total: 3 } });
+
+    const result = await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
+
+    const countCall = sqlCalls.find((c) => c.sql.includes('COUNT'))!;
+    // Same FROM/WHERE shape over the parent join; the provenance joins are
+    // not needed because they can neither filter nor multiply rows.
+    expect(countCall.sql).toContain('FROM invoice_payments p');
+    expect(countCall.sql).toContain('JOIN invoices i ON i.id = p.invoice_id');
+    expect(countCall.sql).not.toContain('cash_shift_sessions');
+    expect(countCall.sql).not.toContain('users');
+    expect(result.pagination.total).toBe(3);
+  });
+
+  it('maps terminalId/operatorName into the DTO and nulls unresolvable provenance', async () => {
+    const baseRow = {
+      paymentId: 'pay-1',
+      invoiceId: 'inv-1',
+      invoiceNumber: 'PA-001',
+      amount: '1500.00',
+      amountNio: '1500.00',
+      currency: 'NIO',
+      method: 'card',
+      voucherCode: 'VCH-1',
+      reconciliationStatus: 'MANUAL_OVERRIDE',
+      reconciledAt: new Date('2026-09-02T15:30:00.000Z'),
+      reconciledByUserId: 'user-1',
+      overrideSupervisorRef: 'sup-ref-42',
+      createdAt: new Date('2026-09-01T12:00:00.000Z'),
+    };
+    bootstrap({
+      countRow: { total: 2 },
+      dataRows: [
+        { ...baseRow, paymentId: 'pay-resolved', terminalId: 'TERMINAL-01', operatorName: 'Ana Operador' },
+        // Legacy MANUAL_OVERRIDE row: no matching shift/user → honest nulls.
+        { ...baseRow, paymentId: 'pay-legacy', terminalId: null, operatorName: null },
+      ],
+    });
+
+    const result = await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
+
+    expect(result.reconciliations[0].terminalId).toBe('TERMINAL-01');
+    expect(result.reconciliations[0].operatorName).toBe('Ana Operador');
+    expect(result.reconciliations[1].terminalId).toBeNull();
+    expect(result.reconciliations[1].operatorName).toBeNull();
+  });
+
   it('maps persisted rows into the DTO contract (ISO 8601 dates, numeric amounts)', async () => {
     bootstrap({
       countRow: { total: 1 },
@@ -240,6 +320,8 @@ describe('ReconciliationListService', () => {
         reconciledAt: '2026-09-02T15:30:00.000Z',
         reconciledByUserId: 'user-1',
         overrideSupervisorRef: 'sup-ref-42',
+        terminalId: null,
+        operatorName: null,
         createdAt: '2026-09-01T12:00:00.000Z',
       },
     ]);
