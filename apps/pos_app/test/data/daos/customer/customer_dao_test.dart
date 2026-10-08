@@ -158,5 +158,50 @@ void main() {
       expect(restored.email, equals(domain.email));
       expect(restored.pointsBalance, equals(domain.pointsBalance));
     });
+
+    test('recupera clientes pendientes de sync y los marca como synced (outbox D-1 / FU-4)', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      final pending1 = CustomerEntity(
+        id: 'cust-pending-1',
+        name: 'Cliente Pendiente 1',
+        createdAt: now - 1000,
+        updatedAt: now - 1000,
+        syncStatus: 'pending',
+      );
+
+      final synced = CustomerEntity(
+        id: 'cust-synced',
+        name: 'Cliente Ya Sincronizado',
+        createdAt: now - 500,
+        updatedAt: now - 500,
+        syncStatus: 'synced',
+      );
+
+      final pending2 = CustomerEntity(
+        id: 'cust-pending-2',
+        name: 'Cliente Pendiente 2',
+        createdAt: now,
+        updatedAt: now,
+        syncStatus: 'pending',
+      );
+
+      await database.customerDao.saveCustomers([pending1, synced, pending2]);
+
+      final pendingList = await database.customerDao.getPendingSyncCustomers();
+      expect(pendingList.length, equals(2));
+      expect(pendingList.map((c) => c.id), equals(['cust-pending-1', 'cust-pending-2']));
+
+      // Mark single synced
+      await database.customerDao.markCustomerSynced('cust-pending-1');
+      final afterSingle = await database.customerDao.getPendingSyncCustomers();
+      expect(afterSingle.length, equals(1));
+      expect(afterSingle.first.id, equals('cust-pending-2'));
+
+      // Mark batch synced
+      await database.customerDao.markCustomersSynced(['cust-pending-2']);
+      final afterBatch = await database.customerDao.getPendingSyncCustomers();
+      expect(afterBatch, isEmpty);
+    });
   });
 }

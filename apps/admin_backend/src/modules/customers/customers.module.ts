@@ -4,6 +4,8 @@ import { Customer } from './entities/customer.entity';
 import { CustomerPointTransaction } from './entities/customer-point-transaction.entity';
 import { CustomersService } from './services/customers.service';
 import { CustomersController } from './controllers/customers.controller';
+import { CustomerSyncController } from './controllers/customer-sync.controller';
+import { CustomerSyncIngestionService } from './services/customer-sync-ingestion.service';
 import { IdentityModule } from '../identity/identity.module';
 
 @Module({
@@ -11,8 +13,8 @@ import { IdentityModule } from '../identity/identity.module';
     TypeOrmModule.forFeature([Customer, CustomerPointTransaction]),
     IdentityModule,
   ],
-  controllers: [CustomersController],
-  providers: [CustomersService],
-  exports: [CustomersService, TypeOrmModule],
+  controllers: [CustomersController, CustomerSyncController],
+  providers: [CustomersService, CustomerSyncIngestionService],
+  exports: [CustomersService, CustomerSyncIngestionService, TypeOrmModule],
 })
 export class CustomersModule {}

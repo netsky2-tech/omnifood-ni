@@ -42,4 +42,13 @@ abstract class CustomerDao {
 
   @Query('SELECT COUNT(*) FROM customers')
   Future<int?> countCustomers();
+
+  @Query("SELECT * FROM customers WHERE sync_status = 'pending' ORDER BY created_at ASC")
+  Future<List<CustomerEntity>> getPendingSyncCustomers();
+
+  @Query("UPDATE customers SET sync_status = 'synced' WHERE id = :id")
+  Future<void> markCustomerSynced(String id);
+
+  @Query("UPDATE customers SET sync_status = 'synced' WHERE id IN (:ids)")
+  Future<void> markCustomersSynced(List<String> ids);
 }

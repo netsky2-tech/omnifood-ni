@@ -30,6 +30,6 @@
 ## Registro de Tareas
 
 - [x] **T1** Desfase 6h timestamps fiscales (Completado: `sales_mapper.dart`, `audit_repository_impl.dart`, `receipt_layout_formatter.dart`, `invoices.service.ts`, specs verdes 501/501 y 33/33)
-- [ ] **T2** Sync de clientes de alta local
+- [x] **T2** Sync de clientes de alta local (Completado: `CustomerDao`, `DeviceSyncAuthInterceptor`, `SyncService`, `CustomerSyncController`, `CustomerSyncIngestionService`, tests verdes en DAO, Interceptor, Badge y Backend 23/23)
 - [ ] **T3** Limpieza venta de verificación
 - [ ] **T4** Banner visible para errores de venta (R-4)
