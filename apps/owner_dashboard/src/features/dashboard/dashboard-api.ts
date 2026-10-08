@@ -402,6 +402,10 @@ export interface SyncFreshnessTerminal {
   acceptedThroughSequence: number | null;
   lastReceiptAt: string | null;
   hasDeclaredGaps?: boolean;
+  /** True when receipts reached the cloud but inventory application is still pending (R-10). */
+  hasInventoryPending?: boolean;
+  /** Count of inventory-pending receipts for this terminal. */
+  inventoryPendingCount?: number;
 }
 
 /**
@@ -419,6 +423,10 @@ export interface SyncFreshnessResponse {
   perTerminal: SyncFreshnessTerminal[];
   evaluatedAt: string;
   hasDeclaredGaps?: boolean;
+  /** True when any terminal has receipts whose inventory application is pending (R-10, informational). */
+  hasInventoryPending?: boolean;
+  /** Total count of inventory-pending receipts rolled up across terminals. */
+  inventoryPendingCount?: number;
 }
 
 const FRESHNESS_STATES: readonly SyncFreshnessState[] = [
@@ -461,6 +469,12 @@ export function normalizeSyncFreshness(raw: unknown): SyncFreshnessResponse {
     ...(typeof r.hasDeclaredGaps === "boolean"
       ? { hasDeclaredGaps: r.hasDeclaredGaps }
       : {}),
+    ...(typeof r.hasInventoryPending === "boolean"
+      ? { hasInventoryPending: r.hasInventoryPending }
+      : {}),
+    ...(r.inventoryPendingCount !== undefined && r.inventoryPendingCount !== null
+      ? { inventoryPendingCount: toFiniteNumber(r.inventoryPendingCount) }
+      : {}),
     perTerminal: terminals.map((entry) => {
       const t = (typeof entry === "object" && entry !== null ? entry : {}) as Record<
         string,
@@ -474,6 +488,13 @@ export function normalizeSyncFreshness(raw: unknown): SyncFreshnessResponse {
         lastReceiptAt: typeof t.lastReceiptAt === "string" ? t.lastReceiptAt : null,
         ...(typeof t.hasDeclaredGaps === "boolean"
           ? { hasDeclaredGaps: t.hasDeclaredGaps }
+          : {}),
+        ...(typeof t.hasInventoryPending === "boolean"
+          ? { hasInventoryPending: t.hasInventoryPending }
+          : {}),
+        ...(t.inventoryPendingCount !== undefined &&
+        t.inventoryPendingCount !== null
+          ? { inventoryPendingCount: toFiniteNumber(t.inventoryPendingCount) }
           : {}),
       };
     }),

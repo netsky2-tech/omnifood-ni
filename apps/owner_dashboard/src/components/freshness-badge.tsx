@@ -76,6 +76,13 @@ function latestReceiptAt(freshness: SyncFreshnessResponse): string | null {
   return latest;
 }
 
+/**
+ * R-10: when records reached the cloud but inventory application is still
+ * pending, the tooltip explains the real cause — never network/sync lag.
+ */
+const INVENTORY_PENDING_NOTE =
+  "Los registros llegaron a la nube, pero el procesamiento de inventario está pendiente.";
+
 function freshnessText(freshness: SyncFreshnessResponse, now: Date): string {
   switch (freshness.state) {
     case "COMPLETE": {
@@ -85,11 +92,22 @@ function freshnessText(freshness: SyncFreshnessResponse, now: Date): string {
         ? `Datos completos hasta ${formatWatermark(freshness.lastCompleteAt, now)}`
         : "Datos completos";
       const heartbeat = latestReceiptAt(freshness);
-      return heartbeat
+      const base = heartbeat
         ? `${complete} · sync ${formatWatermark(heartbeat, now)}`
         : complete;
+      // R-10: sales synced, inventory application still pending — say so
+      // instead of letting a COMPLETE caption hide the pending work.
+      return freshness.hasInventoryPending
+        ? `${base} · inventario pendiente`
+        : base;
     }
     case "STALE": {
+      // R-10: when the delay comes from pending inventory processing, the
+      // records DID reach the cloud — blaming the network would send the
+      // operator hunting for a drop that does not exist.
+      if (freshness.hasInventoryPending) {
+        return "Sincronización al día · inventario pendiente de aplicar";
+      }
       const base = `Sincronización demorada (>${freshness.thresholdMinutes} min)`;
       return freshness.lastCompleteAt
         ? `${base} · hasta ${formatWatermark(freshness.lastCompleteAt, now)}`
@@ -165,12 +183,22 @@ export function FreshnessBadge({
     ? `Reporte generado: ${formatWatermark(generatedAt, now)}`
     : null;
 
+  // R-10: the tooltip carries the accurate explanation for inventory-pending
+  // evidence alongside the technical caption (color/text/tooltip never
+  // misattribute the delay to the network).
+  const title = [
+    caption,
+    freshness.hasInventoryPending ? INVENTORY_PENDING_NOTE : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <span className="inline-flex items-center gap-2">
       <Badge
         dot={STATE_DOT[freshness.state]}
         state={freshness.state}
-        title={caption ?? undefined}
+        title={title || undefined}
       >
         {freshnessText(freshness, now)}
       </Badge>

@@ -56,6 +56,15 @@ export interface TerminalStreamGapEvidence {
   pendingAboveWatermark: number;
   /** Number of declared gap fill receipts (result_code = 'GAP_FILL_DECLARED') indicating permanent data loss. */
   declaredGapCount?: number;
+  /**
+   * Receipts whose sale records synced but whose inventory outcome is still
+   * pending (result_code/inventory_outcome = 'APPLIED_INVENTORY_PENDING')
+   * above the accepted watermark. Informational (issue #73b / R-10): it does
+   * NOT create a sequence gap and never holds the state back from COMPLETE —
+   * it only feeds the dashboard's inventory-pending explanation, which must
+   * not be misattributed to the network.
+   */
+  inventoryPendingCount?: number;
 }
 
 export interface SyncGapEvidence {
@@ -88,6 +97,10 @@ export interface TerminalFreshness {
   acceptedThroughSequence: number | null;
   lastReceiptAt: string | null;
   hasDeclaredGaps: boolean;
+  /** True when any stream for this terminal has receipts whose inventory application is still pending (R-10). */
+  hasInventoryPending: boolean;
+  /** Total count of inventory-pending receipts across this terminal's streams. */
+  inventoryPendingCount: number;
 }
 
 export interface SyncFreshnessDerivation {
@@ -98,6 +111,10 @@ export interface SyncFreshnessDerivation {
   evaluatedAt: string;
   thresholdMinutes: number;
   hasDeclaredGaps: boolean;
+  /** True when any terminal has receipts whose inventory application is still pending (R-10, informational). */
+  hasInventoryPending: boolean;
+  /** Total count of inventory-pending receipts rolled up across terminals. */
+  inventoryPendingCount: number;
 }
 
 /** Raised when the freshness threshold is not a positive finite number. */
@@ -151,6 +168,15 @@ const terminalHasGap = (evidence: TerminalReceiptEvidence): boolean =>
 const terminalHasDeclaredGaps = (evidence: TerminalReceiptEvidence): boolean =>
   (evidence.gapEvidence?.streams ?? []).some(
     (stream) => (stream.declaredGapCount ?? 0) > 0,
+  );
+
+/** R-10: inventory-pending evidence is informational — counted, never a gap. */
+const terminalInventoryPendingCount = (
+  evidence: TerminalReceiptEvidence,
+): number =>
+  (evidence.gapEvidence?.streams ?? []).reduce(
+    (total, stream) => total + (stream.inventoryPendingCount ?? 0),
+    0,
   );
 
 /**
@@ -242,6 +268,8 @@ export function deriveSyncFreshness(
     acceptedThroughSequence: terminal.acceptedThroughSequence,
     lastReceiptAt: terminal.lastReceiptAt,
     hasDeclaredGaps: terminalHasDeclaredGaps(terminal),
+    hasInventoryPending: terminalInventoryPendingCount(terminal) > 0,
+    inventoryPendingCount: terminalInventoryPendingCount(terminal),
   }));
 
   // PENDING terminals are display-only: they are filtered out before the
@@ -267,6 +295,11 @@ export function deriveSyncFreshness(
     (terminal) => terminal.hasDeclaredGaps,
   );
 
+  const inventoryPendingCount = perTerminal.reduce(
+    (total, terminal) => total + terminal.inventoryPendingCount,
+    0,
+  );
+
   return {
     state,
     lastCompleteAt,
@@ -274,5 +307,7 @@ export function deriveSyncFreshness(
     evaluatedAt: now,
     thresholdMinutes,
     hasDeclaredGaps,
+    hasInventoryPending: inventoryPendingCount > 0,
+    inventoryPendingCount,
   };
 }

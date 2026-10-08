@@ -805,6 +805,79 @@ describe("AC-08 / AC-09 / AC-09A — freshness badge (FR-SYNC-01..05)", () => {
     expect(badge.textContent).not.toContain("demorada");
     expect(badge.textContent).not.toContain("parcial");
   });
+
+  it("R-10: COMPLETE with pending inventory appends '· inventario pendiente', not network blame", async () => {
+    mockDashboardReport({});
+    // Sales synced; the inventory application of those sales is still
+    // pending. The caption must say so — never a network/sync-lag claim.
+    vi.mocked(fetchSyncFreshness).mockResolvedValue(
+      freshnessFixture({
+        hasInventoryPending: true,
+        inventoryPendingCount: 2,
+        perTerminal: [
+          {
+            terminalId: "term-1",
+            label: "Caja 1",
+            state: "COMPLETE",
+            acceptedThroughSequence: 41,
+            lastReceiptAt: "2026-09-23T21:52:30Z",
+            hasInventoryPending: true,
+            inventoryPendingCount: 2,
+          },
+        ],
+      }) as never,
+    );
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("freshness-badge")).toHaveAttribute(
+        "data-freshness-state",
+        "COMPLETE",
+      );
+    });
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain("Datos completos");
+    expect(badge.textContent).toContain("· inventario pendiente");
+    expect(badge.textContent).not.toContain("demorada");
+    // Tooltip clarifies: records reached the cloud; inventory processing is
+    // what is pending — not the network.
+    expect(badge.getAttribute("title")).toContain(
+      "procesamiento de inventario",
+    );
+  });
+
+  it("R-10: STALE with pending inventory does not blame the network", async () => {
+    mockDashboardReport({});
+    // The watermark age comes from receipts whose inventory outcome is still
+    // pending: sales are synced, inventory is not. 'Sincronización demorada'
+    // would send the operator hunting for a network drop that does not exist.
+    vi.mocked(fetchSyncFreshness).mockResolvedValue(
+      freshnessFixture({
+        state: "STALE",
+        lastCompleteAt: "2026-09-23T21:34:00Z",
+        hasInventoryPending: true,
+        inventoryPendingCount: 3,
+      }) as never,
+    );
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("freshness-badge")).toHaveAttribute(
+        "data-freshness-state",
+        "STALE",
+      );
+    });
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain(
+      "Sincronización al día · inventario pendiente de aplicar",
+    );
+    expect(badge.textContent).not.toContain("demorada");
+    expect(badge.getAttribute("title")).toContain(
+      "procesamiento de inventario",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
