@@ -1298,10 +1298,23 @@ _StockStatus _stockStatus(Insumo insumo) {
 /// Stock badge for the sales product list (issue #73). Products whose stock
 /// is not tracked (`InventoryPolicy.notTracked`) are never "SIN STOCK": a
 /// zero stock value only means nothing is being counted, so they render as
-/// neutral NO RASTREADO instead of alarming operators. Tracked products keep
-/// the danger/primary behavior; a null policy fails closed as tracked.
+/// neutral NO RASTREADO instead of alarming operators. The same applies to
+/// simple/resale products (`!isPrepared`) with no direct stock link
+/// (neither `directStockInsumoId` nor `insumoId`): they do not track stock
+/// through the BOH, so zero stock only means untracked. Only products that
+/// actually track stock (direct stock policy or link, or prepared products)
+/// show danger SIN STOCK when depleted and primary ACTIVO when positive.
 _StockStatus _productStockStatus(Product product) {
-  if (product.inventoryPolicy == InventoryPolicy.notTracked) {
+  // Explicit untracked policy or simple/resale product without direct stock
+  // link: inventory is untracked, never depleted.
+  final isUntracked = product.inventoryPolicy == InventoryPolicy.notTracked ||
+      (!product.isPrepared &&
+          product.inventoryPolicy != InventoryPolicy.directStock &&
+          (product.directStockInsumoId == null ||
+              product.directStockInsumoId!.isEmpty) &&
+          (product.insumoId == null || product.insumoId!.isEmpty));
+
+  if (isUntracked) {
     return const _StockStatus('NO RASTREADO', DsChipTone.neutral);
   }
   if (product.stock <= 0) {

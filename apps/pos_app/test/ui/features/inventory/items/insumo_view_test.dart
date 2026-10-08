@@ -16,7 +16,9 @@ Product _product({
   required String id,
   required String name,
   required double stock,
+  bool isPrepared = false,
   InventoryPolicy? inventoryPolicy,
+  String? directStockInsumoId,
 }) {
   return Product(
     id: id,
@@ -25,8 +27,9 @@ Product _product({
     stock: stock,
     averageCost: 10,
     sellPrice: 25,
-    isPrepared: false,
+    isPrepared: isPrepared,
     inventoryPolicy: inventoryPolicy,
+    directStockInsumoId: directStockInsumoId,
   );
 }
 
@@ -96,6 +99,7 @@ void main() {
             id: 'p-2',
             name: 'Hamburguesa',
             stock: 0,
+            isPrepared: true,
             inventoryPolicy: InventoryPolicy.recipeBom,
           ),
         ]);
@@ -113,6 +117,7 @@ void main() {
             id: 'p-3',
             name: 'Papas Fritas',
             stock: 12,
+            isPrepared: true,
             inventoryPolicy: InventoryPolicy.recipeBom,
           ),
         ]);
@@ -123,14 +128,50 @@ void main() {
     );
 
     testWidgets(
-      'product with null inventory policy and 0 stock still shows danger SIN STOCK (fail-closed)',
+      'simple resale product with no stock link and 0 stock shows NO RASTREADO (untracked, fail-open)',
       (tester) async {
         await _pumpProductList(tester, [
           _product(id: 'p-4', name: 'Producto Legacy', stock: 0),
         ]);
 
+        final chip = _chipWithLabel(tester, 'NO RASTREADO');
+        expect(chip.tone, DsChipTone.neutral);
+        expect(find.text('SIN STOCK'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'direct-stock product with 0 stock shows SIN STOCK with danger tone',
+      (tester) async {
+        await _pumpProductList(tester, [
+          _product(
+            id: 'p-5',
+            name: 'Cerveza Artesanal',
+            stock: 0,
+            directStockInsumoId: 'ins-1',
+          ),
+        ]);
+
         final chip = _chipWithLabel(tester, 'SIN STOCK');
         expect(chip.tone, DsChipTone.danger);
+        expect(find.text('NO RASTREADO'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'direct-stock product with positive stock shows ACTIVO with primary tone',
+      (tester) async {
+        await _pumpProductList(tester, [
+          _product(
+            id: 'p-6',
+            name: 'Agua Embotellada',
+            stock: 5,
+            directStockInsumoId: 'ins-1',
+          ),
+        ]);
+
+        final chip = _chipWithLabel(tester, 'ACTIVO');
+        expect(chip.tone, DsChipTone.primary);
       },
     );
   });
