@@ -3948,4 +3948,56 @@ describe('InvoicesService', () => {
       expect(payload.tipEligibleBaseNio).toBeUndefined();
     });
   });
+
+  describe('fiscal timestamp parsing and convergence (6h drift prevention)', () => {
+    const baseDto: SyncInvoiceDto = {
+      id: 'inv-tz-base',
+      number: 'INV-001',
+      createdAt: '2026-10-09T20:30:00.000Z',
+      userId: 'user-1',
+      paymentStatus: 'PAID',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+      items: [],
+      payments: [],
+    };
+
+    it('persists UTC ISO timestamps with Z with their exact UTC instant', async () => {
+      const dto: SyncInvoiceDto = {
+        ...baseDto,
+        id: 'inv-tz-utc',
+        createdAt: '2026-10-09T20:30:00.000Z',
+      };
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'inv-tz-utc',
+          created_at: new Date('2026-10-09T20:30:00.000Z'),
+        }),
+        ['id'],
+      );
+    });
+
+    it('normalizes legacy timestamps lacking timezone offset to America/Managua (UTC-6) preventing 6h drift', async () => {
+      const dto: SyncInvoiceDto = {
+        ...baseDto,
+        id: 'inv-tz-legacy',
+        createdAt: '2026-10-09T14:30:00.000', // Managua local time emitted without Z
+      };
+
+      await service.syncInvoices('tenant-1', [dto]);
+
+      expect(invoiceRepo.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'inv-tz-legacy',
+          // 14:30 in Managua (UTC-6) is 20:30 UTC
+          created_at: new Date('2026-10-09T20:30:00.000Z'),
+        }),
+        ['id'],
+      );
+    });
+  });
 });
