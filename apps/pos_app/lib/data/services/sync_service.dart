@@ -525,6 +525,18 @@ class SyncService {
       } catch (e, st) {
         _logOutboxCountFailure('fulfillment events', e, st);
       }
+
+      // D-1 (backlog #98 / FU-4): outbound customers created on the terminal
+      // via quick-creation must be counted in pending outbox.
+      try {
+        final rows = await database.database.rawQuery(
+          "SELECT COUNT(*) AS pending FROM customers "
+          "WHERE sync_status = 'pending'",
+        );
+        count += _scalarCount(rows);
+      } catch (e, st) {
+        _logOutboxCountFailure('customers outbox', e, st);
+      }
     }
 
     return count;
@@ -588,6 +600,11 @@ class SyncService {
       'reconciliations oldest pending',
       "SELECT MIN(reconciled_at) AS oldest FROM payments "
       "WHERE reconciliation_sync_status = 'pending'",
+    );
+    await readOldest(
+      'customers oldest pending',
+      "SELECT MIN(created_at) AS oldest FROM customers "
+      "WHERE sync_status = 'pending'",
     );
 
     if (oldestTimestampsMs.isEmpty) return null;
@@ -815,6 +832,17 @@ class SyncService {
       if (!reconciliationSuccess) {
         hasFailure = true;
         domainErrors.add('Conciliaciones');
+      }
+
+      // 1f. Push locally created customers (D-1, backlog #98 / FU-4): customers
+      // created on the terminal via quick-creation must sync to cloud.
+      final customerSyncSuccess = await _runDomain(
+        'customers',
+        _syncOutboundCustomers,
+      );
+      if (!customerSyncSuccess) {
+        hasFailure = true;
+        domainErrors.add('Clientes');
       }
 
       // 2. Sync inventory outbox deltas
@@ -1561,6 +1589,78 @@ class SyncService {
             item['status'] == 'ACCEPTED' &&
             item['paymentId'] is String)
           item['paymentId'] as String,
+    };
+  }
+
+  /// D-1 (backlog #98 / FU-4): pushes pending customers created locally on the
+  /// terminal via quick creation to the cloud. Rows stay 'pending' on failure
+  /// and are retried on the next sync pass. Server-side ingestion upserts by
+  /// id, so retrying an accepted customer is idempotent.
+  Future<void> _syncOutboundCustomers() async {
+    final database = _database;
+    if (database == null) return;
+    final customerDao = database.customerDao;
+    final pending = await customerDao.getPendingSyncCustomers();
+    if (pending.isEmpty) return;
+
+    final batch = pending.take(_batchEnvelopeLimit).toList(growable: false);
+
+    developer.log(
+      'Customer sync: posting ${batch.length} outbound customers',
+      name: 'SyncService',
+    );
+    final response = await _dio.post(
+      '/customers/sync',
+      data: {
+        'customers': batch
+            .map(_buildCustomerSyncPayload)
+            .toList(growable: false),
+      },
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final acceptedKeys = _acceptedCustomerSyncKeys(response.data);
+      if (acceptedKeys.isNotEmpty) {
+        await customerDao.markCustomersSynced(acceptedKeys.toList(growable: false));
+      }
+    }
+  }
+
+  Map<String, Object?> _buildCustomerSyncPayload(CustomerEntity customer) {
+    return {
+      'id': customer.id,
+      'name': customer.name,
+      if (customer.taxId != null && customer.taxId!.trim().isNotEmpty)
+        'taxId': customer.taxId!.trim(),
+      if (customer.phone != null && customer.phone!.trim().isNotEmpty)
+        'phone': customer.phone!.trim(),
+      if (customer.email != null && customer.email!.trim().isNotEmpty)
+        'email': customer.email!.trim(),
+      if (customer.address != null && customer.address!.trim().isNotEmpty)
+        'address': customer.address!.trim(),
+      if (customer.customerCode != null && customer.customerCode!.trim().isNotEmpty)
+        'customerCode': customer.customerCode!.trim(),
+      'createdAt': DateTime.fromMillisecondsSinceEpoch(
+        customer.createdAt,
+        isUtc: true,
+      ).toIso8601String(),
+      'updatedAt': DateTime.fromMillisecondsSinceEpoch(
+        customer.updatedAt,
+        isUtc: true,
+      ).toIso8601String(),
+    };
+  }
+
+  Set<String> _acceptedCustomerSyncKeys(dynamic responseData) {
+    if (responseData is! Map) return const <String>{};
+    final results = responseData['results'];
+    if (results is! List) return const <String>{};
+    return {
+      for (final item in results)
+        if (item is Map &&
+            item['status'] == 'ACCEPTED' &&
+            item['id'] is String)
+          item['id'] as String,
     };
   }
 

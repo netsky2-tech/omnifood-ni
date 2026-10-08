@@ -14,6 +14,7 @@ import 'package:pos_app/data/models/sales/tax_config_entity.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
+import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
@@ -227,6 +228,53 @@ void main() {
       final bannerTop = tester.getTopLeft(find.byKey(bannerKey)).dy;
       final cobrarTop = tester.getTopLeft(cobrarButton).dy;
       expect(bannerTop, lessThan(cobrarTop));
+    },
+  );
+
+  testWidgets(
+    'R-4 general checkout error: when sale fails, banner surfaces the error '
+    'visibly above COBRAR in the cart with a Descartar action',
+    (tester) async {
+      configDao.saveConfig(
+        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
+      );
+      configDao.saveConfig(
+        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
+      );
+      viewModel.addToCart(
+        const Product(
+          id: 'p-err-1',
+          name: 'Taco',
+          uom: 'UND',
+          stock: 5,
+          averageCost: 10,
+          sellPrice: 50.0,
+        ),
+      );
+      await viewModel.loadExchangeRates();
+
+      when(mockSalesRepo.saveSale(
+        invoice: anyNamed('invoice'),
+        items: anyNamed('items'),
+        payments: anyNamed('payments'),
+      )).thenThrow(Exception('Simulated sale database failure'));
+
+      try {
+        await viewModel.processSale([PaymentMethod.cash]);
+      } catch (_) {}
+
+      await pumpCart(tester);
+
+      expect(find.byKey(bannerKey), findsOneWidget);
+      expect(
+        find.textContaining('No se pudo procesar la venta'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(TextButton, 'Descartar'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Descartar'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(bannerKey), findsNothing);
     },
   );
 }

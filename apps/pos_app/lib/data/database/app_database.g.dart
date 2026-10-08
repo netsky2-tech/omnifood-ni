@@ -6404,6 +6404,41 @@ class _$CustomerDao extends CustomerDao {
     await _customerEntityUpdateAdapter.update(
         customer, OnConflictStrategy.replace);
   }
+
+  @override
+  Future<List<CustomerEntity>> getPendingSyncCustomers() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customers WHERE sync_status = \'pending\' ORDER BY created_at ASC',
+        mapper: (Map<String, Object?> row) => CustomerEntity(
+            id: row['id'] as String,
+            name: row['name'] as String,
+            taxId: row['tax_id'] as String?,
+            phone: row['phone'] as String?,
+            email: row['email'] as String?,
+            address: row['address'] as String?,
+            pointsBalance: row['points_balance'] as double,
+            isActive: (row['is_active'] as int) != 0,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            syncStatus: row['sync_status'] as String,
+            customerCode: row['customer_code'] as String?));
+  }
+
+  @override
+  Future<void> markCustomerSynced(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE customers SET sync_status = \'synced\' WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> markCustomersSynced(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final valueList1 = ids.map((_) => '?').join(', ');
+    await _queryAdapter.queryNoReturn(
+        'UPDATE customers SET sync_status = \'synced\' WHERE id IN ($valueList1)',
+        arguments: [...ids]);
+  }
 }
 
 class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {

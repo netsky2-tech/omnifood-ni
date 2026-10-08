@@ -110,7 +110,7 @@ class AuditRepositoryImpl implements AuditRepository {
     String? metodoAutorizacion,
     String? usuarioAutorizadorId,
   }) {
-    final timestamp = _now().toIso8601String();
+    final timestamp = _now().toUtc().toIso8601String();
     final metadataObject = _normalizeMetadataToJsonObject(metadata);
     final canonicalMetadata = jsonEncode(metadataObject);
     final selectedVersion = _capabilityCache.isV3Eligible(tenantId)

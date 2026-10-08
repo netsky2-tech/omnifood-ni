@@ -26,6 +26,7 @@ import 'data/services/activation_priming_service.dart';
 import 'data/services/activation_reconnect_sync_runner.dart';
 import 'data/services/activation_required_config_adapter.dart';
 import 'data/services/activation_session_service.dart';
+import 'data/services/activation_verification_sale_cleanup_runner.dart';
 import 'data/services/api_base_url_service.dart';
 import 'data/security/app_private_device_sync_credential_store.dart';
 import 'data/security/dio_device_sync_exchange_port.dart';
@@ -448,12 +449,18 @@ void main() async {
     syncPort: activationSyncPort,
     terminalIdentityService: terminalIdentityService,
   );
+  final activationVerificationSaleCleanupRunner =
+      ActivationVerificationSaleCleanupRunner(
+    database: database,
+    salesRepository: salesRepository,
+  );
   final activationSessionService = ActivationSessionService(
     database: database,
     discoveryService: activationDiscoveryService,
     preOfflineRunner: activationPreOfflineRunner,
     controlledSaleRunner: activationControlledSaleRunner,
     reconnectSyncRunner: activationReconnectSyncRunner,
+    cleanupRunner: activationVerificationSaleCleanupRunner,
   );
   // The device-sync bootstrap cannot run at login when no finalized attempt
   // exists yet (closed bootstrap cycle). Trigger it right after activation

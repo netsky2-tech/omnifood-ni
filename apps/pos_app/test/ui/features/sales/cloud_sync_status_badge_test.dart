@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
+import 'package:pos_app/data/models/customer/customer_entity.dart';
 import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
 import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart';
 import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
@@ -560,6 +561,44 @@ void main() {
       final age = await syncService.getOldestPendingItemAge();
 
       expect(age, isNull);
+    });
+
+    test(
+        'getPendingOutboxCount counts a pending customer created locally (D-1 / FU-4 blind spot)',
+        () async {
+      await database.customerDao.saveCustomer(
+        CustomerEntity(
+          id: 'cust-pending-outbox',
+          name: 'Cliente Outbox',
+          createdAt: nowMinus(const Duration(minutes: 10)),
+          updatedAt: nowMinus(const Duration(minutes: 10)),
+          syncStatus: 'pending',
+        ),
+      );
+
+      final count = await syncService.getPendingOutboxCount();
+
+      expect(count, 1);
+    });
+
+    test(
+        'getOldestPendingItemAge returns the age of the oldest pending customer',
+        () async {
+      await database.customerDao.saveCustomer(
+        CustomerEntity(
+          id: 'cust-old',
+          name: 'Cliente Viejo',
+          createdAt: nowMinus(const Duration(minutes: 25)),
+          updatedAt: nowMinus(const Duration(minutes: 25)),
+          syncStatus: 'pending',
+        ),
+      );
+
+      final age = await syncService.getOldestPendingItemAge();
+
+      expect(age, isNotNull);
+      expect(age!.inMinutes, greaterThanOrEqualTo(24));
+      expect(age.inMinutes, lessThanOrEqualTo(26));
     });
   });
 }

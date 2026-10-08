@@ -484,6 +484,9 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   // controller keeps its human-only transport classification.
   { controller: 'LoyaltySyncController', transport: 'device' },
   { controller: 'CustomersController', transport: 'human' },
+  // D-1 (backlog #98 / FU-4): POS-pushed customers created on the terminal
+  // via quick creation. Dedicated device surface (`CustomerSyncController`).
+  { controller: 'CustomerSyncController', transport: 'device' },
   {
     controller: 'InventoryMovementController',
     transport: 'human',

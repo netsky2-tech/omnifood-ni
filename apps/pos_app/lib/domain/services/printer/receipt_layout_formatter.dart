@@ -1555,7 +1555,7 @@ class ReceiptLayoutFormatter {
     buffer.writeln(center(docTitle));
     buffer.writeln(center('No. ${invoice.number}'));
     buffer.writeln(
-      formatTwoColumns('Fecha:', dateFormat.format(invoice.createdAt)),
+      formatTwoColumns('Fecha:', dateFormat.format(invoice.createdAt.toLocal())),
     );
 
     if (cashierName != null && cashierName.isNotEmpty) {
@@ -1890,7 +1890,7 @@ class ReceiptLayoutFormatter {
         .bold(false)
         .align(EscPosAlign.left)
         .textLine(
-          formatTwoColumns('Fecha:', dateFormat.format(invoice.createdAt)),
+          formatTwoColumns('Fecha:', dateFormat.format(invoice.createdAt.toLocal())),
         );
 
     if (cashierName != null && cashierName.isNotEmpty) {

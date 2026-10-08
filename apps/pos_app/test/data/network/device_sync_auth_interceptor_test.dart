@@ -102,6 +102,34 @@ void main() {
     );
 
     test(
+      'allowlists the customer outbound sync route as device-transported (D-1 #98 / FU-4)',
+      () async {
+        when(
+          () => coordinator.getAccessToken(),
+        ).thenAnswer((_) async => 'device.access.jwt');
+
+        expect(
+          DeviceSyncAuthInterceptor.isDeviceTransportedRoute(
+            'customers/sync',
+          ),
+          isTrue,
+        );
+
+        final options = RequestOptions(
+          path: '/customers/sync',
+          baseUrl: 'https://api.test',
+        );
+        final handler = _TestRequestHandler();
+
+        await interceptor.onRequest(options, handler);
+
+        expect(handler.isNextCalled, isTrue);
+        expect(handler.isRejected, isFalse);
+        expect(options.headers['Authorization'], 'Bearer device.access.jwt');
+      },
+    );
+
+    test(
       'attaches device access token as Bearer only to /v1/sync/* routes',
       () async {
         when(

@@ -13,6 +13,7 @@ import 'package:pos_app/data/services/activation_pre_offline_runner.dart';
 import 'package:pos_app/data/services/activation_reconnect_sync_runner.dart';
 import 'package:pos_app/data/services/activation_required_config_adapter.dart';
 import 'package:pos_app/data/services/activation_session_service.dart';
+import 'package:pos_app/data/services/activation_verification_sale_cleanup_runner.dart';
 import 'package:pos_app/data/services/local_auth_service.dart';
 import 'package:pos_app/data/services/terminal_identity_service.dart';
 import 'package:pos_app/domain/models/activation/activation_attempt_snapshot.dart';
@@ -154,6 +155,28 @@ class _RecordingReconnectSyncRunner extends ActivationReconnectSyncRunner {
   @override
   Future<ActivationReconnectSyncResult> syncActivationEvidence(
     ActivationReconnectSyncParams params,
+  ) async {
+    calls.add(params);
+    return result;
+  }
+}
+
+class _RecordingCleanupRunner extends ActivationVerificationSaleCleanupRunner {
+  _RecordingCleanupRunner({required AppDatabase database})
+      : super(
+          database: database,
+          salesRepository: _NoopSalesRepository(),
+        );
+
+  final List<VoidVerificationSaleParams> calls = [];
+  VoidVerificationSaleResult result = const VoidVerificationSaleResult(
+    isSuccess: true,
+    ticketId: 'test-ticket-void-1',
+  );
+
+  @override
+  Future<VoidVerificationSaleResult> voidVerificationSale(
+    VoidVerificationSaleParams params,
   ) async {
     calls.add(params);
     return result;
@@ -485,6 +508,104 @@ void main() {
       expect(preOfflineRunner.calls, isEmpty);
       expect(controlledSaleRunner.calls, isEmpty);
       expect(reconnectSyncRunner.calls, isEmpty);
+    });
+  });
+
+  group('ONB1.8H / #77 — verification sale cleanup wiring', () {
+    ActivationAttemptDiscoveryService makeDiscoveryService() =>
+        ActivationAttemptDiscoveryService(
+          database: database,
+          syncPort: discoverySyncPort,
+          terminalIdentityService: TerminalIdentityService(
+            database.localConfigDao,
+          ),
+        );
+
+    setUp(() async {
+      await seedTerminalIdentity('pos-term-01');
+      await seedProduct(
+        id: 'prod-uuid-1',
+        tenantId: 'tenant-founder-01',
+      );
+      discoverySyncPort.snapshot = backendSnapshot();
+    });
+
+    test(
+        'syncActivationEvidence triggers cleanupRunner automatically on ACTIVATED status',
+        () async {
+      final cleanupRunner = _RecordingCleanupRunner(database: database);
+      final activeSession = ActivationSessionService(
+        database: database,
+        discoveryService: makeDiscoveryService(),
+        preOfflineRunner: preOfflineRunner,
+        controlledSaleRunner: controlledSaleRunner,
+        reconnectSyncRunner: reconnectSyncRunner,
+        cleanupRunner: cleanupRunner,
+      );
+
+      final prep = await activeSession.prepare(tenantId: 'tenant-founder-01');
+      expect(prep.isSuccess, isTrue);
+
+      reconnectSyncRunner.result = const ActivationReconnectSyncResult(
+        isSuccess: true,
+        attemptStatus: 'ACTIVATED',
+      );
+
+      final syncResult = await activeSession.syncActivationEvidence();
+      expect(syncResult.isSuccess, isTrue);
+
+      expect(cleanupRunner.calls, hasLength(1));
+      final call = cleanupRunner.calls.single;
+      expect(call.tenantId, equals('tenant-founder-01'));
+      expect(call.attemptId, equals('attempt-active-1'));
+    });
+
+    test(
+        'cleanupVerificationSale explicitly delegates to cleanupRunner',
+        () async {
+      final cleanupRunner = _RecordingCleanupRunner(database: database);
+      final activeSession = ActivationSessionService(
+        database: database,
+        discoveryService: makeDiscoveryService(),
+        preOfflineRunner: preOfflineRunner,
+        controlledSaleRunner: controlledSaleRunner,
+        reconnectSyncRunner: reconnectSyncRunner,
+        cleanupRunner: cleanupRunner,
+      );
+
+      final prep = await activeSession.prepare(tenantId: 'tenant-founder-01');
+      expect(prep.isSuccess, isTrue);
+
+      final result = await activeSession.cleanupVerificationSale(
+        reason: 'Motivo explicito de prueba',
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(result.ticketId, equals('test-ticket-void-1'));
+      expect(cleanupRunner.calls, hasLength(1));
+      final call = cleanupRunner.calls.single;
+      expect(call.tenantId, equals('tenant-founder-01'));
+      expect(call.attemptId, equals('attempt-active-1'));
+      expect(call.reason, equals('Motivo explicito de prueba'));
+    });
+
+    test(
+        'cleanupVerificationSale reports clean failure when cleanupRunner is not registered',
+        () async {
+      final activeSession = ActivationSessionService(
+        database: database,
+        discoveryService: makeDiscoveryService(),
+        preOfflineRunner: preOfflineRunner,
+        controlledSaleRunner: controlledSaleRunner,
+        reconnectSyncRunner: reconnectSyncRunner,
+      );
+
+      final prep = await activeSession.prepare(tenantId: 'tenant-founder-01');
+      expect(prep.isSuccess, isTrue);
+
+      final result = await activeSession.cleanupVerificationSale();
+      expect(result.isSuccess, isFalse);
+      expect(result.errors.first, contains('CLEANUP_RUNNER_UNAVAILABLE'));
     });
   });
 }

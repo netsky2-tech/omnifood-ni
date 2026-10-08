@@ -6,6 +6,7 @@ import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/models/sales/payment.dart';
 
 void main() {
   group('SalesMapper - recipeVersionId per-line binding', () {
@@ -498,6 +499,68 @@ void main() {
 
       expect(json['customerName'], 'Distribuidora Central S.A.');
       expect(json['customerTaxId'], 'J0310000001234');
+    });
+  });
+
+  group('SalesMapper — fiscal timestamp convergence to UTC', () {
+    final baseInvoice = Invoice(
+      id: 'inv-tz-1',
+      number: '001',
+      createdAt: DateTime(2026, 10, 9, 14, 30),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+      isCanceled: false,
+      voidReason: null,
+      syncStatus: SyncStatus.pending,
+      paymentStatus: PaymentStatus.paid,
+      type: InvoiceType.regular,
+      customerId: null,
+    );
+
+    test('toSyncJson emits createdAt in strict ISO-8601 UTC with Z suffix', () {
+      final localCreated = DateTime(2026, 10, 9, 14, 30);
+      final json = SalesMapper.toSyncJson(
+        baseInvoice.copyWith(createdAt: localCreated),
+        const [],
+        const [],
+      );
+
+      final createdAtStr = json['createdAt'] as String;
+      expect(createdAtStr, endsWith('Z'),
+          reason: 'wire sync timestamp must be explicit UTC with Z to prevent 6h server drift');
+      expect(DateTime.parse(createdAtStr).toUtc(), localCreated.toUtc());
+    });
+
+    test('toSyncJson emits payment reconciledAt in strict ISO-8601 UTC with Z suffix', () {
+      final localReconciled = DateTime(2026, 10, 9, 15, 0);
+      final payment = Payment(
+        id: 'pay-1',
+        invoiceId: 'inv-tz-1',
+        method: PaymentMethod.card,
+        amount: 115,
+        currency: 'NIO',
+        exchangeRate: 1.0,
+        amountNio: 115,
+        changeGiven: 0,
+        changeCurrency: 'NIO',
+        reconciliationStatus: 'CONCILIADO',
+        reconciledAt: localReconciled,
+      );
+
+      final json = SalesMapper.toSyncJson(
+        baseInvoice,
+        const [],
+        [payment],
+      );
+
+      final payments = json['payments'] as List<dynamic>;
+      final payMap = payments.first as Map<String, dynamic>;
+      final reconciledAtStr = payMap['reconciledAt'] as String;
+      expect(reconciledAtStr, endsWith('Z'),
+          reason: 'payment reconciledAt must be explicit UTC with Z');
+      expect(DateTime.parse(reconciledAtStr).toUtc(), localReconciled.toUtc());
     });
   });
 }

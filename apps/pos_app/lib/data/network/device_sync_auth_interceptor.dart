@@ -47,6 +47,9 @@ class DeviceSyncAuthInterceptor extends Interceptor {
     // declared here explicitly.
     'sales/payment-reconciliations/sync',
     'loyalty/point-transactions/sync',
+    // D-1 (backlog #98 / FU-4): outbound customer sync for customers created
+    // on the terminal via quick creation (POST /customers/sync).
+    'customers/sync',
     // D-18: the forensic audit stream push (POST /identity/audit) is device
     // transport on the backend; in an offline-PIN kiosk session there is no
     // cloud user JWT, so the push must ride the device credential.

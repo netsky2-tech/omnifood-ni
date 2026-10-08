@@ -169,6 +169,23 @@ export const calculateSyncPayloadHash = (record: SyncBatchRecordDto): string =>
     )
     .digest('hex');
 
+/**
+ * Normalizes sync timestamps to UTC Date.
+ * If candidate already carries a timezone indicator ('Z' or [+-]HH:mm), it is parsed as-is.
+ * If candidate lacks a timezone indicator (legacy POS payload emitting local time),
+ * it is normalized to America/Managua canonical offset (-06:00), preventing the 6h
+ * drift that occurs when UTC servers interpret bare ISO timestamps as UTC.
+ */
+export function parseFiscalTimestamp(candidate: string | Date | number): Date {
+  if (candidate instanceof Date) return candidate;
+  if (typeof candidate === 'number') return new Date(candidate);
+  const trimmed = String(candidate).trim();
+  if (/([Zz]|[+-]\d{2}:?\d{2})$/.test(trimmed)) {
+    return new Date(trimmed);
+  }
+  return new Date(`${trimmed}-06:00`);
+}
+
 @Injectable()
 export class InvoicesService {
   private readonly logger = new Logger(InvoicesService.name);
@@ -257,7 +274,7 @@ export class InvoicesService {
       const invoicePayload = {
         ...persistenceDto,
         tenant_id: tenantId,
-        created_at: new Date(dto.createdAt),
+        created_at: parseFiscalTimestamp(dto.createdAt),
       };
 
       await this.invoiceRepoFor(manager).upsert(invoicePayload, ['id']);
@@ -1659,7 +1676,7 @@ export class InvoicesService {
             // AG-02: anchor the movement to the sale's business timestamp so
             // COGS attribution aligns with the sale's business date even for
             // delayed offline syncs (spec AP-04 / AC-06 prerequisite).
-            timestamp: new Date(invoice.createdAt),
+            timestamp: parseFiscalTimestamp(invoice.createdAt),
             user_id: invoice.userId,
           }),
         );
@@ -1747,7 +1764,7 @@ export class InvoicesService {
           // keep the ingestion-time fallback (CreateInventoryMovementDto
           // deltas carry no timestamp field).
           ...(record.invoice
-            ? { timestamp: new Date(record.invoice.createdAt) }
+            ? { timestamp: parseFiscalTimestamp(record.invoice.createdAt) }
             : {}),
           user_id: record.invoice?.userId,
         }),
@@ -1982,7 +1999,7 @@ export class InvoicesService {
         originInvoiceItemId:
           movementType === MovementType.SALE ? item.id : null,
         // AG-02: business timestamp of the originating sale invoice.
-        timestamp: new Date(invoice.createdAt),
+        timestamp: parseFiscalTimestamp(invoice.createdAt),
         user_id: invoice.userId,
       }),
     );
@@ -2485,7 +2502,7 @@ export class InvoicesService {
         originInvoiceItemId: input.originInvoiceItemId,
         refundReasonPolicy: input.refundReasonPolicy,
         // AG-02: anchor the restock to the credit note's business timestamp.
-        timestamp: new Date(invoice.createdAt),
+        timestamp: parseFiscalTimestamp(invoice.createdAt),
         user_id: invoice.userId,
       }),
     );
@@ -2547,7 +2564,7 @@ export class InvoicesService {
         stableStringify({
           id: dto.id,
           number: dto.number,
-          createdAt: new Date(dto.createdAt).toISOString(),
+          createdAt: parseFiscalTimestamp(dto.createdAt).toISOString(),
           userId: dto.userId,
           subtotal: Number(dto.subtotal),
           totalTax: Number(dto.totalTax),
