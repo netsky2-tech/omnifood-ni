@@ -1264,6 +1264,76 @@ void main() {
         expect(payload['anchoredOccurredAt'], isNotNull);
       });
 
+      test('audit #78: claim and FIRST_SUCCESSFUL_SALE_OBSERVED payload carry the REAL pos build (injected posBuildReader seam)', () async {
+        await seedPrerequisites(
+          serverTimeAnchorAt: '2026-09-04T12:00:00.000Z',
+          anchorMonotonicTicks: 0,
+          bootSessionId: 'boot-session-pr78',
+        );
+
+        final buildReader = ActivationControlledSaleRunner(
+          database: database,
+          salesRepository: salesRepo,
+          printerPort: printerAdapter,
+          posBuildReader: () async => '2.14.3+918',
+        );
+
+        final result = await buildReader.executeControlledOfflineSale(
+          const ControlledSaleParams(
+            tenantId: tenantId,
+            attemptId: attemptId,
+            cashierUserId: cashierId,
+          ),
+        );
+        expect(result.isSuccess, isTrue);
+
+        final claim = await database.firstSuccessfulSaleClaimDao.getClaimByTenantId(tenantId);
+        expect(claim, isNotNull);
+        expect(claim!.posBuild, equals('2.14.3+918'));
+
+        final envelopes = await database.activationOutboxDao.getPendingEnvelopes(tenantId);
+        final firstSaleEnv = envelopes.firstWhere((e) => e.eventType == 'FIRST_SUCCESSFUL_SALE_OBSERVED');
+        final payload = jsonDecode(firstSaleEnv.payloadJson) as Map<String, dynamic>;
+        expect(payload['posBuild'], equals('2.14.3+918'));
+        // The previously hardcoded, invented build must never reappear.
+        expect(jsonEncode(payload), isNot(contains('1.0.0+1')));
+      });
+
+      test('audit #78: unreadable pos build stays null — no invented fallback and the payload omits the key', () async {
+        await seedPrerequisites(
+          serverTimeAnchorAt: '2026-09-04T12:00:00.000Z',
+          anchorMonotonicTicks: 0,
+          bootSessionId: 'boot-session-pr78-null',
+        );
+
+        final buildReader = ActivationControlledSaleRunner(
+          database: database,
+          salesRepository: salesRepo,
+          printerPort: printerAdapter,
+          // Mirrors readOhacPosBuild()'s fail-closed contract: a failed
+          // PackageInfo read yields null, never a substitute string.
+          posBuildReader: () async => null,
+        );
+
+        final result = await buildReader.executeControlledOfflineSale(
+          const ControlledSaleParams(
+            tenantId: tenantId,
+            attemptId: attemptId,
+            cashierUserId: cashierId,
+          ),
+        );
+        expect(result.isSuccess, isTrue);
+
+        final claim = await database.firstSuccessfulSaleClaimDao.getClaimByTenantId(tenantId);
+        expect(claim, isNotNull);
+        expect(claim!.posBuild, isNull);
+
+        final envelopes = await database.activationOutboxDao.getPendingEnvelopes(tenantId);
+        final firstSaleEnv = envelopes.firstWhere((e) => e.eventType == 'FIRST_SUCCESSFUL_SALE_OBSERVED');
+        final payload = jsonDecode(firstSaleEnv.payloadJson) as Map<String, dynamic>;
+        expect(payload.containsKey('posBuild'), isFalse);
+      });
+
       test('write-once invariant: second sale or attempt retry NEVER overwrites winning claim nor emits second FIRST_SUCCESSFUL_SALE_OBSERVED', () async {
         await seedPrerequisites(
           serverTimeAnchorAt: '2026-09-04T12:00:00.000Z',

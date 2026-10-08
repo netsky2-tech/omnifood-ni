@@ -216,6 +216,15 @@ export class ActivationService {
       // here left the new attempt without evidence (finalize evaluated
       // VERIFICATION_SALE_EVIDENCE_MISSING on an all-PASS attempt).
       attempt.verificationTicketId = dto.ticketId;
+      // Audit item #78: stamp the artifact identity write-once. Only the
+      // first claim on an attempt records which POS build produced the
+      // verification sale; a later claim must never silently rewrite it.
+      // A blank column (never written, or written empty) is stampable, but
+      // the stored value is always trimmed and never whitespace.
+      const claimedPosBuild = dto.posBuild?.trim();
+      if (claimedPosBuild && !attempt.posBuild?.trim()) {
+        attempt.posBuild = claimedPosBuild;
+      }
       await aRepo.save(attempt);
 
       if (!session.firstSuccessfulSaleAt) {
