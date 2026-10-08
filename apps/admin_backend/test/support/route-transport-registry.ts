@@ -550,6 +550,10 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   // (GET /sales/reports/card-reconciliation-summary, spec §15 route);
   // same human session-JWT transport class as ReportsController.
   { controller: 'CardReconciliationSummaryController', transport: 'human' },
+  // Reconciliation drill-down list (GET /sales/reports/reconciliations):
+  // dashboard-consumed paginated read, same human session-JWT transport class
+  // as the card-reconciliation summary it drills down from.
+  { controller: 'ReconciliationListController', transport: 'human' },
   { controller: 'CashShiftController', transport: 'human' },
   // Batch 5 slice 5c (finding H3): POS-pushed cash shift sessions and cash
   // movements. Dedicated device surface (`CashShiftSyncController`) so the
