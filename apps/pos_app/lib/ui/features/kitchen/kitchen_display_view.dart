@@ -3,12 +3,41 @@ import 'package:provider/provider.dart';
 import 'kitchen_display_view_model.dart';
 import 'widgets/kitchen_order_card_widget.dart';
 
-class KitchenDisplayView extends StatelessWidget {
+class KitchenDisplayView extends StatefulWidget {
   const KitchenDisplayView({super.key});
+
+  @override
+  State<KitchenDisplayView> createState() => _KitchenDisplayViewState();
+}
+
+class _KitchenDisplayViewState extends State<KitchenDisplayView> {
+  final ScrollController _scrollController = ScrollController();
+  String? _trackedStation;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Only a station filter change changes the list identity, so it is the
+  /// single case where the scroll position must jump back to the top.
+  void _syncStationScrollReset(String station) {
+    final stationChanged = _trackedStation != null && _trackedStation != station;
+    _trackedStation = station;
+    if (!stationChanged) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<KitchenDisplayViewModel>();
+    _syncStationScrollReset(vm.selectedStation);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1120), // Dark Navy Background
@@ -51,6 +80,14 @@ class KitchenDisplayView extends StatelessWidget {
             color: const Color(0xFF0F172A),
             child: _buildStationFilterBar(context, vm),
           ),
+          // Non-destructive refresh affordance: already-loaded comandas stay
+          // mounted while the list reloads in the background.
+          if (vm.isLoading)
+            const LinearProgressIndicator(
+              minHeight: 2,
+              color: Colors.amber,
+              backgroundColor: Color(0xFF334155),
+            ),
           const Divider(height: 1, color: Color(0xFF334155)),
           // Main Body Content
           Expanded(
@@ -97,13 +134,19 @@ class KitchenDisplayView extends StatelessWidget {
   }
 
   Widget _buildBody(BuildContext context, KitchenDisplayViewModel vm) {
-    if (vm.isLoading) {
+    // Full-screen spinner only when there is nothing to show yet; an error
+    // with no orders still renders the error UI below.
+    if (vm.isLoading && vm.orders.isEmpty && vm.errorMessage == null) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.amber),
       );
     }
 
-    if (vm.errorMessage != null) {
+    // A failure with nothing loaded yet gets the full-screen error. When the
+    // cook already has comandas on screen, the failure is surfaced as a banner
+    // instead: replacing the list would destroy its scroll position, which is
+    // the exact usability loss reported for a card action that fails.
+    if (vm.errorMessage != null && vm.orders.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -145,7 +188,53 @@ class KitchenDisplayView extends StatelessWidget {
       );
     }
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (vm.errorMessage != null) _buildInlineErrorBanner(vm),
+        Expanded(
+          child: _buildComandaList(vm),
+        ),
+      ],
+    );
+  }
+
+  /// Non-destructive error affordance: the loaded comandas stay visible and
+  /// scrollable while the failure is announced with a retry action.
+  Widget _buildInlineErrorBanner(KitchenDisplayViewModel vm) {
+    return Container(
+      color: const Color(0xFF3F1D1D),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 18, color: Colors.redAccent),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              vm.errorMessage!,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () => vm.loadOrders(),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.amber,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            child: const Text('Reintentar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComandaList(KitchenDisplayViewModel vm) {
     return SingleChildScrollView(
+      key: const PageStorageKey('kds-scroll'),
+      controller: _scrollController,
       padding: const EdgeInsets.all(12),
       child: Wrap(
         spacing: 12,
