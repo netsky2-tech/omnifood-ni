@@ -10,6 +10,7 @@ import 'package:pos_app/domain/ports/printer_port.dart';
 import 'package:pos_app/domain/services/config/printer_config_service.dart';
 import 'package:pos_app/ui/features/config/hardware/hardware_settings_view.dart';
 import 'package:pos_app/ui/features/config/hardware/hardware_settings_view_model.dart';
+import 'package:pos_app/ui/widgets/receipt_preview_dialog.dart';
 import 'package:provider/provider.dart';
 
 import 'hardware_settings_view_test.mocks.dart';
@@ -43,6 +44,9 @@ class _PrinterConfigServiceSpy implements PrinterConfigService {
 
   @override
   Future<bool> isPrinterProfileConfigured() async => profileConfigured;
+
+  @override
+  Future<String?> getTaxRegime() => _delegate.getTaxRegime();
 
   @override
   Future<void> confirmPrinterProfile({
@@ -256,6 +260,81 @@ void main() {
       final invoice = capturedInvoice as Invoice;
       expect(invoice.totalTax, equals(15.0));
       expect(invoice.total, equals(115.0));
+    });
+
+    testWidgets(
+        '#76: preview and test print read the tax regime fresh from storage, not from the loadConfig snapshot',
+        (tester) async {
+      tester.view.physicalSize = const Size(1024, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      // The persisted `tax_regime` key in local_configs — the same storage
+      // PrinterConfigService reads. It starts as regime A and flips to regime
+      // B behind this screen's back, exactly what happens when the owner
+      // edits the fiscal regime in Business Profile. No manual refresh press.
+      String persistedTaxRegime = 'REGIMEN_GENERAL';
+      when(mockConfigService.getPrinterConfig()).thenAnswer(
+        (_) async => PrinterConfig(
+          driverType: PrinterDriverType.sunmiV2s,
+          paperWidthMm: 58,
+          headerBusinessName: 'NHILOS POS HW Test',
+          taxRegime: persistedTaxRegime,
+        ),
+      );
+      when(mockConfigService.getTaxRegime())
+          .thenAnswer((_) async => persistedTaxRegime);
+
+      TaxRegime? printedRegime;
+      when(mockPrinterPort.printInvoice(
+        any,
+        items: anyNamed('items'),
+        payments: anyNamed('payments'),
+        businessName: anyNamed('businessName'),
+        legalName: anyNamed('legalName'),
+        ruc: anyNamed('ruc'),
+        address: anyNamed('address'),
+        phone: anyNamed('phone'),
+        logoRasterBytes: anyNamed('logoRasterBytes'),
+        taxRegime: anyNamed('taxRegime'),
+        isTaxExempt: anyNamed('isTaxExempt'),
+        paperWidthMm: anyNamed('paperWidthMm'),
+      )).thenAnswer((Invocation invocation) async {
+        printedRegime =
+            invocation.namedArguments[const Symbol('taxRegime')] as TaxRegime?;
+        return PrinterResult.success();
+      });
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pumpAndSettle();
+
+      // The owner changes the fiscal regime in Business Profile.
+      persistedTaxRegime = 'CUOTA_FIJA';
+
+      // 1) The preview must surface regime B without a manual refresh press.
+      final previewButton = find.byKey(const Key('preview_receipt_button'));
+      await tester.ensureVisible(previewButton);
+      await tester.pumpAndSettle();
+      await tester.tap(previewButton);
+      await tester.pumpAndSettle();
+
+      final dialog = tester.widget<ReceiptPreviewDialog>(
+        find.byType(ReceiptPreviewDialog),
+      );
+      expect(dialog.initialTaxRegime, TaxRegime.cuotaFija);
+
+      // Close the dialog so the test print can run on the same screen.
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pumpAndSettle();
+
+      // 2) The test-print path must use the SAME fresh value.
+      final printButton = find.byKey(const Key('test_print_button'));
+      await tester.ensureVisible(printButton);
+      await tester.pumpAndSettle();
+      await tester.tap(printButton);
+      await tester.pumpAndSettle();
+
+      expect(printedRegime, TaxRegime.cuotaFija);
     });
 
     testWidgets('preview prints the locally persisted issuer RUC, never the header override',

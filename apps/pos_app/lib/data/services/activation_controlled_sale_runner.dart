@@ -19,6 +19,7 @@ import '../models/activation/first_successful_sale_claim_entity.dart';
 import '../models/sales/invoice_entity.dart';
 import '../models/local_config_entity.dart';
 import 'activation_clock_manager.dart';
+import 'ohac_negotiation_parameters.dart';
 import 'sync_service.dart';
 import '../../domain/usecases/inventory/checkout_inventory_preparation_service.dart';
 
@@ -67,16 +68,24 @@ class ActivationControlledSaleRunner {
   final ActivationClockManager? _clockManager;
   final PrinterConfigService _printerConfigService;
 
+  /// Audit item #78: where the activation handshake reads the device's real
+  /// build. Defaults to [readOhacPosBuild] (fail-closed: null when the
+  /// platform read fails); tests inject a stub instead of reaching into
+  /// PackageInfo.
+  final Future<String?> Function() _readPosBuild;
+
   ActivationControlledSaleRunner({
     required AppDatabase database,
     required SalesRepository salesRepository,
     PrinterPort? printerPort,
     ActivationClockManager? clockManager,
     PrinterConfigService? printerConfigService,
+    Future<String?> Function()? posBuildReader,
   })  : _database = database,
         _salesRepository = salesRepository,
         _injectedPrinterPort = printerPort,
         _clockManager = clockManager,
+        _readPosBuild = posBuildReader ?? readOhacPosBuild,
         _printerConfigService =
             printerConfigService ?? PrinterConfigService(database.localConfigDao);
 
@@ -641,6 +650,14 @@ class ActivationControlledSaleRunner {
     // unconditionally and answers idempotently (claimed:false when the attempt
     // already holds a pointer), so one claim per attempt is safe and required.
     final claimOutboxEventId = const Uuid().v4();
+    // Audit item #78: the claim is the evidence of which artifact produced
+    // the verification sale, so it must carry the build reported by the
+    // artifact itself, read ONCE here and reused for both the persisted row
+    // and the FIRST_SUCCESSFUL_SALE_OBSERVED envelope. readOhacPosBuild()
+    // returns null when the platform read fails; persisting null is honest —
+    // the previous hardcoded '1.0.0+1' was an invented build that could never
+    // match the actual artifact and poisoned the audit trail.
+    final posBuild = await _readPosBuild();
     final candidateClaim = FirstSuccessfulSaleClaimEntity(
       tenantId: trimmedTenantId,
       terminalId: attempt.candidateTerminalId,
@@ -650,7 +667,7 @@ class ActivationControlledSaleRunner {
       anchoredOccurredAt: clockRes.anchoredOccurredAt,
       clockConfidence: clockRes.clockConfidence,
       serverTimeAnchorId: clockRes.serverTimeAnchorId,
-      posBuild: '1.0.0+1',
+      posBuild: posBuild,
       outboxEventId: claimOutboxEventId,
       createdAtLocal: nowIso,
     );
@@ -674,21 +691,26 @@ class ActivationControlledSaleRunner {
     final attemptHasClaimedVerificationSale = existingClaimEnvelope != null;
 
     if (!attemptHasClaimedVerificationSale) {
+      // The DTO field is optional: when the build could not be read, the key
+      // is omitted rather than filled with an invented value.
+      final claimPayload = <String, dynamic>{
+        'ticketId': ticketId,
+        'declarativeTenantId': trimmedTenantId,
+        'declarativeTerminalId': attempt.candidateTerminalId,
+        'activationAttemptId': trimmedAttemptId,
+        'deviceOccurredAt': clockRes.deviceOccurredAt,
+        'anchoredOccurredAt': clockRes.anchoredOccurredAt,
+        'clockConfidence': clockRes.clockConfidence,
+        'serverTimeAnchorId': clockRes.serverTimeAnchorId,
+        'outboxEventId': claimOutboxEventId,
+      };
+      if (posBuild != null) {
+        claimPayload['posBuild'] = posBuild;
+      }
       addEnvelope(
         eventType: 'FIRST_SUCCESSFUL_SALE_OBSERVED',
         idempotencyKey: claimIdempotencyKey,
-        payload: {
-          'ticketId': ticketId,
-          'declarativeTenantId': trimmedTenantId,
-          'declarativeTerminalId': attempt.candidateTerminalId,
-          'activationAttemptId': trimmedAttemptId,
-          'deviceOccurredAt': clockRes.deviceOccurredAt,
-          'anchoredOccurredAt': clockRes.anchoredOccurredAt,
-          'clockConfidence': clockRes.clockConfidence,
-          'serverTimeAnchorId': clockRes.serverTimeAnchorId,
-          'posBuild': '1.0.0+1',
-          'outboxEventId': claimOutboxEventId,
-        },
+        payload: claimPayload,
       );
     }
 

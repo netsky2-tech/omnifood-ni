@@ -116,6 +116,16 @@ class MockPrinterConfigService extends _i1.Mock
       ) as _i5.Future<_i2.PrinterConfig>);
 
   @override
+  _i5.Future<String?> getTaxRegime() => (super.noSuchMethod(
+        Invocation.method(
+          #getTaxRegime,
+          [],
+        ),
+        returnValue: _i5.Future<String?>.value(),
+        returnValueForMissingStub: _i5.Future<String?>.value(),
+      ) as _i5.Future<String?>);
+
+  @override
   _i5.Future<void> savePrinterConfig(_i2.PrinterConfig? config) =>
       (super.noSuchMethod(
         Invocation.method(

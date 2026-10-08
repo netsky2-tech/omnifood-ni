@@ -1526,3 +1526,120 @@ describe('ActivationService — claimFirstSuccessfulSale re-activation (issue #5
     );
   });
 });
+
+describe('ActivationService — claimFirstSuccessfulSale stamps posBuild write-once (audit item #78)', () => {
+  const tenantId = 'tenant-founder-01';
+  const terminalId = 'pos-term-01';
+  const devicePrincipal: DevicePrincipal = { tenantId, terminalId };
+
+  const buildService = (attemptPosBuild: string | null = null) => {
+    const attemptRepo: any = {
+      findOne: jest.fn(async () => ({
+        id: 'attempt-uuid-1',
+        tenantId,
+        candidateTerminalId: terminalId,
+        verificationTicketId: null,
+        posBuild: attemptPosBuild,
+      })),
+      save: jest.fn(async (entity: any) => entity),
+    };
+    const sessionRepo: any = {
+      findOne: jest.fn(async () => ({
+        id: 'session-uuid-1',
+        tenantId,
+        firstSuccessfulSaleAt: null,
+        lastActivityAt: null,
+        optimisticVersion: 1,
+      })),
+      save: jest.fn(async (entity: any) => entity),
+    };
+    const invoiceRepo: any = {
+      findOne: jest.fn(async () => ({
+        id: 'verification-invoice-1',
+        tenant_id: tenantId,
+        isCanceled: false,
+        paymentStatus: 'paid',
+      })),
+    };
+    const dataSource: any = {
+      transaction: jest.fn(async (cb: (m: any) => Promise<unknown>) =>
+        cb({
+          query: jest.fn(async () => undefined),
+          getRepository: (entityClass: any) => {
+            if (entityClass === ActivationAttempt) return attemptRepo;
+            if (entityClass === OnboardingSession) return sessionRepo;
+            if (entityClass === Invoice) return invoiceRepo;
+            return null;
+          },
+        }),
+      ),
+    };
+
+    const service = new ActivationService(
+      attemptRepo,
+      { find: jest.fn() } as any,
+      { findOne: jest.fn() } as any,
+      sessionRepo,
+      {} as any,
+      {} as any,
+      {} as any,
+      dataSource,
+      { log: jest.fn().mockResolvedValue(undefined) } as any,
+    );
+
+    return { service, attemptRepo };
+  };
+
+  const claim = (service: ActivationService, posBuild?: string) =>
+    service.claimFirstSuccessfulSale(
+      'attempt-uuid-1',
+      {
+        declarativeTenantId: tenantId,
+        declarativeTerminalId: terminalId,
+        activationAttemptId: 'attempt-uuid-1',
+        ticketId: 'verification-invoice-1',
+        anchoredOccurredAt: '2026-09-24T12:00:00.000Z',
+        deviceOccurredAt: '2026-09-24T12:00:01.000Z',
+        posBuild,
+      } as any,
+      devicePrincipal,
+    );
+
+  it('stamps the claimed pos build (trimmed) on an attempt whose pos_build is still empty', async () => {
+    const { service, attemptRepo } = buildService(null);
+
+    await claim(service, '  2.14.3+918  ');
+
+    const savedAttempt = attemptRepo.save.mock.calls[0][0];
+    expect(savedAttempt.posBuild).toBe('2.14.3+918');
+  });
+
+  it('never overwrites a pos build already recorded on the attempt', async () => {
+    const { service, attemptRepo } = buildService('1.2.0+3');
+
+    await claim(service, '9.9.9+1');
+
+    const savedAttempt = attemptRepo.save.mock.calls[0][0];
+    // The artifact identity of the attempt is write-once: a later claim must
+    // not silently rewrite which build produced the verification sale.
+    expect(savedAttempt.posBuild).toBe('1.2.0+3');
+  });
+
+  it('leaves pos_build untouched when the claim carries no posBuild', async () => {
+    const { service, attemptRepo } = buildService(null);
+
+    await claim(service);
+
+    const savedAttempt = attemptRepo.save.mock.calls[0][0];
+    expect(savedAttempt.posBuild).toBeNull();
+  });
+
+  it('leaves a blank-string pos_build stampable but does not store whitespace', async () => {
+    const { service, attemptRepo } = buildService('   ');
+
+    await claim(service, '2.14.3+918');
+
+    const savedAttempt = attemptRepo.save.mock.calls[0][0];
+    expect(savedAttempt.posBuild).toBe('2.14.3+918');
+  });
+});

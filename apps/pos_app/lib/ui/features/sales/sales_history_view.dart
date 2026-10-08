@@ -630,18 +630,38 @@ class InvoiceDetailsPanel extends StatelessWidget {
                         selectedCode!,
                         reasonDetail: detail.isEmpty ? null : detail,
                       );
-                      final printed = saleViewModel.lastVoidPrintSucceeded;
+                      // Audit #79: the void's print outcome is a TRI-STATE.
+                      // The fiscal void is the fact; the print is derivative
+                      // and never reported as a void failure. `notRequested`
+                      // (auto-print off) is NOT a failure — the old boolean
+                      // fabricated one there.
+                      final printOutcome =
+                          saleViewModel.lastVoidCopyPrintOutcome;
                       if (!context.mounted) return;
                       if (ok) {
                         Navigator.pop(dialogContext);
                         // Honesty rule: only claim the print if it happened.
+                        final String voidPrintMessage = switch (printOutcome) {
+                          VoidCopyPrintOutcome.printed =>
+                            'Factura anulada. Se imprimió el comprobante ANULADO.',
+                          VoidCopyPrintOutcome.notRequested =>
+                            'Factura anulada. Comprobante ANULADO no impreso: '
+                                'la impresión automática está desactivada.',
+                          VoidCopyPrintOutcome.failed =>
+                            // Unavailable printer / paper / driver failure:
+                            // named, never silently swallowed.
+                            () {
+                              final detail = saleViewModel.lastPrintError;
+                              return 'Factura anulada. No se pudo imprimir el '
+                                      'comprobante ANULADO.' +
+                                  (detail == null || detail.isEmpty
+                                      ? ''
+                                      : ' Motivo: $detail');
+                            }(),
+                        };
                         messenger.showSnackBar(
                           SnackBar(
-                            content: Text(
-                              printed
-                                  ? 'Factura anulada. Se imprimió el comprobante ANULADO.'
-                                  : 'Factura anulada. No se pudo imprimir el comprobante ANULADO.',
-                            ),
+                            content: Text(voidPrintMessage),
                           ),
                         );
                         await context

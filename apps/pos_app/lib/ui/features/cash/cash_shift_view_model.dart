@@ -257,6 +257,12 @@ class CashShiftViewModel extends ChangeNotifier {
   Future<void> refreshPendingVouchersCount() async {
     if (paymentDao != null) {
       _pendingVouchersCount = (await paymentDao!.countPendingCardPayments()) ?? 0;
+      // Issue #74: the re-read above only stored the fresh count — without
+      // this notify the badge (cash_shift_view), the 'Vouchers (n)' label
+      // and the Corte Z fiscal gate kept rendering the stale value even
+      // after a per-voucher refresh while the reconciliation dialog is
+      // open. Safe to call from init() too (the finally already notifies).
+      notifyListeners();
     }
   }
 

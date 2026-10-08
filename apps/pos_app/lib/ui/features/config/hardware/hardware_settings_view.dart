@@ -300,8 +300,14 @@ class HardwareSettingsView extends StatelessWidget {
                   key: const Key('preview_receipt_button'),
                   icon: const Icon(Icons.preview),
                   label: const Text('PREVIEW Y DIAGNÓSTICO DE TICKET'),
-                  onPressed: () {
-                    final taxRegime = TaxRegime.fromString(config.taxRegime);
+                  onPressed: () async {
+                    // #76: the regime can change outside this screen
+                    // (Business Profile). Re-read it from the source of
+                    // truth so the preview shows the regime the owner last
+                    // saved, not this screen's load-time snapshot.
+                    await viewModel.refreshTaxRegime();
+                    final taxRegime =
+                        TaxRegime.fromString(viewModel.config.taxRegime);
                     if (taxRegime == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -319,8 +325,11 @@ class HardwareSettingsView extends StatelessWidget {
                       initialTaxRegime: taxRegime,
                       printerPort: viewModel.printerPort,
                       // D-17: the preview must show what the paper will
-                      // show — the value already loaded in this view's
-                      // config, no re-read.
+                      // show. The preview and the hardware test print read
+                      // the SAME tax regime value at the SAME moment,
+                      // freshly from the current source of truth — not from
+                      // a stale load-time snapshot — so the two can never
+                      // diverge.
                       fiscalAuthorizationNumber: config.dgiAuthorizationCode,
                     );
                   },
