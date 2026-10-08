@@ -213,12 +213,37 @@ class HardwareSettingsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// #76: re-reads ONLY the fiscal regime from the source of truth
+  /// (`local_configs['tax_regime']` via [PrinterConfigService.getTaxRegime])
+  /// and notifies listeners. The regime can change outside this screen
+  /// (Business Profile), so the preview and the test print must read the
+  /// current value at the moment they run — never the snapshot taken at
+  /// [loadConfig] time. Printer hardware settings (driver/port/width/
+  /// auto-print) stay on their cached path; the full config is never rebuilt
+  /// here.
+  Future<void> refreshTaxRegime() async {
+    try {
+      final freshRegime = await _configService.getTaxRegime();
+      if (freshRegime != null && _config.taxRegime != freshRegime) {
+        _config = _config.copyWith(taxRegime: freshRegime);
+        notifyListeners();
+      }
+    } catch (_) {
+      // A failed re-read keeps the snapshot value; the preview / test print
+      // surfaces the missing-regime error downstream exactly as before.
+    }
+  }
+
   Future<bool> testPrintReceipt() async {
     _isTesting = true;
     _statusMessage = null;
     notifyListeners();
 
     try {
+      // #76 / D-17: read the regime fresh from the source of truth so the
+      // paper shows the same regime the preview just showed — both paths
+      // re-read at the moment they run, never the load-time snapshot.
+      await refreshTaxRegime();
       // B2e D-3: the diagnostic ticket must derive its sample fiscal amounts
       // from the configured regime — a Cuota Fija device never prints a test
       // ticket carrying an invented 15% IVA.

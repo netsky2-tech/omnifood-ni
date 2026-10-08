@@ -45,6 +45,12 @@ class PrinterConfigService {
   static const String logoHeightKey = 'printer_logo_height';
   static const String isLogoEnabledKey = 'printer_logo_enabled';
 
+  /// Fiscal regime key (`tax_regime`). Written by the operator from the
+  /// business profile; re-read fresh by the receipt preview / hardware test
+  /// print path (#76) so a regime change outside the hardware screen is
+  /// honoured at the moment the ticket is produced.
+  static const String taxRegimeKey = 'tax_regime';
+
   final LocalConfigDao _configDao;
   final StreamController<PrinterConfig> _configStreamController =
       StreamController<PrinterConfig>.broadcast();
@@ -139,7 +145,7 @@ class PrinterConfigService {
     final logoWidth = int.tryParse(logoWidthEntity?.value ?? '');
     final logoHeight = int.tryParse(logoHeightEntity?.value ?? '');
     final isLogoEnabled = isLogoEnabledEntity?.value.trim().toLowerCase() == 'true';
-    final taxRegimeEntity = await _configDao.getConfigByKey('tax_regime');
+    final taxRegimeEntity = await _configDao.getConfigByKey(taxRegimeKey);
     final authCodeEntity =
         await _configDao.getConfigByKey(dgiAuthorizationCodeKey);
 
@@ -164,6 +170,18 @@ class PrinterConfigService {
       logoHeight: logoHeight,
       isLogoEnabled: isLogoEnabled,
     );
+  }
+
+  /// Fresh read of the fiscal regime from the source of truth
+  /// (`local_configs['tax_regime']`).
+  ///
+  /// #76: the receipt preview and the hardware test print must honour the
+  /// regime the owner last saved — including changes made from the business
+  /// profile after this screen loaded its snapshot. Returns null when the
+  /// key is unset; the caller surfaces the missing-regime error.
+  Future<String?> getTaxRegime() async {
+    final entity = await _configDao.getConfigByKey(taxRegimeKey);
+    return entity?.value;
   }
 
   /// Persists the printer configuration.
