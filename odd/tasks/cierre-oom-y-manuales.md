@@ -113,9 +113,26 @@ Rojo preexistente confirmado como tal con el log: `lint-and-test` de #809 falló
 línea base de main. El tope nuevo no lo toca: `test:db` corre con `--config ./test/jest-db.json` y
 `--runInBand`, o sea ni lee el bloque `jest` de `package.json`.
 
-Queda como acción del dueño, no de la repo: aplicar `docs/devex/wsl2/.wslconfig` (16 GiB / 8 GiB)
-cuando corres `wsl --shutdown`. Sin eso, el techo sigue siendo 12 GiB + 4 GiB y el guardrail de
-`maxWorkers: 2` es lo que sostiene.
+El dueño aplicó `docs/devex/wsl2/.wslconfig` (16 GiB / 8 GiB) y reinició el VM con `wsl --shutdown`.
 
-FU-9 (OOM) queda cerrado en la capa que el repo puede controlar. FU-7 (relay de revisión nativa que
-trunca en 4672 caracteres) sigue abierto y bloquea RDD en esta máquina.
+**Post-reinicio verificado:** RAM del VM **15 GiB** y swap **8 GiB** (antes 11 / 4). `nproc` sigue en 12.
+Respaldo del valor viejo: `.wslconfig.bak-20261007-184236` (con su mtime original, útil como auditoría de rollback).
+`npm test` sin flags: **3700 passed, 8 skipped, 3708 total**, idéntico a antes del cambio — el tope nuevo no alteró
+resultados, solo sumó headroom. Servicios del harness: `engram-http.service` y `moshi-hook.service` activos.
+
+Lección de triage: **no existe `engram.service`**. `systemctl --user is-active engram` responde `inactive` porque la
+unidad no está encontrada, y eso se lee como "el servicio murió". Listar primero:
+`systemctl --user list-unit-files | grep -iE "engram|moshi"` → la unidad real es `engram-http.service`. FU-9 queda
+cerrado en las dos capas: config del repo (`maxWorkers: 2`) y techo del host (16 GiB).
+
+FU-7 queda **fuera del alcance de este repo**. El defecto es de `gentle-pi`: `lib/inprocess-reviewer.ts` no tiene rama
+para `stopReason === "length"`, así que submissiona JSON truncado como si fuera veredicto y native lo rechaza con un
+mensaje que señala el transporte. Está reportado aguas arriba en gentle-shell #1483 / #1607 / #1661 / #1259; el dueño
+decidió no abrir duplicado y esperar el update del harness. Mi diagnóstico inicial ("bound fijo en 4672" y "el relay
+cachea el artefacto roto") está **refutado** con datos en `odd/tasks/factura-con-nombre.md` §9. El lineage
+`review-75107ffde7dd9222` quedó **abandonado** con `operator_disposition` (registro en
+`review-transactions/quarantine/review-75107ffde7dd9222-546714406`) en lugar de colgado.
+
+La verificación física del ticket en una terminal SOHO real queda **pendiente hasta la próxima reunión con el
+cliente**: los fixtures afirman la geometría byte a byte, pero un fixture no prueba papel. No es un defecto conocido;
+es una verificación que acá no se puede hacer.
