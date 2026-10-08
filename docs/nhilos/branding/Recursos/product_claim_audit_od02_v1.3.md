@@ -9,7 +9,7 @@
 **Downstream:** `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
 **Gobernanza de cadena:** según `nhilos_branding_document_governance_v1.0.md` (§3), este documento es la autoridad de claims y el Marketing Brief es downstream de él.  
 **Fecha de reconciliación:** 2026-10-08  
-**Reconciliation resolutions:** `OD-02-R01` (Claim count 40 — 34 originales + 6 loyalty `PC-LOY-01..06`), `OD-02-R02` (Fiscal conditioning), `OD-02-R03` (Hardened offline wording)  
+**Reconciliation resolutions:** `OD-02-R01` (Claim count 40 — 34 originales + 6 loyalty `PC-LOY-01..06`), `OD-02-R02` (Fiscal conditioning), `OD-02-R03` (Hardened offline wording); extensión FOH `PC-FOH-01..03` — **Claim count vigente: 43** (34 originales + 6 loyalty + 3 FOH)  
 
 ---
 
@@ -67,7 +67,7 @@ components:
 
 ---
 
-# 4. Primary Audit Matrix (D1) — 40 Claims Auditados (34 originales + 6 loyalty, `OD-02-R01`)
+# 4. Primary Audit Matrix (D1) — 43 Claims Auditados (34 originales + 6 loyalty `OD-02-R01` + 3 FOH `PC-FOH-01..03`)
 
 | ID | Claim | Class | Scope | Code Evidence | Test Evidence | Limitations | Technical Status | Public Status | Website Treatment |
 |---|---|---|---|---|---|---|---|---|---|
@@ -111,6 +111,9 @@ components:
 | **PC-LOY-04** | Identificación del cliente en mostrador por QR, código, teléfono o búsqueda por nombre, totalmente offline | `LOYALTY` | FOH / Customer Identification | `apps/pos_app/lib/domain/services/sales/customer_identification_service.dart`, `apps/pos_app/lib/data/adapters/customer_identification_adapters.dart`, `apps/pos_app/lib/main.dart` (wiring del servicio) | `apps/pos_app/test/domain/services/sales/customer_identification_service_test.dart`, `apps/pos_app/test/domain/ports/customer_identification_adapters_test.dart` | Requiere que el cliente exista localmente en el terminal. El formato del payload QR es `NHL1:{code}`. El escaneo por cámara requiere permiso concedido. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
 | **PC-LOY-05** | Promociones (buy-X-get-Y free, porcentaje, monto fijo, combo) aplicadas de forma automática y determinista en el POS, con administración central | `LOYALTY / PROMOTIONS` | FOH / Promotions Engine | `apps/pos_app/lib/domain/services/sales/promotions_engine.dart`, `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart` (aplicación en la venta), `apps/admin_backend/src/modules/promotions/` (CRUD en la nube), `apps/pos_app/lib/data/services/sync_service.dart` (ruta de sync por deltas) | `apps/pos_app/test/domain/services/sales/promotions_engine_test.dart`, `apps/pos_app/test/presentation/features/sales/promotions_integration_flow_test.dart`, `apps/admin_backend/test/promotions/promotions-rls.db.e2e-spec.ts` | Requiere que la promoción esté activa localmente (el push desde la nube debe haber llegado). Las filas malformadas provenientes de la nube se descartan. Las promociones NO están ligadas a las reglas de acumulación de puntos. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
 | **PC-LOY-06** | Configuración de programas y recompensas por el dueño, ajuste de puntos con actor y motivo, y economía profit-aware de cada recompensa | `LOYALTY` | Backoffice / Owner Dashboard | `apps/admin_backend/src/modules/loyalty/controllers/loyalty.controller.ts` (incluye API de ajuste de puntos con actor y motivo), `apps/owner_dashboard/src/features/loyalty/loyalty-page.tsx`, `apps/owner_dashboard/src/features/loyalty/reward-profit-aware-dialog.tsx` | `apps/admin_backend/test/loyalty/loyalty-profit-aware.db.e2e-spec.ts`, `apps/owner_dashboard/src/__tests__/w10-loyalty-programs-rewards.test.tsx` | Requiere rol `OWNER` o `MANAGER`. No existen dashboards de KPIs de loyalty, campañas, niveles (tiers) ni portal de consumidor. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-FOH-01** | Retención de cuentas abiertas: park de órdenes por mesa, listado de todas las cuentas abiertas, recuperación, reemplazo y fusión (merge), con mapa de mesas que renderiza los tickets retenidos por mesa | `WORKFLOW` | FOH / Table Service | `apps/pos_app/lib/domain/services/sales/table_order_service.dart` (parkOrder, getAllOpenOrders, replaceOrderItems, mergeOrders), `apps/pos_app/lib/ui/features/sales/tables/table_layout_view.dart`, `apps/pos_app/lib/ui/features/sales/tables/table_layout_view_model.dart`, `apps/pos_app/lib/domain/services/sales/waiter_settlement_service.dart` | `apps/pos_app/test/domain/services/sales/table_order_service_test.dart`, `apps/pos_app/test/domain/services/sales/waiter_settlement_service_test.dart`, `apps/pos_app/test/ui/features/sales/table_layout_view_model_test.dart`, `apps/pos_app/test/ui/features/sales/table_layout_view_test.dart` | Requiere un modo de negocio que habilite servicio de mesa. El cierre de turno no procede mientras existan cuentas abiertas (verificación de cuentas abiertas en el cierre; `OpenTablesPendingException` en liquidación de mesero). La retención es por terminal local (multi-dispositivo fuera de alcance, ver PC-OFF-05). El registro de retención lleva versión optimista para concurrencia. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-FOH-02** | Grupos de modificadores y opciones configurables por producto, ofrecidos al operador y aplicados al ticket con su ajuste de precio; administración desde el backoffice | `WORKFLOW` | FOH / Product Configuration | `apps/pos_app/lib/ui/features/sales/sale_view.dart` (diálogo de opciones por `availableModifierGroups`, aplicación de `priceDelta`), `apps/pos_app/lib/ui/features/inventory/items/item_options_editor.dart`, `apps/admin_backend/src/modules/modifiers/` (administración de grupos y opciones) | `apps/pos_app/test/ui/features/sales/product_options_grouped_modifiers_test.dart`, `apps/pos_app/test/data/services/modifier_resolution_service_test.dart`, `apps/pos_app/test/ui/features/inventory/items/item_options_editor_readonly_test.dart`, `apps/admin_backend/src/modules/modifiers/services/modifiers.service.spec.ts` | Los modificadores deben estar configurados previamente para aparecer en el POS. Un producto sin grupos configurados se comporta como antes (sin diálogo de opciones). | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-FOH-03** | Visibilidad operativa en mostrador: el POS muestra al operador su estado de conectividad y el conteo de documentos pendientes de sincronizar | `DATA / VISIBILITY` | FOH / Operational Status | `apps/pos_app/lib/ui/features/sales/widgets/cloud_sync_status_badge.dart` (cadenas offline y conteo pendiente, incluido conteo de auditoría degradada), `apps/pos_app/lib/data/services/sync_service.dart` (fuente del conteo de outbox pendiente) | `apps/pos_app/test/ui/features/sales/cloud_sync_status_badge_test.dart` | La visibilidad cubre únicamente el estado que la app rastrea hoy (online/offline, error de sincronización, conteo de outbox y auditoría pendiente); no constituye una auditoría general de todos los estados pendientes del sistema. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
 
 ### 4.1 Loyalty — lo que el producto NO hace y por lo tanto no debe prometerse
 
@@ -223,7 +226,7 @@ Funcionalidades implementadas en código que requieren evidencia visual antes de
 # 10. Exit Criteria Sign-off
 
 - [x] El codebase auditado está identificado por commit/versión (`b4b5ad27`, re-anclaje 2026-10-08).
-- [x] Se construyó el universo completo de claims candidatos (**40 claims analizados**: 34 originales + 6 loyalty `PC-LOY-01..06`, resolución `OD-02-R01`).
+- [x] Se construyó el universo completo de claims candidatos (**43 claims analizados**: 34 originales + 6 loyalty `PC-LOY-01..06`, resolución `OD-02-R01`, + 3 FOH `PC-FOH-01..03`).
 - [x] Claims compuestos fueron desagregados en claims unitarios atómicos.
 - [x] Claims funcionales relevantes tienen evidencia concreta de implementación en código (E3).
 - [x] Claims relevantes tienen tests automatizados verificables (E4).
@@ -249,7 +252,7 @@ Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` (
 
 # Reconciliación v1.2–v1.3 — Re-anclaje a b4b5ad27 y adenda de lealtad
 
-Resultado headline: de los 34 claims auditados en el re-anclaje original (el registro asciende hoy a 40 con la extensión loyalty `PC-LOY-01..06`), **30 sin cambio, 3 con deriva, 0 ya no sostenibles** tras 575 commits (`7af1521…` → `b4b5ad27`, 2026-10-08).
+Resultado headline: de los 34 claims auditados en el re-anclaje original (el registro asciende hoy a 43 con las extensiones loyalty `PC-LOY-01..06` y FOH `PC-FOH-01..03`), **30 sin cambio, 3 con deriva, 0 ya no sostenibles** tras 575 commits (`7af1521…` → `b4b5ad27`, 2026-10-08).
 
 | # | Corrección | Antes | Después |
 |---|---|---|---|
@@ -316,3 +319,6 @@ Resultado headline: de los 34 claims auditados en el re-anclaje original (el reg
 | PC-LOY-04 | LY-004 | citado |
 | PC-LOY-05 | LY-005 | citado |
 | PC-LOY-06 | LY-006 | citado |
+| PC-FOH-01 | PC-002, CW-005 | citado |
+| PC-FOH-02 | CW-002 | citado |
+| PC-FOH-03 | CT-005 | citado |

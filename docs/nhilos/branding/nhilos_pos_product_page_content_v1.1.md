@@ -1522,7 +1522,7 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 
 # Anexo A — Matriz de Trazabilidad de Claims (Product Page → OD-02)
 
-**Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, §Reglas) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.3.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`, `LY-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`, `PC-LOY-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
+**Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, §Reglas) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.3.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`, `LY-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`, `PC-LOY-*`, `PC-FOH-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
 
 | Claim ID | Sección | Assertion (resumen) | OD-02 ID(s) | Tipo | Estado |
 | :---- | :---- | :---- | :---- | :---- | :---- |
@@ -1531,20 +1531,20 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 | PP-003 | §3 Product Promise | El flujo permite trabajar con claridad. | N/A | MARKETING | MARKETING |
 | PP-004 | §3 Product Promise | La promesa de continuidad aplica a escenarios soportados, no de forma absoluta. | N/A | MARKETING | MARKETING |
 | PC-001 | §4 Product in Context | Contempla escenarios de atención en mostrador. | PC-OFF-01 | TÉCNICO | RESPALDADO |
-| PC-002 | §4 Product in Context | Contempla cuentas abiertas o mesas en modalidades soportadas. | N/A | TÉCNICO | SIN BASE OD-02 |
+| PC-002 | §4 Product in Context | Contempla cuentas abiertas o mesas en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
 | PC-003 | §4 Product in Context | Las ventas pueden relacionarse con movimientos de inventario configurados. | PC-INV-01, PC-INV-04 | TÉCNICO | RESPALDADO |
 | PC-004 | §4 Product in Context | La experiencia mostrada corresponde a la versión vigente. | N/A | MARKETING | MARKETING |
 | CW-001 | §5 Core Workflows | Permite seleccionar productos y construir una cuenta. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
-| CW-002 | §5 Core Workflows | El flujo puede incluir modificadores configurados. | N/A | TÉCNICO | SIN BASE OD-02 |
+| CW-002 | §5 Core Workflows | El flujo puede incluir modificadores configurados. | PC-FOH-02 | TÉCNICO | RESPALDADO |
 | CW-003 | §5 Core Workflows | Registra pagos con los métodos disponibles. | PC-PAY-01, PC-PAY-04, PC-PAY-06 | TÉCNICO | RESPALDADO |
 | CW-004 | §5 Core Workflows | El esquema de tarjeta puede requerir confirmación manual posterior al datáfono. | PC-PAY-01 | TÉCNICO | RESPALDADO |
-| CW-005 | §5 Core Workflows | Existen cuentas abiertas/retención en modalidades soportadas. | N/A | TÉCNICO | SIN BASE OD-02 |
+| CW-005 | §5 Core Workflows | Existen cuentas abiertas/retención en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
 | CW-006 | §5 Core Workflows | Existen superficies de consulta para información operativa. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
 | CT-001 | §6 Continuity | Enfoque offline-first en los escenarios definidos. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
 | CT-002 | §6 Continuity | Determinadas operaciones pueden continuar localmente durante una desconexión soportada. | PC-OFF-01 | TÉCNICO | RESPALDADO |
 | CT-003 | §6 Continuity | Existe sincronización posterior de información pendiente. | PC-OFF-03 | TÉCNICO | RESPALDADO |
 | CT-004 | §6 Continuity | El comportamiento depende del escenario soportado. | N/A | MARKETING | MARKETING |
-| CT-005 | §6 Continuity | El usuario conoce los límites y estados pendientes relevantes. | N/A | TÉCNICO | SIN BASE OD-02 |
+| CT-005 | §6 Continuity | El usuario conoce los límites y estados pendientes relevantes. | PC-FOH-03 | TÉCNICO | RESPALDADO |
 | CV-001 | §7 Control / Visibility | Registra información de ventas consultable. | PC-OFF-02, PC-DASH-01, PC-DASH-04 | TÉCNICO | RESPALDADO |
 | CV-002 | §7 Control / Visibility | Existen capacidades de inventario y consulta de movimientos. | PC-INV-02, PC-INV-03, PC-INV-05, PC-DASH-04 | TÉCNICO | RESPALDADO |
 | CV-003 | §7 Control / Visibility | Determinadas acciones pueden quedar registradas en bitácora. | PC-SEC-02, PC-SEC-03 | TÉCNICO | RESPALDADO |
@@ -1590,12 +1590,9 @@ Notas de la matriz:
 
 ## Claims sin base en el OD-02
 
-Los siguientes claims afirman una capacidad técnica sin ningún claim del OD-02 que la respalde. Su resolución **está pendiente** y no se decide unilateralmente en este anexo. Mientras permanezcan sin ancla, estos claims quedan **BLOQUEADOS PARA PUBLICACIÓN** según `G-04` de `nhilos_branding_document_governance_v1.0.md`:
+Los claims de esta lista afirmaban una capacidad técnica sin ningún claim del OD-02 que la respaldara y, mientras permanecieran sin ancla, quedaban **BLOQUEADOS PARA PUBLICACIÓN** según `G-04` de `nhilos_branding_document_governance_v1.0.md`. La lista se resolvió mediante la extensión FOH del OD-02 (`PC-FOH-01..03`): `PC-002` y `CW-005` quedaron anclados a `PC-FOH-01`, `CW-002` a `PC-FOH-02`, y `CT-005` a `PC-FOH-03`; los cuatro pasaron a estado `RESPALDADO` en la matriz anterior.
 
-- **PC-002** — Cuentas abiertas o mesas en modalidades soportadas. *Recomendación (pendiente de resolución):* `PC-PAY-05` (Split Bill) acredita la existencia de órdenes abiertas de salón, pero no cubre atómicamente la retención, recuperación y concurrencia de cuentas; o bien se extiende el OD-02 con un claim atómico de retención de cuentas abiertas, o el claim se retira de publicación hasta ese anclaje.
-- **CW-002** — El flujo puede incluir modificadores configurados. *Recomendación (pendiente de resolución):* ningún claim del OD-02 audita grupos de modificadores y sus reglas; o bien se extiende el OD-02 con un claim atómico de modificadores configurables, o el workflow de personalización se retira de publicación.
-- **CW-005** — Existen cuentas abiertas/retención en modalidades soportadas. *Recomendación (pendiente de resolución):* misma disposition que `PC-002` (extensión del OD-02 o retiro de publicación).
-- **CT-005** — El usuario conoce los límites y estados pendientes relevantes. *Recomendación (pendiente de resolución):* la visibilidad de estados pendientes en el POS no está auditada en el OD-02; o bien se extiende el OD-02 con un claim atómico de transparencia de estados en el POS, o el claim se re-enfoca al lado dashboard re-anclándolo a `PC-DASH-02` (frescura de sincronización), o se retira de publicación.
+**Estado actual: no hay ningún claim de la página bloqueado bajo `G-04`.** Los claims `MARKETING` con OD-02 `N/A` no son bloqueos: no afirman capacidad técnica.
 ---
 
 **Final disposition:** `CONTENT CONTRACT APPROVED — PUBLICATION BLOCKED UNTIL GATES PASS`.
