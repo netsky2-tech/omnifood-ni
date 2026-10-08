@@ -3,7 +3,9 @@
 **Documento:** `nhilos_website_product_marketing_brief_v1.0.md`  
 **Versión:** 1.0 (Autorizado para Producción)  
 **Estado:** `APPROVED / READY FOR WEBSITE IA PROMOTION & COPYWRITING`  
-**Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.2.md` (v1.2, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`  
+**Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.2.md` (v1.2, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`
+**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara y comienza por la operación del propio prospecto (ver Regla de Oro y Sección 5.1).  
+  
 **Downstream Gate:** `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
 **Audiencia:** Product Marketing, Copywriters, UI/UX Designers, Frontend Engineers  
 **Mercado objetivo principal:** Nicaragua (Gastronomía, Cafeterías, Food Parks, Bares y Retail de alta rotación)  
@@ -15,7 +17,7 @@
 
 **NHILOS POS** es el sistema de punto de venta táctico y gestión operativa diseñado específicamente para las realidades de conectividad y fiscalidad de Nicaragua.
 
-A diferencia de los sistemas tradicionales en la nube que se congelan cuando el internet falla, o los sistemas locales obsoletos que no ofrecen visibilidad remota al dueño, NHILOS combina una **arquitectura local offline-first** (SQLite en caja) con un **panel administrativo web en la nube** (PostgreSQL con aislamiento estricto RLS y dashboard ejecutivo en tiempo real).
+A diferencia de los sistemas tradicionales en la nube que se congelan cuando el internet falla, o los sistemas locales obsoletos que no ofrecen visibilidad remota al dueño, NHILOS POS combina una **arquitectura local offline-first** (SQLite en caja) con un **panel administrativo web en la nube** (PostgreSQL con aislamiento estricto RLS y dashboard ejecutivo en tiempo real).
 
 ### Regla de Oro del Copywriting
 > **Solo comunicamos lo que el código ya sabe hacer.**  
@@ -27,31 +29,31 @@ A diferencia de los sistemas tradicionales en la nube que se congelan cuando el 
 
 Los cinco pilares innegociables del producto, verificados contra código real:
 
-### 1. Offline-First Táctico en Caja: Tu venta nunca se frena (`OD-02-R03`)
+### 1. Offline-First Táctico en Caja: la venta sigue cuando se cae el internet (`OD-02-R03`)
 - **Problema del cliente:** Cuando el proveedor de internet se cae en Managua o en departamentos, el comercio pierde ventas, genera filas o tiene que recurrir al papel y lápiz.
-- **Solución NHILOS:** El terminal corre una base de datos local completa (SQLite Floor). Vende, emite tickets correlativos, calcula impuestos, descuenta recetas y autentica por PIN sin depender de ningún servidor externo.
-- **Wording normativo endurecido:** *“Cobrá, facturá e imprimí siempre en tu punto de venta local, incluso si se cae el internet. Cuando regrese la conexión, tus ventas e inventarios sincronizan automáticamente con la nube.”*
+- **NHILOS POS:** El terminal corre una base de datos local completa (SQLite Floor). Vende, emite tickets correlativos, calcula impuestos, descuenta recetas y autentica por PIN sin depender de ningún servidor externo.
+- **Wording normativo endurecido:** *“Cobrá, facturá e imprimí en tu punto de venta local, aunque se caiga el internet. Cuando regrese la conexión, tus ventas e inventarios sincronizan automáticamente con la nube.”*
 - **Delimitación explícita:** El terminal debe estar previamente enrolado y con su catálogo local hidratado. El enrolamiento inicial y la actualización remota de precios requieren conectividad.
 
 ### 2. Cumplimiento Fiscal DGI Nicaragua (DT 09-2007) (`OD-02-R02`)
-- **Problema del cliente:** Miedo a multas o auditorías de la DGI por saltos en la numeración correlativa o alteración de registros.
-- **Solución NHILOS:** Implementación rigurosa de la Disposición Técnica 09-2007 para Sistemas Computarizados de Facturación. Consecutivos progresivos inalterables, prohibición física de borrado de facturas y anulación supervisada únicamente mediante Notas de Crédito.
+- **Problema del cliente:** El riesgo de multas o auditorías de la DGI por saltos en la numeración correlativa o alteración de registros.
+- **NHILOS POS:** Implementación rigurosa de la Disposición Técnica 09-2007 para Sistemas Computarizados de Facturación. Consecutivos progresivos inalterables, prohibición física de borrado de facturas y anulación supervisada únicamente mediante Notas de Crédito.
 - **Wording normativo condicionado:** *"Emisión de facturas correlativas conforme a la Disposición Técnica DGI 09-2007 para Sistemas Computarizados de Facturación: numeración consecutiva e inalterable, con prefijo y folio inicial configurados previamente según la autorización de la DGI."* (`OD-02` PC-FISC-01/PC-FISC-02; claim delimitado, no una garantía absoluta de cumplimiento.)
 - **Delimitación explícita:** Requiere parametrización inicial del folio inicial y serie autorizada por la DGI. No es facturación electrónica en línea con transmisión XML en vivo.
 
 ### 3. Costeo y Deducción Automática por Receta (BOM)
 - **Problema del cliente:** El dueño no sabe cuánto le cuesta producir un café o una hamburguesa ni cuándo se fuga materia prima.
-- **Solución NHILOS:** Descuento automático de insumos en tiempo real por cada producto compuesto vendido (`COMPOUND`), cálculo de Costo Promedio Ponderado (CPP) con cada factura de compra y Kardex inmutable basado en deltas cronológicos.
+- **NHILOS POS:** Descuento automático de insumos en tiempo real por cada producto compuesto vendido (`COMPOUND`), cálculo de Costo Promedio Ponderado (CPP) con cada factura de compra y Kardex inmutable basado en deltas cronológicos.
 - **Promesa verificada:** *“Cada venta descuenta exactamente los insumos de tu receta. Conocé tu margen bruto y costo real al instante.”*
 
-### 4. Arqueo y Finanzas Bimoneda Blindadas (NIO / USD)
+### 4. Arqueo y Finanzas Bimoneda (NIO / USD)
 - **Problema del cliente:** En Nicaragua el cliente paga en dólares o córdobas, o combina efectivo y tarjeta. El cajero pierde tiempo con calculadoras y descuadra la caja.
-- **Solución NHILOS:** Checkout bimoneda nativo con tipo de cambio oficial BCN (para cálculo fiscal) y comercial (para proteger el margen de caja). División de cuentas (Split Bill) exacta, conciliación diaria de vouchers BAC/Banpro y control de propina voluntaria sin gravar IVA (DGI INV-16.1).
+- **NHILOS POS:** Checkout bimoneda nativo con tipo de cambio oficial BCN (para cálculo fiscal) y comercial (para proteger el margen de caja). División de cuentas (Split Bill) exacta, conciliación diaria de vouchers BAC/Banpro y control de propina voluntaria sin gravar IVA (DGI INV-16.1).
 - **Promesa verificada:** *“Cobrá en Córdobas o Dólares con cálculo de vuelto automático. Conciliá vouchers de tarjetas BAC y Banpro en minutos al cerrar tu turno.”*
 
 ### 5. Control Ejecutivo Remoto para el Dueño (Dashboard V2)
-- **Problema del cliente:** El dueño vive esclavizado en el local o recibe reportes estáticos al final del mes.
-- **Solución NHILOS:** Panel web moderno con métricas clave de venta neta, horas pico, ticket promedio, participación de productos top y un indicador visual de frescura de sincronización para saber si cada terminal está al día.
+- **Problema del cliente:** El dueño necesita estar presente en el local para saber qué ocurre, o recibe reportes estáticos al final del mes.
+- **NHILOS POS:** Panel web moderno con métricas clave de venta neta, horas pico, ticket promedio, participación de productos top y un indicador visual de frescura de sincronización para saber si cada terminal está al día.
 - **Promesa verificada:** *“Monitoreá tus ventas, productos más vendidos y estado de tus cajas desde cualquier dispositivo con internet.”*
 
 ---
@@ -89,9 +91,9 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
 ## 5. Arquitectura del Sitio Web y Mensajes por Página
 
 ### 5.1 Homepage (`/`)
-- **Hero Title:** El sistema de punto de venta que nunca se frena. Diseñado para Nicaragua.
+- **Hero Title:** El punto de venta que sigue operando cuando se cae el internet. Diseñado para Nicaragua.
 - **Hero Subtitle:** Cobrá sin internet en tu caja, cumplí con la DGI (DT 09-2007), controlá tus recetas y monitoreá tus ventas en tiempo real desde cualquier lugar.
-- **CTA Principal:** Agendá una Demostración Operativa.
+- **CTA Principal:** Solicitar una demo.
 - **Sección de Prueba:** Base de datos SQLite local en terminales Sunmi V2s.
 - **Social Proof / Credenciales:** Hecho para el comercio local: bimoneda (NIO/USD), conciliación BAC/Banpro y soporte en Nicaragua.
 

@@ -7,7 +7,7 @@
 **Gobernanza:** cadena de autoridad según `nhilos_branding_document_governance_v1.0.md` (§3, referencias técnicas transversales)  
 **Propósito:** Definir los umbrales medibles (umbrales de lanzamiento o *release gates*) en materia de rendimiento, accesibilidad, privacidad y soporte técnico que el website público de NHILOS debe superar antes de salir a producción.
 
-> **Principio Operativo:** El estándar de cuidado que promete el producto debe estar presente en el código y comportamiento del website. Una experiencia "Premium" se demuestra con tiempos de carga rápidos, accesibilidad sin fricciones y respeto absoluto por la privacidad del usuario.
+> **Principio Operativo:** El estándar de cuidado que promete el producto debe estar presente en el código y comportamiento del website. Ese cuidado se demuestra con tiempos de carga rápidos, accesibilidad sin fricciones y respeto absoluto por la privacidad del usuario.
 
 ---
 

@@ -153,7 +153,7 @@ abierta.
 │
 ├── Nosotros / NHILOS
 │
-├── Solicitar demo
+├── Solicitar una demo
 │
 └── Legal                    [no-promotional / required before launch]
     ├── Privacidad
@@ -350,7 +350,7 @@ La homepage debe:
 ``` text
 ┌────────────────────────────────────────────────────┐
 │ NHILOS     Producto  Cómo funciona  Implementación│
-│            Recursos  Nosotros       [Solicitar demo]│
+│            Recursos  Nosotros       [Solicitar una demo]│
 └────────────────────────────────────────────────────┘
 ```
 
@@ -780,7 +780,7 @@ Legal
   Privacidad
   Términos
 
-[Solicitar demo]
+[Solicitar una demo]
 ```
 
 ------------------------------------------------------------------------
@@ -797,7 +797,7 @@ NHILOS POS
 
 [Qué es y qué resuelve]
 
-[Solicitar demo]
+[Solicitar una demo]
 
 [Producto real]
 ```

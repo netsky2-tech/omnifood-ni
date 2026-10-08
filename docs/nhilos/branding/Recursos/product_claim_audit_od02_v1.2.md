@@ -124,8 +124,8 @@ components:
 Claims rigurosamente autorizados y condicionados para el Website de Marketing de NHILOS POS:
 
 ### Propuesta de Valor y Continuidad Operativa (`OD-02-R03`)
-- ✅ **"Cobrá, facturá e imprimí siempre en tu punto de venta, incluso si se cae el internet."** (Respaldado por PC-OFF-01 y PC-OFF-02; condicionado al terminal enrolado).
-- ✅ **"Base de datos local en cada terminal: tu caja nunca se congela esperando respuestas de la nube."** (PC-OFF-02).
+- ✅ **"Cobrá, facturá e imprimí en tu punto de venta, aunque se caiga el internet."** (Respaldado por PC-OFF-01 y PC-OFF-02; condicionado al terminal enrolado y con catálogo local hidratado).
+- ✅ **"Base de datos local en cada terminal: la caja sigue operando sin depender de respuestas de la nube."** (PC-OFF-02).
 - ✅ **"Sincronización automática en segundo plano cuando la conexión a internet regresa."** (PC-OFF-03).
 - ✅ **"Control de acceso y cambio de cajero instantáneo por PIN en el terminal sin internet."** (PC-OFF-04).
 
