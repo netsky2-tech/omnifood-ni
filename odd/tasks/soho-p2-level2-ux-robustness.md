@@ -22,9 +22,13 @@
 
 **Superficie:** `apps/pos_app/lib/ui/features/config/hardware/hardware_settings_view.dart`, `hardware_settings_view_model.dart`, `apps/pos_app/lib/domain/services/config/printer_config_service.dart` (+ tests).
 
-**Checks:** `flutter analyze` acotado + widget/unit test enfocado que cambie `tax_regime` después de `loadConfig()` y afirme que el preview muestra el régimen nuevo.
+**Checks:** `flutter analyze lib/ui/features/config/hardware lib/domain/services/config` → No issues found. `flutter test --concurrency=2 test/ui/features/config/hardware test/domain/services/config` → +55 All tests passed. `flutter test --concurrency=2 test/domain/services/config/printer_config_service_test.dart` → +19 All tests passed. RED observado antes del fix (`The method 'getTaxRegime' isn't defined`).
 
-**Commit evidencia:** —
+**Commit evidencia:** `b48cf7a7` fix(pos): read the fiscal regime fresh for ticket preview and test print.
+
+**Implementación real:** `PrinterConfigService.getTaxRegime()` (lectura de una sola clave, `taxRegimeKey` extraído como constante), `HardwareSettingsViewModel.refreshTaxRegime()` (sólo el régimen, nunca reconstruye el config de hardware), convocado por el botón de preview y por `testPrintReceipt()`. La nota D-17 quedó reescrita con el invariant correcto.
+
+**Incidente de superficie (resuelto):** el primer intento de regeneración usó `build_runner build --delete-conflicting-outputs --build-filter=<un mock>`; `--delete-conflicting-outputs` **no** está acotado por `--build-filter` y borró ~90 archivos generados trackeados. El worker los recuperó con un build_runner completo, lo que a su vez dejó 8 archivos fuera de superficie modificados por deriva de regeneración (`app_database.g.dart` y 7 `*_test.mocks.dart` de sales). El padre los revirtió con `git restore`: ningún cambio de #76 los necesita.
 
 ---
 
@@ -94,3 +98,8 @@ T1 → T2 → T3 → T4, cada una: worker en este worktree → verify con checks
 - `flutter test --concurrency=2` (WSL2 12 GiB; default en 16 cores = OOM killer global).
 - `npm test` del backend ya trae `maxWorkers: 2` fijado; no quitarlo.
 - Nunca correr suites completas mientras un subagente sigue vivo.
+
+## Lecciones de la ejecución
+
+1. **`build_runner --delete-conflicting-outputs` no es acotable.** Correrlo con `--build-filter=<un mock>` igual **borra** los outputs generados trackeados de todo el repo. Para regenerar un solo mock en este proyecto no hace falta el flag: basta `flutter pub run build_runner build` (sin `--delete-conflicting-outputs`). Y en cualquier caso, la regeneración de mocks **debe pedirse con superficie explícita** en el delegation brief, porque `app_database.g.dart` y los `*_test.mocks.dart` de `test/ui/features/sales/` tienen deriva propia acumulada y un regen completo la destapa como ruido en el diff.
+2. **Regenerar mocks sobrantes no era necesario.** #76 agrega `getTaxRegime()` a `PrinterConfigService`; el mock de `test/domain/services/config/` no se regeneró e igual compila y pasa (los `Mock` de mockito resuelven por `noSuchMethod`). Lección: pedir la regeneración **acotada al mock que realmente se extienda**, no un buildRunner global.
