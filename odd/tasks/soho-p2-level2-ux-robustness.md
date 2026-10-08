@@ -136,3 +136,22 @@ Checks acotados post-consolidación: cash 68/68 · void 29/29 · activation 32/3
 
 1. **`build_runner --delete-conflicting-outputs` no es acotable.** Correrlo con `--build-filter=<un mock>` igual **borra** los outputs generados trackeados de todo el repo. Para regenerar un solo mock en este proyecto no hace falta el flag: basta `flutter pub run build_runner build` (sin `--delete-conflicting-outputs`). Y en cualquier caso, la regeneración de mocks **debe pedirse con superficie explícita** en el delegation brief, porque `app_database.g.dart` y los `*_test.mocks.dart` de `test/ui/features/sales/` tienen deriva propia acumulada y un regen completo la destapa como ruido en el diff.
 2. **Regenerar mocks sobrantes no era necesario.** #76 agrega `getTaxRegime()` a `PrinterConfigService`; el mock de `test/domain/services/config/` no se regeneró e igual compila y pasa (los `Mock` de mockito resuelven por `noSuchMethod`). Lección: pedir la regeneración **acotada al mock que realmente se extienda**, no un buildRunner global.
+
+---
+
+## Post-merge review receipt
+
+Consolidated main (`958122cf` → main HEAD) reviewed after the merge:
+lineage `review-a51a62a2ac7f93f7`, tier medium, 22 files / 1532 lines, lens
+`review-reliability` → **approved**, 4 informational non-blocking findings
+(2 WARNING + 1 WARNING + 1 SUGGESTION on the hardware preview, the voucher
+parent hook, and the close-flow gate re-check), no correction opened.
+Authority burned on target `sha256:39651df7...`.
+
+Format note (incident, reverted): a `dart format` run without
+`--output=none` rewrote `activation_controlled_sale_runner_test.dart` and
+`sale_view_model_void_test.dart` whole-file (1988+/1640- churn). Reverted with
+`git restore` before any commit. Measured at base `958122cf`, 8 of the 9
+changed lib files and both test files were already not `dart format`-clean
+with this SDK: the drift is pre-existing repo style, never a reason to run a
+whole-file format pass in `apps/pos_app`.
