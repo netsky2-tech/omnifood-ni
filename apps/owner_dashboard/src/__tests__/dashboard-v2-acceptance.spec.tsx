@@ -881,6 +881,150 @@ describe("AC-08 / AC-09 / AC-09A — freshness badge (FR-SYNC-01..05)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// PARTIAL + declared sequence gaps — honest copy (NHILOS: honesty, precision,
+// +1 clarity). A historical, audit-registered DGI sequence gap must never be
+// reported as "datos pendientes" while receipts keep flowing live.
+// ---------------------------------------------------------------------------
+
+describe("PARTIAL with declared sequence gaps — differentiated copy", () => {
+  it("renders gap-only copy when every incomplete terminal is explained by declared gaps", async () => {
+    mockDashboardReport({});
+    // Terminal transmits in real time (fresh watermark) but the PARTIAL state
+    // was triggered only by a historical declared sequence gap.
+    vi.mocked(fetchSyncFreshness).mockResolvedValue(
+      freshnessFixture({
+        state: "PARTIAL",
+        lastCompleteAt: null,
+        hasDeclaredGaps: true,
+        perTerminal: [
+          {
+            terminalId: "term-1",
+            label: "Caja 1",
+            state: "PARTIAL",
+            acceptedThroughSequence: 41,
+            lastReceiptAt: "2026-09-23T21:52:30Z",
+            hasDeclaredGaps: true,
+          },
+        ],
+      }) as never,
+    );
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("freshness-badge")).toHaveAttribute(
+        "data-freshness-state",
+        "PARTIAL",
+      );
+    });
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain(
+      "Sincronización al día · Registro con salto de secuencia histórico",
+    );
+    // Honesty: no "datos pendientes" claim for a live, gap-only terminal.
+    expect(badge.textContent).not.toContain("datos pendientes");
+    // +1 clarity: the tooltip explains the historical, audited anomaly.
+    expect(badge.getAttribute("title")).toContain(
+      "Las ventas actuales están al día",
+    );
+    expect(badge.getAttribute("title")).toContain(
+      "salto de secuencia previo bajo normativa de auditoría",
+    );
+    // Honest color: live sync with a historical anomaly is amber, not the
+    // alarming rose reserved for real pending data.
+    expect(badge.querySelector("span")?.className).toContain("bg-amber-500");
+    expect(badge.querySelector("span")?.className).not.toContain("bg-rose-500");
+  });
+
+  it("renders mixed copy when declared gaps coexist with terminals that have real pending data", async () => {
+    mockDashboardReport({});
+    // One gap-only terminal plus one PENDING terminal with no declared gaps:
+    // there IS pending data, so the copy must not claim "al día".
+    vi.mocked(fetchSyncFreshness).mockResolvedValue(
+      freshnessFixture({
+        state: "PARTIAL",
+        lastCompleteAt: null,
+        hasDeclaredGaps: true,
+        perTerminal: [
+          {
+            terminalId: "term-1",
+            label: "Caja 1",
+            state: "PARTIAL",
+            acceptedThroughSequence: 41,
+            lastReceiptAt: "2026-09-23T21:52:30Z",
+            hasDeclaredGaps: true,
+          },
+          {
+            terminalId: "term-2",
+            label: "Caja 2",
+            state: "PENDING",
+            acceptedThroughSequence: null,
+            lastReceiptAt: null,
+          },
+        ],
+      }) as never,
+    );
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("freshness-badge")).toHaveAttribute(
+        "data-freshness-state",
+        "PARTIAL",
+      );
+    });
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain(
+      "Información parcial · Historial con salto de secuencia registrado",
+    );
+    // The gap-only "al día" copy must not leak into the mixed scenario.
+    expect(badge.textContent).not.toContain(
+      "Sincronización al día",
+    );
+    // Tooltip still carries the declared-gaps context.
+    expect(badge.getAttribute("title")).toContain(
+      "Las ventas actuales están al día",
+    );
+  });
+
+  it("keeps the pending-data copy for a normal PARTIAL without declared gaps", async () => {
+    mockDashboardReport({});
+    vi.mocked(fetchSyncFreshness).mockResolvedValue(
+      freshnessFixture({
+        state: "PARTIAL",
+        lastCompleteAt: null,
+        perTerminal: [
+          {
+            terminalId: "term-1",
+            label: "Caja 1",
+            state: "PARTIAL",
+            acceptedThroughSequence: 41,
+            lastReceiptAt: "2026-09-23T21:52:30Z",
+          },
+        ],
+      }) as never,
+    );
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("freshness-badge")).toHaveAttribute(
+        "data-freshness-state",
+        "PARTIAL",
+      );
+    });
+    const badge = screen.getByTestId("freshness-badge");
+    expect(badge.textContent).toContain(
+      "Información parcial (1 terminal con datos pendientes)",
+    );
+    // No declared-gap context without an actual declared gap.
+    expect(badge.getAttribute("title") ?? "").not.toContain(
+      "salto de secuencia previo",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // AC-10..AC-13 — Attention Required signals
 // ---------------------------------------------------------------------------
 

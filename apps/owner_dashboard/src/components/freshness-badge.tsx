@@ -83,6 +83,40 @@ function latestReceiptAt(freshness: SyncFreshnessResponse): string | null {
 const INVENTORY_PENDING_NOTE =
   "Los registros llegaron a la nube, pero el procesamiento de inventario está pendiente.";
 
+/**
+ * Declared sequence gaps (NHILOS honesty/+1 clarity): a historical,
+ * audit-registered DGI sequence gap can trigger the tenant-level PARTIAL
+ * state while receipts keep flowing in real time. The tooltip separates the
+ * live-sync fact from the historical anomaly so owners never read a
+ * gap-only PARTIAL as "sync is stalled or data is in transit".
+ */
+const DECLARED_GAPS_NOTE =
+  "Las ventas actuales están al día. Se registró un salto de secuencia previo bajo normativa de auditoría.";
+
+/**
+ * True when the PARTIAL state is caused ONLY by historical declared sequence
+ * gaps: every incomplete terminal carries the declared-gaps flag, so there is
+ * no actual pending-data deficit behind the tenant state.
+ */
+function isGapOnlyPartial(freshness: SyncFreshnessResponse): boolean {
+  if (!freshness.hasDeclaredGaps) return false;
+  const incomplete = freshness.perTerminal.filter(
+    (t) => t.state !== "COMPLETE",
+  );
+  return (
+    incomplete.length > 0 && incomplete.every((t) => t.hasDeclaredGaps === true)
+  );
+}
+
+function freshnessDot(freshness: SyncFreshnessResponse): string {
+  // Live sync with a historical-gap-only anomaly is amber, not rose: the
+  // receipts are flowing, so the alarming red would misstate the risk.
+  if (freshness.state === "PARTIAL" && isGapOnlyPartial(freshness)) {
+    return "bg-amber-500";
+  }
+  return STATE_DOT[freshness.state];
+}
+
 function freshnessText(freshness: SyncFreshnessResponse, now: Date): string {
   switch (freshness.state) {
     case "COMPLETE": {
@@ -117,6 +151,17 @@ function freshnessText(freshness: SyncFreshnessResponse, now: Date): string {
       const incomplete = freshness.perTerminal.filter(
         (t) => t.state !== "COMPLETE",
       ).length;
+      // Gap-only PARTIAL: all incomplete terminals are explained solely by
+      // historical declared sequence gaps — sales are synced, so claiming
+      // "datos pendientes" would fabricate a live data deficit.
+      if (isGapOnlyPartial(freshness)) {
+        return "Sincronización al día · Registro con salto de secuencia histórico";
+      }
+      // Mixed: declared gaps exist alongside terminals with real pending
+      // data — acknowledge both honestly.
+      if (freshness.hasDeclaredGaps) {
+        return "Información parcial · Historial con salto de secuencia registrado";
+      }
       return incomplete === 1
         ? "Información parcial (1 terminal con datos pendientes)"
         : `Información parcial (${incomplete} terminales con datos pendientes)`;
@@ -188,6 +233,7 @@ export function FreshnessBadge({
   // misattribute the delay to the network).
   const title = [
     caption,
+    freshness.hasDeclaredGaps ? DECLARED_GAPS_NOTE : null,
     freshness.hasInventoryPending ? INVENTORY_PENDING_NOTE : null,
   ]
     .filter(Boolean)
@@ -196,7 +242,7 @@ export function FreshnessBadge({
   return (
     <span className="inline-flex items-center gap-2">
       <Badge
-        dot={STATE_DOT[freshness.state]}
+        dot={freshnessDot(freshness)}
         state={freshness.state}
         title={title || undefined}
       >
