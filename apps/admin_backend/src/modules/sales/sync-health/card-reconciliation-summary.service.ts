@@ -66,6 +66,8 @@ export class CardReconciliationSummaryService {
       oldestPendingAt: row?.oldestPendingAt
         ? new Date(row.oldestPendingAt).toISOString()
         : null,
+      manualOverrideCount: Number(row?.manualOverrideCount ?? 0),
+      manualOverrideAmountNio: Number(row?.manualOverrideAmountNio ?? 0),
       generatedAt: generatedAt.toISOString(),
     };
   }
@@ -76,18 +78,30 @@ export class CardReconciliationSummaryService {
    * parent-owned); it mirrors the RLS binding as defense in depth.
    * Sensitive payload is never selected: no card numbers, no CVV, no
    * authorization data (spec §15.2) — only the aggregate row.
+   *
+   * Single-pass conditional aggregation: the WHERE clause pins only the
+   * tenant/is-canceled/card-method scope, so PENDIENTE and MANUAL_OVERRIDE
+   * aggregates are computed over the same filtered row set in one query —
+   * there is no second pass. reconciliation_status remains free-form varchar
+   * (no CHECK), so any other value is counted in neither aggregate.
    */
   private static readonly PENDING_SUMMARY_SQL = `
     SELECT
-      COUNT(*)::int AS "pendingCount",
-      COALESCE(SUM(p.amount_nio), 0)::float8 AS "pendingAmountNio",
-      MIN(p.created_at) AS "oldestPendingAt"
+      COUNT(CASE WHEN p.reconciliation_status = 'PENDIENTE' THEN 1 END)::int
+        AS "pendingCount",
+      COALESCE(SUM(CASE WHEN p.reconciliation_status = 'PENDIENTE' THEN p.amount_nio END), 0)::float8
+        AS "pendingAmountNio",
+      MIN(CASE WHEN p.reconciliation_status = 'PENDIENTE' THEN p.created_at END)
+        AS "oldestPendingAt",
+      COUNT(CASE WHEN p.reconciliation_status = 'MANUAL_OVERRIDE' THEN 1 END)::int
+        AS "manualOverrideCount",
+      COALESCE(SUM(CASE WHEN p.reconciliation_status = 'MANUAL_OVERRIDE' THEN p.amount_nio END), 0)::float8
+        AS "manualOverrideAmountNio"
     FROM invoice_payments p
     JOIN invoices i ON i.id = p.invoice_id
     WHERE i.tenant_id = $1
       AND i.is_canceled = false
       AND UPPER(p.method) IN ('CARD', 'TARJETA', 'BAC', 'BANPRO')
-      AND p.reconciliation_status = 'PENDIENTE'
   `;
 }
 
@@ -95,4 +109,6 @@ interface ReconciliationSummaryRow {
   pendingCount: string | number;
   pendingAmountNio: string | number;
   oldestPendingAt: Date | string | null;
+  manualOverrideCount: string | number;
+  manualOverrideAmountNio: string | number;
 }
