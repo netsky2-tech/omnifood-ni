@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -134,7 +135,16 @@ export class FiscalSetupDto {
   ruc: string;
 
   @IsNumber()
-  @Min(0, { message: 'commercialFxSpread must be greater than or equal to 0' })
+  // Issue #75: the commercial FX spread is a C$ per USD exchange rate, not a
+  // percentage spread — a value below 10 or above 100 is a data-entry error
+  // (or the old dangerous 0.5 default leaking through). Strict 10..100 range,
+  // matching the service-level guard and the POS/dashboard validators.
+  @Min(10, {
+    message: 'commercialFxSpread must be greater than or equal to 10',
+  })
+  @Max(100, {
+    message: 'commercialFxSpread must be less than or equal to 100',
+  })
   commercialFxSpread: number;
 
   @IsBoolean()

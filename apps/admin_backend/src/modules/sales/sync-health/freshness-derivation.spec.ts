@@ -463,4 +463,96 @@ describe('deriveSyncFreshness (PRD §20 Gate C)', () => {
       deriveSyncFreshness(buildInput({ thresholdMinutes: Number.NaN })),
     ).toThrow(InvalidFreshnessThresholdError);
   });
+
+  it('R-10 — reports hasInventoryPending per terminal and tenant without holding the tenant back (COMPLETE)', () => {
+    // Sales are synced; the inventory application of those sales is still
+    // pending. That is an inventory-processing signal, NOT a sequence gap:
+    // the freshness state must stay COMPLETE (issue #73b / R-10 — the delay
+    // is not a network drop and must not be attributed to one).
+    const result = deriveSyncFreshness(
+      buildInput({
+        terminals: [
+          buildTerminal({
+            gapEvidence: {
+              streams: [
+                {
+                  flowType: 'sales',
+                  acceptedMax: 42,
+                  acceptedCount: 42,
+                  minAcceptedSequence: 1,
+                  rejectedAboveWatermark: 0,
+                  pendingAboveWatermark: 0,
+                  inventoryPendingCount: 2,
+                },
+              ],
+            },
+          }),
+        ],
+      }),
+    );
+
+    expect(result.state).toBe('COMPLETE');
+    expect(result.hasInventoryPending).toBe(true);
+    expect(result.inventoryPendingCount).toBe(2);
+    expect(result.perTerminal[0].hasInventoryPending).toBe(true);
+    expect(result.perTerminal[0].inventoryPendingCount).toBe(2);
+  });
+
+  it('R-10 — rolls inventoryPendingCount up across terminals (sum + any-terminal flag)', () => {
+    const result = deriveSyncFreshness(
+      buildInput({
+        terminals: [
+          buildTerminal({
+            terminalId: 'pos-01',
+            gapEvidence: {
+              streams: [
+                {
+                  flowType: 'sales',
+                  acceptedMax: 42,
+                  acceptedCount: 42,
+                  minAcceptedSequence: 1,
+                  rejectedAboveWatermark: 0,
+                  pendingAboveWatermark: 0,
+                  inventoryPendingCount: 3,
+                },
+              ],
+            },
+          }),
+          buildTerminal({
+            terminalId: 'pos-02',
+            gapEvidence: {
+              streams: [
+                {
+                  flowType: 'sales',
+                  acceptedMax: 10,
+                  acceptedCount: 10,
+                  minAcceptedSequence: 1,
+                  rejectedAboveWatermark: 0,
+                  pendingAboveWatermark: 0,
+                  inventoryPendingCount: 1,
+                },
+              ],
+            },
+          }),
+        ],
+      }),
+    );
+
+    expect(result.state).toBe('COMPLETE');
+    expect(result.hasInventoryPending).toBe(true);
+    expect(result.inventoryPendingCount).toBe(4);
+    expect(result.perTerminal.map((t) => t.inventoryPendingCount)).toEqual([
+      3, 1,
+    ]);
+  });
+
+  it('R-10 — no inventory-pending evidence defaults to hasInventoryPending=false, count 0', () => {
+    const result = deriveSyncFreshness(buildInput());
+
+    expect(result.state).toBe('COMPLETE');
+    expect(result.hasInventoryPending).toBe(false);
+    expect(result.inventoryPendingCount).toBe(0);
+    expect(result.perTerminal[0].hasInventoryPending).toBe(false);
+    expect(result.perTerminal[0].inventoryPendingCount).toBe(0);
+  });
 });

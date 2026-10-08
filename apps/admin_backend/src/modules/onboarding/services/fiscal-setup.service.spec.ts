@@ -116,7 +116,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
           tenant_id: tenantId,
           tenant: mockTenant,
           paramKey: 'COMMERCIAL_FX_SPREAD',
-          paramValue: 0.5,
+          paramValue: 36.5,
           version: 1,
           effectiveFrom: new Date(),
           effectiveTo: null,
@@ -137,7 +137,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       regime: FiscalRegime.REGIMEN_GENERAL,
       taxRateIva: 0.15,
       pricesIncludeTax: true,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
         // BXW-007 U1 rev 2: unconfigured params read as null (absence must
         // look like absence, never rebased to a default).
         operationMode: null,
@@ -202,7 +202,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         taxRateIva: 0.0,
         pricesIncludeTax: true,
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         operationMode: null,
         checkoutFxMode: null,
         dgiAuthorizationCode: null,
@@ -226,7 +226,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Café Central',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         operationMode: TenantOperationMode.FOODPARK_QSR,
         checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -237,21 +237,32 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       );
     });
 
-    it('throws BadRequestException if commercialFxSpread is negative', async () => {
-      const dto: FiscalSetupDto = {
-        regime: FiscalRegime.CUOTA_FIJA,
-        businessName: 'Café Central',
-        ruc: 'J0310000055555',
-        commercialFxSpread: -0.1,
-        pricesIncludeTax: true,
-        operationMode: TenantOperationMode.FOODPARK_QSR,
-        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
-      };
+    // Issue #75: the service guard mirrors the DTO boundary — anything
+    // outside 10..100 (including the old permissive < 0 check) is rejected
+    // before any write, with a message that names the full valid range.
+    it.each([
+      ['below the allowed range', 9.9],
+      ['above the allowed range', 100.1],
+    ])(
+      'throws BadRequestException if commercialFxSpread is %s',
+      async (_label, spread) => {
+        const dto: FiscalSetupDto = {
+          regime: FiscalRegime.CUOTA_FIJA,
+          businessName: 'Café Central',
+          ruc: 'J0310000055555',
+          commercialFxSpread: spread as number,
+          pricesIncludeTax: true,
+          operationMode: TenantOperationMode.FOODPARK_QSR,
+          checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+        };
 
-      await expect(service.configureFiscalSetup(tenantId, dto)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
+        await expect(
+          service.configureFiscalSetup(tenantId, dto),
+        ).rejects.toThrow(
+          'commercialFxSpread must be between 10 and 100',
+        );
+      },
+    );
 
     it('configures CUOTA_FIJA setting taxRateIva to 0.00 and version 1 parameters', async () => {
       mockManager.findOne.mockResolvedValueOnce({ ...mockTenant });
@@ -261,7 +272,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         operationMode: TenantOperationMode.FOODPARK_QSR,
         checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -276,7 +287,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         taxRateIva: 0.0,
         pricesIncludeTax: true,
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
       });
       expect(result.configuredAt).toBeInstanceOf(Date);
 
@@ -298,7 +309,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.REGIMEN_GENERAL,
         businessName: 'Restaurante El Güegüense S.A.',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.75,
+        commercialFxSpread: 36.75,
         pricesIncludeTax: false,
         operationMode: TenantOperationMode.FOODPARK_QSR,
         checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -313,7 +324,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.REGIMEN_GENERAL,
         taxRateIva: 0.15,
         pricesIncludeTax: false,
-        commercialFxSpread: 0.75,
+        commercialFxSpread: 36.75,
       });
       expect(result.configuredAt).toBeInstanceOf(Date);
     });
@@ -362,7 +373,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.REGIMEN_GENERAL, // changed from CUOTA_FIJA
         businessName: 'Mi Cafetería Actualizada',
         ruc: 'J0310000099999',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         operationMode: TenantOperationMode.FOODPARK_QSR,
         checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -411,7 +422,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
           regime: FiscalRegime.CUOTA_FIJA,
           businessName: 'Cafe Central',
           ruc,
-          commercialFxSpread: 0.5,
+          commercialFxSpread: 36.5,
           pricesIncludeTax: true,
           operationMode: TenantOperationMode.FOODPARK_QSR,
           checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -439,7 +450,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetin Las Palmeras',
         ruc: '  J0310000055555  ',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         operationMode: TenantOperationMode.FOODPARK_QSR,
         checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -466,7 +477,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         // The RUC guard introduced on main runs before the transaction, so a
         // valid value is required for this test to reach the binding point.
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         operationMode: TenantOperationMode.FOODPARK_QSR,
         checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -562,7 +573,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         dgiAuthorizationCode: 'DGI-SFC-2024-00123',
         dgiAuthorizationIssuedAt: '2025-01-15',
@@ -608,7 +619,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         operationMode: TenantOperationMode.FOODPARK_QSR,
         checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -628,7 +639,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         dgiAuthorizationCode: '',
         operationMode: TenantOperationMode.FOODPARK_QSR,
@@ -663,7 +674,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         dgiAuthorizationCode: 'DGI-SFC-2024-00123',
         operationMode: TenantOperationMode.FOODPARK_QSR,
@@ -685,7 +696,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         dgiAuthorizationCode: 'DGI-SFC-2024-00123',
         dgiAuthorizationIssuedAt: '2025-01-15',
@@ -710,7 +721,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         dgiAuthorizationExpiresAt: '',
         operationMode: TenantOperationMode.FOODPARK_QSR,
@@ -740,7 +751,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         dgiAuthorizationCode: 'RES-SFC-145/2025',
         dgiAuthorizationIssuedAt: '2025-06-01',
@@ -839,7 +850,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         operationMode: TenantOperationMode.RESTAURANT,
         checkoutFxMode: CheckoutFxMode.BCN_OFFICIAL,
@@ -913,7 +924,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
       };
 
@@ -935,7 +946,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         operationMode: TenantOperationMode.HYBRID,
         checkoutFxMode: CheckoutFxMode.BCN_OFFICIAL,
@@ -963,7 +974,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         operationMode: null,
       };
@@ -1005,7 +1016,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: 'Cafetín Las Palmeras',
         ruc: 'J0310000055555',
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: true,
         checkoutFxMode: null,
       };

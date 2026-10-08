@@ -283,7 +283,8 @@ export function FiscalSetupForm() {
                   id="commercialFxSpread"
                   type="number"
                   step="0.0001"
-                  min="0"
+                  min="10"
+                  max="100"
                   placeholder="36.5000"
                   {...register("commercialFxSpread", { valueAsNumber: true })}
                   aria-invalid={Boolean(errors.commercialFxSpread)}

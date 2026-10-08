@@ -25,6 +25,7 @@ import 'widgets/tip_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'widgets/fx_rate_block_banner.dart';
+import 'widgets/inventory_enrichment_warning_banner.dart';
 import 'tables/table_layout_view.dart';
 import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
 import '../config/business_profile/fiscal_authorization_expiry_notice_widget.dart';
@@ -551,9 +552,18 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
               ],
       ),
       drawer: const AppDrawer(),
+      // Issue #73c / R-13: the inventory enrichment warning banner is mounted
+      // above both handheld and tablet/desktop layouts so operators always
+      // see local sales with APPLIED_INVENTORY_PENDING outcome. Warning-only
+      // (Q80 Section D4): it never blocks checkout, DGI invoicing, or
+      // offline operations, and renders SizedBox.shrink at count 0.
       body: hasActiveSession
-          ? (isHandheld
-              ? Stack(
+          ? Column(
+              children: [
+                const InventoryEnrichmentWarningBanner(),
+                Expanded(
+                  child: isHandheld
+                      ? Stack(
                   children: [
                     Positioned.fill(
                       child: Padding(
@@ -598,7 +608,10 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
                       child: const CartSidebar(),
                     ),
                   ],
-                ))
+                ),
+              ),
+            ],
+          )
           : const BoxOpeningContent(),
     );
   }

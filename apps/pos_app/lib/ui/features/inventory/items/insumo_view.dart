@@ -4,6 +4,7 @@ import '../../../../domain/models/inventory/insumo.dart';
 import '../../../../domain/models/catalog/catalog_value.dart';
 import 'insumo_view_model.dart';
 import '../../../../domain/models/inventory/product.dart';
+import '../../../../domain/models/fulfillment/fulfillment_contracts.dart';
 import '../../../../domain/models/inventory/uom_conversion.dart';
 import '../../../design_system/design_system.dart';
 import 'item_options_editor.dart';
@@ -808,10 +809,9 @@ class _ProductListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final stockTone = product.stock <= 0
-        ? DsChipTone.danger
-        : DsChipTone.primary;
-    final stockLabel = product.stock <= 0 ? 'SIN STOCK' : 'ACTIVO';
+    final stockStatus = _productStockStatus(product);
+    final stockTone = stockStatus.tone;
+    final stockLabel = stockStatus.label;
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -1293,4 +1293,19 @@ _StockStatus _stockStatus(Insumo insumo) {
     return const _StockStatus('BAJO PAR', DsChipTone.warning);
   }
   return const _StockStatus('OK', DsChipTone.success);
+}
+
+/// Stock badge for the sales product list (issue #73). Products whose stock
+/// is not tracked (`InventoryPolicy.notTracked`) are never "SIN STOCK": a
+/// zero stock value only means nothing is being counted, so they render as
+/// neutral NO RASTREADO instead of alarming operators. Tracked products keep
+/// the danger/primary behavior; a null policy fails closed as tracked.
+_StockStatus _productStockStatus(Product product) {
+  if (product.inventoryPolicy == InventoryPolicy.notTracked) {
+    return const _StockStatus('NO RASTREADO', DsChipTone.neutral);
+  }
+  if (product.stock <= 0) {
+    return const _StockStatus('SIN STOCK', DsChipTone.danger);
+  }
+  return const _StockStatus('ACTIVO', DsChipTone.primary);
 }

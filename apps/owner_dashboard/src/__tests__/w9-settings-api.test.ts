@@ -59,7 +59,7 @@ describe("W9 — Fiscal Setup & Onboarding API & Schemas (TDD RED -> GREEN -> TR
           regime: FiscalRegime.CUOTA_FIJA,
           businessName: "Cafetería La Esquina",
           ruc: "J0310000012345",
-          commercialFxSpread: 0.5,
+          commercialFxSpread: 36.5,
           pricesIncludeTax: false,
           phone: "+505 8888-1234",
           address: "Managua, Nicaragua",
@@ -73,7 +73,7 @@ describe("W9 — Fiscal Setup & Onboarding API & Schemas (TDD RED -> GREEN -> TR
           regime: FiscalRegime.REGIMEN_GENERAL,
           businessName: "OmniFood Gourmet S.A.",
           ruc: "J0310000099999",
-          commercialFxSpread: 0.75,
+          commercialFxSpread: 36.75,
           pricesIncludeTax: true,
         };
         const parsed = fiscalSetupSchema.safeParse(payload);
@@ -84,29 +84,70 @@ describe("W9 — Fiscal Setup & Onboarding API & Schemas (TDD RED -> GREEN -> TR
         const invalid = {
           regime: FiscalRegime.CUOTA_FIJA,
           businessName: "   ",
-          commercialFxSpread: 0.5,
+          commercialFxSpread: 36.5,
           pricesIncludeTax: false,
         };
         const parsed = fiscalSetupSchema.safeParse(invalid);
         expect(parsed.success).toBe(false);
       });
 
-      it("rejects negative FX spread", () => {
+      it("rejects FX spread below the allowed range", () => {
         const invalid = {
           regime: FiscalRegime.REGIMEN_GENERAL,
           businessName: "OmniFood S.A.",
-          commercialFxSpread: -0.25,
+          commercialFxSpread: 9.99,
           pricesIncludeTax: true,
         };
         const parsed = fiscalSetupSchema.safeParse(invalid);
         expect(parsed.success).toBe(false);
+        if (!parsed.success) {
+          const fxIssue = parsed.error.issues.find(
+            (issue) => issue.path[0] === "commercialFxSpread",
+          );
+          expect(fxIssue?.message).toBe(
+            "El tipo de cambio comercial debe ser mayor o igual a 10",
+          );
+        }
+      });
+
+      it("rejects FX spread above the allowed range", () => {
+        const invalid = {
+          regime: FiscalRegime.REGIMEN_GENERAL,
+          businessName: "OmniFood S.A.",
+          commercialFxSpread: 100.5,
+          pricesIncludeTax: true,
+        };
+        const parsed = fiscalSetupSchema.safeParse(invalid);
+        expect(parsed.success).toBe(false);
+        if (!parsed.success) {
+          const fxIssue = parsed.error.issues.find(
+            (issue) => issue.path[0] === "commercialFxSpread",
+          );
+          expect(fxIssue?.message).toBe(
+            "El tipo de cambio comercial debe ser menor o igual a 100",
+          );
+        }
+      });
+
+      it("accepts FX spread at the 10 and 100 boundaries", () => {
+        for (const spread of [10, 100]) {
+          const payload = {
+            regime: FiscalRegime.REGIMEN_GENERAL,
+            businessName: "OmniFood S.A.",
+            ruc: "J0310000099999",
+            commercialFxSpread: spread,
+            pricesIncludeTax: true,
+          };
+          const parsed = fiscalSetupSchema.safeParse(payload);
+          expect(parsed.success).toBe(true);
+        }
       });
 
       it("rejects invalid regime", () => {
         const invalid = {
           regime: "MONOTRIBUTO",
           businessName: "OmniFood S.A.",
-          commercialFxSpread: 0.5,
+          commercialFxSpread: 36.5,
           pricesIncludeTax: true,
         };
         const parsed = fiscalSetupSchema.safeParse(invalid);
@@ -118,7 +159,7 @@ describe("W9 — Fiscal Setup & Onboarding API & Schemas (TDD RED -> GREEN -> TR
       const basePayload = {
         regime: FiscalRegime.CUOTA_FIJA,
         businessName: "Cafetería La Esquina",
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         pricesIncludeTax: false,
       };
 
@@ -257,7 +298,7 @@ describe("W9 — Fiscal Setup & Onboarding API & Schemas (TDD RED -> GREEN -> TR
           regime: FiscalRegime.CUOTA_FIJA,
           taxRateIva: 0.0,
           pricesIncludeTax: false,
-          commercialFxSpread: 0.5,
+          commercialFxSpread: 36.5,
         };
         mockFetchSuccess(responseData);
 
@@ -285,7 +326,7 @@ describe("W9 — Fiscal Setup & Onboarding API & Schemas (TDD RED -> GREEN -> TR
         const payload = {
           regime: FiscalRegime.REGIMEN_GENERAL,
           businessName: "Nuevo Restaurante",
-          commercialFxSpread: 0.6,
+          commercialFxSpread: 36.6,
           pricesIncludeTax: true,
           ruc: "J0310000099999",
         };

@@ -89,7 +89,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       tenant_id: tenantId,
       tenant: mockTenant,
       paramKey: 'COMMERCIAL_FX_SPREAD',
-      paramValue: 0.5,
+      paramValue: 36.5,
       version: 1,
       effectiveFrom: new Date(),
       effectiveTo: null,
@@ -165,7 +165,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         fiscalRegime: FiscalRegime.REGIMEN_GENERAL,
         taxRate: 0.15,
         pricesIncludeTax: true,
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         // BXW-007 U1 rev 2: unconfigured params read as null — the
         // fingerprint of an unconfigured tenant must differ from one that
         // explicitly configured the POS defaults.
@@ -456,7 +456,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         fiscalRegime: FiscalRegime.CUOTA_FIJA,
         taxRate: 0.0,
         pricesIncludeTax: true,
-        commercialFxSpread: 0.5,
+        commercialFxSpread: 36.5,
         operationMode: null,
         checkoutFxMode: null,
         dgiAuthorizationCode: null,

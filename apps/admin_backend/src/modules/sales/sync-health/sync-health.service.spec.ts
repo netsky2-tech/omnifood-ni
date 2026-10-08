@@ -126,6 +126,8 @@ describe('SyncHealthService', () => {
       thresholdMinutes: 5,
       lastCompleteAt: '2026-09-01T11:58:00.000Z',
       hasDeclaredGaps: false,
+      hasInventoryPending: false,
+      inventoryPendingCount: 0,
       perTerminal: [
         {
           terminalId: 'pos-01',
@@ -134,9 +136,50 @@ describe('SyncHealthService', () => {
           acceptedThroughSequence: 42,
           lastReceiptAt: '2026-09-01T11:58:00.000Z',
           hasDeclaredGaps: false,
+          hasInventoryPending: false,
+          inventoryPendingCount: 0,
         },
       ],
       evaluatedAt: '2026-09-01T12:00:00.000Z',
+    });
+  });
+
+  it('R-10 — maps APPLIED_INVENTORY_PENDING receipts into hasInventoryPending without holding the tenant at PARTIAL', async () => {
+    await bootstrap({
+      receipts: [
+        {
+          deviceId: 'pos-01',
+          flowType: 'sales',
+          acceptedMax: '42',
+          acceptedMin: '1',
+          acceptedCount: '42',
+          inventoryPendingCount: '2',
+          lastAcceptedAt: new Date('2026-09-01T11:58:00.000Z'),
+        },
+      ],
+    });
+    const evaluatedAt = new Date('2026-09-01T12:00:00.000Z');
+
+    const result = await service.getFreshness(TENANT_ID, evaluatedAt);
+
+    // The watermark SQL must count receipts whose inventory outcome is still
+    // pending (issue #73b / R-10): evidence for the dashboard's inventory-
+    // pending explanation, distinct from the network/sync blame.
+    const receiptStreamCall = sqlCalls.find((call) =>
+      call.sql.includes('acceptedMax'),
+    );
+    expect(receiptStreamCall?.sql).toContain('inventoryPendingCount');
+    expect(receiptStreamCall?.sql).toContain('APPLIED_INVENTORY_PENDING');
+
+    // Sales are synced; inventory application is pending: informational
+    // signal only — the freshness state must stay COMPLETE.
+    expect(result.state).toBe('COMPLETE');
+    expect(result.hasInventoryPending).toBe(true);
+    expect(result.inventoryPendingCount).toBe(2);
+    expect(result.perTerminal[0]).toMatchObject({
+      state: 'COMPLETE',
+      hasInventoryPending: true,
+      inventoryPendingCount: 2,
     });
   });
 

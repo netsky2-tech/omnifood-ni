@@ -27,6 +27,7 @@ interface ReceiptStreamRow {
   acceptedMin: string | number | null;
   acceptedCount: string | number | null;
   declaredGapCount?: string | number | null;
+  inventoryPendingCount?: string | number | null;
   lastAcceptedAt: Date | null;
 }
 
@@ -116,6 +117,8 @@ export class SyncHealthService {
         acceptedThroughSequence: terminal.acceptedThroughSequence,
         lastReceiptAt: terminal.lastReceiptAt,
         hasDeclaredGaps: terminal.hasDeclaredGaps,
+        hasInventoryPending: terminal.hasInventoryPending,
+        inventoryPendingCount: terminal.inventoryPendingCount,
       }),
     );
 
@@ -126,6 +129,8 @@ export class SyncHealthService {
       perTerminal,
       evaluatedAt: derivation.evaluatedAt,
       hasDeclaredGaps: derivation.hasDeclaredGaps,
+      hasInventoryPending: derivation.hasInventoryPending,
+      inventoryPendingCount: derivation.inventoryPendingCount,
     };
   }
 
@@ -143,6 +148,7 @@ export class SyncHealthService {
       MIN(r.source_sequence::bigint) FILTER (WHERE r.result_status = 'ACCEPTED') AS "acceptedMin",
       COUNT(*) FILTER (WHERE r.result_status = 'ACCEPTED')::bigint AS "acceptedCount",
       COUNT(*) FILTER (WHERE r.result_code = 'GAP_FILL_DECLARED' OR r.result_code LIKE 'GAP_FILL%')::int AS "declaredGapCount",
+      COUNT(*) FILTER (WHERE r.inventory_outcome = 'APPLIED_INVENTORY_PENDING' OR r.result_code = 'APPLIED_INVENTORY_PENDING')::int AS "inventoryPendingCount",
       MAX(COALESCE(r.accepted_at, r.created_at))
         FILTER (WHERE r.result_status = 'ACCEPTED') AS "lastAcceptedAt"
     FROM inventory_sync_receipts r
@@ -336,6 +342,8 @@ export class SyncHealthService {
             minAcceptedSequence: SyncHealthService.toNumber(stream.acceptedMin),
             declaredGapCount:
               SyncHealthService.toNumber(stream.declaredGapCount) ?? 0,
+            inventoryPendingCount:
+              SyncHealthService.toNumber(stream.inventoryPendingCount) ?? 0,
             rejectedAboveWatermark:
               rejectedByStream.get(
                 SyncHealthService.streamKey(deviceId, stream.flowType),
@@ -360,6 +368,7 @@ export class SyncHealthService {
             acceptedCount: null,
             minAcceptedSequence: null,
             declaredGapCount: 0,
+            inventoryPendingCount: 0,
             rejectedAboveWatermark: 0,
             pendingAboveWatermark: pending,
           });

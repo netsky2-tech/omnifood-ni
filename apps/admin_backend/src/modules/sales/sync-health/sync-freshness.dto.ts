@@ -44,6 +44,17 @@ export class SyncFreshnessTerminalDto {
    * terminal (permanent data loss). When true, state cannot return to COMPLETE.
    */
   hasDeclaredGaps!: boolean;
+
+  /**
+   * True when any stream for this terminal has receipts whose inventory
+   * application is still pending (R-10, informational — never a gap).
+   * Optional for backward compatibility with existing construction sites;
+   * the service always populates it on the wire.
+   */
+  hasInventoryPending?: boolean;
+
+  /** Total count of inventory-pending receipts across this terminal's streams. */
+  inventoryPendingCount?: number;
 }
 
 export class SyncFreshnessDto {
@@ -66,4 +77,16 @@ export class SyncFreshnessDto {
 
   /** True when any participating terminal has explicitly declared sequence gaps. */
   hasDeclaredGaps!: boolean;
+
+  /**
+   * True when any terminal has receipts whose inventory application is still
+   * pending (R-10, informational). The dashboard uses this to explain a
+   * delay as pending inventory processing instead of network lag.
+   * Optional for backward compatibility with existing construction sites;
+   * the service always populates it on the wire.
+   */
+  hasInventoryPending?: boolean;
+
+  /** Total count of inventory-pending receipts rolled up across terminals. */
+  inventoryPendingCount?: number;
 }

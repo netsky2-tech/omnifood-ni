@@ -55,7 +55,7 @@ const baseValues = () => ({
   regime: FiscalRegime.CUOTA_FIJA,
   businessName: "Comedor Doña Mary",
   ruc: "J0310000055555",
-  commercialFxSpread: 0.5,
+  commercialFxSpread: 36.5,
   pricesIncludeTax: true,
 });
 
@@ -149,7 +149,7 @@ const fiscalGetResponse = (overrides: Record<string, unknown> = {}) =>
       regime: FiscalRegime.CUOTA_FIJA,
       taxRateIva: 0.0,
       pricesIncludeTax: true,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
       ...overrides,
     }),
     { status: 200, headers: { "Content-Type": "application/json" } },
@@ -164,7 +164,7 @@ const fiscalPostResponse = () =>
       regime: FiscalRegime.CUOTA_FIJA,
       taxRateIva: 0.0,
       pricesIncludeTax: true,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
       operationMode: null,
       checkoutFxMode: null,
     }),
@@ -285,7 +285,7 @@ describe("FiscalSetupForm — Business Profile selects (BXW-007 U2, rev 2)", () 
     // Edit ONLY the spread: the selects stay on 'Sin definir'. Any key in
     // the payload here would affirm a mode and downgrade local terminals.
     fireEvent.change(screen.getByLabelText(/Tipo de Cambio Comercial/i), {
-      target: { value: "0.75" },
+      target: { value: "36.75" },
     });
 
     fetchSpy.mockResolvedValueOnce(fiscalPostResponse());
@@ -294,7 +294,7 @@ describe("FiscalSetupForm — Business Profile selects (BXW-007 U2, rev 2)", () 
     await waitFor(() => {
       const bodies = postedFiscalBodies();
       expect(bodies).toHaveLength(1);
-      expect(bodies[0].commercialFxSpread).toBe(0.75);
+      expect(bodies[0].commercialFxSpread).toBe(36.75);
       expect("operationMode" in bodies[0]).toBe(false);
       expect("checkoutFxMode" in bodies[0]).toBe(false);
     });

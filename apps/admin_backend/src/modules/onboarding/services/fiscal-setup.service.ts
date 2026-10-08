@@ -55,6 +55,23 @@ export const DGI_NICARAGUA_TAX_RATES = {
   REGIMEN_GENERAL: 0.15,
 } as const;
 
+/**
+ * Issue #75: canonical commercial FX spread fallback (C$ per USD). The old
+ * fallback of 0.5 was a dangerous default — a rate of C$0.50 per USD is
+ * off by two orders of magnitude and would corrupt every checkout in USD.
+ * 36.5 is the canonical Nicaragua commercial exchange rate and sits inside
+ * the strict 10..100 validation range.
+ */
+export const DEFAULT_COMMERCIAL_FX_SPREAD = 36.5;
+
+/**
+ * Issue #75: strict FX range shared by the DTO boundary and this service
+ * guard. The DTO owns the HTTP wording; the service guard is defense-in-depth
+ * for directly-constructed DTOs.
+ */
+export const COMMERCIAL_FX_SPREAD_MIN = 10;
+export const COMMERCIAL_FX_SPREAD_MAX = 100;
+
 export { FiscalRegime };
 
 @Injectable()
@@ -130,7 +147,9 @@ export class FiscalSetupService {
 
     const rawFxSpread = paramMap.get(FISCAL_PARAM_KEYS.COMMERCIAL_FX_SPREAD);
     const commercialFxSpread =
-      typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
+      typeof rawFxSpread === 'number'
+        ? rawFxSpread
+        : DEFAULT_COMMERCIAL_FX_SPREAD;
 
     // BXW-007 U1 rev 2: absence must read as absence (D-16/D-21 spirit) — a
     // missing, non-string or non-member stored value reads as null, never as
@@ -202,10 +221,11 @@ export class FiscalSetupService {
     if (
       dto.commercialFxSpread === undefined ||
       dto.commercialFxSpread === null ||
-      dto.commercialFxSpread < 0
+      dto.commercialFxSpread < COMMERCIAL_FX_SPREAD_MIN ||
+      dto.commercialFxSpread > COMMERCIAL_FX_SPREAD_MAX
     ) {
       throw new BadRequestException(
-        'commercialFxSpread must be greater than or equal to 0',
+        'commercialFxSpread must be between 10 and 100',
       );
     }
 

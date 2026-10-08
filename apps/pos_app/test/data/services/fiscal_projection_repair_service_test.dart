@@ -749,7 +749,8 @@ void main() {
           () => runner.runStartupRepair(),
           throwsA(
             isA<FormatException>()
-                .having((e) => e.message, 'message', contains('commercialFxSpread must be a non-negative number')),
+                .having((e) => e.message, 'message',
+                    contains('commercialFxSpread must be a number between 10 and 100')),
           ),
         );
 
@@ -772,7 +773,8 @@ void main() {
           () => runner.runStartupRepair(),
           throwsA(
             isA<FormatException>()
-                .having((e) => e.message, 'message', contains('commercialFxSpread must be a non-negative number')),
+                .having((e) => e.message, 'message',
+                    contains('commercialFxSpread must be a number between 10 and 100')),
           ),
         );
 

@@ -82,7 +82,7 @@ void main() {
                 'fiscalRegime': 'REGIMEN_GENERAL',
                 'taxRate': 0.15,
                 'pricesIncludeTax': true,
-                'commercialFxSpread': 0.5,
+                'commercialFxSpread': 36.5,
                 'configVersion': {
                   'revision': 1,
                   'fingerprint':

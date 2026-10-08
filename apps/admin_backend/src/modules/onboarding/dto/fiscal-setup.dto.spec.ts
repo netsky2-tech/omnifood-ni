@@ -35,7 +35,7 @@ const validBody = (): Record<string, unknown> => ({
   regime: FiscalRegime.CUOTA_FIJA,
   businessName: 'Comedor Doña Mary',
   ruc: 'J0310000055555',
-  commercialFxSpread: 0.5,
+  commercialFxSpread: 36.5,
   pricesIncludeTax: true,
   operationMode: TenantOperationMode.FOODPARK_QSR,
   checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -98,6 +98,39 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
         ruc: '  J0310000055555  ',
       });
       expect(dto.ruc).toBe('J0310000055555');
+    });
+  });
+
+  // Issue #75: strict FX range — the commercial rate is a C$ per USD rate,
+  // so anything below 10 or above 100 is a data-entry error, not a spread.
+  describe('commercialFxSpread range (issue #75)', () => {
+    it.each([10, 36.5, 100])(
+      'accepts commercialFxSpread %s',
+      async (spread) => {
+        const dto = await transformBody({
+          ...validBody(),
+          commercialFxSpread: spread as number,
+        });
+        expect(dto.commercialFxSpread).toBe(spread);
+      },
+    );
+
+    it.each([
+      [9.99, 'commercialFxSpread must be greater than or equal to 10'],
+      [-0.5, 'commercialFxSpread must be greater than or equal to 10'],
+      [100.01, 'commercialFxSpread must be less than or equal to 100'],
+    ])('rejects commercialFxSpread %s', async (spread, message) => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        commercialFxSpread: spread,
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(message);
     });
   });
 

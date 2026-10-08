@@ -62,7 +62,7 @@ void main() {
         'taxRate': 15,
         'pricesIncludeTax': true,
         'ruc': 'J0310000123456',
-        'commercialFxSpread': 0.07,
+        'commercialFxSpread': 36.5,
       };
 
   TerminalPrimingPayload payload({

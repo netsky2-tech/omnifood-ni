@@ -60,7 +60,7 @@ describe("W9 E2E — Complete Fiscal Setup, Industry Templates & Bulk Import Lif
       regime: FiscalRegime.CUOTA_FIJA,
       taxRateIva: 0.0,
       pricesIncludeTax: false,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
     };
 
     // Historical Invoices under Cuota Fija (ODAV-31 baseline)
@@ -312,7 +312,7 @@ describe("W9 E2E — Complete Fiscal Setup, Industry Templates & Bulk Import Lif
     await user.type(rucInput, "J0310000088888");
     await user.selectOptions(regimeSelect, FiscalRegime.REGIMEN_GENERAL);
     await user.clear(fxSpreadInput);
-    await user.type(fxSpreadInput, "0.75");
+    await user.type(fxSpreadInput, "36.75");
 
     await user.click(saveBtn);
 
@@ -321,7 +321,7 @@ describe("W9 E2E — Complete Fiscal Setup, Industry Templates & Bulk Import Lif
       expect(dbFiscalSetup.regime).toBe(FiscalRegime.REGIMEN_GENERAL);
       expect(dbFiscalSetup.taxRateIva).toBe(0.15);
       expect(dbFiscalSetup.ruc).toBe("J0310000088888");
-      expect(dbFiscalSetup.commercialFxSpread).toBe(0.75);
+      expect(dbFiscalSetup.commercialFxSpread).toBe(36.75);
     });
 
     // ODAV-31 Invariant: Historical Invoices must retain their exact original values

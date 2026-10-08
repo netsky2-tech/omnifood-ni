@@ -295,10 +295,15 @@ class _BusinessProfileViewState extends State<BusinessProfileView> with RouteAwa
                                 : 'Tasa utilizada para precios al público, cobro en USD y cálculo de vuelto en córdobas.',
                       ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      // Issue #75: strict FX range — the commercial rate is a
+                      // C$ per USD rate, so anything below 10 or above 100 is
+                      // a data-entry error (or the old dangerous 0.5 default).
                       validator: (v) {
                         if (v == null || v.isEmpty) return 'Requerido';
                         final val = double.tryParse(v);
-                        if (val == null || val <= 0) return 'Ingrese una tasa válida mayor a 0';
+                        if (val == null || val < 10 || val > 100) {
+                          return 'Ingrese una tasa válida entre 10 y 100';
+                        }
                         return null;
                       },
                     ),

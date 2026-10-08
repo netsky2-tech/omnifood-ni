@@ -606,7 +606,7 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
     regime: FiscalRegime.CUOTA_FIJA,
     businessName: 'Café Central',
     ruc: 'J0310000055555',
-    commercialFxSpread: 0.5,
+    commercialFxSpread: 36.5,
     pricesIncludeTax: true,
     operationMode: TenantOperationMode.FOODPARK_QSR,
     checkoutFxMode: CheckoutFxMode.COMMERCIAL,
