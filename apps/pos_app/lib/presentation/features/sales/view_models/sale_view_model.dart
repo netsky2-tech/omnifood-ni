@@ -780,6 +780,26 @@ class SaleViewModel extends ChangeNotifier {
   /// stays reserved for the other error paths.
   String? get fxCheckoutBlockReason => _fxRateBlockReason();
 
+  /// R-4: the last GENERAL checkout failure (missing recipe, fiscal sequence
+  /// error, database exception, ...) recorded by [processSale]. Distinct from
+  /// the FX guard state above: the FX reason is authoritative while it exists
+  /// (non-dismissible), while a general checkout error stays in the banner
+  /// until the operator discards it or the cart/sale state moves on.
+  String? _lastCheckoutError;
+
+  /// Non-consuming read for the persistent cart-panel banner: the FX block
+  /// reason wins when present, otherwise the last general checkout error.
+  String? get checkoutBlockReason => fxCheckoutBlockReason ?? _lastCheckoutError;
+
+  /// Dismisses the general checkout error banner (the 'Descartar' action).
+  /// Never touches the FX guard state: a missing-rate block stays on screen.
+  void clearCheckoutError() {
+    if (_lastCheckoutError != null) {
+      _lastCheckoutError = null;
+      notifyListeners();
+    }
+  }
+
   /// Checkout seam: called by the view right after loadExchangeRates() and
   /// BEFORE the checkout dialog opens, so the operator learns about the
   /// missing rate before ringing up the whole sale, not after COBRAR.
@@ -1327,6 +1347,8 @@ class SaleViewModel extends ChangeNotifier {
       );
     }
     _applyPromotions();
+    // R-4: a cart change supersedes a stale checkout failure banner.
+    _lastCheckoutError = null;
     // Re-evaluate loyalty when cart changes (fire-and-forget async)
     if (_selectedCustomer != null &&
         _rewardInteraction?.selectedRewardId != null) {
@@ -1347,6 +1369,8 @@ class SaleViewModel extends ChangeNotifier {
           (modifiers == null || listEquals(item.selectedModifiers, modifiers)),
     );
     _applyPromotions();
+    // R-4: a cart change supersedes a stale checkout failure banner.
+    _lastCheckoutError = null;
     notifyListeners();
   }
 
@@ -1369,6 +1393,8 @@ class SaleViewModel extends ChangeNotifier {
         _cart[index] = _cart[index].copyWith(quantity: quantity);
       }
       _applyPromotions();
+      // R-4: a cart change supersedes a stale checkout failure banner.
+      _lastCheckoutError = null;
       notifyListeners();
     }
   }
@@ -1385,6 +1411,7 @@ class SaleViewModel extends ChangeNotifier {
     _pointsToRedeem = 0.0;
     _activeLoadedHoldTicket = null;
     _lastPostPaidFeedback = null;
+    _lastCheckoutError = null;
     _currentEvaluation = null;
     clearReward();
     // D-7: a voluntary tip belongs to ONE ticket only. It must never leak
@@ -1699,6 +1726,7 @@ class SaleViewModel extends ChangeNotifier {
       // (H9) remain readable via lastLoyaltyError but intentionally do
       // not arm the post-sale warning: preview staleness, not unposted
       // points.
+      _lastCheckoutError = null;
       _lastLoyaltyError = null;
 
       // Process Customer Loyalty (single write path via LoyaltyRewardInteractionService)
@@ -1982,6 +2010,9 @@ class SaleViewModel extends ChangeNotifier {
               'No se pudo procesar la venta. Intentá de nuevo; si el problema continúa, avisá al encargado.';
         }
       }
+      // R-4: record the failure so the persistent cart-panel banner surfaces
+      // it above COBRAR, not only in the transient (occluded) SnackBar.
+      _lastCheckoutError = _errorMessage;
       notifyListeners();
       rethrow;
     }

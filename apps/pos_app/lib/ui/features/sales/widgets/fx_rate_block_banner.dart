@@ -2,30 +2,37 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
 
-/// Persistent blocking banner for the FX rate guard (#805 U4).
+/// Persistent blocking banner inside the cart panel (#805 U4 + R-4).
 ///
-/// When checkout is blocked because a recorded exchange rate is missing or
-/// unverifiable, the directive Spanish reason is rendered HERE — inside the
-/// cart panel, directly above the EN ESPERA / COBRAR row — instead of only
-/// as a transient SnackBar that the cart panel overlays.
+/// Two reasons can occupy the banner, resolved via
+/// [SaleViewModel.checkoutBlockReason]:
 ///
-/// The banner is authoritative and non-dismissible: it reads the
-/// non-consuming [SaleViewModel.fxCheckoutBlockReason] getter, so it stays
-/// visible across rebuilds and never pushes into the transient SnackBar
-/// channel (`SaleViewModel.errorMessage`), which remains reserved for the
-/// other error paths. Retry/sync is the only cashier-side action, because
-/// the FX fields are owner/manager-only; there is deliberately no dismiss
-/// button — a blocking condition must not be dismissible.
+/// 1. The FX rate guard (`SaleViewModel.fxCheckoutBlockReason`): checkout is
+///    blocked because a recorded exchange rate is missing or unverifiable.
+///    The directive Spanish reason renders HERE — directly above the
+///    EN ESPERA / COBRAR row — instead of only as a transient SnackBar that
+///    the cart panel overlays. This reason is authoritative and
+///    non-dismissible: the only cashier-side action is 'Reintentar'
+///    (reload rates), because the FX fields are owner/manager-only; there is
+///    deliberately no dismiss — a blocking condition must not be dismissible.
+///
+/// 2. A general checkout failure (`SaleViewModel._lastCheckoutError`,
+///    e.g. missing recipe, fiscal sequence error, database exception):
+///    rendered in the same slot so the error is never limited to the
+///    transient SnackBar channel. It is dismissed via the 'Descartar'
+///    action (or implicitly when the cart changes / the next sale succeeds).
 class FxRateBlockBanner extends StatelessWidget {
   const FxRateBlockBanner({super.key});
 
   @override
   Widget build(BuildContext context) {
     final viewModel = context.watch<SaleViewModel>();
-    final reason = viewModel.fxCheckoutBlockReason;
+    final reason = viewModel.checkoutBlockReason;
     if (reason == null) {
       return const SizedBox.shrink();
     }
+
+    final isFxRateBlock = viewModel.fxCheckoutBlockReason != null;
 
     // Blocking (error) surface, not informational amber: this must read as
     // "you cannot sell until this is fixed", matching the directive copy.
@@ -64,9 +71,11 @@ class FxRateBlockBanner extends StatelessWidget {
               minimumSize: const Size(0, 32),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            onPressed: () => viewModel.loadExchangeRates(),
+            onPressed: isFxRateBlock
+                ? () => viewModel.loadExchangeRates()
+                : viewModel.clearCheckoutError,
             child: Text(
-              'Reintentar',
+              isFxRateBlock ? 'Reintentar' : 'Descartar',
               style: TextStyle(
                 color: Colors.red.shade900,
                 fontSize: 12,

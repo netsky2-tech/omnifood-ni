@@ -32,4 +32,4 @@
 - [x] **T1** Desfase 6h timestamps fiscales (Completado: `sales_mapper.dart`, `audit_repository_impl.dart`, `receipt_layout_formatter.dart`, `invoices.service.ts`, specs verdes 501/501 y 33/33)
 - [x] **T2** Sync de clientes de alta local (Completado: `CustomerDao`, `DeviceSyncAuthInterceptor`, `SyncService`, `CustomerSyncController`, `CustomerSyncIngestionService`, tests verdes en DAO, Interceptor, Badge y Backend 23/23)
 - [x] **T3** Limpieza venta de verificación (Completado: `ActivationVerificationSaleCleanupRunner` registrado en `main.dart`, inyectado en `ActivationSessionService` con ejecución automática en `ACTIVATED` y método explícito, `ActivationSessionViewModel` conectado, 11/11 tests verdes)
-- [ ] **T4** Banner visible para errores de venta (R-4)
+- [x] **T4** Banner visible para errores de venta (R-4) (Completado: `SaleViewModel` captura `_lastCheckoutError` y expone `checkoutBlockReason`/`clearCheckoutError()`; `FxRateBlockBanner` renderiza visiblemente encima de COBRAR con acción 'Descartar' para errores generales y 'Reintentar' para FX; 6/6 widget tests y 53/53 suites de sales verdes)
