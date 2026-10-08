@@ -53,6 +53,19 @@ class CardVoucherReconciliationViewModel extends ChangeNotifier {
     String? batchNumber,
     String? last4,
   }) async {
+    // Identity guard (reconcile-time identity fix): the backend sync
+    // contract (@IsNotEmpty reconciledByUserId) rejects an empty operator
+    // id, and a reconciliation without a known operator is an audit hole.
+    // Refuse BEFORE any write — a row is never persisted with an empty
+    // reconciledByUserId, and (Issue #74) a refused write never calls the
+    // parent-refresh callback.
+    if (currentUserId.trim().isEmpty) {
+      _errorMessage =
+          'No se pudo identificar al usuario que concilia. Inicie sesión e intente de nuevo.';
+      notifyListeners();
+      return false;
+    }
+
     final cleanCode = voucherCode.trim();
     if (cleanCode.isEmpty || cleanCode.toUpperCase() == 'PENDIENTE') {
       _errorMessage = 'Debe ingresar un código de autorización válido.';
@@ -122,6 +135,17 @@ class CardVoucherReconciliationViewModel extends ChangeNotifier {
     required String reason,
     required String supervisorId,
   }) async {
+    // Same identity guard as [reconcileVoucher]: the override also stamps
+    // an operator-context row that reaches the backend, so it must refuse
+    // when no acting operator can be resolved. NOTE: the supervisor
+    // authorization below is a SEPARATE concern (left untouched here).
+    if (currentUserId.trim().isEmpty) {
+      _errorMessage =
+          'No se pudo identificar al usuario que registra el override. Inicie sesión e intente de nuevo.';
+      notifyListeners();
+      return false;
+    }
+
     final cleanReason = reason.trim();
     if (cleanReason.isEmpty) {
       _errorMessage = 'Debe indicar el motivo del override manual.';
