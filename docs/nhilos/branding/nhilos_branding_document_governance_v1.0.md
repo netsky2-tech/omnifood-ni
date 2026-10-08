@@ -69,7 +69,7 @@ el set.
    Referencias técnicas transversales (no deciden marca ni claims):
    nhilos_pos_experience_standard_v1.0.md                [branding/Recursos/]
    nhilos_backoffice_experience_standard_v1.0.md         [branding/Recursos/]
-   nhilos_website_non_functional_acceptance_spec.md      [branding/Recursos/]
+   nhilos_website_non_functional_spec_v1.0.md                [branding/Recursos/]
    nhilos_backoffice_module_audit_template_v1.0.md       [branding/Recursos/]
 ```
 
@@ -103,7 +103,7 @@ a él como upstream. Si un documento necesita una regla que vive arriba, la cita
 | 3 | `nhilos_website_product_marketing_brief_v1.0.md` | `branding/` | Narrativa de marketing | 1.0 | `APPROVED` |
 | 4 | `nhilos_website_information_architecture_content_wireframe_v1.0.md` | `branding/` | IA y contenido del sitio | 1.0 | `APPROVED` |
 | 5 | `nhilos_pos_product_page_content_v1.1.md` | `branding/` | Contrato de contenido de producto | 1.1 | `APPROVED / PUBLICATION GATED` |
-| 6 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `APPROVED` |
+| 6 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `CONTENIDO APROBADO / EVIDENCIA OBSOLETA — REVALIDACIÓN REQUERIDA` |
 | — | `nhilos_pos_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficie POS | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_backoffice_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficies backoffice | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_website_non_functional_spec_v1.0.md` | `branding/Recursos/` | Spec no funcional del sitio | 1.0 | `DRAFT` — gates heredados por la IA (§18.1 `NF-01`..`NF-13`) |

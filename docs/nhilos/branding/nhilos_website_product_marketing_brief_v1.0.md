@@ -3,7 +3,7 @@
 **Documento:** `nhilos_website_product_marketing_brief_v1.0.md`  
 **Versión:** 1.0 (Autorizado para Producción)  
 **Estado:** `APPROVED / READY FOR WEBSITE IA PROMOTION & COPYWRITING`  
-**Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.2, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`
+**Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara y comienza por la operación del propio prospecto (ver Regla de Oro y Sección 5.1).  
   
 **Downstream Gate:** `nhilos_website_information_architecture_content_wireframe_v1.0.md` — dueño de la navegación y las rutas; consume los mensajes de este Brief (ver `nhilos_branding_document_governance_v1.0.md` §6)  
@@ -21,11 +21,11 @@ A diferencia de los sistemas tradicionales en la nube que se congelan cuando el 
 
 ### Regla de Oro del Copywriting
 > **Solo comunicamos lo que el código ya sabe hacer.**  
-> Cada afirmación en el sitio web debe estar respaldada por la auditoría técnica de claims **OD-02 v1.2** (`product_claim_audit_od02_v1.3.md`). No sobreprometemos tecnología experimental ni vendemos intenciones de roadmap.
+> Cada afirmación en el sitio web debe estar respaldada por la auditoría técnica de claims **OD-02 v1.3** (`product_claim_audit_od02_v1.3.md`). No sobreprometemos tecnología experimental ni vendemos intenciones de roadmap.
 
 ---
 
-## 2. Pilares de Posicionamiento y Propuesta de Valor (Auditoría OD-02 v1.2)
+## 2. Pilares de Posicionamiento y Propuesta de Valor (Auditoría OD-02 v1.3)
 
 Los seis pilares innegociables del producto, verificados contra código real:
 
@@ -66,7 +66,7 @@ Los seis pilares innegociables del producto, verificados contra código real:
 
 ## 3. Delimitación de Producto y Anti-Posicionamiento (Blocklist D5)
 
-Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5 de OD-02 v1.2**, el sitio web **NUNCA DEBE AFIRMAR**:
+Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5 de OD-02 v1.3**, el sitio web **NUNCA DEBE AFIRMAR**:
 
 | Copy Prohibido (Anti-Claim) | Razón Técnica | Copy Correcto Autorizado |
 |---|---|---|

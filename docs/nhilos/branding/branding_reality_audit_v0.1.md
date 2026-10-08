@@ -8,6 +8,7 @@
 **Working tree:** `origin/main` + 3 commits ajenos (reconciliación de vouchers, `fcf9f873`)
 **Marco normativo aplicado:** `nhilos_brand_experience_principles_v1.0.md`, `nhilos_pos_experience_standard_v1.0.md`, `nhilos_backoffice_experience_standard_v1.0.md`, `nhilos_website_non_functional_acceptance_spec.md`
 **Método:** 6 exploradores read-only en 2 olas; sin escritura sobre ningún documento auditado.
+**Rol documental:** insumo de la remediación. Este informe es un registro del estado **encontrado**, no un documento gobernado por la cadena que él mismo originó (`nhilos_branding_document_governance_v1.0.md`): las rutas y nombres de archivo que cita son los vigentes al momento de la auditoría, antes de la normalización.
 
 > **Regla rectora aplicada:** el producto real tiene precedencia sobre cualquier claim de
 > marketing. Todo lo no verificable en código se marca y sale del copy público.

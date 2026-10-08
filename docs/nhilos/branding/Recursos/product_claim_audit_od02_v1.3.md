@@ -241,13 +241,13 @@ Funcionalidades implementadas en código que requieren evidencia visual antes de
 
 # 11. Autoridad Downstream
 
-Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` (§3), este documento versión 1.2 es la **autoridad de claims** del set. Los documentos downstream que consumen sus claims admisibles son:
+Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` (§3), este documento versión 1.3 es la **autoridad de claims** del set. Los documentos downstream que consumen sus claims admisibles son:
 1. `nhilos_website_product_marketing_brief_v1.0.md`
 2. `nhilos_website_information_architecture_content_wireframe_v1.0.md`
 
 ---
 
-# Reconciliación v1.2 — Re-anclaje a b4b5ad27
+# Reconciliación v1.2–v1.3 — Re-anclaje a b4b5ad27 y adenda de lealtad
 
 Resultado headline: de los 34 claims auditados en el re-anclaje original (el registro asciende hoy a 40 con la extensión loyalty `PC-LOY-01..06`), **30 sin cambio, 3 con deriva, 0 ya no sostenibles** tras 575 commits (`7af1521…` → `b4b5ad27`, 2026-10-08).
 

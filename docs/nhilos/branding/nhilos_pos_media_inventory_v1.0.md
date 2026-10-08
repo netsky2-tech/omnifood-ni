@@ -5,7 +5,7 @@
 **Estado:** `CONTENIDO APROBADO / EVIDENCIA OBSOLETA — REVALIDACIÓN REQUERIDA ANTES DE PUBLICAR`
 **Build de producción de origen:** `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED — el build anclado vigente es `b4b5ad27`; los activos deben re-capturarse o re-verificarse contra `b4b5ad27` antes de cualquier publicación, según `G-09` de `nhilos_branding_document_governance_v1.0.md`)
 **Ruta pública:** Página profunda de producto NHILOS POS (`/pos`)
-**Upstream de contenido:** `nhilos_pos_product_page_content_v1.1`
+**Upstream de contenido:** `nhilos_pos_product_page_content_v1.1.md`
 **Upstream de auditoría técnica:** `product_claim_audit_od02_v1.3.md`
 **Fecha de actualización:** 2026-10-08 (revalidación de evidencia pendiente; captura original 2026-10-02)
 

@@ -1,5 +1,6 @@
 # NHILOS POS — Product Page Content v1.1
 
+**Documento:** `nhilos_pos_product_page_content_v1.1.md`  
 **Status:** `APPROVED / AUTHORITATIVE CONTENT CONTRACT — PUBLICATION GATED`  
 **Scope:** Página profunda de producto NHILOS POS  
 **Masterbrand:** NHILOS  
@@ -7,8 +8,8 @@
 **Version:** 1.1  
 **Date:** 2026-10-02  
 **Authority:** Contrato de contenido aprobado para la página profunda de producto.  
-**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.2) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
-**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara según el contexto que el prospecto comparte (Sección 12), y los estados de éxito y error le devuelven un siguiente paso definido.
+**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
+**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara según el contexto que el prospecto comparte (Sección 12), y los estados de éxito y error le devuelven un siguiente paso definido.  
 **DEPENDENCIA PENDIENTE — no existe en el repositorio:** `nhilos_website_homepage_content_v1.1.md` no existe en ningún lugar del repositorio. Este documento NO puede promocionarse para publicación hasta que esa dependencia exista. La alineación con ella y la verificación de capacidades contra builds y evidencia vigentes permanecen como gates separados de publicación.  
 **GATE DE PUBLICACIÓN:** la publicación de esta página está bloqueada por (a) la creación de `nhilos_website_homepage_content_v1.1.md` y (b) la verificación de capacidades contra el build vigente.
 
@@ -1388,7 +1389,7 @@ Las siguientes decisiones deben cerrarse antes de la publicación. La tabla regi
 
 | ID | Decision / dependency | Status | Owner | Evidence / Concrete Artifact Linkage | Detailed Resolution |
 | :---- | :---- | :---- | :---- | :---- | :---- |
-| OD-PP-01 | Definir el scope público exacto de NHILOS POS. | `PARTIALLY RESOLVED` | Product | NH-SA-0001 §2–§3; NH-SO-0001 §2–§5; reconciliación de build `1.0.1+6`. | Alcance congelado: POS 1.0.x + Owner Dashboard v2.0. Falta declaración formal de aprobación por versión como artefacto único de referencia. |
+| OD-PP-01 | Definir el scope público exacto de NHILOS POS. | `PARTIALLY RESOLVED` | Product | NH-SA-0001 §2–§3; NH-SO-0001 §2–§5; reconciliación contra el build anclado `b4b5ad27`. | Alcance congelado: línea POS 1.x + Owner Dashboard v2.0. Falta declaración formal de aprobación por versión como artefacto único de referencia. |
 | OD-PP-02 | Confirmar workflows que pueden mostrarse en producción. | `PARTIALLY RESOLVED` | Product / QA | NH-AUD-POS-001 §3/§4 (workflows ejecutados); hold (retención y recuperación de ticket en espera, Workflow D) en NH-GL-0001 §2.C. | Workflows A/B/C/E evidenciados en auditoría; actualizaciones visuales dependen de los hallazgos PX remediados antes de publicar capturas. |
 | OD-PP-03 | Aprobar matriz de continuidad por topología y dispositivo. | `PARTIALLY RESOLVED` | Engineering / Product | CD-05 §1–§3; CD-14; EX-17; NH-POL-BAK-001; NH-MAN-POS-001; NH-MAN-CTG-001; exclusión multi-dispositivo en NH-SO-0001 §5. | Topología single-terminal Q80 verificada. Multi-device y multi-sucursal quedan explícitamente fuera del scope comunicable; escenarios y límites documentados. |
 | OD-PP-04 | Definir vistas administrativas disponibles y su frescura. | `CLOSED` | Product / Backoffice | NH-MAN-DSH-001 §2–§9. | Inventario de vistas y contrato de frescura del Owner Dashboard establecidos y publicados como artefacto manual. |
@@ -1473,7 +1474,7 @@ Se promueve este documento a:
 
 > **Version 1.1 — APPROVED / AUTHORITATIVE CONTENT CONTRACT FOR NHILOS POS PRODUCT PAGE**
 
-La aprobación cubre la arquitectura narrativa, el orden de las doce secciones, los criterios editoriales, el modelo de claims, las restricciones de contenido y los gates de publicación. No certifica que cada funcionalidad descrita esté disponible, ni aprueba capturas, compatibilidad, soporte, condiciones comerciales, privacidad o consistencia final con la homepage.
+La aprobación cubre la arquitectura narrativa, el orden de las trece secciones, los criterios editoriales, el modelo de claims, las restricciones de contenido y los gates de publicación. No certifica que cada funcionalidad descrita esté disponible, ni aprueba capturas, compatibilidad, soporte, condiciones comerciales, privacidad o consistencia final con la homepage.
 
 En la revisión posterior del registro de auditoría se verificó el cierre parcial del conjunto de decisiones OD-PP contra artefactos del repositorio: OD-PP-04 y OD-PP-07 `CLOSED`, OD-PP-09 `CLOSED WITH CONDITION` (unificación de canales DR-0), siete decisiones `PARTIALLY RESOLVED` con evidencia vinculada (OD-PP-01/02/03/05/06/08/11) y dos `OPEN` (OD-PP-10, OD-PP-12 / Gate E). Esta reconciliación se registra en §19 y §22.3 y no modifica el alcance de la aprobación: la promoción sigue siendo una decisión editorial independiente del permiso de publicación, que permanece `NOT GRANTED`.
 
@@ -1487,7 +1488,7 @@ Los siguientes elementos permanecen abiertos y no deben interpretarse como defec
 | :---- | :---- |
 | `CLOSED` | OD-PP-04 (vistas y frescura del dashboard, NH-MAN-DSH-001 §2–§9); OD-PP-07 (playbook de implementación, OP-01 + OP-07 + CD-07/08/09/10 + NH-SO-0001 §4/§6 + readiness §14). |
 | `CLOSED WITH CONDITION` | OD-PP-09 (soporte público según NH-POL-SUP-001; condición de publicación: unificación de canales de contacto DR-0). |
-| `PARTIALLY RESOLVED` | OD-PP-01 (scope congelado, build `1.0.1+6`); OD-PP-02 (workflows evidenciados, capturas sujetas a remediación PX); OD-PP-03 (topología single-terminal Q80; multi-device excluido); OD-PP-05 (3 roles publicados; cuarto rol de CD-15 excluido del alcance público SOHO retail-food); OD-PP-06 (17 capturas ADB con provenance; media register pendiente); OD-PP-08 (perfil Q80/iPOS Android 12 80mm verificado); OD-PP-11 (aviso de datos CLIENT-READY; adenda de privacidad del formulario requerida). |
+| `PARTIALLY RESOLVED` | OD-PP-01 (scope congelado, build anclado `b4b5ad27`); OD-PP-02 (workflows evidenciados, capturas sujetas a remediación PX); OD-PP-03 (topología single-terminal Q80; multi-device excluido); OD-PP-05 (3 roles publicados; cuarto rol de CD-15 excluido del alcance público SOHO retail-food); OD-PP-06 (17 capturas ADB con provenance; media register pendiente); OD-PP-08 (perfil Q80/iPOS Android 12 80mm verificado); OD-PP-11 (aviso de datos CLIENT-READY; adenda de privacidad del formulario requerida). |
 | `OPEN` | OD-PP-10 (receptor web/comercial de demos sin asignar); OD-PP-12 / Gate E (documento homepage v1.1 upstream pendiente). |
 
 ### Estado de los publication gates
@@ -1502,7 +1503,7 @@ Los siguientes elementos permanecen abiertos y no deben interpretarse como defec
 
 ### Prerrequisito de verificación de claims
 
-Ningún claim del registro (§16) puede publicarse sin verificación registrada con versión/build, escenario, responsable, estado y fecha. Los claims sin evidencia permanecen bloqueados; el registro con responsables y fecha de aprobación es prerrequisito de Gate A y Gate D, y su cumplimiento se auditará contra la versión publicada del producto (`1.0.1+6` o posterior).
+Ningún claim del registro (§16) puede publicarse sin verificación registrada con versión/build, escenario, responsable, estado y fecha. Los claims sin evidencia permanecen bloqueados; el registro con responsables y fecha de aprobación es prerrequisito de Gate A y Gate D, y su cumplimiento se auditará contra la versión publicada del producto (anclada a `b4b5ad27` o posterior).
 
 ### Disposición final de autoridad de publicación
 
@@ -1589,7 +1590,7 @@ Notas de la matriz:
 
 ## Claims sin base en el OD-02
 
-Los siguientes claims afirman una capacidad técnica sin ningún claim del OD-02 que la respalde. Su resolución **está pendiente** y no se decide unilateralmente en este anexo:
+Los siguientes claims afirman una capacidad técnica sin ningún claim del OD-02 que la respalde. Su resolución **está pendiente** y no se decide unilateralmente en este anexo. Mientras permanezcan sin ancla, estos claims quedan **BLOQUEADOS PARA PUBLICACIÓN** según `G-04` de `nhilos_branding_document_governance_v1.0.md`:
 
 - **PC-002** — Cuentas abiertas o mesas en modalidades soportadas. *Recomendación (pendiente de resolución):* `PC-PAY-05` (Split Bill) acredita la existencia de órdenes abiertas de salón, pero no cubre atómicamente la retención, recuperación y concurrencia de cuentas; o bien se extiende el OD-02 con un claim atómico de retención de cuentas abiertas, o el claim se retira de publicación hasta ese anclaje.
 - **CW-002** — El flujo puede incluir modificadores configurados. *Recomendación (pendiente de resolución):* ningún claim del OD-02 audita grupos de modificadores y sus reglas; o bien se extiende el OD-02 con un claim atómico de modificadores configurables, o el workflow de personalización se retira de publicación.
