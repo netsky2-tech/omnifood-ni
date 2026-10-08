@@ -3,7 +3,8 @@
 **Documento:** `nhilos_website_non_functional_spec_v1.0.md`  
 **Versión:** 1.0  
 **Estado:** DRAFT / FOR ENGINEERING & QA REVIEW  
-**Autoridad de origen:** `nhilos_website_product_marketing_brief.md` (v1.0 - Section 47.1)  
+**Autoridad de origen:** `nhilos_website_product_marketing_brief_v1.0.md` (v1.0 — Sección 5: Arquitectura del Sitio Web y Mensajes por Página)  
+**Gobernanza:** cadena de autoridad según `nhilos_branding_document_governance_v1.0.md` (§3, referencias técnicas transversales)  
 **Propósito:** Definir los umbrales medibles (umbrales de lanzamiento o *release gates*) en materia de rendimiento, accesibilidad, privacidad y soporte técnico que el website público de NHILOS debe superar antes de salir a producción.
 
 > **Principio Operativo:** El estándar de cuidado que promete el producto debe estar presente en el código y comportamiento del website. Una experiencia "Premium" se demuestra con tiempos de carga rápidos, accesibilidad sin fricciones y respeto absoluto por la privacidad del usuario.
@@ -67,7 +68,7 @@ La accesibilidad en NHILOS no es una capa opcional de *compliance*, es expresió
 
 # 3. Privacy & Analytics Gate (El valor del respeto)
 
-Gobernanza sobre qué medimos y cómo tratamos la información, enlazado a la Sección 38 del Brief.
+Gobernanza sobre qué medimos y cómo tratamos la información, enlazado a `docs/nhilos/contracts/nhilos_privacy_data_notice_v0.1.md` y a la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md`.
 
 ## 3.1 Recolección de Datos
 *   **Cero tracking invasivo por defecto:** Las herramientas de grabación de sesiones (*session replay*, *rage clicks*) están **bloqueadas en este release**. Requieren evaluación legal/seguridad para futuras versiones.

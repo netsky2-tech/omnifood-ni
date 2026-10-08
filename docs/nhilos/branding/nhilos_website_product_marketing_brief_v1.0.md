@@ -3,8 +3,8 @@
 **Documento:** `nhilos_website_product_marketing_brief_v1.0.md`  
 **Versión:** 1.0 (Autorizado para Producción)  
 **Estado:** `APPROVED / READY FOR WEBSITE IA PROMOTION & COPYWRITING`  
-**Upstream Authority:** `product_claim_audit_od02_v0.1.md` v1.1 (`CLOSED / VERIFIED / RECONCILED`)  
-**Downstream Gate:** Reconciliación de `nhilos_website_information_architecture_content_wireframe_v0.2.md` → `v1.0`  
+**Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.2.md` (v1.2, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`  
+**Downstream Gate:** `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
 **Audiencia:** Product Marketing, Copywriters, UI/UX Designers, Frontend Engineers  
 **Mercado objetivo principal:** Nicaragua (Gastronomía, Cafeterías, Food Parks, Bares y Retail de alta rotación)  
 **Fecha:** 2026-09-26  
@@ -19,11 +19,11 @@ A diferencia de los sistemas tradicionales en la nube que se congelan cuando el 
 
 ### Regla de Oro del Copywriting
 > **Solo comunicamos lo que el código ya sabe hacer.**  
-> Cada afirmación en el sitio web debe estar respaldada por la auditoría técnica de claims **OD-02 v1.1**. No sobreprometemos tecnología experimental ni vendemos intenciones de roadmap.
+> Cada afirmación en el sitio web debe estar respaldada por la auditoría técnica de claims **OD-02 v1.2** (`product_claim_audit_od02_v1.2.md`). No sobreprometemos tecnología experimental ni vendemos intenciones de roadmap.
 
 ---
 
-## 2. Pilares de Posicionamiento y Propuesta de Valor (Auditoría OD-02 v1.1)
+## 2. Pilares de Posicionamiento y Propuesta de Valor (Auditoría OD-02 v1.2)
 
 Los cinco pilares innegociables del producto, verificados contra código real:
 
@@ -58,7 +58,7 @@ Los cinco pilares innegociables del producto, verificados contra código real:
 
 ## 3. Delimitación de Producto y Anti-Posicionamiento (Blocklist D5)
 
-Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5 de OD-02 v1.1**, el sitio web **NUNCA DEBE AFIRMAR**:
+Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5 de OD-02 v1.2**, el sitio web **NUNCA DEBE AFIRMAR**:
 
 | Copy Prohibido (Anti-Claim) | Razón Técnica | Copy Correcto Autorizado |
 |---|---|---|
@@ -158,6 +158,6 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
 
 ## 7. Próxima Acción y Fuente Autoritativa
 
-Este documento se ratifica como la **fuente autoritativa única** derivada de la auditoría **OD-02 v1.1**. Con esto se desbloquea:
-1. La reconciliación y promoción del wireframe de arquitectura de información (`nhilos_website_information_architecture_content_wireframe_v0.2.md` → `v1.0`).
+Según `nhilos_branding_document_governance_v1.0.md`, este Brief es el paso 3 de la cadena de autoridad: selecciona claims admisibles definidos por el OD-02 (`product_claim_audit_od02_v1.2.md`) y no inventa claims. Con esto se desbloquea:
+1. La reconciliación y promoción del wireframe de arquitectura de información (`nhilos_website_information_architecture_content_wireframe_v1.0.md`).
 2. El inicio de la redacción final de textos (copywriting) para cada página del sitio web.

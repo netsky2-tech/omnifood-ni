@@ -1,13 +1,14 @@
 # NHILOS — Product Claim Audit / OD-02
 
-**Documento:** `product_claim_audit_od02_v0.1.md`  
-**Versión:** 1.1 (Reconciliación Normativa)  
-**Estado:** `CLOSED / VERIFIED / RECONCILED`  
+**Documento:** `product_claim_audit_od02_v1.2.md`  
+**Versión:** 1.2 (Reconciliación Normativa + Re-anclaje)  
+**Estado:** `CLOSED / VERIFIED / RE-ANCHORED`  
 **Gate:** OD-02 — Product Claim Inventory  
 **Scope:** NHILOS POS public website  
-**Upstream authority:** `nhilos_website_product_marketing_brief_v1.0.md`  
-**Downstream gate:** `nhilos_website_information_architecture_content_wireframe_v0.2.md` → `v1.0`  
-**Fecha de reconciliación:** 2026-09-26  
+**Upstream authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0)  
+**Downstream:** `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
+**Gobernanza de cadena:** según `nhilos_branding_document_governance_v1.0.md` (§3), este documento es la autoridad de claims y el Marketing Brief es downstream de él.  
+**Fecha de reconciliación:** 2026-10-08  
 **Reconciliation resolutions:** `OD-02-R01` (Claim count 34), `OD-02-R02` (Fiscal conditioning), `OD-02-R03` (Hardened offline wording)  
 
 ---
@@ -16,9 +17,7 @@
 
 Cerrar **OD-02 — Product Claim Inventory** mediante una auditoría basada en el **producto realmente implementado** en el repositorio `omnifood-ni`, erradicando el futureware y separando la intención de marketing del comportamiento real del software.
 
-Este documento constituye la **fuente autoritativa única de claims técnicos** para desbloquear y alimentar:
-1. La redacción del **Website Product Marketing Brief v1.0**.
-2. La reconciliación y promoción formal de la **Information Architecture v0.2 a v1.0**.
+1. La redacción del **Website Product Marketing Brief v1.0**, que según `nhilos_branding_document_governance_v1.0.md` es downstream de este documento.
 
 > **Regla principal verificada:** el producto real tiene precedencia sobre cualquier claim de marketing.
 
@@ -40,7 +39,7 @@ MATERIAL LIMITATIONS (LIM-01 .. LIM-06)
     ↓
 PUBLIC CLAIM STATUS (Allowlist D4 vs Blocklist D5)
     ↓
-AUTHORITATIVE INPUT FOR IA v0.2 → v1.0 RECONCILIATION
+AUTHORITATIVE INPUT FOR IA v1.0 RECONCILIATION
 ```
 
 ---
@@ -49,13 +48,13 @@ AUTHORITATIVE INPUT FOR IA v0.2 → v1.0 RECONCILIATION
 
 ## 3.1 Repository Snapshot
 ```text
-repository:       netsky2-tech/omnifood-ni (NHILOS POS / OmniCore Platform)
-branch/tag:       fix/dashboard-v2-review-round-2 (HEAD sobre main)
-commit_sha:       7af1521ea077ce8bc1faed1aa7189a6186eac515
-audit_date:       2026-09-26
+repository:       netsky2-tech/omnifood-ni (NHILOS POS)
+branch/tag:       origin/main
+commit_sha:       b4b5ad27 (re-anclaje 2026-10-08; auditoría original 7af1521ea077ce8bc1faed1aa7189a6186eac515, 2026-09-26)
+audit_date:       2026-10-08
 environment:      Production-grade Local Monorepo
 components:
-  - POS Mobile / Terminal (Flutter 3.x, Dart, SQLite Floor v57)
+  - POS Mobile / Terminal (Flutter 3.x, Dart, SQLite Floor v65)
   - Admin Backend API (NestJS, TypeScript, TypeORM, PostgreSQL RLS)
   - Owner Dashboard Web (React 19, TypeScript, Vite, TailwindCSS)
 ```
@@ -73,8 +72,8 @@ components:
 | ID | Claim | Class | Scope | Code Evidence | Test Evidence | Limitations | Technical Status | Public Status | Website Treatment |
 |---|---|---|---|---|---|---|---|---|---|
 | **PC-OFF-01** | Operación de caja offline-first en terminal local previamente hidratado | `CONTINUITY` | FOH / POS Checkout | `apps/pos_app/lib/domain/usecases/inventory/process_sale_inventory_use_case.dart`, `apps/pos_app/lib/data/daos/sales/invoice_dao.dart` | `apps/pos_app/test/integration/activation_offline_sale_e2e_test.dart` | Aplica a venta, cobro, ticket y receta sobre terminal enrolado con catálogo local en SQLite. Enrolamiento y cambios de catálogo requieren internet (`OD-02-R03`). | `VERIFIED_RUNTIME` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
-| **PC-OFF-02** | Base de datos local SQLite (Floor) como fuente de verdad en caja | `CONTINUITY` | FOH Local Storage | `apps/pos_app/lib/data/database/app_database.dart`, `migrations.dart` (v57) | `apps/pos_app/test/data/database/sales_database_test.dart` | Ninguna para la operación táctica de caja individual. | `VERIFIED_RUNTIME` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
-| **PC-OFF-03** | Sincronización asíncrona bidireccional por deltas con detección de red | `CONTINUITY` | Sync Layer | `apps/pos_app/lib/data/services/sync_service.dart`, `apps/admin_backend/src/modules/inventory/inventory-sync.service.ts` | `apps/pos_app/test/data/services/sync_service_test.dart`, `sync_service_reconnect_test.dart` | Los datos en la nube son eventualmente consistentes; encolamiento local con backoff exponencial. | `VERIFIED_RUNTIME` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
+| **PC-OFF-02** | Base de datos local SQLite (Floor) como fuente de verdad en caja | `CONTINUITY` | FOH Local Storage | `apps/pos_app/lib/data/database/app_database.dart`, `migrations.dart` (v65) | `apps/pos_app/test/data/database/sales_database_test.dart` | Ninguna para la operación táctica de caja individual. | `VERIFIED_RUNTIME` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
+| **PC-OFF-03** | Sincronización asíncrona bidireccional por deltas con detección de red | `CONTINUITY` | Sync Layer | `apps/pos_app/lib/data/services/sync_service.dart`, `apps/admin_backend/src/modules/sales/services/inbound-sync.service.ts`, `apps/admin_backend/src/modules/sales/controllers/sync-batch.controller.ts` | `apps/pos_app/test/data/services/sync_service_test.dart`, `sync_service_reconnect_test.dart` | Los datos en la nube son eventualmente consistentes; encolamiento local con backoff exponencial. | `VERIFIED_RUNTIME` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
 | **PC-OFF-04** | Autenticación de personal offline mediante PIN cifrado (BCrypt) | `SECURITY` | POS Access | `apps/pos_app/lib/data/services/local_auth_service.dart`, `apps/pos_app/lib/ui/widgets/pin_pad.dart` | `apps/pos_app/test/data/services/local_auth_service_test.dart`, `phase1_rbac_override_integration_test.dart` | El empleado debe haber iniciado sesión online al menos una vez para hidratar el hash local. | `VERIFIED_RUNTIME` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
 | **PC-OFF-05** | Red local inalámbrica multi-terminal sin internet (LAN Broker / mDNS) | `CONTINUITY` | Multi-device FOH | `docs/plans/master_execution_roadmap.md` Bloque 18 (shelf huérfano en pubspec.lock, sin broker en lib) | Ninguna en runtime | No implementado. Requiere sincronización vía nube si hay múltiples terminales. | `NOT_IMPLEMENTED` | `PROPOSED` | `DO_NOT_CLAIM / FUTUREWARE` |
 | **PC-FISC-01** | Consecutivos fiscales correlativos inalterables (DGI DT 09-2007) | `FISCAL / COMPLIANCE` | Invoicing | `apps/pos_app/lib/data/services/sales/dgi_numbering_service_impl.dart`, `invoice_dao.dart` | `apps/pos_app/test/data/services/sales/dgi_numbering_service_impl_test.dart` | Requiere configuración previa del prefijo y folio inicial autorizado por la DGI bajo DT 09-2007 (`OD-02-R02`). | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
@@ -86,7 +85,7 @@ components:
 | **PC-PAY-03** | Integración electrónica directa por API / BLE con datáfonos bancarios | `PAYMENT` | Hardware Integration | `apps/pos_app/lib/data/adapters/terminals/local_network_terminal_adapter.dart` (stub/mock) | Ninguna contra hardware bancario real | No existe conexión directa por cable o Bluetooth a terminales bancarias en Nicaragua. | `NOT_IMPLEMENTED` | `PROPOSED` | `DO_NOT_CLAIM / FUTUREWARE` |
 | **PC-PAY-04** | Cobro bimoneda nativo (NIO/USD) con desacoplamiento de tipo de cambio oficial BCN y comercial | `PAYMENT` | Multicurrency | `apps/pos_app/lib/domain/services/sales/currency_checkout_calculator.dart`, `multi_currency_checkout_dialog.dart` | `apps/pos_app/test/domain/services/sales/currency_checkout_calculator_test.dart` | El vuelto se entrega en la moneda seleccionada (típicamente NIO) según configuración de caja. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
 | **PC-PAY-05** | División de cuenta (Split Bill) por comensales o formas de pago mixtas | `PAYMENT` | Checkout | `apps/pos_app/lib/domain/services/sales/split_bill_engine.dart`, `split_bill_dialog.dart` | `apps/pos_app/test/domain/services/sales/split_bill_engine_test.dart` | Aplica a cuentas de salón y órdenes abiertas; valida cuadre exacto de centavos. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
-| **PC-PAY-06** | Captura y liquidación de propina voluntaria (10%) sin gravar IVA | `PAYMENT` | Tipping | `apps/pos_app/lib/domain/services/sales/tip_engine.dart`, `apps/admin_backend/src/migrations/1809200000000-AddInvoiceTipColumns.ts` | `apps/pos_app/test/domain/services/sales/tip_engine_test.dart` | Cumplimiento DGI INV-16.1 (la propina no forma parte de la base imponible del IVA). | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
+| **PC-PAY-06** | Captura y liquidación de propina voluntaria (10%) sin gravar IVA | `PAYMENT` | Tipping | `apps/pos_app/lib/domain/services/sales/tip_engine.dart`, `apps/admin_backend/src/migrations/1809470000000-AddTipsToInvoices.ts` | `apps/pos_app/test/domain/services/sales/tip_engine_test.dart` | Cumplimiento DGI INV-16.1 (la propina no forma parte de la base imponible del IVA). | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
 | **PC-INV-01** | Descuento automático de insumos en tiempo real por receta (BOM) al vender | `FUNCTIONAL` | Inventory / BOM | `apps/pos_app/lib/domain/usecases/inventory/process_sale_inventory_use_case.dart`, `authority_hydration_service.dart` | `apps/pos_app/test/domain/usecases/inventory/process_sale_inventory_use_case_test.dart` | Exclusivo de productos tipo `COMPOUND` con receta publicada. Ventas sin receta no descuentan insumo (WU11). | `VERIFIED_RUNTIME` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
 | **PC-INV-02** | Kardex inmutable basado en deltas incrementales procesados cronológicamente | `DATA / VISIBILITY` | Kardex Engine | `apps/pos_app/lib/domain/services/inventory/kardex_recalculation_engine.dart`, `apps/admin_backend/src/modules/inventory/inventory-movement.service.ts` | `apps/pos_app/test/kardex_retrocalculation_e2e_integration_test.dart` | Los movimientos son inmutables; correcciones se efectúan mediante nuevos movimientos de ajuste. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
 | **PC-INV-03** | Costeo Promedio Ponderado (CPP) automático al asentar facturas de compra | `FUNCTIONAL` | Cost Accounting | `apps/admin_backend/src/modules/inventory/services/inventory-purchase.service.ts`, `movement_engine_impl.dart` | `apps/admin_backend/src/modules/inventory/inventory-purchase.service.spec.ts` | Requiere registrar compras con costo unitario y cantidad recibida válida. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED` |
@@ -131,7 +130,7 @@ Claims rigurosamente autorizados y condicionados para el Website de Marketing de
 - ✅ **"Control de acceso y cambio de cajero instantáneo por PIN en el terminal sin internet."** (PC-OFF-04).
 
 ### Fiscalidad y DGI Nicaragua (`OD-02-R02`)
-- ✅ **"Cumplimiento garantizado con la Disposición Técnica DGI 09-2007 para Sistemas Computarizados de Facturación."** (PC-FISC-01 y PC-FISC-02).
+- ✅ **"Emisión de facturas correlativas conforme a la DT 09-2007 para Sistemas Computarizados de Facturación: numeración consecutiva e inalterable, con prefijo y folio inicial configurados previamente según la autorización de la DGI."** (PC-FISC-01 y PC-FISC-02; condicionado a la parametrización inicial del prefijo y folio autorizados por la DGI).
 - ✅ **"Consecutivos fiscales correlativos y ordenados, sin saltos de folio ni riesgos de duplicación."** (PC-FISC-01; condicionado a parametrización inicial del folio autorizado).
 - ✅ **"Inmutabilidad total: cero borrado de facturas; anulaciones supervisadas exclusivamente mediante Notas de Crédito."** (PC-FISC-02).
 - ✅ **"Validación algorítmica de Cédula y RUC nicaragüense (Personas Naturales y Jurídicas) para evitar errores tipográficos."** (PC-FISC-03).
@@ -193,7 +192,7 @@ Funcionalidades implementadas en código que requieren evidencia visual antes de
 
 # 10. Exit Criteria Sign-off
 
-- [x] El codebase auditado está identificado por commit/versión (`7af1521ea077ce8bc1faed1aa7189a6186eac515`).
+- [x] El codebase auditado está identificado por commit/versión (`b4b5ad27`, re-anclaje 2026-10-08).
 - [x] Se construyó el universo completo de claims candidatos (**34 claims analizados**, resolución `OD-02-R01`).
 - [x] Claims compuestos fueron desagregados en claims unitarios atómicos.
 - [x] Claims funcionales relevantes tienen evidencia concreta de implementación en código (E3).
@@ -212,6 +211,29 @@ Funcionalidades implementadas en código que requieren evidencia visual antes de
 
 # 11. Autoridad Downstream
 
-Este documento versión 1.1 constituye la **fuente autoritativa vinculante de claims** para:
+Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` (§3), este documento versión 1.2 es la **autoridad de claims** del set. Los documentos downstream que consumen sus claims admisibles son:
 1. `nhilos_website_product_marketing_brief_v1.0.md`
-2. La reconciliación y promoción del wireframe de arquitectura de información (`nhilos_website_information_architecture_content_wireframe_v0.2.md` → `v1.0`).
+2. `nhilos_website_information_architecture_content_wireframe_v1.0.md`
+
+---
+
+# Reconciliación v1.2 — Re-anclaje a b4b5ad27
+
+Resultado headline: de los 34 claims auditados, **30 sin cambio, 3 con deriva, 0 ya no sostenibles** tras 575 commits (`7af1521…` → `b4b5ad27`, 2026-10-08).
+
+| # | Corrección | Antes | Después |
+|---|---|---|---|
+| R-1 | Re-anclaje del build de procedencia | `7af1521ea077ce8bc1faed1aa7189a6186eac515` (2026-09-26) | `b4b5ad27` (`origin/main`, 2026-10-08) |
+| R-2 | Evidencia muerta de `PC-OFF-03` | `apps/admin_backend/src/modules/inventory/inventory-sync.service.ts` (inexistente) | `apps/admin_backend/src/modules/sales/services/inbound-sync.service.ts` + `apps/admin_backend/src/modules/sales/controllers/sync-batch.controller.ts` |
+| R-3 | Evidencia muerta de `PC-PAY-06` | `apps/admin_backend/src/migrations/1809200000000-AddInvoiceTipColumns.ts` (inexistente) | `apps/admin_backend/src/migrations/1809470000000-AddTipsToInvoices.ts` |
+| R-4 | Versión de esquema local | SQLite Floor v57 | SQLite Floor **v65** (`apps/pos_app/lib/data/database/app_database.dart`, `@Database(version: 65)`); corregido en §3.1, en la celda de evidencia de `PC-OFF-02` y en este registro |
+
+**Claims con deriva (comportamiento verificado contra `b4b5ad27`):**
+
+| Claim | Nueva evidencia | Nota |
+|---|---|---|
+| `PC-OFF-03` | `modules/sales/services/inbound-sync.service.ts` + `controllers/sync-batch.controller.ts` | Comportamiento ampliado con transporte por dispositivo y `apps/admin_backend/src/modules/identity/guards/sync-transport.guard.ts`; el claim se mantiene |
+| `PC-PAY-06` | `src/migrations/1809470000000-AddTipsToInvoices.ts` | Migración renombrada; comportamiento intacto |
+| `PC-DASH-02` | `apps/owner_dashboard/src/features/dashboard/use-sync-freshness.ts` | Hook reubicado; comportamiento intacto y ampliado con badge `PARTIAL` para huecos históricos |
+
+> **Nota de precisión KPI:** `PC-DASH-01` y `PC-DASH-03` no deben sobredeclarar precisión en el copy: el ticket promedio está acotado al ticket, el denominador de participación de top-products está etiquetado, y los números no probados fueron retirados.

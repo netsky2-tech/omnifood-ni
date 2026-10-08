@@ -1,7 +1,7 @@
 # NHILOS --- Website Information Architecture & Content Wireframe
 
 **Documento:**
-`nhilos_website_information_architecture_content_wireframe.md`\
+`nhilos_website_information_architecture_content_wireframe_v1.0.md`\
 **Versión:** 1.0\
 **Estado:** APPROVED / AUTHORITATIVE WEBSITE INFORMATION ARCHITECTURE &
 CONTENT WIREFRAME\
@@ -9,8 +9,8 @@ CONTENT WIREFRAME\
 **Producto público actual:** NHILOS POS\
 **Tipo:** Information Architecture + Content Wireframe\
 **Upstream principal:**
-`nhilos_website_product_marketing_brief_v1.0.md`\
-**Upstream de marca:** `nhilos_brand_experience_principles_v1.0.md`
+`nhilos_website_product_marketing_brief_v1.0.md` (v1.0)\
+**Upstream de marca:** `nhilos_brand_experience_principles_v1.0.md` (v1.0)
 
 ------------------------------------------------------------------------
 

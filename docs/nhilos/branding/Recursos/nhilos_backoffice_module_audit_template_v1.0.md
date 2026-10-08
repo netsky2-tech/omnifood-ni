@@ -1,10 +1,14 @@
 # NHILOS POS — Module Experience Audit Template
 
+**Documento:** `nhilos_backoffice_module_audit_template_v1.0.md`  
+**Version:** 1.0  
+**Upstream:** `nhilos_backoffice_experience_standard_v1.0.md` (v1.0)
+
 **Use with:** `nhilos_backoffice_experience_standard_v1.0.md`
 
 # <MODULE> — NHILOS Experience Audit
 
-**Version:** 0.1  
+**Version:** 1.0  
 **Status:** EVIDENCE PASS  
 **Date:**  
 **Auditor:**  
