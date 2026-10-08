@@ -1800,18 +1800,62 @@ class CartSummary extends StatelessWidget {
           children: [
             const Text('Subtotal'),
             Text(
-              'C\$ ${((viewModel.subtotal) + (viewModel.totalDiscounts)).toStringAsFixed(2)}',
+              // SOHO-P3: the TRUE gross from the fiscal calculator, not
+              // subtotal + totalDiscounts — that expression over-reports
+              // whenever the aggregate is clamped (e.g. a stale redemption
+              // after the cart shrinks).
+              'C\$ ${(viewModel.grossSubtotal).toStringAsFixed(2)}',
               style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
             ),
           ],
         ),
-        if (viewModel.totalDiscounts > 0)
+        // SOHO-P3: report the discount breakdown honestly. A manual discount
+        // is not a promotion; each component gets its own row and the rows
+        // still sum to the aggregate the fiscal path consumes.
+        if (viewModel.manualDiscount > 0)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Descuentos (Promos)', style: TextStyle(color: NhilosColors.success)),
+              const Text(
+                'Descuento manual',
+                style: TextStyle(color: NhilosColors.success),
+              ),
               Text(
-                '-C\$ ${(viewModel.totalDiscounts).toStringAsFixed(2)}',
+                '-C\$ ${(viewModel.manualDiscount).toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: NhilosColors.success,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        if (viewModel.promoDiscounts > 0)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Promociones',
+                style: TextStyle(color: NhilosColors.success),
+              ),
+              Text(
+                '-C\$ ${(viewModel.promoDiscounts).toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: NhilosColors.success,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        if (viewModel.loyaltyDiscount > 0)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Descuento por puntos',
+                style: TextStyle(color: NhilosColors.success),
+              ),
+              Text(
+                '-C\$ ${(viewModel.loyaltyDiscount).toStringAsFixed(2)}',
                 style: const TextStyle(
                   color: NhilosColors.success,
                   fontFeatures: [FontFeature.tabularFigures()],

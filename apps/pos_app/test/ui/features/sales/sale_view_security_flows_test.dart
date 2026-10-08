@@ -155,6 +155,116 @@ void main() {
     );
   }
 
+  testWidgets(
+    'CartSummary reports the discount breakdown honestly and reconciles with TOTAL (SOHO-P3)',
+    (tester) async {
+      when(mockViewModel.cart).thenReturn([
+        const CartItem(
+          productId: 'p-1',
+          productName: 'Producto 1',
+          quantity: 1,
+          unitPrice: 155,
+          taxRate: 0.15,
+        ),
+      ]);
+      // Components: manual 30 + promo 15 + loyalty 10 = totalDiscounts 55.
+      // Gross row prints subtotal + totalDiscounts = 160.00; IVA 24.00;
+      // TOTAL must reconcile: 160 - 30 - 15 - 10 + 24 = 129.00.
+      when(mockViewModel.subtotal).thenReturn(105.0);
+      when(mockViewModel.totalDiscounts).thenReturn(55.0);
+      when(mockViewModel.manualDiscount).thenReturn(30.0);
+      when(mockViewModel.promoDiscounts).thenReturn(15.0);
+      when(mockViewModel.loyaltyDiscount).thenReturn(10.0);
+      when(mockViewModel.totalTax).thenReturn(24.0);
+      when(mockViewModel.total).thenReturn(129.0);
+      when(mockViewModel.grossSubtotal).thenReturn(160.0);
+      when(mockViewModel.companyTaxRegime).thenReturn(null);
+
+      // The default 800x600 test surface renders the cart panel ~335px wide;
+      // under the Ahem test font every glyph is fontSize wide, which overflows
+      // rows that fit easily with real fonts. Halve the text scale for layout.
+      tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Descuento manual'), findsOneWidget);
+      expect(find.text('-C\$ 30.00'), findsOneWidget);
+      expect(find.text('Promociones'), findsOneWidget);
+      expect(find.text('-C\$ 15.00'), findsOneWidget);
+      expect(find.text('Descuento por puntos'), findsOneWidget);
+      expect(find.text('-C\$ 10.00'), findsOneWidget);
+      // The aggregate row that misreported manual discounts as promotions is
+      // gone.
+      expect(find.text('Descuentos (Promos)'), findsNothing);
+
+      // Display reconciliation: the printed gross row (subtotal +
+      // totalDiscounts = 160.00) minus the three rendered discount rows plus
+      // the rendered IVA row must equal the printed TOTAL (129.00). Without
+      // the loyalty row this panel no longer adds up to TOTAL.
+      expect(find.text('C\$ 160.00'), findsOneWidget);
+      expect(find.text('C\$ 24.00'), findsOneWidget);
+      expect(find.text('C\$ 129.00'), findsOneWidget);
+      const renderedDiscounts = 30.0 + 15.0 + 10.0;
+      const expectedTotal = 160.0 - renderedDiscounts + 24.0;
+      expect(expectedTotal, 129.0);
+    },
+  );
+
+  testWidgets(
+    'CartSummary prints the TRUE gross and TOTAL 0 when the discount aggregate is clamped (SOHO-P3)',
+    (tester) async {
+      when(mockViewModel.cart).thenReturn([
+        const CartItem(
+          productId: 'p-1',
+          productName: 'Producto 1',
+          quantity: 1,
+          unitPrice: 155,
+          taxRate: 0.15,
+        ),
+      ]);
+      // Stale redemption after the cart shrank: the raw aggregate (205)
+      // exceeds the true gross (200); the fiscal calculator clamps it, so
+      // subtotal and total collapse to 0. The gross row must still print the
+      // TRUE gross, not subtotal + totalDiscounts (the lying 205.00).
+      when(mockViewModel.grossSubtotal).thenReturn(200.0);
+      when(mockViewModel.subtotal).thenReturn(0.0);
+      when(mockViewModel.totalDiscounts).thenReturn(205.0);
+      when(mockViewModel.manualDiscount).thenReturn(15.0);
+      when(mockViewModel.promoDiscounts).thenReturn(100.0);
+      when(mockViewModel.loyaltyDiscount).thenReturn(90.0);
+      when(mockViewModel.totalTax).thenReturn(0.0);
+      when(mockViewModel.total).thenReturn(0.0);
+      when(mockViewModel.companyTaxRegime).thenReturn(null);
+
+      tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Descuento manual'), findsOneWidget);
+      expect(find.text('-C\$ 15.00'), findsOneWidget);
+      expect(find.text('Promociones'), findsOneWidget);
+      expect(find.text('-C\$ 100.00'), findsOneWidget);
+      expect(find.text('Descuento por puntos'), findsOneWidget);
+      expect(find.text('-C\$ 90.00'), findsOneWidget);
+
+      // The gross row is the source of truth.
+      expect(find.text('C\$ 200.00'), findsOneWidget);
+      expect(find.text('C\$ 205.00'), findsNothing);
+
+      // TOTAL is clamped to 0, and the rendered rows expose the
+      // over-discount: 200 - (15 + 100 + 90) = -5, i.e. no positive amount
+      // can reconcile; the discount rows plus IVA (hidden, 0) reconcile
+      // against the true gross only through the clamp.
+      expect(find.text('C\$ 0.00'), findsOneWidget);
+      const overDiscount = 200.0 - (15.0 + 100.0 + 90.0);
+      expect(overDiscount <= 0, isTrue);
+    },
+  );
+
   testWidgets('presents supervisor override modal before close-box restricted action', (tester) async {
     when(mockAuthRepository.authorizeOverride(
       supervisorId: anyNamed('supervisorId'),

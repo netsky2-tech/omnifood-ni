@@ -169,6 +169,13 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
       ) as bool);
 
   @override
+  _i11.VoidCopyPrintOutcome get lastVoidCopyPrintOutcome => (super.noSuchMethod(
+        Invocation.getter(#lastVoidCopyPrintOutcome),
+        returnValue: _i11.VoidCopyPrintOutcome.printed,
+        returnValueForMissingStub: _i11.VoidCopyPrintOutcome.printed,
+      ) as _i11.VoidCopyPrintOutcome);
+
+  @override
   bool get lastReprintPrintSucceeded => (super.noSuchMethod(
         Invocation.getter(#lastReprintPrintSucceeded),
         returnValue: false,
@@ -455,6 +462,13 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
   @override
   double get totalDiscounts => (super.noSuchMethod(
         Invocation.getter(#totalDiscounts),
+        returnValue: 0.0,
+        returnValueForMissingStub: 0.0,
+      ) as double);
+
+  @override
+  double get manualDiscount => (super.noSuchMethod(
+        Invocation.getter(#manualDiscount),
         returnValue: 0.0,
         returnValueForMissingStub: 0.0,
       ) as double);
@@ -759,6 +773,15 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
         returnValue: _i18.Future<void>.value(),
         returnValueForMissingStub: _i18.Future<void>.value(),
       ) as _i18.Future<void>);
+
+  @override
+  void clearCheckoutError() => super.noSuchMethod(
+        Invocation.method(
+          #clearCheckoutError,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   void grantSupervisorOverride() => super.noSuchMethod(

@@ -540,7 +540,7 @@ class SaleViewModel extends ChangeNotifier {
   double get pointsToRedeem => _pointsToRedeem;
   double get loyaltyDiscount =>
       _loyaltyService.calculateDiscountFromPoints(_pointsToRedeem);
-  double get promoDiscounts => _totalDiscounts;
+  double get promoDiscounts => _promotionDiscount;
 
   RedemptionValidationResult applyLoyaltyPoints(double points) {
     if (_selectedCustomer == null) {
@@ -552,7 +552,11 @@ class SaleViewModel extends ChangeNotifier {
       0.0,
       (sum, item) => sum + item.subtotal + item.modifiersTotal,
     );
-    final currentSubtotal = rawSubtotal - _totalDiscounts;
+    // orderTotal acts ONLY as a ceiling on the redeemable amount, so it must
+    // be the residual the customer actually pays after ALL already-granted
+    // discounts. A larger ceiling would let points be redeemed against value
+    // the manual or promotion discount already gave away.
+    final currentSubtotal = rawSubtotal - _promotionDiscount - _manualDiscount;
     final result = _loyaltyService.validateRedemption(
       customer: _selectedCustomer!,
       pointsToRedeem: points,
@@ -935,7 +939,7 @@ class SaleViewModel extends ChangeNotifier {
       return;
     }
 
-    _totalDiscounts += discountAmount;
+    _manualDiscount += discountAmount;
     _errorMessage = null;
     notifyListeners();
   }
@@ -1030,8 +1034,16 @@ class SaleViewModel extends ChangeNotifier {
     return item.grossAmount;
   }
 
-  double _totalDiscounts = 0.0;
-  double get totalDiscounts => _totalDiscounts + loyaltyDiscount;
+  // SOHO-P3: manual and promotion discounts are INDEPENDENT accumulators.
+  // One shared accumulator let `_applyPromotions()` erase a manual discount
+  // (and vice versa) on every cart mutation. `totalDiscounts` stays the
+  // fiscal aggregate the calculator, mapper, receipt and sync already
+  // consume: promo + manual + loyalty.
+  double _promotionDiscount = 0.0;
+  double _manualDiscount = 0.0;
+  double get totalDiscounts =>
+      _promotionDiscount + _manualDiscount + loyaltyDiscount;
+  double get manualDiscount => _manualDiscount;
 
   TipType _tipType = TipType.none;
   double _customTipPercentage = 0.0;
@@ -1119,7 +1131,7 @@ class SaleViewModel extends ChangeNotifier {
       cart: _cart,
       promotions: _promotions,
     );
-    _totalDiscounts = result.totalDiscount;
+    _promotionDiscount = result.totalDiscount;
   }
 
   Future<void> loadProducts() async {
@@ -1437,7 +1449,8 @@ class SaleViewModel extends ChangeNotifier {
   void clearCart() {
     _cart.clear();
     _isGlobalTaxExempt = false;
-    _totalDiscounts = 0.0;
+    _promotionDiscount = 0.0;
+    _manualDiscount = 0.0;
     _pointsToRedeem = 0.0;
     _activeLoadedHoldTicket = null;
     _lastPostPaidFeedback = null;
