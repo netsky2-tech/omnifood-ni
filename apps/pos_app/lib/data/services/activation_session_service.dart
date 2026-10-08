@@ -1,9 +1,12 @@
+import 'dart:developer' as developer;
+
 import '../database/app_database.dart';
 import '../models/activation/activation_attempt_local_entity.dart';
 import 'activation_attempt_discovery_service.dart';
 import 'activation_controlled_sale_runner.dart';
 import 'activation_pre_offline_runner.dart';
 import 'activation_reconnect_sync_runner.dart';
+import 'activation_verification_sale_cleanup_runner.dart';
 
 /// Named blocker codes surfaced by [ActivationSessionService.prepare].
 class ActivationSessionBlockers {
@@ -85,17 +88,20 @@ class ActivationSessionService {
     required ActivationPreOfflineRunner preOfflineRunner,
     required ActivationControlledSaleRunner controlledSaleRunner,
     required ActivationReconnectSyncRunner reconnectSyncRunner,
+    ActivationVerificationSaleCleanupRunner? cleanupRunner,
   })  : _database = database,
         _discovery = discoveryService,
         _preOfflineRunner = preOfflineRunner,
         _controlledSaleRunner = controlledSaleRunner,
-        _reconnectSyncRunner = reconnectSyncRunner;
+        _reconnectSyncRunner = reconnectSyncRunner,
+        _cleanupRunner = cleanupRunner;
 
   final AppDatabase _database;
   final ActivationAttemptDiscoveryService _discovery;
   final ActivationPreOfflineRunner _preOfflineRunner;
   final ActivationControlledSaleRunner _controlledSaleRunner;
   final ActivationReconnectSyncRunner _reconnectSyncRunner;
+  final ActivationVerificationSaleCleanupRunner? _cleanupRunner;
 
   /// Invoked after the reconnect-sync phase reports ACTIVATED or
   /// ACTIVATED_WITH_WARNING. Used to trigger the device-sync bootstrap,
@@ -212,6 +218,25 @@ class ActivationSessionService {
     if (result.isSuccess &&
         (result.attemptStatus == 'ACTIVATED' ||
             result.attemptStatus == 'ACTIVATED_WITH_WARNING')) {
+      // #77: Automatically clean up (void) the verification sale so the
+      // terminal does not leave a test sale active in the fiscal ledger.
+      if (_cleanupRunner != null) {
+        try {
+          await _cleanupRunner.voidVerificationSale(
+            VoidVerificationSaleParams(
+              tenantId: attempt.tenantId,
+              attemptId: attempt.attemptId,
+              reason: 'Anulación de venta de verificación de activación',
+            ),
+          );
+        } catch (e) {
+          developer.log(
+            'Verification sale cleanup after activation failed (non-blocking): $e',
+            name: 'ActivationSessionService',
+          );
+        }
+      }
+
       try {
         await onActivationComplete?.call();
       } catch (_) {
@@ -221,6 +246,28 @@ class ActivationSessionService {
     }
 
     return result;
+  }
+
+  /// Explicitly cleans up (voids) the verification sale for the current attempt.
+  Future<VoidVerificationSaleResult> cleanupVerificationSale({
+    String reason = 'Anulación de venta de verificación de activación',
+  }) async {
+    final attempt = _requirePreparedAttempt();
+    if (_cleanupRunner == null) {
+      return const VoidVerificationSaleResult(
+        isSuccess: false,
+        errors: [
+          'CLEANUP_RUNNER_UNAVAILABLE: Verification sale cleanup runner is not registered',
+        ],
+      );
+    }
+    return _cleanupRunner.voidVerificationSale(
+      VoidVerificationSaleParams(
+        tenantId: attempt.tenantId,
+        attemptId: attempt.attemptId,
+        reason: reason,
+      ),
+    );
   }
 
   /// Refuses with a named error when prepare() has not resolved an attempt.

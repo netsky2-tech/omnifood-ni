@@ -4,6 +4,7 @@ import '../../../../data/models/activation/activation_attempt_local_entity.dart'
 import '../../../../data/services/activation_controlled_sale_runner.dart';
 import '../../../../data/services/activation_pre_offline_runner.dart';
 import '../../../../data/services/activation_reconnect_sync_runner.dart';
+import '../../../../data/services/activation_verification_sale_cleanup_runner.dart';
 import '../../../../data/services/activation_priming_service.dart';
 import '../../../../data/services/activation_session_service.dart';
 import '../../../../data/ports/activation_priming_port.dart';
@@ -355,6 +356,13 @@ class ActivationSessionViewModel extends ChangeNotifier {
         _errorMessage = friendlyError(result.errors);
       }
     });
+  }
+
+  /// Cleans up (voids) the verification sale through the session service.
+  Future<VoidVerificationSaleResult> cleanupVerificationSale({
+    String reason = 'Anulación de venta de verificación de activación',
+  }) async {
+    return _sessionService.cleanupVerificationSale(reason: reason);
   }
 
   Future<User> _requireCurrentUser() async {
