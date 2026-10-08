@@ -30,6 +30,8 @@
 
 **Incidente de superficie (resuelto):** el primer intento de regeneración usó `build_runner build --delete-conflicting-outputs --build-filter=<un mock>`; `--delete-conflicting-outputs` **no** está acotado por `--build-filter` y borró ~90 archivos generados trackeados. El worker los recuperó con un build_runner completo, lo que a su vez dejó 8 archivos fuera de superficie modificados por deriva de regeneración (`app_database.g.dart` y 7 `*_test.mocks.dart` de sales). El padre los revirtió con `git restore`: ningún cambio de #76 los necesita.
 
+**Estado:** ✅ CERRADA — Cherry-picked como `b48cf7a7` al feature branch.
+
 ---
 
 ## T2 · #74 — La conciliación de vouchers no refresca la vista
@@ -47,9 +49,13 @@
 
 **Superficie:** `apps/pos_app/lib/ui/features/cash/card_voucher_reconciliation_view_model.dart`, `apps/pos_app/lib/ui/features/cash/widgets/card_voucher_reconciliation_dialog.dart`, `apps/pos_app/lib/ui/features/cash/widgets/close_shift_dialog.dart`, `apps/pos_app/lib/ui/features/cash/cash_shift_view_model.dart` (+ tests en `test/ui/features/cash/`).
 
-**Checks:** test que concilia un voucher dentro del diálogo y afirma que el contador del padre baja **sin** cerrar el diálogo; idem para el override. `flutter analyze` acotado + `flutter test --concurrency=2 test/ui/features/cash`.
+**Checks:** `flutter analyze lib/ui/features/cash` → No issues found. `flutter test --concurrency=2 test/ui/features/cash/` → **+68 All tests passed** (incl. test de #74).
 
-**Commit evidencia:** —
+**Commit evidencia:** `6a87218e` fix(pos): refresh pending-voucher count after each reconciliation.
+
+**Implementación real:** hook `onVoucherResolved` en `CardVoucherReconciliationViewModel` (invocado en éxito en reconcile y override), `notifyListeners()` añadido en `refreshPendingVouchersCount()`, gate de Corte Z re-evaluado contra contador vivo, `.then()` del cierre mantenido como safety net idempotente.
+
+**Estado:** ✅ CERRADA — Cherry-picked como `6a87218e` al feature branch.
 
 ---
 
@@ -70,9 +76,13 @@
 
 **Superficie:** `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart`, `apps/pos_app/lib/ui/features/sales/sales_history_view.dart` (+ tests).
 
-**Checks:** unit test con `autoPrintInvoice=false` que afirme cero llamadas de impresión; test con impresora que falla que afirme el mensaje de anulación-parcial.
+**Checks:** `flutter analyze lib/presentation/features/sales lib/ui/features/sales` → No issues found. `flutter test --concurrency=2 test/presentation/features/sales/sale_view_model_void_test.dart` → **+18 All tests passed**. `flutter test --concurrency=2 test/ui/features/sales/sales_history_void_action_test.dart` → **+11 All tests passed**.
 
-**Commit evidencia:** —
+**Commit evidencia:** `2fc887d6` fix(pos): gate the ANULADO copy on auto-print and report its outcome.
+
+**Implementación real:** tri-estado `VoidCopyPrintOutcome { printed, notRequested, failed }`, gate en `autoPrintInvoice` en el mismo momento que el resto de print paths, SnackBar con 3 mensajes distintos (impreso / no solicitado / falló con motivo), el void nunca se revierte ni se reporta como fallo por culpa de la impresión. El cleanup runner (`activation_verification_sale_cleanup_runner.dart`) voids por el repositorio y nunca imprimió → su comportamiento es inalterado.
+
+**Estado:** ✅ CERRADA — Cherry-picked como `2fc887d6` al feature branch.
 
 ---
 
@@ -101,9 +111,18 @@
 
 ---
 
-## Orden de ejecución
+## Consolidación
 
-T1 → T2 → T3 → T4, cada una: worker en este worktree → verify con checks acotados → work-unit commit en `fix/soho-p2-level2-ux-robustness`.
+T1-T4 consolidados en `fix/soho-p2-level2-ux-robustness` (worktree `omnifood-ni-l2`) via cherry-pick:
+
+| Tarea | Commit | Tests | Revisión nativa | Observaciones |
+|---|---|---|---|---|
+| T1 #76 | `b48cf7a7` | 54+19 pass, analyzer limpio | `review-4e7f4a64140ef438` approved, quemada | 3 findings informativos no bloqueantes (documentados) |
+| T2 #74 | `6a87218e` | 68/68 cash tests, analyzer limpio | Pendiente (se ejecuta en branch consolidado) | Hook `onVoucherResolved`, `notifyListeners()` añadido |
+| T3 #79 | `2fc887d6` | VM 18/18 + widget 11/11, analyzer limpio | `review-bc8f91547c3a016f` approved, quemada | Tri-estado `printed/notRequested/failed` |
+| T4 #78 | `6eb17f26` | Flutter 32/32, Jest 54/54, analyzer limpio | `review-8a44d915190ea024` approved sin hallazgos, quemada | `readOhacPosBuild()` real, write-once backend |
+
+Checks acotados post-consolidación: cash 68/68 · void 29/29 · activation 32/32.
 
 ## Restricciones del host
 
