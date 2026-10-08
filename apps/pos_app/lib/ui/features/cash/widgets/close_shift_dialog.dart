@@ -96,10 +96,16 @@ Future<void> showCloseShiftFlow(
         ],
       ),
     );
-    if (goToReconcile == true && context.mounted) {
-      await openVoucherReconciliationDialog(context, vm);
-    }
-    return;
+    if (goToReconcile != true) return;
+    if (!context.mounted) return;
+    await openVoucherReconciliationDialog(context, vm);
+    // Issue #74: re-evaluate the fiscal gate against the LIVE count — each
+    // successful in-dialog resolution already refreshed the parent VM, so
+    // if the operator reconciled/overrode every voucher inside the dialog
+    // they proceed straight to the blind count WITHOUT dismissing and
+    // re-entering the whole close flow. Vouchers still pending → back out;
+    // the operator can re-enter (the gate re-reads on every invocation).
+    if (vm.hasPendingVouchers) return;
   }
 
   await showDialog<bool>(
@@ -133,8 +139,9 @@ String openAccountsBlockMessage(List<HoldTicket> accounts) {
       'Luego vuelva a intentar el cierre.';
 }
 
-/// Opens the voucher reconciliation dialog for [vm]'s payment DAO and
-/// refreshes the pending-voucher count once it closes.
+/// Opens the voucher reconciliation dialog for [vm]'s payment DAO. The
+/// pending-voucher count refreshes after EACH successful in-dialog
+/// resolution (Issue #74) and once more on close (idempotent safety net).
 Future<void> openVoucherReconciliationDialog(
   BuildContext context,
   CashShiftViewModel vm,
@@ -146,6 +153,12 @@ Future<void> openVoucherReconciliationDialog(
       create: (_) => CardVoucherReconciliationViewModel(
         paymentDao: vm.paymentDao!,
         currentUserId: vm.currentUserId,
+        // Issue #74: refresh the parent count after EACH successful
+        // resolution while the dialog is still open, so the pending-voucher
+        // badge, the 'Vouchers (n)' label and the fiscal gate reflect the
+        // live state. The `.then(...)` below stays as an idempotent
+        // close-time safety net — no longer the only mechanism.
+        onVoucherResolved: () => vm.refreshPendingVouchersCount(),
       )..loadPendingVouchers(),
       child: const CardVoucherReconciliationDialog(),
     ),

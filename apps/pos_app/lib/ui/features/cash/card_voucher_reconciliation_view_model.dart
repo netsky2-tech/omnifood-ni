@@ -6,6 +6,15 @@ class CardVoucherReconciliationViewModel extends ChangeNotifier {
   final PaymentDao paymentDao;
   final String currentUserId;
 
+  /// Issue #74: optional parent-refresh hook, invoked after EACH successful
+  /// voucher resolution (reconcile or manual override) so the parent
+  /// CashShiftViewModel re-reads the pending count WHILE the dialog is still
+  /// open — the badge, the 'Vouchers (n)' button and the Corte Z fiscal gate
+  /// must not wait for the dialog to be dismissed to see the fresh count.
+  /// It is never called on a failed/rejected resolution (both methods return
+  /// false there), so a failed write can never pretend the count dropped.
+  final Future<void> Function()? onVoucherResolved;
+
   List<PaymentEntity> _pendingVouchers = [];
   bool _isLoading = false;
   String? _errorMessage;
@@ -13,6 +22,7 @@ class CardVoucherReconciliationViewModel extends ChangeNotifier {
   CardVoucherReconciliationViewModel({
     required this.paymentDao,
     required this.currentUserId,
+    this.onVoucherResolved,
   });
 
   List<PaymentEntity> get pendingVouchers =>
@@ -90,6 +100,13 @@ class CardVoucherReconciliationViewModel extends ChangeNotifier {
 
       await paymentDao.updatePayment(reconciled);
       _pendingVouchers = await paymentDao.getPendingCardPayments();
+      // Issue #74: only on SUCCESS — push the fresh count to the parent
+      // while the dialog stays open. The close-time `.then(...)` refresh in
+      // openVoucherReconciliationDialog remains as an idempotent safety net.
+      final notifyParent = onVoucherResolved;
+      if (notifyParent != null) {
+        await notifyParent();
+      }
       return true;
     } catch (e) {
       _errorMessage = 'Error al conciliar voucher: $e';
@@ -154,6 +171,12 @@ class CardVoucherReconciliationViewModel extends ChangeNotifier {
 
       await paymentDao.updatePayment(overrode);
       _pendingVouchers = await paymentDao.getPendingCardPayments();
+      // Issue #74: same per-success parent refresh as [reconcileVoucher] —
+      // the override path must refresh the live count too.
+      final notifyParent = onVoucherResolved;
+      if (notifyParent != null) {
+        await notifyParent();
+      }
       return true;
     } catch (e) {
       _errorMessage = 'Error al registrar override: $e';
