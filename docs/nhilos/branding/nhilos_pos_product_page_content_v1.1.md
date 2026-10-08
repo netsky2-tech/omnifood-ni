@@ -1456,6 +1456,80 @@ La autoridad de publicación permanece `NOT GRANTED`. La página solo puede pasa
 5. la verificación de claims del registro esté completa; y  
 6. los Gates A–E hayan pasado formalmente.
 
-Mientras alguna de estas condiciones permanezca abierta, este documento es la referencia autoritativa de contenido, no un permiso de publicación.
+Mientras alguna de estas condiciones permanezca abierta, este documento permanece como el contrato de contenido vigente, no como un permiso de publicación. Su rol está asignado en `nhilos_branding_document_governance_v1.0.md`.
+
+---
+
+# Anexo A — Matriz de Trazabilidad de Claims (Product Page → OD-02)
+
+**Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, §Reglas) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.2.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
+
+| Claim ID | Sección | Assertion (resumen) | OD-02 ID(s) | Tipo | Estado |
+| :---- | :---- | :---- | :---- | :---- | :---- |
+| PP-001 | §3 Product Promise | Punto de venta para registrar operaciones comerciales. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
+| PP-002 | §3 Product Promise | Relaciona el registro de venta con capacidades operativas asociadas. | N/A | MARKETING | MARKETING |
+| PP-003 | §3 Product Promise | El flujo permite trabajar con claridad. | N/A | MARKETING | MARKETING |
+| PP-004 | §3 Product Promise | La promesa de continuidad aplica a escenarios soportados, no de forma absoluta. | N/A | MARKETING | MARKETING |
+| PC-001 | §4 Product in Context | Contempla escenarios de atención en mostrador. | PC-OFF-01 | TÉCNICO | RESPALDADO |
+| PC-002 | §4 Product in Context | Contempla cuentas abiertas o mesas en modalidades soportadas. | N/A | TÉCNICO | SIN BASE OD-02 |
+| PC-003 | §4 Product in Context | Las ventas pueden relacionarse con movimientos de inventario configurados. | PC-INV-01, PC-INV-04 | TÉCNICO | RESPALDADO |
+| PC-004 | §4 Product in Context | La experiencia mostrada corresponde a la versión vigente. | N/A | MARKETING | MARKETING |
+| CW-001 | §5 Core Workflows | Permite seleccionar productos y construir una cuenta. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
+| CW-002 | §5 Core Workflows | El flujo puede incluir modificadores configurados. | N/A | TÉCNICO | SIN BASE OD-02 |
+| CW-003 | §5 Core Workflows | Registra pagos con los métodos disponibles. | PC-PAY-01, PC-PAY-04, PC-PAY-06 | TÉCNICO | RESPALDADO |
+| CW-004 | §5 Core Workflows | El esquema de tarjeta puede requerir confirmación manual posterior al datáfono. | PC-PAY-01 | TÉCNICO | RESPALDADO |
+| CW-005 | §5 Core Workflows | Existen cuentas abiertas/retención en modalidades soportadas. | N/A | TÉCNICO | SIN BASE OD-02 |
+| CW-006 | §5 Core Workflows | Existen superficies de consulta para información operativa. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CT-001 | §6 Continuity | Enfoque offline-first en los escenarios definidos. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
+| CT-002 | §6 Continuity | Determinadas operaciones pueden continuar localmente durante una desconexión soportada. | PC-OFF-01 | TÉCNICO | RESPALDADO |
+| CT-003 | §6 Continuity | Existe sincronización posterior de información pendiente. | PC-OFF-03 | TÉCNICO | RESPALDADO |
+| CT-004 | §6 Continuity | El comportamiento depende del escenario soportado. | N/A | MARKETING | MARKETING |
+| CT-005 | §6 Continuity | El usuario conoce los límites y estados pendientes relevantes. | N/A | TÉCNICO | SIN BASE OD-02 |
+| CV-001 | §7 Control / Visibility | Registra información de ventas consultable. | PC-OFF-02, PC-DASH-01, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CV-002 | §7 Control / Visibility | Existen capacidades de inventario y consulta de movimientos. | PC-INV-02, PC-INV-03, PC-INV-05, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CV-003 | §7 Control / Visibility | Determinadas acciones pueden quedar registradas en bitácora. | PC-SEC-02, PC-SEC-03 | TÉCNICO | RESPALDADO |
+| CV-004 | §7 Control / Visibility | La información presentada refleja su frescura y alcance. | PC-DASH-02 | TÉCNICO | RESPALDADO |
+| CV-005 | §7 Control / Visibility | Los indicadores y términos públicos tienen semántica aprobada. | N/A | MARKETING | MARKETING |
+| RL-001 | §8 Roles | El POS soporta tareas de venta y cobro. | PC-OFF-01, PC-PAY-01, PC-PAY-04 | TÉCNICO | RESPALDADO |
+| RL-002 | §8 Roles | Existen permisos diferenciados para acciones específicas. | PC-SEC-02 | TÉCNICO | RESPALDADO |
+| RL-003 | §8 Roles | Existen superficies de consulta para responsables del negocio. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| RL-004 | §8 Roles | Las capacidades mostradas corresponden a los permisos reales. | N/A | MARKETING | MARKETING |
+| GL-001 | §9 Gallery | Las capturas corresponden al producto vigente. | N/A | MARKETING | MARKETING |
+| GL-002 | §9 Gallery | Cada imagen representa el workflow indicado. | N/A | MARKETING | MARKETING |
+| GL-003 | §9 Gallery | Los datos visibles están autorizados y contextualizados. | N/A | MARKETING | MARKETING |
+| GL-004 | §9 Gallery | Los estados y cifras no fueron alterados de forma engañosa. | N/A | MARKETING | MARKETING |
+| IM-001 | §10 Implementation | NHILOS cuenta con un proceso de implementación. | PC-ONB-03 | TÉCNICO | RESPALDADO |
+| IM-002 | §10 Implementation | La implementación contempla preparación y verificación. | PC-ONB-01, PC-ONB-03 | TÉCNICO | RESPALDADO |
+| IM-003 | §10 Implementation | La capacitación forma parte del alcance cuando así se acuerda. | N/A | MARKETING | MARKETING |
+| IM-004 | §10 Implementation | El go-live depende de criterios definidos. | PC-ONB-03 | TÉCNICO | RESPALDADO |
+| IM-005 | §10 Implementation | Los tiempos y entregables publicados reflejan compromisos vigentes. | N/A | MARKETING | MARKETING |
+| HC-001 | §11 Hardware / Compatibility | Tiene combinaciones de hardware soportadas. | PC-HW-01, PC-HW-02, PC-HW-03 | TÉCNICO | RESPALDADO |
+| HC-002 | §11 Hardware / Compatibility | El dispositivo mostrado corresponde a una configuración probada. | N/A | MARKETING | MARKETING |
+| HC-003 | §11 Hardware / Compatibility | Los periféricos indicados funcionan en el escenario descrito. | PC-HW-01, PC-HW-02 | TÉCNICO | RESPALDADO |
+| HC-004 | §11 Hardware / Compatibility | Los requisitos y límites se comunican antes de la implementación. | N/A | MARKETING | MARKETING |
+| SP-001 | §12 Support | Existe un canal/proceso de soporte para clientes cubiertos. | N/A | MARKETING | MARKETING |
+| SP-002 | §12 Support | El cliente puede conocer el alcance del servicio aplicable. | N/A | MARKETING | MARKETING |
+| SP-003 | §12 Support | El proceso contempla seguimiento de incidentes. | N/A | MARKETING | MARKETING |
+| SP-004 | §12 Support | Horarios y compromisos publicados son contractualmente válidos. | N/A | MARKETING | MARKETING |
+| DM-001 | §14 Demo CTA | El visitante puede solicitar una demo. | N/A | MARKETING | MARKETING |
+| DM-002 | §14 Demo CTA | La demo se prepara según el contexto compartido. | N/A | MARKETING | MARKETING |
+| DM-003 | §14 Demo CTA | La información del formulario se trata conforme a la política publicada. | N/A | MARKETING | MARKETING |
+| DM-004 | §14 Demo CTA | Los mensajes de confirmación reflejan el estado real del envío. | N/A | MARKETING | MARKETING |
+
+Notas de la matriz:
+
+- PP-004 y CT-004 son enunciados de acotación de promesa (promise framing): no afirman capacidad técnica; el límite que referencian está declarado en el OD-02 como limitación de `PC-OFF-01` (LIM-01), no como claim autónomo.
+- `PC-003`/`CV-002` heredan la limitación de LIM-05: la deducción de insumos aplica solo a productos `COMPOUND` con receta publicada.
+- Los claims `MARKETING` con OD-02 `N/A` no afirman capacidad técnica del producto; si en revisión posterior se reformularan como capacidades, deberán re-ingresar a esta matriz con anclaje OD-02.
+
+## Claims sin base en el OD-02
+
+Los siguientes claims afirman una capacidad técnica sin ningún claim del OD-02 que la respalde. Su resolución **está pendiente** y no se decide unilateralmente en este anexo:
+
+- **PC-002** — Cuentas abiertas o mesas en modalidades soportadas. *Recomendación (pendiente de resolución):* `PC-PAY-05` (Split Bill) acredita la existencia de órdenes abiertas de salón, pero no cubre atómicamente la retención, recuperación y concurrencia de cuentas; o bien se extiende el OD-02 con un claim atómico de retención de cuentas abiertas, o el claim se retira de publicación hasta ese anclaje.
+- **CW-002** — El flujo puede incluir modificadores configurados. *Recomendación (pendiente de resolución):* ningún claim del OD-02 audita grupos de modificadores y sus reglas; o bien se extiende el OD-02 con un claim atómico de modificadores configurables, o el workflow de personalización se retira de publicación.
+- **CW-005** — Existen cuentas abiertas/retención en modalidades soportadas. *Recomendación (pendiente de resolución):* misma disposition que `PC-002` (extensión del OD-02 o retiro de publicación).
+- **CT-005** — El usuario conoce los límites y estados pendientes relevantes. *Recomendación (pendiente de resolución):* la visibilidad de estados pendientes en el POS no está auditada en el OD-02; o bien se extiende el OD-02 con un claim atómico de transparencia de estados en el POS, o el claim se re-enfoca al lado dashboard re-anclándolo a `PC-DASH-02` (frescura de sincronización), o se retira de publicación.
+---
 
 **Final disposition:** `CONTENT CONTRACT APPROVED — PUBLICATION BLOCKED UNTIL GATES PASS`.

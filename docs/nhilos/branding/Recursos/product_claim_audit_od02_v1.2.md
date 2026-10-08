@@ -237,3 +237,46 @@ Resultado headline: de los 34 claims auditados, **30 sin cambio, 3 con deriva, 0
 | `PC-DASH-02` | `apps/owner_dashboard/src/features/dashboard/use-sync-freshness.ts` | Hook reubicado; comportamiento intacto y ampliado con badge `PARTIAL` para huecos históricos |
 
 > **Nota de precisión KPI:** `PC-DASH-01` y `PC-DASH-03` no deben sobredeclarar precisión en el copy: el ticket promedio está acotado al ticket, el denominador de participación de top-products está etiquetado, y los números no probados fueron retirados.
+
+---
+
+# Índice inverso — Claims publicados que citan cada claim del OD-02
+
+**Propósito.** Trazabilidad inversa exigida por `G-04` (`nhilos_branding_document_governance_v1.0.md`): para cada claim técnico del OD-02, qué Claim IDs de la página de producto (`nhilos_pos_product_page_content_v1.1.md`, Anexo A) lo citan como respaldo. Los Claim IDs de la página son IDs de slot de contenido, no IDs de capacidad técnica; no existe correspondencia 1:1. Un claim `huérfano` no es defecto por sí solo: si su estado público es `APPROVED_WEBSITE`, la omisión indica un hueco de cobertura de la página; si es `DO_NOT_CLAIM / FUTUREWARE`, la omisión es la conducta correcta.
+
+| OD-02 ID | Product Page Claim IDs que lo citan | Estado (citado / huérfano) |
+| :---- | :---- | :---- |
+| PC-OFF-01 | PP-001, PC-001, CW-001, CT-001, CT-002, RL-001 | citado |
+| PC-OFF-02 | PP-001, CW-001, CT-001, CV-001 | citado |
+| PC-OFF-03 | CT-003 | citado |
+| PC-OFF-04 | — | huérfano |
+| PC-OFF-05 | — | huérfano (futureware, no debe citarse) |
+| PC-FISC-01 | — | huérfano |
+| PC-FISC-02 | — | huérfano |
+| PC-FISC-03 | — | huérfano |
+| PC-FISC-04 | — | huérfano (futureware, no debe citarse) |
+| PC-PAY-01 | CW-003, CW-004, RL-001 | citado |
+| PC-PAY-02 | — | huérfano |
+| PC-PAY-03 | — | huérfano (futureware, no debe citarse) |
+| PC-PAY-04 | CW-003, RL-001 | citado |
+| PC-PAY-05 | — | huérfano |
+| PC-PAY-06 | CW-003 | citado |
+| PC-INV-01 | PC-003 | citado |
+| PC-INV-02 | CV-002 | citado |
+| PC-INV-03 | CV-002 | citado |
+| PC-INV-04 | PC-003 | citado |
+| PC-INV-05 | CV-002 | citado |
+| PC-INV-06 | — | huérfano |
+| PC-HW-01 | HC-001, HC-003 | citado |
+| PC-HW-02 | HC-001, HC-003 | citado |
+| PC-HW-03 | HC-001 | citado |
+| PC-SEC-01 | — | huérfano |
+| PC-SEC-02 | CV-003, RL-002 | citado |
+| PC-SEC-03 | CV-003 | citado |
+| PC-DASH-01 | CW-006, CV-001, RL-003 | citado |
+| PC-DASH-02 | CW-006, CV-004, RL-003 | citado |
+| PC-DASH-03 | CW-006, RL-003 | citado |
+| PC-DASH-04 | CW-006, CV-001, CV-002, RL-003 | citado |
+| PC-ONB-01 | IM-002 | citado |
+| PC-ONB-02 | — | huérfano |
+| PC-ONB-03 | IM-001, IM-002, IM-004 | citado |
