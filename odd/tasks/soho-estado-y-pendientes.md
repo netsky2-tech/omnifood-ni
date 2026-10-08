@@ -90,12 +90,12 @@ R-16 era: *el sync se estanca en silencio y el badge miente*. **Causa raíz repa
 
 ### P2 — Operación diaria
 - **#73** Inventario BOH y flujo, con R-10 (el panel de sync atribuye a la red lo que es inventario) y R-13 (sin aviso de ventas con inventario no aplicado). Visto: INSUMOS vacío y los 58 productos con badge rojo **SIN STOCK** (no bloquea vender).
-- **#74** La conciliación de vouchers **no refresca la vista**.
+- [#74 ✅](odd/tasks/soho-p2-level2-ux-robustness.md) La conciliación de vouchers **no refresca la vista**. Resuelto: hook `onVoucherResolved` por cada voucher conciliado/override, `notifyListeners()` en `refreshPendingVouchersCount()`, gate de Corte Z re-evaluado contra contador vivo. `6a87218e`.
 - **#75** Defaults de provisioning peligrosos + FX **sin validación de rango**.
-- **#76** El preview de ticket lee config cacheada y niega el régimen fiscal.
+- [#76 ✅](odd/tasks/soho-p2-level2-ux-robustness.md) El preview de ticket lee config cacheada y niega el régimen fiscal. Resuelto: `getTaxRegime()` fresh read al momento de preview y test print. `b48cf7a7`.
 - **#77** La activación deja la **venta de verificación sin limpiar** (el runner existe y no se registró).
-- **#78** La activación quedó con `pos_build` vacío y un follow-up abierto.
-- **#79** La copia ANULADO se imprime sin condición y su resultado no se muestra.
+- [#78 ✅](odd/tasks/soho-p2-level2-ux-robustness.md) La activación quedó con `pos_build` vacío y un follow-up abierto. Resuelto: `readOhacPosBuild()` real en el runner, estampado write-once en el backend. `59174c18` → `6eb17f26`.
+- [#79 ✅](odd/tasks/soho-p2-level2-ux-robustness.md) La copia ANULADO se imprime sin condición y su resultado no se muestra. Resuelto: gate en `autoPrintInvoice`, tri-estado `printed/notRequested/failed`. `311bbfc9` → `2fc887d6`.
 - **#80** R-4: el mensaje de error queda oculto bajo el carrito.
 - **#91** El editor de opciones rotula el dinero con `$` en vez de `C$`.
 
