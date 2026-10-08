@@ -33,6 +33,9 @@ Cerradas antes de implementación. Los batches referencian estas reglas en lugar
 | **D15** | **La custodia serializada nunca se resuelve por last-write-wins.** Toda ambigüedad va a una **cola de reconciliación** con decisión humana, conservando ambos registros financieros. Se apoya en el patrón de alertas ya existente; falta generalizarlo. | #818, #819 |
 | **D16** | **Kit comercial ≠ receta.** Un kit descarga componentes y tiene precio propio; una receta produce un ítem. `COMPOUND` está atado a la rama de recetas (`recipe.service.ts:36,43`), así que **no** sirve para kits. | #821 |
 | **D17** | **Grado/condición es atributo de la instancia, no de la clase.** Habilita usados, refurbished y mercancía con empaque dañado con un solo mecanismo. | #821 |
+| **D18** | **El producto es POS de tienda física.** Multi-canal (web/marketplace sobre un stock compartido) queda **fuera de alcance** por decisión del 2026-10-08, no aplazado. Consecuencia de diseño: la disponibilidad **no** necesita nacer reservable entre canales, lo que simplifica la proyección de existencias de la Fase 2. | #821 Q1 |
+| **D19** | **Apartado con prima y cuotas es una capacidad propia**, no parte de cartera. Tiene ciclo de vida propio (reserva del equipo, prima, calendario de cuotas, vencimiento, mora) y por lo tanto superficie y roles propios. GS1 ya norma el hecho como bizStep `reserving`. Comparte el libro de cuenta corriente con cartera, pero no es un modo de ella. | #820, #821 Q2 |
+| **D20** | **Postventa se limita a garantía por unidad y RMA a proveedor.** El **servicio técnico** (ticket, técnico, repuestos, cotización) queda **fuera de alcance**: no es core ni plugin por ahora. Consecuencia: el estado de una unidad en garantía se modela con ubicación de cuarentena + bizStep `staging_outbound`/`shipping`/`receiving` y documento `rma`, sin un módulo de taller. | #818, #821 Q3 |
 
 ---
 
@@ -150,12 +153,12 @@ Identidad por unidad (IMEI/serie) sobre las dimensiones ya declaradas en 0.2: es
 
 Implementación de #820 sobre el seam declarado en Fase 0: cliente como entidad de crédito con límite, plazo y bloqueo; libro de cuenta corriente append-only con saldo como proyección reconstruible; abonos y recibos de caja con numeración propia (DT 3.2); vencimiento en el cargo y antigüedad de saldos; cobranza y mora como capacidades separadas. El **apartado con prima y las cuotas** entra acá como capacidad propia (GS1 lo normaría como `reserving`), igual que el **trade-in / buy-back** como compra a cliente con grado (#821, Q2 y Q4).
 
-### Fase 5 — Postventa, servicio y condicionales
+### Fase 5 — Postventa y condicionales
 
-- **Garantía por unidad, orden de servicio/reparación y RMA a proveedor** (#821, M5–M7): módulo con estados propios, no un movimiento de inventario.
+- **Garantía por unidad y RMA a proveedor** (#821, M5 y M7): la garantía se registra sobre la instancia identificada de la Fase 3, y el RMA es un **documento** con seguimiento, no un movimiento de inventario. El servicio técnico queda fuera (D20), así que la unidad en garantía vive en cuarentena con trazabilidad de eventos.
 - **Listas de precios** por cliente, volumen y periodo (#821, M3).
 - **Kits comerciales** (D16) y **CxP formal** (#821, M4 y M8), según decidan Q5 y el alcance.
-- **Multi-canal** (tienda + web + marketplace sobre un mismo stock) y **plugins de rubro** como activación con operadora y comisiones: fronteras estratégicas a decidir (#821, Q1 y Q7).
+- **No-goals confirmados**: multi-canal (D18) y activación con operadora más comisiones (#821, Q7) no entran en este plan.
 
 - **ISC** (D10): solo si el tenant importa o es primer enajenante.
 - **Ciclo de orden de compra / recepción parcial**: decisión fundadora previa lo excluyó; reabrir solo con evidencia de un cliente que lo necesite.
@@ -202,6 +205,9 @@ Regla: cada fila es una **capacidad** (D1), y cada columna un **bundle declarado
 
 ## Diferidos y no-goals
 
+- **No-goal confirmado por decisión (2026-10-08):** multi-canal — el producto es POS de tienda física (D18).
+- **No-goal confirmado por decisión (2026-10-08):** servicio técnico / taller. Postventa se limita a garantía por unidad y RMA (D20).
+- **No-goal confirmado por decisión (2026-10-08):** activación con operadora y comisiones; queda como frontera de un rubro telecom que no se persigue.
 - **No-goal:** registro genérico de plugins, carga dinámica de módulos o rutas de código por tenant.
 - **No-goal:** reescribir el core en hexagonal (D3).
 - **No-goal:** divergencia fiscal por rubro (D4).
