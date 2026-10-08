@@ -193,10 +193,14 @@ class FiscalInboxHandler {
       throw ArgumentError('Fiscal envelope pricesIncludeTax must be a boolean');
     }
 
+    // Issue #75: strict FX range — a commercial rate is C$ per USD, so a
+    // value below 10 or above 100 is a data-entry error (or the old
+    // dangerous 0.5 default). Fail closed at the envelope boundary.
     if (rawEnvelope.containsKey('commercialFxSpread') && rawEnvelope['commercialFxSpread'] != null) {
       final rawSpread = rawEnvelope['commercialFxSpread'];
-      if (rawSpread is! num || rawSpread < 0) {
-        throw ArgumentError('Fiscal envelope commercialFxSpread must be a non-negative number if present');
+      if (rawSpread is! num || rawSpread < 10 || rawSpread > 100) {
+        throw ArgumentError(
+            'Fiscal envelope commercialFxSpread must be a number between 10 and 100 if present');
       }
     }
 
@@ -453,15 +457,17 @@ class FiscalInboxHandler {
       );
     }
 
+    // Issue #75: strict FX range, same contract as the envelope boundary —
+    // a stored snapshot carrying a rate outside 10..100 is corrupt.
     if (rawEnvelope.containsKey('commercialFxSpread') && rawEnvelope['commercialFxSpread'] != null) {
       final rawFx = rawEnvelope['commercialFxSpread'];
-      if (rawFx is! num || rawFx < 0) {
+      if (rawFx is! num || rawFx < 10 || rawFx > 100) {
         developer.log(
           '[FISCAL_PROJECTION] invalid_snapshot_commercial_fx_spread=true tenant_id=${sanitizeTenantId(entity.tenantId)}',
           name: 'FiscalInboxHandler',
         );
         throw FormatException(
-          'Snapshot payload commercialFxSpread must be a non-negative number for tenant ${sanitizeTenantId(entity.tenantId)}',
+          'Snapshot payload commercialFxSpread must be a number between 10 and 100 for tenant ${sanitizeTenantId(entity.tenantId)}',
         );
       }
     }
@@ -814,8 +820,11 @@ class FiscalInboxHandler {
     // 7. commercial_exchange_rate is OPTIONAL:
     // If present in payload -> local must exist and match.
     // If absent in payload -> local MUST NOT exist (stale key check).
+    // Issue #75: strict FX range — an out-of-range rate in the payload is
+    // malformed and can never satisfy projection completeness.
     final rawFxSpread = rawEnvelope['commercialFxSpread'];
-    if (rawFxSpread != null && (rawFxSpread is! num || rawFxSpread < 0)) {
+    if (rawFxSpread != null &&
+        (rawFxSpread is! num || rawFxSpread < 10 || rawFxSpread > 100)) {
       developer.log(
         '[FISCAL_PROJECTION] malformed_fx_spread_in_completeness_check=true tenant_id=${sanitizeTenantId(tenantId)}',
         name: 'FiscalInboxHandler',

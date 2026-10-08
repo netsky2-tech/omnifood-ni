@@ -45,7 +45,7 @@ describe("W9 — Settings & Onboarding Components (TDD & Component Tests)", () =
             regime: FiscalRegime.CUOTA_FIJA,
             taxRateIva: 0.0,
             pricesIncludeTax: true,
-            commercialFxSpread: 0.5,
+            commercialFxSpread: 36.5,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -67,7 +67,7 @@ describe("W9 — Settings & Onboarding Components (TDD & Component Tests)", () =
 
       expect(screen.getByDisplayValue("Café París")).toBeInTheDocument();
       expect(screen.getByDisplayValue("J0310000012345")).toBeInTheDocument();
-      expect(screen.getByDisplayValue("0.5")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("36.5")).toBeInTheDocument();
 
       // ODAV-31 Invariant notice is present
       expect(
@@ -88,7 +88,7 @@ describe("W9 — Settings & Onboarding Components (TDD & Component Tests)", () =
             regime: FiscalRegime.CUOTA_FIJA,
             taxRateIva: 0.0,
             pricesIncludeTax: false,
-            commercialFxSpread: 0.5,
+            commercialFxSpread: 36.5,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -126,7 +126,7 @@ describe("W9 — Settings & Onboarding Components (TDD & Component Tests)", () =
             regime: FiscalRegime.REGIMEN_GENERAL,
             taxRateIva: 0.15,
             pricesIncludeTax: false,
-            commercialFxSpread: 0.5,
+            commercialFxSpread: 36.5,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -379,7 +379,7 @@ Croissant Mantequilla,30.00,unidad,false,Panadería,CRO01,false`;
             regime: FiscalRegime.CUOTA_FIJA,
             taxRateIva: 0.0,
             pricesIncludeTax: false,
-            commercialFxSpread: 0.5,
+            commercialFxSpread: 36.5,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),

@@ -35,7 +35,7 @@ void main() {
       'fiscalRegime': 'CUOTA_FIJA',
       'taxRate': 0.0,
       'pricesIncludeTax': true,
-      'commercialFxSpread': 0.5,
+      'commercialFxSpread': 36.5,
       'configVersion': {
         'revision': 1,
         'fingerprint':
@@ -183,7 +183,7 @@ void main() {
 
       // Verify commercial_exchange_rate
       final fxRate = await database.localConfigDao.getConfigByKey('commercial_exchange_rate');
-      expect(fxRate?.value, '0.5');
+      expect(fxRate?.value, '36.5');
 
       // Verify tenant_id
       final tid = await database.localConfigDao.getConfigByKey('tenant_id');
@@ -840,7 +840,7 @@ void main() {
         'fiscalRegime': 'CUOTA_FIJA',
         'taxRate': 0.0,
         'pricesIncludeTax': true,
-        'commercialFxSpread': 0.75,
+        'commercialFxSpread': 36.75,
         'configVersion': {
           'revision': 1,
           'fingerprint':
@@ -867,7 +867,7 @@ void main() {
 
       final repairedFx =
           await database.localConfigDao.getConfigByKey('commercial_exchange_rate');
-      expect(repairedFx?.value, '0.75');
+      expect(repairedFx?.value, '36.75');
 
       // Subsequent replay is idempotentNoOp
       final outcome3 = await handler.handleFiscalEnvelope(envelope);
@@ -1260,7 +1260,7 @@ void main() {
         'ruc': 'J0310000000099',
         'taxRate': 0.15,
         'pricesIncludeTax': true,
-        'commercialFxSpread': 0.85,
+        'commercialFxSpread': 36.85,
         'configVersion': {
           'revision': 2,
           'fingerprint':
@@ -1285,7 +1285,7 @@ void main() {
       final regime2 = await database.localConfigDao.getConfigByKey('tax_regime');
       expect(regime2?.value, 'REGIMEN_GENERAL');
       final fx2 = await database.localConfigDao.getConfigByKey('commercial_exchange_rate');
-      expect(fx2?.value, '0.85');
+      expect(fx2?.value, '36.85');
 
       final markerRev2 =
           await database.localConfigDao.getConfigByKey('last_applied_fiscal_revision');
@@ -1408,7 +1408,7 @@ void main() {
           'fiscalRegime': 'REGIMEN_GENERAL',
           'taxRate': 0.15,
           'pricesIncludeTax': true,
-          'commercialFxSpread': 0.75,
+          'commercialFxSpread': 36.75,
           'configVersion': {
             'revision': 1,
             'fingerprint':
@@ -1424,7 +1424,7 @@ void main() {
         final ruc1 = await database.localConfigDao.getConfigByKey('ruc');
         expect(ruc1?.value, 'J0310000000001');
         final fx1 = await database.localConfigDao.getConfigByKey('commercial_exchange_rate');
-        expect(fx1?.value, '0.75');
+        expect(fx1?.value, '36.75');
 
         // Prepare rev 2: optional fields omitted / null
         final rev2Envelope = {
@@ -1484,7 +1484,7 @@ void main() {
             'fiscalRegime': 'CUOTA_FIJA',
             'taxRate': 0.0,
             'pricesIncludeTax': true,
-            'commercialFxSpread': 0.5,
+            'commercialFxSpread': 36.5,
             'configVersion': {
               'revision': 1,
               'fingerprint':
@@ -1598,6 +1598,14 @@ void main() {
 
         final envNegativeFx = validEnvelope()..['commercialFxSpread'] = -1.0;
         expect(() => handler.handleFiscalEnvelope(envNegativeFx), throwsArgumentError);
+
+        // Issue #75: strict FX range — a commercial rate is C$ per USD, so
+        // anything below 10 or above 100 is rejected (fail closed).
+        final envTooLowFx = validEnvelope()..['commercialFxSpread'] = 5.0;
+        expect(() => handler.handleFiscalEnvelope(envTooLowFx), throwsArgumentError);
+
+        final envTooHighFx = validEnvelope()..['commercialFxSpread'] = 150.0;
+        expect(() => handler.handleFiscalEnvelope(envTooHighFx), throwsArgumentError);
 
         expect(await database.fiscalConfigLocalDao.getAll(), isEmpty);
       });

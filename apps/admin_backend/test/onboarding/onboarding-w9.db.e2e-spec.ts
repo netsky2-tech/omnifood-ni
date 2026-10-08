@@ -503,7 +503,7 @@ describe('W9 Backend PostgreSQL E2E — ODAV-31..34 Specifications', () => {
             regime: FiscalRegime.REGIMEN_GENERAL,
             businessName: 'Café Central Nicaragua S.A.',
             ruc: 'J0310000055555',
-            commercialFxSpread: 0.75,
+            commercialFxSpread: 36.75,
             pricesIncludeTax: true,
             operationMode: TenantOperationMode.FOODPARK_QSR,
             checkoutFxMode: CheckoutFxMode.COMMERCIAL,

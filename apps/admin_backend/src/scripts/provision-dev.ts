@@ -27,6 +27,7 @@ async function provision() {
   const app = await NestFactory.createApplicationContext(AppModule);
   const dataSource = app.get(DataSource);
 
+  let failed = false;
   try {
     // The tenant id must be known before the transaction opens: the wrapper
     // binds the transaction-local RLS context from it. `tenants` is a public
@@ -65,9 +66,16 @@ async function provision() {
 
     console.log('--- Provisioning complete ---');
   } catch (error) {
+    // Issue #75: never swallow provisioning errors silently — a failed
+    // provision must be visible in the process exit code so callers
+    // (CI, shell chains) can react.
     console.error('Provisioning failed:', error);
+    failed = true;
   } finally {
     await app.close();
+  }
+  if (failed) {
+    process.exit(1);
   }
 }
 

@@ -87,9 +87,13 @@ export const fiscalSetupSchema = z.object({
     .refine((ruc) => isValidNicaraguaFiscalId(ruc), {
       message: RUC_ACCEPTED_FORMS_MESSAGE,
     }),
+  // Issue #75: strict FX range — the commercial rate is a C$ per USD rate,
+  // so anything below 10 or above 100 is a data-entry error. Mirrors the
+  // backend FiscalSetupDto (Min 10 / Max 100) and the POS validator.
   commercialFxSpread: z
     .number({ invalid_type_error: "El tipo de cambio comercial debe ser un número" })
-    .min(0, "El tipo de cambio comercial debe ser mayor o igual a 0"),
+    .min(10, "El tipo de cambio comercial debe ser mayor o igual a 10")
+    .max(100, "El tipo de cambio comercial debe ser menor o igual a 100"),
   // BXW-007 U2 (contract rev 2): OPTIONAL-UNTIL-SET. Absence (undefined,
   // null, or the "" sentinel of the "Sin definir" select option) is valid:
   // it means the tenant never configured the value in the cloud, and every

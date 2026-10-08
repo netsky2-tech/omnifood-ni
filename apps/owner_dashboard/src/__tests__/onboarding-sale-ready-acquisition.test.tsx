@@ -86,7 +86,7 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
       businessName: "",
       ruc: "",
       regime: FiscalRegime.CUOTA_FIJA,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
       pricesIncludeTax: true,
     };
 
@@ -275,7 +275,7 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
       businessName: "Café de Especialidad",
       ruc: "J0310000000000",
       regime: FiscalRegime.REGIMEN_GENERAL,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
       pricesIncludeTax: true,
     };
 

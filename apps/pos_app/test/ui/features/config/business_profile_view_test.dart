@@ -759,6 +759,34 @@ void main() {
     });
   });
 
+  group('Commercial FX rate validation (issue #75)', () {
+    testWidgets('rejects rates outside the strict 10..100 range',
+        (tester) async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+
+      await tester.pumpWidget(buildWidget());
+      await tester.pumpAndSettle();
+
+      final fxField = tester.widget<TextFormField>(
+        find.byKey(const Key('commercial_exchange_rate_field')),
+      );
+      final validate = fxField.validator;
+      expect(validate, isNotNull,
+          reason: 'the commercial rate field must validate its range');
+
+      // In-range values pass, including the strict boundaries.
+      expect(validate!('36.50'), isNull);
+      expect(validate('10'), isNull);
+      expect(validate('100'), isNull);
+      // Below 10 and above 100 are data-entry errors (or the old dangerous
+      // 0.5 default) — reject with the range message.
+      expect(validate('9.9'), 'Ingrese una tasa válida entre 10 y 100');
+      expect(validate('100.1'), 'Ingrese una tasa válida entre 10 y 100');
+      // Empty stays required.
+      expect(validate(''), 'Requerido');
+    });
+  });
+
   group('T1 #66: role guard on the FX fields', () {
     Future<void> pumpAsRole(WidgetTester tester, UserRole role) async {
       when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);

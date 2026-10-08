@@ -24,6 +24,7 @@ import {
   FiscalRegime,
   FISCAL_PARAM_KEYS,
   DGI_NICARAGUA_TAX_RATES,
+  DEFAULT_COMMERCIAL_FX_SPREAD,
 } from './fiscal-setup.service';
 import {
   EffectiveFiscalPayload,
@@ -117,7 +118,9 @@ export class FiscalConfigVersionService {
 
     const rawFxSpread = paramMap.get(FISCAL_PARAM_KEYS.COMMERCIAL_FX_SPREAD);
     const commercialFxSpread =
-      typeof rawFxSpread === 'number' ? rawFxSpread : 0.5;
+      typeof rawFxSpread === 'number'
+        ? rawFxSpread
+        : DEFAULT_COMMERCIAL_FX_SPREAD;
 
     // BXW-007 U1 rev 2: absence must read as absence (D-16/D-21 spirit) —
     // both fields ride the fingerprinted payload as null when the tenant

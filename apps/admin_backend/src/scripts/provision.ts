@@ -31,6 +31,7 @@ async function provision() {
   const app = await NestFactory.createApplicationContext(AppModule);
   const dataSource = app.get(DataSource);
 
+  let failed = false;
   try {
     const tenantName = await ask('Nombre del Tenant (Negocio): ');
     const ruc = await ask('RUC del Negocio (opcional): ');
@@ -77,10 +78,17 @@ async function provision() {
 
     console.log('--- Provisión completada exitosamente ---');
   } catch (error) {
+    // Issue #75: never swallow provisioning errors silently — a failed
+    // provision must be visible in the process exit code so callers
+    // (CI, shell chains) can react.
     console.error('❌ Error durante la provisión:', error);
+    failed = true;
   } finally {
     await app.close();
     rl.close();
+  }
+  if (failed) {
+    process.exit(1);
   }
 }
 

@@ -55,7 +55,7 @@ const baseValues = () => ({
   regime: FiscalRegime.CUOTA_FIJA,
   businessName: "Comedor Doña Mary",
   ruc: "J0310000055555",
-  commercialFxSpread: 0.5,
+  commercialFxSpread: 36.5,
   pricesIncludeTax: true,
 });
 
@@ -221,7 +221,7 @@ const fiscalGetResponse = (overrides: Record<string, unknown> = {}) =>
       regime: FiscalRegime.CUOTA_FIJA,
       taxRateIva: 0.0,
       pricesIncludeTax: true,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
       ...overrides,
     }),
     { status: 200, headers: { "Content-Type": "application/json" } },
@@ -236,7 +236,7 @@ const fiscalPostResponse = () =>
       regime: FiscalRegime.CUOTA_FIJA,
       taxRateIva: 0.0,
       pricesIncludeTax: true,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
     }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );

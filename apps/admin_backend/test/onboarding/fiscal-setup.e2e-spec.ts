@@ -50,7 +50,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     regime: FiscalRegime.CUOTA_FIJA,
     businessName: 'Café Central',
     ruc: 'J0310000055555',
-    commercialFxSpread: 0.5,
+    commercialFxSpread: 36.5,
     pricesIncludeTax: true,
     operationMode: TenantOperationMode.FOODPARK_QSR,
     checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -354,18 +354,33 @@ describe('FiscalSetup (Integration & E2E)', () => {
     expect(body.message).toContain('businessName must not be empty');
   });
 
-  it('returns 400 when commercialFxSpread is negative', async () => {
+  it('returns 400 when commercialFxSpread is below the allowed range', async () => {
     const token = signToken();
 
     const response = await request(app.getHttpServer())
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
-      .send(buildFiscalPayload({ commercialFxSpread: -0.5 }))
+      .send(buildFiscalPayload({ commercialFxSpread: 9.5 }))
       .expect(400);
 
     const body = response.body as BadRequestResponseBody;
     expect(body.message).toContain(
-      'commercialFxSpread must be greater than or equal to 0',
+      'commercialFxSpread must be greater than or equal to 10',
+    );
+  });
+
+  it('returns 400 when commercialFxSpread is above the allowed range', async () => {
+    const token = signToken();
+
+    const response = await request(app.getHttpServer())
+      .post(API_PREFIX)
+      .set('Authorization', `Bearer ${token}`)
+      .send(buildFiscalPayload({ commercialFxSpread: 100.5 }))
+      .expect(400);
+
+    const body = response.body as BadRequestResponseBody;
+    expect(body.message).toContain(
+      'commercialFxSpread must be less than or equal to 100',
     );
   });
 
@@ -434,7 +449,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       regime: FiscalRegime.CUOTA_FIJA,
       taxRateIva: 0.0,
       pricesIncludeTax: true,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
       // BXW-007 U1 rev 2: unconfigured params read as null (never rebased
       // to a default).
       operationMode: null,
@@ -498,7 +513,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       regime: FiscalRegime.CUOTA_FIJA,
       taxRateIva: 0.0,
       pricesIncludeTax: true,
-      commercialFxSpread: 0.5,
+      commercialFxSpread: 36.5,
     });
 
     const tenantA = dbTenants.find((t) => t.id === 'tenant-A');
@@ -547,7 +562,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
           regime: FiscalRegime.REGIMEN_GENERAL,
           businessName: 'Restaurante Managua S.A.',
           ruc: 'J0310000012345',
-          commercialFxSpread: 0.75,
+          commercialFxSpread: 36.75,
           pricesIncludeTax: false,
         }),
       )
@@ -561,7 +576,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       regime: FiscalRegime.REGIMEN_GENERAL,
       taxRateIva: 0.15,
       pricesIncludeTax: false,
-      commercialFxSpread: 0.75,
+      commercialFxSpread: 36.75,
     });
 
     // Issue #377: supersession is append-only. The governing row is the
@@ -617,7 +632,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
         buildFiscalPayload({
           regime: FiscalRegime.REGIMEN_GENERAL,
           businessName: 'Comedor Doña Mary S.A.',
-          commercialFxSpread: 0.75,
+          commercialFxSpread: 36.75,
           pricesIncludeTax: false,
         }),
       )
@@ -627,7 +642,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       regime: FiscalRegime.REGIMEN_GENERAL,
       taxRateIva: 0.15,
       pricesIncludeTax: false,
-      commercialFxSpread: 0.75,
+      commercialFxSpread: 36.75,
     });
 
     // The rows written by the first call are left completely untouched.
@@ -658,7 +673,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
     ).toBe(false);
     expect(
       secondRows.find((p) => p.paramKey === 'COMMERCIAL_FX_SPREAD')?.paramValue,
-    ).toBe(0.75);
+    ).toBe(36.75);
 
     // BXW-007 U1: the unchanged operationMode/checkoutFxMode are idempotent —
     // no new version row is written when the governing value already matches.
@@ -681,7 +696,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       regime: FiscalRegime.REGIMEN_GENERAL,
       taxRateIva: 0.15,
       pricesIncludeTax: false,
-      commercialFxSpread: 0.75,
+      commercialFxSpread: 36.75,
     });
   });
 
@@ -700,7 +715,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       .post(API_PREFIX)
       .set('Authorization', `Bearer ${token}`)
       .send(
-        buildFiscalPayload({ commercialFxSpread: 1.25 }), // non-default: the fallback is 0.5
+        buildFiscalPayload({ commercialFxSpread: 37.25 }), // non-default: the fallback is 36.5
       )
       .expect(201);
 
@@ -716,7 +731,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
       .expect(200);
 
     expect((response.body as FiscalSetupResponse).commercialFxSpread).toBe(
-      1.25,
+      37.25,
     );
 
     const bindsAfter = countBinds();
@@ -736,7 +751,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
           regime: FiscalRegime.REGIMEN_GENERAL,
           businessName: 'Tenant A Corp',
           ruc: 'J0310000000001',
-          commercialFxSpread: 1.0,
+          commercialFxSpread: 36.0,
           pricesIncludeTax: false,
         }),
       )
@@ -750,7 +765,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
         buildFiscalPayload({
           businessName: 'Tenant B Pulpería',
           ruc: 'J0310000000002',
-          commercialFxSpread: 0.25,
+          commercialFxSpread: 36.25,
         }),
       )
       .expect(201);
