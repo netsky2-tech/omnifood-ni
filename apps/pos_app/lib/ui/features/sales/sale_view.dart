@@ -1370,13 +1370,22 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
             final selectedModifiers = <Modifier>[];
             selectedModifiers.addAll(_selectedLegacyModifiers);
             for (final group in widget.product.availableModifierGroups) {
+              final groupName = group.name.trim();
               for (final option in group.options) {
+                final optionName = option.name.trim();
+                // Issue #795: Contextualize modifier name with group name if not redundant
+                // e.g. "Leche: Almendras", "Endulzante: Stevia", "Extra shot"
+                final hasGroupContext = groupName.isNotEmpty &&
+                    !optionName.toLowerCase().contains(groupName.toLowerCase()) &&
+                    !groupName.toLowerCase().startsWith('extra');
+                final displayName = hasGroupContext ? '$groupName: $optionName' : optionName;
+
                 if (group.maxSelected == 1) {
                   if (_selectedRadioOption[group.id] == option.id) {
                     selectedModifiers.add(
                       Modifier(
                         id: option.id,
-                        name: option.name,
+                        name: displayName,
                         extraPrice: option.priceDelta,
                         quantity: 1,
                       ),
@@ -1388,7 +1397,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                     selectedModifiers.add(
                       Modifier(
                         id: option.id,
-                        name: option.name,
+                        name: displayName,
                         // Precio POR UNIDAD: la cantidad viaja en su campo
                         // propio para que totales y comanda sepan cuántas.
                         extraPrice: option.priceDelta,
@@ -1400,7 +1409,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                   selectedModifiers.add(
                     Modifier(
                       id: option.id,
-                      name: option.name,
+                      name: displayName,
                       extraPrice: option.priceDelta,
                       quantity: 1,
                     ),

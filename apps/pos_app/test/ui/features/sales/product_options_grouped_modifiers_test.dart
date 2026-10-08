@@ -295,12 +295,13 @@ void main() {
     await tester.pumpAndSettle();
 
     // Semantic change vs the first bridge: extraPrice is PER UNIT and the
-    // quantity rides on its own field, so the kitchen can print '2x Entera'
-    // and the totals stay quantity-aware end to end.
+    // quantity rides on its own field, so the kitchen can print '2x Leche: Entera'
+    // and the totals stay quantity-aware end to end. The option name carries
+    // its group context (Issue #795): 'Leche: Entera'.
     final modifiers = viewModel.addedModifiers.single;
     expect(modifiers, hasLength(1));
     expect(modifiers.first.id, 'opt-1');
-    expect(modifiers.first.name, 'Entera');
+    expect(modifiers.first.name, 'Leche: Entera');
     expect(modifiers.first.extraPrice, 15.0);
     expect(modifiers.first.quantity, 2);
     expect(viewModel.addedProducts.single.id, 'p-1');

@@ -306,7 +306,8 @@ void main() {
       expect(cocinaOrder.items.map((i) => i.productName), containsAll(['Hamburguesa FoodPark Especial', 'Tacos al Pastor FoodPark']));
 
       final burgerKdsItem = cocinaOrder.items.firstWhere((i) => i.productName == 'Hamburguesa FoodPark Especial');
-      expect(burgerKdsItem.modifiers, contains('Extra Bacon'));
+      // #795 U1: KDS modifier lines are quantity-explicit.
+      expect(burgerKdsItem.modifiers, contains('1x Extra Bacon'));
 
       // Barra Order checks
       expect(barraOrder.tableName, 'Buzzer #42');

@@ -47,6 +47,7 @@ class RecordedKitchenDispatch {
 
 class RecordingKitchenOrderService extends KitchenOrderService {
   final List<RecordedKitchenDispatch> calls = [];
+  final List<String> relabeledTicketIds = [];
 
   RecordingKitchenOrderService(super.database);
 
@@ -71,6 +72,14 @@ class RecordingKitchenOrderService extends KitchenOrderService {
       ),
     );
     return [];
+  }
+
+  @override
+  Future<void> updateTicketInvoiceNumber({
+    required String ticketId,
+    required String invoiceNumber,
+  }) async {
+    relabeledTicketIds.add(ticketId);
   }
 }
 
@@ -131,6 +140,11 @@ class RecordingTableOrderService extends TableOrderService {
 }
 
 class FakeSalesRepository extends Fake implements SalesRepository {
+  /// Issue #795/U2: the real repository assigns the DGI sequential number
+  /// inside the saveSale fiscal transaction, so the persisted invoice NEVER
+  /// keeps the in-memory 'PENDING' placeholder.
+  static const String realInvoiceNumber = '001-001-01-00000005';
+
   Invoice? savedInvoice;
   List<InvoiceItem>? savedItems;
   List<Payment>? savedPayments;
@@ -142,9 +156,16 @@ class FakeSalesRepository extends Fake implements SalesRepository {
     required List<Payment> payments,
     FulfillmentCheckoutContext? fulfillmentContext,
   }) async {
-    savedInvoice = invoice;
+    // Simulate the fiscal transaction: the persisted invoice carries the
+    // real sequential number, while the in-memory one still says 'PENDING'.
+    savedInvoice = invoice.copyWith(number: realInvoiceNumber);
     savedItems = items;
     savedPayments = payments;
+  }
+
+  @override
+  Future<Invoice?> getInvoiceById(String id) async {
+    return savedInvoice?.id == id ? savedInvoice : null;
   }
 }
 
@@ -317,13 +338,21 @@ void main() {
         final call = recordingKitchenService.calls.single;
         final invoice = fakeSalesRepo.savedInvoice;
         expect(invoice, isNotNull);
-        expect(call.invoiceId, invoice!.id);
-        expect(call.invoiceNumber, invoice.number);
+        expect(invoice!.number, FakeSalesRepository.realInvoiceNumber);
+        // Issue #795/U2: the kitchen must receive the COMMITTED fiscal
+        // number, never the in-memory 'PENDING' placeholder.
+        expect(call.invoiceNumber, FakeSalesRepository.realInvoiceNumber);
+        expect(call.invoiceNumber, isNot('PENDING'));
+        expect(call.invoiceId, invoice.id);
         expect(call.items, hasLength(1));
         expect(call.items.single.productId, product.id);
         expect(call.buzzerNumber, isNull);
         expect(call.customerName, isNull);
         expect(call.waiterName, 'Cashier 1');
+
+        // 4b. Issue #795/U2: the committed number is also relayed to any
+        //     pre-existing 'PENDING'-labeled comanda for this invoice.
+        expect(recordingKitchenService.relabeledTicketIds, [invoice.id]);
 
         // 5. Dispatch precedes liquidation: the hold ticket is liquidated
         //    after the kitchen comanda exists.
@@ -341,8 +370,11 @@ void main() {
         final call = recordingKitchenService.calls.single;
         final invoice = fakeSalesRepo.savedInvoice;
         expect(invoice, isNotNull);
-        expect(call.invoiceId, invoice!.id);
-        expect(call.invoiceNumber, invoice.number);
+        expect(invoice!.number, FakeSalesRepository.realInvoiceNumber);
+        // Issue #795/U2: direct sales get the real number too.
+        expect(call.invoiceNumber, FakeSalesRepository.realInvoiceNumber);
+        expect(call.invoiceNumber, isNot('PENDING'));
+        expect(call.invoiceId, invoice.id);
         expect(call.items, hasLength(1));
         expect(call.items.single.productId, product.id);
         expect(call.waiterName, 'Cashier 1');

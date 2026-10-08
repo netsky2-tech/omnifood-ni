@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import '../printer/kitchen_modifier_lines.dart';
 import '../../models/kitchen/kitchen_order.dart';
 import '../../models/kitchen/kitchen_order_item.dart';
 import '../../models/sales/hold_ticket.dart';
@@ -225,7 +226,9 @@ class KitchenOrderService {
       final orderId = _uuid.v4();
 
       final kitchenOrderItems = items.map((cartItem) {
-        final modifierNames = cartItem.selectedModifiers.map((m) => m.name).toList();
+        final modifierNames = cartItem.selectedModifiers
+            .map((m) => KitchenModifierLines.quantityLabel(m.quantity, m.name))
+            .toList();
         return KitchenOrderItem(
           id: _uuid.v4(),
           kitchenOrderId: orderId,
@@ -294,7 +297,9 @@ class KitchenOrderService {
       final orderId = _uuid.v4();
 
       final kitchenOrderItems = stationItems.map((cartItem) {
-        final modifierNames = cartItem.selectedModifiers.map((m) => m.name).toList();
+        final modifierNames = cartItem.selectedModifiers
+            .map((m) => KitchenModifierLines.quantityLabel(m.quantity, m.name))
+            .toList();
         return KitchenOrderItem(
           id: _uuid.v4(),
           kitchenOrderId: orderId,
@@ -358,7 +363,9 @@ class KitchenOrderService {
 
       final orderId = _uuid.v4();
       final kitchenOrderItems = items.map((cartItem) {
-        final modifierNames = cartItem.selectedModifiers.map((m) => m.name).toList();
+        final modifierNames = cartItem.selectedModifiers
+            .map((m) => KitchenModifierLines.quantityLabel(m.quantity, m.name))
+            .toList();
         return KitchenOrderItem(
           id: _uuid.v4(),
           kitchenOrderId: orderId,
@@ -477,6 +484,51 @@ class KitchenOrderService {
   /// Cancels / deletes kitchen orders linked to a canceled ticket
   Future<void> cancelOrdersForTicket(String ticketId) async {
     await _database.kitchenOrderDao.deleteOrdersByTicketId(ticketId);
+  }
+
+  /// Issue #795/U2: retitles kitchen comandas that were created while the
+  /// invoice number was still the 'PENDING' placeholder (e.g. dispatched
+  /// before the fiscal transaction assigned the DGI sequential number) to
+  /// the committed fiscal number.
+  ///
+  /// Only placeholder/default labels are rewritten — a real buzzer label
+  /// ('Buzzer #12') or a customer-name label is preserved untouched, and
+  /// lifecycle state (status/timestamps) is never modified.
+  Future<void> updateTicketInvoiceNumber({
+    required String ticketId,
+    required String invoiceNumber,
+  }) async {
+    final orders = await _database.kitchenOrderDao.getOrdersByTicketId(ticketId);
+    for (final order in orders) {
+      final currentName = order.tableName ?? '';
+      final isPlaceholder =
+          currentName.isEmpty ||
+          currentName.contains('PENDING') ||
+          currentName.startsWith('Ticket ');
+      if (!isPlaceholder) continue;
+
+      final updated = KitchenOrder(
+        id: order.id,
+        ticketId: order.ticketId,
+        tableNumber: order.tableNumber,
+        tableName: 'Ticket $invoiceNumber',
+        waiterName: order.waiterName,
+        station: order.station,
+        status: order.status,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(order.createdAt),
+        startedAt: order.startedAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(order.startedAt!)
+            : null,
+        readyAt: order.readyAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(order.readyAt!)
+            : null,
+        servedAt: order.servedAt != null
+            ? DateTime.fromMillisecondsSinceEpoch(order.servedAt!)
+            : null,
+        notes: order.notes,
+      );
+      await _database.kitchenOrderDao.updateOrder(KitchenMapper.toEntity(updated));
+    }
   }
 
   /// Retrieves an order by its ID

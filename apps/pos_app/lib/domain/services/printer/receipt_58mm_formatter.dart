@@ -324,7 +324,8 @@ class Receipt58mmFormatter {
           .bold(false);
 
       for (final mod in item.selectedModifiers) {
-        builder.textLine('   * [MOD] ${mod.name}');
+        // Issue #795: the comanda always shows the explicit count ('2x Extra Shot').
+        builder.textLine('   * [MOD] ${KitchenModifierLines.quantityLabel(mod.quantity, mod.name)}');
       }
       if (item.notes != null && item.notes!.isNotEmpty) {
         builder.textLine('   * [NOTA] ${item.notes}');

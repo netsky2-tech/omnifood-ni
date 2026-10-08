@@ -150,7 +150,9 @@ void main() {
       expect(cocinaOrder.tableNumber, '18');
       expect(cocinaOrder.status, 'PENDIENTE');
       expect(cocinaOrder.items.first.productName, 'Tacos al Pastor');
-      expect(cocinaOrder.items.first.modifiers, contains('Extra Queso'));
+      // #795 U1: kitchen comanda lines carry the explicit quantity, so the
+      // card reads '1x Extra Queso' rather than the bare option name.
+      expect(cocinaOrder.items.first.modifiers, contains('1x Extra Queso'));
       expect(cocinaOrder.items.first.notes, 'Con salsa picante');
 
       final barraOrder = createdOrders.firstWhere((o) => o.station == 'BARRA');
