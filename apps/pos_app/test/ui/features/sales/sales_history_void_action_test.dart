@@ -351,6 +351,89 @@ void main() {
       );
     });
   });
+
+  group('audit #79: the ANULADO SnackBar reports the print outcome honestly', () {
+    void arrangeSuccessfulVoid() {
+      arrangeUser(UserRole.owner);
+      when(mockInvoiceDao.getInvoiceById('inv-ui-1'))
+          .thenAnswer((_) async => invoiceEntityForGuard(userId: 'u-1'));
+      when(mockSalesRepo.voidInvoice(any, any,
+              reasonDetail: anyNamed('reasonDetail')))
+          .thenAnswer((_) async {});
+      when(mockSalesRepo.getInvoiceById(any))
+          .thenAnswer((_) async => invoice(isCanceled: true));
+      when(mockInvoiceDao.getAllInvoices()).thenAnswer((_) async => []);
+    }
+
+    Future<void> confirmVoid(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('void_invoice_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cliente desiste'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm_void_button')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('printed: confirms the copy came out (auto-print on)',
+        (tester) async {
+      arrangeSuccessfulVoid();
+      fakeLocalConfigDao.saveConfig(
+        LocalConfigEntity(key: 'printer_auto_invoice', value: 'true'),
+      );
+      final vm = await pumpPanel(tester, panelInvoice: invoice());
+      await vm.loadCompanyTaxRegime();
+
+      await confirmVoid(tester);
+
+      expect(
+          find.text('Factura anulada. Se imprimió el comprobante ANULADO.'),
+          findsOneWidget);
+    });
+
+    testWidgets('notRequested: auto-print off is NOT reported as a failure',
+        (tester) async {
+      arrangeSuccessfulVoid();
+      fakeLocalConfigDao.saveConfig(
+        LocalConfigEntity(key: 'printer_auto_invoice', value: 'false'),
+      );
+      final vm = await pumpPanel(tester, panelInvoice: invoice());
+      await vm.loadCompanyTaxRegime();
+
+      await confirmVoid(tester);
+
+      expect(vm.lastVoidCopyPrintOutcome,
+          VoidCopyPrintOutcome.notRequested);
+      // Audit #79 honesty: the void succeeded and the copy was skipped by
+      // policy — the old boolean path fabricated a print FAILURE here.
+      expect(
+          find.text(
+              'Factura anulada. Comprobante ANULADO no impreso: la impresión automática está desactivada.'),
+          findsOneWidget);
+      expect(
+          find.text(
+              'Factura anulada. No se pudo imprimir el comprobante ANULADO.'),
+          findsNothing);
+    });
+
+    testWidgets('failed: states the void succeeded and surfaces the reason',
+        (tester) async {
+      arrangeSuccessfulVoid();
+      printer.shouldFail = true;
+      final vm = await pumpPanel(tester, panelInvoice: invoice());
+      await vm.loadCompanyTaxRegime();
+
+      await confirmVoid(tester);
+
+      expect(vm.lastVoidCopyPrintOutcome, VoidCopyPrintOutcome.failed);
+      final snackBarText = tester.widget<Text>(
+        find.textContaining(
+            'Factura anulada. No se pudo imprimir el comprobante ANULADO.'),
+      );
+      // The reason is surfaced, not swallowed (audit #79 point 4).
+      expect(snackBarText.data,
+          contains('Error de impresión en hardware simulado'));
+    });
+  });
 }
 
 InvoiceEntity invoiceEntityForGuard({required String userId}) =>

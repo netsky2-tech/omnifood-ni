@@ -387,6 +387,79 @@ void main() {
       expect(ownerVm.canVoidInvoice, isTrue);
     });
   });
+
+  group('audit #79: the ANULADO copy follows the auto-print policy', () {
+    void arrangeVoidable() {
+      arrangeAuthenticatedCashier();
+      when(mockInvoiceDao.getInvoiceById('inv-void-target')).thenAnswer(
+        (_) async =>
+            invoiceEntity(localIssueDate: localDay(DateTime.now())),
+      );
+      arrangeCommittedVoid();
+    }
+
+    test('auto-print OFF: the printer port is never called and the outcome '
+        'is notRequested (audit #79 gate)', () async {
+      arrangeVoidable();
+      fakeLocalConfigDao.saveConfig(
+        LocalConfigEntity(
+            key: 'printer_auto_invoice', value: 'false'),
+      );
+      final vm = buildViewModel();
+      await Future<void>.delayed(Duration.zero);
+      await vm.loadCompanyTaxRegime();
+
+      final ok = await vm.voidInvoice('inv-void-target', 'OTRO');
+
+      expect(ok, isTrue, reason: 'the void itself committed');
+      expect(printer.printHistory, isEmpty,
+          reason: 'auto-print off: the printer must never be called');
+      expect(vm.lastVoidCopyPrintOutcome,
+          VoidCopyPrintOutcome.notRequested);
+      // Backwards-compatible bool: never claimed a print that did not happen.
+      expect(vm.lastVoidPrintSucceeded, isFalse);
+    });
+
+    test('auto-print ON + print succeeds: outcome is printed', () async {
+      arrangeVoidable();
+      fakeLocalConfigDao.saveConfig(
+        LocalConfigEntity(key: 'printer_auto_invoice', value: 'true'),
+      );
+      final vm = buildViewModel();
+      await Future<void>.delayed(Duration.zero);
+      await vm.loadCompanyTaxRegime();
+
+      final ok = await vm.voidInvoice('inv-void-target', 'OTRO');
+
+      expect(ok, isTrue);
+      expect(printer.printHistory, hasLength(1));
+      expect(vm.lastVoidCopyPrintOutcome, VoidCopyPrintOutcome.printed);
+      expect(vm.lastVoidPrintSucceeded, isTrue);
+    });
+
+    test('auto-print ON + print fails: outcome is failed, the void still '
+        'commits and the reason is surfaced (not swallowed)', () async {
+      arrangeVoidable();
+      fakeLocalConfigDao.saveConfig(
+        LocalConfigEntity(key: 'printer_auto_invoice', value: 'true'),
+      );
+      printer.shouldFail = true;
+      final vm = buildViewModel();
+      await Future<void>.delayed(Duration.zero);
+      await vm.loadCompanyTaxRegime();
+
+      final ok = await vm.voidInvoice('inv-void-target', 'OTRO');
+
+      expect(ok, isTrue, reason: 'the fiscal void is the fact; the print is '
+          'derivative and never un-happens it');
+      verify(mockSalesRepo.voidInvoice('inv-void-target', 'OTRO'))
+          .called(1);
+      expect(vm.lastVoidCopyPrintOutcome, VoidCopyPrintOutcome.failed);
+      expect(vm.lastVoidPrintSucceeded, isFalse);
+      expect(vm.lastPrintError, isNotNull,
+          reason: 'the print failure reason must reach the UI');
+    });
+  });
   group('B1r/JD-A-002: the session carries the sale terminal', () {
     test('openSession persists the resolved deviceId, not a model default',
         () async {

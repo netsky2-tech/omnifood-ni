@@ -82,6 +82,25 @@ class FiscalExchangeRateUnconfiguredError implements Exception {
   String toString() => 'FiscalExchangeRateUnconfiguredError: $message';
 }
 
+/// Audit #79: honest tri-state for the ANULADO copy printed after a void.
+/// The old `bool` could not distinguish "the copy came out", "printing was
+/// never requested (auto-print off)" and "printing was attempted and
+/// failed" — the SnackBar fabricated a failure when auto-print was off.
+/// The fiscal void is the fact; the print is derivative and NEVER reported
+/// as a void failure.
+enum VoidCopyPrintOutcome {
+  /// The copy was requested and printed successfully.
+  printed,
+
+  /// The copy was NOT requested: `autoPrintInvoice` is off (audit #79 gate).
+  /// Not a failure.
+  notRequested,
+
+  /// The copy was requested but the print failed; [SaleViewModel.lastPrintError]
+  /// carries the reason.
+  failed,
+}
+
 class SaleViewModel extends ChangeNotifier {
   final SalesRepository _salesRepository;
   final InventoryRepository _inventoryRepository;
@@ -239,6 +258,17 @@ class SaleViewModel extends ChangeNotifier {
   /// be the same fabrication failure #548 called out.
   bool _lastVoidPrintSucceeded = false;
   bool get lastVoidPrintSucceeded => _lastVoidPrintSucceeded;
+
+  /// Audit #79: tri-state outcome of the LAST void's ANULADO copy. True
+  /// honesty for the SnackBar: `printed` confirms paper, `notRequested`
+  /// states the copy was skipped because auto-print is off (NOT a failure),
+  /// `failed` means the print was attempted and did not come out (the
+  /// reason rides [lastPrintError]). The void itself is never rolled back
+  /// nor reported failed because of a print problem.
+  VoidCopyPrintOutcome _lastVoidCopyPrintOutcome =
+      VoidCopyPrintOutcome.notRequested;
+  VoidCopyPrintOutcome get lastVoidCopyPrintOutcome =>
+      _lastVoidCopyPrintOutcome;
 
   /// Whether the LAST reprint's copy actually printed (D-13 honesty rule:
   /// the SnackBar claims only what happened; the audit stands either way).
@@ -2482,14 +2512,36 @@ class SaleViewModel extends ChangeNotifier {
 
       // AC-10: print the ANULADO copy on the same printer path the sale
       // used, with the VOIDER's name as the document identity (AC-9).
+      // Audit #79: the copy follows the SAME auto-print policy as the sale
+      // and credit-note paths — the printer config is read at print time
+      // and `autoPrintInvoice` is respected. The void is already committed
+      // here and is NEVER rolled back or reported failed because of a print
+      // problem: the fiscal void is the fact, the print is derivative.
       _lastVoidPrintSucceeded = false;
+      _lastVoidCopyPrintOutcome = VoidCopyPrintOutcome.notRequested;
       final voided = await _salesRepository.getInvoiceById(invoiceId);
       if (voided != null) {
         _lastProcessedInvoice = voided;
-        _lastVoidPrintSucceeded = await _printInvoiceCopy(
-          voided,
-          cashierName: currentUser.name,
-        );
+        try {
+          final printerConfig =
+              await _printerConfigService.getPrinterConfig();
+          if (printerConfig.autoPrintInvoice) {
+            _lastVoidPrintSucceeded = await _printInvoiceCopy(
+              voided,
+              cashierName: currentUser.name,
+            );
+            _lastVoidCopyPrintOutcome = _lastVoidPrintSucceeded
+                ? VoidCopyPrintOutcome.printed
+                : VoidCopyPrintOutcome.failed;
+          }
+        } catch (e) {
+          // Printer-unavailability must not silently pass as "not
+          // requested" nor un-happen the committed void: it is a failed
+          // print attempt whose reason the operator sees.
+          _lastPrintError = e.toString();
+          _lastVoidCopyPrintOutcome = VoidCopyPrintOutcome.failed;
+          notifyListeners();
+        }
       }
 
       _errorMessage = null;
