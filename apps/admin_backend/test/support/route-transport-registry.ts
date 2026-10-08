@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import type { DynamicModule, Type } from '@nestjs/common';
 import { RequestMethod } from '@nestjs/common';
 
@@ -213,6 +215,90 @@ export function enumerateAppRoutes(rootModule: ModuleRef): RouteRecord[] {
       a.route.localeCompare(b.route) ||
       a.httpMethod.localeCompare(b.httpMethod),
   );
+}
+
+function* walkControllerFiles(dir: string): Generator<string> {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      yield* walkControllerFiles(full);
+    } else if (
+      entry.name.endsWith('.controller.ts') &&
+      !entry.name.endsWith('.spec.ts')
+    ) {
+      yield full;
+    }
+  }
+}
+
+export interface SourceControllerClass {
+  controller: string;
+  /** Path relative to `srcDir`. */
+  file: string;
+}
+
+/**
+ * Scan the SOURCE tree, not the module graph: every exported class in a
+ * `*.controller.ts` file (spec files excluded) that carries a `@Controller`
+ * decoration. This is the blind-spot complement of `enumerateAppRoutes`:
+ * a controller that is never registered in a module has no routes and is
+ * invisible to every served-route rule, so only a source scan can detect it.
+ */
+export function scanSourceControllerClasses(
+  srcDir: string,
+): SourceControllerClass[] {
+  const found: SourceControllerClass[] = [];
+  for (const file of walkControllerFiles(srcDir)) {
+    const source = readFileSync(file, 'utf8');
+    for (const match of source.matchAll(/export\s+class\s+([A-Za-z0-9_]+)/g)) {
+      // A `@Controller(` decoration binds to the NEXT class declaration, so
+      // look backwards and reject a match when another class declaration
+      // sits between the decorator and this one (multi-class files).
+      const before = source.slice(
+        Math.max(0, (match.index ?? 0) - 2000),
+        match.index,
+      );
+      const decoratorIndex = before.lastIndexOf('@Controller(');
+      if (decoratorIndex === -1) continue;
+      if (/\bclass\b/.test(before.slice(decoratorIndex))) continue;
+      found.push({ controller: match[1], file: relative(srcDir, file) });
+    }
+  }
+  return found.sort((a, b) => a.controller.localeCompare(b.controller));
+}
+
+export interface UnregisteredSourceController extends SourceControllerClass {
+  /** Present in the route table enumerated from AppModule. */
+  served: boolean;
+  /** Present in TRANSPORT_DECLARATIONS. */
+  declared: boolean;
+}
+
+/**
+ * Source-declared controllers that are NOT served by the module graph and/or
+ * NOT classified in the transport registry. An entry with `served: false` is
+ * a dead controller: its routes can never be reached at runtime.
+ */
+export function findUnregisteredSourceControllers(
+  srcDir: string,
+  routes: RouteRecord[],
+  declarations: TransportDeclaration[],
+): UnregisteredSourceController[] {
+  const served = new Set(routes.map((route) => route.controller));
+  const declared = new Set(
+    declarations.map((declaration) => declaration.controller),
+  );
+  const findings: UnregisteredSourceController[] = [];
+  for (const sourceClass of scanSourceControllerClasses(srcDir)) {
+    if (served.has(sourceClass.controller) && declared.has(sourceClass.controller))
+      continue;
+    findings.push({
+      ...sourceClass,
+      served: served.has(sourceClass.controller),
+      declared: declared.has(sourceClass.controller),
+    });
+  }
+  return findings;
 }
 
 function effectiveTransport(
@@ -442,6 +528,14 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   },
   {
     controller: 'InboundSyncController',
+    transport: 'device',
+  },
+  // Backlog #68 slice S1b: POS-pushed card/voucher reconciliations after the
+  // sale synced (re-pushing the sale is a dead end: same idempotency key →
+  // DUPLICATE_REPLAY). Dedicated device surface mirroring
+  // `CashShiftSyncController`; DGI-neutral (no fiscal fields touched).
+  {
+    controller: 'PaymentReconciliationSyncController',
     transport: 'device',
   },
   { controller: 'ReportsController', transport: 'human' },

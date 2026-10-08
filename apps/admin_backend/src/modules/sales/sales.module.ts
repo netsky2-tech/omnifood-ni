@@ -11,6 +11,8 @@ import { SyncBatchController } from './controllers/sync-batch.controller';
 import { InboundSyncController } from './controllers/inbound-sync.controller';
 import { InboundSyncService } from './services/inbound-sync.service';
 import { ReportsController } from './controllers/reports.controller';
+import { PaymentReconciliationSyncController } from './controllers/payment-reconciliation-sync.controller';
+import { PaymentReconciliationSyncIngestionService } from './services/payment-reconciliation-sync-ingestion.service';
 import { InventoryMovement } from '../inventory/entities/inventory-movement.entity';
 import { InventorySyncReceipt } from '../inventory/entities/inventory-sync-receipt.entity';
 import { InventorySyncOutbox } from '../inventory/entities/inventory-sync-outbox.entity';
@@ -84,11 +86,13 @@ import { forwardRef } from '@nestjs/common';
     SyncBatchController,
     InboundSyncController,
     InvoicesController,
+    PaymentReconciliationSyncController,
   ],
   providers: [
     InvoicesService,
     SaleInventoryOutcomeService,
     InboundSyncService,
+    PaymentReconciliationSyncIngestionService,
     CashShiftService,
     CashShiftSyncIngestionService,
     SalesReportsService,
