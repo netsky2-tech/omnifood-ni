@@ -2777,6 +2777,28 @@ final migration64_65 = Migration(64, 65, (database) async {
   }
 });
 
+/// v65 → v66: manual-override supervisor credential on payments. The typed
+/// supervisor string moves OUT of reconciled_by_user_id (which keeps the real
+/// operator on both the reconcile and override paths) into its own nullable
+/// TEXT column — full parity with the backend's invoice_payments.
+/// override_supervisor_ref (02cfd0ff): nullable, no default, no FK. Each
+/// guard (table existence + column probe) keeps the migration safe to
+/// re-run; old rows read back null, which is exactly the value normal
+/// reconciliations carry.
+final migration65_66 = Migration(65, 66, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='payments'",
+  );
+  if (tables.isEmpty) return;
+  final columns = await database.rawQuery('PRAGMA table_info(payments)');
+  final names = columns.map((row) => row['name'] as String).toSet();
+  if (!names.contains('override_supervisor_ref')) {
+    await database.execute(
+      'ALTER TABLE payments ADD COLUMN override_supervisor_ref TEXT',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2833,6 +2855,7 @@ final allMigrations = [
   migration62_63,
   migration63_64,
   migration64_65,
+  migration65_66,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

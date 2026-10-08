@@ -202,17 +202,26 @@ void main() {
     String id, {
     String syncStatus = 'pending',
     String? reconciledByUserId = 'cajero-01',
+    String? overrideSupervisorRef,
+    String? voucherCode,
+    String? reconciliationStatus,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
+    final isOverride = overrideSupervisorRef != null;
     final payment = PaymentEntity(
       id: id,
       invoiceId: 'inv-vsync-01',
       method: 'card',
       amount: 400.0,
       amountNio: 400.0,
-      voucherCode: id == 'pay-recon-failed' ? 'OVERRIDE: sin voucher' : '654321',
-      reconciliationStatus:
-          id == 'pay-recon-failed' ? 'MANUAL_OVERRIDE' : 'CONCILIADO',
+      voucherCode: voucherCode ??
+          (id == 'pay-recon-failed' || isOverride
+              ? 'OVERRIDE: sin voucher'
+              : '654321'),
+      reconciliationStatus: reconciliationStatus ??
+          (id == 'pay-recon-failed' || isOverride
+              ? 'MANUAL_OVERRIDE'
+              : 'CONCILIADO'),
       reconciliationSyncStatus: syncStatus,
       cardBrand: 'VISA',
       cardType: 'CREDITO',
@@ -221,6 +230,7 @@ void main() {
       batchNumber: '003',
       reconciledAt: now,
       reconciledByUserId: reconciledByUserId,
+      overrideSupervisorRef: overrideSupervisorRef,
       createdAt: now,
     );
     await database.paymentDao.insertPayments([payment]);
@@ -255,6 +265,9 @@ void main() {
       // Optional correlation fields ride along.
       expect(first['batchNumber'], '003');
       expect(first['last4'], '1122');
+      // A normal reconciliation never carries a supervisor credential: the
+      // key is omitted entirely, never sent as null.
+      expect(first.containsKey('overrideSupervisorRef'), isFalse);
 
       final payments =
           await database.paymentDao.getPaymentsByInvoiceId('inv-vsync-01');
@@ -508,6 +521,72 @@ void main() {
       final stored = await storedPayment('pay-recon-empty-id');
       expect(stored.reconciledByUserId, 'cajero-07');
       expect(stored.reconciliationSyncStatus, 'synced');
+    },
+  );
+
+  test(
+    'an override row pushes its typed supervisor credential verbatim and a null-credential row omits the key',
+    () async {
+      await seedReconciledPayment(
+        'pay-recon-override-ref',
+        overrideSupervisorRef: 'supervisora-ana',
+      );
+      await seedReconciledPayment('pay-recon-normal');
+
+      await syncService.triggerManualSync();
+
+      expect(capturedReconciliationRequests, hasLength(1));
+      final batch =
+          capturedReconciliationRequests.single['reconciliations'] as List;
+      final overridePayload = batch.singleWhere(
+        (r) => (r as Map)['paymentId'] == 'pay-recon-override-ref',
+      ) as Map;
+      // The typed credential rides the payload verbatim — never validated
+      // client-side, never merged into reconciledByUserId.
+      expect(overridePayload['overrideSupervisorRef'], 'supervisora-ana');
+      expect(overridePayload['reconciledByUserId'], 'cajero-01');
+      final normalPayload = batch.singleWhere(
+        (r) => (r as Map)['paymentId'] == 'pay-recon-normal',
+      ) as Map;
+      // Absent credential ⇒ absent key (the forbidNonWhitelisted pipe
+      // accepts the legacy shape, and null is never sent).
+      expect(normalPayload.containsKey('overrideSupervisorRef'), isFalse);
+    },
+  );
+
+  test(
+    "the queued-identity repair preserves a MANUAL_OVERRIDE row's typed supervisor credential",
+    () async {
+      // Pre-fix override rows on SOHO's tablet: reconciled_by_user_id='' (no
+      // operator stamped) AND a supervisor credential already stored. The
+      // sync-time backfill must stamp the operator WITHOUT losing the typed
+      // credential — the repaired entity is a hand-built copy, so a missing
+      // field there silently nulls the credential on write-through.
+      await seedReconciledPayment(
+        'pay-recon-empty-id',
+        reconciledByUserId: '',
+        overrideSupervisorRef: 'sup-07',
+      );
+
+      final identitySyncService = buildIdentitySyncService(
+        resolveActingUserId: () async => 'cajero-07',
+      );
+
+      await identitySyncService.triggerManualSync();
+
+      expect(capturedReconciliationRequests, hasLength(1));
+      final batch =
+          capturedReconciliationRequests.single['reconciliations'] as List;
+      final pushed = batch.single as Map;
+      // BOTH identities correct after the repair: operator in the id field,
+      // typed supervisor credential in its own field.
+      expect(pushed['reconciledByUserId'], 'cajero-07');
+      expect(pushed['overrideSupervisorRef'], 'sup-07');
+
+      // And the write-through repair persists both values, not just the id.
+      final stored = await storedPayment('pay-recon-empty-id');
+      expect(stored.reconciledByUserId, 'cajero-07');
+      expect(stored.overrideSupervisorRef, 'sup-07');
     },
   );
 

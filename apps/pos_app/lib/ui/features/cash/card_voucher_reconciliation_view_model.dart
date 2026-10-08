@@ -186,7 +186,13 @@ class CardVoucherReconciliationViewModel extends ChangeNotifier {
         last4: payment.last4,
         batchNumber: payment.batchNumber,
         reconciledAt: DateTime.now().millisecondsSinceEpoch,
-        reconciledByUserId: supervisorId,
+        // Semantics fix: the override is PERFORMED by the operator, so the
+        // reconciler identity stays the real acting user (same as
+        // [reconcileVoucher]). The typed supervisor credential — declared
+        // evidence, never validated — moves to its own column so the cloud
+        // can tell WHO did it from WHO allegedly authorized it.
+        reconciledByUserId: currentUserId,
+        overrideSupervisorRef: supervisorId,
         // S1a (backlog #68): the override write also creates the outbox
         // work — MANUAL_OVERRIDE state must reach the cloud as well.
         reconciliationSyncStatus: 'pending',

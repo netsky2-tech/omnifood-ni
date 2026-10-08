@@ -1596,6 +1596,11 @@ class SyncService {
           batchNumber: payment.batchNumber,
           reconciledAt: payment.reconciledAt,
           reconciledByUserId: actingUserId,
+          // Semantics fix: the repair rebuilds the entity by hand (no
+          // copyWith), so every new field must be carried explicitly or it
+          // is silently dropped on write-through. The typed supervisor
+          // credential predating the repair must survive the backfill.
+          overrideSupervisorRef: payment.overrideSupervisorRef,
           reconciliationSyncStatus: payment.reconciliationSyncStatus,
           createdAt: payment.createdAt,
         );
@@ -1673,6 +1678,13 @@ class SyncService {
       if (payment.voucherCode != null) 'voucherCode': payment.voucherCode,
       if (payment.batchNumber != null) 'batchNumber': payment.batchNumber,
       if (payment.last4 != null) 'last4': payment.last4,
+      // Semantics fix: the typed supervisor credential rides its own key,
+      // verbatim, only when non-empty — same convention as the other
+      // optional correlation fields: omitted when absent, never sent as
+      // null (the backend DTO declares it optional @IsString).
+      if (payment.overrideSupervisorRef != null &&
+          payment.overrideSupervisorRef!.isNotEmpty)
+        'overrideSupervisorRef': payment.overrideSupervisorRef,
     };
   }
 
