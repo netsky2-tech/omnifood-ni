@@ -1,7 +1,9 @@
 # Soho P2 — Nivel 2: UX y Robustez Operativa en Punto de Venta
 
-**Branch:** `fix/soho-p2-level2-ux-robustness` (base `main@958122cf`, Nivel 1 ya mergeado)
+**Branch:** `fix/soho-p2-level2-ux-robustness` (base `main@958122cf`, Nivel 1 ya mergeado) — **MERGED** a `main` en `a1b409ef` (`--no-ff`), con el status passivo en `f6eeee95`.
 **Worktree:** `/home/octavio_morales/omnifood-ni-l2`
+**Revisión nativa consolidada:** `review-422f91643146ecf6` — tier medium, 18 archivos / 1089 líneas, lens `review-reliability`, **approved** con 6 hallazgos informativos no bloqueantes; autoridad quemada.
+**Checks post-merge en `main`:** cash 68/68 · void 18+11 · activation 32/32 · hardware 17/17 · backend onboarding 54/54 · analyze limpio en las 4 superficies.
 **Origen:** `odd/tasks/soho-estado-y-pendientes.md` §4, bloque P2 — items #74, #76, #78, #79.
 **Routing:** sequential writers (un `gentle-ai-worker` a la vez en este worktree), `gentle-ai-verify` por tarea.
 
