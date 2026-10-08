@@ -773,6 +773,13 @@ class SaleViewModel extends ChangeNotifier {
     return null;
   }
 
+  /// Non-consuming read of the directive block reason for the persistent
+  /// cart-panel banner. Unlike [gateCheckoutOnFxRates] it must NEVER write
+  /// [_errorMessage] or clear anything: the banner has to stay visible
+  /// while the operator keeps working, and the transient SnackBar channel
+  /// stays reserved for the other error paths.
+  String? get fxCheckoutBlockReason => _fxRateBlockReason();
+
   /// Checkout seam: called by the view right after loadExchangeRates() and
   /// BEFORE the checkout dialog opens, so the operator learns about the
   /// missing rate before ringing up the whole sale, not after COBRAR.
