@@ -495,6 +495,11 @@ void main() async {
     syncDio,
     database: database,
     connectivityService: connectivityService,
+    // Queued-reconciliation identity repair: the sync path backfills
+    // legacy pending rows that carry an empty reconciledByUserId with the
+    // same acting-operator identity the cash path uses
+    // (AuthRepository.getCurrentUser). Optional callback, sync-time call.
+    resolveActingUserId: () async => (await authRepository.getCurrentUser())?.id,
   );
   activeSyncService = syncService;
 

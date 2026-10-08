@@ -277,6 +277,7 @@ class SyncService {
     FiscalInboxHandler? fiscalInboxHandler,
     OhacOutboxRegistry? ohacOutboxRegistry,
     void Function(OhacObservabilityFact fact)? ohacFactObserver,
+    Future<String?> Function()? resolveActingUserId,
   }) : _role = role,
        _database = database,
        _connectivityService = connectivityService,
@@ -284,11 +285,19 @@ class SyncService {
            fiscalInboxHandler ??
            (database != null ? FiscalInboxHandler(database) : null),
        _ohacOutboxRegistry = ohacOutboxRegistry ?? OhacOutboxRegistry(),
-       _ohacFactObserver = ohacFactObserver;
+       _ohacFactObserver = ohacFactObserver,
+       _resolveActingUserId = resolveActingUserId;
 
   /// Test/production seam for OHAC observability facts (design §12): when
   /// null, facts go to `developer.log` via [logOhacFact].
   final void Function(OhacObservabilityFact fact)? _ohacFactObserver;
+
+  /// Optional sync-time acting-operator identity source for the queued
+  /// reconciliation repair: wired from main.dart with
+  /// AuthRepository.getCurrentUser (the same identity the cash path uses).
+  /// Optional so existing constructors/tests keep compiling; when absent,
+  /// the reconciliation push keeps its legacy behaviour.
+  final Future<String?> Function()? _resolveActingUserId;
 
   /// Emits one OHAC observability fact (design §12/§16): the injected
   /// observer wins (tests); the default writes a `developer.log` line.
@@ -1527,7 +1536,94 @@ class SyncService {
     final pending = await paymentDao.getPendingReconciliations();
     if (pending.isEmpty) return;
 
-    final batch = pending.take(_batchEnvelopeLimit).toList(growable: false);
+    // Queued-identity repair: rows reconciled before the write-side fix
+    // (c5e5fa9b) hold an empty `reconciledByUserId`. An empty string passes
+    // the payload builder's `?? 'unknown-terminal-operator'` fallback
+    // untouched, reaches the backend's `@IsNotEmpty()` DTO validation and
+    // 400s the ENTIRE batch — so one bad row blocks every good row forever
+    // (failed rows stay 'pending'). Backfill honestly at sync time: stamp
+    // the acting operator (persisted via updatePayment so the repair
+    // survives restarts and later passes read the corrected value) when one
+    // is resolvable; defer the row (stays pending, retried next pass) when
+    // it is not. Never send an empty id; never fabricate an identity for a
+    // row that could still be attributed. The 'unknown-terminal-operator'
+    // literal is kept only for null rows on callers that never wired an
+    // identity source (payload-builder fallback, unchanged).
+    final resolver = _resolveActingUserId;
+    String? actingUserId;
+    if (resolver != null) {
+      try {
+        actingUserId = (await resolver())?.trim() ?? '';
+      } catch (e) {
+        developer.log(
+          'Reconciliation sync: acting-operator resolution failed ($e); '
+          'unattributable rows will be deferred',
+          name: 'SyncService',
+        );
+        actingUserId = '';
+      }
+      if (actingUserId.isEmpty) actingUserId = null;
+    }
+
+    final syncable = <PaymentEntity>[];
+    var deferredUnattributable = 0;
+    for (final payment in pending) {
+      final storedId = payment.reconciledByUserId?.trim() ?? '';
+      if (storedId.isNotEmpty) {
+        syncable.add(payment);
+        continue;
+      }
+      if (actingUserId != null) {
+        // Write-through repair: persist the honest attribution so the next
+        // sync pass reads the corrected row instead of re-deciding. The
+        // repaired entity (not the stale in-memory one) rides the batch.
+        final repaired = PaymentEntity(
+          id: payment.id,
+          invoiceId: payment.invoiceId,
+          method: payment.method,
+          amount: payment.amount,
+          currency: payment.currency,
+          exchangeRate: payment.exchangeRate,
+          amountNio: payment.amountNio,
+          changeGiven: payment.changeGiven,
+          changeCurrency: payment.changeCurrency,
+          voucherCode: payment.voucherCode,
+          cardBrand: payment.cardBrand,
+          cardType: payment.cardType,
+          bankPos: payment.bankPos,
+          reconciliationStatus: payment.reconciliationStatus,
+          last4: payment.last4,
+          batchNumber: payment.batchNumber,
+          reconciledAt: payment.reconciledAt,
+          reconciledByUserId: actingUserId,
+          reconciliationSyncStatus: payment.reconciliationSyncStatus,
+          createdAt: payment.createdAt,
+        );
+        await paymentDao.updatePayment(repaired);
+        syncable.add(repaired);
+        continue;
+      }
+      if (payment.reconciledByUserId == null && resolver == null) {
+        // Legacy behaviour preserved verbatim: callers that never wire an
+        // identity source keep the terminal fallback literal (non-empty,
+        // backend-accepted) for null rows only. Never widened to ''.
+        syncable.add(payment);
+        continue;
+      }
+      deferredUnattributable++;
+    }
+    if (deferredUnattributable > 0) {
+      developer.log(
+        'Reconciliation sync: deferred $deferredUnattributable payment '
+        'reconciliation(s) with an empty reconciledByUserId and no '
+        'resolvable acting operator; rows stay pending and are retried on '
+        'the next pass instead of poisoning the batch',
+        name: 'SyncService',
+      );
+    }
+    if (syncable.isEmpty) return;
+
+    final batch = syncable.take(_batchEnvelopeLimit).toList(growable: false);
 
     developer.log(
       'Reconciliation sync: posting ${batch.length} payment reconciliations',
@@ -1555,7 +1651,10 @@ class SyncService {
   /// Maps a local payment row onto the cloud ingestion contract
   /// (PaymentReconciliationSyncItemDto). `reconciledAt` is sent as ISO-8601
   /// (the DTO requires a non-empty string); the optional correlation fields
-  /// are omitted when absent, never sent as null.
+  /// are omitted when absent, never sent as null. The
+  /// 'unknown-terminal-operator' fallback only applies to a NULL stored id
+  /// on callers with no identity source wired; empty-string rows never
+  /// reach this builder (they are repaired or deferred upstream).
   Map<String, Object?> _buildPaymentReconciliationPayload(
     PaymentEntity payment,
   ) {

@@ -201,6 +201,7 @@ void main() {
   Future<PaymentEntity> seedReconciledPayment(
     String id, {
     String syncStatus = 'pending',
+    String? reconciledByUserId = 'cajero-01',
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final payment = PaymentEntity(
@@ -219,7 +220,7 @@ void main() {
       last4: '1122',
       batchNumber: '003',
       reconciledAt: now,
-      reconciledByUserId: 'cajero-01',
+      reconciledByUserId: reconciledByUserId,
       createdAt: now,
     );
     await database.paymentDao.insertPayments([payment]);
@@ -451,6 +452,197 @@ void main() {
       final age = await syncService.getOldestPendingItemAge();
       expect(age, isNotNull);
       expect(age!.inSeconds, greaterThanOrEqualTo(0));
+    },
+  );
+
+  /// Builds a SyncService against the shared in-memory database and fake
+  /// dio, with an optional sync-time acting-operator identity source —
+  /// the same seam main.dart wires from AuthRepository.getCurrentUser.
+  SyncService buildIdentitySyncService({
+    Future<String?> Function()? resolveActingUserId,
+  }) {
+    return SyncService(
+      _FakeAuditRepository(),
+      _FakeSalesRepository(),
+      _FakeInventoryRepository(),
+      dio,
+      database: database,
+      resolveActingUserId: resolveActingUserId,
+    );
+  }
+
+  Future<PaymentEntity> storedPayment(String id) async {
+    final payments =
+        await database.paymentDao.getPaymentsByInvoiceId('inv-vsync-01');
+    return payments.singleWhere((p) => p.id == id);
+  }
+
+  test(
+    'a queued reconciliation with an empty reconciledByUserId is backfilled with the resolved operator, persisted, and sent',
+    () async {
+      // SOHO's tablet holds rows queued since 2026-10-06 with
+      // reconciled_by_user_id='' baked into the row: pre-fix writes.
+      await seedReconciledPayment('pay-recon-empty-id', reconciledByUserId: '');
+
+      final identitySyncService = buildIdentitySyncService(
+        resolveActingUserId: () async => 'cajero-07',
+      );
+
+      await identitySyncService.triggerManualSync();
+
+      expect(
+        syncService.lastSyncError ?? '',
+        isNot(contains('Conciliaciones')),
+      );
+      expect(capturedReconciliationRequests, hasLength(1));
+      final batch =
+          capturedReconciliationRequests.single['reconciliations'] as List;
+      final pushed = batch.singleWhere(
+        (r) => (r as Map)['paymentId'] == 'pay-recon-empty-id',
+      ) as Map;
+      // Honest attribution: the resolved operator rides the payload, never
+      // the empty string that 400s the whole batch server-side.
+      expect(pushed['reconciledByUserId'], 'cajero-07');
+
+      // The repair is written through to Floor, not just to the payload.
+      final stored = await storedPayment('pay-recon-empty-id');
+      expect(stored.reconciledByUserId, 'cajero-07');
+      expect(stored.reconciliationSyncStatus, 'synced');
+    },
+  );
+
+  test(
+    'a queued row with an empty id and no resolvable operator is deferred while valid rows in the same batch still sync (anti-poisoning)',
+    () async {
+      await seedReconciledPayment('pay-recon-empty-id', reconciledByUserId: '');
+      await seedReconciledPayment('pay-recon-good-id');
+
+      final identitySyncService = buildIdentitySyncService(
+        resolveActingUserId: () async => null,
+      );
+
+      await identitySyncService.triggerManualSync();
+
+      expect(capturedReconciliationRequests, hasLength(1));
+      final batch =
+          capturedReconciliationRequests.single['reconciliations'] as List;
+      final pushedIds = batch.map((r) => (r as Map)['paymentId']).toSet();
+      // The unattributable row must NOT block the batch: only the row that
+      // already carries an identity is pushed.
+      expect(pushedIds, {'pay-recon-good-id'});
+
+      // The deferred row keeps its pending state for the next pass.
+      final stillPending = await database.paymentDao.getPendingReconciliations();
+      expect(stillPending.map((p) => p.id), contains('pay-recon-empty-id'));
+      expect((await storedPayment('pay-recon-empty-id')).reconciledByUserId, '');
+    },
+  );
+
+  test(
+    'the identity backfill persists: a later pass reads the corrected row instead of re-deciding',
+    () async {
+      await seedReconciledPayment('pay-recon-empty-id', reconciledByUserId: '');
+
+      // Pass 1: the backend rejects the record (server-side failure), so the
+      // row stays pending — but the identity repair must already be durable.
+      final failingDio = Dio();
+      failingDio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.path == '/sales/payment-reconciliations/sync') {
+              capturedReconciliationRequests.add(
+                Map<String, dynamic>.from(options.data as Map),
+              );
+              return handler.resolve(
+                Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'received': 1,
+                    'processed': 0,
+                    'failed': 1,
+                    'results': [
+                      {
+                        'paymentId': 'pay-recon-empty-id',
+                        'status': 'FAILED',
+                      },
+                    ],
+                  },
+                ),
+              );
+            }
+            if (options.path.startsWith('/v1/catalog') ||
+                options.path.startsWith('/v1/alerts')) {
+              return handler.resolve(
+                Response(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {
+                    'products': [],
+                    'catalogValues': [],
+                    'insumos': [],
+                    'recipes': [],
+                    'users': [],
+                    'securityProfiles': [],
+                    'alerts': [],
+                    'version': 1,
+                  },
+                ),
+              );
+            }
+            return handler.next(options);
+          },
+        ),
+      );
+      final firstPass = SyncService(
+        _FakeAuditRepository(),
+        _FakeSalesRepository(),
+        _FakeInventoryRepository(),
+        failingDio,
+        database: database,
+        resolveActingUserId: () async => 'cajero-07',
+      );
+      await firstPass.triggerManualSync();
+
+      final afterFirstPass = await storedPayment('pay-recon-empty-id');
+      expect(afterFirstPass.reconciledByUserId, 'cajero-07');
+      expect(afterFirstPass.reconciliationSyncStatus, 'pending');
+
+      // Pass 2: no operator is resolvable anymore, but the row now carries
+      // the persisted id — it must be sent with it, not re-deferred.
+      final secondPass = buildIdentitySyncService(
+        resolveActingUserId: () async => null,
+      );
+      await secondPass.triggerManualSync();
+
+      expect(capturedReconciliationRequests, hasLength(2));
+      final secondBatch =
+          capturedReconciliationRequests.last['reconciliations'] as List;
+      final row = secondBatch.single as Map;
+      expect(row['paymentId'], 'pay-recon-empty-id');
+      expect(row['reconciledByUserId'], 'cajero-07');
+    },
+  );
+
+  test(
+    'rows that already carry a non-empty id are never overwritten by the resolver',
+    () async {
+      await seedReconciledPayment('pay-recon-good-id');
+
+      final identitySyncService = buildIdentitySyncService(
+        resolveActingUserId: () async => 'cajero-07',
+      );
+
+      await identitySyncService.triggerManualSync();
+
+      final batch =
+          capturedReconciliationRequests.single['reconciliations'] as List;
+      final row = batch.single as Map;
+      expect(row['paymentId'], 'pay-recon-good-id');
+      expect(row['reconciledByUserId'], 'cajero-01');
+
+      final stored = await storedPayment('pay-recon-good-id');
+      expect(stored.reconciledByUserId, 'cajero-01');
     },
   );
 }
