@@ -59,10 +59,14 @@
 
 **Causa raíz (verificada):** `sale_view_model.dart` `voidInvoice()` (~2485-2489) llama `_printInvoiceCopy()` **sin condición**, a diferencia del camino de nota de crédito (`processReturn`, ~2340) que sí gatea en `config.autoPrintInvoice`. `_printInvoiceCopy()` (~2160-2177) retorna `false` y fija `_lastPrintError`, pero la anulación ya quedó commiteada (fila de auditoría escrita) y ese resultado sólo se filtra en `sales_history_view.dart` (~633-643) vía `_lastVoidPrintSucceeded`.
 
+**Anclas exactas:** `view_models/sale_view_model.dart:2483-2491` — dentro de `voidInvoice()`, tras `_salesRepository.voidInvoice(...)` fija `_lastVoidPrintSucceeded = false`, relee la factura y llama `_printInvoiceCopy(voided, cashierName: currentUser.name)` **sin leer nunca** `PrinterConfigService.getPrinterConfig()`. El contraste existe en el mismo archivo: `_printCreditNoteCopy()` (~2335-2340) hace `final config = await _printerConfigService.getPrinterConfig(); if (!config.autoPrintInvoice) return;`. El camino de venta normal (~1931) también gatea; `voidInvoice()` es el único que no. El resultado ya se muestra en `sales_history_view.dart:633-645`, así que **el defecto de visibilidad es de verdad, no de UI**: con auto-print apagado el mensaje afirma que *no se pudo imprimir* cuando en realidad no se pidió.
+
 **Fix:**
 1. Gatear la impresión de la copia ANULADO con la misma política del resto: respetar `printerConfig.autoPrintInvoice` y la disponibilidad del hardware.
 2. Superficialmente **mostrar el resultado**: éxito → confirmación de que la copia salió; fallo → mensaje explícito de "factura anulada, la copia no imprimió" con el motivo, sin dejar la anulación revertida (la anulación fiscal es el hecho; la impresión es derivada).
 3. Unificar con el camino de nota de crédito para que ambos lean la misma config en el mismo momento.
+
+**Decisión de shape:** modelar el resultado como tri-estado (`printed` / `not-requested` / `failed`) en lugar de un bool, porque el bool actual convierte "auto-print apagado" en un falso fallo y "impresora fuera de línea" en un silencio. La anulación **no** se revierte jamás: el hecho fiscal es la anulación, la impresión es derivada.
 
 **Superficie:** `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart`, `apps/pos_app/lib/ui/features/sales/sales_history_view.dart` (+ tests).
 
@@ -78,6 +82,8 @@
 
 **Causa raíz (verificada):** `activation_controlled_sale_runner.dart:653` fija `posBuild: '1.0.0+1'` y `:689` repite `'1.0.0+1'` en el payload `FIRST_SUCCESSFUL_SALE_OBSERVED`, en vez de `readOhacPosBuild()` (`ohac_negotiation_parameters.dart:76`, que usa `PackageInfo.fromPlatform()`). El `sync_service` sí usa la función real (2849, 3105, 3203, 3601); sólo el camino de activación hardcodea. Del lado backend, `FirstSuccessfulSaleClaimDto.posBuild` ya llega (`activation.dto.ts`) pero `claimFirstSuccessfulSale()` **nunca** lo escribe en el attempt, y `startActivation()` lo guarda como `dto.posBuild?.trim() || null` (~370) mientras el dashboard manda sólo `{ candidateTerminalId }` (`setup-center-view.tsx:277`).
 
+**Anclas exactas:** `apps/pos_app/lib/data/models/activation/first_successful_sale_claim_entity.dart:36` — la columna `pos_build` del claim local **ya es `String?`**, así que null es representable y no hace falta un fallback inventado. `ohac_negotiation_parameters.dart:76` — `readOhacPosBuild()` devuelve null a propósito cuando la lectura falla (fail-closed, "no silently wrong build"); `sync_service.dart:2849` es el consumidor de referencia. Backend: `claimFirstSuccessfulSale()` ya carga el attempt y lo savea dentro de `runTenantBound`, pero nunca toca `attempt.posBuild`, que es donde se pierde el valor real que sí llega por `FirstSuccessfulSaleClaimDto.posBuild`.
+
 **Fix (acotado a dos superficies, sin migración):**
 1. **POS:** reemplazar ambos `'1.0.0+1'` por `await readOhacPosBuild()`, con fallback explícito y documentado cuando devuelva `null`.
 2. **Backend:** en `claimFirstSuccessfulSale()`, estampar `attempt.posBuild` desde `dto.posBuild` cuando el attempt lo tenga vacío (write-once, nunca pisar un valor ya confirmado).
@@ -85,9 +91,13 @@
 
 **Superficie:** `apps/pos_app/lib/data/services/activation_controlled_sale_runner.dart`, `apps/admin_backend/src/modules/onboarding/services/activation.service.ts` (+ tests).
 
-**Checks:** test POS que afirme que el payload lleva el build leído; test de servicio backend que afirme write-once del `posBuild` en el attempt.
+**Checks:** `cd apps/pos_app && flutter analyze lib/data/services` → No issues found. `flutter test --concurrency=2 test/data/services/activation_controlled_sale_runner_test.dart` → **+32 All tests passed** (incl. los dos nuevos de #78). `cd apps/admin_backend && npx jest src/modules/onboarding/services/activation.service.spec.ts` → **54/54**. RED observado en ambos lados: backend `Expected: '2.14.3+918' / Received: null`; POS `No named parameter with the name 'posBuildReader'`.
 
-**Commit evidencia:** —
+**Commit evidencia:** `59174c18` en la rama aislada `fix/soho-p2-activation-pos-build` (worktree `omnifood-ni-l2-t4`, base `bd69ebae`). Revisión nativa `review-8a44d915190ea024`: tier medium, 244 líneas, lens reliability, **approved sin hallazgos**, autoridad quemada.
+
+**Implementación real:** el runner lee el build **una sola vez** y lo reutiliza para la fila local y el envelope; cuando `readOhacPosBuild()` devuelve null persiste null y **omite** la clave `posBuild` del payload (`FirstSuccessfulSaleClaimDto.posBuild` ya es `@IsOptional()`). Como `PackageInfo` es inalcanzable bajo `flutter_test`, se agregó un seam opcional `posBuildReader` con default real: ningún call site existente cambió. Backend: estampado write-once dentro de la transacción `runTenantBound` que ya saveaba el attempt (`claimedPosBuild && !attempt.posBuild?.trim()`).
+
+**Follow-up explícito (fuera de slice, decidido por el padre):** (a) prefijar `posBuild` cuando el dashboard inicia el intento requiere persistir el build en `device_linking_codes` en el claim pre-auth → migración nueva. (b) Los attempts históricos ya ligados a un ticket hacen early-return `claimed:false` y **conservan `pos_build` vacío para siempre**: coherente con el contrato write-once, pero no repara el pasado.
 
 ---
 
