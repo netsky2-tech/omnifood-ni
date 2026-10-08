@@ -51,8 +51,9 @@ el set.
    segmento y mensaje. NO inventa claims.
         │
         ├──────────────────────► 4. nhilos_website_information_architecture_content_wireframe_v1.0.md
-        │                            Arquitectura de información y contenido del sitio.
-        │                            NO cambia rutas ni promesas fuera de lo que el brief autoriza.
+        │                            Dueño de la navegación y las rutas. Recibe del brief
+        │                            mensajes por capacidad, no rutas ni promesas fuera de
+        │                            lo que el brief autoriza en messaging.
         │                                 │
         │                                 ▼
         │                          5. nhilos_pos_product_page_content_v1.1.md
@@ -105,7 +106,7 @@ a él como upstream. Si un documento necesita una regla que vive arriba, la cita
 | 6 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `APPROVED` |
 | — | `nhilos_pos_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficie POS | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_backoffice_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficies backoffice | 1.0 | `APPROVED / REFERENCE` |
-| — | `nhilos_website_non_functional_spec_v1.0.md` | `branding/Recursos/` | Spec no funcional del sitio | 1.0 | `DRAFT` |
+| — | `nhilos_website_non_functional_spec_v1.0.md` | `branding/Recursos/` | Spec no funcional del sitio | 1.0 | `DRAFT` — gates heredados por la IA (§18.1 `NF-01`..`NF-13`) |
 | — | `nhilos_backoffice_module_audit_template_v1.0.md` | `branding/Recursos/` | Plantilla de auditoría de módulo | 1.0 | `EVIDENCE PASS` |
 
 **Documentos derivados exigidos por la constitución y aún inexistentes** (deuda declarada, no
@@ -118,9 +119,13 @@ las especificaciones de expresión por producto. La constitución los marca como
 
 1. Un cambio en el paso 1 obliga a revisar los pasos 2 a 6.
 2. Un cambio en el paso 2 (nuevo claim admisible o claim retirado) obliga a revisar los pasos 3 a 6.
-3. Un cambio de rutas o navegación del sitio se decide en el paso 3 y se propaga al 4; nunca se
-   decide en el 4.
-4. Toda revisión de realidad se registra como un documento numerado y su resultado se refleja en
+3. Un cambio de rutas o navegación del sitio se decide en el paso 4 (IA wireframe) y nunca en el
+   paso 3. El Brief contribuye mensajes por capacidad, no rutas: no puede introducirlas,
+   prescribirlas ni propagarlas.
+4. **Ownership split:** el Brief (paso 3) es dueño del **messaging**; el IA wireframe (paso 4) es
+   dueño de la **navegación y las rutas**. Toda decisión de sitemap, rutas o navegación nace y se
+   documenta en el paso 4.
+5. Toda revisión de realidad se registra como un documento numerado y su resultado se refleja en
    el paso correspondiente antes de publicar.
 
 ---

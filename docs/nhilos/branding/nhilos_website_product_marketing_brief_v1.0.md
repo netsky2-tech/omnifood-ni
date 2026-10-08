@@ -6,7 +6,7 @@
 **Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.2, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara y comienza por la operación del propio prospecto (ver Regla de Oro y Sección 5.1).  
   
-**Downstream Gate:** `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
+**Downstream Gate:** `nhilos_website_information_architecture_content_wireframe_v1.0.md` — dueño de la navegación y las rutas; consume los mensajes de este Brief (ver `nhilos_branding_document_governance_v1.0.md` §6)  
 **Audiencia:** Product Marketing, Copywriters, UI/UX Designers, Frontend Engineers  
 **Mercado objetivo principal:** Nicaragua (Gastronomía, Cafeterías, Food Parks, Bares y Retail de alta rotación)  
 **Fecha:** 2026-09-26  
@@ -98,16 +98,23 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
 
 ---
 
-## 5. Arquitectura del Sitio Web y Mensajes por Página
+## 5. Mensajes por Capacidad del Sitio Web (sin prescripción de rutas)
 
-### 5.1 Homepage (`/`)
+**Regla de enrutamiento (`G-02` / `N-03`):** Este Brief asigna **mensajes por capacidad**, no rutas.
+Ninguna sección de este documento prescribe rutas, sitemap ni navegación de primer nivel: toda
+decisión de rutas y navegación pertenece a `nhilos_website_information_architecture_content_wireframe_v1.0.md`
+(paso 4 de la cadena, dueño de la navegación según `nhilos_branding_document_governance_v1.0.md` §6).
+Las capacidades de esta sección se argumentan como bloques de contenido dentro de las páginas
+profundas que la IA defina; ninguna es un destino de navegación de primer nivel.
+
+### 5.1 Homepage
 - **Hero Title:** El punto de venta que sigue operando cuando se cae el internet. Diseñado para Nicaragua.
 - **Hero Subtitle:** Cobrá sin internet en tu caja, cumplí con la DGI (DT 09-2007), controlá tus recetas y monitoreá tus ventas en tiempo real desde cualquier lugar.
 - **CTA Principal:** Solicitar una demo.
 - **Sección de Prueba:** Base de datos SQLite local en terminales Sunmi V2s.
 - **Social Proof / Credenciales:** Hecho para el comercio local: bimoneda (NIO/USD), conciliación BAC/Banpro y soporte en Nicaragua.
 
-### 5.2 Producto: Punto de Venta FOH (`/pos`)
+### 5.2 Capacidad: Punto de Venta FOH
 - **Foco:** Rapidez táctil, interfaz oscura de alto contraste, buscador rápido de productos, modificadores de platos/bebidas.
 - **Módulos destacados:**
   - Modo Offline Táctico (base de datos local SQLite Floor en el terminal).
@@ -115,7 +122,7 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
   - Impresión térmica integrada 58mm y tickets de comanda por red local.
   - División de cuentas (Split Bill) y propina voluntaria.
 
-### 5.3 Producto: Inventario, Recetas y BOH (`/inventario`)
+### 5.3 Capacidad: Inventario, Recetas y BOH
 - **Foco:** Rentabilidad real y eliminación de mermas invisibles.
 - **Módulos destacados:**
   - Deducción automática por receta (BOM).
@@ -123,7 +130,7 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
   - Kardex inmutable con tolerancia a stock negativo y regularización posterior.
   - Control de mermas y órdenes de producción de pre-elaborados.
 
-### 5.4 Producto: Cumplimiento Fiscal DGI (`/fiscal`)
+### 5.4 Capacidad: Cumplimiento Fiscal DGI
 - **Foco:** Tranquilidad legal y contable bajo normativa DT 09-2007.
 - **Módulos destacados:**
   - Disposición Técnica DGI 09-2007 para Sistemas Computarizados de Facturación.
@@ -132,7 +139,7 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
   - Validación sintáctica de RUC y Cédula nicaragüense.
   - Exportación de reportes limpios para tu contador.
 
-### 5.5 Hardware Compatible (`/hardware`)
+### 5.5 Capacidad: Hardware Compatible
 - **Foco:** Un perfil de equipamiento verificado, con límites declarados (`OD-02` PC-HW-01..03, LIM-06). No se afirma “certificado en campo” de forma genérica.
 - **Equipos destacados:**
   - **Sunmi V2s:** Terminal móvil todo-en-uno con impresora térmica integrada de 58mm, cámara lectora de códigos y batería de larga duración. *Works when:* terminal Android con Sunmi OS vía Platform Channels de Android. *Does not work when:* impresoras domésticas USB o hardware sin checklist de verificación.
@@ -140,7 +147,7 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
   - **Impresoras de Cocina:** Compatibilidad con ticketeras de red local ESC/POS (LAN/Ethernet, driver `ESCPOS_NETWORK`) para barra y cocina. *Works when:* impresora ESC/POS estándar con IP estática fija en la misma subred. *Does not work when:* red local sin IP fija o impresoras no ESC/POS.
   - **Tablets Android:** Soporte para tablets táctiles estándar en barra o punto fijo, incluida la pantalla de cocina (KDS) (`kitchen_display_view.dart`).
 
-### 5.6 Dueños: Owner Dashboard (`/dashboard`)
+### 5.6 Capacidad: Owner Dashboard
 - **Foco:** Control sin estar metido en la cocina.
 - **Módulos destacados:**
   - Venta neta consolidada y horas de mayor flujo de clientes.

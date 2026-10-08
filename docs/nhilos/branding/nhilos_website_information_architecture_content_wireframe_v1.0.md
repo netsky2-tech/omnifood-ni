@@ -1221,10 +1221,12 @@ Dentro:
 ``` text
 Producto
   NHILOS POS
+    Overview
     Operación / Cómo funciona
     Capacidades
-    Implementación
     Soporte
+
+Implementación
 
 Recursos
   Guías
@@ -1235,6 +1237,11 @@ Nosotros
 ```
 
 `*` solo cuando exista evidencia publicable.
+
+Los items de primer nivel del menú móvil son los mismos que la navegación primaria de
+escritorio (§2.2): `Producto`, `Implementación`, `Recursos`, `Nosotros`. `Implementación` es
+un item de primer nivel en ambos breakpoints; dentro del menú `Producto` permanece anidado
+como experiencia de NHILOS POS, igual que en el árbol `Producto navigation` de escritorio.
 
 ## Mobile rules
 
@@ -1363,10 +1370,44 @@ necesidad.
     donde corresponde;
 -   [x] la siguiente etapa puede comenzar sin reinterpretar la
     arquitectura.
+-   [ ] los gates no funcionales de §18.1 están verificados contra
+    `nhilos_website_non_functional_spec_v1.0.md` antes de cualquier
+    sign-off de lanzamiento del sitio.
 
 **Nota:** URL técnica, claims, pricing, buyer/ICP, proof, legal y
 operación de demo siguen siendo gates downstream; no son blockers de la
 aprobación de esta IA.
+
+## 18.1 Non-functional acceptance gates (inherited)
+
+**Status: `INHERITED` — gate obligatorio, no omisible**
+
+El cierre estructural de este bloque de aceptación no sustituye el gate no funcional. Los
+umbrales siguientes se heredan de
+`Recursos/nhilos_website_non_functional_spec_v1.0.md` (referencia técnica transversal según
+`nhilos_branding_document_governance_v1.0.md` §3). Conforme a la regla `G-02`, ningún
+sign-off de esta IA o del sitio es válido si omite estos gates: la aprobación de la IA queda
+explícitamente condicionada a ellos.
+
+| # | Gate | Valor heredado (verbatim) | Fuente (spec no funcional) |
+|---|------|---------------------------|----------------------------|
+| NF-01 | Conformidad de accesibilidad | WCAG 2.1 **Nivel AA** como estándar base de aceptación | §2 (intro) |
+| NF-02 | LCP | `< 2.5 segundos` (percentil 75, "Good") | §1.1 |
+| NF-03 | INP | `< 200 milisegundos` | §1.1 |
+| NF-04 | CLS | `< 0.1` | §1.1 |
+| NF-05 | Peso de página inicial | `< 2.5 MB` comprimido | §1.2 |
+| NF-06 | Formato de imágenes | Servidas en formatos modernos (`WebP` o `AVIF` con fallback a JPG/PNG); redimensionadas por viewport con `srcset`; `loading="lazy"` fuera del viewport inicial | §1.2 |
+| NF-07 | Touch targets | Área táctil mínima de `44x44 CSS pixels` en móvil para todo elemento interactivo | §2.4 |
+| NF-08 | Contraste de texto | Mínimo `4.5:1` texto normal y `3:1` texto grande (H1, H2) | §2.1 |
+| NF-09 | Contraste de UI | Mínimo `3:1` para controles interactivos (botones, inputs, estados activos) | §2.1 |
+| NF-10 | Movimiento reducido | Con `prefers-reduced-motion` activo, CSS/JS cancela reveals, paralajes y transiciones suaves | §2.4 |
+| NF-11 | Consentimiento antes de terceros | Ninguna cookie no esencial o script de terceros (píxeles, analytics) sin consentimiento explícito del usuario; "Rechazar todo" tan accesible y visible como "Aceptar todo" | §3.2 |
+| NF-12 | Página 404 útil | Vista personalizada y sobria con enlaces directos a Home, Producto y Soporte; sin dead ends | §6 (QA checklist) |
+| NF-13 | Formulario de demo (fiabilidad) | Errores inline justo debajo del campo afectado (prohibido `alert()`); sin pérdida de datos al fallar la validación; bloqueo de doble envío (botón deshabilitado + estado "Enviando..."); degradación elegante con correo alternativo si falla el envío | §4 |
+
+El spec no funcional no declara valor numérico para ninguna puerta adicional de esta IA más
+allá de las listadas; no se inventó ningún valor. Cualquier umbral nuevo debe importarse
+desde el spec, nunca definirse en este documento.
 
 ------------------------------------------------------------------------
 
@@ -1502,6 +1543,29 @@ deben resolverse mediante sus propios gates.
   SC-10                   Añadidas reglas contra    CLOSED
                           duplicación e inflación   
                           de navegación.            
+
+  SC-11                   Importados los gates no   CLOSED
+                          funcionales del spec
+                          (WCAG, CWV, peso,
+                          targets, contraste,
+                          404, consentimiento,
+                          formularios) como §18.1
+                          con condición de
+                          sign-off.
+
+  SC-12                   Corregido el registro
+                          falso "Consistencia con
+                          Website Brief: PASS"; la
+                          reconciliación de rutas
+                          queda documentada por
+                          decisión explícita.       CLOSED
+
+  SC-13                   Alineada la navegación
+                          móvil con la primaria de
+                          escritorio:
+                          `Implementación` es de
+                          primer nivel en ambos
+                          breakpoints.              CLOSED
   -------------------------------------------------------------------------
 
 # 23. Short Re-Audit --- Closure
@@ -1511,7 +1575,7 @@ findings.**
 
   Check                               Result
   ----------------------------------- --------
-  Consistencia con Website Brief      PASS
+  Consistencia con Website Brief      RECONCILIADO (ver registro abajo)
   Consistencia con Brand Experience   PASS
   Exceso de páginas / navegación      PASS
   Gaps de contenido crítico           PASS
@@ -1521,6 +1585,20 @@ findings.**
   CTA hierarchy                       PASS
   Mobile IA                           PASS
   Open decisions correctly bounded    PASS
+
+### Registro de reconciliación con el Website Brief
+
+La versión anterior de este bloque registraba "Consistencia con Website Brief: PASS" mientras
+el Brief v1.0 §5 prescribía rutas de capacidad de primer nivel (`/inventario`, `/fiscal`,
+`/hardware`, `/dashboard`) que esta IA nunca contuvo y que su regla `N-03` prohíbe. Ese PASS
+era falso por silencio. La reconciliación se resolvió **por decisión explícita**, no por
+omisión:
+
+- el Brief dejó de prescribir rutas: su §5 fue reescrito como mensajes por capacidad, sin rutas;
+- la IA es dueña de la navegación y las rutas; el Brief es dueño del messaging
+  (`nhilos_branding_document_governance_v1.0.md` §6, corregido en esa misma remediación);
+- el conflicto previo queda registrado aquí y en el registro de correcciones quirúrgicas
+  (SC-11..SC-13).
 
 ### Closure statement
 
