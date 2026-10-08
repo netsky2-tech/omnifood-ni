@@ -143,9 +143,29 @@ Separar acumuladores (`manualDiscount` / `promoDiscounts`), `totalDiscounts = ma
 
 *Checks:* suites enfocadas con `--concurrency=1` (nunca la suite completa en este host).
 
+**S1b · Tope de descuento manual (D-A) — S1b-1 IMPLEMENTADO, en verificación**
+
+Cortado en dos unidades: la configuración (backend + web) y después la proyección y el enforcement en el POS. El orden respeta `forbidNonWhitelisted` (`main.ts:49-53`), que rechaza con 400 cualquier propiedad desconocida: si el POS manda el campo antes de que el backend lo declare, **tira el lote completo**.
+
+**Contrato exacto (S1b-2 debe espejarlo, no reinterpretarlo):**
+- Llaves en `sys_parametros_config`: `MAX_DISCOUNT_AMOUNT` (number, `0` permitido = prohibir descuentos) y `MAX_DISCOUNT_PERCENT` (number, `(0, 100]`). Ausente o tumba `null` = **sin tope**. Valor corrupto o no numérico se lee como `null`, nunca se fabrica un tope.
+- Campo de cable: `maxDiscountAmount: number | null` y `maxDiscountPercent: number | null`, en el GET/POST de `/onboarding/fiscal-setup`, en el payload efectivo y en la instantánea.
+- Semántica de tres estados: **ausente** = no tocar lo guardado; **null** = tumba que limpia (sin tope); **número** = poner el tope. `0` viaja como `0`, nunca como ausencia (verificado: el `preprocess` del zod compara contra `""` y `NaN` explícitamente, no por falsedad).
+- **Regla de rechazo:** el descuento se **permite** sólo si `descuento <= maxDiscountAmount` **y** `descuento <= (maxDiscountPercent / 100) x bruto`; o sea, el tope efectivo es el **mínimo** de los topes configurados. Tope `0` prohíbe todo descuento manual. Ambos `null` = sin límite.
+
+**Hallazgo de la ola de re-huella — medido.** Los dos campos viajan como `null` en el payload huellado (convención D-4: "nunca configurado" debe huellarse distinto de "ausente"), y `canonicalizeJcs` omite `undefined` pero **no** `null`, así que la huella de un tenant sin configurar **sí cambia**. Pero la ola **no es un barrido en el despliegue**: `recordRevisionChange` tiene sólo dos llamadores de escritura — activación de terminal (`activation.service.ts:337`) y guardado del owner (`fiscal-setup.service.ts:408`) — y **ningún camino de lectura incrementa la revisión** (el de lectura sólo crea la línea base si no existe). El costo real: cada negocio recibe **un** bump (+1) en su próxima activación o próximo guardado. La dirección es segura: el POS acepta revisiones mayores y sólo rechaza menores (`fiscal_inbox_handler.dart:230-244`) y mismo-revisión-distinta-huella (`:214-228`).
+
+**Deuda registrada, no arreglada (advertencias para S1b-2):**
+1. `getFiscalConfigSnapshot` devuelve la huella **almacenada** junto a un payload de forma **nueva** (`fiscal-config-version.service.ts:314` vs `:355-359`), así que para un tenant cuya última revisión es anterior a este cambio, huella y payload no se corresponden hasta el próximo guardado material. Ningún consumidor recalcula hoy, pero **la huella es opaca**: el POS no debe recomputarla.
+2. **El JCS del POS omite `null`** (`activation_required_config_adapter.dart:105`) mientras el del backend lo incluye. Reusar el canonicalizador del POS para verificar la huella fiscal produce un falso conflicto de integridad.
+
+**Hallazgos de la verificación independiente de S1b-1:** el contrato es simétrico en los seis saltos y no hay bug de coerción por falsedad; una aserción e2e exacta quedaba rota (`test/onboarding/fiscal-setup.e2e-spec.ts:445`) por quedar fuera de las superficies del worker, y se corrige en el mismo commit.
+
+
+
 **S2 · Rastro y activación de promociones (P1, P2, P3)**
-Recargar promociones en el listener de inbound del checkout; decidir el conflicto del toggle local/ nube (decisión D-B).
-*TDD:* RED que afirme que un delta de promoción dispara `loadPromotions` y que el resultado queda evaluado en el carrito abierto.
+Recargar promociones en el listener de inbound del checkout; quitar el toggle del POS (decisión D-B: nube autoritativa).
+*TDD:* RED que afirme que un delta de promoción dispara `loadPromotions` y que el resultado queda evaluado en el carrito abierto; test que afirme que el POS ya no ofrece el toggle.
 
 **S3 · Historial útil para auditar el día (H1, H3)**
 Filtro de fecha, fila de totales del período, límite/paginación, y dejar de tragar errores por fila.

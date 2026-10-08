@@ -46,6 +46,20 @@ function readDgiStringParam(
   return typeof raw === 'string' && raw !== '' ? raw : null;
 }
 
+/**
+ * SOHO P3 (D-A): resolves a manual-discount cap numeric parameter. A
+ * governing tombstone (null), an absent key or a corrupt (non-numeric)
+ * value reads as null — absence must look like absence (D-16 spirit), and
+ * a corrupt value must never fabricate a cap.
+ */
+function readDiscountCapParam(
+  paramMap: Map<string, unknown>,
+  paramKey: string,
+): number | null {
+  const raw = paramMap.get(paramKey);
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+}
+
 @Injectable()
 export class FiscalConfigVersionService {
   constructor(
@@ -148,6 +162,30 @@ export class FiscalConfigVersionService {
       FISCAL_PARAM_KEYS.DGI_AUTHORIZATION_EXPIRES_AT,
     );
 
+    // SOHO P3 (D-A): the manual-discount caps read as null when unconfigured
+    // (or when a null tombstone governs) — NULL CONFIGURATION MEANS NO CAP.
+    //
+    // ENFORCEMENT RULE the POS mirrors (documented contract for the P3 POS
+    // unit). A manual discount is ALLOWED only when it is less than or equal
+    // to EVERY configured cap — the conjunction, not "whichever applies":
+    //
+    //   discount <= maxDiscountAmount (when configured) AND
+    //   discount <= (maxDiscountPercent / 100) x gross subtotal (when configured)
+    //
+    // Equivalently, the effective cap is the MINIMUM of the configured caps.
+    // When only one cap is configured, only that one constrains. A configured
+    // cap of 0 forbids ANY manual discount outright (0 <= x has no positive
+    // solution) — 0 must persist as 0, never collapse to "no cap". When both
+    // caps are null (or absent), the manual discount is NOT limited.
+    const maxDiscountAmount = readDiscountCapParam(
+      paramMap,
+      FISCAL_PARAM_KEYS.MAX_DISCOUNT_AMOUNT,
+    );
+    const maxDiscountPercent = readDiscountCapParam(
+      paramMap,
+      FISCAL_PARAM_KEYS.MAX_DISCOUNT_PERCENT,
+    );
+
     return {
       tenantId: tenant.id,
       businessName: tenant.name,
@@ -161,6 +199,8 @@ export class FiscalConfigVersionService {
       dgiAuthorizationCode,
       dgiAuthorizationIssuedAt,
       dgiAuthorizationExpiresAt,
+      maxDiscountAmount,
+      maxDiscountPercent,
     };
   }
 
@@ -297,6 +337,8 @@ export class FiscalConfigVersionService {
         dgiAuthorizationCode: payload.dgiAuthorizationCode,
         dgiAuthorizationIssuedAt: payload.dgiAuthorizationIssuedAt,
         dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
+        maxDiscountAmount: payload.maxDiscountAmount,
+        maxDiscountPercent: payload.maxDiscountPercent,
         configVersion: version,
         generatedAt: new Date().toISOString(),
       };
@@ -315,6 +357,8 @@ export class FiscalConfigVersionService {
       dgiAuthorizationCode: payload.dgiAuthorizationCode,
       dgiAuthorizationIssuedAt: payload.dgiAuthorizationIssuedAt,
       dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
+      maxDiscountAmount: payload.maxDiscountAmount,
+      maxDiscountPercent: payload.maxDiscountPercent,
       configVersion: {
         revision: latest.revision,
         fingerprint: latest.fingerprint,

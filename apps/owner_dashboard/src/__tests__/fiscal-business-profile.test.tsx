@@ -138,6 +138,98 @@ describe("fiscalSetupSchema — Business Profile fields (BXW-007 U2, rev 2)", ()
   });
 });
 
+// --- Schema-level tests: manual discount caps (SOHO P3, D-A) ---
+// "Sin configurar = sin tope": absence (undefined, null, "" or NaN from an
+// emptied number input) is valid and means the POS applies NO cap. A PRESENT
+// value must satisfy the backend FiscalSetupDto ranges (amount >= 0; percent
+// > 0 and <= 100).
+describe("fiscalSetupSchema — manual discount caps (SOHO P3, D-A)", () => {
+  it("accepts a payload carrying valid caps", () => {
+    const result = fiscalSetupSchema.safeParse({
+      ...baseValues(),
+      maxDiscountAmount: 500,
+      maxDiscountPercent: 15,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a payload without the caps (sin configurar = sin tope)", () => {
+    const result = fiscalSetupSchema.safeParse(baseValues());
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.maxDiscountAmount).toBeUndefined();
+      expect(result.data.maxDiscountPercent).toBeUndefined();
+    }
+  });
+
+  it("accepts the '' sentinel and normalizes it to absence", () => {
+    const result = fiscalSetupSchema.safeParse({
+      ...baseValues(),
+      maxDiscountAmount: "",
+      maxDiscountPercent: "",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.maxDiscountAmount).toBeUndefined();
+      expect(result.data.maxDiscountPercent).toBeUndefined();
+    }
+  });
+
+  it("accepts NaN (what valueAsNumber yields for an emptied input) as absence", () => {
+    const result = fiscalSetupSchema.safeParse({
+      ...baseValues(),
+      maxDiscountAmount: Number.NaN,
+      maxDiscountPercent: Number.NaN,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.maxDiscountAmount).toBeUndefined();
+      expect(result.data.maxDiscountPercent).toBeUndefined();
+    }
+  });
+
+  it("accepts an amount of 0 (a zero-amount cap forbids manual discounts)", () => {
+    const result = fiscalSetupSchema.safeParse({
+      ...baseValues(),
+      maxDiscountAmount: 0,
+    });
+    expect(result.success).toBe(true);
+    // Regression net against falsy coercion: 0 must survive parsing as the
+    // number 0 ("forbid manual discounts"), never undefined and never null.
+    if (result.success) {
+      expect(result.data.maxDiscountAmount).toBe(0);
+      expect(result.data.maxDiscountAmount).not.toBeUndefined();
+      expect(result.data.maxDiscountAmount).not.toBeNull();
+    }
+  });
+
+  it("rejects a negative amount with a Spanish message", () => {
+    const result = fiscalSetupSchema.safeParse({
+      ...baseValues(),
+      maxDiscountAmount: -1,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find((i) => i.path.includes("maxDiscountAmount"));
+      expect(issue?.message).toMatch(/monto máximo de descuento/i);
+    }
+  });
+
+  it("rejects a percent of 0 or above 100 with a Spanish message", () => {
+    for (const percent of [0, 100.5]) {
+      const result = fiscalSetupSchema.safeParse({
+        ...baseValues(),
+        maxDiscountPercent: percent,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const issue = result.error.issues.find((i) => i.path.includes("maxDiscountPercent"));
+        expect(issue?.message).toMatch(/porcentaje máximo de descuento/i);
+      }
+    }
+  });
+});
+
 // --- Component-level tests (FiscalSetupForm) ---
 
 const fiscalGetResponse = (overrides: Record<string, unknown> = {}) =>
@@ -167,6 +259,8 @@ const fiscalPostResponse = () =>
       commercialFxSpread: 36.5,
       operationMode: null,
       checkoutFxMode: null,
+      maxDiscountAmount: null,
+      maxDiscountPercent: null,
     }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
@@ -368,7 +462,110 @@ describe("FiscalSetupForm — Business Profile selects (BXW-007 U2, rev 2)", () 
     });
   });
 
-  // --- BXW-007: saved-snapshot contract (per-field, independent) ---
+  // --- Component-level tests: manual discount caps (SOHO P3, D-A) ---
+// Same snapshot contract as the mode selects: the submit decision compares
+// the CURRENT input value against the value that came from the GET.
+//   empty input, snapshot = number → send null (tombstone: remove the cap);
+//   empty input, snapshot = null/absent → omit the key (asserts nothing);
+//   a number → send it (the POS will enforce it).
+
+describe("FiscalSetupForm — manual discount caps (SOHO P3, D-A)", () => {
+  const amountInput = () =>
+    screen.getByLabelText(/Descuento Máximo por Monto/i) as HTMLInputElement;
+  const percentInput = () =>
+    screen.getByLabelText(/Descuento Máximo por Porcentaje/i) as HTMLInputElement;
+
+  it("renders both cap inputs empty when the GET response omits them", async () => {
+    await renderLoadedForm();
+
+    expect(amountInput().value).toBe("");
+    expect(percentInput().value).toBe("");
+  });
+
+  it("prefills the caps when the GET response carries them", async () => {
+    await renderLoadedForm({ maxDiscountAmount: 500, maxDiscountPercent: 15 });
+
+    expect(amountInput().value).toBe("500");
+    expect(percentInput().value).toBe("15");
+  });
+
+  it("sends the cap values when chosen", async () => {
+    await renderLoadedForm();
+    const user = userEvent.setup();
+
+    fireEvent.change(amountInput(), { target: { value: "500" } });
+    fireEvent.change(percentInput(), { target: { value: "15" } });
+
+    fetchSpy.mockResolvedValueOnce(fiscalPostResponse());
+    await user.click(screen.getByTestId("save-fiscal-setup-button"));
+
+    await waitFor(() => {
+      const bodies = postedFiscalBodies();
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0].maxDiscountAmount).toBe(500);
+      expect(bodies[0].maxDiscountPercent).toBe(15);
+    });
+  });
+
+  it("sends maxDiscountAmount: 0 (not omitted, not null) when 0 is typed into the amount field", async () => {
+    // Regression net against falsy coercion: 0 means "forbid manual
+    // discounts entirely" and must reach the wire as the number 0.
+    await renderLoadedForm();
+    const user = userEvent.setup();
+
+    fireEvent.change(amountInput(), { target: { value: "0" } });
+
+    fetchSpy.mockResolvedValueOnce(fiscalPostResponse());
+    await user.click(screen.getByTestId("save-fiscal-setup-button"));
+
+    await waitFor(() => {
+      const bodies = postedFiscalBodies();
+      expect(bodies).toHaveLength(1);
+      expect("maxDiscountAmount" in bodies[0]).toBe(true);
+      expect(bodies[0].maxDiscountAmount).toBe(0);
+      expect(bodies[0].maxDiscountAmount).not.toBeNull();
+    });
+  });
+
+  it("omits both cap keys when the GET carried null and the inputs stay untouched (sin configurar = sin tope)", async () => {
+    await renderLoadedForm({ maxDiscountAmount: null, maxDiscountPercent: null });
+    const user = userEvent.setup();
+
+    fireEvent.change(screen.getByLabelText(/Nombre Comercial/i), {
+      target: { value: "Café París S.A." },
+    });
+
+    fetchSpy.mockResolvedValueOnce(fiscalPostResponse());
+    await user.click(screen.getByTestId("save-fiscal-setup-button"));
+
+    await waitFor(() => {
+      const bodies = postedFiscalBodies();
+      expect(bodies).toHaveLength(1);
+      expect("maxDiscountAmount" in bodies[0]).toBe(false);
+      expect("maxDiscountPercent" in bodies[0]).toBe(false);
+    });
+  });
+
+  it("sends maxDiscountAmount: null when a stored cap is cleared from the input (tombstone)", async () => {
+    await renderLoadedForm({ maxDiscountAmount: 500, maxDiscountPercent: null });
+    const user = userEvent.setup();
+
+    fireEvent.change(amountInput(), { target: { value: "" } });
+
+    fetchSpy.mockResolvedValueOnce(fiscalPostResponse());
+    await user.click(screen.getByTestId("save-fiscal-setup-button"));
+
+    await waitFor(() => {
+      const bodies = postedFiscalBodies();
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0].maxDiscountAmount).toBeNull();
+      // maxDiscountPercent was null on the GET and untouched → omit.
+      expect("maxDiscountPercent" in bodies[0]).toBe(false);
+    });
+  });
+});
+
+// --- BXW-007: saved-snapshot contract (per-field, independent) ---
   // The submit decision compares the CURRENT select value against the
   // value that came from the GET (the saved snapshot), never against the
   // last click and never against a constant:
