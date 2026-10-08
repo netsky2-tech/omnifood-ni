@@ -1,18 +1,24 @@
 # NHILOS POS — Inventario de Medios y Capturas de Pantalla
 
 **Documento:** `nhilos_pos_media_inventory_v1.0.md`
-**Versión:** 1.0 (Autorizado para Producción — Gate D)
-**Estado:** `APPROVED / VERIFIED FOR GATE D RELEASE`
-**Build de producción de origen:** `7af1521ea077ce8bc1faed1aa7189a6186eac515`
+**Versión:** 1.0 (Evidencia requiere revalidación — Gate D)
+**Estado:** `CONTENIDO APROBADO / EVIDENCIA OBSOLETA — REVALIDACIÓN REQUERIDA ANTES DE PUBLICAR`
+**Build de producción de origen:** `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED — el build anclado vigente es `b4b5ad27`; los activos deben re-capturarse o re-verificarse contra `b4b5ad27` antes de cualquier publicación, según `G-09` de `nhilos_branding_document_governance_v1.0.md`)
 **Ruta pública:** Página profunda de producto NHILOS POS (`/pos`)
-**Upstream de contenido:** `nhilos_pos_product_page_content_v1.2`
-**Upstream de auditoría técnica:** `product_claim_audit_od02_v0.1.md` v1.1
-**Fecha de actualización:** 2026-10-02
+**Upstream de contenido:** `nhilos_pos_product_page_content_v1.1`
+**Upstream de auditoría técnica:** `product_claim_audit_od02_v1.2.md`
+**Fecha de actualización:** 2026-10-08 (revalidación de evidencia pendiente; captura original 2026-10-02)
 
 > **Nota de conversión (2026-10-08):** este documento reemplaza al binario
 > `NHILOS POS - Media Inventory.docx`, que no era diffeable ni indexable. El contenido se
 > transcribió sin cambios. Las correcciones de realidad pendientes se registran en
 > `branding_reality_audit_v0.1.md` (hallazgos B3, H9, M4, M11, H10).
+
+> **Advertencia de revalidación (G-09):** los activos de medios de este inventario fueron
+> capturados en el build `7af1521` (2026-09-26). El build anclado vigente es `b4b5ad27`
+> (2026-10-08), e incluye cambios sustanciales de la UI del POS (remediación UX Nivel 1/2/3).
+> Ningún activo puede publicarse hasta ser re-capturado o re-verificado contra `b4b5ad27`.
+> El cierre de Gate D declarado en §5 NO está vigente.
 
 ---
 
@@ -21,9 +27,11 @@
 El presente documento establece el inventario oficial y la matriz de mapeo de activos visuales
 para la página profunda de producto de NHILOS POS (`/pos`).
 
-Garantiza el cumplimiento estricto del **Gate D (Evidencia y Medios)**, asegurando que cada
-imagen, captura de pantalla o fotografía de hardware provenga directamente del build de
-producción verificado `7af1521ea077ce8bc1faed1aa7189a6186eac515`.
+Garantiza el cumplimiento estricto del **Gate D (Evidencia y Medios)**, exigiendo que cada
+imagen, captura de pantalla o fotografía de hardware provenga del build anclado vigente
+(`b4b5ad27`). Los activos listados a continuación se capturaron en el build histórico
+`7af1521ea077ce8bc1faed1aa7189a6186eac515` y permanecen en estado `REVALIDATION REQUIRED`:
+deben re-capturarse o re-verificarse contra `b4b5ad27` antes de cualquier publicación.
 
 ### Reglas Innegociables de Publicación de Medios
 
@@ -41,8 +49,9 @@ producción verificado `7af1521ea077ce8bc1faed1aa7189a6186eac515`.
 
 ## 2. Inventario Maestro de Activos de Medios (Build `7af1521`)
 
-La siguiente tabla consolida los doce activos de medios certificados que componen la biblioteca
-visual oficial de NHILOS POS:
+La siguiente tabla consolida los doce activos de medios capturados (build de origen
+`7af1521`, revalidación contra `b4b5ad27` pendiente) que componen la biblioteca
+visual de NHILOS POS. Ningún activo está autorizado para publicación en su estado actual.
 
 | Asset ID | Pantalla / Workflow | Dispositivo / Formato | Ubicación en Código / Build `7af1521` | Estado Gate D |
 |---|---|---|---|---|
@@ -61,13 +70,14 @@ visual oficial de NHILOS POS:
 
 ---
 
-## 3. Mapeo Exhaustivo por Sección de la Página de Producto (v1.2)
+## 3. Mapeo Exhaustivo por Sección de la Página de Producto (v1.1)
 
 A continuación se detalla la asignación de cada activo visual a las 12 secciones estructuradas
-de la página de producto `/pos`, definiendo su rol contextual, pie de foto (caption) sugerido y
+de la página de producto `/pos`, con los títulos exactos de `nhilos_pos_product_page_content_v1.1.md`,
+definiendo su rol contextual, pie de foto (caption) sugerido y
 texto de accesibilidad (alt text).
 
-### Sección 01 — Promesa del Producto (Hero)
+### Sección 01 — Product Promise
 
 - **Activo Principal:** `MEDIA-POS-01` (Interfaz principal de punto de venta en Sunmi V2s).
 - **Activo Secundario:** `MEDIA-HW-01` (Terminal Sunmi V2s emitiendo ticket térmico físico).
@@ -78,7 +88,7 @@ texto de accesibilidad (alt text).
 - **Texto Alt (a11y):** "Interfaz de caja táctil NHILOS POS en terminal Sunmi V2s mostrando
   catálogo de bebidas y orden de venta activa."
 
-### Sección 02 — El Producto en Contexto Operativo
+### Sección 02 — Product in Context
 
 - **Activo Principal:** `MEDIA-POS-01` (Modo Mostrador/Barra).
 - **Activos Secundarios:** `MEDIA-POS-03` (Modo Salón / Cuentas Abiertas) y `MEDIA-INV-01`
@@ -90,7 +100,7 @@ texto de accesibilidad (alt text).
 - **Texto Alt (a11y):** "Tres vistas comparativas de NHILOS POS mostrando el menú de cobro
   rápido, el mapa de mesas retenidas y la ficha técnica de insumos."
 
-### Sección 03 — Flujos Operativos Principales (Core Workflows)
+### Sección 03 — Core Workflows
 
 - **Activo Workflow A (Venta):** `MEDIA-POS-01` (Selección de productos y modificadores de
   platillos).
@@ -106,19 +116,22 @@ texto de accesibilidad (alt text).
 - **Texto Alt (a11y):** "Ventana emergente de cobro bimoneda calculando conversión automática
   entre Córdobas y Dólares con vuelto exacto."
 
-### Sección 04 — Continuidad Operativa Offline-First
+### Sección 04 — Continuity
 
-- **Activo Principal:** `MEDIA-POS-01` (Indicador de estado 'Modo Offline Activo - Base de Datos
-  SQLite Floor v57').
+- **Activo Principal:** `MEDIA-POS-01` (Badge de estado de sincronización mostrando
+  el texto real de UI "Sin conexión (Offline) - N pendientes",
+  `cloud_sync_status_badge.dart:179`; el esquema local vigente es SQLite Floor v65,
+  `app_database.dart`, `@Database(version: 65)`).
 - **Activo Secundario:** `MEDIA-DASH-01` (Cola de sincronización asíncrona de deltas).
 - **Rol Contextual:** Proveer evidencia visual del motor offline que permite seguir vendiendo e
   imprimiendo sin conectividad.
 - **Pie de Foto Sugerido:** "Operación local ininterrumpida: el terminal almacena las
   transacciones en SQLite Floor y las sincroniza automáticamente al retornar el internet."
-- **Texto Alt (a11y):** "Pantalla de venta operando con el badge de almacenamiento local SQLite
-  activo durante una desconexión de red."
+- **Texto Alt (a11y):** "Pantalla de venta operando con el badge de estado de sincronización
+  'Sin conexión (Offline) - N pendientes' durante una desconexión de red, mostrando el
+  contador de documentos pendientes de sincronizar."
 
-### Sección 05 — Control y Visibilidad Ejecutiva
+### Sección 05 — Control / Visibility
 
 - **Activo Principal:** `MEDIA-DASH-01` (Owner Dashboard v2 con KPIs de Venta Neta y Sync
   Freshness Badge).
@@ -131,19 +144,27 @@ texto de accesibilidad (alt text).
 - **Texto Alt (a11y):** "Dashboard web administrativo mostrando gráficos de ventas horarias,
   total acumulado del día y estado de conexión de las terminales."
 
-### Sección 06 — Roles y Seguridad
+### Sección 06 — Roles
 
 - **Activo Principal:** `MEDIA-POS-04` (Modal de Solicitud de PIN para Autorización de
   Supervisor).
 - **Activo Secundario:** `MEDIA-DASH-01` (Matriz RBAC de usuarios y Audit Trail SHA-256).
-- **Rol Contextual:** Demostrar la protección operativa mediante permisos por rol (Cajero,
-  Manager, Owner) e historial inalterable.
-- **Pie de Foto Sugerido:** "Seguridad en caja: las anulaciones de platillos y cortes de caja
-  requieren PIN de supervisor y quedan registradas en la bitácora auditora."
-- **Texto Alt (a11y):** "Teclado numérico PIN en pantalla para validación de permisos de
-  supervisor antes de anular una comanda."
+- **Rol Contextual:** Demostrar la protección operativa mediante permisos por rol e historial
+  inalterable. El código define cuatro roles (`OWNER`, `MANAGER`, `CASHIER`, `WAITER`;
+  `apps/pos_app/lib/domain/models/user.dart` y `apps/admin_backend/src/modules/identity/security/user-role.enum.ts`);
+  el supervisor es una capacidad de autorización, no un rol. La página pública presenta tres
+  personas (Cajero / Supervisor / Owner) por decisión deliberada registrada como `OD-PP-05`
+  en el Product Page Content: el cuarto rol de la matriz (Mesero) queda excluido del alcance
+  público. Ninguna de las dos representaciones contradice a la otra.
+- **Pie de Foto Sugerido:** "Seguridad en caja: el corte de caja, la apertura manual de gaveta,
+  el descuento manual y la autorización de varianza de producción requieren PIN de supervisor
+  y quedan registrados en la bitácora auditora. La anulación de facturas no se realiza con
+  PIN: es una guarda de política que solo admite facturas propias, del turno abierto y de la
+  fecha actual (`void_decision.dart`)."
+- **Texto Alt (a11y):** "Teclado numérico PIN en pantalla para la autorización de supervisor
+  antes de un corte de caja, una apertura de gaveta o un descuento manual."
 
-### Sección 07 — Galería de Producto e Inventario de Medios
+### Sección 07 — Gallery
 
 - **Activos Asignados:** Mosaico interactivo de los activos `MEDIA-POS-01` a `MEDIA-FISC-01`.
 - **Rol Contextual:** Permitir al visitante explorar en alta resolución todas las superficies de
@@ -153,7 +174,7 @@ texto de accesibilidad (alt text).
 - **Texto Alt (a11y):** "Galería interactiva con capturas de pantalla de la app móvil de venta,
   terminal Sunmi y panel web administrativo."
 
-### Sección 08 — Proceso de Implementación
+### Sección 08 — Implementation
 
 - **Activo Principal:** `MEDIA-ONB-01` (Vista del Setup Center con Plantillas por Industria e
   Importador CSV).
@@ -164,19 +185,26 @@ texto de accesibilidad (alt text).
 - **Texto Alt (a11y):** "Asistente de configuración del Setup Center con checklist de pasos
   completados e importación masiva de insumos en CSV."
 
-### Sección 09 — Hardware y Compatibilidad Verificada
+### Sección 09 — Hardware / Compatibility
 
 - **Activo Principal:** `MEDIA-HW-01` (Fotografía de Terminal Sunmi V2s e Impresora de Cocina LAN
   ESC/POS).
 - **Activo Secundario:** `MEDIA-HW-02` (Pantalla KDS en Tablet Android de 10 pulgadas).
-- **Rol Contextual:** Presentar la matriz de equipamiento certificado en campo y periféricos
-  soportados.
-- **Pie de Foto Sugerido:** "Equipamiento homologado en Nicaragua: terminales móviles
-  todo-en-uno Sunmi V2s, tablets fijas e impresoras de red local para cocina."
+- **Rol Contextual:** Presentar el perfil de equipamiento verificado y periféricos soportados.
+- **Nota de Formatos de Impresión:** el perfil incluye la impresora térmica integrada de 58mm
+  del Sunmi V2s y los layouts térmicos de 80mm (iPOS / Nyx / Q80) soportados por
+  `receipt_layout_formatter.dart` (`format58mm()` / `format80mm()`), además de ticketeras
+  LAN ESC/POS (driver `ESCPOS_NETWORK`) y el KDS en tablets Android (`kitchen_display_view.dart`).
+  Límites declarados (`OD-02` PC-HW-01..03, LIM-06): la impresión embebida aplica a terminales
+  Android con Sunmi OS; la impresión externa requiere impresoras ESC/POS estándar con IP fija
+  en la red local.
+- **Pie de Foto Sugerido:** "Equipamiento verificado en Nicaragua: terminales móviles
+  todo-en-uno Sunmi V2s con impresora térmica integrada (58mm), soporte de layouts de 80mm
+  (iPOS / Nyx / Q80), tablets fijas e impresoras de red local para cocina."
 - **Texto Alt (a11y):** "Terminal móvil Sunmi V2s junto a una impresora térmica de cocina
   conectada por red Ethernet."
 
-### Sección 10 — Modelo de Soporte Técnico
+### Sección 10 — Support
 
 - **Activo Principal:** `MEDIA-DASH-01` (Vista del Botón de Asistencia Directa y Estado del
   Servidor Cloud).
@@ -188,7 +216,7 @@ texto de accesibilidad (alt text).
 - **Texto Alt (a11y):** "Sección de ayuda en la aplicación mostrando número de versión del
   sistema, código de terminal y canal de contacto por WhatsApp."
 
-### Sección 11 — Preguntas Frecuentes (FAQs)
+### Sección 11 — FAQs
 
 - **Activos de Soporte:** Pequeñas capturas de detalle (thumbnails) asociadas a respuestas
   específicas (`MEDIA-POS-02` para Bimoneda, `MEDIA-HW-01` para DGI).
@@ -199,7 +227,7 @@ texto de accesibilidad (alt text).
 - **Texto Alt (a11y):** "Captura del formato de factura fiscal DGI DT 09-2007 con número RUC y
   desglose de IVA."
 
-### Sección 12 — Formulario de Solicitud de Demo
+### Sección 12 — Demo CTA
 
 - **Directriz de Medios:** Sin imágenes distractoras o pesadas en la tarjeta del formulario para
   optimizar la conversión y la velocidad de carga (LCP < 2.5s, WCAG 2.1 AA).
@@ -217,8 +245,10 @@ cumplen con los siguientes estándares:
 ### Presupuesto de Peso y Formatos
 
 - **Formatos Autorizados:** WebP y AVIF con fallback automático en PNG para navegadores antiguos.
-- **Compresión:** Máximo 180 KB por captura de pantalla individual y 350 KB para fotografías de
-  hardware compuestas.
+- **Compresión:** la especificación no funcional del sitio (`nhilos_website_non_functional_spec_v1.0.md`)
+  **no define un presupuesto de peso por imagen individual**; define únicamente una carga
+  inicial máxima de página (`< 2.5 MB` comprimido) servida en formatos modernos (`WebP` o
+  `AVIF` con fallback a JPG/PNG). No se declara ningún tope por captura ni por fotografía.
 - **Dimensiones de Captura:**
   - Terminal Móvil (Sunmi V2s): 1080 x 2160 px (Relación 18:9).
   - Tablet Android (KDS / FOH): 1920 x 1200 px (Relación 16:10).
@@ -236,20 +266,27 @@ cumplen con los siguientes estándares:
 
 ## 5. Estado de Aprobación de Gate D y Firma de Verificación
 
-El presente Inventario de Medios ha sido evaluado contra la matriz de verificación de artefactos
-de producción:
+El presente Inventario de Medios fue evaluado contra la matriz de verificación de artefactos
+de producción. **El cierre original quedó obsoleto por el re-anclaje del build vigente**;
+la verificación se registra con su estado real:
 
 ```text
 ================================================================================
-VERIFICACIÓN DE GATE D (EVIDENCIA Y MEDIOS) — NHILOS POS V1.2
+VERIFICACIÓN DE GATE D (EVIDENCIA Y MEDIOS) — NHILOS POS
 ================================================================================
 [✓] Cero prototipos o mockups de Figma presentes en el inventario.
-[✓] 100% de los activos provienen del commit auditado 7af1521ea077ce8bc1faed1aa7189a6186eac515.
-[✓] Mapeo completo de las 12 secciones de la página profunda de producto (/pos).
+[✗] Los activos provienen del commit 7af1521ea077ce8bc1faed1aa7189a6186eac515,
+    que ya NO es el build anclado vigente (`b4b5ad27`): la UI del POS cambió
+    sustancialmente entre ambos builds (remediación UX Nivel 1/2/3).
+[✓] Mapeo completo de las 12 secciones de la página profunda de producto (/pos)
+    con los títulos de nhilos_pos_product_page_content_v1.1.md.
 [✓] Textos alternativos (alt text) redactados para cumplimiento WCAG 2.1 AA.
-[✓] Presupuesto de peso y rendimiento web optimizados (< 2.5 MB carga inicial).
+[✓] Presupuesto de peso y rendimiento web alineados a la spec no funcional
+    (< 2.5 MB carga inicial; sin tope por imagen declarado en la spec).
 
-ESTADO DE CIERRE:           PASSED / PUBLICATION UNLOCKED
-AUTORIZACIÓN DE PUBLICACIÓN: CONCEDIDA PARA PRODUCCIÓN (GATE D GRANTED)
+ESTADO DE CIERRE:           NOT VALID — REVALIDATION REQUIRED
+AUTORIZACIÓN DE PUBLICACIÓN: RETIRADA. Los activos capturados en 7af1521 deben
+re-capturarse o re-verificarse contra b4b5ad27 y volver a pasar Gate D antes de
+cualquier publicación. No existe hoy un sello de "PUBLICATION UNLOCKED" vigente.
 ================================================================================
 ```

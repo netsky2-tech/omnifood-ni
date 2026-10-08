@@ -318,7 +318,7 @@ Una cuenta está lista para cobrarse y el equipo necesita registrar el medio de 
 
 **Comportamiento**
 
-El cajero selecciona el método disponible y completa el flujo correspondiente. En el esquema semiautomático de tarjeta documentado, la transacción financiera ocurre en el datáfono bancario y FlexiPoint registra el pago tras la confirmación del cajero.
+El cajero selecciona el método disponible y completa el flujo correspondiente. En el esquema semiautomático de tarjeta documentado, la transacción financiera ocurre en el datáfono bancario y NHILOS POS registra el pago tras la confirmación del cajero.
 
 **Efecto**
 

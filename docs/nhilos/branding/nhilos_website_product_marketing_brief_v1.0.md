@@ -36,7 +36,7 @@ Los cinco pilares innegociables del producto, verificados contra código real:
 ### 2. Cumplimiento Fiscal DGI Nicaragua (DT 09-2007) (`OD-02-R02`)
 - **Problema del cliente:** Miedo a multas o auditorías de la DGI por saltos en la numeración correlativa o alteración de registros.
 - **Solución NHILOS:** Implementación rigurosa de la Disposición Técnica 09-2007 para Sistemas Computarizados de Facturación. Consecutivos progresivos inalterables, prohibición física de borrado de facturas y anulación supervisada únicamente mediante Notas de Crédito.
-- **Wording normativo condicionado:** *“Cumplimiento garantizado con la Disposición Técnica DGI 09-2007 para Sistemas Computarizados de Facturación: consecutivos correlativos inalterables, facturas inmutables y validación algorítmica de Cédula y RUC.”*
+- **Wording normativo condicionado:** *"Emisión de facturas correlativas conforme a la Disposición Técnica DGI 09-2007 para Sistemas Computarizados de Facturación: numeración consecutiva e inalterable, con prefijo y folio inicial configurados previamente según la autorización de la DGI."* (`OD-02` PC-FISC-01/PC-FISC-02; claim delimitado, no una garantía absoluta de cumplimiento.)
 - **Delimitación explícita:** Requiere parametrización inicial del folio inicial y serie autorizada por la DGI. No es facturación electrónica en línea con transmisión XML en vivo.
 
 ### 3. Costeo y Deducción Automática por Receta (BOM)
@@ -74,7 +74,7 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
 
 ### Segmento A: Cafeterías de Especialidad y Panaderías
 - **Dolor principal:** Fugas de leche, café en grano, jarabes y empaques; lentitud al cobrar en horas pico de la mañana.
-- **Gancho:** Control milimétrico de receta por onza/gramo y cobro ultra-rápido en terminal Sunmi con ticket impreso en 2 segundos.
+- **Gancho:** Deducción de insumos por receta (BOM) en productos `COMPOUND` con receta publicada (`OD-02` PC-INV-01) y cobro en el terminal Sunmi V2s con impresora térmica integrada (`OD-02` LIM-06). No se declara ningún tiempo de impresión medido ni cifra de velocidad: no existe evidencia de referencia en el repositorio.
 
 ### Segmento B: Food Parks y Locales de Comida Rápida (QSR)
 - **Dolor principal:** Conexión Wi-Fi inestable en espacios abiertos, clientes que pagan mixto (efectivo + tarjeta), necesidad de KDS en cocina.
@@ -98,7 +98,7 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
 ### 5.2 Producto: Punto de Venta FOH (`/pos`)
 - **Foco:** Rapidez táctil, interfaz oscura de alto contraste, buscador rápido de productos, modificadores de platos/bebidas.
 - **Módulos destacados:**
-  - Modo Offline Táctico (Floor SQLite v57).
+  - Modo Offline Táctico (base de datos local SQLite Floor en el terminal).
   - Cobro Bimoneda (Córdobas y Dólares con tipos de cambio independientes).
   - Impresión térmica integrada 58mm y tickets de comanda por red local.
   - División de cuentas (Split Bill) y propina voluntaria.
@@ -121,11 +121,12 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
   - Exportación de reportes limpios para tu contador.
 
 ### 5.5 Hardware Compatible (`/hardware`)
-- **Foco:** Equipamiento probado y certificado en campo.
+- **Foco:** Un perfil de equipamiento verificado, con límites declarados (`OD-02` PC-HW-01..03, LIM-06). No se afirma “certificado en campo” de forma genérica.
 - **Equipos destacados:**
-  - **Sunmi V2s:** Terminal móvil todo-en-uno con impresora térmica integrada de 58mm, cámara lectora de códigos y batería de larga duración.
-  - **Impresoras de Cocina:** Compatibilidad con ticketeras de red local ESC/POS (LAN/Ethernet) para barra y cocina.
-  - **Tablets Android:** Soporte para tablets táctiles estándar en barra o punto fijo.
+  - **Sunmi V2s:** Terminal móvil todo-en-uno con impresora térmica integrada de 58mm, cámara lectora de códigos y batería de larga duración. *Works when:* terminal Android con Sunmi OS vía Platform Channels de Android. *Does not work when:* impresoras domésticas USB o hardware sin checklist de verificación.
+  - **Impresión térmica de 80mm:** Layouts térmicos de 80mm (iPOS / Nyx / Q80) soportados por `apps/pos_app/lib/domain/services/printer/receipt_layout_formatter.dart` (`format80mm()`), junto al formato de 58mm (`format58mm()`) del Sunmi V2s.
+  - **Impresoras de Cocina:** Compatibilidad con ticketeras de red local ESC/POS (LAN/Ethernet, driver `ESCPOS_NETWORK`) para barra y cocina. *Works when:* impresora ESC/POS estándar con IP estática fija en la misma subred. *Does not work when:* red local sin IP fija o impresoras no ESC/POS.
+  - **Tablets Android:** Soporte para tablets táctiles estándar en barra o punto fijo, incluida la pantalla de cocina (KDS) (`kitchen_display_view.dart`).
 
 ### 5.6 Dueños: Owner Dashboard (`/dashboard`)
 - **Foco:** Control sin estar metido en la cocina.
@@ -133,7 +134,7 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
   - Venta neta consolidada y horas de mayor flujo de clientes.
   - Ranking de productos más vendidos y su porcentaje de contribución.
   - Monitor de frescura (Sync Freshness Badge) para ver terminales conectados.
-  - Histórico de turnos, arqueos X/Z y conciliaciones bancarias.
+  - Histórico de turnos y arqueos X/Z de caja, y conciliación manual de vouchers de tarjetas BAC/Banpro con un ítem de atención de vouchers pendientes. No existe conciliación bancaria automática: la conciliación de vouchers es manual y desacoplada (`OD-02` PC-PAY-02, LIM-02).
 
 ---
 
