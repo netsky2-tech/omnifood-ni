@@ -118,7 +118,7 @@ T1-T4 consolidados en `fix/soho-p2-level2-ux-robustness` (worktree `omnifood-ni-
 | Tarea | Commit | Tests | Revisión nativa | Observaciones |
 |---|---|---|---|---|
 | T1 #76 | `b48cf7a7` | 54+19 pass, analyzer limpio | `review-4e7f4a64140ef438` approved, quemada | 3 findings informativos no bloqueantes (documentados) |
-| T2 #74 | `6a87218e` | 68/68 cash tests, analyzer limpio | Pendiente (se ejecuta en branch consolidado) | Hook `onVoucherResolved`, `notifyListeners()` añadido |
+| T2 #74 | `6a87218e` | 68/68 cash tests, analyzer limpio | Revisión consolidada `review-422f91643146ecf6` aprobada y quemada | Hook `onVoucherResolved`, `notifyListeners()` añadido |
 | T3 #79 | `2fc887d6` | VM 18/18 + widget 11/11, analyzer limpio | `review-bc8f91547c3a016f` approved, quemada | Tri-estado `printed/notRequested/failed` |
 | T4 #78 | `6eb17f26` | Flutter 32/32, Jest 54/54, analyzer limpio | `review-8a44d915190ea024` approved sin hallazgos, quemada | `readOhacPosBuild()` real, write-once backend |
 
