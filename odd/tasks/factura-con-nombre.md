@@ -423,22 +423,49 @@ lens provider result admission incomplete: 5 arrays opened, 4 closed; scan ended
 ```
 
 Diagnóstico con la evidencia en disco: el sobre externo **sí es JSON válido**; lo roto es el campo `raw`, que mide
-exactamente 4672 caracteres, el mismo byte donde muere el parser. Dos intentos de captura dejaron **un solo archivo**
-rechazado con el mismo hash (`review-reliability-1-3453f28fc4dd.json`), o sea el host relay re-admitió bytes cacheados
-en vez de correr de nuevo al reviewer. El defecto es de transporte, no del candidato, y reintentar es determinístico.
-No se quemaron los otros 5 slices a ciegas por lo mismo.
+exactamente 4672 caracteres, el mismo byte donde muere el parser. No se quemaron los otros 5 slices a ciegas.
 
-Decisión del dueño: **cerrar así**. El lineage queda abierto en `reviewing` con el slot sin consumir; no se hizo
-`ABANDON` (es destructivo sobre el registro de auditoría y requiere decisión explícita). `gentle_review assess` con
+> **Este párrafo estaba mal y se corrige el 2026-10-07.** Afirmaba que "dos intentos dejaron un solo archivo con el
+> mismo hash, o sea el host relay re-admitió bytes cacheados en vez de correr de nuevo al reviewer", y que "el defecto
+> es de transporte". Las dos cosas son falsas. El inventario completo de
+> `.git/gentle-ai/rejected-results/` tiene **8 artefactos en 6 lineages**, todos del lente `review-reliability`, con
+> largos 1143 / 1392 / 1598 / 1699 / 3836 / 3932 / 4672 / 5320 caracteres: no hay bound fijo en 4672. Y dos de esos
+> lineages tienen **dos** artefactos cada uno con `raw_sha256` distinto, así que los reintentos sí volvieron a correr
+> al reviewer; solo truncaron en otro punto. Los ocho cortes caen **dentro de una estructura abierta** (uno termina en
+> `"findings": [` y nada después), o sea son truncamiento de salida, no JSON mal formado.
+>
+> Causa real, en `gentle-pi/lib/inprocess-reviewer.ts`: hay refusals tipificados para `stopReason` `aborted` y `error`,
+> para tool-call, para texto vacío y para >4 MiB, pero **no hay rama para `stopReason === "length"`**. Cuando el
+> presupuesto de razonamiento se agota habiendo producido texto parcial, ese JSON incompleto se submissiona como
+> veredicto y native lo rechaza en admisión con un mensaje que señala el transporte. El techo declarado del modelo no
+> es la causa: `models-store` reporta `maxTokens` de 32768 a 131072, y 4672 caracteres están lejos. Aguas arriba está
+> cubierto por gentle-shell #1483, #1607, #1661 y #1259.
+
+Decisión del dueño: **cerrar así**. `gentle_review assess` con
 `nativeReviewOutcome: unavailable` registró el estado: `outcome_source: explicit`, riesgo medium,
 `writerProfile: large (runtime)`, `writerSelfVerification: true`, `independentVerifier: false`,
 `reviewDue: true / slice_budget_reached`. La evidencia de reemplazo son las dos rondas de verificación externa y los
 3 slices de `jd-judge` de la sección 8 (9 defectos confirmados y corregidos).
 
+**Disposición del lineage — resuelta el 2026-10-07 por orden del dueño.** `review-75107ffde7dd9222` quedó
+**abandonado** con `ABANDON`, `reason: operator_disposition`, `expectedRevision: sha256:45daca623e69403f7f8a31aa10980a1469a15e246b94154cfadc49fbdd80aeac`,
+`snapshotIdentity: sha256:1c33d232d2ef2c0bcdab920a46ead6373cd594502456a080f957490e427fab95`, `capturedLensResults: []`,
+`findingsPresent: false`, `actor: pi`. Native respondió `mutation_outcome: committed` y escribió
+`review-75107ffde7dd9222-546714406` en `review-transactions/quarantine/`. Después del abandono,
+`gentle_review status` sobre ese lineage reporta `applicability: unrelated`: ya no hay autoridad en vigor.
+
+Lección de procedimiento: el primer intento falló con `Error: review abandon requires reason "operator_disposition"
+or "retired_schema"` — `reason` es un **enum**, no texto libre, y la explicación larga del dueño va en el registro
+(sección 9), no en el argumento. Ese rechazo fue **previo a mutar**: el STATUS intermedio mostró el mismo
+`state: reviewing`, `generation: 1` y la misma `revision`, así que no hubo nada que reconciliar y cero riesgo de
+doble abandono.
+
 ### Follow-ups
 
-- **FU-7 (nuevo)**: el host relay trunca la respuesta del reviewer en 4672 caracteres y cachea el artefacto roto →
-  ninguna revisión nativa puede completarse en esta máquina hasta arreglar el transporte. Bloqueante para RDD.
+- **FU-7 (descartado del alcance de este repo, 2026-10-07)**: revisión nativa no completable en esta máquina.
+  No es deuda nuestra: el defecto está en `gentle-pi` (falta la rama `stopReason === "length"`) y ya está reportado
+  aguas arriba en gentle-shell #1483 / #1607 / #1661 / #1259. El dueño decidió no abrir un issue duplicado y esperar
+  el update del harness. El lineage de este slice quedó abandonado (arriba) en vez de colgado.
 - **FU-8 (CERRADO por #804 en `4ab429d9`)**: drift de mocks commiteados en main
   (`audit_repository_impl_test.mocks.dart` sin `isReauthenticationRequired`). Medido y fijado: tras la regeneración
   forzada, `build_runner clean` + `build` sobre el main final deja **0 archivos modificados**, así que codegen volvió a
@@ -447,6 +474,10 @@ Decisión del dueño: **cerrar así**. El lineage queda abierto en `reviewing` c
   `--force` **no es flag válido** en este build_runner — muere en el parseo de opciones y el árbol limpio que resulta
   tampoco prueba nada. La única medición honesta es `clean` + `build`.
 - **FU-9 (nuevo)**: `npm test` a 11 workers revienta el VM de WSL2 y mata `engram`. Receta: `--maxWorkers=2`.
+- **Pendiente físico (mover a la próxima reunión con el cliente)**: imprimir un ticket en una terminal SOHO real.
+  La geometría está afirmada byte a byte por los fixtures de 58 mm y verificada contra el layout congelado, pero un
+  fixture no prueba papel: el corte de línea, el feed y el render del bloque de cliente en el termoimpresor quedan
+  sin evidenciar hasta verlo en papel. No es un defecto conocido, es una verificación que acá no se puede hacer.
 - FU-1 a FU-6 (secciones anteriores) siguen abiertos.
 
 ### Fusión y limpieza
