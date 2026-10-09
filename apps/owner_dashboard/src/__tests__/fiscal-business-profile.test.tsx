@@ -565,6 +565,37 @@ describe("FiscalSetupForm — manual discount caps (SOHO P3, D-A)", () => {
   });
 });
 
+// --- noValidate: the application's own validation must be the single
+// source of operator feedback. The form carries native HTML constraints
+// (max=100 on the percent input); without noValidate a browser's NATIVE
+// constraint validation blocks the submit event before react-hook-form
+// runs, so the Spanish design-system message never appears and the only
+// feedback is the browser's bubble (browser language/styling, e.g. English
+// in an English browser). With noValidate, zod owns the message.
+describe("FiscalSetupForm — native validation must never own operator feedback (noValidate)", () => {
+  const percentInput = () =>
+    screen.getByLabelText(/Descuento Máximo por Porcentaje/i) as HTMLInputElement;
+
+  it("shows the Spanish zod error and marks the field invalid when 150 is submitted", async () => {
+    await renderLoadedForm();
+    const user = userEvent.setup();
+
+    fireEvent.change(percentInput(), { target: { value: "150" } });
+
+    fetchSpy.mockResolvedValueOnce(fiscalPostResponse());
+    await user.click(screen.getByTestId("save-fiscal-setup-button"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("El porcentaje máximo de descuento debe ser menor o igual a 100"),
+      ).toBeInTheDocument();
+    });
+    expect(percentInput().getAttribute("aria-invalid")).toBe("true");
+    // An invalid form must never reach the wire.
+    expect(postedFiscalBodies()).toHaveLength(0);
+  });
+});
+
 // --- BXW-007: saved-snapshot contract (per-field, independent) ---
   // The submit decision compares the CURRENT select value against the
   // value that came from the GET (the saved snapshot), never against the

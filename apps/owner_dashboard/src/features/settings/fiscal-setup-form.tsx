@@ -250,7 +250,13 @@ export function FiscalSetupForm() {
           </AlertDescription>
         </Alert>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" data-testid="fiscal-setup-form">
+        {/* noValidate: the application's own zod validation (via the RHF
+            resolver) is the single source of operator feedback. Native HTML
+            constraint validation would otherwise block the submit event
+            before handleSubmit runs, replacing the design system's Spanish
+            inline errors with the browser's own validation bubble (browser
+            language and styling, e.g. English in an English browser). */}
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-6" data-testid="fiscal-setup-form">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Nombre Comercial */}
             <div className="space-y-2">
