@@ -313,6 +313,39 @@ const Map<String, String> kForensicMovementTypeLabels = <String, String>{
   'MANUAL_STOCK_ALTERATION': 'Alteración manual de stock',
 };
 
+/// Audit ledger action codes (`audit_logs.action`) written by the POS's own
+/// audit writers, all of which persist through `AuditRepository` (hash-chained,
+/// `is_synced = 0` until the backend ACKs) and reach the Bitácora via
+/// `getLocalLogs`.
+///
+/// Sources (every local writer, exhaustive):
+/// - `lib/data/repositories/sales/sales_repository_impl.dart`
+///   (SALE_CREATED and REPRINT_REQUESTED via `log`; SALE_VOIDED and
+///   CREDIT_NOTE_CREATED via `prepareLog`, persisted inside the same
+///   atomic void / credit-note transaction).
+/// - `lib/domain/services/fulfillment/durable_print_service.dart`
+///   (PRINT_PAYLOAD_CORRUPT, REPRINT_REQUESTED).
+/// - `lib/ui/features/sales/sale_view.dart`
+///   (SUPERVISOR_OVERRIDE_CLOSE_SESSION, DRAWER_OPENED_MANUALLY,
+///   SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT via `logForensic`).
+///
+/// Copy mirrors the owner dashboard's `auditLedgerActionLabels`
+/// (`apps/owner_dashboard/src/lib/labels.ts`) so the tablet and the dashboard
+/// render identical Spanish. Dashboard-only codes (USER_*,
+/// SUPERVISOR_OVERRIDE_APPROVED/REJECTED, SALE_INVENTORY_REMEDIATED) are
+/// never written by the POS and pass through unchanged per the [localize]
+/// convention.
+const Map<String, String> kAuditLedgerActionLabels = <String, String>{
+  'SALE_CREATED': 'Venta registrada',
+  'SALE_VOIDED': 'Anulación de factura',
+  'CREDIT_NOTE_CREATED': 'Nota de crédito emitida',
+  'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT': 'Descuento manual autorizado',
+  'SUPERVISOR_OVERRIDE_CLOSE_SESSION': 'Cierre de sesión autorizado',
+  'DRAWER_OPENED_MANUALLY': 'Apertura manual de gaveta',
+  'REPRINT_REQUESTED': 'Reimpresión solicitada',
+  'PRINT_PAYLOAD_CORRUPT': 'Impresión detenida por datos corruptos',
+};
+
 /// Sync error detail strings surfaced verbatim by the cloud sync badge's
 /// "Detalle de Error" box (`SyncService.lastSyncError`).
 ///
@@ -417,6 +450,7 @@ const Map<String, Map<String, String>> kAllLabelMaps = <String,
   'kSyncErrorLabels': kSyncErrorLabels,
   'kAuthorityInertRecipeLabels': kAuthorityInertRecipeLabels,
   'kAuditDegradedLabels': kAuditDegradedLabels,
+  'kAuditLedgerActionLabels': kAuditLedgerActionLabels,
   'kActivationBackendVerdictLabels': kActivationBackendVerdictLabels,
 };
 

@@ -145,6 +145,43 @@ void main() {
     });
   });
 
+  group('AuditLogView localized ledger actions', () {
+    testWidgets('renders the Spanish ledger label as primary text, never the raw code',
+        (tester) async {
+      final repo = _FakeAuditRepository([
+        AuditLog(
+          id: 1,
+          sequenceNo: 1,
+          prevHash: 'GENESIS',
+          entryHash: 'hash-1',
+          action: 'SALE_CREATED',
+          userId: 'cajero_01',
+          deviceId: 'SUNMI-V2S-01',
+          timestamp: DateTime(2026, 8, 27, 10, 30),
+          metadata: '{"invoice_id": "inv-1"}',
+        ),
+      ]);
+      final viewModel = AuditLogViewModel(repo);
+
+      await tester.pumpWidget(buildTestWidget(viewModel));
+      await tester.pumpAndSettle();
+
+      // Primary text is the Spanish label, matching the owner dashboard copy.
+      expect(find.text('Venta registrada'), findsOneWidget);
+      // The raw machine code is never the entry's primary label.
+      expect(find.text('SALE_CREATED'), findsNothing);
+
+      // Forensic reachability: the raw code stays available as secondary
+      // information in the entry's detail surface.
+      await tester.tap(find.text('Venta registrada'));
+      await tester.pumpAndSettle();
+      expect(find.text('SALE_CREATED'), findsOneWidget);
+
+      await tester.tap(find.text('CERRAR'));
+      await tester.pumpAndSettle();
+    });
+  });
+
   group('AuditLogView UI/UX & Responsiveness', () {
     testWidgets('renders log list, action badges and category chips on Sunmi V2s handheld (360x720dp)', (tester) async {
       tester.view.physicalSize = const Size(360, 720);

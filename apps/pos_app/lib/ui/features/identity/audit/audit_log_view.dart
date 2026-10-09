@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/localization/display_name_resolver.dart';
+import '../../../../core/localization/label_map.dart';
 import '../../../design_system/design_system.dart';
 import '../../../../domain/models/audit_log.dart';
 import '../../../../domain/repositories/auth_repository.dart';
@@ -198,8 +199,12 @@ class _AuditLogViewState extends State<AuditLogView> {
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            log.action,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                            localize(
+                                                log.action,
+                                                kAuditLedgerActionLabels),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13),
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
@@ -301,7 +306,7 @@ class _AuditLogViewState extends State<AuditLogView> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                log.action,
+                localize(log.action, kAuditLedgerActionLabels),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -317,6 +322,10 @@ class _AuditLogViewState extends State<AuditLogView> {
               children: [
                 _DetailItem(label: 'Fecha y hora', value: _formatDate(log.timestamp)),
                 _DetailItem(label: 'Usuario', value: _userName(log.userId)),
+                // Forensic ledger: the machine code stays reachable as
+                // secondary evidence; the human-readable label above it is
+                // the primary text.
+                _DetailItem(label: 'Código', value: log.action),
                 // Device identity, not person identity: the operator rule
                 // (D-14) is about people, so the device id stays verbatim.
                 _DetailItem(label: 'Dispositivo', value: log.deviceId.toString()),
