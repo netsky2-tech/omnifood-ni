@@ -1,9 +1,10 @@
 import { describe, expect, it, beforeAll } from "vitest";
+import { resolveLiveApiBase } from "@/lib/live-api-base";
 
-// Live-suite contract: NHILOS_LIVE_API overrides the base URL; the default
-// points at the local shadow stack on :3300 so these never collide with
-// another worktree's stack on :3000 (same rule as modifiers-live.live.spec.ts).
-const API_BASE = process.env.NHILOS_LIVE_API ?? "http://127.0.0.1:3300/api";
+// Live-suite contract (src/lib/live-api-base.ts): NHILOS_LIVE_API overrides the
+// base URL; unset OR blank falls back to the canonical shadow stack on :3300,
+// never :3000/:5173, which belong to other worktrees' stacks.
+const API_BASE = resolveLiveApiBase();
 
 // LoginDto requires tenantSlug (issue #556 stage 12d) — same seeded tenant as w1.
 const TENANT_SLUG = "soho-test-fixture";

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveLiveEnv } from "../src/lib/live-api-base";
 
 /**
  * MANUAL SCREENSHOT CAPTURE for the owner-dashboard operation manual.
@@ -34,9 +35,11 @@ import { fileURLToPath } from "node:url";
  */
 
 const CAPTURE = process.env.NHILOS_MANUAL_CAPTURE === "1";
-const BASE = process.env.MANUAL_E2E_BASE_URL ?? "http://soho.localhost:5174";
-const EMAIL = process.env.MANUAL_E2E_EMAIL ?? "admin@soho.com";
-const PASSWORD = process.env.MANUAL_E2E_PASS ?? "C0ntr4sen4";
+// Blank/unset env falls back to these defaults instead of an empty base URL or
+// an empty credential (src/lib/live-api-base.ts).
+const BASE = resolveLiveEnv("MANUAL_E2E_BASE_URL", "http://soho.localhost:5174");
+const EMAIL = resolveLiveEnv("MANUAL_E2E_EMAIL", "admin@soho.com");
+const PASSWORD = resolveLiveEnv("MANUAL_E2E_PASS", "C0ntr4sen4");
 
 // Walkthrough data (section 6 narrative): one plausibly-named group with two
 // options carrying real price deltas, attached to a category that really has

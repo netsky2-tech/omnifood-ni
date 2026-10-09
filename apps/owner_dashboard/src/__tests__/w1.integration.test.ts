@@ -2,19 +2,23 @@
  * W1 Integration Tests — Real Backend + PostgreSQL
  *
  * These tests hit the actual NestJS backend (see API_BASE below).
- * Prerequisites:
- *   1. Backend running: `cd apps/admin_backend && npm run start:dev`
- *   2. Database seeded: `npm run seed:test`
- *   3. PostgreSQL on 127.0.0.1:5432 (database: omnifood, user: postgres, pass: admin)
+ * Prerequisites — the local SHADOW STACK, never the :3000/:5173 stack that
+ * belongs to another worktree:
+ *   1. Backend on port 3300: `cd apps/admin_backend && PORT=3300 npm run start:dev`
+ *   2. Database seeded: `npm run seed:test` (from apps/admin_backend)
+ *   3. PostgreSQL reachable with the credentials in apps/admin_backend/.env
+ *      (DB_HOST / DB_PORT / DB_USERNAME / DB_PASSWORD / DB_DATABASE — they are
+ *      machine-local, so they are not repeated here)
  *
  * Run: `pnpm run test:integration` from apps/owner_dashboard/
  */
 import { describe, expect, it } from "vitest";
+import { resolveLiveApiBase } from "@/lib/live-api-base";
 
-// Live-suite contract: NHILOS_LIVE_API overrides the base URL; the default
-// points at the local shadow stack on :3300 so these never collide with
-// another worktree's stack on :3000 (same rule as modifiers-live.live.spec.ts).
-const API_BASE = process.env.NHILOS_LIVE_API ?? "http://127.0.0.1:3300/api";
+// Live-suite contract (src/lib/live-api-base.ts): NHILOS_LIVE_API overrides the
+// base URL; unset OR blank falls back to the canonical shadow stack on :3300,
+// never :3000/:5173, which belong to other worktrees' stacks.
+const API_BASE = resolveLiveApiBase();
 
 // Tenant fixture shared by all three seeded roles. LoginDto/RefreshTokenDto
 // require tenantSlug (issue #556 stage 12d — the legacy no-slug path is closed).
