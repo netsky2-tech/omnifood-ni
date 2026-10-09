@@ -46,6 +46,7 @@ import '../../../../domain/services/printer/printer_resolver.dart';
 import '../../../../domain/services/printer/thermal_logo_processor.dart';
 import 'dart:async';
 import '../../../../domain/services/sales/invoice_fiscal_calculator.dart';
+import '../../../../domain/services/sales/discount_origin_allocator.dart';
 import '../../../../domain/ports/printer_port.dart';
 import '../../../../domain/services/kitchen/kitchen_order_service.dart';
 import '../../../../data/services/sync_service.dart';
@@ -1113,10 +1114,59 @@ class SaleViewModel extends ChangeNotifier {
   // fiscal aggregate the calculator, mapper, receipt and sync already
   // consume: promo + manual + loyalty.
   double _promotionDiscount = 0.0;
+  /// SOHO P3: per-product promotion amounts from the LAST engine evaluation
+  /// for THIS cart (PromotionsEngineResult.itemDiscounts). The origin
+  /// allocator consumes it at checkout so promotion weight lands on the
+  /// lines of the product that earned it. A discarded value here would make
+  /// every promotion distribute by line gross alone; a RETAINED value would
+  /// leak one cart's weights into the next — same defect class S1a fixed:
+  /// a value that belongs to ONE cart must not survive into the next
+  /// (cleared in [clearCart]).
+  Map<String, double> _promotionItemDiscounts = const {};
   double _manualDiscount = 0.0;
   double get totalDiscounts =>
       _promotionDiscount + _manualDiscount + loyaltyDiscount;
   double get manualDiscount => _manualDiscount;
+
+  /// SOHO P3: converts the checkout fiscal snapshot's per-line discounts into
+  /// the wire per-line breakdown ({promotion?, manual?, loyalty?}, positive
+  /// amounts only) for the persisted [InvoiceItem] rows.
+  ///
+  /// Computed ONCE per checkout from THIS snapshot ([calc]) plus the cart's
+  /// retained origin totals; index-matched to the cart exactly like
+  /// `calc.lines`. Empty allocations become NULL — null means legacy/unknown
+  /// and is never fabricated as an empty map.
+  List<Map<String, double>?> _buildDiscountOriginBreakdowns(
+    FiscalCalculationResult calc,
+  ) {
+    final allocation = allocateDiscountOrigins(
+      lineGrosses: [for (final line in calc.lines) line.grossAmount],
+      lineDiscounts: [for (final line in calc.lines) line.discount],
+      lineProductIds: [for (final line in calc.lines) line.productId],
+      promotionDiscount: _promotionDiscount,
+      manualDiscount: _manualDiscount,
+      loyaltyDiscount: loyaltyDiscount,
+      promotionItemDiscounts: _promotionItemDiscounts,
+    );
+    return [
+      for (final lineAllocation in allocation)
+        _discountOriginToWire(lineAllocation),
+    ];
+  }
+
+  /// Converts one line's allocator output into the wire map. Keys are
+  /// iterated in [DiscountOrigin.values] order so the serialized order is
+  /// always promotion, manual, loyalty regardless of the allocator's
+  /// internal map order; an empty allocation maps to null.
+  Map<String, double>? _discountOriginToWire(
+    Map<DiscountOrigin, double> allocation,
+  ) {
+    if (allocation.isEmpty) return null;
+    return {
+      for (final origin in DiscountOrigin.values)
+        if (allocation.containsKey(origin)) origin.wire: allocation[origin]!,
+    };
+  }
 
   TipType _tipType = TipType.none;
   double _customTipPercentage = 0.0;
@@ -1221,6 +1271,7 @@ class SaleViewModel extends ChangeNotifier {
       promotions: _promotions,
     );
     _promotionDiscount = result.totalDiscount;
+    _promotionItemDiscounts = result.itemDiscounts;
   }
 
   Future<void> loadProducts() async {
@@ -1539,6 +1590,11 @@ class SaleViewModel extends ChangeNotifier {
     _cart.clear();
     _isGlobalTaxExempt = false;
     _promotionDiscount = 0.0;
+    // D-7/S1a-class hygiene: the per-product promotion weights belong to ONE
+    // cart. clearCart runs after every successful checkout, so a retained
+    // map would smuggle the previous cart's promotion provenance into the
+    // next sale.
+    _promotionItemDiscounts = const {};
     _manualDiscount = 0.0;
     _pointsToRedeem = 0.0;
     _activeLoadedHoldTicket = null;
@@ -1735,6 +1791,12 @@ class SaleViewModel extends ChangeNotifier {
     }
 
     final calc = currentFiscalCalculation;
+    // SOHO P3: split the AUTHORITATIVE per-line discount back into the
+    // origin amounts that produced it, ONCE, from this exact fiscal
+    // snapshot. The breakdown must reach the persisted InvoiceItem (the
+    // outbound payload is rebuilt from LOCAL rows at upload time), not only
+    // an in-memory payload map.
+    final discountOriginBreakdowns = _buildDiscountOriginBreakdowns(calc);
     // Batch 7 Slice 2 (PRD §21 / §33.4 / AD-10): the tip snapshot is fixed
     // at checkout — NIO amount, USD conversion, effective percentage and
     // the eligible base — and never recomputed afterwards. A tip of 0 (or
@@ -1761,6 +1823,7 @@ class SaleViewModel extends ChangeNotifier {
           variantId: cartItem.variantId,
           notes: cartItem.notes,
           selectedModifiers: cartItem.selectedModifiers,
+          discountOrigin: discountOriginBreakdowns[i],
         ),
       );
     }

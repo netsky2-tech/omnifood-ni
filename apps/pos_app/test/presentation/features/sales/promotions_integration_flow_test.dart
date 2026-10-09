@@ -258,6 +258,22 @@ void main() {
       expect(invoice.subtotal, equals(192.0));
       expect(invoice.totalTax, closeTo(28.80, 0.01)); // 15% de 192
       expect(invoice.total, closeTo(220.80, 0.01));
+
+      // SOHO P3: the persisted checkout lines carry the per-line
+      // discount-origin breakdown. Both invariants: each line's breakdown
+      // sums to THAT line's discount, and each origin sums to the order-level
+      // total the promotion fixture granted through the REAL engine (48.00).
+      final savedItems = salesRepo.lastSavedItems!;
+      expect(savedItems, hasLength(1));
+      final breakdown = savedItems.single.discountOrigin;
+      expect(breakdown, isNotNull);
+      expect(
+        (breakdown!.values.fold<double>(0, (a, b) => a + b) * 100).round(),
+        (savedItems.single.discount * 100).round(),
+      );
+      expect(breakdown['promotion']! * 100, 4800);
+      expect(breakdown.containsKey('manual'), isFalse);
+      expect(breakdown.containsKey('loyalty'), isFalse);
     });
   });
 

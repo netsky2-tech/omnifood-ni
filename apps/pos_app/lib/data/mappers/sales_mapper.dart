@@ -692,6 +692,14 @@ class SalesMapper {
               'taxAmount': item.taxAmount,
               'total': item.total,
               'discount': item.discount,
+              // SOHO P3: the per-line discount-origin breakdown (wire keys
+              // promotion | manual | loyalty, positive amounts only). Emitted
+              // ONLY when populated — omitted entirely, never emitted as
+              // null — so a legacy sale and a legacy credit-note replay stay
+              // byte-identical: the credit-note conflict hash covers this
+              // field and old terminals must keep hashing identically.
+              if (item.discountOrigin != null && item.discountOrigin!.isNotEmpty)
+                'discountOrigin': item.discountOrigin,
               'variantId': item.variantId,
               'notes': item.notes,
               'recipeVersionId': item.recipeVersionId,

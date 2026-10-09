@@ -428,4 +428,26 @@ Por qué la columna no es opcional: el payload de sync se reconstruye desde las 
 
 **Evidencia:** `sales_mapper_test.dart` 39/39 (6 nuevos), suite nueva de persistencia sobre bases reales 10/10 (sqflite ffi, no mocks), `migrations_test.dart` 15/15, `identity_sales_migrations_test.dart` 20/20, `invoice_modifier_quantity_test.dart` 3/3, paridad de instalación limpia 8/8. Inventario de generados: 87 archivos con hash antes y después, delta **exactamente 3**, todos derivados de los dos modelos cambiados. `flutter analyze` sin issues en los siete archivos escritos a mano (los 5 infos restantes son preexistentes, dentro del código generado de Floor y presentes ya en el archivo commiteado).
 
+### S1c-2b-2 · El cable, de punta a punta — CERRADO
+
+`_applyPromotions()` ya no descarta `result.itemDiscounts`: el VM retiene el mapa por producto y lo resetea en `clearCart`. El checkout calcula el reparto **una vez**, desde el mismo snapshot fiscal que consumen las filas (`_buildDiscountOriginBreakdowns(calc)`, justo después de `final calc = currentFiscalCalculation;`), y cada `InvoiceItem` persistido lleva su mapa. La conversión a las llaves del cable itera `DiscountOrigin.values`, así que el orden serializado es siempre promoción → manual → lealtad.
+
+En el payload la llave se **emite sólo cuando el desglose existe y no está vacío**: se omite entera, **nunca** como `null` ni como `{}`. Ésa es la diferencia entre "compatible" y "rompe el hash de conflicto de notas de crédito": un replay legacy y una venta legacy tienen que seguir hasheando byte-idéntico.
+
+**Respuesta a la pregunta abierta del fallback no fiscal: no puede alcanzar el checkout.** Los dos únicos sitios que lanzan `FiscalConfigurationException` (régimen nulo `invoice_fiscal_calculator.dart:166-168`, tasas no usables `:175-183`) están guardados **antes** del cálculo (`sale_view_model.dart:1737-1742` para FX, `:1744-1752` para régimen) y entre la última guarda y `final calc` **no hay `await`**, así que nada puede anular el régimen en esa ventana. Conclusión: el checkout siempre corre el camino fiscal cent-exacto y el desglose reconcilia al centavo con el `discount` de la línea. **Anotado, no arreglado:** si alguna vez se relajan esas guardas, el fallback reparte `totalDiscount * proportion` **sin redondear** (`:1055-1114`) y el desglose podría diferir en menos de un centavo.
+
+**Mutaciones propias, todas restauradas byte-idénticas:**
+
+| Mutación | Resultado | Garantía anclada |
+|---|---|---|
+| Emitir la llave siempre (aunque sea `null` o `{}`) | `Expected: not contains '"discountOrigin"'` / `Actual: ..."discountOrigin":null...` y `..."discountOrigin":{}...` | La omisión es el contrato: el hash legacy no cambia |
+| No pasar el mapa del motor al allocator | `Expected: ['manual']` / `Actual: ['promotion','manual']` | El peso de la promoción aterriza en la línea que la ganó |
+| **No** resetear el mapa retenido en `clearCart` | **pasa en verde** (5/5 y 6/6) | **Ninguna**: hoy es inalcanzable, porque `_applyPromotions()` reescribe el mapa en cada mutación del carrito |
+
+Esa tercera fila se registra como está: el reset es **seguro contra la clase de defecto de S1a**, no comportamiento demostrado. El test que lo acompaña fija el estado observable final (la segunda venta no arrastra peso de promoción), no el campo privado. Se deja el reset porque es barato y protege un camino futuro que limpie el carrito **sin** reevaluar promociones, que es exactamente la forma del bug de S1a.
+
+**Evidencia:** checkout real 5/5 —promoción real por `loadPromotions` + `addToCart`, descuento manual tipeado por el test, `processSale`, y las dos invariantes afirmadas contra los montos del propio test, sin inyectarle nada al VM—, `sales_mapper_test.dart` 42/42, `promotions_integration_flow_test.dart` 6/6, `activation_controlled_sale_runner_test.dart` 32/32, `phase7_fiscal_dgi_compliance_integration_test.dart` 8/8, `sales_repository_impl_test.dart` 37/37, `sale_view_model_void_test.dart` 18/18, hold/kitchen 3/3, calculador fiscal 57/57, allocator 21/21, persistencia local 10/10. **Sin archivo generado tocado en esta unidad.**
+
+**S1c-2 queda cerrado.** Lo que sigue es **S1c-3**: reportes aditivos (`discountNio`/`totalDiscounts` **no se tocan** — invariantes de reconciliación en `sales-reports.service.ts:354-359`) y la columna de origen en la web.
+
 ⚠ **Orden de despliegue (hereda §10):** el backend va **primero**. El POS no debe mandar el campo a producción antes que el backend esté desplegado; en la rama van juntos, en producción no.
