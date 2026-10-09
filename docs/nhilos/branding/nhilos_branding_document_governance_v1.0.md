@@ -39,6 +39,17 @@ el set.
    Constitución de marca. Autoridad fundacional sobre
    arquitectura de marca, personalidad, comportamiento verbal y no-negociables.
         │
+        ├─────────────────────────────────────────────┐
+        │                                             ▼
+        │                              I. nhilos_brand_identity_brief_v0.1.md
+        │                                 [branding/] Capa de identidad.
+        │                                 Traduce la constitución en un encargo de
+        │                                 identidad ejecutable: núcleo de marca,
+        │                                 restricciones, direcciones, entregables.
+        │                                      │
+        │                                      ▼
+        │                                 nhilos_brand_identity_system.md
+        │                                 (a producir por diseño — constitución §49)
         ▼
 2. product_claim_audit_od02_v1.3.md                    [branding/Recursos/]
    Autoridad de claims. Inventario de lo que el producto REALMENTE hace,
@@ -73,6 +84,11 @@ el set.
         │                             contradecir el contenido del paso 6.
         │
         ▼
+   D. nhilos_design_kickoff_handover_v0.1.md           [branding/]
+      Paquete operativo del encargo de diseño. No decide marca ni claims:
+      declara qué documento gobierna cada frente de trabajo, en qué orden
+      se lee y qué decisiones ya están tomadas.
+
    Referencias técnicas transversales (no deciden marca ni claims):
    nhilos_pos_experience_standard_v1.0.md                [branding/Recursos/]
    nhilos_backoffice_experience_standard_v1.0.md         [branding/Recursos/]
@@ -116,10 +132,22 @@ a él como upstream. Si un documento necesita una regla que vive arriba, la cita
 | — | `nhilos_backoffice_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficies backoffice | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_website_non_functional_spec_v1.0.md` | `branding/Recursos/` | Spec no funcional del sitio | 1.0 | `DRAFT` — gates heredados por la IA (§18.1 `NF-01`..`NF-13`) |
 | — | `nhilos_backoffice_module_audit_template_v1.0.md` | `branding/Recursos/` | Plantilla de auditoría de módulo | 1.0 | `EVIDENCE PASS` |
+| `I` | `nhilos_brand_identity_brief_v0.1.md` | `branding/` | Capa de identidad — encargo de diseño | 0.1 | `FOR DESIGN — INPUT DOCUMENT` |
+| `D` | `nhilos_design_kickoff_handover_v0.1.md` | `branding/` | Paquete operativo del encargo de diseño | 0.1 | `FOR DESIGN — KICKOFF PACK` |
 
-**Documentos derivados exigidos por la constitución y aún inexistentes** (deuda declarada, no
-pendiente de este set): `nhilos_brand_identity_system.md`, `nhilos_verbal_identity_guide.md` y
-las especificaciones de expresión por producto. La constitución los marca como línea futura.
+### Roadmap de documentos de marca pendientes
+
+La constitución §49 exige una secuencia. Ningún documento se produce «porque está en la lista»:
+cada uno se produce cuando su disparador aparece. Así se evita olvidarlo **y** se evita generar
+versiones flacas que nadie usa.
+
+| Documento | Estado | Disparador que lo justifica |
+|---|---|---|
+| `nhilos_brand_identity_system.md` | **Pendiente — es el entregable de diseño en curso** | Existe el brief (`I`). Se produce cuando el diseñador entregue la identidad. |
+| `nhilos_verbal_identity_guide.md` | Pendiente | Hoy la autoridad verbal es la constitución §14 y alcanza. Se justifica cuando haya **más de un redactor o agencia** escribiendo para la marca. |
+| `product_expression_specs/nhilos_pos_brand_expression.md` | Pendiente | Se justifica cuando exista un **segundo producto** y haya que definir qué puede variar por producto. Hoy POS es la única expresión vigente. |
+| `product_expression_specs/` (conta, erp) | Pendiente | Cuando esos productos se aprueben. Hoy son líneas previstas, no aprobadas. |
+| `experience_playbooks/` (sales, onboarding, support) | Pendiente | Cuando la operación de esos frentes escale al punto de necesitar guion propio. |
 
 ---
 
