@@ -167,7 +167,11 @@ void main() {
       expect(stored.first.reconciliationStatus, 'MANUAL_OVERRIDE');
       // S1a #68: the override write also creates the outbox work.
       expect(stored.first.reconciliationSyncStatus, 'pending');
-      expect(stored.first.reconciledByUserId, 'sup-01');
+      // Semantics fix: the override stamps the REAL OPERATOR (the logged-in
+      // cajero) as the reconciler, and the typed supervisor credential moves
+      // to its own column — the two identities are never conflated again.
+      expect(stored.first.reconciledByUserId, 'cajero-01');
+      expect(stored.first.overrideSupervisorRef, 'sup-01');
       expect(stored.first.voucherCode, contains('Ticket de datáfono salió en blanco'));
     });
   });

@@ -147,12 +147,20 @@ Future<void> openVoucherReconciliationDialog(
   CashShiftViewModel vm,
 ) async {
   if (vm.paymentDao == null) return;
+  // Reconcile-time identity fix: resolve the acting user with the SAME
+  // per-action resolver open/close use, instead of the raw constructor
+  // field (which the production wiring in main.dart leaves empty — that
+  // empty id is what the backend rejected with 'reconciledByUserId should
+  // not be empty'). When nobody can be resolved the child VM receives ''
+  // and REFUSES every identity-stamped write, so no row is ever persisted
+  // with an empty reconciledByUserId.
+  final actingUserId = await vm.resolveActingUserId();
   await showDialog<void>(
     context: context,
     builder: (_) => ChangeNotifierProvider<CardVoucherReconciliationViewModel>(
       create: (_) => CardVoucherReconciliationViewModel(
         paymentDao: vm.paymentDao!,
-        currentUserId: vm.currentUserId,
+        currentUserId: actingUserId ?? '',
         // Issue #74: refresh the parent count after EACH successful
         // resolution while the dialog is still open, so the pending-voucher
         // badge, the 'Vouchers (n)' label and the fiscal gate reflect the

@@ -12,14 +12,22 @@ import {
 } from "./use-sales-reports";
 import { useRbac } from "@/lib/rbac";
 import { CreditNotesTab } from "./credit-notes-tab";
+import { ReconciliationsTab } from "./reconciliations-tab";
 
-type TabId = "summary" | "hourly" | "products" | "cashiers" | "credit-notes";
+type TabId =
+  | "summary"
+  | "hourly"
+  | "products"
+  | "cashiers"
+  | "reconciliations"
+  | "credit-notes";
 
 const BASE_TABS: { id: TabId; label: string }[] = [
   { id: "summary", label: "Resumen" },
   { id: "hourly", label: "Ventas por Hora" },
   { id: "products", label: "Top Productos" },
   { id: "cashiers", label: "Rendimiento Cajeros" },
+  { id: "reconciliations", label: "Reconciliaciones" },
 ];
 
 import { formatLocalDate } from "@/lib/utils";
@@ -304,6 +312,8 @@ export function SalesPage() {
   const productFilter =
     searchParams.get("product") || searchParams.get("productId") || undefined;
   const paymentMethodFilter = searchParams.get("paymentMethod") || undefined;
+  const reconciliationStatusFilter =
+    searchParams.get("reconciliationStatus") || undefined;
 
   const handleTabChange = (tabId: TabId) => {
     setActiveTab(tabId);
@@ -368,6 +378,12 @@ export function SalesPage() {
         )}
         {activeTab === "cashiers" && (
           <CashiersTab startDate={range.startDate} endDate={range.endDate} />
+        )}
+        {/* Deliberately no startDate/endDate: the server filters
+            reconciliations by reconciled_at, which is NULL for PENDIENTE rows
+            — dates would make the pending view come back empty. */}
+        {activeTab === "reconciliations" && (
+          <ReconciliationsTab initialStatus={reconciliationStatusFilter} />
         )}
         {activeTab === "credit-notes" && <CreditNotesTab />}
       </div>

@@ -325,6 +325,9 @@ export interface CardReconciliationSummary {
   pendingAmountNio: number;
   /** ISO 8601 of the oldest pending row; null when nothing is pending. */
   oldestPendingAt: string | null;
+  /** Card payments reconciled by MANUAL_OVERRIDE (policy-approved operation). */
+  manualOverrideCount: number;
+  manualOverrideAmountNio: number;
   generatedAt: string;
 }
 
@@ -336,6 +339,8 @@ export function normalizeCardReconciliationSummary(
     pendingCount: toFiniteNumber(r.pendingCount),
     pendingAmountNio: toFiniteNumber(r.pendingAmountNio),
     oldestPendingAt: typeof r.oldestPendingAt === "string" ? r.oldestPendingAt : null,
+    manualOverrideCount: toFiniteNumber(r.manualOverrideCount),
+    manualOverrideAmountNio: toFiniteNumber(r.manualOverrideAmountNio),
     generatedAt: typeof r.generatedAt === "string" ? r.generatedAt : "",
   };
 }
@@ -346,6 +351,113 @@ export async function fetchCardReconciliationSummary(
   const url = "/sales/reports/card-reconciliation-summary";
   const raw = opts ? await api.get<unknown>(url, opts) : await api.get<unknown>(url);
   return normalizeCardReconciliationSummary(raw);
+}
+
+// ---------------------------------------------------------------------------
+// Reconciliation drill-down list — GET /sales/reports/reconciliations
+// (OWNER/MANAGER, tenant-scoped). READ-ONLY: the dashboard never reconciles.
+// ---------------------------------------------------------------------------
+
+export interface ReconciliationListRow {
+  paymentId: string;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  amount: number;
+  amountNio: number;
+  currency: string | null;
+  method: string | null;
+  voucherCode: string | null;
+  reconciliationStatus: string;
+  reconciledAt: string | null;
+  /** Never rendered to the owner — the operator name is the display field. */
+  reconciledByUserId: string | null;
+  overrideSupervisorRef: string | null;
+  /** null when the invoice has no shift. */
+  terminalId: string | null;
+  /**
+   * null when the stored reconciler id does not resolve to a user (legacy
+   * MANUAL_OVERRIDE rows abused the column with a typed supervisor string);
+   * never fabricated — the UI labels it honestly.
+   */
+  operatorName: string | null;
+  createdAt: string;
+}
+
+export interface ReconciliationListResponse {
+  reconciliations: ReconciliationListRow[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export interface ReconciliationListParams {
+  status?: string;
+  method?: string;
+  page?: number;
+  limit?: number;
+  /**
+   * The server's date filter applies to `reconciled_at`, which is NULL for
+   * PENDIENTE rows: callers must NOT send dates for an outstanding-state
+   * query or the list silently comes back empty.
+   */
+  startDate?: string;
+  endDate?: string;
+}
+
+export function normalizeReconciliationRow(raw: unknown): ReconciliationListRow {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  return {
+    paymentId: typeof r.paymentId === "string" ? r.paymentId : "",
+    invoiceId: typeof r.invoiceId === "string" ? r.invoiceId : null,
+    invoiceNumber: typeof r.invoiceNumber === "string" ? r.invoiceNumber : null,
+    amount: toFiniteNumber(r.amount),
+    amountNio: toFiniteNumber(r.amountNio),
+    currency: typeof r.currency === "string" ? r.currency : null,
+    method: typeof r.method === "string" ? r.method : null,
+    voucherCode: typeof r.voucherCode === "string" ? r.voucherCode : null,
+    reconciliationStatus:
+      typeof r.reconciliationStatus === "string" ? r.reconciliationStatus : "",
+    reconciledAt: typeof r.reconciledAt === "string" ? r.reconciledAt : null,
+    reconciledByUserId:
+      typeof r.reconciledByUserId === "string" ? r.reconciledByUserId : null,
+    overrideSupervisorRef:
+      typeof r.overrideSupervisorRef === "string" ? r.overrideSupervisorRef : null,
+    terminalId: typeof r.terminalId === "string" ? r.terminalId : null,
+    operatorName: typeof r.operatorName === "string" ? r.operatorName : null,
+    createdAt: typeof r.createdAt === "string" ? r.createdAt : "",
+  };
+}
+
+export function normalizeReconciliationList(raw: unknown): ReconciliationListResponse {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  const rows = Array.isArray(r.reconciliations) ? r.reconciliations : [];
+  const p = (typeof r.pagination === "object" && r.pagination !== null
+    ? r.pagination
+    : {}) as Record<string, unknown>;
+  return {
+    reconciliations: rows.map(normalizeReconciliationRow),
+    pagination: {
+      page: Math.trunc(toFiniteNumber(p.page, 1)),
+      limit: Math.trunc(toFiniteNumber(p.limit, 25)),
+      total: Math.trunc(toFiniteNumber(p.total)),
+      totalPages: Math.trunc(toFiniteNumber(p.totalPages)),
+    },
+  };
+}
+
+export async function fetchReconciliations(
+  params: ReconciliationListParams,
+  opts?: ApiClientMethodOptions,
+): Promise<ReconciliationListResponse> {
+  const query: Record<string, string | undefined> = {
+    status: params.status,
+    method: params.method,
+    page: params.page !== undefined ? String(params.page) : undefined,
+    limit: params.limit !== undefined ? String(params.limit) : undefined,
+    startDate: params.startDate,
+    endDate: params.endDate,
+  };
+  const url = `/sales/reports/reconciliations${toQueryParams(query)}`;
+  const raw = opts ? await api.get<unknown>(url, opts) : await api.get<unknown>(url);
+  return normalizeReconciliationList(raw);
 }
 
 /**

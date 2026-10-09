@@ -79,6 +79,8 @@ const reconciliationPayload = (overrides: Record<string, unknown> = {}) => ({
   pendingCount: 0,
   pendingAmountNio: 0,
   oldestPendingAt: null,
+  manualOverrideCount: 0,
+  manualOverrideAmountNio: 0,
   generatedAt: GENERATED_AT,
   ...overrides,
 });
@@ -510,6 +512,78 @@ describe("AttentionBand — partial failure isolation (FR-STATE-04/05)", () => {
     // a failed signal can never be presented as "healthy" (FR-STATE-04/05).
     expect(screen.getByTestId("attention-band")).toBeInTheDocument();
     expect(screen.queryByTestId("attention-healthy")).not.toBeInTheDocument();
+  });
+});
+
+describe("AttentionBand — reconciliations drill-down (§9.2/§9.3 dead-end fix)", () => {
+  it("drills pending vouchers to the reconciliations tab with the pending filter, not the card sales summary", async () => {
+    vi.mocked(fetchCardReconciliationSummary).mockResolvedValue(
+      reconciliationPayload({ pendingCount: 2, pendingAmountNio: 500 }),
+    );
+
+    renderBand();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("attention-link-vouchers")).toBeInTheDocument();
+    });
+    const href =
+      screen.getByTestId("attention-link-vouchers").getAttribute("href") ?? "";
+    // Context-rich destination: the tab that actually lists pending vouchers
+    // with its filter consumed by the destination (§9.3), not the card SALES
+    // summary that shows no vouchers at all (the old dead end).
+    expect(href).toContain("tab=reconciliations");
+    expect(href).toContain("reconciliationStatus=PENDIENTE");
+    expect(href).not.toContain("tab=summary");
+    expect(href).toContain("source=dashboard&sourceWidget=attention");
+  });
+
+  it("renders a manual-overrides signal (info) when manualOverrideCount > 0", async () => {
+    vi.mocked(fetchCardReconciliationSummary).mockResolvedValue({
+      ...reconciliationPayload({ pendingCount: 0, pendingAmountNio: 0 }),
+      manualOverrideCount: 2,
+      manualOverrideAmountNio: 310,
+    });
+
+    renderBand();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("attention-item-overrides")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("attention-item-overrides")).toHaveAttribute(
+      "data-severity",
+      "info",
+    );
+    expect(screen.getByTestId("attention-item-overrides").textContent).toContain(
+      "2 override",
+    );
+    expect(screen.getByTestId("attention-item-overrides").textContent).toContain(
+      "C$310.00",
+    );
+    const href =
+      screen.getByTestId("attention-link-overrides").getAttribute("href") ?? "";
+    expect(href).toContain("tab=reconciliations");
+    expect(href).toContain("reconciliationStatus=MANUAL_OVERRIDE");
+    expect(href).not.toContain("tab=summary");
+  });
+
+  it("renders no overrides row when manualOverrideCount is 0 (exceptions-only, no noise row)", async () => {
+    // One unrelated exception keeps the panel mounted so the absence is
+    // observed against a settled, rendered panel.
+    vi.mocked(fetchAlerts).mockResolvedValue(
+      alertsPayload({ criticalCount: 1, totalAlertsCount: 1 }),
+    );
+    vi.mocked(fetchCardReconciliationSummary).mockResolvedValue({
+      ...reconciliationPayload({ pendingCount: 2, pendingAmountNio: 500 }),
+      manualOverrideCount: 0,
+      manualOverrideAmountNio: 0,
+    });
+
+    renderBand();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("attention-item-vouchers")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("attention-item-overrides")).not.toBeInTheDocument();
   });
 });
 

@@ -168,8 +168,14 @@ void main() {
             'reconciliationStatus',
             'MANUAL_OVERRIDE',
           ).having(
+            // Semantics fix: the override records the OPERATOR as the
+            // reconciler, not the typed supervisor string.
             (p) => p.reconciledByUserId,
             'reconciledByUserId',
+            'cajero-01',
+          ).having(
+            (p) => p.overrideSupervisorRef,
+            'overrideSupervisorRef',
             'supervisor-mariana',
           )))).called(1);
     });
