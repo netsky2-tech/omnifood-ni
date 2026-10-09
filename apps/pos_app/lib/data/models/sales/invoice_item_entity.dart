@@ -42,6 +42,11 @@ class InvoiceItemEntity {
   final String? inventorySnapshotVersion;
   @ColumnInfo(name: 'origin_invoice_item_id')
   final String? originInvoiceItemId;
+  // TEXT JSON breakdown over the line discount ({promotion|manual|loyalty:
+  // amount}), mirroring how inventory_snapshot_json stores JSON in this
+  // table. Null = legacy/unknown.
+  @ColumnInfo(name: 'discount_origin_json')
+  final String? discountOriginJson;
 
   InvoiceItemEntity({
     required this.id,
@@ -61,5 +66,6 @@ class InvoiceItemEntity {
     this.inventorySnapshotJson,
     this.inventorySnapshotVersion,
     this.originInvoiceItemId,
+    this.discountOriginJson,
   });
 }

@@ -2799,6 +2799,28 @@ final migration65_66 = Migration(65, 66, (database) async {
   }
 });
 
+/// v66 → v67: per-line discount-origin breakdown on invoice_items. The
+/// outbound sync payload is rebuilt from LOCAL rows at upload time
+/// (getItemsByInvoiceId → toItemDomain → toSyncJson), so a breakdown that
+/// only existed in memory at checkout would be lost for every offline-queued
+/// sale. The discount-origin breakdown column is nullable TEXT JSON with no
+/// default, mirroring inventory_snapshot_json; null = legacy/unknown. Each
+/// guard (table existence + column probe) keeps the migration safe to
+/// re-run; old rows read back null, which is exactly the legacy value.
+final migration66_67 = Migration(66, 67, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='invoice_items'",
+  );
+  if (tables.isEmpty) return;
+  final columns = await database.rawQuery('PRAGMA table_info(invoice_items)');
+  final names = columns.map((row) => row['name'] as String).toSet();
+  if (!names.contains('discount_origin_json')) {
+    await database.execute(
+      'ALTER TABLE invoice_items ADD COLUMN discount_origin_json TEXT',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2856,6 +2878,7 @@ final allMigrations = [
   migration63_64,
   migration64_65,
   migration65_66,
+  migration66_67,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

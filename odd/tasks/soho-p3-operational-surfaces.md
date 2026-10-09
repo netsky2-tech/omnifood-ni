@@ -413,6 +413,19 @@ Entrada: brutos por línea, `discount` por línea ya calculado (autoritativo), i
 | Quitar el tope por línea (`min(base, remaining)`) | `Expected: <400> Actual: <500>` (T1); `Expected: <50> Actual: <66>` (matriz T2) | Ninguna línea puede exceder su descuento |
 | Dejar el bucle de sobrantes en una sola pasada | `Expected: <600> Actual: <501>` (T1) | Los centavos sobrantes se colocan **todos**: el bucle es necesario, no decorativo |
 
-21/21 en la suite enfocada con `--concurrency=1`. **S1c-2b sigue pendiente** (columna local + migración + cable).
+**S1c-2b se cortó en dos**: `b-1` persiste localmente (cerrado abajo), `b-2` produce y manda (pendiente).
+
+### S1c-2b-1 · La persistencia local — CERRADO
+
+Columna `discount_origin_json TEXT` nullable en `invoice_items`, con `migration66_67` (guarda por existencia de tabla + sonda de columna, molde exacto de `migration65_66`) y `AppDatabase` de 66 → 67. `InvoiceItem.discountOrigin` es `Map<String, double>?` **nullable sin default**: `null` = legado/desconocido y **nunca** se fabrica un mapa vacío — los dos estados legales son `null` y un desglose poblado. El par local del mapper codifica y decodifica, y el decodificador **falla seguro**: conserva sólo `promotion|manual|loyalty` con valor finito > 0, ignora cualquier otra cosa y devuelve `null` si no queda nada válido, porque una llave desconocida o un cero harían que el backend rechace el lote de 500 **entero**. `toSyncJson` **no se tocó**: nada manda el campo todavía.
+
+Por qué la columna no es opcional: el payload de sync se reconstruye desde las filas locales en el momento del envío (`sales_repository_impl.dart:519-527`), así que un desglose que sólo viviera en memoria se perdería en cada venta encolada offline. Ésa es la diferencia entre "el desglose existe" y "el desglose llega".
+
+**Dos hallazgos que esta unidad destapó, ambos arreglados acá:**
+
+1. **`test/data/database/migrations_test.dart:354` ya estaba en rojo en `d5f94e3e`.** El centinela de la cadena pinnaba "migration64_65 es el eslabón más nuevo" por número e identidad, y **rotó en silencio** cuando entró `migration65_66`: nadie corrió ese archivo en esa unidad. Reescrito como invariante durable: la cadena es contigua, arranca en v10, no repite versiones de arranque y **termina exactamente en la versión con la que Floor abre la base** (leída del runtime, no de la anotación). Mutación de verificación: subir el `version:` del archivo **generado** a 68 sin registrar migración → `Expected: <67> Actual: <68>` con el `reason`; restaurado byte-idéntico. **Lección que vale para el próximo centinela:** el `version:` que cuenta en runtime vive en `app_database.g.dart`, no en la anotación de `app_database.dart`. Mi primer intento de mutación (subir la anotación) pasó en verde y me habría hecho firmar un centinela que no probaba nada; el mutante correcto es el generado.
+2. **La doc de la migración citaba un commit `(52b0f1a3)` que no existe.** El worker imitó el ancla `(02cfd0ff)` de la migración vecina —que **sí** es un commit real— e inventó el hash. Se quitó el ancla; la convención "columna + commit que la introdujo" se conserva donde es real.
+
+**Evidencia:** `sales_mapper_test.dart` 39/39 (6 nuevos), suite nueva de persistencia sobre bases reales 10/10 (sqflite ffi, no mocks), `migrations_test.dart` 15/15, `identity_sales_migrations_test.dart` 20/20, `invoice_modifier_quantity_test.dart` 3/3, paridad de instalación limpia 8/8. Inventario de generados: 87 archivos con hash antes y después, delta **exactamente 3**, todos derivados de los dos modelos cambiados. `flutter analyze` sin issues en los siete archivos escritos a mano (los 5 infos restantes son preexistentes, dentro del código generado de Floor y presentes ya en el archivo commiteado).
 
 ⚠ **Orden de despliegue (hereda §10):** el backend va **primero**. El POS no debe mandar el campo a producción antes que el backend esté desplegado; en la rama van juntos, en producción no.

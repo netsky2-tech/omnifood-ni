@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/database/migrations.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -346,19 +347,46 @@ void main() {
     await databaseFactory.deleteDatabase(legacyPath);
   });
 
-  test(
-      'allMigrations keeps the chain ordered: migration64_65 is the newest '
-      'link at the end and migration63_64 is retained immediately before it',
-      () {
-    // The newest link is registered at the end of the chain.
-    expect(allMigrations.last.startVersion, 64);
-    expect(allMigrations.last.endVersion, 65);
-    expect(allMigrations.last, same(migration64_65));
-    // The previous newest link is still registered, in position, with its
-    // versions unchanged.
-    expect(allMigrations[allMigrations.length - 2], same(migration63_64));
-    expect(migration63_64.startVersion, 63);
-    expect(migration63_64.endVersion, 64);
+  test('allMigrations is a contiguous chain that ends where AppDatabase opens',
+      () async {
+    // WHY this shape: this test used to pin "migration64_65 is the newest link"
+    // by number and identity, so it rotted silently the moment migration65_66
+    // landed — it sat red until the discount-origin unit happened to run it.
+    // The durable invariants are the ones that cannot rot: the chain has no gap
+    // or overlap, and its end is exactly the version Floor opens the database
+    // with. The hazard it catches is the real one: bumping the schema version
+    // without registering its migration, which makes every existing device
+    // "upgrade" to a version whose column was never added, silently.
+    expect(allMigrations, isNotEmpty);
+    expect(allMigrations.first.startVersion, 10);
+
+    final startVersions = <int>{};
+    for (var i = 0; i < allMigrations.length; i++) {
+      final migration = allMigrations[i];
+      expect(migration.endVersion, greaterThan(migration.startVersion));
+      expect(
+        startVersions.add(migration.startVersion),
+        isTrue,
+        reason: 'two migrations start at v${migration.startVersion}',
+      );
+      if (i > 0) {
+        expect(
+          migration.startVersion,
+          allMigrations[i - 1].endVersion,
+          reason: 'gap or overlap between v${allMigrations[i - 1].endVersion} '
+              'and v${migration.startVersion}',
+        );
+      }
+    }
+
+    final database =
+        await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+    addTearDown(database.close);
+    expect(
+      await database.database.getVersion(),
+      allMigrations.last.endVersion,
+      reason: 'AppDatabase.version must be the end of the registered chain',
+    );
   });
 
   const namedInvoiceColumns = [

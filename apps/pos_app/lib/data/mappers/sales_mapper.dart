@@ -411,6 +411,7 @@ class SalesMapper {
       inventorySnapshotVersion: entity.inventorySnapshotVersion,
       originInvoiceItemId: entity.originInvoiceItemId,
       selectedModifiers: modifiers,
+      discountOrigin: _discountOriginFromEntity(entity),
     );
   }
 
@@ -438,6 +439,9 @@ class SalesMapper {
         domain.inventorySnapshotVersion,
       ),
       originInvoiceItemId: domain.originInvoiceItemId,
+      discountOriginJson: domain.discountOrigin == null
+          ? null
+          : jsonEncode(domain.discountOrigin!),
     );
   }
 
@@ -455,6 +459,46 @@ class SalesMapper {
     );
     _snapshotVersion(snapshot, entity.inventorySnapshotVersion);
     return snapshot;
+  }
+
+  static const _discountOriginKeys = {'promotion', 'manual', 'loyalty'};
+
+  /// Fail-safe decode of the stored breakdown. The outbound payload is
+  /// rebuilt from these rows at upload time, so anything the backend would
+  /// reject (unknown key, non-positive or non-numeric amount, corrupt JSON)
+  /// must never survive a read: keep ONLY the three known keys with a finite
+  /// value > 0, ignore the rest, and return null when nothing valid remains.
+  /// Null and undefined both stay null — a breakdown is never fabricated.
+  static Map<String, double>? _discountOriginFromEntity(
+    InvoiceItemEntity entity,
+  ) {
+    final json = entity.discountOriginJson;
+    if (json == null) return null;
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is! Map) return null;
+      Map<String, double>? result;
+      for (final entry in decoded.entries) {
+        final key = entry.key;
+        if (key is! String || !_discountOriginKeys.contains(key)) continue;
+        final value = entry.value;
+        if (value is! num) continue;
+        final amount = value.toDouble();
+        if (!amount.isFinite || amount <= 0) continue;
+        (result ??= {})[key] = amount;
+      }
+      return result;
+    } catch (parseError, st) {
+      developer.log(
+        'Failed to parse discount-origin JSON for invoice item '
+        '(id=${entity.id}); falling back to null.',
+        name: 'SalesMapper',
+        level: 900, // WARNING
+        error: parseError,
+        stackTrace: st,
+      );
+      return null;
+    }
   }
 
   static String? _snapshotVersion(

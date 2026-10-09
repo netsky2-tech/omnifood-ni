@@ -563,4 +563,137 @@ void main() {
       expect(DateTime.parse(reconciledAtStr).toUtc(), localReconciled.toUtc());
     });
   });
+
+  group('SalesMapper - discountOrigin local persistence', () {
+    InvoiceItem itemWith(Map<String, double>? discountOrigin) => InvoiceItem(
+          id: 'item-1',
+          invoiceId: 'inv-1',
+          productId: 'prod-1',
+          productName: 'Burger',
+          quantity: 2,
+          unitPrice: 50,
+          originalTaxRate: 0.15,
+          appliedTaxRate: 0.15,
+          taxAmount: 15,
+          total: 115,
+          discountOrigin: discountOrigin,
+        );
+
+    test('toItemEntity encodes a breakdown to a JSON string', () {
+      final entity = SalesMapper.toItemEntity(itemWith({
+        'promotion': 10.0,
+        'manual': 5.0,
+      }));
+
+      expect(entity.discountOriginJson,
+          jsonEncode({'promotion': 10.0, 'manual': 5.0}));
+    });
+
+    test('toItemEntity keeps null as null (legacy rows are never fabricated)',
+        () {
+      final entity = SalesMapper.toItemEntity(itemWith(null));
+
+      expect(entity.discountOriginJson, isNull);
+    });
+
+    test('toItemDomain decodes the JSON string back to the map', () {
+      final entity = InvoiceItemEntity(
+        id: 'item-1',
+        invoiceId: 'inv-1',
+        productId: 'prod-1',
+        productName: 'Burger',
+        quantity: 2,
+        unitPrice: 50,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 15,
+        total: 115,
+        discountOriginJson: jsonEncode({'loyalty': 3.5}),
+      );
+
+      final domain = SalesMapper.toItemDomain(entity);
+
+      expect(domain.discountOrigin, {'loyalty': 3.5});
+    });
+
+    test('toItemDomain keeps a null JSON cell null, NOT an empty map', () {
+      final entity = InvoiceItemEntity(
+        id: 'item-1',
+        invoiceId: 'inv-1',
+        productId: 'prod-1',
+        productName: 'Burger',
+        quantity: 2,
+        unitPrice: 50,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 15,
+        total: 115,
+        discountOriginJson: null,
+      );
+
+      final domain = SalesMapper.toItemDomain(entity);
+
+      expect(domain.discountOrigin, isNull);
+      // Null is not an empty map: the two states must never blur.
+      expect(domain.discountOrigin, isNot(equals(<String, double>{})));
+    });
+
+    test('toItemDomain keeps only known keys with finite positive values', () {
+      InvoiceItemEntity entityWith(String json) => InvoiceItemEntity(
+            id: 'item-1',
+            invoiceId: 'inv-1',
+            productId: 'prod-1',
+            productName: 'Burger',
+            quantity: 2,
+            unitPrice: 50,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 15,
+            total: 115,
+            discountOriginJson: json,
+          );
+
+      // Unknown key dropped, zero dropped, non-numeric dropped.
+      expect(
+        SalesMapper.toItemDomain(entityWith(
+                '{"promotion":10.0,"mystery":7.0,"manual":0.0,"loyalty":"x"}'))
+            .discountOrigin,
+        {'promotion': 10.0},
+      );
+      // Negative and NaN are not > 0.
+      expect(
+        SalesMapper.toItemDomain(
+                entityWith('{"promotion":-3.0,"manual":5.0}'))
+            .discountOrigin,
+        {'manual': 5.0},
+      );
+      // Nothing valid remains -> null, never an empty map.
+      expect(
+        SalesMapper.toItemDomain(
+                entityWith('{"promotion":0.0,"manual":-1.0}'))
+            .discountOrigin,
+        isNull,
+      );
+    });
+
+    test('toItemDomain decodes corrupt JSON fail-safe to null', () {
+      final entity = InvoiceItemEntity(
+        id: 'item-1',
+        invoiceId: 'inv-1',
+        productId: 'prod-1',
+        productName: 'Burger',
+        quantity: 2,
+        unitPrice: 50,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 15,
+        total: 115,
+        discountOriginJson: 'not-json{',
+      );
+
+      final domain = SalesMapper.toItemDomain(entity);
+
+      expect(domain.discountOrigin, isNull);
+    });
+  });
 }
