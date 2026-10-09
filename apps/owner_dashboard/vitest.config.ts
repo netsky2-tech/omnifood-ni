@@ -21,6 +21,10 @@ export default defineConfig({
       "**/e2e/**",
       "src/__tests__/w1.integration.test.ts",
       "src/__tests__/w4-e2e-fiscal.test.ts",
+      // Live-API suites: they talk to a real backend on NHILOS_LIVE_API and
+      // run via `npm run test:integration`; without a backend (CI) every case
+      // dies with ECONNREFUSED. Keep them out of the default unit run.
+      "src/__tests__/modifiers-live.integration.test.ts",
     ],
     testTimeout: 10000,
     css: true,
