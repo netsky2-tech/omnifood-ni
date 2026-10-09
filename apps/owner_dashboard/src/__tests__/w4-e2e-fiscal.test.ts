@@ -1,6 +1,12 @@
 import { describe, expect, it, beforeAll } from "vitest";
 
-const API_BASE = "http://localhost:3000/api";
+// Live-suite contract: NHILOS_LIVE_API overrides the base URL; the default
+// points at the local shadow stack on :3300 so these never collide with
+// another worktree's stack on :3000 (same rule as modifiers-live.live.spec.ts).
+const API_BASE = process.env.NHILOS_LIVE_API ?? "http://127.0.0.1:3300/api";
+
+// LoginDto requires tenantSlug (issue #556 stage 12d) — same seeded tenant as w1.
+const TENANT_SLUG = "soho-test-fixture";
 
 let managerToken: string;
 let cashierToken: string;
@@ -12,7 +18,7 @@ async function loginAs(
   const res = await fetch(`${API_BASE}/identity/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, pass }),
+    body: JSON.stringify({ email, pass, tenantSlug: TENANT_SLUG }),
   });
   if (!res.ok) {
     throw new Error(`Login failed for ${email}: ${res.status}`);
