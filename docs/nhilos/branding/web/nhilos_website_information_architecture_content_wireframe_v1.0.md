@@ -843,7 +843,7 @@ Situación → Comportamiento → Efecto:
 - **Comportamiento:** el cliente se identifica en mostrador por QR (`NHL1:{code}`), código, teléfono o búsqueda por nombre, con datos locales; al guardar la venta con cliente seleccionado se acumulan puntos a la tasa configurada, y el canje es un descuento validado (mínimo, saldo y tope al total) iniciado por el operador; las promociones activas localmente se aplican de forma automática y determinista; las transacciones de puntos sincronizan a la nube de forma idempotente; el dueño configura programas, recompensas y ajustes con actor y motivo.
 - **Efecto:** la fidelización opera dentro del flujo de caja sin detener la venta, con límites declarados: tasa plana (sin reglas de programa ni sellos), beneficio de catálogo de recompensas no aplicado al carrito, consistencia eventual en la nube (deriva de redondeo de hasta 0.5 punto por transacción, sin paridad exacta de saldo en tiempo real) y configuración restringida al rol OWNER/MANAGER.
 
-Claims de los que depende este argumento (OD-02 v1.3, extensión loyalty): `PC-LOY-01`, `PC-LOY-02`, `PC-LOY-03`, `PC-LOY-04`, `PC-LOY-05`, `PC-LOY-06`. Lo no implementado (expiración, tiers, campañas, KPIs de loyalty, portal del consumidor, paridad exacta POS↔nube) no se comunica como capacidad, según [Loyalty — lo que el producto NO hace y por lo tanto no debe prometerse](Recursos/product_claim_audit_od02_v1.3.md#41-loyalty--lo-que-el-producto-no-hace-y-por-lo-tanto-no-debe-prometerse) del OD-02.
+Claims de los que depende este argumento (OD-02 v1.3, extensión loyalty): `PC-LOY-01`, `PC-LOY-02`, `PC-LOY-03`, `PC-LOY-04`, `PC-LOY-05`, `PC-LOY-06`. Lo no implementado (expiración, tiers, campañas, KPIs de loyalty, portal del consumidor, paridad exacta POS↔nube) no se comunica como capacidad, según [Loyalty — lo que el producto NO hace y por lo tanto no debe prometerse](../claims/product_claim_audit_od02_v1.3.md#41-loyalty--lo-que-el-producto-no-hace-y-por-lo-tanto-no-debe-prometerse) del OD-02.
 
 ## P04 --- Continuity + control / visibility
 
@@ -1384,26 +1384,26 @@ aprobación de esta IA.
 
 El cierre estructural de este bloque de aceptación no sustituye el gate no funcional. Los
 umbrales siguientes se heredan de
-`Recursos/nhilos_website_non_functional_spec_v1.0.md` (referencia técnica transversal según
-`nhilos_branding_document_governance_v1.0.md` [Cadena de autoridad (lineal, sin ciclos)](nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)). Conforme a la regla `G-02`, ningún
+`nhilos_website_non_functional_spec_v1.0.md` (referencia técnica transversal según
+`nhilos_branding_document_governance_v1.0.md` [Cadena de autoridad (lineal, sin ciclos)](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)). Conforme a la regla `G-02`, ningún
 sign-off de esta IA o del sitio es válido si omite estos gates: la aprobación de la IA queda
 explícitamente condicionada a ellos.
 
 | # | Gate | Valor heredado (verbatim) | Fuente (spec no funcional) |
 |---|------|---------------------------|----------------------------|
-| NF-01 | Conformidad de accesibilidad | WCAG 2.1 **Nivel AA** como estándar base de aceptación | [Accessibility (a11y) Target (El valor de la inclusión)](Recursos/nhilos_website_non_functional_spec_v1.0.md#2-accessibility-a11y-target-el-valor-de-la-inclusión) (intro) |
-| NF-02 | LCP | `< 2.5 segundos` (percentil 75, "Good") | [Umbrales Core Web Vitals (CWV)](Recursos/nhilos_website_non_functional_spec_v1.0.md#11-umbrales-core-web-vitals-cwv) |
-| NF-03 | INP | `< 200 milisegundos` | [Umbrales Core Web Vitals (CWV)](Recursos/nhilos_website_non_functional_spec_v1.0.md#11-umbrales-core-web-vitals-cwv) |
-| NF-04 | CLS | `< 0.1` | [Umbrales Core Web Vitals (CWV)](Recursos/nhilos_website_non_functional_spec_v1.0.md#11-umbrales-core-web-vitals-cwv) |
-| NF-05 | Peso de página inicial | `< 2.5 MB` comprimido | [Presupuestos de Medios (Page-Weight Budgets)](Recursos/nhilos_website_non_functional_spec_v1.0.md#12-presupuestos-de-medios-page-weight-budgets) |
-| NF-06 | Formato de imágenes | Servidas en formatos modernos (`WebP` o `AVIF` con fallback a JPG/PNG); redimensionadas por viewport con `srcset`; `loading="lazy"` fuera del viewport inicial | [Presupuestos de Medios (Page-Weight Budgets)](Recursos/nhilos_website_non_functional_spec_v1.0.md#12-presupuestos-de-medios-page-weight-budgets) |
-| NF-07 | Touch targets | Área táctil mínima de `44x44 CSS pixels` en móvil para todo elemento interactivo | [Movimiento e Interacción](Recursos/nhilos_website_non_functional_spec_v1.0.md#24-movimiento-e-interacción) |
-| NF-08 | Contraste de texto | Mínimo `4.5:1` texto normal y `3:1` texto grande (H1, H2) | [Contraste y Legibilidad](Recursos/nhilos_website_non_functional_spec_v1.0.md#21-contraste-y-legibilidad) |
-| NF-09 | Contraste de UI | Mínimo `3:1` para controles interactivos (botones, inputs, estados activos) | [Contraste y Legibilidad](Recursos/nhilos_website_non_functional_spec_v1.0.md#21-contraste-y-legibilidad) |
-| NF-10 | Movimiento reducido | Con `prefers-reduced-motion` activo, CSS/JS cancela reveals, paralajes y transiciones suaves | [Movimiento e Interacción](Recursos/nhilos_website_non_functional_spec_v1.0.md#24-movimiento-e-interacción) |
-| NF-11 | Consentimiento antes de terceros | Ninguna cookie no esencial o script de terceros (píxeles, analytics) sin consentimiento explícito del usuario; "Rechazar todo" tan accesible y visible como "Aceptar todo" | [Comportamiento de Cookies](Recursos/nhilos_website_non_functional_spec_v1.0.md#32-comportamiento-de-cookies) |
-| NF-12 | Página 404 útil | Vista personalizada y sobria con enlaces directos a Home, Producto y Soporte; sin dead ends | [Quality Assurance (QA) Checklist pre-lanzamiento](Recursos/nhilos_website_non_functional_spec_v1.0.md#6-quality-assurance-qa-checklist-pre-lanzamiento) (QA checklist) |
-| NF-13 | Formulario de demo (fiabilidad) | Errores inline justo debajo del campo afectado (prohibido `alert()`); sin pérdida de datos al fallar la validación; bloqueo de doble envío (botón deshabilitado + estado "Enviando..."); degradación elegante con correo alternativo si falla el envío | [Form Reliability & Error Handling (El valor de la confianza)](Recursos/nhilos_website_non_functional_spec_v1.0.md#4-form-reliability--error-handling-el-valor-de-la-confianza) |
+| NF-01 | Conformidad de accesibilidad | WCAG 2.1 **Nivel AA** como estándar base de aceptación | [Accessibility (a11y) Target (El valor de la inclusión)](nhilos_website_non_functional_spec_v1.0.md#2-accessibility-a11y-target-el-valor-de-la-inclusión) (intro) |
+| NF-02 | LCP | `< 2.5 segundos` (percentil 75, "Good") | [Umbrales Core Web Vitals (CWV)](nhilos_website_non_functional_spec_v1.0.md#11-umbrales-core-web-vitals-cwv) |
+| NF-03 | INP | `< 200 milisegundos` | [Umbrales Core Web Vitals (CWV)](nhilos_website_non_functional_spec_v1.0.md#11-umbrales-core-web-vitals-cwv) |
+| NF-04 | CLS | `< 0.1` | [Umbrales Core Web Vitals (CWV)](nhilos_website_non_functional_spec_v1.0.md#11-umbrales-core-web-vitals-cwv) |
+| NF-05 | Peso de página inicial | `< 2.5 MB` comprimido | [Presupuestos de Medios (Page-Weight Budgets)](nhilos_website_non_functional_spec_v1.0.md#12-presupuestos-de-medios-page-weight-budgets) |
+| NF-06 | Formato de imágenes | Servidas en formatos modernos (`WebP` o `AVIF` con fallback a JPG/PNG); redimensionadas por viewport con `srcset`; `loading="lazy"` fuera del viewport inicial | [Presupuestos de Medios (Page-Weight Budgets)](nhilos_website_non_functional_spec_v1.0.md#12-presupuestos-de-medios-page-weight-budgets) |
+| NF-07 | Touch targets | Área táctil mínima de `44x44 CSS pixels` en móvil para todo elemento interactivo | [Movimiento e Interacción](nhilos_website_non_functional_spec_v1.0.md#24-movimiento-e-interacción) |
+| NF-08 | Contraste de texto | Mínimo `4.5:1` texto normal y `3:1` texto grande (H1, H2) | [Contraste y Legibilidad](nhilos_website_non_functional_spec_v1.0.md#21-contraste-y-legibilidad) |
+| NF-09 | Contraste de UI | Mínimo `3:1` para controles interactivos (botones, inputs, estados activos) | [Contraste y Legibilidad](nhilos_website_non_functional_spec_v1.0.md#21-contraste-y-legibilidad) |
+| NF-10 | Movimiento reducido | Con `prefers-reduced-motion` activo, CSS/JS cancela reveals, paralajes y transiciones suaves | [Movimiento e Interacción](nhilos_website_non_functional_spec_v1.0.md#24-movimiento-e-interacción) |
+| NF-11 | Consentimiento antes de terceros | Ninguna cookie no esencial o script de terceros (píxeles, analytics) sin consentimiento explícito del usuario; "Rechazar todo" tan accesible y visible como "Aceptar todo" | [Comportamiento de Cookies](nhilos_website_non_functional_spec_v1.0.md#32-comportamiento-de-cookies) |
+| NF-12 | Página 404 útil | Vista personalizada y sobria con enlaces directos a Home, Producto y Soporte; sin dead ends | [Quality Assurance (QA) Checklist pre-lanzamiento](nhilos_website_non_functional_spec_v1.0.md#6-quality-assurance-qa-checklist-pre-lanzamiento) (QA checklist) |
+| NF-13 | Formulario de demo (fiabilidad) | Errores inline justo debajo del campo afectado (prohibido `alert()`); sin pérdida de datos al fallar la validación; bloqueo de doble envío (botón deshabilitado + estado "Enviando..."); degradación elegante con correo alternativo si falla el envío | [Form Reliability & Error Handling (El valor de la confianza)](nhilos_website_non_functional_spec_v1.0.md#4-form-reliability--error-handling-el-valor-de-la-confianza) |
 
 El spec no funcional no declara valor numérico para ninguna puerta adicional de esta IA más
 allá de las listadas; no se inventó ningún valor. Cualquier umbral nuevo debe importarse
@@ -1596,7 +1596,7 @@ omisión:
 
 - el Brief dejó de prescribir rutas: su [Homepage Content Wireframe](#5-homepage-content-wireframe) fue reescrito como mensajes por capacidad, sin rutas;
 - la IA es dueña de la navegación y las rutas; el Brief es dueño del messaging
-  (`nhilos_branding_document_governance_v1.0.md` [Control de cambios](nhilos_branding_document_governance_v1.0.md#6-control-de-cambios), corregido en esa misma remediación);
+  (`nhilos_branding_document_governance_v1.0.md` [Control de cambios](../gobernanza/nhilos_branding_document_governance_v1.0.md#6-control-de-cambios), corregido en esa misma remediación);
 - el conflicto previo queda registrado aquí y en el registro de correcciones quirúrgicas
   (SC-11..SC-13).
 

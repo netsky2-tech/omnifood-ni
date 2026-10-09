@@ -4,7 +4,7 @@
 **Versión:** 1.0 (Evidencia revalidada — Gate D parcial)
 **Estado:** `CONTENIDO APROBADO / GATE D PARCIAL — 1 VIGENTE · 1 OBSOLETA · 6 A REVERIFICAR · 6 FALTANTES`
 **Build anclado vigente:** `b4b5ad27`
-**Evidencia de origen:** capturas ADB del `2026-10-02` sobre terminal `MIRAY Q80 / iPOS`, en `docs/nhilos/manuals/images/` (`NH-AUD-POS-001`). Build de la captura original: `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED). La revalidación contra el build anclado está documentada en [Registro de documentos](nhilos_branding_document_governance_v1.0.md#5-registro-de-documentos), según `G-09` de `nhilos_branding_document_governance_v1.0.md`.
+**Evidencia de origen:** capturas ADB del `2026-10-02` sobre terminal `MIRAY Q80 / iPOS`, en `docs/nhilos/manuals/images/` (`NH-AUD-POS-001`). Build de la captura original: `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED). La revalidación contra el build anclado está documentada en [Registro de documentos](../gobernanza/nhilos_branding_document_governance_v1.0.md#5-registro-de-documentos), según `G-09` de `nhilos_branding_document_governance_v1.0.md`.
 **Ruta pública:** Página profunda de producto NHILOS POS (`/pos`)
 **Upstream de contenido:** `nhilos_pos_product_page_content_v1.1.md`
 **Upstream de auditoría técnica:** `product_claim_audit_od02_v1.3.md`
@@ -357,7 +357,7 @@ Fechas tomadas del commit que agregó cada archivo:
 el anclaje provisional. Motivo: hay una línea de trabajo en curso (auditoría P3 de descuentos y
 promociones e2e) que cambia comportamiento publicado de lealtad, promociones, modificadores y
 descuentos, y por lo tanto también las superficies capturadas. Ver
-`nhilos_branding_document_governance_v1.0.md` [Estado de anclaje y obligación de re-anclaje](nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje). Capturar ahora obligaría a recapturar después.
+`nhilos_branding_document_governance_v1.0.md` [Estado de anclaje y obligación de re-anclaje](../gobernanza/nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje). Capturar ahora obligaría a recapturar después.
 Lo que sigue sí se ejecutó: la auditoría de la evidencia existente, su procedencia, sus
 dimensiones reales y la ventana de cambio por superficie.
 **Método:** auditoría read-only del contenido del repositorio (33 capturas en

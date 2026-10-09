@@ -4,8 +4,8 @@
 **Versión:** 1.0  
 **Estado:** DRAFT / FOR ENGINEERING & QA REVIEW  
 **Autoridad de origen:** `nhilos_website_product_marketing_brief_v1.0.md` (v1.0 — Sección 5: Mensajes por Capacidad del Sitio Web)  
-**Consumidores:** los gates de este documento son heredados como condición de cierre por `nhilos_website_information_architecture_content_wireframe_v1.0.md` [Non-functional acceptance gates (inherited)](../nhilos_website_information_architecture_content_wireframe_v1.0.md#181-non-functional-acceptance-gates-inherited) (`NF-01`..`NF-13`).
-**Gobernanza:** cadena de autoridad según `nhilos_branding_document_governance_v1.0.md` ([Cadena de autoridad (lineal, sin ciclos)](../nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos), referencias técnicas transversales)  
+**Consumidores:** los gates de este documento son heredados como condición de cierre por `nhilos_website_information_architecture_content_wireframe_v1.0.md` [Non-functional acceptance gates (inherited)](nhilos_website_information_architecture_content_wireframe_v1.0.md#181-non-functional-acceptance-gates-inherited) (`NF-01`..`NF-13`).
+**Gobernanza:** cadena de autoridad según `nhilos_branding_document_governance_v1.0.md` ([Cadena de autoridad (lineal, sin ciclos)](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos), referencias técnicas transversales)  
 **Propósito:** Definir los umbrales medibles (umbrales de lanzamiento o *release gates*) en materia de rendimiento, accesibilidad, privacidad y soporte técnico que el website público de NHILOS debe superar antes de salir a producción.
 
 > **Principio Operativo:** El estándar de cuidado que promete el producto debe estar presente en el código y comportamiento del website. Ese cuidado se demuestra con tiempos de carga rápidos, accesibilidad sin fricciones y respeto absoluto por la privacidad del usuario.

@@ -8,11 +8,11 @@
 **Version:** 1.1  
 **Date:** 2026-10-08  
 **Authority:** Contrato de contenido aprobado para la homepage. La versión se numera 1.1 para coincidir con la referencia de dependencia declarada en `nhilos_pos_product_page_content_v1.1.md`.  
-**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`, [Cadena de autoridad (lineal, sin ciclos)](nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)):** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
+**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`, [Cadena de autoridad (lineal, sin ciclos)](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)):** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
 **Downstream:** `nhilos_pos_product_page_content_v1.1.md` — contrato de contenido de la página profunda de producto; este documento es su referencia de contraste en el Gate E.  
-**Referencia técnica transversal:** `Recursos/nhilos_website_non_functional_spec_v1.0.md` (v1.0) — gates heredados, no redefinidos aquí.  
-**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` [NHILOS +1](../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)): el hero entrega un siguiente paso real (Ver cómo funciona), la FAQ reduce fricción de evaluación y el CTA final conduce a una demo preparada según el contexto que el prospecto comparta.  
-**GATE DE PUBLICACIÓN:** la publicación de la homepage está bloqueada hasta completar los gates A–E de [Publication Gates](nhilos_pos_product_page_content_v1.1.md#18-publication-gates) y el contraste cruzado (Gate E) contra `nhilos_pos_product_page_content_v1.1.md`.
+**Referencia técnica transversal:** `nhilos_website_non_functional_spec_v1.0.md` (v1.0) — gates heredados, no redefinidos aquí.  
+**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` [NHILOS +1](../../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)): el hero entrega un siguiente paso real (Ver cómo funciona), la FAQ reduce fricción de evaluación y el CTA final conduce a una demo preparada según el contexto que el prospecto comparta.  
+**GATE DE PUBLICACIÓN:** la publicación de la homepage está bloqueada hasta completar los gates A–E de [Publication Gates](../producto/nhilos_pos_product_page_content_v1.1.md#18-publication-gates) y el contraste cruzado (Gate E) contra `nhilos_pos_product_page_content_v1.1.md`.
 
 ---
 
@@ -30,7 +30,7 @@ Este documento no autoriza por sí mismo la publicación de claims funcionales, 
 
 ### 1.1 Authority basis
 
-1. `nhilos_brand_experience_principles_v1.0.md` (v1.0) — constitución de marca; personalidad verbal ([Identidad verbal](../nhilos_brand_experience_principles_v1.0.md#14-identidad-verbal)), sobriedad ([Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad)) y `NHILOS +1` ([NHILOS +1](../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)).
+1. `nhilos_brand_experience_principles_v1.0.md` (v1.0) — constitución de marca; personalidad verbal ([Identidad verbal](../../nhilos_brand_experience_principles_v1.0.md#14-identidad-verbal)), sobriedad ([Sobriedad](../../nhilos_brand_experience_principles_v1.0.md#53-sobriedad)) y `NHILOS +1` ([NHILOS +1](../../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)).
 2. `product_claim_audit_od02_v1.3.md` (v1.3) — autoridad de claims; allowlist D4 y blocklist D5.
 3. `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) — fuente del messaging por capacidad, incluido el messaging de homepage ([Homepage](nhilos_website_product_marketing_brief_v1.0.md#51-homepage)).
 4. `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0) — estructura de bloques H00–H13 y sus reglas.
@@ -536,7 +536,7 @@ Sostener cada afirmación con la jerarquía de prueba del wireframe: producto re
 
 - **Situación:** el visitante evaluador necesita evidencia antes de confiar, y las afirmaciones sin respaldo la destruyen.
 - **Comportamiento:** la página demuestra con producto real y workflows reproducibles; los elementos de prueba que dependen de clientes (casos, testimonios, cifras) permanecen bloqueados hasta contar con autorización y evidencia.
-- **Efecto:** la confianza se construye por evidencia y consistencia ([Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad) de la constitución), no por adjetivos.
+- **Efecto:** la confianza se construye por evidencia y consistencia ([Sobriedad](../../nhilos_brand_experience_principles_v1.0.md#53-sobriedad) de la constitución), no por adjetivos.
 
 ## Claim IDs
 
@@ -692,7 +692,7 @@ Convertir el interés en una conversación contextualizada. La demo es una conve
 ## Situation → Behavior → Effect
 
 - **Situación:** el visitante ya entendió la propuesta y necesita un próximo paso de bajo riesgo.
-- **Comportamiento:** el CTA invita a compartir contexto mínimo; la demo se prepara según ese contexto (`NHILOS +1`, [NHILOS +1](../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1) de la constitución).
+- **Comportamiento:** el CTA invita a compartir contexto mínimo; la demo se prepara según ese contexto (`NHILOS +1`, [NHILOS +1](../../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1) de la constitución).
 - **Efecto:** la conversación comienza con el problema del prospecto, no con el catálogo del vendedor.
 
 ## Claim IDs
@@ -760,7 +760,7 @@ Privacidad · Términos
 
 # 16. Media & Performance Rules (gates heredados del spec no funcional)
 
-La homepage es la página de mayor carga media del sitio. Los siguientes umbrales se heredan verbatim de `Recursos/nhilos_website_non_functional_spec_v1.0.md` (v1.0) vía `nhilos_website_information_architecture_content_wireframe_v1.0.md` [Non-functional acceptance gates (inherited)](nhilos_website_information_architecture_content_wireframe_v1.0.md#181-non-functional-acceptance-gates-inherited); este documento no define valores nuevos.
+La homepage es la página de mayor carga media del sitio. Los siguientes umbrales se heredan verbatim de `nhilos_website_non_functional_spec_v1.0.md` (v1.0) vía `nhilos_website_information_architecture_content_wireframe_v1.0.md` [Non-functional acceptance gates (inherited)](nhilos_website_information_architecture_content_wireframe_v1.0.md#181-non-functional-acceptance-gates-inherited); este documento no define valores nuevos.
 
 | Gate | Valor heredado | Aplicación homepage |
 | :---- | :---- | :---- |
@@ -874,7 +874,7 @@ Los ítems `[x]` corresponden a cierre editorial/estructural de este contrato; l
 ## Writing rules
 
 - Escribir desde situaciones reconocibles del negocio (fila de la hora pico, internet caído, dueño fuera del local).
-- Copy delimitado y sobrio, sin superlativos ni auto-descripción de estatus ([Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad) y [Cómo no hablamos](../nhilos_brand_experience_principles_v1.0.md#142-cómo-no-hablamos) de la constitución): prohibido el vocabulario de [Cómo no hablamos](../nhilos_brand_experience_principles_v1.0.md#142-cómo-no-hablamos) y todo equivalente.
+- Copy delimitado y sobrio, sin superlativos ni auto-descripción de estatus ([Sobriedad](../../nhilos_brand_experience_principles_v1.0.md#53-sobriedad) y [Cómo no hablamos](../../nhilos_brand_experience_principles_v1.0.md#142-cómo-no-hablamos) de la constitución): prohibido el vocabulario de [Cómo no hablamos](../../nhilos_brand_experience_principles_v1.0.md#142-cómo-no-hablamos) y todo equivalente.
 - Verbos concretos: cobrar, facturar, sincronizar, consultar, revisar, preparar.
 - Una sola idea principal por bloque; el hero no es una lista de beneficios.
 - Números y textos de UI solo desde fuentes verificables (G-05): nada transcrito de memoria ni de builds obsoletos.

@@ -3,12 +3,12 @@
 **Documento:** `product_claim_audit_od02_v1.3.md`  
 **Versión:** 1.3 (Reconciliación Normativa + Re-anclaje + Adenda de Lealtad)  
 **Estado:** `CLOSED / VERIFIED / RE-ANCHORED — ANCLAJE PROVISIONAL`
-**Anclaje:** `b4b5ad27` (`origin/main`, 2026-10-08). **Provisional**: existe una línea de trabajo en curso (auditoría P3 de descuentos y promociones e2e) que cambia comportamiento publicado. Los claims en riesgo y la obligación de re-anclaje están listados en `nhilos_branding_document_governance_v1.0.md` [Estado de anclaje y obligación de re-anclaje](../nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje).  
+**Anclaje:** `b4b5ad27` (`origin/main`, 2026-10-08). **Provisional**: existe una línea de trabajo en curso (auditoría P3 de descuentos y promociones e2e) que cambia comportamiento publicado. Los claims en riesgo y la obligación de re-anclaje están listados en `nhilos_branding_document_governance_v1.0.md` [Estado de anclaje y obligación de re-anclaje](../gobernanza/nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje).  
 **Gate:** OD-02 — Product Claim Inventory  
 **Scope:** NHILOS POS public website  
 **Upstream authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0)  
 **Downstream:** `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
-**Gobernanza de cadena:** según `nhilos_branding_document_governance_v1.0.md` ([Cadena de autoridad (lineal, sin ciclos)](../nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)), este documento es la autoridad de claims y el Marketing Brief es downstream de él.  
+**Gobernanza de cadena:** según `nhilos_branding_document_governance_v1.0.md` ([Cadena de autoridad (lineal, sin ciclos)](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)), este documento es la autoridad de claims y el Marketing Brief es downstream de él.  
 **Fecha de reconciliación:** 2026-10-08  
 **Reconciliation resolutions:** `OD-02-R01` (Claim count 40 — 34 originales + 6 loyalty `PC-LOY-01..06`), `OD-02-R02` (Fiscal conditioning), `OD-02-R03` (Hardened offline wording); extensión FOH `PC-FOH-01..03` — **Claim count vigente: 43** (34 originales + 6 loyalty + 3 FOH)  
 
@@ -245,7 +245,7 @@ Funcionalidades implementadas en código que requieren evidencia visual antes de
 
 # 11. Autoridad Downstream
 
-Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` ([Cadena de autoridad (lineal, sin ciclos)](../nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)), este documento versión 1.3 es la **autoridad de claims** del set. Los documentos downstream que consumen sus claims admisibles son:
+Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` ([Cadena de autoridad (lineal, sin ciclos)](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)), este documento versión 1.3 es la **autoridad de claims** del set. Los documentos downstream que consumen sus claims admisibles son:
 1. `nhilos_website_product_marketing_brief_v1.0.md`
 2. `nhilos_website_information_architecture_content_wireframe_v1.0.md`
 3. `nhilos_website_homepage_content_v1.1.md`
@@ -278,7 +278,7 @@ Resultado headline: de los 34 claims auditados en el re-anclaje original (el reg
 
 # Índice inverso — Claims publicados que citan cada claim del OD-02
 
-**Propósito.** Trazabilidad inversa exigida por `G-04` (`nhilos_branding_document_governance_v1.0.md`): para cada claim técnico del OD-02, qué Claim IDs de los contratos de contenido publicados lo citan como respaldo. Los contratos son `nhilos_website_homepage_content_v1.1.md` ([Cross-Section Claim Register](../nhilos_website_homepage_content_v1.1.md#17-cross-section-claim-register), ids `HM-*`) y `nhilos_pos_product_page_content_v1.1.md` (Anexo A, ids por sección). Los Claim IDs de contenido son IDs de slot, no IDs de capacidad técnica; no existe correspondencia 1:1. Un claim `huérfano` no es defecto por sí solo: si su estado público es `APPROVED_WEBSITE`, la omisión indica un hueco de cobertura del sitio; si es `DO_NOT_CLAIM / FUTUREWARE`, la omisión es la conducta correcta.
+**Propósito.** Trazabilidad inversa exigida por `G-04` (`nhilos_branding_document_governance_v1.0.md`): para cada claim técnico del OD-02, qué Claim IDs de los contratos de contenido publicados lo citan como respaldo. Los contratos son `nhilos_website_homepage_content_v1.1.md` ([Cross-Section Claim Register](../web/nhilos_website_homepage_content_v1.1.md#17-cross-section-claim-register), ids `HM-*`) y `nhilos_pos_product_page_content_v1.1.md` (Anexo A, ids por sección). Los Claim IDs de contenido son IDs de slot, no IDs de capacidad técnica; no existe correspondencia 1:1. Un claim `huérfano` no es defecto por sí solo: si su estado público es `APPROVED_WEBSITE`, la omisión indica un hueco de cobertura del sitio; si es `DO_NOT_CLAIM / FUTUREWARE`, la omisión es la conducta correcta.
 
 | OD-02 ID | Homepage (`HM-*`) | Página de producto | Estado |
 |---|---|---|---|
