@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" width="900" height="300" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="900" height="300" fill="#FFFFFF"/>
+  <text x="24" y="34" font-size="15" font-weight="700" fill="#0F172A">Ejemplo de forma — ficha de paleta</text>
+  <text x="24" y="54" font-size="12" fill="#64748B">Cada color con sus cuatro valores, su uso y su proporción. Sin proporción, todos los colores se usan a la vez.</text>
+
+  <g transform="translate(24,74)" font-size="11">
+    <!-- swatch 1 -->
+    <g transform="translate(0,0)">
+      <rect width="150" height="90" rx="6" fill="#1A1A1A"/>
+      <rect y="96" width="150" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="12" y="114" font-weight="700" fill="#0F172A">primary/ink</text>
+      <text x="12" y="132" fill="#64748B">HEX #1A1A1A</text>
+      <text x="12" y="148" fill="#64748B">RGB 26 26 26</text>
+      <text x="12" y="164" fill="#64748B">CMYK 0/0/0/90</text>
+      <text x="12" y="184" fill="#1E3A40">Texto y superficies</text>
+      <text x="12" y="200" fill="#0F172A" font-weight="700">Proporción 60%</text>
+    </g>
+    <!-- swatch 2 -->
+    <g transform="translate(178,0)">
+      <rect width="150" height="90" rx="6" fill="#FFFFFF" stroke="#E2E8F0"/>
+      <rect y="96" width="150" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="12" y="114" font-weight="700" fill="#0F172A">primary/surface</text>
+      <text x="12" y="132" fill="#64748B">HEX #FFFFFF</text>
+      <text x="12" y="148" fill="#64748B">RGB 255 255 255</text>
+      <text x="12" y="164" fill="#64748B">CMYK 0/0/0/0</text>
+      <text x="12" y="184" fill="#1E3A40">Fondos y aire</text>
+      <text x="12" y="200" fill="#0F172A" font-weight="700">Proporción 30%</text>
+    </g>
+    <!-- swatch 3 -->
+    <g transform="translate(356,0)">
+      <rect width="150" height="90" rx="6" fill="#E4572E"/>
+      <rect y="96" width="150" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="12" y="114" font-weight="700" fill="#0F172A">accent/base</text>
+      <text x="12" y="132" fill="#64748B">HEX #E4572E</text>
+      <text x="12" y="148" fill="#64748B">RGB 228 87 46</text>
+      <text x="12" y="164" fill="#64748B">CMYK 0/62/80/11</text>
+      <text x="12" y="184" fill="#1E3A40">Acción y énfasis</text>
+      <text x="12" y="200" fill="#0F172A" font-weight="700">Proporción 10%</text>
+    </g>
+    <!-- swatch 4: semantico -->
+    <g transform="translate(534,0)">
+      <rect width="150" height="90" rx="6" fill="#0F7B4F"/>
+      <rect y="96" width="150" height="112" rx="6" fill="#F8FAFC" stroke="#DC2626" stroke-dasharray="4 3"/>
+      <text x="12" y="114" font-weight="700" fill="#0F172A">semantic/success</text>
+      <text x="12" y="132" fill="#64748B">HEX #0F7B4F</text>
+      <text x="12" y="148" fill="#64748B">RGB 15 123 79</text>
+      <text x="12" y="164" fill="#64748B">CMYK 88/0/36/52</text>
+      <text x="12" y="184" fill="#DC2626">No es color de marca</text>
+      <text x="12" y="200" fill="#64748B">Solo comunica estado</text>
+    </g>
+    <!-- nota -->
+    <g transform="translate(712,0)">
+      <rect width="140" height="208" rx="6" fill="#E6EFF0" stroke="#E2E8F0"/>
+      <text x="12" y="22" font-weight="700" fill="#1E3A40">Por qué importa</text>
+      <text x="12" y="46" fill="#0F172A">HEX → pantalla</text>
+      <text x="12" y="64" fill="#0F172A">CMYK → imprenta</text>
+      <text x="12" y="82" fill="#0F172A">RGB → archivos</text>
+      <text x="12" y="100" fill="#0F172A">Pantone → marca física</text>
+      <text x="12" y="128" fill="#64748B">Sin CMYK, el color</text>
+      <text x="12" y="144" fill="#64748B">se rompe al imprimir.</text>
+      <text x="12" y="172" fill="#64748B">Los semánticos son</text>
+      <text x="12" y="188" fill="#64748B">de producto, no de</text>
+      <text x="12" y="204" fill="#64748B">identidad.</text>
+    </g>
+  </g>
+</svg>

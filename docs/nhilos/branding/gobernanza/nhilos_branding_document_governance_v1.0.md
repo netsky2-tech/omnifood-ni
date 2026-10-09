@@ -48,6 +48,13 @@ el set.
         │                                 restricciones, direcciones, entregables.
         │                                      │
         │                                      ▼
+        │                                 G. nhilos_design_deliverables_guide_v0.1.md
+        │                                 [branding/identidad/] Cómo se entrega:
+        │                                 contenido exigido por pieza, checklist de
+        │                                 autoverificación y errores que devuelven
+        │                                 una entrega. Traduce el brief en forma.
+        │                                      │
+        │                                      ▼
         │                                 nhilos_brand_identity_system.md
         │                                 (a producir por diseño — previsto en el anexo D, diferido por [Decisiones DEFERRED / downstream](../../nhilos_brand_experience_principles_v1.0.md#47-decisiones-deferred--downstream) `BR-D01`)
         ▼
@@ -151,6 +158,7 @@ lleva ahí en un clic.
 | — | `nhilos_backoffice_module_audit_template_v2.1.md` | `docs/nhilos/` | Plantilla de auditoría de módulo | 2.1 | `EVIDENCE PASS` |
 | `I` | `nhilos_brand_identity_brief_v0.1.md` | `branding/identidad/` | Capa de identidad — encargo de diseño | 0.1 | `FOR DESIGN — INPUT DOCUMENT` |
 | `D` | `nhilos_design_kickoff_handover_v0.1.md` | `branding/identidad/` | Paquete operativo del encargo de diseño | 0.1 | `FOR DESIGN — KICKOFF PACK` |
+| `G` | `nhilos_design_deliverables_guide_v0.1.md` | `branding/identidad/` | Guía de entregables y criterios de aceptación | 0.1 | `FOR DESIGN — DELIVERABLE GUIDE` |
 
 ### Roadmap de documentos de marca pendientes
 

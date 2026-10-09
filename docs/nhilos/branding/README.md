@@ -15,7 +15,7 @@ sobre qué y en qué orden se leen.
 | Carpeta | Qué contiene |
 |---|---|
 | [`gobernanza/`](gobernanza/) | Las reglas del set y el informe que las originó |
-| [`identidad/`](identidad/) | El encargo de identidad de marca y el paquete de inicio para diseño |
+| [`identidad/`](identidad/) | El encargo de identidad, el paquete de inicio y la guía de entregables |
 | [`claims/`](claims/) | El registro de lo que el producto realmente hace, con evidencia |
 | [`web/`](web/) | Mensaje, arquitectura de información, contenido y gates no funcionales del sitio |
 | [`producto/`](producto/) | Contenido de la página profunda de producto y el inventario de medios |
@@ -41,7 +41,9 @@ sobre qué y en qué orden se leen.
 Empezá por el [paquete de inicio para diseño](identidad/nhilos_design_kickoff_handover_v0.1.md):
 contiene el orden exacto, el alcance, las decisiones ya tomadas y las reglas que no se negocian.
 
-Para la marca, el encargo es el [brief de identidad](identidad/nhilos_brand_identity_brief_v0.1.md).
+Para la marca, el encargo es el [brief de identidad](identidad/nhilos_brand_identity_brief_v0.1.md), y
+la [guía de entregables](identidad/nhilos_design_deliverables_guide_v0.1.md) define **en qué forma** se
+entrega: qué contiene cada pieza, cómo se empaqueta y un checklist para verificar antes de mandar.
 
 ### Si querés entender de dónde viene todo esto
 

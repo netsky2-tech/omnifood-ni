@@ -35,29 +35,30 @@ de sistema, jerarquía y espacios. Sin excepción.
 
 | # | Documento | Qué aporta |
 |---|---|---|
-| 1 | `../gobernanza/nhilos_branding_document_governance_v1.0.md` | Qué documento gobierna qué. Empezar acá evita contradicciones más adelante |
-| 2 | `docs/nhilos/nhilos_brand_experience_principles_v1.0.md` | Tono, personalidad, no-negociables, vocabulario prohibido, [Dirección visual de NHILOS POS](../../nhilos_brand_experience_principles_v1.0.md#23-dirección-visual-de-nhilos-pos) dirección visual, [Fotografía de NHILOS POS](../../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos) fotografía |
-| 3 | `../web/nhilos_website_product_marketing_brief_v1.0.md` | Posicionamiento, mensajes por capacidad, delimitaciones y lista de bloqueo |
-| 4 | `../web/nhilos_website_information_architecture_content_wireframe_v1.0.md` | **La pieza central de `F1`**: sitemap, navegación, reglas `N-01`..`N-04`, modelo de contenido y el wireframe de homepage bloque por bloque (`H00`–`H13`) |
-| 5 | `../web/nhilos_website_homepage_content_v1.1.md` | El copy real de la homepage, sección por sección, con sus restricciones |
-| 6 | `../producto/nhilos_pos_product_page_content_v1.1.md` | El copy de la página profunda de producto, 14 secciones |
-| 7 | `../web/nhilos_website_non_functional_spec_v1.0.md` | **Restricciones de diseño, no de ingeniería**: WCAG 2.1 AA, Core Web Vitals, peso de página, targets táctiles, contraste, movimiento reducido, consentimiento, 404 útil, formulario de demo |
+| 1 | [Gobernanza del set](../gobernanza/nhilos_branding_document_governance_v1.0.md) | Qué documento gobierna qué. Empezar acá evita contradicciones más adelante |
+| 2 | [Constitución de marca](../../nhilos_brand_experience_principles_v1.0.md) | Tono, personalidad, no-negociables, vocabulario prohibido, [dirección visual](../../nhilos_brand_experience_principles_v1.0.md#23-dirección-visual-de-nhilos-pos) y [fotografía](../../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos) |
+| 3 | [Brief de marketing](../web/nhilos_website_product_marketing_brief_v1.0.md) | Posicionamiento, mensajes por capacidad, delimitaciones y lista de bloqueo |
+| 4 | [Arquitectura de información](../web/nhilos_website_information_architecture_content_wireframe_v1.0.md) | **La pieza central de `F1`**: sitemap, navegación, reglas `N-01`..`N-04`, modelo de contenido y el wireframe de homepage bloque por bloque (`H00`–`H13`) |
+| 5 | [Contenido de homepage](../web/nhilos_website_homepage_content_v1.1.md) | El copy real de la homepage, sección por sección, con sus restricciones |
+| 6 | [Contenido de página de producto](../producto/nhilos_pos_product_page_content_v1.1.md) | El copy de la página profunda de producto, 14 secciones |
+| 7 | [Spec no funcional del sitio](../web/nhilos_website_non_functional_spec_v1.0.md) | **Restricciones de diseño, no de ingeniería**: WCAG 2.1 AA, Core Web Vitals, peso de página, targets táctiles, contraste, movimiento reducido, consentimiento, 404 útil, formulario de demo |
 
 ### Frente `F2` — identidad de marca
 
 | # | Documento | Qué aporta |
 |---|---|---|
-| 8 | `nhilos_brand_identity_brief_v0.1.md` | **El encargo**: objetivo, núcleo de marca, restricciones `R-01`..`R-11`, direcciones a explorar, entregables y criterios de aceptación |
-| 9 | `../gobernanza/nhilos_branding_document_governance_v1.0.md` [Cadena de autoridad (lineal, sin ciclos)](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos) y [Estado de anclaje y obligación de re-anclaje](../gobernanza/nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje) | Dónde entra la identidad en la cadena de autoridad |
+| 8 | [Brief de identidad de marca](nhilos_brand_identity_brief_v0.1.md) | **El encargo**: objetivo, núcleo de marca, restricciones `R-01`..`R-11`, direcciones a explorar, entregables y criterios de aceptación |
+| 8b | [Guía de entregables para diseño](nhilos_design_deliverables_guide_v0.1.md) | **Cómo se entrega**, en forma: qué contiene cada pieza, cómo se empaqueta, checklist de autoverificación y los 8 errores que devuelven una entrega |
+| 9 | [Gobernanza del set](../gobernanza/nhilos_branding_document_governance_v1.0.md) | Dónde entra la identidad en la cadena: [cadena de autoridad](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos) y [estado de anclaje](../gobernanza/nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje) | Dónde entra la identidad en la cadena de autoridad |
 
 ### Referencia de producto — para que el sitio hable de algo que existe
 
 | # | Documento | Qué aporta |
 |---|---|---|
-| 10 | `../claims/product_claim_audit_od02_v1.3.md` | Los 43 claims verificados con sus límites. **Es la única fuente de lo que se puede afirmar** |
-| 11 | `../producto/nhilos_pos_media_inventory_v1.0.md` | Inventario de activos visuales del producto, con el estado real de cada uno |
+| 10 | [Registro de claims (OD-02)](../claims/product_claim_audit_od02_v1.3.md) | Los 43 claims verificados con sus límites. **Es la única fuente de lo que se puede afirmar** |
+| 11 | [Inventario de medios](../producto/nhilos_pos_media_inventory_v1.0.md) | Inventario de activos visuales del producto, con el estado real de cada uno |
 | 12 | `docs/nhilos/manuals/images/` | 33 capturas del producto real |
-| 13 | `docs/nhilos/branding/Recursos/nhilos_pos_experience_standard_v1.0.md` | Lenguaje de diseño de la superficie principal del producto, con tokens reales |
+| 13 | [Estándar de experiencia POS](../../nhilos_pos_experience_standard_v1.0.md) | Lenguaje de diseño de la superficie principal del producto, con tokens reales |
 | 14 | `apps/pos_app/lib/ui/design_system/nhilos_tokens.dart` | Los tokens implementados: color, radios, tipografía |
 
 ---

@@ -1587,64 +1587,64 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 
 | Claim ID | Sección | Assertion (resumen) | OD-02 ID(s) | Tipo | Estado |
 | :---- | :---- | :---- | :---- | :---- | :---- |
-| PP-001 | [Product Promise](#3-section-01--product-promise) Product Promise | Punto de venta para registrar operaciones comerciales. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
-| PP-002 | [Product Promise](#3-section-01--product-promise) Product Promise | Relaciona el registro de venta con capacidades operativas asociadas. | N/A | MARKETING | MARKETING |
-| PP-003 | [Product Promise](#3-section-01--product-promise) Product Promise | El flujo permite trabajar con claridad. | N/A | MARKETING | MARKETING |
-| PP-004 | [Product Promise](#3-section-01--product-promise) Product Promise | La promesa de continuidad aplica a escenarios soportados, no de forma absoluta. | N/A | MARKETING | MARKETING |
-| PC-001 | [Product in Context](#4-section-02--product-in-context) Product in Context | Contempla escenarios de atención en mostrador. | PC-OFF-01 | TÉCNICO | RESPALDADO |
-| PC-002 | [Product in Context](#4-section-02--product-in-context) Product in Context | Contempla cuentas abiertas o mesas en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
-| PC-003 | [Product in Context](#4-section-02--product-in-context) Product in Context | Las ventas pueden relacionarse con movimientos de inventario configurados. | PC-INV-01, PC-INV-04 | TÉCNICO | RESPALDADO |
-| PC-004 | [Product in Context](#4-section-02--product-in-context) Product in Context | La experiencia mostrada corresponde a la versión vigente. | N/A | MARKETING | MARKETING |
-| CW-001 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | Permite seleccionar productos y construir una cuenta. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
-| CW-002 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | El flujo puede incluir modificadores configurados. | PC-FOH-02 | TÉCNICO | RESPALDADO |
-| CW-003 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | Registra pagos con los métodos disponibles. | PC-PAY-01, PC-PAY-04, PC-PAY-06 | TÉCNICO | RESPALDADO |
-| CW-004 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | El esquema de tarjeta puede requerir confirmación manual posterior al datáfono. | PC-PAY-01 | TÉCNICO | RESPALDADO |
-| CW-005 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | Existen cuentas abiertas/retención en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
-| CW-006 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | Existen superficies de consulta para información operativa. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
-| CT-001 | [Continuity](#6-section-04--continuity) Continuity | Enfoque offline-first en los escenarios definidos. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
-| CT-002 | [Continuity](#6-section-04--continuity) Continuity | Determinadas operaciones pueden continuar localmente durante una desconexión soportada. | PC-OFF-01 | TÉCNICO | RESPALDADO |
-| CT-003 | [Continuity](#6-section-04--continuity) Continuity | Existe sincronización posterior de información pendiente. | PC-OFF-03 | TÉCNICO | RESPALDADO |
-| CT-004 | [Continuity](#6-section-04--continuity) Continuity | El comportamiento depende del escenario soportado. | N/A | MARKETING | MARKETING |
-| CT-005 | [Continuity](#6-section-04--continuity) Continuity | El usuario conoce los límites y estados pendientes relevantes. | PC-FOH-03 | TÉCNICO | RESPALDADO |
-| CV-001 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Registra información de ventas consultable. | PC-OFF-02, PC-DASH-01, PC-DASH-04 | TÉCNICO | RESPALDADO |
-| CV-002 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Existen capacidades de inventario y consulta de movimientos. | PC-INV-02, PC-INV-03, PC-INV-05, PC-DASH-04 | TÉCNICO | RESPALDADO |
-| CV-003 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Determinadas acciones pueden quedar registradas en bitácora. | PC-SEC-02, PC-SEC-03 | TÉCNICO | RESPALDADO |
-| CV-004 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | La información presentada refleja su frescura y alcance. | PC-DASH-02 | TÉCNICO | RESPALDADO |
-| CV-005 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Los indicadores y términos públicos tienen semántica aprobada. | N/A | MARKETING | MARKETING |
-| RL-001 | [Roles](#8-section-06--roles) Roles | El POS soporta tareas de venta y cobro. | PC-OFF-01, PC-PAY-01, PC-PAY-04 | TÉCNICO | RESPALDADO |
-| RL-002 | [Roles](#8-section-06--roles) Roles | Existen permisos diferenciados para acciones específicas. | PC-SEC-02 | TÉCNICO | RESPALDADO |
-| RL-003 | [Roles](#8-section-06--roles) Roles | Existen superficies de consulta para responsables del negocio. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
-| RL-004 | [Roles](#8-section-06--roles) Roles | Las capacidades mostradas corresponden a los permisos reales. | N/A | MARKETING | MARKETING |
-| GL-001 | [Gallery](#9-section-07--gallery) Gallery | Las capturas corresponden al producto vigente. | N/A | MARKETING | MARKETING |
-| GL-002 | [Gallery](#9-section-07--gallery) Gallery | Cada imagen representa el workflow indicado. | N/A | MARKETING | MARKETING |
-| GL-003 | [Gallery](#9-section-07--gallery) Gallery | Los datos visibles están autorizados y contextualizados. | N/A | MARKETING | MARKETING |
-| GL-004 | [Gallery](#9-section-07--gallery) Gallery | Los estados y cifras no fueron alterados de forma engañosa. | N/A | MARKETING | MARKETING |
-| IM-001 | [Implementation](#10-section-08--implementation) Implementation | NHILOS cuenta con un proceso de implementación. | PC-ONB-03 | TÉCNICO | RESPALDADO |
-| IM-002 | [Implementation](#10-section-08--implementation) Implementation | La implementación contempla preparación y verificación. | PC-ONB-01, PC-ONB-03 | TÉCNICO | RESPALDADO |
-| IM-003 | [Implementation](#10-section-08--implementation) Implementation | La capacitación forma parte del alcance cuando así se acuerda. | N/A | MARKETING | MARKETING |
-| IM-004 | [Implementation](#10-section-08--implementation) Implementation | El go-live depende de criterios definidos. | PC-ONB-03 | TÉCNICO | RESPALDADO |
-| IM-005 | [Implementation](#10-section-08--implementation) Implementation | Los tiempos y entregables publicados reflejan compromisos vigentes. | N/A | MARKETING | MARKETING |
-| HC-001 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) Hardware / Compatibility | Tiene combinaciones de hardware soportadas. | PC-HW-01, PC-HW-02, PC-HW-03 | TÉCNICO | RESPALDADO |
-| HC-002 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) Hardware / Compatibility | El dispositivo mostrado corresponde a una configuración probada. | N/A | MARKETING | MARKETING |
-| HC-003 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) Hardware / Compatibility | Los periféricos indicados funcionan en el escenario descrito. | PC-HW-01, PC-HW-02 | TÉCNICO | RESPALDADO |
-| HC-004 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) Hardware / Compatibility | Los requisitos y límites se comunican antes de la implementación. | N/A | MARKETING | MARKETING |
-| SP-001 | [Support](#12-section-10--support) Support | Existe un canal/proceso de soporte para clientes cubiertos. | N/A | MARKETING | MARKETING |
-| SP-002 | [Support](#12-section-10--support) Support | El cliente puede conocer el alcance del servicio aplicable. | N/A | MARKETING | MARKETING |
-| SP-003 | [Support](#12-section-10--support) Support | El proceso contempla seguimiento de incidentes. | N/A | MARKETING | MARKETING |
-| SP-004 | [Support](#12-section-10--support) Support | Horarios y compromisos publicados son contractualmente válidos. | N/A | MARKETING | MARKETING |
-| DM-001 | [Demo CTA](#14-section-12--demo-cta) Demo CTA | El visitante puede solicitar una demo. | N/A | MARKETING | MARKETING |
-| DM-002 | [Demo CTA](#14-section-12--demo-cta) Demo CTA | La demo se prepara según el contexto compartido. | N/A | MARKETING | MARKETING |
-| DM-003 | [Demo CTA](#14-section-12--demo-cta) Demo CTA | La información del formulario se trata conforme a la política publicada. | N/A | MARKETING | MARKETING |
-| DM-004 | [Demo CTA](#14-section-12--demo-cta) Demo CTA | Los mensajes de confirmación reflejan el estado real del envío. | N/A | MARKETING | MARKETING |
-| LY-001 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Acumulación automática de puntos por venta guardada localmente, offline. | PC-LOY-01 | TÉCNICO | RESPALDADO |
-| LY-002 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Canje de puntos como descuento en mostrador con salvaguardas, iniciado por el operador. | PC-LOY-02 | TÉCNICO | RESPALDADO |
-| LY-003 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Sincronización idempotente de transacciones de puntos; duplicados no cuentan doble. | PC-LOY-03 | TÉCNICO | RESPALDADO |
-| LY-004 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Identificación del cliente por QR, código, teléfono o nombre, totalmente offline. | PC-LOY-04 | TÉCNICO | RESPALDADO |
-| LY-005 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Promociones aplicadas de forma automática y determinista en el POS, administradas centralmente. | PC-LOY-05 | TÉCNICO | RESPALDADO |
-| LY-006 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Configuración de programas/recompensas, ajuste de puntos con actor y motivo, economía profit-aware. | PC-LOY-06 | TÉCNICO | RESPALDADO |
-| CW-007 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | División de cuenta entre comensales o formas de pago combinadas con cuadre exacto, en modalidades soportadas. | PC-PAY-05 | TÉCNICO | RESPALDADO |
-| CV-006 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Órdenes de producción y pre-elaboración batch para sub-recetas registran consumo de insumos base e incremento de stock pre-elaborado. | PC-INV-06 | TÉCNICO | RESPALDADO |
-| IM-006 | [Implementation](#10-section-08--implementation) Implementation | Importación asistida de catálogos e insumos desde archivos CSV conforme a la plantilla oficial. | PC-ONB-02 | TÉCNICO | RESPALDADO |
+| PP-001 | [Product Promise](#3-section-01--product-promise) | Punto de venta para registrar operaciones comerciales. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
+| PP-002 | [Product Promise](#3-section-01--product-promise) | Relaciona el registro de venta con capacidades operativas asociadas. | N/A | MARKETING | MARKETING |
+| PP-003 | [Product Promise](#3-section-01--product-promise) | El flujo permite trabajar con claridad. | N/A | MARKETING | MARKETING |
+| PP-004 | [Product Promise](#3-section-01--product-promise) | La promesa de continuidad aplica a escenarios soportados, no de forma absoluta. | N/A | MARKETING | MARKETING |
+| PC-001 | [Product in Context](#4-section-02--product-in-context) | Contempla escenarios de atención en mostrador. | PC-OFF-01 | TÉCNICO | RESPALDADO |
+| PC-002 | [Product in Context](#4-section-02--product-in-context) | Contempla cuentas abiertas o mesas en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
+| PC-003 | [Product in Context](#4-section-02--product-in-context) | Las ventas pueden relacionarse con movimientos de inventario configurados. | PC-INV-01, PC-INV-04 | TÉCNICO | RESPALDADO |
+| PC-004 | [Product in Context](#4-section-02--product-in-context) | La experiencia mostrada corresponde a la versión vigente. | N/A | MARKETING | MARKETING |
+| CW-001 | [Core Workflows](#5-section-03--core-workflows) | Permite seleccionar productos y construir una cuenta. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
+| CW-002 | [Core Workflows](#5-section-03--core-workflows) | El flujo puede incluir modificadores configurados. | PC-FOH-02 | TÉCNICO | RESPALDADO |
+| CW-003 | [Core Workflows](#5-section-03--core-workflows) | Registra pagos con los métodos disponibles. | PC-PAY-01, PC-PAY-04, PC-PAY-06 | TÉCNICO | RESPALDADO |
+| CW-004 | [Core Workflows](#5-section-03--core-workflows) | El esquema de tarjeta puede requerir confirmación manual posterior al datáfono. | PC-PAY-01 | TÉCNICO | RESPALDADO |
+| CW-005 | [Core Workflows](#5-section-03--core-workflows) | Existen cuentas abiertas/retención en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
+| CW-006 | [Core Workflows](#5-section-03--core-workflows) | Existen superficies de consulta para información operativa. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CT-001 | [Continuity](#6-section-04--continuity) | Enfoque offline-first en los escenarios definidos. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
+| CT-002 | [Continuity](#6-section-04--continuity) | Determinadas operaciones pueden continuar localmente durante una desconexión soportada. | PC-OFF-01 | TÉCNICO | RESPALDADO |
+| CT-003 | [Continuity](#6-section-04--continuity) | Existe sincronización posterior de información pendiente. | PC-OFF-03 | TÉCNICO | RESPALDADO |
+| CT-004 | [Continuity](#6-section-04--continuity) | El comportamiento depende del escenario soportado. | N/A | MARKETING | MARKETING |
+| CT-005 | [Continuity](#6-section-04--continuity) | El usuario conoce los límites y estados pendientes relevantes. | PC-FOH-03 | TÉCNICO | RESPALDADO |
+| CV-001 | [Control / Visibility](#7-section-05--control--visibility) | Registra información de ventas consultable. | PC-OFF-02, PC-DASH-01, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CV-002 | [Control / Visibility](#7-section-05--control--visibility) | Existen capacidades de inventario y consulta de movimientos. | PC-INV-02, PC-INV-03, PC-INV-05, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CV-003 | [Control / Visibility](#7-section-05--control--visibility) | Determinadas acciones pueden quedar registradas en bitácora. | PC-SEC-02, PC-SEC-03 | TÉCNICO | RESPALDADO |
+| CV-004 | [Control / Visibility](#7-section-05--control--visibility) | La información presentada refleja su frescura y alcance. | PC-DASH-02 | TÉCNICO | RESPALDADO |
+| CV-005 | [Control / Visibility](#7-section-05--control--visibility) | Los indicadores y términos públicos tienen semántica aprobada. | N/A | MARKETING | MARKETING |
+| RL-001 | [Roles](#8-section-06--roles) | El POS soporta tareas de venta y cobro. | PC-OFF-01, PC-PAY-01, PC-PAY-04 | TÉCNICO | RESPALDADO |
+| RL-002 | [Roles](#8-section-06--roles) | Existen permisos diferenciados para acciones específicas. | PC-SEC-02 | TÉCNICO | RESPALDADO |
+| RL-003 | [Roles](#8-section-06--roles) | Existen superficies de consulta para responsables del negocio. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| RL-004 | [Roles](#8-section-06--roles) | Las capacidades mostradas corresponden a los permisos reales. | N/A | MARKETING | MARKETING |
+| GL-001 | [Gallery](#9-section-07--gallery) | Las capturas corresponden al producto vigente. | N/A | MARKETING | MARKETING |
+| GL-002 | [Gallery](#9-section-07--gallery) | Cada imagen representa el workflow indicado. | N/A | MARKETING | MARKETING |
+| GL-003 | [Gallery](#9-section-07--gallery) | Los datos visibles están autorizados y contextualizados. | N/A | MARKETING | MARKETING |
+| GL-004 | [Gallery](#9-section-07--gallery) | Los estados y cifras no fueron alterados de forma engañosa. | N/A | MARKETING | MARKETING |
+| IM-001 | [Implementation](#10-section-08--implementation) | NHILOS cuenta con un proceso de implementación. | PC-ONB-03 | TÉCNICO | RESPALDADO |
+| IM-002 | [Implementation](#10-section-08--implementation) | La implementación contempla preparación y verificación. | PC-ONB-01, PC-ONB-03 | TÉCNICO | RESPALDADO |
+| IM-003 | [Implementation](#10-section-08--implementation) | La capacitación forma parte del alcance cuando así se acuerda. | N/A | MARKETING | MARKETING |
+| IM-004 | [Implementation](#10-section-08--implementation) | El go-live depende de criterios definidos. | PC-ONB-03 | TÉCNICO | RESPALDADO |
+| IM-005 | [Implementation](#10-section-08--implementation) | Los tiempos y entregables publicados reflejan compromisos vigentes. | N/A | MARKETING | MARKETING |
+| HC-001 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) | Tiene combinaciones de hardware soportadas. | PC-HW-01, PC-HW-02, PC-HW-03 | TÉCNICO | RESPALDADO |
+| HC-002 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) | El dispositivo mostrado corresponde a una configuración probada. | N/A | MARKETING | MARKETING |
+| HC-003 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) | Los periféricos indicados funcionan en el escenario descrito. | PC-HW-01, PC-HW-02 | TÉCNICO | RESPALDADO |
+| HC-004 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) | Los requisitos y límites se comunican antes de la implementación. | N/A | MARKETING | MARKETING |
+| SP-001 | [Support](#12-section-10--support) | Existe un canal/proceso de soporte para clientes cubiertos. | N/A | MARKETING | MARKETING |
+| SP-002 | [Support](#12-section-10--support) | El cliente puede conocer el alcance del servicio aplicable. | N/A | MARKETING | MARKETING |
+| SP-003 | [Support](#12-section-10--support) | El proceso contempla seguimiento de incidentes. | N/A | MARKETING | MARKETING |
+| SP-004 | [Support](#12-section-10--support) | Horarios y compromisos publicados son contractualmente válidos. | N/A | MARKETING | MARKETING |
+| DM-001 | [Demo CTA](#14-section-12--demo-cta) | El visitante puede solicitar una demo. | N/A | MARKETING | MARKETING |
+| DM-002 | [Demo CTA](#14-section-12--demo-cta) | La demo se prepara según el contexto compartido. | N/A | MARKETING | MARKETING |
+| DM-003 | [Demo CTA](#14-section-12--demo-cta) | La información del formulario se trata conforme a la política publicada. | N/A | MARKETING | MARKETING |
+| DM-004 | [Demo CTA](#14-section-12--demo-cta) | Los mensajes de confirmación reflejan el estado real del envío. | N/A | MARKETING | MARKETING |
+| LY-001 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) | Acumulación automática de puntos por venta guardada localmente, offline. | PC-LOY-01 | TÉCNICO | RESPALDADO |
+| LY-002 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) | Canje de puntos como descuento en mostrador con salvaguardas, iniciado por el operador. | PC-LOY-02 | TÉCNICO | RESPALDADO |
+| LY-003 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) | Sincronización idempotente de transacciones de puntos; duplicados no cuentan doble. | PC-LOY-03 | TÉCNICO | RESPALDADO |
+| LY-004 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) | Identificación del cliente por QR, código, teléfono o nombre, totalmente offline. | PC-LOY-04 | TÉCNICO | RESPALDADO |
+| LY-005 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) | Promociones aplicadas de forma automática y determinista en el POS, administradas centralmente. | PC-LOY-05 | TÉCNICO | RESPALDADO |
+| LY-006 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) | Configuración de programas/recompensas, ajuste de puntos con actor y motivo, economía profit-aware. | PC-LOY-06 | TÉCNICO | RESPALDADO |
+| CW-007 | [Core Workflows](#5-section-03--core-workflows) | División de cuenta entre comensales o formas de pago combinadas con cuadre exacto, en modalidades soportadas. | PC-PAY-05 | TÉCNICO | RESPALDADO |
+| CV-006 | [Control / Visibility](#7-section-05--control--visibility) | Órdenes de producción y pre-elaboración batch para sub-recetas registran consumo de insumos base e incremento de stock pre-elaborado. | PC-INV-06 | TÉCNICO | RESPALDADO |
+| IM-006 | [Implementation](#10-section-08--implementation) | Importación asistida de catálogos e insumos desde archivos CSV conforme a la plantilla oficial. | PC-ONB-02 | TÉCNICO | RESPALDADO |
 | FI-001 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Consecutivos fiscales correlativos e inalterables bajo DT 09-2007, con prefijo y folio inicial autorizados por la DGI. | PC-FISC-01 | TÉCNICO | RESPALDADO |
 | FI-002 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Inmutabilidad de facturas; anulación exclusiva vía Nota de Crédito con autorización de supervisor. | PC-FISC-02 | TÉCNICO | RESPALDADO |
 | FI-003 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Validación sintáctica de Cédula y RUC nicaragüense, sin consulta en vivo al padrón DGI. | PC-FISC-03 | TÉCNICO | RESPALDADO |
