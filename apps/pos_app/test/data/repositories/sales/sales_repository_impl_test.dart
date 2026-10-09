@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/mappers/sales_mapper.dart';
 import 'package:pos_app/data/daos/sales/invoice_dao.dart';
 import 'package:pos_app/data/daos/sales/invoice_item_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
@@ -120,6 +121,50 @@ class _FulfillmentSalesTransactionDao extends Fake
     OutboxEventEntity outbox,
     bool shouldFail,
   ) async => fulfillmentTransactionCalls++;
+}
+
+/// Records the modifier rows the repository forwards to the fulfillment
+/// checkout transaction (the SOHO P3 modifier persistence tests).
+class _RecordingFulfillmentTransactionDao extends _FulfillmentSalesTransactionDao {
+  List<InvoiceItemModifierEntity>? lastModifiers;
+
+  @override
+  Future<void> executeFulfillmentSaleTransaction(
+    InvoiceEntity invoice,
+    List<InvoiceItemEntity> items,
+    List<InvoiceItemModifierEntity> modifiers,
+    List<PaymentEntity> payments,
+    List<MovementEntity> movements,
+    AuditLogEntity? auditLog,
+    FulfillmentRecordEntity fulfillment,
+    List<PrintJobEntity> printJobs,
+    OutboxEventEntity outbox,
+    bool shouldFail,
+  ) async {
+    lastModifiers = modifiers;
+  }
+}
+
+/// Hand-rolled invoice-item DAO for the push-path tests: the generated
+/// [MockInvoiceItemDao] cannot stub DAO methods added to the interface
+/// (codegen null-safety), and the .mocks.dart file is outside this repair's
+/// edit surface. The interface is small enough to fake directly.
+class _FakeInvoiceItemDao implements InvoiceItemDao {
+  List<InvoiceItemEntity> items = const [];
+  List<InvoiceItemModifierEntity> modifierRows = const [];
+
+  @override
+  Future<List<InvoiceItemEntity>> getItemsByInvoiceId(String invoiceId) async =>
+      items;
+
+  @override
+  Future<List<InvoiceItemModifierEntity>> getModifierRowsByInvoiceId(
+    String invoiceId,
+  ) async =>
+      modifierRows;
+
+  @override
+  Future<void> insertItems(List<InvoiceItemEntity> items) async {}
 }
 
 @GenerateMocks([
@@ -2626,6 +2671,368 @@ void main() {
       );
 
       expect(persisted.paymentStatus, 'pending');
+    });
+  });
+
+  group('SOHO P3: selected modifiers persist with the sale and reach the sync wire', () {
+    // THE DEFECT: the cart's selected modifiers died at checkout. The
+    // transaction DAO has always been able to persist
+    // invoice_item_modifiers (executeSaleWithDgiTransaction /
+    // executeFulfillmentSaleTransaction take the rows), but the repository
+    // passed `[]`, and the push path rebuilt items through
+    // SalesMapper.toItemDomain with its EMPTY default modifier list — so
+    // the rows were never written and the wire always carried
+    // `modifiers: []`. A sale and its modifiers must commit in the SAME
+    // transaction, and the rebuilt sync payload must carry what was
+    // actually sold.
+    const cartModifier = Modifier(
+      id: 'mod-michelada-01',
+      name: 'Michelada Extra',
+      extraPrice: 30.0,
+      quantity: 2,
+    );
+
+    Invoice buildInvoice(String id) => Invoice(
+          id: id,
+          number: 'draft',
+          createdAt: DateTime.parse('2026-07-13T10:00:00Z'),
+          userId: 'cashier-1',
+          subtotal: 110,
+          totalTax: 16.5,
+          total: 126.5,
+          syncStatus: SyncStatus.pending,
+          type: InvoiceType.regular,
+        );
+
+    InvoiceItem buildItem(String invoiceId, {required bool withModifiers}) =>
+        InvoiceItem(
+          id: 'line-mods-1',
+          invoiceId: invoiceId,
+          productId: 'prod-1',
+          productName: 'Cerveza Preparada',
+          quantity: 1,
+          unitPrice: 50,
+          taxAmount: 16.5,
+          total: 126.5,
+          originalTaxRate: 15,
+          appliedTaxRate: 15,
+          selectedModifiers:
+              withModifiers ? const [cartModifier] : const [],
+        );
+
+    const payment = Payment(
+      id: 'pay-mods-1',
+      invoiceId: 'payee',
+      method: PaymentMethod.cash,
+      amount: 126.5,
+      amountNio: 126.5,
+      changeGiven: 0,
+    );
+
+    void stubCheckoutHappyPath(String number) {
+      when(mockNumberingService.getNextNumber()).thenAnswer((_) async => number);
+      when(
+        mockInventoryRepository.getProductById('prod-1'),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).thenAnswer((_) async {});
+      when(mockNumberingService.incrementNumber()).thenAnswer((_) async {});
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+    }
+
+    SalesRepositoryImpl repoWithFakeItemDao(_FakeInvoiceItemDao fakeItemDao) =>
+        SalesRepositoryImpl(
+          database: mockDatabase,
+          invoiceDao: mockInvoiceDao,
+          itemDao: fakeItemDao,
+          paymentDao: mockPaymentDao,
+          transactionDao: mockTransactionDao,
+          numberingService: mockNumberingService,
+          movementEngine: mockMovementEngine,
+          auditRepository: mockAuditRepository,
+          processInventoryUseCase: mockProcessInventoryUseCase,
+          reverseInventoryUseCase: mockReverseInventoryUseCase,
+          inventoryRepository: mockInventoryRepository,
+        );
+
+    void stubInvoiceRead(String invoiceId) {
+      when(
+        mockInvoiceDao.getInvoicesBySyncStatus('pending'),
+      ).thenAnswer(
+          (_) async => [SalesMapper.toInvoiceEntity(buildInvoice(invoiceId))]);
+      when(
+        mockPaymentDao.getPaymentsByInvoiceId(invoiceId),
+      ).thenAnswer((_) async => []);
+    }
+
+    Map<String, dynamic> firstWireLine(Map<String, dynamic> aggregate) {
+      final items = aggregate['items'] as List<dynamic>;
+      return items.single as Map<String, dynamic>;
+    }
+
+    test('a real checkout line with a quantity-2 modifier persists the '
+        'modifier rows inside the sale transaction', () async {
+      stubCheckoutHappyPath('F001-000300');
+
+      await repository.saveSale(
+        invoice: buildInvoice('sale-mods-1'),
+        items: [buildItem('sale-mods-1', withModifiers: true)],
+        payments: [payment.copyWith(invoiceId: 'sale-mods-1')],
+      );
+
+      // Positional arg 3 of executeSaleWithDgiTransaction is the modifier
+      // rows: the same transaction that writes the invoice/items/payments
+      // must write them, so a rollback takes both.
+      final captured = verify(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          captureAny,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).captured.single as List<InvoiceItemModifierEntity>;
+
+      expect(captured, hasLength(1));
+      final row = captured.single;
+      expect(row.invoiceItemId, 'line-mods-1');
+      expect(row.name, 'Michelada Extra');
+      expect(row.extraPrice, 30.0);
+      expect(row.quantity, 2);
+    });
+
+    test('the fulfillment checkout transaction also receives the modifier rows',
+        () async {
+      final topologyDao = _StubFulfillmentTopologyDao(
+        TopologySnapshotEntity(
+          id: 'tenant-1-r3',
+          tenantId: 'tenant-1',
+          revision: 3,
+          hash: 'snapshot-hash',
+          payload: '{}',
+          receivedAt: '2026-08-31T10:00:00Z',
+        ),
+      );
+      final transactionDao = _RecordingFulfillmentTransactionDao();
+      repository = SalesRepositoryImpl(
+        database: _FulfillmentAppDatabase(topologyDao),
+        invoiceDao: mockInvoiceDao,
+        itemDao: mockItemDao,
+        paymentDao: mockPaymentDao,
+        transactionDao: transactionDao,
+        numberingService: mockNumberingService,
+        movementEngine: mockMovementEngine,
+        auditRepository: mockAuditRepository,
+        processInventoryUseCase: mockProcessInventoryUseCase,
+        reverseInventoryUseCase: mockReverseInventoryUseCase,
+        inventoryRepository: mockInventoryRepository,
+      );
+      when(
+        mockNumberingService.getNextNumber(),
+      ).thenAnswer((_) async => 'F001-000301');
+      when(
+        mockInventoryRepository.getProductById('prod-1'),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+
+      await repository.saveSale(
+        invoice: buildInvoice('sale-mods-fulfillment'),
+        items: [buildItem('sale-mods-fulfillment', withModifiers: true)],
+        payments: [payment.copyWith(invoiceId: 'sale-mods-fulfillment')],
+        fulfillmentContext: const FulfillmentCheckoutContext(
+          tenantId: 'tenant-1',
+          topologySnapshotId: 'tenant-1-r3',
+          topologyRevision: 3,
+          topologyHash: 'snapshot-hash',
+          channel: 'KDS_AND_PRINT',
+        ),
+      );
+
+      expect(transactionDao.lastModifiers, hasLength(1));
+      final row = transactionDao.lastModifiers!.single;
+      expect(row.invoiceItemId, 'line-mods-1');
+      expect(row.name, 'Michelada Extra');
+      expect(row.extraPrice, 30.0);
+      expect(row.quantity, 2);
+    });
+
+    test('the sync aggregate rebuilt from persisted rows carries the sold '
+        'modifiers on the wire', () async {
+      stubCheckoutHappyPath('F001-000302');
+      const soldItem = InvoiceItem(
+        id: 'line-mods-1',
+        invoiceId: 'agg-mods-1',
+        productId: 'prod-1',
+        productName: 'Cerveza Preparada',
+        quantity: 1,
+        unitPrice: 50,
+        taxAmount: 16.5,
+        total: 126.5,
+        originalTaxRate: 15,
+        appliedTaxRate: 15,
+        selectedModifiers: [cartModifier],
+      );
+      await repository.saveSale(
+        invoice: buildInvoice('agg-mods-1'),
+        items: [soldItem],
+        payments: [payment.copyWith(invoiceId: 'agg-mods-1')],
+      );
+      // The rows the (real) transaction would have persisted come back
+      // through the DAO read the push path uses.
+      final persistedRows = verify(
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          any,
+          any,
+          captureAny,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ).captured.single as List<InvoiceItemModifierEntity>;
+      final fakeItemDao = _FakeInvoiceItemDao()
+        ..items = [SalesMapper.toItemEntity(soldItem)]
+        ..modifierRows = persistedRows;
+      repository = repoWithFakeItemDao(fakeItemDao);
+      stubInvoiceRead('agg-mods-1');
+
+      final aggregates = await repository.getUnsyncedAggregates();
+
+      final line = firstWireLine(aggregates.single);
+      expect(line['modifiers'], [
+        {'name': 'Michelada Extra', 'extraPrice': 30.0, 'quantity': 2},
+      ]);
+    });
+
+    test('a modifier-less sale still rebuilds modifiers: [] with the exact '
+        'pre-change wire shape', () async {
+      stubCheckoutHappyPath('F001-000303');
+      const plainItem = InvoiceItem(
+        id: 'line-mods-1',
+        invoiceId: 'agg-plain-1',
+        productId: 'prod-1',
+        productName: 'Cerveza Preparada',
+        quantity: 1,
+        unitPrice: 50,
+        taxAmount: 16.5,
+        total: 126.5,
+        originalTaxRate: 15,
+        appliedTaxRate: 15,
+      );
+      await repository.saveSale(
+        invoice: buildInvoice('agg-plain-1'),
+        items: [plainItem],
+        payments: [payment.copyWith(invoiceId: 'agg-plain-1')],
+      );
+      final fakeItemDao = _FakeInvoiceItemDao()
+        ..items = [SalesMapper.toItemEntity(plainItem)]
+        // A sale persisted BEFORE the fix has no modifier rows at all.
+        ..modifierRows = const [];
+      repository = repoWithFakeItemDao(fakeItemDao);
+      stubInvoiceRead('agg-plain-1');
+
+      final aggregates = await repository.getUnsyncedAggregates();
+
+      final line = firstWireLine(aggregates.single);
+      expect(line['modifiers'], isEmpty);
+      // Byte-identity to the pre-fix wire: the rebuilt line must neither
+      // gain nor lose keys — the backend hashes the whole record.
+      expect(
+        line.keys.toList(),
+        [
+          'id',
+          'productId',
+          'productName',
+          'quantity',
+          'unitPrice',
+          'originalTaxRate',
+          'appliedTaxRate',
+          'taxAmount',
+          'total',
+          'discount',
+          'variantId',
+          'notes',
+          'recipeVersionId',
+          // inventorySnapshotVersion/inventorySnapshot are conditional keys
+          // (snapshot-less lines omit them) — this test's line has none.
+          'originInvoiceItemId',
+          'modifiers',
+        ],
+      );
+      expect(jsonEncode(aggregates.single), contains('"modifiers":[]'));
+    });
+
+    test('the wire payloadHash the POS sends is unchanged by modifiers '
+        '(idempotency pin)', () async {
+      // The backend recomputes its hash over the whole record and compares
+      // it with the stored one on replay; the POS's payloadHash must stay
+      // exactly the sale-time hash computed BEFORE this repair.
+      stubCheckoutHappyPath('F001-000304');
+
+      // Same invoice id, items and payments — the ONLY difference is the
+      // cart's selectedModifiers, which must not enter the hash.
+      await repository.saveSale(
+        invoice: buildInvoice('hash-pin-1'),
+        items: [buildItem('hash-pin-1', withModifiers: true)],
+        payments: [payment.copyWith(invoiceId: 'hash-pin-1')],
+      );
+      await repository.saveSale(
+        invoice: buildInvoice('hash-pin-1'),
+        items: [buildItem('hash-pin-1', withModifiers: false)],
+        payments: [payment.copyWith(invoiceId: 'hash-pin-1')],
+      );
+
+      final results = verifyInOrder([
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          captureAny,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+        mockTransactionDao.executeSaleWithDgiTransaction(
+          captureAny,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+          any,
+        ),
+      ]);
+      final withModifiers = results[0].captured.single as InvoiceEntity;
+      final withoutModifiers = results[1].captured.single as InvoiceEntity;
+
+      expect(withModifiers.payloadHash, isNotNull);
+      expect(withModifiers.payloadHash, withoutModifiers.payloadHash);
     });
   });
 }

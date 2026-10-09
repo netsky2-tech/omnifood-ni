@@ -3763,6 +3763,15 @@ class _$InvoiceItemDao extends InvoiceItemDao {
   }
 
   @override
+  Future<List<InvoiceItemModifierEntity>> getModifierRowsByInvoiceId(
+      String invoiceId) async {
+    return _queryAdapter.queryList(
+        'SELECT invoice_item_modifiers.* FROM invoice_item_modifiers INNER JOIN invoice_items ON invoice_items.id = invoice_item_modifiers.invoice_item_id WHERE invoice_items.invoice_id = ?1 ORDER BY invoice_item_modifiers.rowid',
+        mapper: (Map<String, Object?> row) => InvoiceItemModifierEntity(id: row['id'] as String, invoiceItemId: row['invoice_item_id'] as String, name: row['name'] as String, extraPrice: row['extra_price'] as double, quantity: row['quantity'] as int),
+        arguments: [invoiceId]);
+  }
+
+  @override
   Future<void> insertItems(List<InvoiceItemEntity> items) async {
     await _invoiceItemEntityInsertionAdapter.insertList(
         items, OnConflictStrategy.replace);

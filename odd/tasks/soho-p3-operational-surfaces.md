@@ -496,3 +496,24 @@ La tabla `invoice_item_modifiers` sólo tenía `id`, `invoice_item_id`, `name`, 
 - `test/sales/pos-modifier-payload.db.e2e-spec.ts`: replay contra esquema aislado real, pipe de producción, ruta real y `InvoicesService` real. Afirma: aceptado de punta a punta, filas persistidas con `name`/`extra_price`/`quantity`, payload legacy (sin la llave) persiste 1, y `quantity: 0` rechazado sin persistir nada.
 
 **Evidencia:** el replay nuevo 3/3 **con el RED citado** (400 del lote y `column "quantity" does not exist`), el replay de S1c-2 6/6 intacto, 130/130 unitarias tocadas, 8/8 del spec contra base real (que ejercita la migración nueva), 34/34 de la cadena productora del POS. Todo verificado por el orquestador además del worker.
+
+### Capa 3 — ARREGLADA: el POS ya persiste y manda los modifiers
+
+**Qué se hizo:** el checkout construye las filas de modifiers (`SalesMapper.toItemModifierEntities`, que hasta hoy **no tenía llamadores**) y las pasa en lugar de `[]` a **los dos** sitios de transacción (DGI y fulfillment), así que venta y modifiers se commitean o se revierten juntos. El push y el rebuild del runner las cargan con **una sola consulta batch** (`InvoiceItemDao.getModifierRowsByInvoiceId`, con JOIN, sin N+1) y se las pasan a `toItemDomain` — cuyo default vacío era justamente lo que aplanaba todo a `modifiers: []`.
+
+**La desviación de la costura se CERRÓ, y con la mejor evidencia posible:** el fixture se volvió a capturar por la cadena real **sin** el re-enganche del test y los bytes salieron **idénticos** (`sha256 1d8d8cb8…`). O sea que la suposición de la costura sobre la forma del cable era correcta, y ahora está probada por construcción en vez de por convención. El comentario de procedencia del spec del backend lo declara cerrado.
+
+**Duplicación que encontré y consolidé:** el worker había copiado la conversión fila→dominio en dos lugares (repositorio y runner) con un comentario pidiendo "keep the two in sync". Eso es exactamente lo que este repo ya decidió no dejar suelto. Movida a `SalesMapper.toModifierDomain`, **al lado de su inversa** `toItemModifierEntities`: con una sola implementación no hay nada que pueda divergir, y el camino del push y el del rebuild quedan obligados a emitir los mismos bytes.
+
+**Mutaciones propias, todas restauradas byte-idénticas:**
+| Mutación | Resultado | Garantía anclada |
+|---|---|---|
+| El checkout vuelve a pasar `[]` | `Expected: an object with length of <1> / Actual: []` | Los modifiers se persisten con la venta |
+| El push no le pasa las filas a `toItemDomain` (aplica el default) | `Expected: [{'name': 'Michelada Extra', 'extraPrice': 30.0, 'quantity': 2}] / Actual: []` | El cable lleva lo vendido |
+| El push no carga las filas | el mismo error | La carga batch es load-bearing |
+
+**Nota de método honesta:** la mutación 2 la corrí primero contra la suite del runner y **pasó en verde** — el runner tiene su propio camino de rebuild y no cubre el push del repositorio. Re-ejecutada contra `sales_repository_impl_test.dart` falla como debe. Moraleja: una mutación que pasa puede estar señalando la suite equivocada, no código correcto.
+
+**Evidencia:** 76/76 en las dos suites (repositorio 42, runner 34) con `--concurrency=1`, el replay del backend 3/3 intacto, `invoice_modifier_quantity` 3/3 y `migrations_test` 15/15 de contabilidad, y el inventario de generados con **delta exacto de 1 archivo** (`app_database.g.dart`, la consulta nueva). `flutter analyze` sin issues en los cuatro archivos de producción.
+
+**Lugares donde el camino real todavía suelta un modifier (reportados, NO arreglados en esta unidad):** (1) la **reimpresión** (`prepareReprintInvoice`/`_printInvoiceCopy`) arma los ítems con el default vacío → un reimpreso todavía no muestra los extras: es la unidad siguiente y es fiscalmente la más delicada; (2) la lectura del historial de ventas (`sales_history_view_model.dart:342`), que no alimenta el cable; (3) el mapeo de ítems de anulación/nota de crédito, donde los modifiers son irrelevantes para la reversión de inventario.

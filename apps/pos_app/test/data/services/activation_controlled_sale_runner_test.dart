@@ -2418,22 +2418,18 @@ void main() {
     //        PERSISTED rows + SyncService.buildSalesSyncRecord)
     //     -> the persisted VERIFICATION_SALE outbox envelope.
     //
-    // DOCUMENTED DEVIATION (the seam, not a production claim): the push path
-    // drops the cart's modifiers today — the runner rebuild calls
-    // `items.map(SalesMapper.toItemDomain)` (lib/data/repositories/sales/
-    // sales_repository_impl.dart:522-529 and the same call inside
-    // activation_controlled_sale_runner.dart), and toItemDomain applies its
-    // EMPTY default modifier list (lib/data/mappers/sales_mapper.dart:391),
-    // so the envelope payload arrives with `modifiers: []` on every line
-    // even though the sale was checked out WITH modifiers. This capture test
-    // RE-ATTACHES the modifier list at the test seam — shaped EXACTLY as
-    // SalesMapper.toSyncJson emits it for a populated cart line
-    // (lib/data/mappers/sales_mapper.dart:713-718: name, extraPrice,
-    // quantity) — because the backend must be proven against the shape the
-    // POS WILL send once the POS-side repair unit lands. A later POS unit
-    // will close the drop itself; until then the envelope emitted by
-    // production genuinely still carries `[]`, and this test asserts that
-    // drop explicitly before re-attaching.
+    // DEVIATION CLOSED (SOHO P3 POS-side repair): the push path NO LONGER
+    // drops the cart's modifiers. The runner rebuild (and the normal push
+    // path in lib/data/repositories/sales/sales_repository_impl.dart) now
+    // loads the persisted invoice_item_modifiers rows and passes them to
+    // SalesMapper.toItemDomain, so the envelope payload carries the REAL
+    // modifier list the sale was checked out with — name, extraPrice and
+    // quantity, in the same shape SalesMapper.toSyncJson emits
+    // (lib/data/mappers/sales_mapper.dart:713-718). There is NO test seam
+    // anymore: this capture test asserts the production payload
+    // PRODUCTION-NATIVE, and the committed fixture is produced by the real
+    // chain end to end. A sale persisted BEFORE the repair has no modifier
+    // rows, so it still rebuilds `modifiers: []` and hashes identically.
     //
     // Re-capture with:
     //   POS_CAPTURE_MODIFIER_FIXTURE=1 flutter test --concurrency=1 \
@@ -2588,10 +2584,25 @@ void main() {
     }
 
     test(
-        'producer + pin: the persisted VERIFICATION_SALE payload with the '
-        'modifier list RE-ATTACHED at the test seam equals the committed '
-        'backend fixture EXACTLY', () async {
+        'producer + pin: the persisted VERIFICATION_SALE payload PRODUCTION-NATIVE '
+        'equals the committed backend fixture EXACTLY', () async {
       final payloadJson = await produceModifierVerificationPayload();
+
+      // PERSISTENCE PROOF: the REAL checkout wrote the modifier row into
+      // SQLite inside the sale transaction — name, extra_price and quantity
+      // exactly as the cart carried them. The wire fragment below can only
+      // come from these rows (the rebuild reads them back through the DAO).
+      final persistedModifierRows = await database.database.query(
+        'invoice_item_modifiers',
+        where: 'invoice_item_id = ?',
+        whereArgs: const ['d0000000-0000-4000-8000-00000000d011'],
+      );
+      expect(persistedModifierRows, hasLength(1));
+      expect(persistedModifierRows.single['invoice_item_id'],
+          'd0000000-0000-4000-8000-00000000d011');
+      expect(persistedModifierRows.single['name'], 'Michelada Extra');
+      expect(persistedModifierRows.single['extra_price'], 30.0);
+      expect(persistedModifierRows.single['quantity'], 2);
 
       final decoded = jsonDecode(payloadJson) as Map<String, dynamic>;
       final invoice = decoded['invoice'] as Map<String, dynamic>;
@@ -2599,29 +2610,15 @@ void main() {
       expect(items, hasLength(1));
       final line = items.first as Map<String, dynamic>;
 
-      // THE DOCUMENTED DEVIATION, asserted: production's rebuild chain
-      // genuinely emits an EMPTY modifiers array today (toItemDomain's empty
-      // default — the finding; the later POS unit closes it).
-      expect(line['modifiers'], isEmpty);
-
-      // RE-ATTACH at the test seam, shaped EXACTLY as SalesMapper.toSyncJson
-      // emits a populated cart line's modifiers (name, extraPrice,
-      // quantity — sales_mapper.dart:713-718), derived from the SAME
-      // Modifier instance the cart carried.
-      const cartModifier = Modifier(
-        id: 'mod-fixture-michelada-01',
-        name: 'Michelada Extra',
-        extraPrice: 30.0,
-        quantity: 2,
-      );
-      line['modifiers'] = [
+      // PRODUCTION-NATIVE: the rebuild chain now loads the persisted
+      // modifier rows and carries them on the wire — the seam is gone.
+      expect(line['modifiers'], [
         {
-          'name': cartModifier.name,
-          'extraPrice': cartModifier.extraPrice,
-          'quantity': cartModifier.quantity,
+          'name': 'Michelada Extra',
+          'extraPrice': 30.0,
+          'quantity': 2,
         },
-      ];
-      final payloadWithModifiers = jsonEncode(decoded);
+      ]);
 
       // Sanity — the fiscal totals really include the modifier quantities:
       // 50.00 (beer) + 30.00 * 2 (modifier units) = 110.00 gross, 15% IVA.
@@ -2629,12 +2626,18 @@ void main() {
       expect(invoice['totalTax'], equals(16.5));
       expect(invoice['total'], equals(126.5));
 
+      // IDEMPOTENCY PIN: the payloadHash is the sale-time hash the POS has
+      // always sent (it never covered the modifiers), and the committed
+      // fixture carries it — byte-identical equality below pins it.
+      final wireHash = invoice['payloadHash'];
+      expect(wireHash, isNotNull);
+
       final fixtureFile = File(modifierFixturePath);
       if (Platform.environment['POS_CAPTURE_MODIFIER_FIXTURE'] == '1') {
         fixtureFile.parent.createSync(recursive: true);
-        // EXACT bytes of the re-attached payload — no normalization,
-        // no pretty-printing, no trailing newline.
-        fixtureFile.writeAsStringSync(payloadWithModifiers);
+        // EXACT bytes of the production payload — no normalization,
+        // no pretty-printing, no trailing newline, no seam.
+        fixtureFile.writeAsStringSync(payloadJson);
       }
       expect(
         fixtureFile.existsSync(),
@@ -2644,17 +2647,16 @@ void main() {
             'test/data/services/activation_controlled_sale_runner_test.dart',
       );
 
-      // THE PIN: deep equality (whole tree, not "contains") between the
-      // payload production just built (with the seam re-attach) and the
-      // committed fixture the backend replay spec consumes. A change on
-      // either side of the wire fails one of the two tests bound by this
-      // artifact.
+      // THE PIN: the bytes production just built must equal the committed
+      // fixture the backend replay spec consumes, BYTE FOR BYTE — not just
+      // deep-equal trees. If they differ, the seam's assumption about the
+      // wire shape was wrong and the difference must be reported, never
+      // captured over.
       expect(
-        jsonDecode(payloadWithModifiers),
-        equals(jsonDecode(fixtureFile.readAsStringSync())),
-        reason: 'the cross-app contract: the runner\'s persisted payload (with '
-            'the documented seam re-attach) must equal the fixture the '
-            'backend replay spec POSTs, exactly',
+        payloadJson,
+        fixtureFile.readAsStringSync(),
+        reason: 'the cross-app contract: the runner\'s persisted payload must '
+            'equal the fixture the backend replay spec POSTs, byte for byte',
       );
     });
   });

@@ -65,21 +65,23 @@ import {
  *     calculator — the line amount includes extraPrice * quantity), persisted
  *     through the REAL `SalesRepositoryImpl.saveSale` with only the sale's
  *     identity (ids/timestamps) pinned for reproducibility.
- *   - DOCUMENTED DEVIATION (the capture seam): the push path DROPS the cart's
- *     modifiers today — the rebuild calls `items.map(SalesMapper.toItemDomain)`
- *     (lib/data/repositories/sales/sales_repository_impl.dart:522-529), and
- *     `toItemDomain` applies its EMPTY default modifier list
- *     (lib/data/mappers/sales_mapper.dart:391), so the envelope genuinely
- *     arrives with `modifiers: []`. The capturing test asserts that drop and
- *     then RE-ATTACHES the modifier list at the test seam, shaped EXACTLY as
- *     `SalesMapper.toSyncJson` emits a populated cart line (sales_mapper.dart:
- *     713-718). A later POS unit will close the drop itself; until then this
- *     backend fix only makes the cloud READY to accept what the POS will send.
+ *   - DEVIATION CLOSED (SOHO P3 POS-side repair): the push path no longer
+ *     drops the cart's modifiers. The rebuild (and the normal push path in
+ *     lib/data/repositories/sales/sales_repository_impl.dart) now loads the
+ *     persisted invoice_item_modifiers rows (one batched query,
+ *     InvoiceItemDao.getModifierRowsByInvoiceId) and passes them through
+ *     SalesMapper.toItemDomain, so the envelope genuinely carries the REAL
+ *     modifier list the sale was checked out with — the former capture seam
+ *     (test-side re-attach of `modifiers`) is REMOVED. This fixture is now
+ *     produced by the real chain END TO END with no test-side shaping: the
+ *     capturing test asserts the production payload PRODUCTION-NATIVE and
+ *     pins the fixture bytes byte for byte.
  *   - Capturing test (the two apps are bound by this one artifact):
  *     `apps/pos_app/test/data/services/activation_controlled_sale_runner_test.dart`,
  *     group "SOHO P3 cross-app fixture — REAL producer chain for the modifier
  *     wire payload", test "producer + pin: the persisted VERIFICATION_SALE
- *     payload with the modifier list RE-ATTACHED at the test seam ...".
+ *     payload PRODUCTION-NATIVE equals the committed backend fixture
+ *     EXACTLY".
  *     Re-capture with `POS_CAPTURE_MODIFIER_FIXTURE=1 flutter test
  *     --concurrency=1 test/data/services/activation_controlled_sale_runner_test.dart`
  *     — two consecutive captures produce byte-identical bytes

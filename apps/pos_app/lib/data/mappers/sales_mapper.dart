@@ -528,6 +528,18 @@ class SalesMapper {
         .toList();
   }
 
+  /// The exact inverse of [toItemModifierEntities]: rebuilds the domain
+  /// modifier of a persisted row. It lives here, beside its inverse, so the
+  /// push path and the activation-controlled rebuild CANNOT drift apart —
+  /// both wire builders must emit identical bytes for the same sale, and a
+  /// second copy of this conversion would be a silent way to break that.
+  static Modifier toModifierDomain(InvoiceItemModifierEntity row) => Modifier(
+        id: row.id,
+        name: row.name,
+        extraPrice: row.extraPrice,
+        quantity: row.quantity,
+      );
+
   // --- Payment ---
   static Payment toPaymentDomain(PaymentEntity entity) {
     return Payment(
