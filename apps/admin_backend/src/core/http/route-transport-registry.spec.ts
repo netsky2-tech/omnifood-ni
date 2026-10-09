@@ -64,18 +64,15 @@ describe('route transport registry (AppModule route table)', () => {
       routes,
       TRANSPORT_DECLARATIONS,
     );
-    // Known orphan, left unregistered deliberately and reported here for a
-    // founder decision: `InventoryController` (dead POST /inventory/purchase
-    // surface) was found by this same guard and must not disappear silently.
-    // Every OTHER source-declared controller must be served AND declared.
-    expect(orphans).toEqual([
-      {
-        controller: 'InventoryController',
-        declared: false,
-        file: 'modules/inventory/inventory.controller.ts',
-        served: false,
-      },
-    ]);
+    // Known orphans used to be listed here — e.g. `InventoryController`
+    // (dead POST /inventory/purchase surface), found by this same guard,
+    // left unregistered deliberately and reported for a founder decision.
+    // It was retired in 359d3515 (the route is covered by
+    // InventoryMovementController), so the guard now expects ZERO
+    // source-declared orphans. A newly orphaned controller must be served
+    // or recorded here with a deliberate, commented decision — never
+    // absorbed silently.
+    expect(orphans).toEqual([]);
   });
 
   it('classifies every route and matches declared transports to the guards actually present', () => {

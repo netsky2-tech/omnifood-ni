@@ -7,7 +7,7 @@
 **Aplica a:** Propietarios (Owners), administradores y gerentes de SOHO Café (`NH-T0001`)  
 **Acceso Web:** Portal Backoffice en la Nube  
 
-> **Cambios v0.2:** sección 6 reescrita paso a paso con capturas actualizadas; correcciones de renderizado, terminología y alineación de §3–§4 con la UI real; captura del dashboard con filtro «Este mes», imágenes nuevas para §7 (Inventario y Recetas) y §9 (Usuarios), y ruta real de Usuarios.
+> **Cambios v0.2:** sección 6 reescrita paso a paso con capturas actualizadas; correcciones de renderizado, terminología y alineación de §3–§4 con la UI real; captura del dashboard con filtro «Este mes», imágenes nuevas para §7 (Inventario y Recetas) y §9 (Usuarios), y ruta real de Usuarios. Cierre de follow-ups: §10 reformulada con lo disponible hoy y su hoja de ruta (la ruta `Ajustes > Dispositivos` no existe en el backoffice) y §11 sin marcadores de posición, solo canales verificables y guías incluidas.
 
 ---
 
@@ -227,18 +227,30 @@ En la sección **Administración > Usuarios** del menú lateral (título «Gesti
 
 ---
 
-## 10. Monitoreo de Terminales de Flota
+## 10. Monitoreo de Terminales de Flota (en desarrollo)
 
-En la sección **Ajustes > Dispositivos**:
+Hoy **no existe la ruta `Ajustes > Dispositivos` en el backoffice**: el panel por terminal todavía no está construido, por lo que esta sección se documenta sin captura y con lo que realmente está disponible hoy:
 
-* Podrás ver el estado del terminal físico MIRAY Q80 asignado a tu sucursal (`POS-SOHO-01`).
-* **Información Reportada:** Versión de la app instalada, nivel de batería reportado, dirección IP y marca de tiempo de la última sincronización exitosa.
-* **Bloqueo Remoto:** En caso de extravío o sospecha de hurto del terminal, podés revocar su token de acceso con un solo clic para impedir cualquier uso no autorizado.
+* **Vinculación de terminal:** cada equipo MIRAY Q80 queda vinculado a su sucursal al instalar la app POS (la app lo confirma con «Terminal vinculada»); si el terminal registrado no corresponde al dispositivo, la app lo informa y bloquea el uso.
+* **Revocación desde el servidor:** la plataforma puede revocar un dispositivo de forma remota — la app lo muestra como «Dispositivo revocado por el servidor. Requiere reactivación.» —. El botón de revocación autogestionada en el backoffice aún no existe: por ahora este bloqueo lo ejecuta el equipo de NHILOS cuando lo solicitás por el canal de soporte (§11).
+* **Frescura de sincronización:** los módulos Fiscal, Caja, Kardex y Auditoría muestran el indicador de estado («Sincronización al día» / «Sincronización demorada») para saber si el backoffice está recibiendo información del POS.
+
+**Hoja de ruta:** detalle por terminal en el backoffice (versión de la app, batería, dirección IP y última sincronización) y revocación desde el propio panel. Esta sección se ampliará con capturas cuando el módulo exista.
 
 ---
 
 ## 11. Canales de Asistencia y Preguntas Frecuentes
 
-* **WhatsApp de Asistencia para Propietarios:** [Número de Contacto Directo]
-* **Correo de Soporte Técnico:** `soporte@nhilospos.com`
+* **Correo de Soporte Técnico:** `soporte@nhilospos.com` — canal oficial de escrito de NHILOS.
+* **WhatsApp de Asistencia para Propietarios:** el canal de WhatsApp Business de soporte se habilita en la puesta en marcha de tu sucursal; pedí tu alta por el correo de soporte.
 * **Horario de Atención:** Lunes a Sábado de 8:00 AM a 8:00 PM.
+* **Documentación de referencia incluida:**
+  * Guía de inicio rápido: [`nhilos_quick_start_guide_v0.1.md`](./nhilos_quick_start_guide_v0.1.md)
+  * Manual de usuario del POS: [`nhilos_pos_user_manual_v0.1.md`](./nhilos_pos_user_manual_v0.1.md)
+  * Guía de contingencia: [`nhilos_contingency_guide_v0.1.md`](./nhilos_contingency_guide_v0.1.md)
+
+### Preguntas frecuentes
+
+* **¿Una venta no aparece en el dashboard?** Revisá el indicador de frescura de sincronización (§10): si marca «Sincronización demorada», el POS todavía no envió la información.
+* **¿Puedo borrar una factura por error?** No. Por norma DGI las facturas no se eliminan: se anulan (§4.2) y el sistema conserva el registro con numeración secuencial.
+* **¿Se cortó la internet?** El POS sigue vendiendo de forma local (SQLite); al restablecer la conexión las ventas se sincronizan y el dashboard se pone al día (§2).
