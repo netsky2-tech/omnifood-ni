@@ -314,3 +314,52 @@ Por superficie, en el orden del cliente: (1) descuento manual con mutación de c
 **Riesgos:** (a) **ola de re-huella**: cambiar la forma del payload re-fingerprinta todos los tenants (advertencia documentada en `odd/tasks/soho-business-profile-web.md`), hay que coordinar; (b) `U3` (proyección de Business Profile en el POS) sigue pendiente, así que el patrón del marcador `business_profile_managed_keys` (`fiscal_inbox_handler.dart:110,685`) está disponible pero no implementado — sin verificar si las llaves de descuento deben unírsele; (c) el toggle de exención global de impuestos no está respaldado por configuración (persistencia sin verificar).
 
 **Sin alternativa más barata:** hoy no se sincroniza ningún valor de descuento (verificado en `FISCAL_PARAM_KEYS` y `FiscalProjectionKeys`).
+
+---
+
+## 10. Traspaso de sesión (cierre del bloque P3)
+
+**Rama:** `feat/soho-p3-operational-surfaces`, **23 commits** sobre `origin/main`, empujada hasta `635a0540`, árbol limpio. `origin/main` ya estaba integrado (merge `614793d6`), así que no hay commits de main pendientes de traer.
+
+### Cerrado y validado
+S1a, S1b (config + web + POS), S2, S3a/S3b, S4a/S4b, S6a/S6b/S6c, más los defectos que aparecieron al validar: la trampa del filtro vacío, la bitácora en español con búsqueda por lo que se ve, el rechazo del descuento visible en el prompt, el **500 al limpiar cualquier parámetro de configuración**, y el navegador robando el feedback de validación. Todo con mutaciones propias restauradas byte-idénticas.
+
+### S1c · estado y siguiente paso
+- **S1c-1 (`019295ef`)**: origen categórico por línea — **superado** por el desglose.
+- **S1c-1b (`635a0540`)**: **desglose por origen en `jsonb`** con CHECK. Contratos verificados: nullable y sin backfill (`NULL` = legado/desconocido, **nunca** se fabrica); **opcional en el cable** (cada terminal omite el campo y `forbidNonWhitelisted` tira el lote de 500 entero); el campo en **ambos lados** del hash de conflicto de notas de crédito; ítems de NC en `NULL` (su descuento se fuerza a 0). El DTO y la base **coinciden**: llaves conocidas, valores `> 0`, y un desglose presente debe nombrar al menos un origen. Los dos estados legales son `NULL` y desglose poblado; las cinco formas inválidas las rechaza la base con `23514`.
+- ⚠ **Orden de despliegue:** el backend va **primero**. El POS no debe enviar el campo a producción antes de que el backend esté desplegado.
+
+**S1c-2 (lo inmediato) — aceptación ya definida.** El POS ya reparte el descuento por línea con el calculador fiscal (mayor-resto sobre el bruto), así que el nuevo reparto por origen **tiene que reconciliar con ese**. Dos invariantes **simultáneos**:
+1. La suma del desglose de cada línea **es igual** a su `discount`.
+2. La suma de cada origen sobre todas las líneas **es igual** a su total a nivel de orden.
+
+Se logra repartiendo **un origen por vez**, acotado por la capacidad restante de la línea. **Orden decidido: promociones → manual → lealtad** (el discrecional absorbe el redondeo, por ser el que un humano controla). Ojo con el `build_runner` de este repo (ya borró generados con `--build-filter`) y con la migración local de Floor.
+
+**S1c-3:** reportes aditivos (`discountNio`/`totalDiscounts` **no se tocan**, invariantes de reconciliación documentados en `sales-reports.service.ts:354-359`) y columna de origen en la web.
+
+### Lo que queda, en orden
+1. **S1c-2** (POS: prorrateo por origen y envío del desglose) — con la nota de despliegue.
+2. **S1c-3** (reportes y web).
+3. **Barrido de los 4 formularios** que dependen de la validación nativa como única guarda (`catalog-page`, `product-page` y los dos de lealtad): necesitan esquema propio **antes** de `noValidate`, o se pierden sus `required`/`pattern` en silencio.
+4. **S6d** (14 de 16 clientes de API del panel no normalizan numéricos).
+5. **S5** (QR/transferencia con conciliación, lealtad, Fase 8.3 del guión).
+6. **KDS**: en `FOODPARK_QSR` debía auto-despachar y no lo hace — 17 tickets `PENDIENTE` con badges de ~6 días. **Va al final, por decisión.**
+7. **Limpieza del rig** (abajo).
+
+### Estado del entorno (para una sesión fresca)
+- **Backend local corriendo** (`node dist/main`, pid 5972) en `:3000`, log en `~/.cache/s4b-backup/backend.log`. **Vite** en `:5173` (`npm exec vite --host 127.0.0.1`).
+- ⚠ **Hay procesos de OTRA sesión** (worktree `omnifood-ni-modifiers-web-e2e`): no matarlos a ciegas.
+- **Espejo local `omnifood`** (127.0.0.1:5432): migración `180961` (AllowNullParamValue) **aplicada**; `180962`/`180963` **no** aplicadas al esquema público (sus specs construyen esquemas *scratch*). Topes del tenant SOHO **con tumbas nulas** (sin tope), revisión fiscal **17**.
+- ⚠ **Contraseña del dueño cambiada** en el espejo local para poder entrar al panel (`admin@soho.com`); el hash original está en `~/.cache/s4b-backup/hash_original.txt`. **Restaurarla al cerrar.**
+- `.env` y `apps/pos_app/android/key.properties` copiados desde el checkout principal (gitignoreados). El keystore es `~/.keys/nhilos-upload.jks`.
+- **S23** (`R5CWB2LQJDJ`): APK **con todos los arreglos del POS** instalado, apuntando a `http://localhost:3000/api` con `adb reverse tcp:3000 tcp:3000`.
+- **Validación web**: el panel se entra por **`http://soho.localhost:5173`** (el slug del tenant es el primer label del hostname; Chromium resuelve `soho.localhost` a loopback y el servidor de desarrollo lo acepta).
+
+### Hallazgos abiertos, no arreglados
+- El barrido de formularios (punto 3 de arriba).
+- La metadata de la bitácora del POS sigue accesible como JSON crudo tras el toggle **"Ver crudo"** — **a propósito**, es evidencia forense.
+- Los 17 tickets del KDS.
+- El e2e web del panel está testeado con rutas **mockeadas**; verifiqué a mano que los nombres de parámetros coinciden con el DTO, pero nada automatizado lo prueba.
+
+### Método que funcionó (repetirlo)
+Cada unidad cerrada con **mutaciones propias restauradas byte-idénticas** (verificadas con `cmp`), backups **fuera de `/tmp`** (que se barre en este repo), `dart format` **nunca** en sitio, y preferir el test **contra base real** cuando hay constraints, triggers o RLS — los mocks esconden el esquema por diseño.
