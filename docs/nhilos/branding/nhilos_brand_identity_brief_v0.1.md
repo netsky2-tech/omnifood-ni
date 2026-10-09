@@ -3,8 +3,8 @@
 **Documento:** `nhilos_brand_identity_brief_v0.1.md`
 **Versión:** 0.1
 **Estado:** `FOR DESIGN — INPUT DOCUMENT`
-**Autoridad de origen:** `nhilos_brand_experience_principles_v1.0.md` (§1, §2, §5, §6, §13, §14, §22, §23, §24, §29, §41, §48)
-**Produce:** `nhilos_brand_identity_system.md` — el sistema que el diseñador entrega. La constitución lo prevé como derivación futura (árbol documental del anexo D) y lo deja **explícitamente diferido**: v1.0 se aprueba sin requerir que esté diseñado (§47 `BR-D01`, §48). No hay mandato pendiente; es decisión del cliente completar la marca.
+**Autoridad de origen:** `nhilos_brand_experience_principles_v1.0.md` ([Arquitectura de marca](../nhilos_brand_experience_principles_v1.0.md#1-arquitectura-de-marca), [Brand Core de NHILOS](../nhilos_brand_experience_principles_v1.0.md#2-brand-core-de-nhilos), [Principios maestros de NHILOS](../nhilos_brand_experience_principles_v1.0.md#5-principios-maestros-de-nhilos), [Personalidad](../nhilos_brand_experience_principles_v1.0.md#6-personalidad), [No-negociables](../nhilos_brand_experience_principles_v1.0.md#13-no-negociables), [Identidad verbal](../nhilos_brand_experience_principles_v1.0.md#14-identidad-verbal), [Expresión visual actual de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#22-expresión-visual-actual-de-nhilos-pos), [Dirección visual de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#23-dirección-visual-de-nhilos-pos), [Fotografía de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos), [Propuesta comercial](../nhilos_brand_experience_principles_v1.0.md#29-propuesta-comercial), [Packaging físico](../nhilos_brand_experience_principles_v1.0.md#41-packaging-físico), [Authority boundary after v1.0](../nhilos_brand_experience_principles_v1.0.md#48-authority-boundary-after-v10))
+**Produce:** `nhilos_brand_identity_system.md` — el sistema que el diseñador entrega. La constitución lo prevé como derivación futura (árbol documental del anexo D) y lo deja **explícitamente diferido**: v1.0 se aprueba sin requerir que esté diseñado ([Decisiones DEFERRED / downstream](../nhilos_brand_experience_principles_v1.0.md#47-decisiones-deferred--downstream) `BR-D01`, [Authority boundary after v1.0](../nhilos_brand_experience_principles_v1.0.md#48-authority-boundary-after-v10)). No hay mandato pendiente; es decisión del cliente completar la marca.
 **Gobernanza:** `nhilos_branding_document_governance_v1.0.md`
 **Fecha:** 2026-10-08
 
@@ -48,8 +48,8 @@ hardware, presentaciones).
 9. Retícula y principios de layout para superficies de marketing.
 10. Derivaciones: favicon, ícono de app, imagen de terminal bloqueada, sello/marca de agua para
     capturas.
-11. **Master tokens** y reglas de expresión por producto (estructura exigida en §22 de la
-    constitución, ver §9 de este brief).
+11. **Master tokens** y reglas de expresión por producto (estructura exigida en [Expresión visual actual de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#22-expresión-visual-actual-de-nhilos-pos) de la
+    constitución, ver [Excelencia sin perfeccionismo](../nhilos_brand_experience_principles_v1.0.md#9-excelencia-sin-perfeccionismo) de este brief).
 
 ---
 
@@ -74,21 +74,21 @@ tiene un trabajo concreto: hacer visible **la conexión de hilos**, no decorarla
 **Arquitectura (no negociable).** `NHILOS` es la marca madre y la compañía. `NHILOS POS` es el
 producto actual. `NHILOS Conta`, `NHILOS ERP` y futuras líneas están previstas, no aprobadas.
 
-**Principios maestros** (§5): Precisión · Cuidado · Sobriedad · Fiabilidad · Ecosystem by Design.
+**Principios maestros** ([Principios maestros de NHILOS](../nhilos_brand_experience_principles_v1.0.md#5-principios-maestros-de-nhilos)): Precisión · Cuidado · Sobriedad · Fiabilidad · Ecosystem by Design.
 
-**Personalidad** (§6): Seguro · Sereno · Preciso · Atento · Sofisticado · Cercano · Técnico cuando
+**Personalidad** ([Personalidad](../nhilos_brand_experience_principles_v1.0.md#6-personalidad)): Seguro · Sereno · Preciso · Atento · Sofisticado · Cercano · Técnico cuando
 hace falta.
 
-**Dirección visual declarada** (§23):
+**Dirección visual declarada** ([Dirección visual de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#23-dirección-visual-de-nhilos-pos)):
 
 > *"No queremos que NHILOS POS parezca caro. Queremos que parezca cuidado."*
 > **70% sobriedad / 20% producto / 10% gesto memorable**.
 
-**Dirección fotográfica declarada** (§24): negocio real, personas reales, producto real, hardware
+**Dirección fotográfica declarada** ([Fotografía de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos)): negocio real, personas reales, producto real, hardware
 real, contexto operativo. Evitar stock genérico, poses corporativas, composiciones falsas e
 imágenes sobreproducidas.
 
-**La marca no es** (§7): arrogante, elitista, pretenciosa, ruidosa, excéntrica, agresiva en ventas,
+**La marca no es** ([NHILOS no es](../nhilos_brand_experience_principles_v1.0.md#7-nhilos-no-es)): arrogante, elitista, pretenciosa, ruidosa, excéntrica, agresiva en ventas,
 "startup que vive de hype", ni una marca que necesita decir que es premium.
 
 ---
@@ -100,17 +100,17 @@ evaluar su mérito estético.
 
 | # | Restricción | Origen |
 |---|---|---|
-| `R-01` | **Prohibido autodescribirse como premium, lujo, exclusivo o equivalente.** El cuidado se demuestra, no se declara. | §13.12, §7 |
-| `R-02` | **Sobriedad como mecanismo, no como estilo.** 70/20/10 es disciplina: el 70% del peso visual es aire y estructura, no ornamento. | §5.3, §23 |
-| `R-03` | **Una sola marca con productos, no sub-marcas.** Nada de nombres nuevos por módulo ni "NHILOS POS by NHILOS". | §1.2, §1.3 |
-| `R-04` | **"Nada debe existir únicamente para colocar el logo."** Si un elemento visual no aporta comprensión, orientación o acción, se elimina. | §41 |
+| `R-01` | **Prohibido autodescribirse como premium, lujo, exclusivo o equivalente.** El cuidado se demuestra, no se declara. | [No-negociables (ítem 12)](../nhilos_brand_experience_principles_v1.0.md#13-no-negociables), [NHILOS no es](../nhilos_brand_experience_principles_v1.0.md#7-nhilos-no-es) |
+| `R-02` | **Sobriedad como mecanismo, no como estilo.** 70/20/10 es disciplina: el 70% del peso visual es aire y estructura, no ornamento. | [Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad), [Dirección visual de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#23-dirección-visual-de-nhilos-pos) |
+| `R-03` | **Una sola marca con productos, no sub-marcas.** Nada de nombres nuevos por módulo ni "NHILOS POS by NHILOS". | [Modelo de arquitectura recomendado](../nhilos_brand_experience_principles_v1.0.md#12-modelo-de-arquitectura-recomendado), [Qué NO hacer](../nhilos_brand_experience_principles_v1.0.md#13-qué-no-hacer) |
+| `R-04` | **"Nada debe existir únicamente para colocar el logo."** Si un elemento visual no aporta comprensión, orientación o acción, se elimina. | [Packaging físico](../nhilos_brand_experience_principles_v1.0.md#41-packaging-físico) |
 | `R-05` | **Tiene que funcionar en monocromo y en baja resolución.** El mark se imprime en ticket térmico y se procesa a 1 bit. Un mark con líneas finas de color desaparece ahí. | `PC-HW-01` (58 mm), `receipt_layout_formatter.dart`, `thermal_logo_processor.dart` |
 | `R-06` | **Tiene que funcionar a 16×16 px** como favicon y a tamaño de ícono de app, sin perder lectura. | Requisito de derivación |
 | `R-07` | **Tiene que funcionar sobre las dos superficies de producto:** fondo claro del backoffice y fondo oscuro del KDS. | `nhilos_tokens.dart`, estándar POS |
 | `R-08` | **Contraste verificable:** 4.5:1 para texto, 3:1 para elementos de UI (WCAG 2.1 AA). Ninguna combinación de marca puede incumplirlo. | `nhilos_website_non_functional_spec_v1.0.md` |
 | `R-09` | **No romper los tokens de producto vigentes** sin declarar migración. La paleta de marca debe reconciliarse con `nhilos_tokens.dart` o proponer explícitamente el cambio y su costo. | `nhilos_tokens.dart` |
-| `R-10` | **Nada de imágenes literales de tecnología:** servidores, nubes, engranajes, candados, gráficos de barras ascendentes, siluetas de manos apretadas, ni genéricos de stock. | §7, §24, §5.3 |
-| `R-11` | **"No empezar hablando de nosotros."** La propuesta abre por el cliente, su contexto y su problema; NHILOS aparece después. | §29 |
+| `R-10` | **Nada de imágenes literales de tecnología:** servidores, nubes, engranajes, candados, gráficos de barras ascendentes, siluetas de manos apretadas, ni genéricos de stock. | [NHILOS no es](../nhilos_brand_experience_principles_v1.0.md#7-nhilos-no-es), [Fotografía de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos), [Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad) |
+| `R-11` | **"No empezar hablando de nosotros."** La propuesta abre por el cliente, su contexto y su problema; NHILOS aparece después. | [Propuesta comercial](../nhilos_brand_experience_principles_v1.0.md#29-propuesta-comercial) |
 
 **Nota de trazabilidad (`G-04`):** `R-05` describe una **condición de diseño**, no un claim. El
 producto sí imprime en 58 mm (registrado como `PC-HW-01`) y el código también genera layouts de
@@ -137,10 +137,10 @@ Lo que existe hoy, medido en el repositorio:
 | Favicon del dashboard | **Es el logo y está bien.** `index.html` carga `/favicon.png`, byte-idéntico a `logo.png`. | `apps/owner_dashboard/index.html`, `public/favicon.png` |
 | Ícono huérfano | Existe un `favicon.svg` (violeta y celeste: `#863bff`, `#7e14ff`, `#47bfff`, `#ede6ff`), residuo de scaffolding, que **ninguna página referencia**. No contamina hoy; evidencia que no hay gobierno de íconos. | `apps/owner_dashboard/public/favicon.svg` |
 | Paleta de producto | Implementada con tokens: `brandPrimary #1E3A40` (deep teal), `brandNavy #0F292E`, semánticos success/warning/danger. Radios 12/8/4 dp. | `apps/pos_app/lib/ui/design_system/nhilos_tokens.dart` |
-| Tipografía de producto | **Inter**, compartida por toda la suite, incluido el KDS oscuro. | Estándar POS §42.7 |
-| Paleta documentada | Aprobada: `#F8FAFC` `#FFFFFF` `#E2E8F0` `#0F172A` `#64748B` `#1E3A40` `#0F292E` `#059669` `#DC2626` `#D97706`. **Prohibidos expresamente:** `#795548` (marrón) y `#3949AB` (morado). | Estándar POS §42.1 |
+| Tipografía de producto | **Inter**, compartida por toda la suite, incluido el KDS oscuro. | Estándar POS [Tipografía](../nhilos_pos_experience_standard_v1.0.md#427-tipografía) |
+| Paleta documentada | Aprobada: `#F8FAFC` `#FFFFFF` `#E2E8F0` `#0F172A` `#64748B` `#1E3A40` `#0F292E` `#059669` `#DC2626` `#D97706`. **Prohibidos expresamente:** `#795548` (marrón) y `#3949AB` (morado). | Estándar POS [Paleta cromática unificada](../nhilos_pos_experience_standard_v1.0.md#421-paleta-cromática-unificada) |
 | Sistema de identidad | **No existe.** | — |
-| Guía verbal separada | **No existe.** El contenido de §14 de la constitución es hoy la autoridad. | — |
+| Guía verbal separada | **No existe.** El contenido de [Identidad verbal](../nhilos_brand_experience_principles_v1.0.md#14-identidad-verbal) de la constitución es hoy la autoridad. | — |
 | Especificaciones de expresión por producto | **No existen.** | — |
 | Fotografía propia | No hay fotografía de marca. Existen 33 capturas de pantalla del producto, la mayoría anteriores a la remediación UX vigente. | `docs/nhilos/manuals/images/` |
 
@@ -163,9 +163,9 @@ decoración: es el slogan hecho forma. `NHILOS` = hilos. La marca ya tiene su me
 la encontró sola.
 
 **El apilado `N` + `POS` comunica bien la relación marca madre / producto**, que es exactamente la
-arquitectura declarada en §1.2.
+arquitectura declarada en [Modelo de arquitectura recomendado](../nhilos_brand_experience_principles_v1.0.md#12-modelo-de-arquitectura-recomendado).
 
-**La paleta base es sobria y coherente con §23** — navy profundo y un acento, nada más.
+**La paleta base es sobria y coherente con [Dirección visual de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#23-dirección-visual-de-nhilos-pos)** — navy profundo y un acento, nada más.
 
 ### Dónde el mark actual falla, con evidencia
 
@@ -209,17 +209,17 @@ resiste. Alinea con *"conectar para hacer que el negocio funcione mejor"* y con 
 negocio y las partes de la aplicación.
 
 **Qué comunica bien:** red, ecosistema, interconexión, estructura que se sostiene por sus uniones.
-Es coherente con `Ecosystem by Design` (§5.5) y con un ecosistema de productos. Geométricamente es
+Es coherente con `Ecosystem by Design` ([Ecosystem by Design](../nhilos_brand_experience_principles_v1.0.md#55-ecosystem-by-design)) y con un ecosistema de productos. Geométricamente es
 radial, escalable y sobrio: buenos atributos para un mark.
 
 **Riesgos que el brief está obligado a dejar por escrito antes de que se explore:**
 
 | Riesgo | Detalle |
 |---|---|
-| **Connotación de abandono** | En español, "telaraña" evoca descuido y lugar abandonado (*"esa bodega está llena de telarañas"*). Es lo opuesto al Cuidado (§5.2) y a la Sobriedad (§5.3). |
+| **Connotación de abandono** | En español, "telaraña" evoca descuido y lugar abandonado (*"esa bodega está llena de telarañas"*). Es lo opuesto al Cuidado ([Cuidado](../nhilos_brand_experience_principles_v1.0.md#52-cuidado)) y a la Sobriedad ([Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad)). |
 | **Connotación de trampa** | La telaraña es un instrumento de depredador: existe para atrapar. Una marca de software para negocios no quiere decir "te atrapo". |
 | **"Enredado" = confuso** | *Enredarse* y *enredar* significan complicar. El propósito de la marca menciona **claridad** como valor explícito. El riesgo es decir lo contrario de lo que se quiere decir. |
-| **Fragilidad** | Una telaraña se destruye al primer contacto. La marca promete Fiabilidad (§5.4). |
+| **Fragilidad** | Una telaraña se destruye al primer contacto. La marca promete Fiabilidad ([Fiabilidad](../nhilos_brand_experience_principles_v1.0.md#54-fiabilidad)). |
 | **Cliché de categoría** | La red es el recurso más usado del software empresarial: riesgo alto de parecerse a una marca de infraestructura o de ciberseguridad. |
 
 **Recomendación sobre D2:** explorarla en serio, porque la intuición del diseñador —*una red que
@@ -262,7 +262,7 @@ Una propuesta de identidad se acepta cuando:
 6. **Respeta la arquitectura de marca**: se ve claramente que `NHILOS POS` es un producto de
    `NHILOS`, y se puede extender a un producto futuro sin rediseñar.
 7. **Sobrevive el test del silencio:** al sacarle todo, queda algo reconocible. Ese es el 10% de
-   gesto memorable de §23.
+   gesto memorable de [Dirección visual de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#23-dirección-visual-de-nhilos-pos).
 
 ---
 
@@ -287,7 +287,7 @@ La identidad no termina en la web. Debe convivir con lo que ya está implementad
 
 ## 9. Estructura técnica requerida
 
-La constitución §22 establece esta jerarquía para el futuro sistema. La identidad debe entregarse en esta forma:
+La constitución [Expresión visual actual de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#22-expresión-visual-actual-de-nhilos-pos) establece esta jerarquía para el futuro sistema. La identidad debe entregarse en esta forma:
 
 ```text
 NHILOS MASTER TOKENS          (color, tipografía, radios, espaciado, sombras, motion)
@@ -312,7 +312,7 @@ solo para POS; el sistema debe expresarlos como marca madre y derivar POS como p
 3. **Alcance del sistema hoy:** ¿se diseña para el ecosistema futuro (`Conta`, `ERP`) o se
    documenta solo la extensibilidad?
 4. **Fotografía:** ¿se produce fotografía propia de negocio real desde ahora, o la fase 1 usa solo
-   producto y tipografía? §24 pide negocio real; producirla toma tiempo y presupuesto.
+   producto y tipografía? [Fotografía de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos) pide negocio real; producirla toma tiempo y presupuesto.
 5. **Idioma del sistema:** la marca se comunica en español de Nicaragua (`es-NI`). ¿La documentación
    del sistema se entrega en español, en inglés o en ambos?
 
@@ -323,7 +323,7 @@ solo para POS; el sistema debe expresarlos como marca madre y derivar POS como p
 - Diseño de las páginas web comerciales (eso es el paquete de inicio de diseño, documento aparte).
 - Diseño de UI de producto (gobernado por `nhilos_pos_experience_standard_v1.0.md` y
   `nhilos_backoffice_experience_standard_v1.0.md`).
-- Arquitectura de marca y naming (ya definidos en la constitución §1).
+- Arquitectura de marca y naming (ya definidos en la constitución [Arquitectura de marca](../nhilos_brand_experience_principles_v1.0.md#1-arquitectura-de-marca)).
 - Constitución legal de la compañía, registro marcario y contratos (decisión del cliente,
   posterior).
 - Contenido y copy: ya existen contratos de contenido aprobados para la homepage y la página de

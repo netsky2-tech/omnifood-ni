@@ -4,7 +4,7 @@
 **Versión:** 1.0 (Evidencia revalidada — Gate D parcial)
 **Estado:** `CONTENIDO APROBADO / GATE D PARCIAL — 1 VIGENTE · 1 OBSOLETA · 6 A REVERIFICAR · 6 FALTANTES`
 **Build anclado vigente:** `b4b5ad27`
-**Evidencia de origen:** capturas ADB del `2026-10-02` sobre terminal `MIRAY Q80 / iPOS`, en `docs/nhilos/manuals/images/` (`NH-AUD-POS-001`). Build de la captura original: `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED). La revalidación contra el build anclado está documentada en §5, según `G-09` de `nhilos_branding_document_governance_v1.0.md`.
+**Evidencia de origen:** capturas ADB del `2026-10-02` sobre terminal `MIRAY Q80 / iPOS`, en `docs/nhilos/manuals/images/` (`NH-AUD-POS-001`). Build de la captura original: `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED). La revalidación contra el build anclado está documentada en [Registro de documentos](nhilos_branding_document_governance_v1.0.md#5-registro-de-documentos), según `G-09` de `nhilos_branding_document_governance_v1.0.md`.
 **Ruta pública:** Página profunda de producto NHILOS POS (`/pos`)
 **Upstream de contenido:** `nhilos_pos_product_page_content_v1.1.md`
 **Upstream de auditoría técnica:** `product_claim_audit_od02_v1.3.md`
@@ -18,8 +18,8 @@
 > **Advertencia de revalidación (G-09):** los activos de medios de este inventario fueron
 > capturados el `2026-10-02` sobre un terminal `MIRAY Q80 / iPOS`, cuando el build de referencia
 > era `7af1521`. El build anclado vigente es `b4b5ad27` (2026-10-08) e incluye cambios que
-> alteraron superficies capturadas. La revalidación está documentada en §5 y el estado resultante
-> de Gate D en §6: ningún activo puede publicarse sin estar `VIGENTE` y convertido a WebP/AVIF.
+> alteraron superficies capturadas. La revalidación está documentada en [Revalidación de Medios contra el Build Anclado (`b4b5ad27`)](#5-revalidación-de-medios-contra-el-build-anclado-b4b5ad27) y el estado resultante
+> de Gate D en [Estado de Aprobación de Gate D y Firma de Verificación](#6-estado-de-aprobación-de-gate-d-y-firma-de-verificación): ningún activo puede publicarse sin estar `VIGENTE` y convertido a WebP/AVIF.
 
 ---
 
@@ -52,7 +52,7 @@ deben re-capturarse o re-verificarse contra `b4b5ad27` antes de cualquier public
 
 La siguiente tabla consolida los activos de medios que componen la biblioteca visual oficial de
 NHILOS POS. La columna **Evidencia existente** apunta al archivo real que hoy respalda el activo
-en el repositorio; el **Veredicto** es el resultado de la revalidación documentada en §5.
+en el repositorio; el **Veredicto** es el resultado de la revalidación documentada en [Revalidación de Medios contra el Build Anclado (`b4b5ad27`)](#5-revalidación-de-medios-contra-el-build-anclado-b4b5ad27).
 
 | Asset ID | Pantalla / Workflow | Evidencia existente (`docs/nhilos/manuals/images/`) | Ubicación en Código (`b4b5ad27`) | Veredicto |
 |---|---|---|---|---|
@@ -90,16 +90,16 @@ activo. No se descarta: se registra para que la decisión de asignación sea exp
 ## 3. Mapeo Exhaustivo por Sección de la Página de Producto (v1.1)
 
 A continuación se detalla la asignación de cada activo visual a las 14 secciones estructuradas
-(12 originales + Loyalty & Promotions §15 + Cumplimiento Fiscal DGI §16 de `nhilos_pos_product_page_content_v1.1.md`)
+(12 originales + Loyalty & Promotions [Loyalty & Promotions](nhilos_pos_product_page_content_v1.1.md#15-section-13--loyalty--promotions) + Cumplimiento Fiscal DGI [Cumplimiento Fiscal DGI (DT 09-2007)](nhilos_pos_product_page_content_v1.1.md#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) de `nhilos_pos_product_page_content_v1.1.md`)
 de la página de producto `/pos`, con los títulos exactos del contrato de contenido,
 definiendo su rol contextual, pie de foto (caption) sugerido y
 texto de accesibilidad (alt text).
 
 > **Cómo leer esta sección.** Los textos describen el activo **previsto** para cada sección del
 > contrato de contenido, no piezas ya publicables. Las referencias a dispositivo deben leerse
-> según §4: el terminal que produjo la evidencia es `MIRAY Q80 / iPOS`; Sunmi V2s es una
+> según [Ficha Técnica de Captura y Especificaciones Non-Funcionales](#4-ficha-técnica-de-captura-y-especificaciones-non-funcionales): el terminal que produjo la evidencia es `MIRAY Q80 / iPOS`; Sunmi V2s es una
 > plataforma soportada por el código, no el dispositivo de captura. Todo activo marcado
-> `OBSOLETA`, `REQUIERE REVERIFICACIÓN` o `FALTANTE` en §2 **no está disponible hoy**: sus pies de
+> `OBSOLETA`, `REQUIERE REVERIFICACIÓN` o `FALTANTE` en [Inventario Maestro de Activos de Medios (Build anclado `b4b5ad27`)](#2-inventario-maestro-de-activos-de-medios-build-anclado-b4b5ad27) **no está disponible hoy**: sus pies de
 > foto y alt text son objetivos de captura, no copia publicable.
 
 ### Sección 01 — Product Promise
@@ -134,7 +134,7 @@ texto de accesibilidad (alt text).
   BAC/Banpro).
 - **Activo Workflow D (Mantener una cuenta abierta):** sin activo capturado. La superficie de
   retención de cuentas y mapa de mesas (`table_layout_view.dart`, `table_order_service.dart`)
-  requiere una captura nueva; ver `MEDIA-POS-05` en §2.
+  requiere una captura nueva; ver `MEDIA-POS-05` en [Inventario Maestro de Activos de Medios (Build anclado `b4b5ad27`)](#2-inventario-maestro-de-activos-de-medios-build-anclado-b4b5ad27).
 - **Activo Workflow E (Consultar información operativa):** `MEDIA-DASH-01` (Superficies de
   consulta operativa del terminal).
 - **Rol Contextual:** Guiar al usuario paso a paso en la ejecución de una transacción completa
@@ -262,7 +262,7 @@ texto de accesibilidad (alt text).
 - **Rol Contextual:** Mantener un entorno limpio y accesible para la captura de datos del
   prospecto.
 
-### Sección 13 — Loyalty & Promotions (§15 del contrato de contenido)
+### Sección 13 — Loyalty & Promotions ([Loyalty & Promotions](nhilos_pos_product_page_content_v1.1.md#15-section-13--loyalty--promotions) del contrato de contenido)
 - **Activo Principal:** `MEDIA-LOY-01` (Identificación de cliente y saldo de puntos en caja con
   QR `NHL1:{code}`; **pendiente de captura, no aprobado**).
 - **Rol Contextual:** Demostrar la identificación offline del cliente y el canje de puntos como
@@ -276,7 +276,7 @@ texto de accesibilidad (alt text).
   superficie existe aún; no se marca ningún activo como aprobado.
 - **Claims respaldados (OD-02):** `PC-LOY-01..06` vía `LY-001..LY-006` del contrato de contenido.
 
-### Sección 14 — Cumplimiento Fiscal DGI (DT 09-2007) (§16 del contrato de contenido)
+### Sección 14 — Cumplimiento Fiscal DGI (DT 09-2007) ([Cumplimiento Fiscal DGI (DT 09-2007)](nhilos_pos_product_page_content_v1.1.md#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) del contrato de contenido)
 
 - **Activo Principal:** `MEDIA-HW-01` (**`FALTANTE`** — sin captura; ticket fiscal impreso en papel térmico con
   correlativo DT 09-2007).
@@ -357,7 +357,7 @@ Fechas tomadas del commit que agregó cada archivo:
 el anclaje provisional. Motivo: hay una línea de trabajo en curso (auditoría P3 de descuentos y
 promociones e2e) que cambia comportamiento publicado de lealtad, promociones, modificadores y
 descuentos, y por lo tanto también las superficies capturadas. Ver
-`nhilos_branding_document_governance_v1.0.md` §7. Capturar ahora obligaría a recapturar después.
+`nhilos_branding_document_governance_v1.0.md` [Estado de anclaje y obligación de re-anclaje](nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje). Capturar ahora obligaría a recapturar después.
 Lo que sigue sí se ejecutó: la auditoría de la evidencia existente, su procedencia, sus
 dimensiones reales y la ventana de cambio por superficie.
 **Método:** auditoría read-only del contenido del repositorio (33 capturas en

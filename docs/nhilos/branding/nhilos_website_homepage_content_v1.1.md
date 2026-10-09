@@ -8,17 +8,17 @@
 **Version:** 1.1  
 **Date:** 2026-10-08  
 **Authority:** Contrato de contenido aprobado para la homepage. La versión se numera 1.1 para coincidir con la referencia de dependencia declarada en `nhilos_pos_product_page_content_v1.1.md`.  
-**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`, §3):** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
+**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`, [Cadena de autoridad (lineal, sin ciclos)](nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)):** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
 **Downstream:** `nhilos_pos_product_page_content_v1.1.md` — contrato de contenido de la página profunda de producto; este documento es su referencia de contraste en el Gate E.  
 **Referencia técnica transversal:** `Recursos/nhilos_website_non_functional_spec_v1.0.md` (v1.0) — gates heredados, no redefinidos aquí.  
-**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): el hero entrega un siguiente paso real (Ver cómo funciona), la FAQ reduce fricción de evaluación y el CTA final conduce a una demo preparada según el contexto que el prospecto comparta.  
-**GATE DE PUBLICACIÓN:** la publicación de la homepage está bloqueada hasta completar los gates A–E de §18 y el contraste cruzado (Gate E) contra `nhilos_pos_product_page_content_v1.1.md`.
+**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` [NHILOS +1](../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)): el hero entrega un siguiente paso real (Ver cómo funciona), la FAQ reduce fricción de evaluación y el CTA final conduce a una demo preparada según el contexto que el prospecto comparta.  
+**GATE DE PUBLICACIÓN:** la publicación de la homepage está bloqueada hasta completar los gates A–E de [Publication Gates](nhilos_pos_product_page_content_v1.1.md#18-publication-gates) y el contraste cruzado (Gate E) contra `nhilos_pos_product_page_content_v1.1.md`.
 
 ---
 
 ## 0. Purpose
 
-Este documento convierte el wireframe de homepage de la IA (`nhilos_website_information_architecture_content_wireframe_v1.0.md` §5, bloques `H01`–`H13`) en un contrato de contenido operativo. Define el copy propuesto por bloque, la jerarquía de mensajes, los CTAs, los claim IDs, las restricciones de publicación y los requisitos de media y rendimiento.
+Este documento convierte el wireframe de homepage de la IA (`nhilos_website_information_architecture_content_wireframe_v1.0.md` [Homepage Content Wireframe](nhilos_website_information_architecture_content_wireframe_v1.0.md#5-homepage-content-wireframe), bloques `H01`–`H13`) en un contrato de contenido operativo. Define el copy propuesto por bloque, la jerarquía de mensajes, los CTAs, los claim IDs, las restricciones de publicación y los requisitos de media y rendimiento.
 
 La homepage es la capa superficial y temprana del sitio: establece NHILOS, hace entendible NHILOS POS, demuestra valor con producto real, reduce incertidumbre y dirige hacia una demo. No profundiza: eso pertenece a la página de producto.
 
@@ -30,9 +30,9 @@ Este documento no autoriza por sí mismo la publicación de claims funcionales, 
 
 ### 1.1 Authority basis
 
-1. `nhilos_brand_experience_principles_v1.0.md` (v1.0) — constitución de marca; personalidad verbal (§14), sobriedad (§5.3) y `NHILOS +1` (§11).
+1. `nhilos_brand_experience_principles_v1.0.md` (v1.0) — constitución de marca; personalidad verbal ([Identidad verbal](../nhilos_brand_experience_principles_v1.0.md#14-identidad-verbal)), sobriedad ([Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad)) y `NHILOS +1` ([NHILOS +1](../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)).
 2. `product_claim_audit_od02_v1.3.md` (v1.3) — autoridad de claims; allowlist D4 y blocklist D5.
-3. `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) — fuente del messaging por capacidad, incluido el messaging de homepage (§5.1).
+3. `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) — fuente del messaging por capacidad, incluido el messaging de homepage ([Homepage](nhilos_website_product_marketing_brief_v1.0.md#51-homepage)).
 4. `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0) — estructura de bloques H00–H13 y sus reglas.
 
 Cuando exista conflicto, prevalece el upstream correspondiente según la cadena de `nhilos_branding_document_governance_v1.0.md`. Este documento nunca contradice a su upstream: lo implementa y, como máximo, lo acota.
@@ -49,7 +49,7 @@ Cuando exista conflicto, prevalece el upstream correspondiente según la cadena 
 
 ### 1.3 Publication rule
 
-Cada bloque de copy conserva su estado. El diseño visual, un video preparado o una captura de pantalla no convierten un claim `EVIDENCE_REQUIRED` en aprobado. Todo claim técnico citado en este documento referencia su ID del OD-02 (§17).
+Cada bloque de copy conserva su estado. El diseño visual, un video preparado o una captura de pantalla no convierten un claim `EVIDENCE_REQUIRED` en aprobado. Todo claim técnico citado en este documento referencia su ID del OD-02 ([Cross-Section Claim Register](#17-cross-section-claim-register)).
 
 ---
 
@@ -76,7 +76,7 @@ Esta regla es vinculante en ambas direcciones:
 - La página de producto (`nhilos_pos_product_page_content_v1.1.md`) resuelve las dudas que la homepage abre; no repite el hero de la homepage con más palabras ni se convierte en una lista indiscriminada de módulos.
 - Ninguna capacidad se presenta con mayor profundidad en la homepage que en la página de producto. Si este documento y la página profunda entran en conflicto, se escala; no se resuelve editando unilateralmente (G-02).
 
-**Gate E (§18.6)** verifica el cumplimiento de esta regla por contraste directo entre ambos contratos.
+**Gate E ([Gate E — Website consistency (cross-check contra la página de producto)](#186-gate-e--website-consistency-cross-check-contra-la-página-de-producto))** verifica el cumplimiento de esta regla por contraste directo entre ambos contratos.
 
 ---
 
@@ -183,7 +183,7 @@ Responder rápidamente qué es, para quién y por qué importa. El hero no se co
 - No presentar el cumplimiento fiscal como garantía absoluta: la delimitación de OD-02-R02 (parametrización previa del folio autorizado) se comunica en la página de producto, no se elimina aquí.
 - No afirmar integración electrónica automática con datáfonos: la conciliación es manual y desacoplada (LIM-02); el detalle pertenece a la página de producto.
 - No usar “en tiempo real” sin el contrato de frescura del dashboard (PC-DASH-02); aquí se dice “monitoreo… desde cualquier dispositivo con internet”.
-- La frase de credenciales no promete soporte operativo: los canales y coberturas de soporte permanecen gated (§12, H10).
+- La frase de credenciales no promete soporte operativo: los canales y coberturas de soporte permanecen gated ([Section H10 — Support](#12-section-h10--support), H10).
 - Product proof: solo media del build vigente con provenance registrada (Gate D); sin mockups ni prototipos.
 
 ---
@@ -231,7 +231,7 @@ Explicar que NHILOS POS conecta la operación completa — venta, operación, co
 ## Restrictions
 
 - El diagrama VENTA → OPERACIÓN → CONTROL → VISIBILIDAD es conceptual (`INHERITED` del wireframe); el visual debe usar producto real cuando exista (H09 proof hierarchy).
-- No traducir la idea operativa en una lista de módulos: eso es lo que la división de labores (§2.2) prohíbe.
+- No traducir la idea operativa en una lista de módulos: eso es lo que la división de labores ([Regla de división de labores con la página de producto](#22-regla-de-división-de-labores-con-la-página-de-producto)) prohíbe.
 - No afirmar sincronización multi-terminal sin internet (PC-OFF-05 es futureware, blocklist D5).
 
 ---
@@ -507,7 +507,7 @@ Reducir la ansiedad de adoptar software: mostrar que existe un proceso preparado
 
 ## Restrictions
 
-- No publicar tiempos garantizados (“go-live en X días”), número de sesiones, SLA ni alcance universal de migración (governance del wireframe §8).
+- No publicar tiempos garantizados (“go-live en X días”), número de sesiones, SLA ni alcance universal de migración (governance del wireframe [Implementation --- Content Wireframe](nhilos_website_information_architecture_content_wireframe_v1.0.md#8-implementation-----content-wireframe)).
 - La secuencia 01–07 es representación propuesta; debe alinearse con el playbook operacional vigente antes de publicarse como proceso oficial.
 - Los entregables y condiciones comercialmente vinculantes se declaran solo en la página de producto / implementación, con el alcance acordado.
 
@@ -528,7 +528,7 @@ Sostener cada afirmación con la jerarquía de prueba del wireframe: producto re
 3. **Caso de cliente** — `EVIDENCE_REQUIRED`: solo con cliente real, permiso y contexto suficiente.
 4. **Testimonio verificable** — `EVIDENCE_REQUIRED`: solo con consentimiento.
 5. **Cifra verificable** — `EVIDENCE_REQUIRED`: solo con metodología y periodo documentados.
-6. **Trust / compliance evidence** — la trazabilidad de claims de §17 y el cumplimiento DT 09-2007 argumentado en H02/H07.
+6. **Trust / compliance evidence** — la trazabilidad de claims de [Cross-Section Claim Register](#17-cross-section-claim-register) y el cumplimiento DT 09-2007 argumentado en H02/H07.
 
 **Status:** `PROPOSED / EVIDENCE_REQUIRED`
 
@@ -536,7 +536,7 @@ Sostener cada afirmación con la jerarquía de prueba del wireframe: producto re
 
 - **Situación:** el visitante evaluador necesita evidencia antes de confiar, y las afirmaciones sin respaldo la destruyen.
 - **Comportamiento:** la página demuestra con producto real y workflows reproducibles; los elementos de prueba que dependen de clientes (casos, testimonios, cifras) permanecen bloqueados hasta contar con autorización y evidencia.
-- **Efecto:** la confianza se construye por evidencia y consistencia (§5.3 de la constitución), no por adjetivos.
+- **Efecto:** la confianza se construye por evidencia y consistencia ([Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad) de la constitución), no por adjetivos.
 
 ## Claim IDs
 
@@ -692,14 +692,14 @@ Convertir el interés en una conversación contextualizada. La demo es una conve
 ## Situation → Behavior → Effect
 
 - **Situación:** el visitante ya entendió la propuesta y necesita un próximo paso de bajo riesgo.
-- **Comportamiento:** el CTA invita a compartir contexto mínimo; la demo se prepara según ese contexto (`NHILOS +1`, §11 de la constitución).
+- **Comportamiento:** el CTA invita a compartir contexto mínimo; la demo se prepara según ese contexto (`NHILOS +1`, [NHILOS +1](../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1) de la constitución).
 - **Efecto:** la conversación comienza con el problema del prospecto, no con el catálogo del vendedor.
 
 ## Claim IDs
 
 | ID | Claim | OD-02 source | Gate |
 | :---- | :---- | :---- | :---- |
-| HM-33 (reutilizado) | Ver §13, H11 — la demo se prepara según el contexto compartido. | N/A | MARKETING / Commercial |
+| HM-33 (reutilizado) | Ver [Section H11 — FAQ](#13-section-h11--faq), H11 — la demo se prepara según el contexto compartido. | N/A | MARKETING / Commercial |
 
 ## Restrictions
 
@@ -735,7 +735,7 @@ Privacidad · Términos
 [Solicitar una demo]
 ```
 
-`*` Casos aparece solo cuando exista contenido publicable suficiente (wireframe §2.3).
+`*` Casos aparece solo cuando exista contenido publicable suficiente (wireframe [Footer architecture](nhilos_website_information_architecture_content_wireframe_v1.0.md#23-footer-architecture)).
 
 **Status:** `INHERITED (estructura) / PROPOSED (labels)`
 
@@ -753,14 +753,14 @@ Privacidad · Términos
 
 ## Restrictions
 
-- Sin productos futuros como `coming soon` (AP-02). Sin enlace de `Contacto` independiente hasta que exista una experiencia de contacto definida (wireframe §2.3).
+- Sin productos futuros como `coming soon` (AP-02). Sin enlace de `Contacto` independiente hasta que exista una experiencia de contacto definida (wireframe [Footer architecture](nhilos_website_information_architecture_content_wireframe_v1.0.md#23-footer-architecture)).
 - Legal (Privacidad, Términos) existe como capa de confianza; su copy es `EVIDENCE_REQUIRED` (OD-IA-13).
 
 ---
 
 # 16. Media & Performance Rules (gates heredados del spec no funcional)
 
-La homepage es la página de mayor carga media del sitio. Los siguientes umbrales se heredan verbatim de `Recursos/nhilos_website_non_functional_spec_v1.0.md` (v1.0) vía `nhilos_website_information_architecture_content_wireframe_v1.0.md` §18.1; este documento no define valores nuevos.
+La homepage es la página de mayor carga media del sitio. Los siguientes umbrales se heredan verbatim de `Recursos/nhilos_website_non_functional_spec_v1.0.md` (v1.0) vía `nhilos_website_information_architecture_content_wireframe_v1.0.md` [Non-functional acceptance gates (inherited)](nhilos_website_information_architecture_content_wireframe_v1.0.md#181-non-functional-acceptance-gates-inherited); este documento no define valores nuevos.
 
 | Gate | Valor heredado | Aplicación homepage |
 | :---- | :---- | :---- |
@@ -769,7 +769,7 @@ La homepage es la página de mayor carga media del sitio. Los siguientes umbrale
 | CLS (NF-04) | `< 0.1` | Ningún bloque del hero o de workflows “salta” al cargar media. |
 | Peso inicial (NF-05) | `< 2.5 MB` comprimido | Presupuesto que gobierna cuánta media carga el primer viewport. |
 | Imágenes (NF-06) | `WebP`/`AVIF` con fallback JPG/PNG; `srcset` por viewport; `loading="lazy"` fuera del viewport inicial | Aplica a todas las capturas de H04, H07 y H09. |
-| Video demo (spec §1.2) | autoplay `muted` sin controles; pausa fuera de viewport (`IntersectionObserver`); `preload="none"`/`metadata` si no está en la primera sección | Aplica a videos de workflow en H02/H04. |
+| Video demo (spec [Decision classes](#12-decision-classes)) | autoplay `muted` sin controles; pausa fuera de viewport (`IntersectionObserver`); `preload="none"`/`metadata` si no está en la primera sección | Aplica a videos de workflow en H02/H04. |
 | Movimiento reducido (NF-10) | `prefers-reduced-motion` cancela reveals y transiciones | Aplica a toda la homepage. |
 
 **Regla editorial derivada:** si un bloque no puede sostenerse con media dentro del presupuesto de página, el bloque se simplifica; el presupuesto no se negocia con decoración.
@@ -817,7 +817,7 @@ Registro de trazabilidad exigido por `G-04` de `nhilos_branding_document_governa
 | HM-33 | H11 FAQ / H12 Final CTA | La demo se solicita desde el CTA y se prepara según el contexto compartido. | N/A | MARKETING | MARKETING |
 | HM-34 | H13 Footer | Tagline de marca en footer. | N/A | MARKETING | MARKETING |
 
-**Cobertura de claims del OD-02 sin cobertura publicada previa:** este contrato incorpora las capacidades `PC-OFF-04` (HM-18), `PC-FISC-01` (HM-05), `PC-FISC-02` (HM-05), `PC-PAY-02` (HM-06) y `PC-SEC-01` (HM-09), que carecían de cita en contenido publicado. Las capacidades `PC-FISC-03`, `PC-PAY-05`, `PC-INV-06` y `PC-ONB-02` permanecen sin cita en la homepage deliberadamente: son capacidades de resolución profunda que corresponden a la página de producto (ver §20). Las capacidades futureware `PC-OFF-05`, `PC-FISC-04` y `PC-PAY-03` no se citan (blocklist D5).
+**Cobertura de claims del OD-02 sin cobertura publicada previa:** este contrato incorpora las capacidades `PC-OFF-04` (HM-18), `PC-FISC-01` (HM-05), `PC-FISC-02` (HM-05), `PC-PAY-02` (HM-06) y `PC-SEC-01` (HM-09), que carecían de cita en contenido publicado. Las capacidades `PC-FISC-03`, `PC-PAY-05`, `PC-INV-06` y `PC-ONB-02` permanecen sin cita en la homepage deliberadamente: son capacidades de resolución profunda que corresponden a la página de producto (ver [Open Decisions & Dependencies](#20-open-decisions--dependencies)). Las capacidades futureware `PC-OFF-05`, `PC-FISC-04` y `PC-PAY-03` no se citan (blocklist D5).
 
 ---
 
@@ -825,7 +825,7 @@ Registro de trazabilidad exigido por `G-04` de `nhilos_branding_document_governa
 
 ## 18.1 Gate A — Product truth
 
-Cada claim `TÉCNICO` de §17: existe en la versión pública, funciona en el escenario descrito, tiene flujo demostrable y no depende de configuración presentada como universal.
+Cada claim `TÉCNICO` de [Cross-Section Claim Register](#17-cross-section-claim-register): existe en la versión pública, funciona en el escenario descrito, tiene flujo demostrable y no depende de configuración presentada como universal.
 
 ## 18.2 Gate B — Operational truth
 
@@ -837,29 +837,29 @@ Sin pricing, SLA, compromisos de soporte ni tratamiento de datos publicado sin a
 
 ## 18.4 Gate D — Evidence and media
 
-Toda captura y video de H02, H04, H07 y H09 proviene del build vigente con registro de provenance (asset, build, workflow, fecha, owner, aprobación); formatos y lazy-loading según §16.
+Toda captura y video de H02, H04, H07 y H09 proviene del build vigente con registro de provenance (asset, build, workflow, fecha, owner, aprobación); formatos y lazy-loading según [Media & Performance Rules (gates heredados del spec no funcional)](#16-media--performance-rules-gates-heredados-del-spec-no-funcional).
 
 ## 18.5 Gate F — Non-functional acceptance
 
-Los gates NF-01..NF-13 del spec no funcional (heredados por el wireframe §18.1) verificados para la homepage, con énfasis en LCP, peso de página y formatos de imagen (§16).
+Los gates NF-01..NF-13 del spec no funcional (heredados por el wireframe [Non-functional acceptance gates (inherited)](nhilos_website_information_architecture_content_wireframe_v1.0.md#181-non-functional-acceptance-gates-inherited)) verificados para la homepage, con énfasis en LCP, peso de página y formatos de imagen ([Content Status Matrix](nhilos_website_information_architecture_content_wireframe_v1.0.md#16-content-status-matrix)).
 
 ## 18.6 Gate E — Website consistency (cross-check contra la página de producto)
 
 Contraste directo entre este documento y `nhilos_pos_product_page_content_v1.1.md`:
 
-- la división de labores de §2.2 se cumple en ambas direcciones: la homepage no profundiza más que la página de producto, y la página de producto no repite el hero de la homepage con más palabras;
+- la división de labores de [Regla de división de labores con la página de producto](#22-regla-de-división-de-labores-con-la-página-de-producto) se cumple en ambas direcciones: la homepage no profundiza más que la página de producto, y la página de producto no repite el hero de la homepage con más palabras;
 - ningún término usado aquí con semántica técnica (`offline-first`, `terminal enrolado`, `hidratado`, `Kardex`, `frescura`) contradice la definición de la página de producto;
 - los CTAs y destinos de navegación del footer y de H05 existen;
 - ningún módulo futuro aparece como disponible;
-- el registro de cobertura del OD-02 (índice inverso del OD-02) se actualiza para reflejar las nuevas citas `HM-*` de §17.
+- el registro de cobertura del OD-02 (índice inverso del OD-02) se actualiza para reflejar las nuevas citas `HM-*` de [Cross-Section Claim Register](#17-cross-section-claim-register).
 
 ## 18.7 Definition of Done
 
 - [x] un bloque por sección del wireframe H01–H13, con los nombres de bloque preservados;
 - [x] cada bloque lleva propósito, copy propuesto, Situación → Comportamiento → Efecto, Claim IDs y restricciones;
-- [x] cada claim técnico cita un `PC-*` vigente del OD-02 v1.3 (§17);
+- [x] cada claim técnico cita un `PC-*` vigente del OD-02 v1.3 ([Cross-Section Claim Register](#17-cross-section-claim-register));
 - [x] los límites declarados (`works_when`/`does_not_work_when`) se conservan en H02 y H06 (G-06);
-- [x] los gates no funcionales se heredan verbatim, sin valores inventados (§16);
+- [x] los gates no funcionales se heredan verbatim, sin valores inventados ([Media & Performance Rules (gates heredados del spec no funcional)](#16-media--performance-rules-gates-heredados-del-spec-no-funcional));
 - [ ] verificación claim por claim contra el build anclado vigente (Gate A);
 - [ ] media con provenance aprobada (Gate D);
 - [ ] Gate E ejecutado y documentado contra `nhilos_pos_product_page_content_v1.1.md`;
@@ -874,7 +874,7 @@ Los ítems `[x]` corresponden a cierre editorial/estructural de este contrato; l
 ## Writing rules
 
 - Escribir desde situaciones reconocibles del negocio (fila de la hora pico, internet caído, dueño fuera del local).
-- Copy delimitado y sobrio, sin superlativos ni auto-descripción de estatus (§5.3 y §14.2 de la constitución): prohibido el vocabulario de §14.2 y todo equivalente.
+- Copy delimitado y sobrio, sin superlativos ni auto-descripción de estatus ([Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad) y [Cómo no hablamos](../nhilos_brand_experience_principles_v1.0.md#142-cómo-no-hablamos) de la constitución): prohibido el vocabulario de [Cómo no hablamos](../nhilos_brand_experience_principles_v1.0.md#142-cómo-no-hablamos) y todo equivalente.
 - Verbos concretos: cobrar, facturar, sincronizar, consultar, revisar, preparar.
 - Una sola idea principal por bloque; el hero no es una lista de beneficios.
 - Números y textos de UI solo desde fuentes verificables (G-05): nada transcrito de memoria ni de builds obsoletos.
@@ -883,7 +883,7 @@ Los ítems `[x]` corresponden a cierre editorial/estructural de este contrato; l
 ## UX rules
 
 - Lectura progresiva: marca → promesa → demostración → confianza → conversión.
-- Cada bloque responde: ¿cuál es la siguiente acción lógica? (regla CTA del wireframe §13).
+- Cada bloque responde: ¿cuál es la siguiente acción lógica? (regla CTA del wireframe [CTA Architecture](nhilos_website_information_architecture_content_wireframe_v1.0.md#13-cta-architecture)).
 - Máximo dos CTAs visibles por bloque (primario + secundario).
 - Los detalles condicionados viven cerca del claim al que aplican; las delimitaciones no se esconden en la FAQ.
 - Touch targets, contraste y estructura semántica según NF-01, NF-07, NF-08 y NF-09.
@@ -894,8 +894,8 @@ Los ítems `[x]` corresponden a cierre editorial/estructural de este contrato; l
 
 | ID | Decision / dependency | Status | Owner | Note |
 | :---- | :---- | :---- | :---- | :---- |
-| OD-HM-01 | Cobertura de capacidades profundas sin cita en la homepage: `PC-FISC-03` (validación Cédula/RUC), `PC-PAY-05` (split bill), `PC-INV-06` (producción batch), `PC-ONB-02` (importación CSV). | `CLOSED` | Product / Content | Resuelto: la homepage no las cita, por división de labores (§2.2), y la página de producto las incorporó como secciones y claims propios (`FI-003`, `CW-007`, `CV-006`, `IM-006`). No queda ningún claim `APPROVED_WEBSITE` sin cobertura publicada. |
-| OD-HM-02 | Copy definitivo del hero y de la línea de credenciales. | `PROPOSED` | Marketing | Derivado del Brief §5.1; requiere validación editorial. |
+| OD-HM-01 | Cobertura de capacidades profundas sin cita en la homepage: `PC-FISC-03` (validación Cédula/RUC), `PC-PAY-05` (split bill), `PC-INV-06` (producción batch), `PC-ONB-02` (importación CSV). | `CLOSED` | Product / Content | Resuelto: la homepage no las cita, por división de labores ([Regla de división de labores con la página de producto](#22-regla-de-división-de-labores-con-la-página-de-producto)), y la página de producto las incorporó como secciones y claims propios (`FI-003`, `CW-007`, `CV-006`, `IM-006`). No queda ningún claim `APPROVED_WEBSITE` sin cobertura publicada. |
+| OD-HM-02 | Copy definitivo del hero y de la línea de credenciales. | `PROPOSED` | Marketing | Derivado del Brief [Homepage](nhilos_website_product_marketing_brief_v1.0.md#51-homepage); requiere validación editorial. |
 | OD-HM-03 | Media del build vigente con provenance para H02/H04/H07. | `EVIDENCE_REQUIRED` | Content / Product | Depende del inventario de medios (Gate D, OD-IA-07). |
 | OD-HM-04 | Operación de demo (owner, canal, SLA, flujo). | `EVIDENCE_REQUIRED / OPEN` | Commercial / Web | OD-IA-03 del wireframe; bloquea la experiencia posterior al CTA. |
 | OD-HM-05 | Actualización del índice inverso del OD-02 con las nuevas citas `HM-*`. | `OPEN` | Claims owner | El índice inverso del OD-02 referencia solo la página de producto; debe extenderse a este documento en su próxima revisión (G-02: se escala, no se edita aquí unilateralmente). |

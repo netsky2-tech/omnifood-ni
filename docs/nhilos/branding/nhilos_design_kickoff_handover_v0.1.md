@@ -36,7 +36,7 @@ de sistema, jerarquía y espacios. Sin excepción.
 | # | Documento | Qué aporta |
 |---|---|---|
 | 1 | `docs/nhilos/branding/nhilos_branding_document_governance_v1.0.md` | Qué documento gobierna qué. Empezar acá evita contradicciones más adelante |
-| 2 | `docs/nhilos/nhilos_brand_experience_principles_v1.0.md` | Tono, personalidad, no-negociables, vocabulario prohibido, §23 dirección visual, §24 fotografía |
+| 2 | `docs/nhilos/nhilos_brand_experience_principles_v1.0.md` | Tono, personalidad, no-negociables, vocabulario prohibido, [Dirección visual de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#23-dirección-visual-de-nhilos-pos) dirección visual, [Fotografía de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos) fotografía |
 | 3 | `docs/nhilos/branding/nhilos_website_product_marketing_brief_v1.0.md` | Posicionamiento, mensajes por capacidad, delimitaciones y lista de bloqueo |
 | 4 | `docs/nhilos/branding/nhilos_website_information_architecture_content_wireframe_v1.0.md` | **La pieza central de `F1`**: sitemap, navegación, reglas `N-01`..`N-04`, modelo de contenido y el wireframe de homepage bloque por bloque (`H00`–`H13`) |
 | 5 | `docs/nhilos/branding/nhilos_website_homepage_content_v1.1.md` | El copy real de la homepage, sección por sección, con sus restricciones |
@@ -48,7 +48,7 @@ de sistema, jerarquía y espacios. Sin excepción.
 | # | Documento | Qué aporta |
 |---|---|---|
 | 8 | `docs/nhilos/branding/nhilos_brand_identity_brief_v0.1.md` | **El encargo**: objetivo, núcleo de marca, restricciones `R-01`..`R-11`, direcciones a explorar, entregables y criterios de aceptación |
-| 9 | `docs/nhilos/branding/nhilos_branding_document_governance_v1.0.md` §3 y §7 | Dónde entra la identidad en la cadena de autoridad |
+| 9 | `docs/nhilos/branding/nhilos_branding_document_governance_v1.0.md` [Cadena de autoridad (lineal, sin ciclos)](nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos) y [Estado de anclaje y obligación de re-anclaje](nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje) | Dónde entra la identidad en la cadena de autoridad |
 
 ### Referencia de producto — para que el sitio hable de algo que existe
 
@@ -65,7 +65,7 @@ de sistema, jerarquía y espacios. Sin excepción.
 ## 3. Alcance de `F1`
 
 **Qué se prototipa.** El sitio comercial público. La IA define la **jerarquía lógica** de la
-información y deja la **decisión técnica de URL abierta** (su §2.1 lo declara). La estructura de
+información y deja la **decisión técnica de URL abierta** (su [Corporate Purpose — APPROVED](../nhilos_brand_experience_principles_v1.0.md#21-corporate-purpose--approved) lo declara). La estructura de
 abajo es lo que se prototipa; el nombre final de cada URL se decide antes de producción y **no
 bloquea el prototipo**.
 
@@ -100,13 +100,13 @@ condiciones comerciales, y la operación de la demo.
 1. **Todo claim publicado cita un claim verificado del OD-02.** Si una pantalla afirma una
    capacidad, tiene que existir la fila correspondiente. Las secciones del contrato de contenido ya
    listan lo que no se puede afirmar.
-2. **Vocabulario prohibido** (§14.2 de la constitución): *revolucionario, disruptivo, next
+2. **Vocabulario prohibido** ([Cómo no hablamos](../nhilos_brand_experience_principles_v1.0.md#142-cómo-no-hablamos) de la constitución): *revolucionario, disruptivo, next
    generation, solución 360, lleva tu negocio al siguiente nivel, plataforma definitiva, el mejor,
    experiencia premium*, y cualquier autodescripción como premium o lujo.
 3. **Accesibilidad y rendimiento son criterios de aceptación**, no mejoras posteriores: WCAG 2.1 AA,
    LCP < 2.5 s, INP < 200 ms, CLS < 0.1, carga inicial < 2.5 MB, targets de 44×44 px, contraste
    4.5:1 / 3:1, movimiento reducido respetado.
-4. **Sin relleno.** Nada existe solo para llenar espacio (§5.3). Sin urgencia falsa, sin cifras sin
+4. **Sin relleno.** Nada existe solo para llenar espacio ([Sobriedad](../nhilos_brand_experience_principles_v1.0.md#53-sobriedad)). Sin urgencia falsa, sin cifras sin
    fuente, sin métricas inventadas.
 5. **Las capturas del producto no son referencia visual final.** La mayoría es anterior a la
    remediación UX vigente. Sirven para entender superficies, no para calcar.
@@ -132,7 +132,7 @@ condiciones comerciales, y la operación de la demo.
 ## 6. Decisiones abiertas que necesitan al cliente
 
 1. **URL definitiva de conversión.** La ruta de demo quedó pendiente de decisión en la IA.
-2. **¿Fotografía propia desde ahora?** §24 pide negocio real. Producirla toma tiempo y presupuesto;
+2. **¿Fotografía propia desde ahora?** [Fotografía de NHILOS POS](../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos) pide negocio real. Producirla toma tiempo y presupuesto;
    definir si `F1` la espera o avanza sin ella.
 3. **Receptor de las solicitudes de demo.** No existe asignación (decisión `OD-PP-10` abierta en el
    contrato de producto).
@@ -161,7 +161,7 @@ Una entrega se acepta cuando:
 
 1. Se puede recorrer el sitio y entender qué vende NHILOS y a quién, **sin explicación oral**.
 2. Cada afirmación visible tiene respaldo en el registro de claims.
-3. Los criterios de accesibilidad y rendimiento de §4 se cumplen y están medidos, no declarados.
+3. Los criterios de accesibilidad y rendimiento de [Luxurización aplicada a NHILOS](../nhilos_brand_experience_principles_v1.0.md#4-luxurización-aplicada-a-nhilos) se cumplen y están medidos, no declarados.
 4. La estructura sobrevive si mañana cambia la identidad: el layout no depende de un color
    específico.
 5. Los estados (`hover`, `focus`, `error`, `vacío`, `cargando`) están resueltos, no solo el camino

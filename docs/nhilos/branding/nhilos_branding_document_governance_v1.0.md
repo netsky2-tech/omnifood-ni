@@ -3,7 +3,7 @@
 **Documento:** `nhilos_branding_document_governance_v1.0.md`
 **Versión:** 1.0
 **Estado:** `APPROVED / AUTHORITATIVE — DOCUMENT GOVERNANCE`
-**Autoridad de la que deriva:** `nhilos_brand_experience_principles_v1.0.md` §0 (Autoridad y alcance) y §17 (Gobernanza)
+**Autoridad de la que deriva:** `nhilos_brand_experience_principles_v1.0.md` [Autoridad y alcance](../nhilos_brand_experience_principles_v1.0.md#0-autoridad-y-alcance) (Autoridad y alcance) y [Excepciones](../nhilos_brand_experience_principles_v1.0.md#17-excepciones) (Gobernanza)
 **Alcance:** todo documento de marca, marketing, arquitectura de sitio, contenido de producto y evidencia de medios de NHILOS
 **Fecha:** 2026-10-08
 **Origen:** creado para cerrar los hallazgos `B1`, `H1`, `H10`, `H11` y `M5` de `branding_reality_audit_v0.1.md`
@@ -49,7 +49,7 @@ el set.
         │                                      │
         │                                      ▼
         │                                 nhilos_brand_identity_system.md
-        │                                 (a producir por diseño — previsto en el anexo D, diferido por §47 `BR-D01`)
+        │                                 (a producir por diseño — previsto en el anexo D, diferido por [Decisiones DEFERRED / downstream](../nhilos_brand_experience_principles_v1.0.md#47-decisiones-deferred--downstream) `BR-D01`)
         ▼
 2. product_claim_audit_od02_v1.3.md                    [branding/Recursos/]
    Autoridad de claims. Inventario de lo que el producto REALMENTE hace,
@@ -99,6 +99,23 @@ el set.
 **Regla anti-ciclo:** ningún documento puede declarar como upstream a un documento que lo declare
 a él como upstream. Si un documento necesita una regla que vive arriba, la cita; no la reedita.
 
+### Convención de referencia entre documentos
+
+Las referencias cruzadas se escriben como **enlaces de markdown cuyo texto es el título de la
+sección destino**, sin el símbolo `§`. El número de sección vive en el ancla, no en el texto:
+
+```markdown
+antes:   ver §16
+después: ver [Cumplimiento Fiscal DGI](nhilos_pos_product_page_content_v1.1.md#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007)
+```
+
+**Consecuencia que hay que respetar:** el ancla deriva del **texto del título**. Renombrar una
+sección referenciada rompe todos los enlaces que la citan. Al renombrar una sección numerada, hay
+que buscar quién la referencia y actualizar el enlace.
+
+Motivo: leer `§16` obliga a buscar la sección; el título enlazado dice de qué se está hablando y
+lleva ahí en un clic.
+
 ---
 
 ## 4. Reglas de cumplimiento
@@ -127,24 +144,24 @@ a él como upstream. Si un documento necesita una regla que vive arriba, la cita
 | 4 | `nhilos_website_information_architecture_content_wireframe_v1.0.md` | `branding/` | IA y contenido del sitio | 1.0 | `APPROVED` |
 | 5 | `nhilos_website_homepage_content_v1.1.md` | `branding/` | Contrato de contenido de la homepage | 1.1 | `APPROVED / PUBLICATION GATED` |
 | 6 | `nhilos_pos_product_page_content_v1.1.md` | `branding/` | Contrato de contenido de producto | 1.1 | `APPROVED / PUBLICATION GATED` |
-| 7 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `CONTENIDO APROBADO / GATE D PARCIAL — 1 VIGENTE · 1 OBSOLETA · 6 A REVERIFICAR · 6 FALTANTES / REVALIDACIÓN DE CAPTURAS DIFERIDA (§7)` |
+| 7 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `CONTENIDO APROBADO / GATE D PARCIAL — 1 VIGENTE · 1 OBSOLETA · 6 A REVERIFICAR · 6 FALTANTES / REVALIDACIÓN DE CAPTURAS DIFERIDA ([Estado de anclaje y obligación de re-anclaje](#7-estado-de-anclaje-y-obligación-de-re-anclaje))` |
 | — | `nhilos_pos_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficie POS | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_backoffice_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficies backoffice | 1.0 | `APPROVED / REFERENCE` |
-| — | `nhilos_website_non_functional_spec_v1.0.md` | `branding/Recursos/` | Spec no funcional del sitio | 1.0 | `DRAFT` — gates heredados por la IA (§18.1 `NF-01`..`NF-13`) |
+| — | `nhilos_website_non_functional_spec_v1.0.md` | `branding/Recursos/` | Spec no funcional del sitio | 1.0 | `DRAFT` — gates heredados por la IA ([Non-functional acceptance gates (inherited)](nhilos_website_information_architecture_content_wireframe_v1.0.md#181-non-functional-acceptance-gates-inherited) `NF-01`..`NF-13`) |
 | — | `nhilos_backoffice_module_audit_template_v1.0.md` | `branding/Recursos/` | Plantilla de auditoría de módulo | 1.0 | `EVIDENCE PASS` |
 | `I` | `nhilos_brand_identity_brief_v0.1.md` | `branding/` | Capa de identidad — encargo de diseño | 0.1 | `FOR DESIGN — INPUT DOCUMENT` |
 | `D` | `nhilos_design_kickoff_handover_v0.1.md` | `branding/` | Paquete operativo del encargo de diseño | 0.1 | `FOR DESIGN — KICKOFF PACK` |
 
 ### Roadmap de documentos de marca pendientes
 
-La constitución prevé esta secuencia (árbol documental del anexo D) y declara explícitamente que v1.0 se aprueba **sin requerir** que el sistema de identidad esté diseñado (§47 `BR-D01`, §48). Ningún documento se produce «porque está en la lista»:
+La constitución prevé esta secuencia (árbol documental del anexo D) y declara explícitamente que v1.0 se aprueba **sin requerir** que el sistema de identidad esté diseñado ([Decisiones DEFERRED / downstream](../nhilos_brand_experience_principles_v1.0.md#47-decisiones-deferred--downstream) `BR-D01`, [Authority boundary after v1.0](../nhilos_brand_experience_principles_v1.0.md#48-authority-boundary-after-v10)). Ningún documento se produce «porque está en la lista»:
 cada uno se produce cuando su disparador aparece. Así se evita olvidarlo **y** se evita generar
 versiones flacas que nadie usa.
 
 | Documento | Estado | Disparador que lo justifica |
 |---|---|---|
-| `nhilos_brand_identity_system.md` | **Pendiente — es el entregable de diseño en curso** | Existe el brief (`I`). Se produce cuando el diseñador entregue la identidad. La constitución lo deja **diferido** (§47 `BR-D01`), no exigido. |
-| `nhilos_verbal_identity_guide.md` | Pendiente | Hoy la autoridad verbal es la constitución §14 y alcanza. Se justifica cuando haya **más de un redactor o agencia** escribiendo para la marca. |
+| `nhilos_brand_identity_system.md` | **Pendiente — es el entregable de diseño en curso** | Existe el brief (`I`). Se produce cuando el diseñador entregue la identidad. La constitución lo deja **diferido** ([Decisiones DEFERRED / downstream](../nhilos_brand_experience_principles_v1.0.md#47-decisiones-deferred--downstream) `BR-D01`), no exigido. |
+| `nhilos_verbal_identity_guide.md` | Pendiente | Hoy la autoridad verbal es la constitución [Identidad verbal](../nhilos_brand_experience_principles_v1.0.md#14-identidad-verbal) y alcanza. Se justifica cuando haya **más de un redactor o agencia** escribiendo para la marca. |
 | `product_expression_specs/nhilos_pos_brand_expression.md` | Pendiente | Se justifica cuando exista un **segundo producto** y haya que definir qué puede variar por producto. Hoy POS es la única expresión vigente. |
 | `product_expression_specs/` (conta, erp) | Pendiente | Cuando esos productos se aprueben. Hoy son líneas previstas, no aprobadas. |
 | `experience_playbooks/` (sales, onboarding, support) | Pendiente | Cuando la operación de esos frentes escale al punto de necesitar guion propio. |
@@ -194,7 +211,7 @@ siguiente quedan marcados como **pendientes de re-verificación**.
    `DERIVA` o `YA NO SOSTENIBLE`, y actualizar límites donde corresponda.
 2. **Re-anclar** el OD-02 a un commit concreto y actualizar la fecha de la cabecera.
 3. **Revalidar los medios** contra el build final: era exactamente el motivo por el que la
-   revalidación de capturas quedó diferida (ver `nhilos_pos_media_inventory_v1.0.md` §5).
+   revalidación de capturas quedó diferida (ver `nhilos_pos_media_inventory_v1.0.md` [Revalidación de Medios contra el Build Anclado (`b4b5ad27`)](nhilos_pos_media_inventory_v1.0.md#5-revalidación-de-medios-contra-el-build-anclado-b4b5ad27)).
 4. **Revisar los contratos de contenido** (homepage y página de producto) para que ninguna copia
    publicada contradiga el comportamiento nuevo, especialmente en descuentos, promociones,
    lealtad y modificadores.

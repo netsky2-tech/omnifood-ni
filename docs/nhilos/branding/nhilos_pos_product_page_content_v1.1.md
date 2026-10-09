@@ -8,9 +8,9 @@
 **Version:** 1.1  
 **Date:** 2026-10-02  
 **Authority:** Contrato de contenido aprobado para la página profunda de producto.  
-**Nota de revisión interna (post-aprobación, sin bump de versión):** tras la aprobación de v1.1 se añadieron dos secciones como extensiones trazadas: Loyalty & Promotions (Section 13, §15) y Cumplimiento Fiscal DGI (Section 14, §16, añadida en esta revisión). Como consecuencia, las secciones de cierre del documento se renumeraron y sus referencias internas se actualizaron. La versión formal permanece `1.1`; esta nota existe para que la adición posterior a la aprobación no se pierda.  
+**Nota de revisión interna (post-aprobación, sin bump de versión):** tras la aprobación de v1.1 se añadieron dos secciones como extensiones trazadas: Loyalty & Promotions (Section 13, [Loyalty & Promotions](#15-section-13--loyalty--promotions)) y Cumplimiento Fiscal DGI (Section 14, [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007), añadida en esta revisión). Como consecuencia, las secciones de cierre del documento se renumeraron y sus referencias internas se actualizaron. La versión formal permanece `1.1`; esta nota existe para que la adición posterior a la aprobación no se pierda.  
 **Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0) → `nhilos_website_homepage_content_v1.1.md` (v1.1)  
-**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara según el contexto que el prospecto comparte (Sección 12), y los estados de éxito y error le devuelven un siguiente paso definido.  
+**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` [NHILOS +1](../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)): la demo se prepara según el contexto que el prospecto comparte (Sección 12), y los estados de éxito y error le devuelven un siguiente paso definido.  
 **DEPENDENCIA SATISFECHA:** `nhilos_website_homepage_content_v1.1.md` (v1.1) existe ahora en el repositorio como contrato de contenido de la homepage. La dependencia de creación está cerrada en esa versión; lo que permanece pendiente es el contraste cruzado de Gate E contra dicho documento (OD-PP-12) y la verificación de capacidades contra builds y evidencia vigentes, que siguen siendo gates separados de publicación.
 **GATE DE PUBLICACIÓN:** la publicación de esta página requiere (a) el Gate E ejecutado y documentado: contraste cruzado contra `nhilos_website_homepage_content_v1.1.md` v1.1 (división de labores, terminología y CTAs), y (b) la verificación de capacidades contra el build vigente; la revalidación de medios permanece trackada por separado en Gate D (OD-PP-06).
 
@@ -1326,8 +1326,8 @@ Este registro consolida los claims mínimos de la página y sirve como base para
 | SP-001–SP-004 | Support | Canales y condiciones de atención | Operations / Commercial |
 | FAQ-01–FAQ-10 | FAQs | Respuestas públicas | Owners por tema |
 | DM-001–DM-004 | Demo CTA | Conversión y tratamiento de datos | Web / Commercial / Legal |
-| LY-001–LY-006 | Loyalty & Promotions (§15) | Identificación de cliente, puntos, canje y promociones | Product / Engineering |
-| FI-001–FI-003 | Cumplimiento Fiscal DGI (§16) | Numeración correlativa DT 09-2007, inmutabilidad de facturas y validación fiscal | Product / Legal |
+| LY-001–LY-006 | Loyalty & Promotions ([Loyalty & Promotions](#15-section-13--loyalty--promotions)) | Identificación de cliente, puntos, canje y promociones | Product / Engineering |
+| FI-001–FI-003 | Cumplimiento Fiscal DGI ([Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007)) | Numeración correlativa DT 09-2007, inmutabilidad de facturas y validación fiscal | Product / Legal |
 
 &nbsp;
 
@@ -1448,13 +1448,13 @@ Las siguientes decisiones deben cerrarse antes de la publicación. La tabla regi
 
 | ID | Decision / dependency | Status | Owner | Evidence / Concrete Artifact Linkage | Detailed Resolution |
 | :---- | :---- | :---- | :---- | :---- | :---- |
-| OD-PP-01 | Definir el scope público exacto de NHILOS POS. | `PARTIALLY RESOLVED` | Product | NH-SA-0001 §2–§3; NH-SO-0001 §2–§5; reconciliación contra el build anclado `b4b5ad27`. | Alcance congelado: línea POS 1.x + Owner Dashboard v2.0. Falta declaración formal de aprobación por versión como artefacto único de referencia. |
-| OD-PP-02 | Confirmar workflows que pueden mostrarse en producción. | `PARTIALLY RESOLVED` | Product / QA | NH-AUD-POS-001 §3/§4 (workflows ejecutados); hold (retención y recuperación de ticket en espera, Workflow D) en NH-GL-0001 §2.C. | Workflows A/B/C/E evidenciados en auditoría; actualizaciones visuales dependen de los hallazgos PX remediados antes de publicar capturas. |
-| OD-PP-03 | Aprobar matriz de continuidad por topología y dispositivo. | `PARTIALLY RESOLVED` | Engineering / Product | CD-05 §1–§3; CD-14; EX-17; NH-POL-BAK-001; NH-MAN-POS-001; NH-MAN-CTG-001; exclusión multi-dispositivo en NH-SO-0001 §5. | Topología single-terminal Q80 verificada. Multi-device y multi-sucursal quedan explícitamente fuera del scope comunicable; escenarios y límites documentados. |
-| OD-PP-04 | Definir vistas administrativas disponibles y su frescura. | `CLOSED` | Product / Backoffice | NH-MAN-DSH-001 §2–§9. | Inventario de vistas y contrato de frescura del Owner Dashboard establecidos y publicados como artefacto manual. |
-| OD-PP-05 | Aprobar nomenclatura de roles y capacidades. | `PARTIALLY RESOLVED` | Product / Security | NH-MAN-DSH-001 §8 (roles publicados); CD-15 (matriz de 4 roles). | Publicables Cajero / Supervisor / Owner según manual. La página pública adopta el modelo de 3 roles (Cajero / Supervisor / Owner) conforme a NH-MAN-DSH-001 §8; el cuarto rol de la matriz CD-15 (Mesero) pertenece al escenario de restaurante full-service (CD-15) y queda excluido del alcance público del perfil SOHO retail-food. |
+| OD-PP-01 | Definir el scope público exacto de NHILOS POS. | `PARTIALLY RESOLVED` | Product | NH-SA-0001 [Product Page Job](#2-product-page-job)–[Product Promise](#3-section-01--product-promise); NH-SO-0001 [Product Page Job](#2-product-page-job)–[Core Workflows](#5-section-03--core-workflows); reconciliación contra el build anclado `b4b5ad27`. | Alcance congelado: línea POS 1.x + Owner Dashboard v2.0. Falta declaración formal de aprobación por versión como artefacto único de referencia. |
+| OD-PP-02 | Confirmar workflows que pueden mostrarse en producción. | `PARTIALLY RESOLVED` | Product / QA | NH-AUD-POS-001 [Product Promise](#3-section-01--product-promise)/[Product in Context](#4-section-02--product-in-context) (workflows ejecutados); hold (retención y recuperación de ticket en espera, Workflow D) en NH-GL-0001 [Product Page Job](#2-product-page-job).C. | Workflows A/B/C/E evidenciados en auditoría; actualizaciones visuales dependen de los hallazgos PX remediados antes de publicar capturas. |
+| OD-PP-03 | Aprobar matriz de continuidad por topología y dispositivo. | `PARTIALLY RESOLVED` | Engineering / Product | CD-05 [Authority & Decision Model](#1-authority--decision-model)–[Product Promise](#3-section-01--product-promise); CD-14; EX-17; NH-POL-BAK-001; NH-MAN-POS-001; NH-MAN-CTG-001; exclusión multi-dispositivo en NH-SO-0001 [Core Workflows](#5-section-03--core-workflows). | Topología single-terminal Q80 verificada. Multi-device y multi-sucursal quedan explícitamente fuera del scope comunicable; escenarios y límites documentados. |
+| OD-PP-04 | Definir vistas administrativas disponibles y su frescura. | `CLOSED` | Product / Backoffice | NH-MAN-DSH-001 [Product Page Job](#2-product-page-job)–[Gallery](#9-section-07--gallery). | Inventario de vistas y contrato de frescura del Owner Dashboard establecidos y publicados como artefacto manual. |
+| OD-PP-05 | Aprobar nomenclatura de roles y capacidades. | `PARTIALLY RESOLVED` | Product / Security | NH-MAN-DSH-001 [Roles](#8-section-06--roles) (roles publicados); CD-15 (matriz de 4 roles). | Publicables Cajero / Supervisor / Owner según manual. La página pública adopta el modelo de 3 roles (Cajero / Supervisor / Owner) conforme a NH-MAN-DSH-001 [Roles](#8-section-06--roles); el cuarto rol de la matriz CD-15 (Mesero) pertenece al escenario de restaurante full-service (CD-15) y queda excluido del alcance público del perfil SOHO retail-food. |
 | OD-PP-06 | Preparar capturas y videos de la versión vigente. | `PARTIALLY RESOLVED` | Content / Product | NH-AUD-POS-001 encabezado (17 capturas ADB con provenance); registro de media y criterios de captura post-remediación definidos. | Existe banco de capturas con provenance y criterios de renovación. Falta ejecutar capturas finales post-remediación y aprobar el media register. |
-| OD-PP-07 | Aprobar proceso y entregables de implementación. | `CLOSED` | Operations / Commercial | OP-01 + OP-07 + CD-07/08/09/10 + NH-SO-0001 §4/§6 + readiness §14. | Playbook operativo completo y trazable desde provisioning hasta go-live; alcance comunicable definido. |
+| OD-PP-07 | Aprobar proceso y entregables de implementación. | `CLOSED` | Operations / Commercial | OP-01 + OP-07 + CD-07/08/09/10 + NH-SO-0001 [Product in Context](#4-section-02--product-in-context)/[Continuity](#6-section-04--continuity) + readiness [Demo CTA](#14-section-12--demo-cta). | Playbook operativo completo y trazable desde provisioning hasta go-live; alcance comunicable definido. |
 | OD-PP-08 | Publicar matriz de compatibilidad. | `PARTIALLY RESOLVED` | Engineering | NH-CHK-HW-001; checklist Q80. | Perfil verificado: MIRAY Q80 / iPOS Android 12 / impresora 80mm. Hardware multi-modelo prohibido sin checklist; falta decidir amplitud de la matriz pública. |
 | OD-PP-09 | Definir soporte público general. | `CLOSED WITH CONDITION` | Operations / Commercial | NH-POL-SUP-001 (CLIENT-READY). | Objetivos no-SLA, canales WhatsApp + soporte@nhilospos.com, cobertura L–S 8:00–20:00 Managua. Condición de publicación: unificar canales de contacto según DR-0. |
 | OD-PP-10 | Definir recepción y seguimiento de demos. | `OPEN` | Commercial / Web | Flujo y requerimientos de recepción de demos formalizados. | Pendiente asignación del receptor web/comercial responsable del seguimiento de demos. |
@@ -1474,16 +1474,16 @@ La página puede pasar a diseño/implementación cuando:
 - [x] los claims funcionales tienen evidencia o permanecen bloqueados — el registro existe y todo claim sin evidencia verificada permanece bloqueado; la verificación claim por claim es prerrequisito de publicación, no de esta lista;  
 - [x] continuidad describe escenarios concretos y sus límites — escenarios y topología single-terminal Q80 documentados; la evidencia de pruebas es materia de Gate B;  
 - [x] las superficies POS y backoffice están diferenciadas;  
-- [x] roles y permisos no se presentan de forma especulativa — solo se comunican Cajero / Supervisor / Owner (modelo de 3 roles conforme a NH-MAN-DSH-001 §8); el cuarto rol de la matriz CD-15 (Mesero) pertenece al escenario de restaurante full-service y queda excluido del alcance público del perfil SOHO retail-food;  
+- [x] roles y permisos no se presentan de forma especulativa — solo se comunican Cajero / Supervisor / Owner (modelo de 3 roles conforme a NH-MAN-DSH-001 [Roles](#8-section-06--roles)); el cuarto rol de la matriz CD-15 (Mesero) pertenece al escenario de restaurante full-service y queda excluido del alcance público del perfil SOHO retail-food;  
 - [ ] cada captura corresponde a una versión identificada — pendiente capturas finales post-remediación y aprobación del media register (OD-PP-06, Gate D);  
 - [x] implementación, hardware y soporte no generan compromisos no aprobados — copy restringido al playbook cerrado (OD-PP-07), al perfil Q80 verificado (OD-PP-08) y a NH-POL-SUP-001;  
 - [x] las FAQs responden preguntas reales y no contradicen el copy principal;  
 - [ ] la demo tiene un flujo funcional y responsable de seguimiento — flujo definido, receptor web/comercial sin asignar (OD-PP-10);  
 - [ ] privacidad y accesibilidad han sido revisadas — aviso de datos de cliente CLIENT-READY; falta adenda de privacidad del formulario y revisión final de accesibilidad (OD-PP-11, Gate C/E);  
-- [ ] se completaron los publication gates aplicables — estado actual de Gates A–E en §23.3;  
+- [ ] se completaron los publication gates aplicables — estado actual de Gates A–E en [Residual publication blockers](#233-residual-publication-blockers);  
 - [x] existe un registro de claims con responsables y fecha de aprobación — el registro y sus campos obligatorios están definidos; las entradas quedan sujetas a la verificación de claims.
 
-Los ítems marcados `[x]` corresponden a cierre editorial/estructural verificado en la auditoría del contrato. Los ítems `[ ]` son gate-dependent y se rigen por el estado de Gates A–E y por las decisiones OD-PP registradas en §20.
+Los ítems marcados `[x]` corresponden a cierre editorial/estructural verificado en la auditoría del contrato. Los ítems `[ ]` son gate-dependent y se rigen por el estado de Gates A–E y por las decisiones OD-PP registradas en [Open Decisions & Dependencies](#20-open-decisions--dependencies).
 
 ---
 
@@ -1520,10 +1520,10 @@ La página no debe vender como disponible lo que solo está diseñado, planifica
 | AA-06 | Implementación y soporte podían crear compromisos comerciales no aprobados. | Se condicionan alcance, entregables, canales, cobertura y SLA al modelo comercial/operativo aprobado. | `CLOSED — commercial approval pending` |
 | AA-07 | No existe un expediente de evidencia completo para cada claim. | Se formalizan los campos obligatorios del registro y se mantiene bloqueada la publicación de claims no aprobados. | `CLOSED — evidence collection pending` |
 | AA-08 | Faltaba separar el cierre editorial del permiso de publicación. | Se establece la promoción del contrato como decisión independiente y se conserva `Publication authority: NOT GRANTED`. | `CLOSED` |
-| AA-09 | Las decisiones OD-PP-01 a OD-PP-12 carecían de trazabilidad de estado, evidencia y resolución detallada, impidiendo distinguir cierres reales de pendientes. | Se expande la tabla de §20 con columnas Status, Owner, Evidence / Concrete Artifact Linkage y Detailed Resolution, vinculando cada decisión a artefactos del repositorio (NH-SA-0001, NH-SO-0001, NH-MAN-DSH-001, NH-AUD-POS-001, OP-01/OP-07, CD-05/06/14/15, NH-CHK-HW-001, NH-POL-SUP-001, NH-POL-DAT-001, readiness §14). | `CLOSED — evidence integrated` |
-| AA-10 | La Definition of Done no distinguía ítems editoriales/estructurales verificados de condiciones gate-dependent, lo que permitía leer la lista como bloqueo total o como aprobación total. | Se actualiza §21: los ítems de cierre editorial/estructural verificado quedan marcados `[x]` y los gate-dependent permanecen `[ ]` con referencia explícita a su OD-PP y gate correspondiente. | `CLOSED — delineation applied` |
-| AA-11 | El estado de las vistas administrativas y su frescura no contaba con artefacto de referencia, dejando Gate A y la sección de dashboard sin sustento verificable. | Inventario de vistas y contrato de frescura del Owner Dashboard establecidos en NH-MAN-DSH-001 §2–§9; OD-PP-04 pasa a `CLOSED`. | `CLOSED — artifact published` |
-| AA-12 | La lista de blockers residuales no especificaba el estado exacto de cierre de las OD-PP, el estado de Gates A–E ni el prerrequisito de verificación de claims, y carecía de disposición formal de autoridad de publicación. | Se reescribe §23.3 con el estado de cierre exacto de OD-PP-01 a OD-PP-12, el estado por gate (A–E), el prerrequisito de verificación de claims y la declaración final de autoridad de publicación. | `CLOSED — disposition formalized` |
+| AA-09 | Las decisiones OD-PP-01 a OD-PP-12 carecían de trazabilidad de estado, evidencia y resolución detallada, impidiendo distinguir cierres reales de pendientes. | Se expande la tabla de [Open Decisions & Dependencies](#20-open-decisions--dependencies) con columnas Status, Owner, Evidence / Concrete Artifact Linkage y Detailed Resolution, vinculando cada decisión a artefactos del repositorio (NH-SA-0001, NH-SO-0001, NH-MAN-DSH-001, NH-AUD-POS-001, OP-01/OP-07, CD-05/06/14/15, NH-CHK-HW-001, NH-POL-SUP-001, NH-POL-DAT-001, readiness [Demo CTA](#14-section-12--demo-cta)). | `CLOSED — evidence integrated` |
+| AA-10 | La Definition of Done no distinguía ítems editoriales/estructurales verificados de condiciones gate-dependent, lo que permitía leer la lista como bloqueo total o como aprobación total. | Se actualiza [Definition of Done](#21-definition-of-done): los ítems de cierre editorial/estructural verificado quedan marcados `[x]` y los gate-dependent permanecen `[ ]` con referencia explícita a su OD-PP y gate correspondiente. | `CLOSED — delineation applied` |
+| AA-11 | El estado de las vistas administrativas y su frescura no contaba con artefacto de referencia, dejando Gate A y la sección de dashboard sin sustento verificable. | Inventario de vistas y contrato de frescura del Owner Dashboard establecidos en NH-MAN-DSH-001 [Product Page Job](#2-product-page-job)–[Gallery](#9-section-07--gallery); OD-PP-04 pasa a `CLOSED`. | `CLOSED — artifact published` |
+| AA-12 | La lista de blockers residuales no especificaba el estado exacto de cierre de las OD-PP, el estado de Gates A–E ni el prerrequisito de verificación de claims, y carecía de disposición formal de autoridad de publicación. | Se reescribe [Residual publication blockers](#233-residual-publication-blockers) con el estado de cierre exacto de OD-PP-01 a OD-PP-12, el estado por gate (A–E), el prerrequisito de verificación de claims y la declaración final de autoridad de publicación. | `CLOSED — disposition formalized` |
 
 &nbsp;
 
@@ -1535,7 +1535,7 @@ Se promueve este documento a:
 
 La aprobación cubre la arquitectura narrativa, el orden de las catorce secciones, los criterios editoriales, el modelo de claims, las restricciones de contenido y los gates de publicación. No certifica que cada funcionalidad descrita esté disponible, ni aprueba capturas, compatibilidad, soporte, condiciones comerciales, privacidad o consistencia final con la homepage.
 
-En la revisión posterior del registro de auditoría se verificó el cierre parcial del conjunto de decisiones OD-PP contra artefactos del repositorio: OD-PP-04 y OD-PP-07 `CLOSED`, OD-PP-09 `CLOSED WITH CONDITION` (unificación de canales DR-0), siete decisiones `PARTIALLY RESOLVED` con evidencia vinculada (OD-PP-01/02/03/05/06/08/11) y dos `OPEN` (OD-PP-10, OD-PP-12 / Gate E). Esta reconciliación se registra en §20 y §23.3 y no modifica el alcance de la aprobación: la promoción sigue siendo una decisión editorial independiente del permiso de publicación, que permanece `NOT GRANTED`.
+En la revisión posterior del registro de auditoría se verificó el cierre parcial del conjunto de decisiones OD-PP contra artefactos del repositorio: OD-PP-04 y OD-PP-07 `CLOSED`, OD-PP-09 `CLOSED WITH CONDITION` (unificación de canales DR-0), siete decisiones `PARTIALLY RESOLVED` con evidencia vinculada (OD-PP-01/02/03/05/06/08/11) y dos `OPEN` (OD-PP-10, OD-PP-12 / Gate E). Esta reconciliación se registra en [Open Decisions & Dependencies](#20-open-decisions--dependencies) y [Residual publication blockers](#233-residual-publication-blockers) y no modifica el alcance de la aprobación: la promoción sigue siendo una decisión editorial independiente del permiso de publicación, que permanece `NOT GRANTED`.
 
 ## 23.3 Residual publication blockers
 
@@ -1545,7 +1545,7 @@ Los siguientes elementos permanecen abiertos y no deben interpretarse como defec
 
 | Estado | Decisiones |
 | :---- | :---- |
-| `CLOSED` | OD-PP-04 (vistas y frescura del dashboard, NH-MAN-DSH-001 §2–§9); OD-PP-07 (playbook de implementación, OP-01 + OP-07 + CD-07/08/09/10 + NH-SO-0001 §4/§6 + readiness §14). |
+| `CLOSED` | OD-PP-04 (vistas y frescura del dashboard, NH-MAN-DSH-001 [Product Page Job](#2-product-page-job)–[Gallery](#9-section-07--gallery)); OD-PP-07 (playbook de implementación, OP-01 + OP-07 + CD-07/08/09/10 + NH-SO-0001 [Product in Context](#4-section-02--product-in-context)/[Continuity](#6-section-04--continuity) + readiness [Demo CTA](#14-section-12--demo-cta)). |
 | `CLOSED WITH CONDITION` | OD-PP-09 (soporte público según NH-POL-SUP-001; condición de publicación: unificación de canales de contacto DR-0). |
 | `PARTIALLY RESOLVED` | OD-PP-01 (scope congelado, build anclado `b4b5ad27`); OD-PP-02 (workflows evidenciados, capturas sujetas a remediación PX); OD-PP-03 (topología single-terminal Q80; multi-device excluido); OD-PP-05 (3 roles publicados; cuarto rol de CD-15 excluido del alcance público SOHO retail-food); OD-PP-06 (17 capturas ADB con provenance; media register pendiente); OD-PP-08 (perfil Q80/iPOS Android 12 80mm verificado); OD-PP-11 (aviso de datos CLIENT-READY; adenda de privacidad del formulario requerida). |
 | `OPEN` | OD-PP-10 (receptor web/comercial de demos sin asignar); OD-PP-12 / Gate E (documento homepage v1.1 upstream pendiente). |
@@ -1562,7 +1562,7 @@ Los siguientes elementos permanecen abiertos y no deben interpretarse como defec
 
 ### Prerrequisito de verificación de claims
 
-Ningún claim del registro (§17) puede publicarse sin verificación registrada con versión/build, escenario, responsable, estado y fecha. Los claims sin evidencia permanecen bloqueados; el registro con responsables y fecha de aprobación es prerrequisito de Gate A y Gate D, y su cumplimiento se auditará contra la versión publicada del producto (anclada a `b4b5ad27` o posterior).
+Ningún claim del registro ([Cross-Section Claim Register](#17-cross-section-claim-register)) puede publicarse sin verificación registrada con versión/build, escenario, responsable, estado y fecha. Los claims sin evidencia permanecen bloqueados; el registro con responsables y fecha de aprobación es prerrequisito de Gate A y Gate D, y su cumplimiento se auditará contra la versión publicada del producto (anclada a `b4b5ad27` o posterior).
 
 ### Disposición final de autoridad de publicación
 
@@ -1581,73 +1581,73 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 
 # Anexo A — Matriz de Trazabilidad de Claims (Product Page → OD-02)
 
-**Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, §Reglas) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.3.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`, `LY-*`, `FI-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`, `PC-LOY-*`, `PC-FOH-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
+**Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, [Reglas de cumplimiento](nhilos_branding_document_governance_v1.0.md#4-reglas-de-cumplimiento)) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.3.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`, `LY-*`, `FI-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`, `PC-LOY-*`, `PC-FOH-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
 
 **Alcance de la matriz.** Esta matriz cubre los IDs de slot que anclan una **aserción de capacidad o de promesa**. Los IDs `FAQ-01`..`FAQ-10` de la sección 11 son slots de **pregunta**, no de claim: no afirman una capacidad y por eso no llevan fila aquí. Su respaldo se rastrea dentro de la propia sección de FAQ, donde cada respuesta cita el claim que la sostiene.
 
 | Claim ID | Sección | Assertion (resumen) | OD-02 ID(s) | Tipo | Estado |
 | :---- | :---- | :---- | :---- | :---- | :---- |
-| PP-001 | §3 Product Promise | Punto de venta para registrar operaciones comerciales. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
-| PP-002 | §3 Product Promise | Relaciona el registro de venta con capacidades operativas asociadas. | N/A | MARKETING | MARKETING |
-| PP-003 | §3 Product Promise | El flujo permite trabajar con claridad. | N/A | MARKETING | MARKETING |
-| PP-004 | §3 Product Promise | La promesa de continuidad aplica a escenarios soportados, no de forma absoluta. | N/A | MARKETING | MARKETING |
-| PC-001 | §4 Product in Context | Contempla escenarios de atención en mostrador. | PC-OFF-01 | TÉCNICO | RESPALDADO |
-| PC-002 | §4 Product in Context | Contempla cuentas abiertas o mesas en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
-| PC-003 | §4 Product in Context | Las ventas pueden relacionarse con movimientos de inventario configurados. | PC-INV-01, PC-INV-04 | TÉCNICO | RESPALDADO |
-| PC-004 | §4 Product in Context | La experiencia mostrada corresponde a la versión vigente. | N/A | MARKETING | MARKETING |
-| CW-001 | §5 Core Workflows | Permite seleccionar productos y construir una cuenta. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
-| CW-002 | §5 Core Workflows | El flujo puede incluir modificadores configurados. | PC-FOH-02 | TÉCNICO | RESPALDADO |
-| CW-003 | §5 Core Workflows | Registra pagos con los métodos disponibles. | PC-PAY-01, PC-PAY-04, PC-PAY-06 | TÉCNICO | RESPALDADO |
-| CW-004 | §5 Core Workflows | El esquema de tarjeta puede requerir confirmación manual posterior al datáfono. | PC-PAY-01 | TÉCNICO | RESPALDADO |
-| CW-005 | §5 Core Workflows | Existen cuentas abiertas/retención en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
-| CW-006 | §5 Core Workflows | Existen superficies de consulta para información operativa. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
-| CT-001 | §6 Continuity | Enfoque offline-first en los escenarios definidos. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
-| CT-002 | §6 Continuity | Determinadas operaciones pueden continuar localmente durante una desconexión soportada. | PC-OFF-01 | TÉCNICO | RESPALDADO |
-| CT-003 | §6 Continuity | Existe sincronización posterior de información pendiente. | PC-OFF-03 | TÉCNICO | RESPALDADO |
-| CT-004 | §6 Continuity | El comportamiento depende del escenario soportado. | N/A | MARKETING | MARKETING |
-| CT-005 | §6 Continuity | El usuario conoce los límites y estados pendientes relevantes. | PC-FOH-03 | TÉCNICO | RESPALDADO |
-| CV-001 | §7 Control / Visibility | Registra información de ventas consultable. | PC-OFF-02, PC-DASH-01, PC-DASH-04 | TÉCNICO | RESPALDADO |
-| CV-002 | §7 Control / Visibility | Existen capacidades de inventario y consulta de movimientos. | PC-INV-02, PC-INV-03, PC-INV-05, PC-DASH-04 | TÉCNICO | RESPALDADO |
-| CV-003 | §7 Control / Visibility | Determinadas acciones pueden quedar registradas en bitácora. | PC-SEC-02, PC-SEC-03 | TÉCNICO | RESPALDADO |
-| CV-004 | §7 Control / Visibility | La información presentada refleja su frescura y alcance. | PC-DASH-02 | TÉCNICO | RESPALDADO |
-| CV-005 | §7 Control / Visibility | Los indicadores y términos públicos tienen semántica aprobada. | N/A | MARKETING | MARKETING |
-| RL-001 | §8 Roles | El POS soporta tareas de venta y cobro. | PC-OFF-01, PC-PAY-01, PC-PAY-04 | TÉCNICO | RESPALDADO |
-| RL-002 | §8 Roles | Existen permisos diferenciados para acciones específicas. | PC-SEC-02 | TÉCNICO | RESPALDADO |
-| RL-003 | §8 Roles | Existen superficies de consulta para responsables del negocio. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
-| RL-004 | §8 Roles | Las capacidades mostradas corresponden a los permisos reales. | N/A | MARKETING | MARKETING |
-| GL-001 | §9 Gallery | Las capturas corresponden al producto vigente. | N/A | MARKETING | MARKETING |
-| GL-002 | §9 Gallery | Cada imagen representa el workflow indicado. | N/A | MARKETING | MARKETING |
-| GL-003 | §9 Gallery | Los datos visibles están autorizados y contextualizados. | N/A | MARKETING | MARKETING |
-| GL-004 | §9 Gallery | Los estados y cifras no fueron alterados de forma engañosa. | N/A | MARKETING | MARKETING |
-| IM-001 | §10 Implementation | NHILOS cuenta con un proceso de implementación. | PC-ONB-03 | TÉCNICO | RESPALDADO |
-| IM-002 | §10 Implementation | La implementación contempla preparación y verificación. | PC-ONB-01, PC-ONB-03 | TÉCNICO | RESPALDADO |
-| IM-003 | §10 Implementation | La capacitación forma parte del alcance cuando así se acuerda. | N/A | MARKETING | MARKETING |
-| IM-004 | §10 Implementation | El go-live depende de criterios definidos. | PC-ONB-03 | TÉCNICO | RESPALDADO |
-| IM-005 | §10 Implementation | Los tiempos y entregables publicados reflejan compromisos vigentes. | N/A | MARKETING | MARKETING |
-| HC-001 | §11 Hardware / Compatibility | Tiene combinaciones de hardware soportadas. | PC-HW-01, PC-HW-02, PC-HW-03 | TÉCNICO | RESPALDADO |
-| HC-002 | §11 Hardware / Compatibility | El dispositivo mostrado corresponde a una configuración probada. | N/A | MARKETING | MARKETING |
-| HC-003 | §11 Hardware / Compatibility | Los periféricos indicados funcionan en el escenario descrito. | PC-HW-01, PC-HW-02 | TÉCNICO | RESPALDADO |
-| HC-004 | §11 Hardware / Compatibility | Los requisitos y límites se comunican antes de la implementación. | N/A | MARKETING | MARKETING |
-| SP-001 | §12 Support | Existe un canal/proceso de soporte para clientes cubiertos. | N/A | MARKETING | MARKETING |
-| SP-002 | §12 Support | El cliente puede conocer el alcance del servicio aplicable. | N/A | MARKETING | MARKETING |
-| SP-003 | §12 Support | El proceso contempla seguimiento de incidentes. | N/A | MARKETING | MARKETING |
-| SP-004 | §12 Support | Horarios y compromisos publicados son contractualmente válidos. | N/A | MARKETING | MARKETING |
-| DM-001 | §14 Demo CTA | El visitante puede solicitar una demo. | N/A | MARKETING | MARKETING |
-| DM-002 | §14 Demo CTA | La demo se prepara según el contexto compartido. | N/A | MARKETING | MARKETING |
-| DM-003 | §14 Demo CTA | La información del formulario se trata conforme a la política publicada. | N/A | MARKETING | MARKETING |
-| DM-004 | §14 Demo CTA | Los mensajes de confirmación reflejan el estado real del envío. | N/A | MARKETING | MARKETING |
-| LY-001 | §15 Loyalty & Promotions | Acumulación automática de puntos por venta guardada localmente, offline. | PC-LOY-01 | TÉCNICO | RESPALDADO |
-| LY-002 | §15 Loyalty & Promotions | Canje de puntos como descuento en mostrador con salvaguardas, iniciado por el operador. | PC-LOY-02 | TÉCNICO | RESPALDADO |
-| LY-003 | §15 Loyalty & Promotions | Sincronización idempotente de transacciones de puntos; duplicados no cuentan doble. | PC-LOY-03 | TÉCNICO | RESPALDADO |
-| LY-004 | §15 Loyalty & Promotions | Identificación del cliente por QR, código, teléfono o nombre, totalmente offline. | PC-LOY-04 | TÉCNICO | RESPALDADO |
-| LY-005 | §15 Loyalty & Promotions | Promociones aplicadas de forma automática y determinista en el POS, administradas centralmente. | PC-LOY-05 | TÉCNICO | RESPALDADO |
-| LY-006 | §15 Loyalty & Promotions | Configuración de programas/recompensas, ajuste de puntos con actor y motivo, economía profit-aware. | PC-LOY-06 | TÉCNICO | RESPALDADO |
-| CW-007 | §5 Core Workflows | División de cuenta entre comensales o formas de pago combinadas con cuadre exacto, en modalidades soportadas. | PC-PAY-05 | TÉCNICO | RESPALDADO |
-| CV-006 | §7 Control / Visibility | Órdenes de producción y pre-elaboración batch para sub-recetas registran consumo de insumos base e incremento de stock pre-elaborado. | PC-INV-06 | TÉCNICO | RESPALDADO |
-| IM-006 | §10 Implementation | Importación asistida de catálogos e insumos desde archivos CSV conforme a la plantilla oficial. | PC-ONB-02 | TÉCNICO | RESPALDADO |
-| FI-001 | §16 Cumplimiento Fiscal DGI | Consecutivos fiscales correlativos e inalterables bajo DT 09-2007, con prefijo y folio inicial autorizados por la DGI. | PC-FISC-01 | TÉCNICO | RESPALDADO |
-| FI-002 | §16 Cumplimiento Fiscal DGI | Inmutabilidad de facturas; anulación exclusiva vía Nota de Crédito con autorización de supervisor. | PC-FISC-02 | TÉCNICO | RESPALDADO |
-| FI-003 | §16 Cumplimiento Fiscal DGI | Validación sintáctica de Cédula y RUC nicaragüense, sin consulta en vivo al padrón DGI. | PC-FISC-03 | TÉCNICO | RESPALDADO |
+| PP-001 | [Product Promise](#3-section-01--product-promise) Product Promise | Punto de venta para registrar operaciones comerciales. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
+| PP-002 | [Product Promise](#3-section-01--product-promise) Product Promise | Relaciona el registro de venta con capacidades operativas asociadas. | N/A | MARKETING | MARKETING |
+| PP-003 | [Product Promise](#3-section-01--product-promise) Product Promise | El flujo permite trabajar con claridad. | N/A | MARKETING | MARKETING |
+| PP-004 | [Product Promise](#3-section-01--product-promise) Product Promise | La promesa de continuidad aplica a escenarios soportados, no de forma absoluta. | N/A | MARKETING | MARKETING |
+| PC-001 | [Product in Context](#4-section-02--product-in-context) Product in Context | Contempla escenarios de atención en mostrador. | PC-OFF-01 | TÉCNICO | RESPALDADO |
+| PC-002 | [Product in Context](#4-section-02--product-in-context) Product in Context | Contempla cuentas abiertas o mesas en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
+| PC-003 | [Product in Context](#4-section-02--product-in-context) Product in Context | Las ventas pueden relacionarse con movimientos de inventario configurados. | PC-INV-01, PC-INV-04 | TÉCNICO | RESPALDADO |
+| PC-004 | [Product in Context](#4-section-02--product-in-context) Product in Context | La experiencia mostrada corresponde a la versión vigente. | N/A | MARKETING | MARKETING |
+| CW-001 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | Permite seleccionar productos y construir una cuenta. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
+| CW-002 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | El flujo puede incluir modificadores configurados. | PC-FOH-02 | TÉCNICO | RESPALDADO |
+| CW-003 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | Registra pagos con los métodos disponibles. | PC-PAY-01, PC-PAY-04, PC-PAY-06 | TÉCNICO | RESPALDADO |
+| CW-004 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | El esquema de tarjeta puede requerir confirmación manual posterior al datáfono. | PC-PAY-01 | TÉCNICO | RESPALDADO |
+| CW-005 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | Existen cuentas abiertas/retención en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
+| CW-006 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | Existen superficies de consulta para información operativa. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CT-001 | [Continuity](#6-section-04--continuity) Continuity | Enfoque offline-first en los escenarios definidos. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
+| CT-002 | [Continuity](#6-section-04--continuity) Continuity | Determinadas operaciones pueden continuar localmente durante una desconexión soportada. | PC-OFF-01 | TÉCNICO | RESPALDADO |
+| CT-003 | [Continuity](#6-section-04--continuity) Continuity | Existe sincronización posterior de información pendiente. | PC-OFF-03 | TÉCNICO | RESPALDADO |
+| CT-004 | [Continuity](#6-section-04--continuity) Continuity | El comportamiento depende del escenario soportado. | N/A | MARKETING | MARKETING |
+| CT-005 | [Continuity](#6-section-04--continuity) Continuity | El usuario conoce los límites y estados pendientes relevantes. | PC-FOH-03 | TÉCNICO | RESPALDADO |
+| CV-001 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Registra información de ventas consultable. | PC-OFF-02, PC-DASH-01, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CV-002 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Existen capacidades de inventario y consulta de movimientos. | PC-INV-02, PC-INV-03, PC-INV-05, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CV-003 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Determinadas acciones pueden quedar registradas en bitácora. | PC-SEC-02, PC-SEC-03 | TÉCNICO | RESPALDADO |
+| CV-004 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | La información presentada refleja su frescura y alcance. | PC-DASH-02 | TÉCNICO | RESPALDADO |
+| CV-005 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Los indicadores y términos públicos tienen semántica aprobada. | N/A | MARKETING | MARKETING |
+| RL-001 | [Roles](#8-section-06--roles) Roles | El POS soporta tareas de venta y cobro. | PC-OFF-01, PC-PAY-01, PC-PAY-04 | TÉCNICO | RESPALDADO |
+| RL-002 | [Roles](#8-section-06--roles) Roles | Existen permisos diferenciados para acciones específicas. | PC-SEC-02 | TÉCNICO | RESPALDADO |
+| RL-003 | [Roles](#8-section-06--roles) Roles | Existen superficies de consulta para responsables del negocio. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| RL-004 | [Roles](#8-section-06--roles) Roles | Las capacidades mostradas corresponden a los permisos reales. | N/A | MARKETING | MARKETING |
+| GL-001 | [Gallery](#9-section-07--gallery) Gallery | Las capturas corresponden al producto vigente. | N/A | MARKETING | MARKETING |
+| GL-002 | [Gallery](#9-section-07--gallery) Gallery | Cada imagen representa el workflow indicado. | N/A | MARKETING | MARKETING |
+| GL-003 | [Gallery](#9-section-07--gallery) Gallery | Los datos visibles están autorizados y contextualizados. | N/A | MARKETING | MARKETING |
+| GL-004 | [Gallery](#9-section-07--gallery) Gallery | Los estados y cifras no fueron alterados de forma engañosa. | N/A | MARKETING | MARKETING |
+| IM-001 | [Implementation](#10-section-08--implementation) Implementation | NHILOS cuenta con un proceso de implementación. | PC-ONB-03 | TÉCNICO | RESPALDADO |
+| IM-002 | [Implementation](#10-section-08--implementation) Implementation | La implementación contempla preparación y verificación. | PC-ONB-01, PC-ONB-03 | TÉCNICO | RESPALDADO |
+| IM-003 | [Implementation](#10-section-08--implementation) Implementation | La capacitación forma parte del alcance cuando así se acuerda. | N/A | MARKETING | MARKETING |
+| IM-004 | [Implementation](#10-section-08--implementation) Implementation | El go-live depende de criterios definidos. | PC-ONB-03 | TÉCNICO | RESPALDADO |
+| IM-005 | [Implementation](#10-section-08--implementation) Implementation | Los tiempos y entregables publicados reflejan compromisos vigentes. | N/A | MARKETING | MARKETING |
+| HC-001 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) Hardware / Compatibility | Tiene combinaciones de hardware soportadas. | PC-HW-01, PC-HW-02, PC-HW-03 | TÉCNICO | RESPALDADO |
+| HC-002 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) Hardware / Compatibility | El dispositivo mostrado corresponde a una configuración probada. | N/A | MARKETING | MARKETING |
+| HC-003 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) Hardware / Compatibility | Los periféricos indicados funcionan en el escenario descrito. | PC-HW-01, PC-HW-02 | TÉCNICO | RESPALDADO |
+| HC-004 | [Hardware / Compatibility](#11-section-09--hardware--compatibility) Hardware / Compatibility | Los requisitos y límites se comunican antes de la implementación. | N/A | MARKETING | MARKETING |
+| SP-001 | [Support](#12-section-10--support) Support | Existe un canal/proceso de soporte para clientes cubiertos. | N/A | MARKETING | MARKETING |
+| SP-002 | [Support](#12-section-10--support) Support | El cliente puede conocer el alcance del servicio aplicable. | N/A | MARKETING | MARKETING |
+| SP-003 | [Support](#12-section-10--support) Support | El proceso contempla seguimiento de incidentes. | N/A | MARKETING | MARKETING |
+| SP-004 | [Support](#12-section-10--support) Support | Horarios y compromisos publicados son contractualmente válidos. | N/A | MARKETING | MARKETING |
+| DM-001 | [Demo CTA](#14-section-12--demo-cta) Demo CTA | El visitante puede solicitar una demo. | N/A | MARKETING | MARKETING |
+| DM-002 | [Demo CTA](#14-section-12--demo-cta) Demo CTA | La demo se prepara según el contexto compartido. | N/A | MARKETING | MARKETING |
+| DM-003 | [Demo CTA](#14-section-12--demo-cta) Demo CTA | La información del formulario se trata conforme a la política publicada. | N/A | MARKETING | MARKETING |
+| DM-004 | [Demo CTA](#14-section-12--demo-cta) Demo CTA | Los mensajes de confirmación reflejan el estado real del envío. | N/A | MARKETING | MARKETING |
+| LY-001 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Acumulación automática de puntos por venta guardada localmente, offline. | PC-LOY-01 | TÉCNICO | RESPALDADO |
+| LY-002 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Canje de puntos como descuento en mostrador con salvaguardas, iniciado por el operador. | PC-LOY-02 | TÉCNICO | RESPALDADO |
+| LY-003 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Sincronización idempotente de transacciones de puntos; duplicados no cuentan doble. | PC-LOY-03 | TÉCNICO | RESPALDADO |
+| LY-004 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Identificación del cliente por QR, código, teléfono o nombre, totalmente offline. | PC-LOY-04 | TÉCNICO | RESPALDADO |
+| LY-005 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Promociones aplicadas de forma automática y determinista en el POS, administradas centralmente. | PC-LOY-05 | TÉCNICO | RESPALDADO |
+| LY-006 | [Loyalty & Promotions](#15-section-13--loyalty--promotions) Loyalty & Promotions | Configuración de programas/recompensas, ajuste de puntos con actor y motivo, economía profit-aware. | PC-LOY-06 | TÉCNICO | RESPALDADO |
+| CW-007 | [Core Workflows](#5-section-03--core-workflows) Core Workflows | División de cuenta entre comensales o formas de pago combinadas con cuadre exacto, en modalidades soportadas. | PC-PAY-05 | TÉCNICO | RESPALDADO |
+| CV-006 | [Control / Visibility](#7-section-05--control--visibility) Control / Visibility | Órdenes de producción y pre-elaboración batch para sub-recetas registran consumo de insumos base e incremento de stock pre-elaborado. | PC-INV-06 | TÉCNICO | RESPALDADO |
+| IM-006 | [Implementation](#10-section-08--implementation) Implementation | Importación asistida de catálogos e insumos desde archivos CSV conforme a la plantilla oficial. | PC-ONB-02 | TÉCNICO | RESPALDADO |
+| FI-001 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Consecutivos fiscales correlativos e inalterables bajo DT 09-2007, con prefijo y folio inicial autorizados por la DGI. | PC-FISC-01 | TÉCNICO | RESPALDADO |
+| FI-002 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Inmutabilidad de facturas; anulación exclusiva vía Nota de Crédito con autorización de supervisor. | PC-FISC-02 | TÉCNICO | RESPALDADO |
+| FI-003 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Validación sintáctica de Cédula y RUC nicaragüense, sin consulta en vivo al padrón DGI. | PC-FISC-03 | TÉCNICO | RESPALDADO |
 
 Notas de la matriz:
 

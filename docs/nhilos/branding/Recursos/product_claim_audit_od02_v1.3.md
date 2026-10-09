@@ -3,12 +3,12 @@
 **Documento:** `product_claim_audit_od02_v1.3.md`  
 **Versión:** 1.3 (Reconciliación Normativa + Re-anclaje + Adenda de Lealtad)  
 **Estado:** `CLOSED / VERIFIED / RE-ANCHORED — ANCLAJE PROVISIONAL`
-**Anclaje:** `b4b5ad27` (`origin/main`, 2026-10-08). **Provisional**: existe una línea de trabajo en curso (auditoría P3 de descuentos y promociones e2e) que cambia comportamiento publicado. Los claims en riesgo y la obligación de re-anclaje están listados en `nhilos_branding_document_governance_v1.0.md` §7.  
+**Anclaje:** `b4b5ad27` (`origin/main`, 2026-10-08). **Provisional**: existe una línea de trabajo en curso (auditoría P3 de descuentos y promociones e2e) que cambia comportamiento publicado. Los claims en riesgo y la obligación de re-anclaje están listados en `nhilos_branding_document_governance_v1.0.md` [Estado de anclaje y obligación de re-anclaje](../nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje).  
 **Gate:** OD-02 — Product Claim Inventory  
 **Scope:** NHILOS POS public website  
 **Upstream authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0)  
 **Downstream:** `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
-**Gobernanza de cadena:** según `nhilos_branding_document_governance_v1.0.md` (§3), este documento es la autoridad de claims y el Marketing Brief es downstream de él.  
+**Gobernanza de cadena:** según `nhilos_branding_document_governance_v1.0.md` ([Cadena de autoridad (lineal, sin ciclos)](../nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)), este documento es la autoridad de claims y el Marketing Brief es downstream de él.  
 **Fecha de reconciliación:** 2026-10-08  
 **Reconciliation resolutions:** `OD-02-R01` (Claim count 40 — 34 originales + 6 loyalty `PC-LOY-01..06`), `OD-02-R02` (Fiscal conditioning), `OD-02-R03` (Hardened offline wording); extensión FOH `PC-FOH-01..03` — **Claim count vigente: 43** (34 originales + 6 loyalty + 3 FOH)  
 
@@ -199,9 +199,9 @@ Claims estrictamente **PROHIBIDOS** en la comunicación pública:
 | ❌ *"Red local inalámbrica que conecta meseros y cocina 100% sin internet ni nube"* | El broker mDNS/WebSocket local embebido es el Bloque 18 (no implementado). Los dispositivos sincronizan vía nube (`OD-02-R03`). |
 | ❌ *"Validación en tiempo real contra la base de datos de contribuyentes activos de la DGI"* | No existe API pública de consulta en vivo del padrón de la DGI en Nicaragua; la validación es sintáctica y algorítmica (`OD-02-R02`). |
 | ❌ *"Conexión directa a balanzas electrónicas de peso y escáneres seriales"* | No existe soporte en código para drivers de balanzas o lectores seriales de pesaje continuo. |
-| ❌ *"Suscripciones por niveles, estampitas o visitas: gana puntos según reglas de programa"* | La acumulación es una tasa plana configurada, sin reglas de programa ni sellos (`PC-LOY-01`, §4.1). |
-| ❌ *"Recompensas canjeadas que se descuentan solas del total de la compra"* | El beneficio del catálogo de recompensas no se aplica al carrito; el canje en caja es un descuento iniciado por el operador (`PC-LOY-02`, §4.1). |
-| ❌ *"Saldo de puntos idéntico en tiempo real entre caja y nube"* | Consistencia eventual con deriva de redondeo de hasta 0.5 punto por transacción; sin test de paridad round-trip (`PC-LOY-03`, §4.1). |
+| ❌ *"Suscripciones por niveles, estampitas o visitas: gana puntos según reglas de programa"* | La acumulación es una tasa plana configurada, sin reglas de programa ni sellos (`PC-LOY-01`, [Loyalty — lo que el producto NO hace y por lo tanto no debe prometerse](#41-loyalty--lo-que-el-producto-no-hace-y-por-lo-tanto-no-debe-prometerse)). |
+| ❌ *"Recompensas canjeadas que se descuentan solas del total de la compra"* | El beneficio del catálogo de recompensas no se aplica al carrito; el canje en caja es un descuento iniciado por el operador (`PC-LOY-02`, [Loyalty — lo que el producto NO hace y por lo tanto no debe prometerse](#41-loyalty--lo-que-el-producto-no-hace-y-por-lo-tanto-no-debe-prometerse)). |
+| ❌ *"Saldo de puntos idéntico en tiempo real entre caja y nube"* | Consistencia eventual con deriva de redondeo de hasta 0.5 punto por transacción; sin test de paridad round-trip (`PC-LOY-03`, [Loyalty — lo que el producto NO hace y por lo tanto no debe prometerse](#41-loyalty--lo-que-el-producto-no-hace-y-por-lo-tanto-no-debe-prometerse)). |
 
 ---
 
@@ -245,7 +245,7 @@ Funcionalidades implementadas en código que requieren evidencia visual antes de
 
 # 11. Autoridad Downstream
 
-Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` (§3), este documento versión 1.3 es la **autoridad de claims** del set. Los documentos downstream que consumen sus claims admisibles son:
+Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` ([Cadena de autoridad (lineal, sin ciclos)](../nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)), este documento versión 1.3 es la **autoridad de claims** del set. Los documentos downstream que consumen sus claims admisibles son:
 1. `nhilos_website_product_marketing_brief_v1.0.md`
 2. `nhilos_website_information_architecture_content_wireframe_v1.0.md`
 3. `nhilos_website_homepage_content_v1.1.md`
@@ -262,7 +262,7 @@ Resultado headline: de los 34 claims auditados en el re-anclaje original (el reg
 | R-1 | Re-anclaje del build de procedencia | `7af1521ea077ce8bc1faed1aa7189a6186eac515` (2026-09-26) | `b4b5ad27` (`origin/main`, 2026-10-08) |
 | R-2 | Evidencia muerta de `PC-OFF-03` | `apps/admin_backend/src/modules/inventory/inventory-sync.service.ts` (inexistente) | `apps/admin_backend/src/modules/sales/services/inbound-sync.service.ts` + `apps/admin_backend/src/modules/sales/controllers/sync-batch.controller.ts` |
 | R-3 | Evidencia muerta de `PC-PAY-06` | `apps/admin_backend/src/migrations/1809200000000-AddInvoiceTipColumns.ts` (inexistente) | `apps/admin_backend/src/migrations/1809470000000-AddTipsToInvoices.ts` |
-| R-4 | Versión de esquema local | SQLite Floor v57 | SQLite Floor **v65** (`apps/pos_app/lib/data/database/app_database.dart`, `@Database(version: 65)`); corregido en §3.1, en la celda de evidencia de `PC-OFF-02` y en este registro |
+| R-4 | Versión de esquema local | SQLite Floor v57 | SQLite Floor **v65** (`apps/pos_app/lib/data/database/app_database.dart`, `@Database(version: 65)`); corregido en [Repository Snapshot](#31-repository-snapshot), en la celda de evidencia de `PC-OFF-02` y en este registro |
 
 **Claims con deriva (comportamiento verificado contra `b4b5ad27`):**
 
@@ -278,7 +278,7 @@ Resultado headline: de los 34 claims auditados en el re-anclaje original (el reg
 
 # Índice inverso — Claims publicados que citan cada claim del OD-02
 
-**Propósito.** Trazabilidad inversa exigida por `G-04` (`nhilos_branding_document_governance_v1.0.md`): para cada claim técnico del OD-02, qué Claim IDs de los contratos de contenido publicados lo citan como respaldo. Los contratos son `nhilos_website_homepage_content_v1.1.md` (§17, ids `HM-*`) y `nhilos_pos_product_page_content_v1.1.md` (Anexo A, ids por sección). Los Claim IDs de contenido son IDs de slot, no IDs de capacidad técnica; no existe correspondencia 1:1. Un claim `huérfano` no es defecto por sí solo: si su estado público es `APPROVED_WEBSITE`, la omisión indica un hueco de cobertura del sitio; si es `DO_NOT_CLAIM / FUTUREWARE`, la omisión es la conducta correcta.
+**Propósito.** Trazabilidad inversa exigida por `G-04` (`nhilos_branding_document_governance_v1.0.md`): para cada claim técnico del OD-02, qué Claim IDs de los contratos de contenido publicados lo citan como respaldo. Los contratos son `nhilos_website_homepage_content_v1.1.md` ([Cross-Section Claim Register](../nhilos_website_homepage_content_v1.1.md#17-cross-section-claim-register), ids `HM-*`) y `nhilos_pos_product_page_content_v1.1.md` (Anexo A, ids por sección). Los Claim IDs de contenido son IDs de slot, no IDs de capacidad técnica; no existe correspondencia 1:1. Un claim `huérfano` no es defecto por sí solo: si su estado público es `APPROVED_WEBSITE`, la omisión indica un hueco de cobertura del sitio; si es `DO_NOT_CLAIM / FUTUREWARE`, la omisión es la conducta correcta.
 
 | OD-02 ID | Homepage (`HM-*`) | Página de producto | Estado |
 |---|---|---|---|

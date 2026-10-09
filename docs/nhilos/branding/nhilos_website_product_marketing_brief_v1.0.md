@@ -4,9 +4,9 @@
 **Versión:** 1.0 (Autorizado para Producción)  
 **Estado:** `APPROVED / READY FOR WEBSITE IA PROMOTION & COPYWRITING`  
 **Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`
-**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara y comienza por la operación del propio prospecto (ver Regla de Oro y Sección 5.1).  
+**NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` [NHILOS +1](../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)): la demo se prepara y comienza por la operación del propio prospecto (ver Regla de Oro y Sección 5.1).  
   
-**Downstream Gate:** `nhilos_website_information_architecture_content_wireframe_v1.0.md` — dueño de la navegación y las rutas; consume los mensajes de este Brief (ver `nhilos_branding_document_governance_v1.0.md` §6)  
+**Downstream Gate:** `nhilos_website_information_architecture_content_wireframe_v1.0.md` — dueño de la navegación y las rutas; consume los mensajes de este Brief (ver `nhilos_branding_document_governance_v1.0.md` [Control de cambios](nhilos_branding_document_governance_v1.0.md#6-control-de-cambios))  
 **Audiencia:** Product Marketing, Copywriters, UI/UX Designers, Frontend Engineers  
 **Mercado objetivo principal:** Nicaragua (Gastronomía, Cafeterías, Food Parks, Bares y Retail de alta rotación)  
 **Fecha:** 2026-09-26  
@@ -75,10 +75,10 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
 | *"Integración electrónica automática con datáfonos BAC/Banpro por cable o software"* | No existe API electrónica con terminales bancarias en Nicaragua; el flujo es manual desacoplado con captura de código. | *“Registro rápido y conciliación de vouchers de tarjetas de crédito y débito de todos los bancos nacionales (BAC, Banpro).”* |
 | *"Red inalámbrica multi-mesero que se comunica sin internet ni servidor"* | El broker LAN peer-to-peer sin nube (Bloque 18) está en roadmap. Los pedidos multi-terminal sincronizan vía nube (`OD-02-R03`). | *“Terminales autónomos y ágiles diseñados para alta rotación y sincronización en la nube.”* |
 | *"Conexión directa a balanzas de pesaje continuo"* | No hay drivers de balanza serial implementados en el código auditado. | Enfocar en unidades, porciones y recetas estandarizadas. |
-| *"Tus clientes ganan puntos según reglas de programa, estampitas o niveles"* | La tasa de acumulación es plana; no existen reglas de programa, sellos, expiración ni tiers (`PC-LOY-01`, blocklist §4.1 de OD-02). | *"Acumulación simple y transparente en cada venta, sin tarjetas plásticas."* |
+| *"Tus clientes ganan puntos según reglas de programa, estampitas o niveles"* | La tasa de acumulación es plana; no existen reglas de programa, sellos, expiración ni tiers (`PC-LOY-01`, blocklist [Definición](../nhilos_brand_experience_principles_v1.0.md#41-definición) de OD-02). | *"Acumulación simple y transparente en cada venta, sin tarjetas plásticas."* |
 | *"Recompensas canjeadas que se descuentan solas del total"* | El beneficio del catálogo de recompensas no se aplica al carrito en el POS; el canje es un descuento iniciado por el operador (`PC-LOY-02`). | *"Canje de puntos como descuento en caja, con mínimo, validación de saldo y tope al total de la orden."* |
 | *"Saldo de puntos idéntico en tiempo real entre caja y nube"* | Consistencia eventual; deriva de redondeo de hasta 0.5 punto por transacción y sin test de paridad round-trip (`PC-LOY-03`). | *"Sincronización idempotente de puntos: los duplicados no cuentan doble."* |
-| *"Campañas de lealtad, portal del consumidor, dashboards de KPIs de loyalty o expiración de puntos"* | No existen en código: ni campañas, ni portal, ni KPIs de loyalty, ni expiración, ni acumulación automática en la nube desde tickets (§4.1 de OD-02). | Configuración de programas, recompensas y ajustes con actor y motivo desde el Owner Dashboard (`PC-LOY-06`). |
+| *"Campañas de lealtad, portal del consumidor, dashboards de KPIs de loyalty o expiración de puntos"* | No existen en código: ni campañas, ni portal, ni KPIs de loyalty, ni expiración, ni acumulación automática en la nube desde tickets ([Definición](../nhilos_brand_experience_principles_v1.0.md#41-definición) de OD-02). | Configuración de programas, recompensas y ajustes con actor y motivo desde el Owner Dashboard (`PC-LOY-06`). |
 
 ---
 
@@ -103,7 +103,7 @@ Para proteger la credibilidad de la marca y cumplir el registro de bloqueos **D5
 **Regla de enrutamiento (`G-02` / `N-03`):** Este Brief asigna **mensajes por capacidad**, no rutas.
 Ninguna sección de este documento prescribe rutas, sitemap ni navegación de primer nivel: toda
 decisión de rutas y navegación pertenece a `nhilos_website_information_architecture_content_wireframe_v1.0.md`
-(paso 4 de la cadena, dueño de la navegación según `nhilos_branding_document_governance_v1.0.md` §6).
+(paso 4 de la cadena, dueño de la navegación según `nhilos_branding_document_governance_v1.0.md` [Control de cambios](nhilos_branding_document_governance_v1.0.md#6-control-de-cambios)).
 Las capacidades de esta sección se argumentan como bloques de contenido dentro de las páginas
 profundas que la IA defina; ninguna es un destino de navegación de primer nivel.
 
