@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,7 @@ import { CatalogPage } from "@/features/catalog/catalog-page";
 import {
   useCatalogValues,
   useCreateCatalogValue,
+  useUpdateCatalogValue,
 } from "@/features/catalog/use-catalog";
 import type { CatalogValue } from "@/features/catalog/types";
 
@@ -337,6 +338,192 @@ describe("W5 — CatalogPage create dialog", () => {
       expect(screen.queryByText("Nuevo Valor")).not.toBeInTheDocument();
     });
     expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("W5 — CatalogPage create dialog validation (app-owned schema)", () => {
+  const CODE_INPUT = "Ej: kg, LACTEOS";
+  const NAME_INPUT = "Ej: Kilogramo, Lácteos";
+
+  function mockCreate(mutateAsync: ReturnType<typeof vi.fn>) {
+    vi.mocked(useCreateCatalogValue).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as any);
+  }
+
+  async function openCreateDialog(
+    user: ReturnType<typeof userEvent.setup>,
+  ) {
+    await user.click(screen.getByText("+ Nuevo Valor"));
+    expect(screen.getByText("Nuevo Valor")).toBeInTheDocument();
+  }
+
+  it("submitting with empty name shows the app's Spanish message and never calls the API", async () => {
+    const mockMutateAsync = vi.fn();
+    mockCreate(mockMutateAsync);
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await openCreateDialog(user);
+    await user.type(screen.getByPlaceholderText(CODE_INPUT), "kg");
+    await user.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(
+      await screen.findByText("El nombre es obligatorio"),
+    ).toBeInTheDocument();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("empty code shows the Spanish required message and never calls the API", async () => {
+    const mockMutateAsync = vi.fn();
+    mockCreate(mockMutateAsync);
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await openCreateDialog(user);
+    await user.type(screen.getByPlaceholderText(NAME_INPUT), "Kilogramo");
+    await user.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(
+      await screen.findByText("El código es obligatorio"),
+    ).toBeInTheDocument();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("code with an illegal character shows the Spanish charset message and never calls the API", async () => {
+    const mockMutateAsync = vi.fn();
+    mockCreate(mockMutateAsync);
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await openCreateDialog(user);
+    await user.type(screen.getByPlaceholderText(CODE_INPUT), "a b");
+    await user.type(screen.getByPlaceholderText(NAME_INPUT), "Kilogramo");
+    await user.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(
+      await screen.findByText(
+        "El código solo admite letras, números, guiones y guiones bajos",
+      ),
+    ).toBeInTheDocument();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("code longer than 64 characters shows the Spanish length message and never calls the API", async () => {
+    const mockMutateAsync = vi.fn();
+    mockCreate(mockMutateAsync);
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await openCreateDialog(user);
+    await user.type(screen.getByPlaceholderText(CODE_INPUT), "a".repeat(65));
+    await user.type(screen.getByPlaceholderText(NAME_INPUT), "Kilogramo");
+    await user.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(
+      await screen.findByText("El código no debe exceder 64 caracteres"),
+    ).toBeInTheDocument();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("name longer than 120 characters shows the Spanish length message and never calls the API", async () => {
+    const mockMutateAsync = vi.fn();
+    mockCreate(mockMutateAsync);
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await openCreateDialog(user);
+    await user.type(screen.getByPlaceholderText(CODE_INPUT), "kg");
+    await user.type(screen.getByPlaceholderText(NAME_INPUT), "a".repeat(121));
+    await user.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(
+      await screen.findByText("El nombre no debe exceder 120 caracteres"),
+    ).toBeInTheDocument();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("negative sortOrder shows the Spanish minimum message and never calls the API", async () => {
+    const mockMutateAsync = vi.fn();
+    mockCreate(mockMutateAsync);
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await openCreateDialog(user);
+    await user.type(screen.getByPlaceholderText(CODE_INPUT), "kg");
+    await user.type(screen.getByPlaceholderText(NAME_INPUT), "Kilogramo");
+    fireEvent.change(screen.getByRole("spinbutton"), {
+      target: { value: "-1" },
+    });
+    await user.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    expect(
+      await screen.findByText("El orden debe ser mayor o igual a 0"),
+    ).toBeInTheDocument();
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("sortOrder 0 remains VALID and submits the create payload unchanged", async () => {
+    const mockMutateAsync = vi.fn().mockResolvedValue({});
+    mockCreate(mockMutateAsync);
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await openCreateDialog(user);
+    await user.type(screen.getByPlaceholderText(CODE_INPUT), "kg");
+    await user.type(screen.getByPlaceholderText(NAME_INPUT), "Kilogramo");
+    // sortOrder keeps its seeded default of 0 — a legal value today.
+    await user.click(screen.getByRole("button", { name: /^crear$/i }));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(mockMutateAsync).toHaveBeenCalledWith({
+      code: "kg",
+      name: "Kilogramo",
+      sort_order: 0,
+    });
+  });
+});
+
+describe("W5 — CatalogPage edit dialog", () => {
+  it("prefills values, has no code field, and submits name + sort_order only", async () => {
+    const mockUpdate = vi.fn().mockResolvedValue({});
+    vi.mocked(useCatalogValues).mockReturnValue({
+      data: MOCK_UOM_VALUES,
+      isLoading: false,
+      error: null,
+    } as any);
+    vi.mocked(useUpdateCatalogValue).mockReturnValue({
+      mutateAsync: mockUpdate,
+      isPending: false,
+    } as any);
+    const user = userEvent.setup();
+    render(<CatalogPage />, { wrapper: TestWrapper });
+
+    await user.click(screen.getAllByText("Editar")[0]!);
+    expect(screen.getByText("Editar Valor")).toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("Ej: kg, LACTEOS"),
+    ).not.toBeInTheDocument();
+
+    const nameInput = screen.getByPlaceholderText(
+      "Ej: Kilogramo, Lácteos",
+    ) as HTMLInputElement;
+    expect(nameInput.value).toBe("Kilogramo");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Kilo");
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+    });
+    expect(mockUpdate).toHaveBeenCalledWith({
+      id: "u1",
+      input: { name: "Kilo", sort_order: 0 },
+    });
   });
 });
 

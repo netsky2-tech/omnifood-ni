@@ -666,3 +666,20 @@ después:...,"Descuento (NIO)","Descuento Manual (NIO)","Descuento Promoción (N
 **Corte en tres unidades:** **A** catalog (la más chica, fija el patrón), **B** product (requeridos condicionales + el camino de cambio de tipo + 5 archivos de test), **C** el par de lealtad (mecánicamente idénticos entre sí → una sola unidad de revisión).
 
 **Hallazgos diferidos, no arreglados:** (a) el **quinto** formulario de lealtad (`customer-loyalty-profile.tsx:75`) que el handoff no nombra — sólo `type=number` nativo y ya tiene guardas JS; (b) el grupo con guardas JS ad-hoc (suppliers/insumos/purchases/RecipeForm) **no se rompe** con `noValidate` porque su guarda es JS, pero sus atributos nativos (`RecipeForm` hasta `max={99.99}`, `suppliers-tab.tsx:496` `required`) necesitan paridad de esquema **antes** de agregarlo; (c) los tres que ya usan RHF+zod necesitan sólo `noValidate` — cambio de una línea cada uno, merece su unidad chica.
+
+### Unidad A · Catalog (valor) — CERRADO
+
+El diálogo tiene esquema propio (`catalogValueFormSchema(isEdit)` en `features/catalog/types.ts`, mensajes literales en español por campo), RHF + `zodResolver`, `noValidate` con el comentario que explica **por qué**, y errores en línea con `aria-invalid` + el `<p className="text-xs text-destructive">` del ejemplar fiscal. Los atributos nativos (`required`/`pattern`/`maxLength`/`min`) se **retiraron**: inertes bajo `noValidate`, y dejarlos habría permitido que una futura remoción del atributo reviviera una guarda silenciosa del navegador.
+
+**Fidelidad al atributo, no endurecimiento.** El esquema cubre exactamente lo que la guarda nativa cubría: `name` se valida **sin** `.trim()` porque `required` sólo bloqueaba la cadena vacía (un nombre de sólo espacios era válido y sigue siéndolo), `code` se valida en crudo porque el `pattern` nativo rechazaba espacios, y `sortOrder = 0` (y el campo vaciado, que el `Number("")` vuelve 0) siguen siendo legales.
+
+**Dos consecuencias de UX que se reportaron en vez de esconderse:** el `maxLength` nativo **truncaba** el tipeo en silencio; ahora el operador puede pasarse y recibe un mensaje visible en español (es lo que vuelve observable el test de >64/>120). Y una entrada numérica inválida pegada (`badInput`) que antes el navegador bloqueaba ahora normaliza a 0 igual que un campo vaciado.
+
+**Mutaciones propias, todas restauradas byte-idénticas:**
+| Mutación | Resultado | Garantía anclada |
+|---|---|---|
+| Quitar `name` requerido del esquema | `submitting with empty name shows the app's Spanish message and never calls the API` | La app es dueña del feedback, no el navegador |
+| **Endurecer** `sortOrder` a min 1 | **3** tests: la trampa de regresión (`sortOrder 0 remains VALID...`), el doble submit previo y el modo edición | El esquema no inventa restricciones |
+| Quitar el patrón del código | `code with an illegal character shows the Spanish charset message...` | Cada atributo nativo tiene su regla |
+
+**Evidencia:** RED citado antes de tocar producción (`jsdom` bloquea el submit y el mensaje español no aparece), GREEN 34/34 en las dos suites del catálogo, `tsc --noEmit` sin issues, y paridad de payload create/edición (en edición el `code` no se renderiza ni se envía, y el esquema lo relaja para que nunca rechace una edición legítima).
