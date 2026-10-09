@@ -120,10 +120,10 @@ crear claims, y la copia pública no debe afirmar anchuras sin fila de respaldo.
 
 ### Sobre el estado de la propiedad del nombre
 
-No existe registro de búsqueda de antecedentes marcarios ni de reserva del nombre. **Se recomienda
-hacerla antes de invertir en la construcción final del mark.** El costo de una búsqueda es
-irrisorio al lado del costo de un rebranding con clientes activos. No bloquea la exploración
-conceptual; sí bloquea la producción de piezas finales y el registro de activos.
+**Estado: la búsqueda de antecedentes marcarios está EN CURSO** (el cliente la ejecuta, 2026-10-08).
+No existe todavía reserva del nombre. La búsqueda **no bloquea la exploración conceptual**; sí es
+requisito antes de producir piezas finales y de registrar activos. El costo de una búsqueda es
+irrisorio al lado del costo de un rebranding con clientes activos.
 
 ---
 
@@ -305,14 +305,15 @@ solo para POS; el sistema debe expresarlos como marca madre y derivar POS como p
 
 ## 10. Decisiones que el cliente debe tomar antes de que empiece la producción
 
-1. **Búsqueda de antecedentes marcarios** del nombre `NHILOS` (recomendada antes de las piezas
-   finales).
+1. **Búsqueda de antecedentes marcarios** del nombre `NHILOS` — **EN CURSO** (el cliente la ejecuta,
+   2026-10-08). Sigue siendo requisito antes de producir piezas finales y registrar activos.
 2. **Soportes prioritarios:** ¿la identidad se diseña pensando primero en web, en producto o en
    venta presencial? Cambia la jerarquía de decisiones.
 3. **Alcance del sistema hoy:** ¿se diseña para el ecosistema futuro (`Conta`, `ERP`) o se
    documenta solo la extensibilidad?
-4. **Fotografía:** ¿se produce fotografía propia de negocio real desde ahora, o la fase 1 usa solo
-   producto y tipografía? [Fotografía de NHILOS POS](../../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos) pide negocio real; producirla toma tiempo y presupuesto.
+4. ~~Fotografía~~ — **RESUELTA (2026-10-08): diferida.** La fase 1 usa producto, tipografía y las
+   capturas del POS. Primero se asientan las bases; la producción fotográfica de negocio real
+   ([Fotografía de NHILOS POS](../../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos)) llega después, cuando el negocio esté operando.
 5. **Idioma del sistema:** la marca se comunica en español de Nicaragua (`es-NI`). ¿La documentación
    del sistema se entrega en español, en inglés o en ambos?
 

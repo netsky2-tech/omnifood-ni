@@ -94,7 +94,7 @@ Identificar la marca maestra y ofrecer una navegación contenida con un único C
 
 **Primary navigation (per wireframe, `APPROVED_WEBSITE`)**
 
-> Producto · Cómo funciona · Implementación · Recursos · Nosotros
+> Producto · Implementación · Recursos · Nosotros
 
 **Primary CTA**
 
@@ -308,7 +308,7 @@ Permitir que distintos visitantes reconozcan su contexto operativo desde trabajo
 > Rapidez y claridad en cada venta, incluso en la fila de la hora pico.  
 > [Ver operación]
 
-### Quien gestiona
+### Quien supervisa
 
 > Control y contexto: recetas, inventario y anulaciones supervisadas.  
 > [Ver capacidades]
@@ -406,7 +406,7 @@ CONECTIVIDAD RESTAURADA
 - Límites declarados (G-06): `works_when` terminal enrolado con catálogo local hidratado en SQLite; `does_not_work_when` enrolamiento inicial, primera descarga de catálogo/precios, cambios de usuarios y consolidación al dashboard central (LIM-01). El copy del bloque debe conservar la frase condicional del terminal enrolado e hidratado.
 - Prohibido: cualquier claim absoluto de continuidad (“funciona sin internet en cualquier situación”, promesas de cero pérdida de datos, sincronización garantizada) — H06 Avoid del wireframe y blocklist D5.
 - No confundir operación local con operación multi-dispositivo: la red multi-terminal sin internet es futureware (PC-OFF-05) y no se menciona.
-- La matriz completa de escenarios y topologías se desarrolla en la página de producto; este bloque introduce y enlaza.
+- La página de producto desarrolla los escenarios soportados y sus límites; este bloque introduce y enlaza, y no los anticipa. La matriz de escenarios está pendiente de validación contra el build vigente.
 
 ---
 
@@ -482,8 +482,8 @@ Reducir la ansiedad de adoptar software: mostrar que existe un proceso preparado
 **FLOW**
 
 ```text
-01 Entender la operación → 02 Preparar catálogo → 03 Configurar
-→ 04 Probar → 05 Capacitar → 06 Verificar → 07 Go-live
+Secuencia completa en la página de producto (sección Implementation).
+Este bloque la resume y no la fija.
 ```
 
 **CTA**
@@ -570,7 +570,7 @@ Mostrar que la experiencia continúa después de la compra, sin promesas inventa
 
 **LINKS**
 
-> Ayuda · Contacto · FAQ
+> Ayuda · FAQ
 
 **Status:** `PROPOSED / EVIDENCE_REQUIRED`
 
@@ -769,7 +769,7 @@ La homepage es la página de mayor carga media del sitio. Los siguientes umbrale
 | CLS (NF-04) | `< 0.1` | Ningún bloque del hero o de workflows “salta” al cargar media. |
 | Peso inicial (NF-05) | `< 2.5 MB` comprimido | Presupuesto que gobierna cuánta media carga el primer viewport. |
 | Imágenes (NF-06) | `WebP`/`AVIF` con fallback JPG/PNG; `srcset` por viewport; `loading="lazy"` fuera del viewport inicial | Aplica a todas las capturas de H04, H07 y H09. |
-| Video demo (spec [Decision classes](#12-decision-classes)) | autoplay `muted` sin controles; pausa fuera de viewport (`IntersectionObserver`); `preload="none"`/`metadata` si no está en la primera sección | Aplica a videos de workflow en H02/H04. |
+| Video demo ([Presupuestos de Medios](nhilos_website_non_functional_spec_v1.0.md#12-presupuestos-de-medios-page-weight-budgets)) | autoplay `muted` sin controles; pausa fuera de viewport (`IntersectionObserver`); `preload="none"`/`metadata` si no está en la primera sección | Aplica a videos de workflow en H02/H04. |
 | Movimiento reducido (NF-10) | `prefers-reduced-motion` cancela reveals y transiciones | Aplica a toda la homepage. |
 
 **Regla editorial derivada:** si un bloque no puede sostenerse con media dentro del presupuesto de página, el bloque se simplifica; el presupuesto no se negocia con decoración.
@@ -898,7 +898,7 @@ Los ítems `[x]` corresponden a cierre editorial/estructural de este contrato; l
 | OD-HM-02 | Copy definitivo del hero y de la línea de credenciales. | `PROPOSED` | Marketing | Derivado del Brief [Homepage](nhilos_website_product_marketing_brief_v1.0.md#51-homepage); requiere validación editorial. |
 | OD-HM-03 | Media del build vigente con provenance para H02/H04/H07. | `EVIDENCE_REQUIRED` | Content / Product | Depende del inventario de medios (Gate D, OD-IA-07). |
 | OD-HM-04 | Operación de demo (owner, canal, SLA, flujo). | `EVIDENCE_REQUIRED / OPEN` | Commercial / Web | OD-IA-03 del wireframe; bloquea la experiencia posterior al CTA. |
-| OD-HM-05 | Actualización del índice inverso del OD-02 con las nuevas citas `HM-*`. | `OPEN` | Claims owner | El índice inverso del OD-02 referencia solo la página de producto; debe extenderse a este documento en su próxima revisión (G-02: se escala, no se edita aquí unilateralmente). |
+| OD-HM-05 | Actualización del índice inverso del OD-02 con las nuevas citas `HM-*`. | `CLOSED` | Claims owner | **Resuelto:** el índice inverso del OD-02 ya lista las citas `HM-*` de este contrato y las del contrato de producto. |
 | OD-HM-06 | Legal del footer (privacidad / términos). | `EVIDENCE_REQUIRED` | Legal | OD-IA-13 del wireframe. |
 
 ---

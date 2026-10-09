@@ -130,7 +130,7 @@ Presentar el producto con una promesa clara y acotada: un punto de venta que aco
 
 **Secondary CTA**
 
-> Explorar cómo funciona
+> Ver cómo funciona
 
 **Status:** `PROPOSED / EVIDENCE_REQUIRED`
 
@@ -345,7 +345,7 @@ El pedido aún no está listo para cobrarse o debe permanecer abierto durante el
 
 **Comportamiento**
 
-En modalidades soportadas, el equipo guarda la cuenta en espera y la recupera desde una terminal autorizada conforme a las reglas de concurrencia disponibles.
+En modalidades soportadas, el equipo guarda la cuenta en espera y la recupera desde la misma terminal conforme a las reglas de concurrencia disponibles.
 
 **Efecto**
 
@@ -420,7 +420,7 @@ Explicar la continuidad operativa como una capacidad condicionada por topología
 ## Situation → Behavior → Effect
 
 - **Situación:** el negocio pierde temporalmente la conexión a internet.  
-- **Comportamiento:** según la topología y las capacidades habilitadas, el POS puede continuar determinadas tareas localmente y mantener transacciones pendientes de sincronización.  
+- **Comportamiento:** en un terminal enrolado y con su catálogo local hidratado, continúan localmente la venta, el cobro, la emisión de ticket y la deducción de insumos por receta; la autenticación por PIN opera sin red y el terminal muestra su estado de conexión y sus documentos pendientes. El resto de las tareas depende de la topología y de las capacidades habilitadas, y el POS puede continuar determinadas tareas localmente y mantener transacciones pendientes de sincronización.  
 - **Efecto:** el equipo puede conservar parte del flujo operativo y posteriormente sincronizar la información, sujeto a los límites del escenario.
 
 ## Required explanation
@@ -1258,7 +1258,7 @@ No publicar sin evidencia adicional, ni insinuar:
 
 # 16\. Section 14 — Cumplimiento Fiscal DGI (DT 09-2007)
 
-> **Nota de trazabilidad:** sección añadida como extensión posterior a la v1.1 aprobada, siguiendo el patrón de la Section 13. Los claims de esta sección citan el bloque fiscal del OD-02 (`PC-FISC-01..03`), registrado en el OD-02 antes de ser citado aquí (orden de gobernanza `G-04`). La homepage difiere estas capacidades a esta página (decisión abierta `OD-HM-01` de `nhilos_website_homepage_content_v1.1.md`): la homepage introduce, esta página resuelve.
+> **Nota de trazabilidad:** sección añadida como extensión posterior a la v1.1 aprobada, siguiendo el patrón de la Section 13. Los claims de esta sección citan el bloque fiscal del OD-02 (`PC-FISC-01..03`), registrado en el OD-02 antes de ser citado aquí (orden de gobernanza `G-04`). La homepage difiere estas capacidades a esta página (decisión `OD-HM-01`, `CLOSED`, de `nhilos_website_homepage_content_v1.1.md`): la homepage introduce, esta página resuelve.
 
 ## Purpose
 
@@ -1409,6 +1409,12 @@ Confirmar:
 - términos consistentes;  
 - comportamiento responsive y accesible.
 
+**Gates no funcionales heredados (`NF-01`..`NF-13`).** Esta página se cierra contra los mismos
+umbrales que la homepage, definidos en `nhilos_website_non_functional_spec_v1.0.md`: WCAG 2.1 AA,
+LCP `< 2.5 s`, INP `< 200 ms`, CLS `< 0.1`, peso inicial `< 2.5 MB`, formatos modernos de imagen con
+`loading="lazy"`, áreas táctiles de `44x44 CSS px`, contraste `4.5:1` / `3:1`, movimiento reducido,
+consentimiento antes de terceros, 404 útil y fiabilidad del formulario de demo.
+
 **Publication status:** `BLOCKED UNTIL REQUIRED CLAIMS AND GATES ARE APPROVED`.
 
 ---
@@ -1457,9 +1463,9 @@ Las siguientes decisiones deben cerrarse antes de la publicación. La tabla regi
 | OD-PP-07 | Aprobar proceso y entregables de implementación. | `CLOSED` | Operations / Commercial | OP-01 + OP-07 + CD-07/08/09/10 + NH-SO-0001 [Product in Context](#4-section-02--product-in-context)/[Continuity](#6-section-04--continuity) + readiness [Demo CTA](#14-section-12--demo-cta). | Playbook operativo completo y trazable desde provisioning hasta go-live; alcance comunicable definido. |
 | OD-PP-08 | Publicar matriz de compatibilidad. | `PARTIALLY RESOLVED` | Engineering | NH-CHK-HW-001; checklist Q80. | Perfil verificado: MIRAY Q80 / iPOS Android 12 / impresora 80mm. Hardware multi-modelo prohibido sin checklist; falta decidir amplitud de la matriz pública. |
 | OD-PP-09 | Definir soporte público general. | `CLOSED WITH CONDITION` | Operations / Commercial | NH-POL-SUP-001 (CLIENT-READY). | Objetivos no-SLA, canales WhatsApp + soporte@nhilospos.com, cobertura L–S 8:00–20:00 Managua. Condición de publicación: unificar canales de contacto según DR-0. |
-| OD-PP-10 | Definir recepción y seguimiento de demos. | `OPEN` | Commercial / Web | Flujo y requerimientos de recepción de demos formalizados. | Pendiente asignación del receptor web/comercial responsable del seguimiento de demos. |
+| OD-PP-10 | Definir recepción y seguimiento de demos. | `CLOSED` | Commercial / Web | Flujo y requerimientos de recepción de demos formalizados. | **Resuelto (2026-10-08):** las demos las ejecuta el fundador; el seguimiento es directo, no delegado. Además ya hay una persona con la app instalada para pruebas reales en campo. |
 | OD-PP-11 | Aprobar privacidad y tratamiento del formulario. | `PARTIALLY RESOLVED` | Legal / Engineering | NH-POL-DAT-001 (CLIENT-READY, datos de cliente). | Aviso de datos de cliente aprobado. Requerida adenda de privacidad específica para el formulario de contacto antes de publicar. |
-| OD-PP-12 | Validar consistencia final con homepage v1.1. | `OPEN` | Content / Product | Contraste condicionado a disponibilidad del documento upstream. | Gate E bloqueado hasta que el documento homepage v1.1 esté disponible para revisión cruzada y cierre editorial. |
+| OD-PP-12 | Validar consistencia final con homepage v1.1. | `CLOSED` | Content / Product | Contraste condicionado a disponibilidad del documento upstream. | **Ejecutado (2026-10-08):** contraste cruzado corrido y documentado entre los dos contratos de contenido; contradicciones encontradas y corregidas; sin pendientes de consistencia. |
 
 &nbsp;
 
@@ -1478,7 +1484,7 @@ La página puede pasar a diseño/implementación cuando:
 - [ ] cada captura corresponde a una versión identificada — pendiente capturas finales post-remediación y aprobación del media register (OD-PP-06, Gate D);  
 - [x] implementación, hardware y soporte no generan compromisos no aprobados — copy restringido al playbook cerrado (OD-PP-07), al perfil Q80 verificado (OD-PP-08) y a NH-POL-SUP-001;  
 - [x] las FAQs responden preguntas reales y no contradicen el copy principal;  
-- [ ] la demo tiene un flujo funcional y responsable de seguimiento — flujo definido, receptor web/comercial sin asignar (OD-PP-10);  
+- [x] la demo tiene un flujo funcional y responsable de seguimiento — **resuelto:** el fundador ejecuta las demos y el seguimiento es directo (OD-PP-10 `CLOSED`);  
 - [ ] privacidad y accesibilidad han sido revisadas — aviso de datos de cliente CLIENT-READY; falta adenda de privacidad del formulario y revisión final de accesibilidad (OD-PP-11, Gate C/E);  
 - [ ] se completaron los publication gates aplicables — estado actual de Gates A–E en [Residual publication blockers](#233-residual-publication-blockers);  
 - [x] existe un registro de claims con responsables y fecha de aprobación — el registro y sus campos obligatorios están definidos; las entradas quedan sujetas a la verificación de claims.
@@ -1548,7 +1554,7 @@ Los siguientes elementos permanecen abiertos y no deben interpretarse como defec
 | `CLOSED` | OD-PP-04 (vistas y frescura del dashboard, NH-MAN-DSH-001 [Product Page Job](#2-product-page-job)–[Gallery](#9-section-07--gallery)); OD-PP-07 (playbook de implementación, OP-01 + OP-07 + CD-07/08/09/10 + NH-SO-0001 [Product in Context](#4-section-02--product-in-context)/[Continuity](#6-section-04--continuity) + readiness [Demo CTA](#14-section-12--demo-cta)). |
 | `CLOSED WITH CONDITION` | OD-PP-09 (soporte público según NH-POL-SUP-001; condición de publicación: unificación de canales de contacto DR-0). |
 | `PARTIALLY RESOLVED` | OD-PP-01 (scope congelado, build anclado `b4b5ad27`); OD-PP-02 (workflows evidenciados, capturas sujetas a remediación PX); OD-PP-03 (topología single-terminal Q80; multi-device excluido); OD-PP-05 (3 roles publicados; cuarto rol de CD-15 excluido del alcance público SOHO retail-food); OD-PP-06 (17 capturas ADB con provenance; media register pendiente); OD-PP-08 (perfil Q80/iPOS Android 12 80mm verificado); OD-PP-11 (aviso de datos CLIENT-READY; adenda de privacidad del formulario requerida). |
-| `OPEN` | OD-PP-10 (receptor web/comercial de demos sin asignar); OD-PP-12 / Gate E (documento homepage v1.1 upstream pendiente). |
+| `—` | Ninguna decisión OD-PP queda `OPEN`. OD-PP-10 y OD-PP-12 cerraron el 2026-10-08. |
 
 ### Estado de los publication gates
 
@@ -1558,7 +1564,7 @@ Los siguientes elementos permanecen abiertos y no deben interpretarse como defec
 | Gate B — Operational truth | `CONDITIONALLY ADVANCED` | Topología, implementación y go-live con playbook cerrado (OD-PP-07); soporte cerrado con condición (OD-PP-09: unificación de canales DR-0). |
 | Gate C — Commercial and legal truth | `CONDITIONALLY ADVANCED` | Privacidad de datos de cliente CLIENT-READY (NH-POL-DAT-001); falta adenda de privacidad del formulario de contacto (OD-PP-11). |
 | Gate D — Evidence and media | `BLOCKED` | Capturas con provenance existentes, pero media register sin aprobar y capturas finales post-remediación sin ejecutar (OD-PP-06). |
-| Gate E — Website consistency | `BLOCKED` | Contraste contra homepage v1.1 condicionado a la disponibilidad del documento upstream (OD-PP-12); revisión final de responsive y accesibilidad pendiente. |
+| Gate E — Website consistency | `PASSED` | Contraste cruzado ejecutado el 2026-10-08 contra `nhilos_website_homepage_content_v1.1.md`; contradicciones corregidas (OD-PP-12 `CLOSED`); revisión final de responsive y accesibilidad pendiente. |
 
 ### Prerrequisito de verificación de claims
 
@@ -1571,7 +1577,7 @@ La autoridad de publicación permanece `NOT GRANTED`. La página solo puede pasa
 1. las condiciones de OD-PP-09 (unificación de canales DR-0) y OD-PP-11 (adenda de privacidad del formulario) estén cerradas;  
 2. el media register esté aprobado con capturas post-remediación (OD-PP-06, Gate D);  
 3. el receptor de demos esté asignado (OD-PP-10);  
-4. el contraste contra homepage v1.1 esté ejecutado y documentado (OD-PP-12, Gate E);  
+4. el contraste contra homepage v1.1 esté ejecutado y documentado (OD-PP-12, Gate E) — **cumplido el 2026-10-08**;  
 5. la verificación de claims del registro esté completa; y  
 6. los Gates A–E hayan pasado formalmente.
 

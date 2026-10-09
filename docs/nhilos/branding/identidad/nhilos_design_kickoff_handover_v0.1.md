@@ -126,21 +126,22 @@ condiciones comerciales, y la operación de la demo.
 | Navegación | Los mismos ítems de primer nivel en desktop y en móvil |
 | Arquitectura de marca | Una marca con productos. Sin sub-marcas, sin nombres por módulo |
 | Dirección visual | 70% sobriedad / 20% producto / 10% gesto memorable · *"cuidado, no caro"* |
-| Fotografía | Negocio real, personas reales, producto real, hardware real, contexto operativo |
+| Fotografía | Negocio real, personas reales, producto real, hardware real, contexto operativo. **Producción propia diferida** (2026-10-08): la fase 1 usa producto, tipografía y las capturas del POS |
+| Dominio | **`nhilospos.com`** en el apex para el sitio comercial; `<cliente>.nhilospos.com` como comodín por cliente (`soho.nhilospos.com`); `api.nhilospos.com` para el backend |
+| Receptor de demos | **El fundador.** No se delega. Ya hay una persona con la app instalada para pruebas reales en campo (`OD-PP-10` `CLOSED`) |
 
 ---
 
 ## 6. Decisiones abiertas que necesitan al cliente
 
-1. **URL definitiva de conversión.** La ruta de demo quedó pendiente de decisión en la IA.
-2. **¿Fotografía propia desde ahora?** [Fotografía de NHILOS POS](../../nhilos_brand_experience_principles_v1.0.md#24-fotografía-de-nhilos-pos) pide negocio real. Producirla toma tiempo y presupuesto;
-   definir si `F1` la espera o avanza sin ella.
-3. **Receptor de las solicitudes de demo.** No existe asignación (decisión `OD-PP-10` abierta en el
-   contrato de producto).
-4. **Estados vacíos y de error reales del sitio:** qué se muestra en 404, en fallo de envío del
+1. **Estados vacíos y de error reales del sitio:** qué se muestra en 404, en fallo de envío del
    formulario y en contenido no disponible.
-5. **Prioridad de soportes:** si la identidad se piensa primero para web, para producto o para venta
+2. **Prioridad de soportes:** si la identidad se piensa primero para web, para producto o para venta
    presencial.
+3. **`path` exacto de cada página.** El dominio y el esquema de subdominios están decididos; el
+   nombre final de cada ruta se fija con el diseño.
+
+**Cerradas el 2026-10-08** (ver §5): dominio, fotografía diferida, receptor de demos.
 
 ---
 

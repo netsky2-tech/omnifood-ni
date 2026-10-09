@@ -162,9 +162,18 @@ abierta.
 
 ### Route governance
 
-La jerarquía anterior es **lógica**, no una fijación de dominio,
-subpath, subdomain, redirect o canonical. La decisión técnica de URL
-permanece abierta.
+La jerarquía anterior es **lógica**. El **dominio está decidido** (2026-10-08):
+
+```text
+nhilospos.com                 Sitio comercial público (esta arquitectura)
+<cliente>.nhilospos.com       Comodín por cliente  →  soho.nhilospos.com
+api.nhilospos.com             Backend / API
+```
+
+**Consecuencia de arquitectura:** el sitio comercial vive en el **apex** y los portales de cliente en
+subdominios, así que el marketing **no comparte espacio de nombres** con los inquilinos. Ninguna ruta
+de este documento puede colisionar con un subdominio de cliente. El `path` exacto de cada página se
+fija con el diseño; el dominio y el esquema de subdominios ya no están abiertos.
 
 Reglas:
 
@@ -349,8 +358,8 @@ La homepage debe:
 
 ``` text
 ┌────────────────────────────────────────────────────┐
-│ NHILOS     Producto  Cómo funciona  Implementación│
-│            Recursos  Nosotros       [Solicitar una demo]│
+│ NHILOS     Producto  Implementación  Recursos     │
+│            Nosotros  [Solicitar una demo]         │
 └────────────────────────────────────────────────────┘
 ```
 
@@ -1097,7 +1106,7 @@ El contenido corporativo debe respetar el Brand Experience Principles.
 
 **Logical destination:** Solicitar una demo
 
-**Route:** pendiente de decisión URL
+**Route:** sobre `nhilospos.com`; el `path` exacto se fija con el diseño, el dominio ya está decidido.
 
 ## Purpose
 
