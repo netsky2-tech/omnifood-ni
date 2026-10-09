@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +18,7 @@ import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/product_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/security_profile_entity.dart';
+import 'package:pos_app/data/models/sales/promotion_entity.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/repositories/audit_repository_impl.dart';
 import 'package:pos_app/data/repositories/auth_repository_impl.dart';
@@ -26,14 +28,148 @@ import 'package:pos_app/data/repositories/tenant_capability_cache.dart';
 import 'package:pos_app/data/services/activation_controlled_sale_runner.dart';
 import 'package:pos_app/data/services/local_auth_service.dart';
 import 'package:pos_app/data/services/sales/dgi_numbering_service_impl.dart';
+import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
+import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
+import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/models/sales/payment.dart';
+import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/ports/printer_port.dart';
+import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
+import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
+import 'package:pos_app/domain/services/config/printer_config_service.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
+import 'package:pos_app/domain/services/kitchen/kitchen_order_service.dart';
+import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'package:pos_app/domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
+import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 
 class MockDio extends Mock implements Dio {}
+
+// Pinned identity of the cross-app fixture sale (see the SOHO P3 group at
+// the end of main()).
+const String _fixtureTenantId = 'tenant-fixture-01';
+const String _fixtureCashierUserId = 'd0000000-0000-4000-8000-00000000000d';
+
+/// Controllable stand-in for the real [SyncService]: no network path is
+/// exercised; the stream simply stays quiet. (Same shape as the fake the
+/// checkout tests use.)
+class FixtureFakeSyncService extends Mock implements SyncService {
+  final _controller = StreamController<InboundSyncResult>.broadcast();
+
+  @override
+  Stream<InboundSyncResult> get onInboundSync => _controller.stream;
+}
+
+/// Minimal inventory-repository stand-in for the view model: the checkout
+/// under test never reads the catalog through it.
+class _FixtureInventoryRepository implements InventoryRepository {
+  @override
+  Future<List<Product>> getActiveProducts() async => [];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
+}
+
+/// Auth stand-in handing the view model the pinned cashier.
+class _FixtureAuthRepository implements AuthRepository {
+  const _FixtureAuthRepository();
+
+  @override
+  Future<User?> getCurrentUser() async => const User(
+        id: _fixtureCashierUserId,
+        name: 'Cajero Fixture',
+        email: 'fixture@omnifood.ni',
+        role: UserRole.cashier,
+        isActive: true,
+        tenantId: _fixtureTenantId,
+      );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
+}
+
+/// THE PRODUCER SEAM of the cross-app fixture: the view model drives the
+/// REAL checkout (real promotion engine, real manual discount, real fiscal
+/// calculator, real discount-origin allocator) and the sale is persisted
+/// through the REAL [SalesRepositoryImpl] — but the sale's IDENTITY (ids and
+/// timestamps) is pinned first, because the wire payload covers them and the
+/// fixture must be byte-reproducible. Nothing else is touched: every amount,
+/// breakdown key and shape comes from production code, and the persisted
+/// rows are written by the same [SalesRepositoryImpl.saveSale] that the
+/// production checkout uses.
+class _IdentityPinningSalesRepository implements SalesRepository {
+  _IdentityPinningSalesRepository(
+    this._real,
+    this.pinnedInvoiceId,
+    this.pinnedCreatedAt, {
+    required this.pinnedItemIds,
+    required this.pinnedPaymentIds,
+  });
+
+  final SalesRepository _real;
+  final String pinnedInvoiceId;
+  final DateTime pinnedCreatedAt;
+  /// Valid UUIDs: the backend persists invoice_items.id / payments.id into
+  /// uuid columns, and production checkout ids ARE uuids (Uuid().v4()) — so
+  /// the pinned identity must be uuid-shaped too or the replay would fail
+  /// for a reason production can never produce.
+  final List<String> pinnedItemIds;
+  final List<String> pinnedPaymentIds;
+
+  @override
+  Future<void> saveSale({
+    FulfillmentCheckoutContext? fulfillmentContext,
+    required Invoice invoice,
+    required List<InvoiceItem> items,
+    required List<Payment> payments,
+  }) async {
+    assert(
+      items.length == pinnedItemIds.length,
+      'pinnedItemIds must cover every cart line',
+    );
+    assert(
+      payments.length == pinnedPaymentIds.length,
+      'pinnedPaymentIds must cover every payment',
+    );
+    await _real.saveSale(
+      fulfillmentContext: fulfillmentContext,
+      invoice:
+          invoice.copyWith(id: pinnedInvoiceId, createdAt: pinnedCreatedAt),
+      items: <InvoiceItem>[
+        for (var i = 0; i < items.length; i++)
+          items[i].copyWith(
+            id: pinnedItemIds[i],
+            invoiceId: pinnedInvoiceId,
+          ),
+      ],
+      payments: <Payment>[
+        for (var i = 0; i < payments.length; i++)
+          payments[i].copyWith(
+            id: pinnedPaymentIds[i],
+            invoiceId: pinnedInvoiceId,
+          ),
+      ],
+    );
+  }
+
+  @override
+  Future<Invoice?> getInvoiceById(String id) => _real.getInvoiceById(id);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+        'Fixture repo does not implement ${invocation.memberName}; extend it '
+        'if the checkout path starts needing it.',
+      );
+}
 
 class MockAlertService extends Mock implements AlertService {
   @override
@@ -1994,6 +2130,532 @@ void main() {
       final cursor =
           await database.localConfigDao.getConfigByKey('dgi_current_number');
       expect(cursor!.value, '7');
+    });
+  });
+
+  group('SOHO P3 cross-app fixture — REAL producer chain for the discount-origin wire payload', () {
+    // THE CROSS-APP CONTRACT (fixture provenance):
+    //
+    // The backend replay spec
+    // apps/admin_backend/test/sales/pos-payload-discount-origin.db.e2e-spec.ts
+    // POSTs apps/admin_backend/test/fixtures/sales/pos-discount-origin-payload.json
+    // to the REAL /v1/sync/batch route over a REAL PostgreSQL schema. The
+    // bytes of that fixture are PRODUCED HERE — never hand-built:
+    //
+    //   SaleViewModel.processSale (REAL promotion engine + REAL manual
+    //   discount + REAL fiscal calculator + REAL discount-origin allocator)
+    //     -> _IdentityPinningSalesRepository (pinned ids/timestamps ONLY)
+    //     -> REAL SalesRepositoryImpl.saveSale (REAL SQLite rows, incl.
+    //        discount_origin_json, REAL DGI numbering, REAL payloadHash)
+    //     -> ActivationControlledSaleRunner idempotent rebuild (the exact
+    //        production wire builder: SalesMapper.toSyncJson over the
+    //        PERSISTED rows + SyncService.buildSalesSyncRecord)
+    //     -> the persisted VERIFICATION_SALE outbox envelope.
+    //
+    // The payload is the queued batch record for sync — exactly what the
+    // device posts — so a shape change on either side of the wire breaks a
+    // test here or on the backend. Re-capture with:
+    //   POS_CAPTURE_DISCOUNT_ORIGIN_FIXTURE=1 flutter test --concurrency=1 \
+    //     test/data/services/activation_controlled_sale_runner_test.dart
+    // Re-running must reproduce the fixture byte for byte; every volatile
+    // field (ids, invoice createdAt, DGI folio from a seeded cursor,
+    // payload hash over pinned content) is pinned by construction.
+    const pinnedInvoiceId = 'c0000000-0000-4000-8000-00000000c001';
+    const pinnedBeerProductId = 'c0000000-0000-4000-8000-00000000c101';
+    const pinnedBurgerProductId = 'c0000000-0000-4000-8000-00000000c102';
+
+    // The backend replay spec in apps/admin_backend POSTs the bytes this
+    // producer writes to apps/admin_backend/test/fixtures/sales/
+    // pos-discount-origin-payload.json.
+    const fixturePath =
+        '../admin_backend/test/fixtures/sales/pos-discount-origin-payload.json';
+
+    Future<String> produceMixedProvenanceVerificationPayload() async {
+      // Fiscal + FX configuration the checkout and the DGI numbering fail
+      // closed without.
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+      );
+
+      // The activation runner refuses to run without the verification
+      // product in the catalog. Seeded WITHOUT insumo mappings or recipes,
+      // so the sale-time inventory snapshot is deterministic (noImpact:
+      // fixed classification/reason strings, empty bindings).
+      await database.productDao.insertProducts([
+        ProductEntity(
+          id: pinnedBurgerProductId,
+          name: 'Hamburguesa Clásica',
+          sellPrice: 120.0,
+          averageCost: 60.0,
+          stock: 50.0,
+          uom: 'UND',
+          barcode: 'FIXTURE-BURGER',
+          isActive: true,
+          isPrepared: false,
+          tenantId: _fixtureTenantId,
+        ),
+      ]);
+
+      // REAL promotion through the REAL path: 10% on the Bebidas category.
+      await database.promotionDao.savePromotion(
+        PromotionEntity(
+          id: 'promo-fixture-cat-10',
+          name: '10% Descuento en Bebidas',
+          type: 'percentageDiscount',
+          targetCategoryId: 'cat-bebidas',
+          discountValue: 10.0,
+          priority: 5,
+          isActive: true,
+        ),
+      );
+
+      final pinningRepo = _IdentityPinningSalesRepository(
+        salesRepo,
+        pinnedInvoiceId,
+        DateTime.utc(2026, 10, 9, 12, 0, 0),
+        pinnedItemIds: const [
+          'c0000000-0000-4000-8000-00000000c011',
+          'c0000000-0000-4000-8000-00000000c012',
+        ],
+        pinnedPaymentIds: const [
+          'c0000000-0000-4000-8000-00000000c021',
+        ],
+      );
+      final viewModel = SaleViewModel(
+        pinningRepo,
+        _FixtureInventoryRepository(),
+        const _FixtureAuthRepository(),
+        database,
+        TableOrderService(database),
+        false, // no autoLoad: promotions are loaded explicitly below
+        TenantConfigService(database.localConfigDao),
+        KitchenOrderService(database),
+        PrinterConfigService(database.localConfigDao),
+        null, // printerPort
+        FixtureFakeSyncService(),
+      );
+      viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
+
+      // Cart: 4 beers (gross 200) + 1 burger (gross 120). The REAL promotion
+      // engine grants 20.00; the operator then types a REAL manual discount
+      // of 30.00 through the view model's own method. The resulting
+      // breakdown has MORE THAN ONE key on the beer line (promotion +
+      // manual) — the mixed provenance the backend column exists for.
+      await viewModel.loadPromotions();
+      viewModel.addToCart(
+        Product(
+          id: pinnedBeerProductId,
+          name: 'Cerveza Toña 350ml',
+          uom: 'UND',
+          stock: 100,
+          averageCost: 25,
+          sellPrice: 50,
+          taxRate: 0.15,
+          category: 'Bebidas',
+          categoryId: 'cat-bebidas',
+        ),
+        quantity: 4,
+      );
+      viewModel.addToCart(
+        Product(
+          id: pinnedBurgerProductId,
+          name: 'Hamburguesa Clásica',
+          uom: 'UND',
+          stock: 50,
+          averageCost: 60,
+          sellPrice: 120,
+          taxRate: 0.15,
+          category: 'Comida',
+          categoryId: 'cat-comida',
+        ),
+      );
+      expect(viewModel.totalDiscounts, equals(20.0));
+      viewModel.grantSupervisorOverride();
+      viewModel.applyManualDiscount(30.0);
+      expect(viewModel.totalDiscounts, equals(50.0));
+
+      await viewModel.processSale([PaymentMethod.cash]);
+
+      // The REAL repository persisted the REAL rows (pinned identity only).
+      final persistedInvoice =
+          await database.invoiceDao.getInvoiceById(pinnedInvoiceId);
+      expect(persistedInvoice, isNotNull);
+      expect(persistedInvoice!.paymentStatus, equals('paid'));
+      expect(persistedInvoice.terminalId, isNotNull);
+
+      // The activation attempt now points at the REAL checked-out sale, so
+      // the runner takes its idempotent rebuild path: it reconstructs the
+      // wire record from the PERSISTED rows through SalesMapper.toSyncJson +
+      // SyncService.buildSalesSyncRecord — the exact production builder —
+      // and persists it as the VERIFICATION_SALE outbox envelope.
+      await database.activationAttemptLocalDao.saveAttempt(
+        ActivationAttemptLocalEntity(
+          attemptId: 'attempt-fixture-mixed-provenance',
+          tenantId: _fixtureTenantId,
+          candidateTerminalId: persistedInvoice.terminalId!,
+          localStatus: 'RUNNING',
+          requiredFiscalRevision: 1,
+          requiredFiscalFingerprint: 'fiscal-fp-fixture',
+          verificationProductId: pinnedBurgerProductId,
+          assignedAt: '2026-10-09T12:00:00.000Z',
+          updatedAt: '2026-10-09T12:00:00.000Z',
+        ),
+      );
+      // The attempt binds the ticket BEFORE the run so the runner finds the
+      // existing invoice by id.
+      final attempt = await database.activationAttemptLocalDao.getAttemptById(
+        'attempt-fixture-mixed-provenance',
+      );
+      await database.activationAttemptLocalDao.updateAttempt(
+        attempt!.copyWith(verificationTicketId: pinnedInvoiceId),
+      );
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: _fixtureTenantId,
+          attemptId: 'attempt-fixture-mixed-provenance',
+          cashierUserId: _fixtureCashierUserId,
+        ),
+      );
+      expect(result.isSuccess, isTrue, reason: 'errors: ${result.errors}');
+
+      final envelopes = await database.activationOutboxDao.getEnvelopesByAttempt(
+        _fixtureTenantId,
+        'attempt-fixture-mixed-provenance',
+      );
+      final verificationEnvelope = envelopes
+          .firstWhere((envelope) => envelope.eventType == 'VERIFICATION_SALE');
+      return verificationEnvelope.payloadJson;
+    }
+
+    test(
+        'producer + pin: the persisted VERIFICATION_SALE payload for the mixed '
+        'promotion+manual sale equals the committed backend fixture EXACTLY',
+        () async {
+      final payloadJson = await produceMixedProvenanceVerificationPayload();
+
+      // Sanity — the scenario really is MIXED provenance built by the real
+      // chain: the beer line carries BOTH origins, the burger line manual
+      // only.
+      final decoded = jsonDecode(payloadJson) as Map<String, dynamic>;
+      final items =
+          (decoded['invoice'] as Map<String, dynamic>)['items'] as List<dynamic>;
+      expect(items, hasLength(2));
+      final beer = items.firstWhere(
+        (item) => item['productId'] == pinnedBeerProductId,
+      ) as Map<String, dynamic>;
+      final burger = items.firstWhere(
+        (item) => item['productId'] == pinnedBurgerProductId,
+      ) as Map<String, dynamic>;
+      expect(
+        (beer['discountOrigin'] as Map<String, dynamic>).keys,
+        containsAll(['promotion', 'manual']),
+        reason: 'the beer line must carry the MIXED breakdown',
+      );
+      expect(
+        (burger['discountOrigin'] as Map<String, dynamic>).keys,
+        ['manual'],
+      );
+
+      final fixtureFile = File(fixturePath);
+      if (Platform.environment['POS_CAPTURE_DISCOUNT_ORIGIN_FIXTURE'] == '1') {
+        fixtureFile.parent.createSync(recursive: true);
+        // EXACT bytes of the runner's persisted payload — no normalization,
+        // no pretty-printing, no trailing newline.
+        fixtureFile.writeAsStringSync(payloadJson);
+      }
+      expect(
+        fixtureFile.existsSync(),
+        isTrue,
+        reason: 'capture first: POS_CAPTURE_DISCOUNT_ORIGIN_FIXTURE=1 '
+            'flutter test --concurrency=1 '
+            'test/data/services/activation_controlled_sale_runner_test.dart',
+      );
+
+      // THE PIN: deep equality (whole tree, not "contains") between the
+      // payload production just built and the committed fixture the backend
+      // replay spec consumes. A change on either side of the wire fails one
+      // of the two tests bound by this artifact.
+      expect(
+        jsonDecode(payloadJson),
+        equals(jsonDecode(fixtureFile.readAsStringSync())),
+        reason: 'the cross-app contract: the runner\'s persisted payload must '
+            'equal the fixture the backend replay spec POSTs, exactly',
+      );
+    });
+  });
+
+  group('SOHO P3 cross-app fixture — REAL producer chain for the modifier wire payload', () {
+    // THE CROSS-APP CONTRACT (fixture provenance, option B):
+    //
+    // The backend replay spec
+    // apps/admin_backend/test/sales/pos-modifier-payload.db.e2e-spec.ts
+    // POSTs apps/admin_backend/test/fixtures/sales/pos-modifier-payload.json
+    // to the REAL /v1/sync/batch route over a REAL PostgreSQL schema. The
+    // bytes of that fixture are PRODUCED HERE — never hand-built:
+    //
+    //   SaleViewModel.processSale (REAL fiscal calculator; the cart line
+    //   carries a REAL Modifier with quantity 2, so the line total includes
+    //   extraPrice * quantity * lineQuantity through
+    //   InvoiceFiscalCalculator)
+    //     -> _IdentityPinningSalesRepository (pinned ids/timestamps ONLY)
+    //     -> REAL SalesRepositoryImpl.saveSale (REAL SQLite rows, REAL DGI
+    //        numbering, REAL payloadHash)
+    //     -> ActivationControlledSaleRunner idempotent rebuild (the exact
+    //        production wire builder: SalesMapper.toSyncJson over the
+    //        PERSISTED rows + SyncService.buildSalesSyncRecord)
+    //     -> the persisted VERIFICATION_SALE outbox envelope.
+    //
+    // DOCUMENTED DEVIATION (the seam, not a production claim): the push path
+    // drops the cart's modifiers today — the runner rebuild calls
+    // `items.map(SalesMapper.toItemDomain)` (lib/data/repositories/sales/
+    // sales_repository_impl.dart:522-529 and the same call inside
+    // activation_controlled_sale_runner.dart), and toItemDomain applies its
+    // EMPTY default modifier list (lib/data/mappers/sales_mapper.dart:391),
+    // so the envelope payload arrives with `modifiers: []` on every line
+    // even though the sale was checked out WITH modifiers. This capture test
+    // RE-ATTACHES the modifier list at the test seam — shaped EXACTLY as
+    // SalesMapper.toSyncJson emits it for a populated cart line
+    // (lib/data/mappers/sales_mapper.dart:713-718: name, extraPrice,
+    // quantity) — because the backend must be proven against the shape the
+    // POS WILL send once the POS-side repair unit lands. A later POS unit
+    // will close the drop itself; until then the envelope emitted by
+    // production genuinely still carries `[]`, and this test asserts that
+    // drop explicitly before re-attaching.
+    //
+    // Re-capture with:
+    //   POS_CAPTURE_MODIFIER_FIXTURE=1 flutter test --concurrency=1 \
+    //     test/data/services/activation_controlled_sale_runner_test.dart
+    // Re-running must reproduce the fixture byte for byte; every volatile
+    // field (ids, invoice createdAt, DGI folio from a seeded cursor,
+    // payload hash over pinned content) is pinned by construction.
+    const pinnedModifierInvoiceId = 'd0000000-0000-4000-8000-00000000d001';
+    const pinnedModifierProductId = 'd0000000-0000-4000-8000-00000000d101';
+
+    // The backend replay spec in apps/admin_backend POSTs the bytes this
+    // producer writes to apps/admin_backend/test/fixtures/sales/
+    // pos-modifier-payload.json.
+    const modifierFixturePath =
+        '../admin_backend/test/fixtures/sales/pos-modifier-payload.json';
+
+    Future<String> produceModifierVerificationPayload() async {
+      // Fiscal + FX configuration the checkout and the DGI numbering fail
+      // closed without.
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+      );
+
+      // Seeded WITHOUT insumo mappings or recipes, so the sale-time
+      // inventory snapshot is deterministic (noImpact: fixed
+      // classification/reason strings, empty bindings).
+      await database.productDao.insertProducts([
+        ProductEntity(
+          id: pinnedModifierProductId,
+          name: 'Cerveza Preparada',
+          sellPrice: 50.0,
+          averageCost: 25.0,
+          stock: 50.0,
+          uom: 'UND',
+          barcode: 'FIXTURE-PREPARADA',
+          isActive: true,
+          isPrepared: false,
+          tenantId: _fixtureTenantId,
+        ),
+      ]);
+
+      const cartModifier = Modifier(
+        id: 'mod-fixture-michelada-01',
+        name: 'Michelada Extra',
+        extraPrice: 30.0,
+        quantity: 2,
+      );
+
+      final pinningRepo = _IdentityPinningSalesRepository(
+        salesRepo,
+        pinnedModifierInvoiceId,
+        DateTime.utc(2026, 10, 9, 14, 0, 0),
+        pinnedItemIds: const [
+          'd0000000-0000-4000-8000-00000000d011',
+        ],
+        pinnedPaymentIds: const [
+          'd0000000-0000-4000-8000-00000000d021',
+        ],
+      );
+      final viewModel = SaleViewModel(
+        pinningRepo,
+        _FixtureInventoryRepository(),
+        const _FixtureAuthRepository(),
+        database,
+        TableOrderService(database),
+        false, // no autoLoad: no promotions in this scenario
+        TenantConfigService(database.localConfigDao),
+        KitchenOrderService(database),
+        PrinterConfigService(database.localConfigDao),
+        null, // printerPort
+        FixtureFakeSyncService(),
+      );
+      viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
+
+      // Cart: ONE beer line carrying ONE modifier option at quantity 2
+      // (two units of Michelada Extra at C\$ 30 each). The REAL fiscal
+      // calculator adds extraPrice * quantity to the line amount.
+      viewModel.addToCart(
+        Product(
+          id: pinnedModifierProductId,
+          name: 'Cerveza Preparada',
+          uom: 'UND',
+          stock: 100,
+          averageCost: 25,
+          sellPrice: 50,
+          taxRate: 0.15,
+          category: 'Bebidas',
+          categoryId: 'cat-bebidas',
+        ),
+        quantity: 1,
+        modifiers: const [cartModifier],
+      );
+      expect(viewModel.cart, hasLength(1));
+
+      await viewModel.processSale([PaymentMethod.cash]);
+
+      // The REAL repository persisted the REAL rows (pinned identity only).
+      final persistedInvoice =
+          await database.invoiceDao.getInvoiceById(pinnedModifierInvoiceId);
+      expect(persistedInvoice, isNotNull);
+      expect(persistedInvoice!.paymentStatus, equals('paid'));
+      expect(persistedInvoice.terminalId, isNotNull);
+
+      await database.activationAttemptLocalDao.saveAttempt(
+        ActivationAttemptLocalEntity(
+          attemptId: 'attempt-fixture-modifier',
+          tenantId: _fixtureTenantId,
+          candidateTerminalId: persistedInvoice.terminalId!,
+          localStatus: 'RUNNING',
+          requiredFiscalRevision: 1,
+          requiredFiscalFingerprint: 'fiscal-fp-fixture-modifier',
+          verificationProductId: pinnedModifierProductId,
+          assignedAt: '2026-10-09T14:00:00.000Z',
+          updatedAt: '2026-10-09T14:00:00.000Z',
+        ),
+      );
+      final attempt = await database.activationAttemptLocalDao.getAttemptById(
+        'attempt-fixture-modifier',
+      );
+      await database.activationAttemptLocalDao.updateAttempt(
+        attempt!.copyWith(verificationTicketId: pinnedModifierInvoiceId),
+      );
+
+      final result = await saleRunner.executeControlledOfflineSale(
+        const ControlledSaleParams(
+          tenantId: _fixtureTenantId,
+          attemptId: 'attempt-fixture-modifier',
+          cashierUserId: _fixtureCashierUserId,
+        ),
+      );
+      expect(result.isSuccess, isTrue, reason: 'errors: ${result.errors}');
+
+      final envelopes = await database.activationOutboxDao.getEnvelopesByAttempt(
+        _fixtureTenantId,
+        'attempt-fixture-modifier',
+      );
+      final verificationEnvelope = envelopes
+          .firstWhere((envelope) => envelope.eventType == 'VERIFICATION_SALE');
+      return verificationEnvelope.payloadJson;
+    }
+
+    test(
+        'producer + pin: the persisted VERIFICATION_SALE payload with the '
+        'modifier list RE-ATTACHED at the test seam equals the committed '
+        'backend fixture EXACTLY', () async {
+      final payloadJson = await produceModifierVerificationPayload();
+
+      final decoded = jsonDecode(payloadJson) as Map<String, dynamic>;
+      final invoice = decoded['invoice'] as Map<String, dynamic>;
+      final items = invoice['items'] as List<dynamic>;
+      expect(items, hasLength(1));
+      final line = items.first as Map<String, dynamic>;
+
+      // THE DOCUMENTED DEVIATION, asserted: production's rebuild chain
+      // genuinely emits an EMPTY modifiers array today (toItemDomain's empty
+      // default — the finding; the later POS unit closes it).
+      expect(line['modifiers'], isEmpty);
+
+      // RE-ATTACH at the test seam, shaped EXACTLY as SalesMapper.toSyncJson
+      // emits a populated cart line's modifiers (name, extraPrice,
+      // quantity — sales_mapper.dart:713-718), derived from the SAME
+      // Modifier instance the cart carried.
+      const cartModifier = Modifier(
+        id: 'mod-fixture-michelada-01',
+        name: 'Michelada Extra',
+        extraPrice: 30.0,
+        quantity: 2,
+      );
+      line['modifiers'] = [
+        {
+          'name': cartModifier.name,
+          'extraPrice': cartModifier.extraPrice,
+          'quantity': cartModifier.quantity,
+        },
+      ];
+      final payloadWithModifiers = jsonEncode(decoded);
+
+      // Sanity — the fiscal totals really include the modifier quantities:
+      // 50.00 (beer) + 30.00 * 2 (modifier units) = 110.00 gross, 15% IVA.
+      expect(invoice['subtotal'], equals(110.0));
+      expect(invoice['totalTax'], equals(16.5));
+      expect(invoice['total'], equals(126.5));
+
+      final fixtureFile = File(modifierFixturePath);
+      if (Platform.environment['POS_CAPTURE_MODIFIER_FIXTURE'] == '1') {
+        fixtureFile.parent.createSync(recursive: true);
+        // EXACT bytes of the re-attached payload — no normalization,
+        // no pretty-printing, no trailing newline.
+        fixtureFile.writeAsStringSync(payloadWithModifiers);
+      }
+      expect(
+        fixtureFile.existsSync(),
+        isTrue,
+        reason: 'capture first: POS_CAPTURE_MODIFIER_FIXTURE=1 '
+            'flutter test --concurrency=1 '
+            'test/data/services/activation_controlled_sale_runner_test.dart',
+      );
+
+      // THE PIN: deep equality (whole tree, not "contains") between the
+      // payload production just built (with the seam re-attach) and the
+      // committed fixture the backend replay spec consumes. A change on
+      // either side of the wire fails one of the two tests bound by this
+      // artifact.
+      expect(
+        jsonDecode(payloadWithModifiers),
+        equals(jsonDecode(fixtureFile.readAsStringSync())),
+        reason: 'the cross-app contract: the runner\'s persisted payload (with '
+            'the documented seam re-attach) must equal the fixture the '
+            'backend replay spec POSTs, exactly',
+      );
     });
   });
 }
