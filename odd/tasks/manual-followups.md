@@ -1,7 +1,8 @@
 # Feature: Manual follow-ups & live-suite repairs (Round 4)
 
-- **Status:** in_progress — implementation complete; native review + PR pending
-- **Branch:** `chore/manual-followups` (worktree `/home/octavio_morales/omnifood-ni-manual-followups`, from `main@5059ed98`)
+- **Status:** DELIVERED — PR #827 merged (`9d9f0a1b`, 2026-10-09); issue #826 closed;
+  Admin Backend CI + Owner Dashboard CI green on `main` (runs 38002992946 / 38002992893)
+- **Branch:** `chore/manual-followups` — merged and deleted; worktree removed (cleanup)
 - **Delivery:** issue #826 (`status:approved`, `type:chore`) → PR (`type:chore`) → merge
 - **Rule (user):** always isolated worktree + branch — never direct writes to `main`.
 
@@ -64,7 +65,11 @@ modifiers E2E feature:
       backend unit suite green locally (330 suites / 3759 tests), `test:no-only`, targeted
       specs (16/16 + 13/13) and `nest build` OK; `test:db`/`test:e2e`/schema-build run by
       the PR pipeline (paths `apps/admin_backend/**` match this branch).
-- [ ] Issue #826 approved → PR (`type:chore`) green → merged; native review per candidate.
+- [x] Issue #826 approved → PR #827 (`type:chore`) **green → MERGED `9d9f0a1b`**; native
+      review **twice**: `review-1d9c5f315d1cd563` (5-commit slice, medium, 1 lens,
+      APPROVED + burned; 2 advisories) and `review-3beb46530ec87586` (full 6-commit
+      branch range after the schema fix, medium, 1 lens, APPROVED + burned; 4 advisories,
+      all informational).
 
 ## Tasks
 
@@ -79,8 +84,8 @@ modifiers E2E feature:
 - [x] **T5** Manual §10/§11 rewrite + v0.2 change note. Commit `c7ce0321`.
 - [x] **T6** CI red established (diagnosis corrected — see Scope §5) → two fixes:
       commits `54adbdf2` (unbound-method) + `c77cdbce` (stale guard expectation).
-- [ ] **T7** Verification done (see Acceptance) → native review → PR (`type:chore`,
-      issue #826) → merge → final ODD update.
+- [x] **T7** Verification done → native reviews ×2 burned → PR #827 merged (`9d9f0a1b`) →
+      main CI green ×2 → issue #826 closed → worktree/branch cleaned up → this record.
 
 ## Commits
 
@@ -88,3 +93,16 @@ modifiers E2E feature:
 - `c7ce0321` docs(nhilos): establish dashboard manual sections 10 and 11 on verifiable facts
 - `54adbdf2` fix(sales): bind reconciliation toDto mapping for unbound-method lint
 - `c77cdbce` test(admin-backend): update retired InventoryController orphan expectation
+- `aa0ef934` docs(odd): track manual follow-ups round 4 with CI root-cause correction
+- `3cc05a3b` fix(sales): declare override_supervisor_ref as text to match its migration
+- `9d9f0a1b` Merge pull request #827 (delivery)
+
+## Postscript — third latent CI defect
+
+The PR pipeline itself surfaced a third hidden red once lint stopped blocking:
+`verify-schema-build.sh` failed on `invoice_payments.override_supervisor_ref`
+(entity `character varying` vs migration `text`, absent from the downward-only
+`scripts/schema-column-type-manifest.txt` ratchet). Fixed by aligning the entity to
+`text` (`3cc05a3b`) — manifest additions require a separate baseline decision.
+Lesson recorded: on `main`, a red at the FIRST failing step masks every later step;
+re-establishing CI health means walking the whole pipeline, not just the visible red.
