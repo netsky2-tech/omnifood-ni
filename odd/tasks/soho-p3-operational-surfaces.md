@@ -363,3 +363,56 @@ Se logra repartiendo **un origen por vez**, acotado por la capacidad restante de
 
 ### Método que funcionó (repetirlo)
 Cada unidad cerrada con **mutaciones propias restauradas byte-idénticas** (verificadas con `cmp`), backups **fuera de `/tmp`** (que se barre en este repo), `dart format` **nunca** en sitio, y preferir el test **contra base real** cuando hay constraints, triggers o RLS — los mocks esconden el esquema por diseño.
+
+---
+
+## 11. S1c-2 · Prorrateo por origen en el POS (en ejecución)
+
+Continuación directa de §10. El backend ya guarda el desglose (`635a0540`); falta que el POS lo **produzca** y lo mande.
+
+### Evidencia que faltaba (explorador, verificada en código)
+
+- **El payload de sync se arma desde las filas locales**, no en el checkout: `data/repositories/sales/sales_repository_impl.dart:519-527` (`getItemsByInvoiceId` → `toItemDomain` → `toSyncJson`) y `activation_controlled_sale_runner.dart:405-411`. **Un desglose calculado sólo en memoria se perdería para toda venta encolada offline** → columna local + migración de Floor + codegen. No es opcional.
+- **El motor devuelve `itemDiscounts` por `productId`**, no por línea, y **mergea** dos líneas del mismo producto en una sola llave (`promotions_engine.dart:22,93-94,119-120,144-145`). El VM lo descarta hoy (`sale_view_model.dart:1223` sólo guarda `result.totalDiscount`).
+- **Dos caminos producen el `discount` por línea**, ambos indexados contra el carrito: el fiscal (`invoice_fiscal_calculator.dart:200-256`, mayor-resto en **centavos**, desempate resto desc → bruto desc → índice asc) y el fallback sin régimen (`sale_view_model.dart:1046-1095`, proporcional sin centavos). El reparto por origen cuelga del **resultado final**, no del calculador.
+- Punto de persistencia único: `_processSaleInternal` `:1737-1764` (`calc.lines[i]` → `InvoiceItem`, `:1760 discount: l.discount`).
+- Floor: `AppDatabase version: 66` (`app_database.dart:116`); migraciones incrementales en `data/database/migrations.dart` con `allMigrations` (`:2802`) armado en `main.dart:208`; test por migración en `test/data/database/*_migration_test.dart`.
+- Paridad instalación-limpia vs migrada: `test/data/database/ohac_delivery_install_parity_test.dart` (hay que actualizarla si enumera columnas).
+
+### Decisiones tomadas
+
+- **DD-4 · El reparto vive en un allocator puro nuevo**, no dentro del calculador fiscal. Motivo: el calculador ya entrega el `discount` por línea y su contrato escalar sostiene el ticket y las pruebas DGI; el allocator recibe ese resultado como **capacidad** y no toca el camino fiscal. Un solo lugar para la regla, y es testeable por sus dos invariantes sin montar el motor fiscal.
+- **DD-5 · Pesos por origen:** promoción → monto del motor repartido entre las líneas del mismo `productId` proporcional a su bruto (mayor-resto, desempate bruto desc → índice asc); manual y lealtad → bruto de la línea; si Σ pesos == 0, peso = capacidad restante. La primera pasada la manda el peso; el derrame por capacidad se reparte con la misma ordenación del calculador.
+- **DD-6 · Orden y recorte (hereda el orden ya decidido) — CORREGIDO por la verificación adversarial.** promociones → manual → lealtad, **estrictamente secuencial y codicioso**: cada origen reclama `min(lo concedido, la capacidad que queda)`. Si el agregado aplicado es menor que lo concedido (la anomalía preexistente: un canje de lealtad validado sobrevive a que el carrito se encoja y el calculador recorta a bruto, `invoice_fiscal_calculator.dart:200-206`), **el faltante cae sobre el último origen de la fila que todavía tenga monto por colocar**; la lealtad es el pozo **sólo** cuando promociones y manual entran en la capacidad aplicada, que es el caso alcanzable. La primera redacción ("lealtad absorbe el faltante") era **falsa** en el caso degenerado `promoción + manual > bruto`, y la verificación lo reprodujo: con `lineDiscounts [2.00]` y `promo 3.00 / manual 2.00 / lealtad 1.00` el resultado es `{promotion: 2.00}` — promoción corta, manual y lealtad en cero. Consecuencia registrada: en esa anomalía el desglose puede sub-reportar puntos ya quemados. La alternativa (escalar los tres orígenes proporcionalmente) es un cambio chico si el dueño prefiere ver proporciones; no se toma ahora.
+- **DD-7 · Nada viaja con cero o negativo.** El DTO (`@IsPositive`) y el CHECK de la base rechazan `<= 0`, y un desglose presente debe nombrar al menos un origen: el mapa omite las llaves cero y la línea manda `NULL` cuando no queda ningún origen.
+
+### Contrato observable (lo que el worker debe espejar, no reinterpretar)
+
+Entrada: brutos por línea, `discount` por línea ya calculado (autoritativo), ids de producto por línea, los tres totales de orden y el mapa opcional del motor. Salida: por línea, monto por origen, en centavos exactos.
+
+**Dos invariantes simultáneos, verificados por test:**
+1. Para toda línea: Σ desglose == `discount` de esa línea (centavos exactos).
+2. Para todo origen: Σ sobre las líneas == su total de orden (salvo el recorte de DD-6, donde el faltante queda en lealtad).
+
+### Unidades de trabajo
+
+- **S1c-2a · La regla, probada.** Allocator puro + tests de invariantes. Sin wiring, sin cable.
+- **S1c-2b · La regla, cableada y persistida.** Columna local + migración 66→67 + modelo + mapper (local y payload) + VM que retiene el mapa del motor e invoca el allocator + tests de mapper/VM/migración.
+
+### S1c-2a · La regla, probada — CERRADO
+
+`apps/pos_app/lib/domain/services/sales/discount_origin_allocator.dart` (328 líneas) + su test (21 casos). Reparto en **centavos enteros** con la misma técnica del calculador (piso + mayor-resto, desempate resto desc → bruto desc → índice asc, tope por línea, y bucle de sobrantes que sólo incrementa líneas con capacidad). La aritmética interna es `int`: no hay fuga de punto flotante hacia una cuenta posterior (verificado por inspección). La unidad **no toca ningún camino de producción todavía** — sólo agrega dos archivos.
+
+**Verificación independiente (adversarial, read-only).** Fuzz de 300k casos de reparto exacto → **0 rupturas** de los dos invariantes; 100k casos de sobre-concesión → el faltante cae siempre en el último origen de la fila (2.221/2.221); 200k mixtos → 0 líneas por encima de su tope y 0 montos no positivos emitidos. Encontró el error de redacción de DD-6 y **cuatro huecos de prueba**, todos cerrados: el caso general de recorte (T5 saltaba la aserción del invariante 2 justo donde falla), el desempate de mayor-resto entre líneas del mismo producto (**ningún fixture lo ejercía**, T10), el fallback de peso cero cuando el mapa nombra sólo un producto ausente del carrito (T11), y un helper de test que redondeaba distinto que la implementación (`1.005` → 101 vs 100, con lo que las aserciones "en centavos exactos" eran más débiles de lo que parecían).
+
+**Mutaciones propias, todas restauradas byte-idénticas** (`sha256` del archivo idéntico antes y después, `cmp` contra el backup en `~/.cache/s1c2a/`):
+
+| Mutación | Resultado | Garantía anclada |
+|---|---|---|
+| Invertir el orden de los orígenes | fallan T5 y las dos reproducciones de T9 | La secuencia manda el recorte |
+| Quitar el tope por línea (`min(base, remaining)`) | `Expected: <400> Actual: <500>` (T1); `Expected: <50> Actual: <66>` (matriz T2) | Ninguna línea puede exceder su descuento |
+| Dejar el bucle de sobrantes en una sola pasada | `Expected: <600> Actual: <501>` (T1) | Los centavos sobrantes se colocan **todos**: el bucle es necesario, no decorativo |
+
+21/21 en la suite enfocada con `--concurrency=1`. **S1c-2b sigue pendiente** (columna local + migración + cable).
+
+⚠ **Orden de despliegue (hereda §10):** el backend va **primero**. El POS no debe mandar el campo a producción antes que el backend esté desplegado; en la rama van juntos, en producción no.
