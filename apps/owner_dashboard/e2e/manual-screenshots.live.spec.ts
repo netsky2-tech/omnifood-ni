@@ -99,7 +99,7 @@ function sectionBox(page: Page, heading: string) {
     .locator("xpath=ancestor::div[contains(@class,'rounded-md')][1]");
 }
 
-test("captures the static reference screens (login, KPIs, ventas, productos, caja, fiscal)", async ({
+test("captures the static reference screens (login, KPIs month view, ventas, productos, caja, fiscal, inventario, recetas, usuarios)", async ({
   page,
 }) => {
   // dsh_01: the login screen itself, logged out, reached from the base URL.
@@ -110,13 +110,46 @@ test("captures the static reference screens (login, KPIs, ventas, productos, caj
 
   await login(page);
 
-  // dsh_02: dashboard overview — the executive KPI strip must be loaded.
+  // dsh_02: dashboard overview filtered with the "Este mes" preset, so the
+  // manual shows real KPIs, the sales-evolution chart and populated
+  // breakdowns instead of the empty first-day view (the tenant's sales live
+  // earlier in the month, not on "today").
   await page.goto(`${BASE}/`);
   await expect(
     page.getByRole("heading", { name: "Dashboard", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Ventas Netas", { exact: true })).toBeVisible();
   await expect(page.getByText("Ticket Promedio", { exact: true })).toBeVisible();
+
+  const rangeTrigger = page.getByRole("button", {
+    name: "Seleccionar rango de fechas",
+  });
+  await rangeTrigger.click();
+  await page.getByRole("button", { name: "Este mes", exact: true }).click();
+
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const month = pad(now.getMonth() + 1);
+  const today = `${pad(now.getDate())}/${month}/${now.getFullYear()}`;
+  const firstOfMonth = `01/${month}/${now.getFullYear()}`;
+  await expect(rangeTrigger).toContainText(firstOfMonth);
+  await expect(rangeTrigger).toContainText(today);
+
+  // Key state that keeps the month capture honest: the net-sales KPI carries
+  // the month's real total, the "no activity" note is gone, and the
+  // evolution chart renders (its "pick 2+ days" placeholder must disappear).
+  // (the total renders in more than one card — net sales and gross margin —
+  // so assert the first occurrence instead of a multi-match locator)
+  await expect(page.getByText(/4,571\.00/).first()).toBeVisible();
+  await expect(
+    page.getByText("sin actividad registrada en este periodo"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Evolución de ventas", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Seleccione un rango de 2 o más días"),
+  ).toHaveCount(0);
   await capture(page, "dsh_02_kpis_ventas.png");
 
   // dsh_03: Ventas section, Resumen tab (ventas/comprobantes overview).
@@ -160,6 +193,34 @@ test("captures the static reference screens (login, KPIs, ventas, productos, caj
     page.getByRole("heading", { name: "Resumen Fiscal (DGI)" }),
   ).toBeVisible();
   await capture(page, "dsh_06_fiscal.png");
+
+  // dsh_15: inventory module landing (section 7) — Day-1 state: the catalog
+  // still sells SIMPLE products, recipes not loaded yet.
+  await page.goto(`${BASE}/inventory`);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Inventario", exact: true }),
+  ).toBeVisible();
+  await capture(page, "dsh_15_inventario.png");
+
+  // dsh_16: recipes & BOM (section 7) — the empty state a Day-1 tenant sees,
+  // matching the section's "when recipes are loaded" note.
+  await page.goto(`${BASE}/recipes`);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Recetas y BOM",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await capture(page, "dsh_16_recetas_bom.png");
+
+  // dsh_17: users, roles and permissions (section 9) — the real users page
+  // with its roles/permissions card.
+  await page.goto(`${BASE}/users`);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Gestión de Usuarios" }),
+  ).toBeVisible();
+  await capture(page, "dsh_17_gestion_usuarios.png");
 });
 
 test("shows the Modificadores Grupos tab with the three real groups", async ({
