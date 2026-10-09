@@ -28,7 +28,7 @@
 - [x] **T10** Terminología: `allow_quantities`, «Price Delta», params `min`/`max`, «Sync Freshness» eliminados — grep final: 0 términos restantes; conservado copy literal UI en español («Permitir cantidades», «Precio adicional», «Mínimo/Máximo de selección»)
 - [x] **T11** §4.1 reescrita como «Reportes de Ventas» con las 6 pestañas reales (scout `mv1fkvkt-8-vihd`, path:line) + Nota de ausencia de lista cronológica (diseño: factura-level → Fiscal › Exportaciones); §4.2 reubican en **Fiscal › Anulaciones** con columnas reales (Factura/Cajero/Total/Motivo/Fecha) y sin claim de PIN de supervisor; alt de `dsh_03` corregido; changelog v0.2 ampliado
 - [x] **T12** Inventario: 33→38 PNG (L307/L336), Backoffice 9→14, fila de sesión `2026-10-09` agregada, peso ~3.5→~4.1 MB y rango 25–170 KB; las 2 menciones restantes a 33 son históricas fechadas (método del 10-08 y «contenía» en pasado)
-- [ ] **T13** Verificación + commits + review preflight
+- [x] **T13** Verificación inline (greps de `$`/términos/§4 leído de vuelta + conteos inventario) + commits `efd5c9cd` (manual+inventario) y `2ef02fac` (ODD ronda 2) + revisión nativa del candidato ronda 2
 
 ### Follow-up diferido (acordado con el usuario)
 - Secciones sin capturas (§7 Inventario, §9 Usuarios, §10 Flota, §11 Asistencia) — agregar imágenes en una feature futura.
@@ -48,3 +48,4 @@
 - Limpieza final BD: tenant `soho` = Leche/Endulzante/Extras activos, 0 filas Jarabes.
 - Verify battery: 6/7 PASS + CHECK 5 corregido en el momento (3 paths actualizados).
 - Revisión nativa: forecast `pi_host_relay`/1 run corrido 2× — 1ª admisión rechazada por campo extra `evidence_extra` en el payload del reviewer (slot no consumido); payload movido a `/tmp/gentle-rejected-backup/` → forecast→ack fresco → APPROVED → ack completado vía facade. Commits cubiertos: `7556739b`, `1b78a261`, `4a1e37b7`.
+- Revisión nativa ronda 2: candidato `efd5c9cd`+`2ef02fac` (baseRef `b331cf4f`) · lineage `review-cfe45f1a347f6598` · **low tier, `non_executable_only`, 0 lentes** → aprobación nativa inmediata en START + ack quemado (`gentle-ai.review-acknowledged/v1`, target `4b1be6ef`, rev `27f90117`). `b331cf4f` (evidencia ronda 1) y `2ef02fac` (tracking ronda 2) quedan como docs de cierre posteriores a sus burns, patrón de la feature 1.
