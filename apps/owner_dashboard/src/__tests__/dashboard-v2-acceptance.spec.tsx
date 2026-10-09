@@ -1129,7 +1129,10 @@ describe("AC-10..AC-13 — attention signals (Gate E surfaces)", () => {
     ).toContain("/sales?source=dashboard");
     expect(
       screen.getByTestId("attention-link-vouchers").getAttribute("href"),
-    ).toContain("tab=summary");
+    ).toContain("tab=reconciliations");
+    expect(
+      screen.getByTestId("attention-link-vouchers").getAttribute("href"),
+    ).toContain("reconciliationStatus=PENDIENTE");
   });
 
   it("AC-13 (audit summary): severity counts surface from the audit executive summary", async () => {

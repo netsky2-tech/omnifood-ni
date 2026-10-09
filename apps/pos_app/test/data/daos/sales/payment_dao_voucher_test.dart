@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/database/migrations.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/payment_entity.dart';
@@ -462,6 +463,159 @@ void main() {
         expect(stillPending, hasLength(1));
         expect(stillPending.single.id, 'pay-sync-b');
       });
+    });
+  });
+
+  group('override supervisor credential column (v65 → v66 migration)', () {
+    // Harness note: this follows the repo's existing migration-test pattern
+    // (test/data/database/*_migration_test.dart) — a raw sqflite_ffi
+    // database opened at the old version, with the guarded migration
+    // function run directly. The payments table is created here with the
+    // exact v65 shape (pre-override_supervisor_ref).
+    late String dbPath;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    setUp(() async {
+      dbPath =
+          '${await databaseFactory.getDatabasesPath()}/payment_v66_migration_test.db';
+      await databaseFactory.deleteDatabase(dbPath);
+    });
+
+    tearDown(() async {
+      await databaseFactory.deleteDatabase(dbPath);
+    });
+
+    Future<dynamic> openV65WithLegacyRow() async {
+      final db = await databaseFactory.openDatabase(
+        dbPath,
+        options: OpenDatabaseOptions(
+          version: 65,
+          onCreate: (database, version) async {
+            await database.execute('''
+              CREATE TABLE payments (
+                id TEXT NOT NULL PRIMARY KEY,
+                invoice_id TEXT NOT NULL,
+                method TEXT NOT NULL,
+                amount REAL NOT NULL,
+                currency TEXT NOT NULL,
+                exchange_rate REAL NOT NULL,
+                amount_nio REAL NOT NULL,
+                change_given REAL NOT NULL,
+                change_currency TEXT NOT NULL,
+                voucher_code TEXT,
+                card_brand TEXT,
+                card_type TEXT,
+                bank_pos TEXT,
+                reconciliation_status TEXT,
+                last4 TEXT,
+                batch_number TEXT,
+                reconciled_at INTEGER,
+                reconciled_by_user_id TEXT,
+                reconciliation_sync_status TEXT NOT NULL DEFAULT 'synced',
+                created_at INTEGER
+              )
+            ''');
+            // A pre-fix MANUAL_OVERRIDE row: the typed supervisor string
+            // abused reconciled_by_user_id, no credential column existed.
+            await database.execute('''
+              INSERT INTO payments (id, invoice_id, method, amount, currency,
+                exchange_rate, amount_nio, change_given, change_currency,
+                voucher_code, reconciliation_status, reconciled_by_user_id,
+                reconciliation_sync_status)
+              VALUES ('pay-legacy-override', 'inv-legacy', 'card', 300.0,
+                'NIO', 1.0, 300.0, 0.0, 'NIO', 'OVERRIDE: sin voucher',
+                'MANUAL_OVERRIDE', 'sup-legacy', 'pending')
+            ''');
+          },
+        ),
+      );
+      return db;
+    }
+
+    test('migration65_66 adds the nullable column and legacy rows read back null', () async {
+      final db = await openV65WithLegacyRow();
+
+      await migration65_66.migrate(db);
+
+      final columns = await db.rawQuery('PRAGMA table_info(payments)');
+      final names = columns.map((c) => c['name'] as String).toSet();
+      expect(names, contains('override_supervisor_ref'));
+
+      final row = (await db.rawQuery(
+        'SELECT * FROM payments WHERE id = ?',
+        ['pay-legacy-override'],
+      )).single;
+      // Old rows must read back null — NOT crash and NOT inherit the
+      // abused reconciled_by_user_id value.
+      expect(row['override_supervisor_ref'], isNull);
+      // The historical (wrong-shape) value is preserved untouched.
+      expect(row['reconciled_by_user_id'], 'sup-legacy');
+
+      await db.close();
+    });
+
+    test('migration65_66 is a no-op when the column already exists (re-run safety)', () async {
+      final db = await openV65WithLegacyRow();
+
+      await migration65_66.migrate(db);
+      // Second run must not throw (SQLite has no ADD COLUMN IF NOT EXISTS).
+      await migration65_66.migrate(db);
+
+      final columns = await db.rawQuery('PRAGMA table_info(payments)');
+      final refColumns =
+          columns.where((c) => c['name'] == 'override_supervisor_ref');
+      expect(refColumns, hasLength(1));
+
+      await db.close();
+    });
+
+    test('the new column round-trips verbatim through the DAO on a fresh v66 schema', () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final payment = PaymentEntity(
+        id: 'pay-ref-roundtrip',
+        invoiceId: 'inv-test-01',
+        method: 'card',
+        amount: 250.0,
+        amountNio: 250.0,
+        voucherCode: 'OVERRIDE: papel atascado',
+        reconciliationStatus: 'MANUAL_OVERRIDE',
+        reconciliationSyncStatus: 'pending',
+        reconciledAt: now,
+        reconciledByUserId: 'cajero-01',
+        overrideSupervisorRef: ' supervisor-mariana ',
+        createdAt: now,
+      );
+
+      await database.paymentDao.insertPayments([payment]);
+      final stored =
+          await database.paymentDao.getPaymentsByInvoiceId('inv-test-01');
+      // Stored verbatim — including whitespace: never validated, never
+      // normalized client-side (the backend normalizes whitespace-only to
+      // null on its side).
+      expect(stored.first.overrideSupervisorRef, ' supervisor-mariana ');
+      expect(stored.first.reconciledByUserId, 'cajero-01');
+
+      // A row written without the credential reads back null.
+      final plain = PaymentEntity(
+        id: 'pay-ref-null',
+        invoiceId: 'inv-test-01',
+        method: 'card',
+        amount: 100.0,
+        amountNio: 100.0,
+        voucherCode: '654321',
+        reconciliationStatus: 'CONCILIADO',
+        createdAt: now,
+      );
+      await database.paymentDao.insertPayments([plain]);
+      final all = await database.paymentDao.getPaymentsByInvoiceId('inv-test-01');
+      expect(
+        all.firstWhere((p) => p.id == 'pay-ref-null').overrideSupervisorRef,
+        isNull,
+      );
     });
   });
 }

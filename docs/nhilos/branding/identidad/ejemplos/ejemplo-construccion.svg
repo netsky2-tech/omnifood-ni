@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" width="900" height="380" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="900" height="380" fill="#FFFFFF"/>
+  <text x="24" y="34" font-size="15" font-weight="700" fill="#0F172A">Ejemplo de forma — retícula de construcción y área de resguardo</text>
+  <text x="24" y="54" font-size="12" fill="#64748B">Marca de relleno. Muestra qué debe contener la pieza, no una propuesta visual.</text>
+
+  <!-- Panel 1: grilla de construccion -->
+  <g transform="translate(24,80)">
+    <rect x="0" y="0" width="400" height="266" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+    <text x="16" y="24" font-size="12" font-weight="600" fill="#1E3A40">1 · Construcción</text>
+    <g transform="translate(70,60)">
+      <rect x="0" y="0" width="260" height="170" fill="none" stroke="#E2E8F0"/>
+      <g stroke="#E2E8F0" stroke-width="0.6">
+        <line x1="52" y1="0" x2="52" y2="170"/><line x1="104" y1="0" x2="104" y2="170"/>
+        <line x1="156" y1="0" x2="156" y2="170"/><line x1="208" y1="0" x2="208" y2="170"/>
+        <line x1="0" y1="34" x2="260" y2="34"/><line x1="0" y1="68" x2="260" y2="68"/>
+        <line x1="0" y1="102" x2="260" y2="102"/><line x1="0" y1="136" x2="260" y2="136"/>
+      </g>
+      <g stroke="#CBD5E1" stroke-width="0.8" stroke-dasharray="3 3">
+        <line x1="130" y1="-14" x2="130" y2="184"/><line x1="-14" y1="85" x2="274" y2="85"/>
+      </g>
+      <circle cx="104" cy="85" r="52" fill="none" stroke="#0F172A" stroke-width="6"/>
+      <rect x="104" y="33" width="104" height="104" rx="18" fill="none" stroke="#0F172A" stroke-width="6"/>
+      <circle cx="104" cy="85" r="4" fill="#0F172A"/>
+    </g>
+    <text x="16" y="252" font-size="11" fill="#64748B">Proporciones y alineaciones con la unidad base marcada (x).</text>
+  </g>
+
+  <!-- Panel 2: area de resguardo -->
+  <g transform="translate(456,80)">
+    <rect x="0" y="0" width="420" height="266" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+    <text x="16" y="24" font-size="12" font-weight="600" fill="#1E3A40">2 · Área de resguardo y tamaño mínimo</text>
+    <g transform="translate(60,56)">
+      <rect x="0" y="0" width="300" height="150" fill="none" stroke="#E4572E" stroke-width="1" stroke-dasharray="4 3"/>
+      <rect x="25" y="25" width="250" height="100" fill="none" stroke="#CBD5E1" stroke-dasharray="3 3"/>
+      <g transform="translate(85,45)">
+        <circle cx="30" cy="30" r="28" fill="none" stroke="#0F172A" stroke-width="5"/>
+        <rect x="30" y="2" width="56" height="56" rx="12" fill="none" stroke="#0F172A" stroke-width="5"/>
+      </g>
+      <text x="150" y="-8" font-size="11" fill="#E4572E" text-anchor="middle">x</text>
+      <line x1="0" y1="75" x2="25" y2="75" stroke="#E4572E" stroke-width="1.5"/>
+      <line x1="275" y1="75" x2="300" y2="75" stroke="#E4572E" stroke-width="1.5"/>
+    </g>
+    <text x="16" y="222" font-size="11" fill="#64748B">Resguardo expresado en la unidad del propio mark, no en mm fijos.</text>
+    <text x="16" y="240" font-size="11" fill="#64748B">Tamaño mínimo por soporte: impresión · pantalla · favicon · app.</text>
+    <text x="16" y="258" font-size="11" fill="#64748B">Sin texto, sin íconos y sin bordes dentro del resguardo.</text>
+  </g>
+</svg>

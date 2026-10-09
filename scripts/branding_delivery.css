@@ -1,0 +1,83 @@
+:root{--ink:#0F172A;--mut:#64748B;--line:#E2E8F0;--bg:#F8FAFC;--acc:#1E3A40;--accl:#E6EFF0}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;
+     color:var(--ink);background:#fff}
+.wrap{display:flex;min-height:100vh}
+nav{width:300px;flex:none;background:var(--bg);border-right:1px solid var(--line);padding:24px 0;
+    position:sticky;top:0;height:100vh;overflow-y:auto}
+nav .brand{padding:0 22px 18px;font-weight:700;font-size:15px;border-bottom:1px solid var(--line);margin-bottom:14px}
+nav .brand span{display:block;font-weight:400;color:var(--mut);font-size:12px;margin-top:3px}
+nav a{display:block;padding:7px 22px;color:var(--ink);text-decoration:none;font-size:14px;
+      border-left:3px solid transparent}
+nav a:hover{background:var(--accl)}
+nav a.on{border-left-color:var(--acc);background:var(--accl);font-weight:600}
+nav .sec{padding:16px 22px 6px;font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut)}
+main{flex:1;min-width:0;padding:44px 56px 90px;max-width:1000px}
+h1{font-size:31px;line-height:1.25;margin:0 0 22px;padding-bottom:14px;border-bottom:2px solid var(--acc)}
+h2{font-size:23px;margin:38px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:18px;margin:26px 0 8px}
+a{color:var(--acc)} a:hover{background:var(--accl)}
+code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+     font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:14px 16px;overflow-x:auto}
+pre code{background:none;border:none;padding:0;font-size:12.5px}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:var(--bg);font-weight:600}
+blockquote{margin:18px 0;padding:12px 18px;background:var(--accl);border-left:4px solid var(--acc)}
+hr{border:none;border-top:1px solid var(--line);margin:34px 0}
+.toc{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:16px 22px;margin:28px 0 8px}
+.toc p{margin:0 0 8px;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut)}
+.toc a{display:block;padding:3px 0;text-decoration:none;font-size:14px}
+.toc .l3{padding-left:18px;font-size:13px;color:var(--mut)}
+.pager{display:flex;justify-content:space-between;gap:16px;margin-top:60px;padding-top:20px;
+       border-top:1px solid var(--line);font-size:14px}
+@media print{
+  nav{display:none} .wrap{display:block} main{padding:0;max-width:none}
+  h1{page-break-after:avoid} h2,h3{page-break-after:avoid}
+  .tw,table,pre,blockquote{page-break-inside:avoid}
+  a{color:var(--ink);text-decoration:none}
+  .pager,.toc{display:none}
+}
+
+/* --- Adaptación a pantallas chicas -------------------------------------------
+   Sin esto el documento es solo de escritorio: el sidebar fijo de 300 px y las
+   tablas anchas no dejan espacio útil en un teléfono. El sidebar pasa a barra
+   superior, las tablas scrollean solas y los espaciados se reducen. */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:16px 0}
+.tw table{margin:0}
+code{overflow-wrap:anywhere}
+
+@media (max-width: 900px){
+  /* El sidebar fijo no cabe en un telefono. Pasa a una sola fila desplazable:
+     compacta, alcanzable con el pulgar, sin robar altura al contenido. */
+  .wrap{display:block}
+  nav{position:static;width:auto;height:auto;border-right:none;
+      border-bottom:1px solid var(--line);padding:6px 4px;
+      display:flex;flex-wrap:nowrap;align-items:center;white-space:nowrap;
+      overflow-x:auto;-webkit-overflow-scrolling:touch}
+  nav .brand{display:none}
+  nav .sec{display:none}
+  nav a{flex:none;display:inline-block;padding:8px 12px;font-size:13.5px;
+        border-left:none;border-bottom:2px solid transparent}
+  nav a.on{border-left:none;border-bottom-color:var(--acc);background:none;font-weight:600}
+  main{padding:26px 18px 64px;max-width:none}
+  body{font-size:15px;line-height:1.6}
+  h1{font-size:25px;margin-bottom:16px}
+  h2{font-size:20px;margin:30px 0 10px}
+  h3{font-size:17px;margin:22px 0 6px}
+  .toc{padding:12px 16px;margin:20px 0 6px}
+  .pager{flex-direction:column;gap:10px;margin-top:40px}
+  blockquote{padding:10px 14px;margin:14px 0}
+  pre{padding:10px 12px}
+  pre code{font-size:11.5px}
+}
+
+@media (max-width: 560px){
+  main{padding:20px 13px 56px}
+  h1{font-size:22px}
+  h2{font-size:18px}
+  th,td{padding:6px 8px;font-size:12.5px}
+  table{font-size:12.5px}
+  .toc a{font-size:13px}
+}

@@ -87,6 +87,16 @@ export class Payment {
   @Column({ name: 'reconciled_by_user_id', nullable: true })
   reconciledByUserId?: string;
 
+  /**
+   * The supervisor credential the operator TYPED at override time, stored
+   * verbatim and unvalidated. Declared evidence, NOT a foreign key to
+   * `users`: null for normal reconciliations. Keeps the operator actor in
+   * `reconciled_by_user_id` separate from the typed supervisor string the
+   * POS used to abuse that column with.
+   */
+  @Column({ name: 'override_supervisor_ref', nullable: true })
+  overrideSupervisorRef?: string;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt: Date;
 }

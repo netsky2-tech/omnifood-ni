@@ -206,6 +206,13 @@ export class PaymentReconciliationSyncIngestionService {
    * item and has not landed; until it does, this column records who the
    * terminal SAYS performed the reconciliation. Do not read this column as
    * a verified approval in reports, dashboards, or audits.
+   *
+   * SUPERVISOR CREDENTIAL — `override_supervisor_ref` records the
+   * supervisor credential the operator TYPED at override time, stored
+   * verbatim and never validated against `users` (declared evidence, not a
+   * foreign key). It is kept strictly SEPARATE from the operator actor:
+   * legacy payloads that do not send it persist null, and an empty or
+   * whitespace-only value normalizes to null instead of failing the batch.
    */
   private toReconciliationValues(
     record: PaymentReconciliationSyncItemDto,
@@ -216,6 +223,12 @@ export class PaymentReconciliationSyncIngestionService {
       reconciledAt: new Date(record.reconciledAt),
       reconciledByUserId: record.reconciledByUserId,
       batchNumber: record.batchNumber ?? null,
+      // Verbatim when declared; absent, empty, or whitespace-only becomes
+      // null ("no supervisor credential declared") instead of failing the
+      // batch or persisting a blank string.
+      overrideSupervisorRef: record.overrideSupervisorRef?.trim()
+        ? record.overrideSupervisorRef
+        : null,
     };
   }
 

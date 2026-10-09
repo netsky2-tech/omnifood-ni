@@ -116,6 +116,13 @@ class CashShiftViewModel extends ChangeNotifier {
     return currentUserId.isNotEmpty ? currentUserId : null;
   }
 
+  /// Resolves the acting user id at ACTION time — same semantics as
+  /// [_actingUserId], exposed publicly for identity-stamped sub-flows
+  /// (voucher reconciliation): the injected identity source wins; when it
+  /// reports no logged-in user there IS no acting user; the constructor
+  /// value is only a fallback when no identity source was injected.
+  Future<String?> resolveActingUserId() => _actingUserId();
+
   CashierSessionEntity? get activeShift => _activeShift;
   CashierSessionEntity? get lastClosedShift => _lastClosedShift;
 

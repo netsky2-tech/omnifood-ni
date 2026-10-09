@@ -99,6 +99,10 @@ R-16 era: *el sync se estanca en silencio y el badge miente*. **Causa raíz repa
 - **#80** R-4: el mensaje de error queda oculto bajo el carrito.
 - **#91** El editor de opciones rotula el dinero con `$` en vez de `C$`.
 
+### F-4 · `InventoryController` huérfano — ✅ JUBILADO (eliminados)
+
+El archivo `apps/admin_backend/src/modules/inventory/inventory.controller.ts` era código muerto (no importado en ningún módulo). Se eliminó junto con su spec. La misma ruta `POST /inventory/purchase` ya está cubierta por `InventoryMovementController` (registrado en el módulo con `AuthGuard` + `RolesGuard`).
+
 ### P3 — Superficies nunca probadas
 - **#81** Pago por QR/Transferencia (el Z mostró C$ 0.00, nunca se ejerció).
 - **#82** Descuento manual. **#83** Promociones (vimos el badge 2x1, nunca su efecto). **#84** Devoluciones y notas de crédito. **#85** KDS y comanda de cocina. **#86** Historial de Ventas (probado parcialmente: funciona y resuelve el nombre del cajero). **#87** Bitácora de Auditoría. **#88** Lealtad/puntos. **#89** Fase 8.3 del guion integral, declarada NO PROBADA.

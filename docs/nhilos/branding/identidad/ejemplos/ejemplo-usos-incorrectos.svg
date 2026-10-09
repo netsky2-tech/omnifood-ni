@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" width="900" height="340" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="900" height="340" fill="#FFFFFF"/>
+  <text x="24" y="34" font-size="15" font-weight="700" fill="#0F172A">Ejemplo de forma — usos incorrectos y su corrección</text>
+  <text x="24" y="54" font-size="12" fill="#64748B">Cada uso incorrecto va mostrado y señalado. No alcanza con escribirlo.</text>
+  <g font-size="11" fill="#64748B">
+    <g transform="translate(24,76)">
+      <rect width="200" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <g transform="translate(70,26) rotate(-18)">
+        <circle cx="18" cy="18" r="16" fill="none" stroke="#0F172A" stroke-width="4"/>
+        <rect x="18" y="2" width="34" height="34" rx="8" fill="none" stroke="#0F172A" stroke-width="4"/>
+      </g>
+      <circle cx="188" cy="12" r="9" fill="#DC2626"/><text x="188" y="16" font-size="11" fill="#fff" text-anchor="middle">✗</text>
+      <text x="12" y="94">No rotar</text>
+      <text x="12" y="107" fill="#1E3A40">→ usar la versión inclinada aprobada</text>
+    </g>
+    <g transform="translate(240,76)">
+      <rect width="200" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <g transform="translate(66,30) scale(1.5,0.7)">
+        <circle cx="18" cy="18" r="16" fill="none" stroke="#0F172A" stroke-width="4"/>
+        <rect x="18" y="2" width="34" height="34" rx="8" fill="none" stroke="#0F172A" stroke-width="4"/>
+      </g>
+      <circle cx="188" cy="12" r="9" fill="#DC2626"/><text x="188" y="16" font-size="11" fill="#fff" text-anchor="middle">✗</text>
+      <text x="12" y="94">No deformar ni escalar distinto</text>
+      <text x="12" y="107" fill="#1E3A40">→ escalar proporcional (Shift)</text>
+    </g>
+    <g transform="translate(456,76)">
+      <rect width="200" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <g transform="translate(70,30)">
+        <circle cx="18" cy="18" r="16" fill="none" stroke="#E4572E" stroke-width="4"/>
+        <rect x="18" y="2" width="34" height="34" rx="8" fill="none" stroke="#0E7C86" stroke-width="4"/>
+      </g>
+      <circle cx="188" cy="12" r="9" fill="#DC2626"/><text x="188" y="16" font-size="11" fill="#fff" text-anchor="middle">✗</text>
+      <text x="12" y="94">No recolorear fuera de paleta</text>
+      <text x="12" y="107" fill="#1E3A40">→ usar los colores aprobados</text>
+    </g>
+    <g transform="translate(672,76)">
+      <rect width="204" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <g transform="translate(72,30)" opacity="0.18">
+        <circle cx="18" cy="18" r="16" fill="none" stroke="#0F172A" stroke-width="4"/>
+        <rect x="18" y="2" width="34" height="34" rx="8" fill="none" stroke="#0F172A" stroke-width="4"/>
+      </g>
+      <circle cx="192" cy="12" r="9" fill="#DC2626"/><text x="192" y="16" font-size="11" fill="#fff" text-anchor="middle">✗</text>
+      <text x="12" y="94">No bajar el contraste</text>
+      <text x="12" y="107" fill="#1E3A40">→ versión con contraste medido</text>
+    </g>
+    <g transform="translate(24,206)">
+      <rect width="200" height="112" rx="6" fill="#64748B" stroke="#E2E8F0"/>
+      <g transform="translate(70,30)">
+        <circle cx="18" cy="18" r="16" fill="none" stroke="#475569" stroke-width="4"/>
+        <rect x="18" y="2" width="34" height="34" rx="8" fill="none" stroke="#475569" stroke-width="4"/>
+      </g>
+      <circle cx="188" cy="12" r="9" fill="#DC2626"/><text x="188" y="16" font-size="11" fill="#fff" text-anchor="middle">✗</text>
+      <text x="12" y="94" fill="#F8FAFC">No sobre fondos cargados</text>
+      <text x="12" y="107" fill="#E2E8F0">→ usar la versión negativa</text>
+    </g>
+    <g transform="translate(240,206)">
+      <rect width="200" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <g transform="translate(70,30)">
+        <g filter="url(#sombra)">
+          <circle cx="18" cy="18" r="16" fill="none" stroke="#0F172A" stroke-width="4"/>
+          <rect x="18" y="2" width="34" height="34" rx="8" fill="none" stroke="#0F172A" stroke-width="4"/>
+        </g>
+      </g>
+      <circle cx="188" cy="12" r="9" fill="#DC2626"/><text x="188" y="16" font-size="11" fill="#fff" text-anchor="middle">✗</text>
+      <text x="12" y="94">No agregar sombras ni efectos</text>
+      <text x="12" y="107" fill="#1E3A40">→ el mark va plano</text>
+    </g>
+    <g transform="translate(456,206)">
+      <rect width="200" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <g transform="translate(70,30)">
+        <circle cx="18" cy="18" r="16" fill="none" stroke="#0F172A" stroke-width="4"/>
+        <rect x="18" y="2" width="34" height="34" rx="8" fill="none" stroke="#0F172A" stroke-width="4"/>
+      </g>
+      <g transform="translate(96,14)">
+        <rect width="90" height="16" rx="3" fill="#0F172A" opacity="0.12"/>
+      </g>
+      <circle cx="188" cy="12" r="9" fill="#DC2626"/><text x="188" y="16" font-size="11" fill="#fff" text-anchor="middle">✗</text>
+      <text x="12" y="94">No invadir el resguardo</text>
+      <text x="12" y="107" fill="#1E3A40">→ respetar el área definida</text>
+    </g>
+    <g transform="translate(672,206)">
+      <rect width="204" height="112" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <g transform="translate(72,30) scale(0.34)">
+        <circle cx="18" cy="18" r="16" fill="none" stroke="#0F172A" stroke-width="4"/>
+        <rect x="18" y="2" width="34" height="34" rx="8" fill="none" stroke="#0F172A" stroke-width="4"/>
+      </g>
+      <circle cx="192" cy="12" r="9" fill="#DC2626"/><text x="192" y="16" font-size="11" fill="#fff" text-anchor="middle">✗</text>
+      <text x="12" y="94">No ir por debajo del mínimo</text>
+      <text x="12" y="107" fill="#1E3A40">→ usar el isotipo solo</text>
+    </g>
+  </g>
+  <defs><filter id="sombra"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.35"/></filter></defs>
+</svg>
