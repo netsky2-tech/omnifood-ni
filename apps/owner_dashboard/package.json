@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:e2e": "playwright test",
+    "test:e2e:live": "playwright test -c playwright.live.config.ts",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
