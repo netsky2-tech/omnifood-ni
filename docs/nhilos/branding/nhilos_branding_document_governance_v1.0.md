@@ -56,14 +56,21 @@ el set.
         │                            lo que el brief autoriza en messaging.
         │                                 │
         │                                 ▼
-        │                          5. nhilos_pos_product_page_content_v1.1.md
-        │                             Contrato de contenido de página de producto.
-        │                             Cada claim publicado cita su ID del OD-02.
+        │                          5. nhilos_website_homepage_content_v1.1.md
+        │                             Contrato de contenido de la homepage.
+        │                             Implementa los bloques H00–H13 de la IA con copy,
+        │                             claims citados del OD-02 y límites declarados.
         │                                 │
         │                                 ▼
-        │                          6. nhilos_pos_media_inventory_v1.0.md
+        │                          6. nhilos_pos_product_page_content_v1.1.md
+        │                             Contrato de contenido de página de producto.
+        │                             Cada claim publicado cita su ID del OD-02.
+        │                             Contrasta contra la homepage en el Gate E.
+        │                                 │
+        │                                 ▼
+        │                          7. nhilos_pos_media_inventory_v1.0.md
         │                             Evidencia visual (Gate D). Ningún activo puede
-        │                             contradecir el contenido del paso 5.
+        │                             contradecir el contenido del paso 6.
         │
         ▼
    Referencias técnicas transversales (no deciden marca ni claims):
@@ -102,8 +109,9 @@ a él como upstream. Si un documento necesita una regla que vive arriba, la cita
 | 2 | `product_claim_audit_od02_v1.3.md` | `branding/Recursos/` | Autoridad de claims | 1.3 | `CLOSED / VERIFIED / RE-ANCHORED` |
 | 3 | `nhilos_website_product_marketing_brief_v1.0.md` | `branding/` | Narrativa de marketing | 1.0 | `APPROVED` |
 | 4 | `nhilos_website_information_architecture_content_wireframe_v1.0.md` | `branding/` | IA y contenido del sitio | 1.0 | `APPROVED` |
-| 5 | `nhilos_pos_product_page_content_v1.1.md` | `branding/` | Contrato de contenido de producto | 1.1 | `APPROVED / PUBLICATION GATED` |
-| 6 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `CONTENIDO APROBADO / EVIDENCIA OBSOLETA — REVALIDACIÓN REQUERIDA` |
+| 5 | `nhilos_website_homepage_content_v1.1.md` | `branding/` | Contrato de contenido de la homepage | 1.1 | `APPROVED / PUBLICATION GATED` |
+| 6 | `nhilos_pos_product_page_content_v1.1.md` | `branding/` | Contrato de contenido de producto | 1.1 | `APPROVED / PUBLICATION GATED` |
+| 7 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `CONTENIDO APROBADO / EVIDENCIA OBSOLETA — REVALIDACIÓN REQUERIDA` |
 | — | `nhilos_pos_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficie POS | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_backoffice_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficies backoffice | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_website_non_functional_spec_v1.0.md` | `branding/Recursos/` | Spec no funcional del sitio | 1.0 | `DRAFT` — gates heredados por la IA (§18.1 `NF-01`..`NF-13`) |

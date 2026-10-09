@@ -10,8 +10,8 @@
 **Authority:** Contrato de contenido aprobado para la página profunda de producto.  
 **Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara según el contexto que el prospecto comparte (Sección 12), y los estados de éxito y error le devuelven un siguiente paso definido.  
-**DEPENDENCIA PENDIENTE — no existe en el repositorio:** `nhilos_website_homepage_content_v1.1.md` no existe en ningún lugar del repositorio. Este documento NO puede promocionarse para publicación hasta que esa dependencia exista. La alineación con ella y la verificación de capacidades contra builds y evidencia vigentes permanecen como gates separados de publicación.  
-**GATE DE PUBLICACIÓN:** la publicación de esta página está bloqueada por (a) la creación de `nhilos_website_homepage_content_v1.1.md` y (b) la verificación de capacidades contra el build vigente.
+**DEPENDENCIA SATISFECHA:** `nhilos_website_homepage_content_v1.1.md` (v1.1) existe ahora en el repositorio como contrato de contenido de la homepage. La dependencia de creación está cerrada en esa versión; lo que permanece pendiente es el contraste cruzado de Gate E contra dicho documento (OD-PP-12) y la verificación de capacidades contra builds y evidencia vigentes, que siguen siendo gates separados de publicación.
+**GATE DE PUBLICACIÓN:** la publicación de esta página requiere (a) el Gate E ejecutado y documentado: contraste cruzado contra `nhilos_website_homepage_content_v1.1.md` v1.1 (división de labores, terminología y CTAs), y (b) la verificación de capacidades contra el build vigente; la revalidación de medios permanece trackada por separado en Gate D (OD-PP-06).
 
 ---
 
