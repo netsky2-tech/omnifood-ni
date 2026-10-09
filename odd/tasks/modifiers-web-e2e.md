@@ -93,8 +93,29 @@ exponé, se arregla aquí sin depender de la otra sesión (ver §4).
 - [x] **T8** Commits convencionales por work unit con tests/docs junto al comportamiento.
       **Evidencia:** `0cad99c3` fix decimal (cherry-pick) · `710008d8` spec UI live (7 tests) ·
       `7ff1277f` test API (12 tests) · `cca3c95f` docs ODD. Árbol limpio tras cada commit.
-- [ ] **T9** Revisión nativa (inspect por candidato) según el switch RDD del usuario.
-- [ ] **T10** Merge a `main` al final (autorizado por el usuario).
+- [x] **T9** Revisión nativa (inspect por candidato) según el switch RDD del usuario.
+      **Evidencia (2026-10-09):**
+      - Candidato full-branch (1987 líneas): lineage `review-43013e22d9919ffe` — 4 lentes,
+        **3/4 admitidos** (risk/readability/reliability) y `review-resilience` atascado 9 corridas
+        (budget de salida agotado en reasoning; sin caché en disco que purgar). **Abandonado**
+        con `reason=operator_disposition` (autorización explícita del usuario) → cuarentena
+        `quarantine/review-43013e22d9919ffe-2023255701`, registro con discarded work exacto.
+      - **Slice 1** (fix `0cad99c3`, high, 881 líneas): lineage `review-6412dace00d703f7`,
+        4 lentes one-slot (la ruta confiable — el modo grupo falló 3/3 por contención del
+        relay), **APPROVED + authority burned** (`16cfb81d…`), 6 advisory findings no bloqueantes.
+      - **Slice 2** (`0cad99c3..HEAD`, medium, 1106 líneas, 6 archivos): lineage
+        `review-43013e22d9919ffe` (recreado con baseRef explícito `0cad99c3`), 1 lente
+        (reliability) — primer intento rechazado por citar `127.0.0.1:3300` como proof_ref;
+        **reparación**: payload rechazado retirado a `/tmp/gentle-rejected-backup/` → corrida
+        nueva limpia → **APPROVED + authority burned** (`111a964d…`), 2 advisory findings.
+      - **Cobertura: 4/4 commits con aprobación nativa quemada** (partición slice1+slice2).
+      - Incidentes aprendidos: grupo concurrente no funciona en este host; el ack del slice 2
+        requirió ejecutar la continuación nativa exacta del cierre (la facada marcó
+        `unrelated` por mismatch de proyección workspace).
+- [x] **T10** Merge a `main` al final (autorizado por el usuario).
+      **Evidencia:** `git merge --ff-only test/modifiers-web-e2e` en el checkout principal →
+      `main` = **`f27a57a3`** (4 commits, 17 archivos, +1943/−44), árbol limpio. Fixture tenant
+      saneado: 10 grupos E2E residualles pasados a inactive (0 activos).
 
 ## 4. Registro de hallazgos
 
@@ -123,4 +144,37 @@ enganche/effective: se ejecutarán en T7 tras el fix de D-1.)
 
 ## 5. Cierre
 
-(Pendiente: T9 revisión nativa, T10 merge, limpieza de leftovers del fixture.)
+**Estado: COMPLETO (2026-10-09).** Rama `test/modifiers-web-e2e` mergeada a `main` (`f27a57a3`).
+
+- **Verificación final previa al merge:** jest modifiers 114/114 · vitest modifiers 51/51 ·
+  tsc backend+dashboard 0 errores · live API 12/12 · live UI 7/7 · lint CI ok.
+- **Defecto real corregido:** D-1 (contrato decimal `price_delta`) — fix canónico `ce002af1`
+  cherry-picked como `0cad99c3`.
+- **Revisión nativa:** 4/4 commits con aprobación quemada (2 slices tras abandonar el candidato
+  full-branch por falla determinista del lente resilience).
+
+### Follow-ups (no bloqueantes)
+1. **Advisory findings de las reviews** (todos informativos):
+   - `R2-duplicated-numeric-transform` — transform decimal duplicado en `create-modifier-option.dto.ts:20-26`.
+   - `R3-001` — `modifier-response.ts:69` (WARNING).
+   - `R3-002/004` — sugerencias en `modifiers.controller.spec.ts:345-353,365`.
+   - `R3-003` + `R4-normalizer-options-guard` — guard del normalizer en `modifiers-api.ts:55`.
+   - `R3-live-integration-ungated` — include de integración sin gate en `vitest.integration.config.ts:16`.
+   - `R3-live-server-reuse` — `reuseExistingServer` en `playwright.live.config.ts:33`.
+2. **Preexistente en main**: `core/http/route-transport-registry.spec.ts` falla en `1ed5c0ad`
+   limpio (reproducido en el checkout de main) — ajeno a esta rama.
+3. **Delta channel** (`GET /v1/sync/inbound/deltas`) no cubierto: exige JWT de device-sync con
+   credencial viva; el path ya está validado en dispositivo (S23/T4.3b). Opcional si se desea
+   un fixture de `device_sync_credentials`.
+4. **Fixture tenant**: quedan 10 grupos E2E inactivos (soft-delete, invisibles por defecto) —
+   higiene aceptable; borrar con `DELETE /api/modifier-groups/:id` si se quiere cero residuo.
+
+### Cómo re-ejecutar
+```bash
+# stack (desde el worktree)
+PORT=3300 CORS_ALLOWED_ORIGINS=http://soho-test-fixture.localhost:5174,http://localhost:5174,http://127.0.0.1:5174 pnpm --filter admin_backend start
+VITE_API_URL=http://127.0.0.1:3300 pnpm --filter owner_dashboard exec vite --port 5174 --strictPort
+# specs
+NHILOS_LIVE_E2E=1 npx playwright test -c playwright.live.config.ts   # apps/owner_dashboard
+npx vitest run -c vitest.integration.config.ts src/__tests__/modifiers-live.integration.test.ts
+```
