@@ -7,7 +7,7 @@
 **Aplica a:** Propietarios (Owners), administradores y gerentes de SOHO Café (`NH-T0001`)  
 **Acceso Web:** Portal Backoffice en la Nube  
 
-> **Cambios v0.2:** sección 6 reescrita paso a paso con capturas actualizadas; correcciones de renderizado, terminología y alineación de §3–§4 con la UI real.
+> **Cambios v0.2:** sección 6 reescrita paso a paso con capturas actualizadas; correcciones de renderizado, terminología y alineación de §3–§4 con la UI real; captura del dashboard con filtro «Este mes», imágenes nuevas para §7 (Inventario y Recetas) y §9 (Usuarios), y ruta real de Usuarios.
 
 ---
 
@@ -35,18 +35,18 @@ En la barra superior del portal verás siempre el indicador de **Frescura de Sin
 
 ## 3. Vista General del Negocio (Dashboard Overview)
 
-Al iniciar sesión, la pantalla de inicio te presenta los indicadores clave de rendimiento (KPIs) en tiempo real con datos sincronizados desde la terminal de caja:
+Al iniciar sesión, la pantalla de inicio te presenta los indicadores clave de rendimiento (KPIs) con datos sincronizados desde la terminal de caja. Para ver el negocio completo, abrí el selector de rango de fechas («Seleccionar rango de fechas») y elegí el preset **Este mes** en «Periodos Rápidos»; la captura muestra ese filtro con las ventas de octubre hasta el día 9:
 
 ![Vista General de KPIs del Negocio](images/dsh_02_kpis_ventas.png)
 
-1. **Ventas Netas del Período:** Monto total facturado en Córdobas (C\$) en el rango seleccionado (la captura muestra el inicio del día, sin ventas registradas: C\$ 0.00).
-2. **Volumen de Facturas (Tickets):** Cantidad de comprobantes emitidos válidos (en la captura, 0 al inicio del día).
-3. **Ticket Promedio:** Gasto medio por cliente (sin base comparable hasta registrar ventas del día).
-4. **Margen Bruto Teórico:** Indicador de rentabilidad (en el Día 1 de SOHO se muestra sin costo de ventas hasta cargar las recetas).
-5. **Evolución y Ventas por Hora:** Gráfica interactiva de facturación a lo largo de las horas del día.
-6. **Top Productos Más Vendidos:** Ranking de rotación (ej. *Cappuccino 12oz*, *Espresso Doble*, *Cappuccino 8oz*).
+1. **Ventas Netas del Período:** Monto total facturado en Córdobas (C\$) en el rango seleccionado (con **Este mes**: C\$ 4,571.00 del 01/10/2026 al 09/10/2026; «Sin base comparable» porque el mes anterior no tiene datos cargados).
+2. **Volumen de Facturas (Tickets):** Cantidad de comprobantes emitidos válidos (en la captura, 28 tickets del mes).
+3. **Ticket Promedio:** Gasto medio por cliente (en la captura, C\$ 163.25).
+4. **Margen Bruto Teórico:** Indicador de rentabilidad; en SOHO todavía sin base porque muestra «Costo de ventas no disponible» hasta mapear los insumos de cada producto (se resuelve al cargar recetas, sección 7).
+5. **Evolución de Ventas:** Gráfica diaria del período con la serie «Ventas netas — período actual» y su comparación con el «Período anterior (comparación)» (del 1 al 9 de octubre en la captura).
+6. **Ventas por Hora y Top Productos:** Promedio por hora del período («Promedio por hora en 9 días») y ranking de rotación (en la captura, *Americano 8oz* lidera con 14 unidades, C\$ 1,311.00 y 28.7% de participación).
 7. **Mix de Métodos de Pago:** Desglose consolidado del dinero recibido (Efectivo NIO, USD, Tarjetas).
-8. **Atención Requerida:** Resumen automático de alertas del negocio (en la captura: 1 voucher pendiente por C\$ 50.00 y 1 override manual por C\$ 220.00).
+8. **Atención Requerida:** Resumen automático de alertas del negocio (en la captura: 1 voucher pendiente por C\$ 50.00, 3 anulaciones del período por C\$ 295.00, 2 eventos de advertencia de auditoría y 1 override manual por C\$ 220.00).
 
 ---
 
@@ -177,6 +177,14 @@ Guardá con **Crear**.
    * Muestra el **margen de ganancia bruta real** de cada producto del menú (Precio de venta menos costo de ingredientes).
 4. **Registro de Mermas y Ajustes:** Registro justificado de insumos caducados, leche cortada o derrames en preparación para auditar el desperdicio real del negocio.
 
+**Estado actual (Día 1):** el módulo vive en las secciones **Inventario** y **Recetas** del menú lateral. Así se ve **Inventario** hoy, con la pestaña **Valoración** en cero hasta mapear insumos y las pestañas **Insumos**, **Compras**, **Proveedores**, **COGS / Margen**, **Kardex** y **Alertas** listas para cuando el control esté cargado:
+
+![Módulo de Inventario en estado Día 1](images/dsh_15_inventario.png)
+
+Y así **Recetas y BOM**, pidiendo productos de tipo *Compuesto* en el catálogo mientras no haya recetas cargadas:
+
+![Recetas y BOM sin productos compuestos](images/dsh_16_recetas_bom.png)
+
 ---
 
 ## 8. Módulo Fiscal y Reportes para Contabilidad
@@ -203,12 +211,15 @@ En la sección **Fiscal** del menú lateral:
 
 ## 9. Gestión de Usuarios, Roles y Seguridad de Acceso
 
-En la sección **Ajustes > Usuarios y Permisos**:
+En la sección **Administración > Usuarios** del menú lateral (título «Gestión de Usuarios»):
+
+![Gestión de Usuarios con roles](images/dsh_17_gestion_usuarios.png)
 
 1. **Creación y Edición de Cajeros:**
-   * Podés registrar a cada empleado con su nombre completo y correo electrónico.
+   * Podés registrar a cada empleado con su nombre completo y correo electrónico desde **+ Nuevo Usuario**, y buscarlo por nombre, correo o rol en la tabla.
+   * La columna **Rol** muestra los roles vigentes (en la captura, *Dueño (Owner)* y *Cajero (Cashier)* con estado *Activo*) y la acción **Permisos** abre la matriz granular de cada usuario.
 2. **Asignación y Reemplazo de PINs:**
-   * Si un cajero olvida su PIN de 4 dígitos o si se produce una rotación de personal, podés cambiar su código numérico directamente en el portal en pocos segundos.
+   * Si un cajero olvida su PIN o si se produce una rotación de personal, podés cambiar su código numérico (de 4 a 8 dígitos) desde la ficha de edición del usuario en pocos segundos.
 3. **Matriz de Privilegios:**
    * **Cajero:** Solo puede operar la pantalla de venta física en el terminal.
    * **Supervisor / Encargado:** Puede autorizar anulaciones y cierres de turno en caja.

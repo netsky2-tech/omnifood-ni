@@ -304,14 +304,14 @@ cumplen con los siguientes estándares:
 
 ### Dispositivo de captura y procedencia real
 
-La biblioteca de 38 PNG en `docs/nhilos/manuals/images/` **no proviene de un solo dispositivo** y no
+La biblioteca de 41 PNG en `docs/nhilos/manuals/images/` **no proviene de un solo dispositivo** y no
 coincide con el que este documento declaraba:
 
 | Grupo | Resolución | Archivos | Dispositivo |
 |---|---|---|---|
 | POS terminal | `800 x 1280` | 16 | **`MIRAY Q80 / iPOS`** — Android 12, impresora térmica **80 mm**, gaveta de efectivo y escáner. Fuente: `docs/nhilos/audits/pos_experience_audit_v1.0.md` (`NH-AUD-POS-001`, 2026-10-02) y `docs/nhilos/manuals/nhilos_pos_user_manual_v0.1.md`. |
 | POS terminal (segundo grupo) | `1080 x 2316` | 8 | **No documentado.** Corresponde a `pos_05a`–`pos_05f`, `pos_15` y `pos_16b`. Son capturas de terminal, pero el repositorio no registra en qué dispositivo se tomaron. No se declara un dispositivo sin evidencia. |
-| Backoffice web | `1440 x 900` | 14 | Capturas de navegador (no son capturas de hardware por ADB). |
+| Backoffice web | `1440 x 900` | 17 | Capturas de navegador (no son capturas de hardware por ADB). |
 
 Dimensiones medidas sobre los archivos. Las que este documento declaraba antes
 (`1080 x 2160` para Sunmi V2s y `2560 x 1440` para desktop) no tenían fuente en el repositorio
@@ -330,12 +330,13 @@ Fechas tomadas del commit que agregó cada archivo:
 | `2026-10-06` | `pos_05a`–`pos_05d`, `pos_16b` | Ciclo de vida de cuentas abiertas y bloqueo de Corte Z. |
 | `2026-10-07` | `pos_05e`, `pos_05f`, `dsh_07`–`dsh_09` | Modificadores en caja y en backoffice. |
 | `2026-10-09` | `dsh_02`–`dsh_09`, `dsh_10`–`dsh_14` | Refresco completo de las capturas backoffice y alta de las 5 del walkthrough de modificadores (manual v0.2, spec `manual-screenshots.live.spec.ts`, 1440×900). |
+| `2026-10-09` | `dsh_02` (recaptura con preset «Este mes»), `dsh_15`, `dsh_16`, `dsh_17` | Dashboard con rango «Este mes» (KPIs, gráfico y alertas con datos reales del mes) + altas de Inventario, Recetas y BOM y Gestión de Usuarios para §7/§9 del manual (misma spec, 1440×900). |
 
 ### Formatos y peso real de la evidencia
 
-- Los 38 archivos están en **PNG**. Deben convertirse a WebP/AVIF con fallback PNG antes de
+- Los 41 archivos están en **PNG**. Deben convertirse a WebP/AVIF con fallback PNG antes de
   publicarse, según la especificación no funcional.
-- Peso total de la biblioteca: ~4.1 MB. La mayoría entre 25 y 170 KB; dos superan los 180 KB
+- Peso total de la biblioteca: ~4.4 MB. La mayoría entre 25 y 170 KB; dos superan los 180 KB
   (`pos_16b_bloqueo_corte_z_cuentas.png` 214 KB, `pos_15_lectura_parcial_corte_x.png` 210 KB) y
   requieren compresión al convertirse.
 - La especificación no funcional **no define un presupuesto de peso por imagen**; define una
