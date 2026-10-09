@@ -59,6 +59,7 @@ interface PaymentRowSnapshot {
   reconciliation_status: string | null;
   batch_number: string | null;
   reconciled_by_user_id: string | null;
+  override_supervisor_ref: string | null;
   reconciled_at: string | null;
 }
 
@@ -94,7 +95,8 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
       `SELECT method, amount, currency, exchange_rate, amount_nio,
               change_given, change_currency, card_brand, card_type, bank_pos,
               "last4", voucher_code, reconciliation_status, batch_number,
-              reconciled_by_user_id, reconciled_at::text AS reconciled_at
+              reconciled_by_user_id, override_supervisor_ref,
+              reconciled_at::text AS reconciled_at
          FROM invoice_payments
         WHERE id = $1`,
       [paymentId],
@@ -226,7 +228,7 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
   });
 
   it(
-    'happy path: updates exactly the five reconciliation columns on the real invoice_payments row and leaves the fiscal snapshot untouched',
+    'happy path: updates exactly the reconciliation columns on the real invoice_payments row and leaves the fiscal snapshot untouched',
     async () => {
       const before = await snapshotPayment(payA1Id);
 
@@ -258,6 +260,9 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
       expect(after.voucher_code).toBe('VCH-HP-0001');
       expect(after.reconciliation_status).toBe('CONCILIADO');
       expect(after.reconciled_by_user_id).toBe('cashier-a1');
+      // Legacy payload shape: no overrideSupervisorRef key sent, so the new
+      // column stays null — backward compatible with the shipped POS.
+      expect(after.override_supervisor_ref).toBeNull();
       expect(after.batch_number).toBe('BATCH-HP');
       expect(after.reconciled_at).not.toBeNull();
       // Everything else is the sale sync's fiscal snapshot and must be
@@ -383,6 +388,7 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
         reconciliationStatus: 'MANUAL_OVERRIDE',
         reconciledAt: '2026-03-04T09:00:00.000Z',
         reconciledByUserId: 'supervisor-1',
+        overrideSupervisorRef: 'SUP-TYPED-7788',
         voucherCode: 'VCH-MIX-0004',
         batchNumber: 'BATCH-MIX',
       });
@@ -411,6 +417,9 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
       expect(afterGood.reconciliation_status).toBe('MANUAL_OVERRIDE');
       expect(afterGood.voucher_code).toBe('VCH-MIX-0004');
       expect(afterGood.reconciled_by_user_id).toBe('supervisor-1');
+      // The split identities: the operator actor in reconciled_by_user_id,
+      // the typed supervisor credential verbatim in override_supervisor_ref.
+      expect(afterGood.override_supervisor_ref).toBe('SUP-TYPED-7788');
       expect(afterGood.batch_number).toBe('BATCH-MIX');
       expect(afterGood.reconciled_at).not.toBeNull();
       expect(afterGood.amount).toBe(beforeGood.amount);
@@ -536,6 +545,49 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
       await expect(
         bootstrap.query('SELECT count(*)::int AS n FROM invoice_payments'),
       ).resolves.toEqual([{ n: 6 }]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'legacy payload (supervisor string in reconciledByUserId, no overrideSupervisorRef) still persists as-is for backward compatibility',
+    async () => {
+      const before = await snapshotPayment(payA3Id);
+
+      // Exactly what the currently shipped POS sends: the typed supervisor
+      // string riding in reconciledByUserId and NO overrideSupervisorRef key.
+      const result = await service.ingestReconciliationBatch(tenantAId, {
+        reconciliations: [
+          reconciliation({
+            paymentId: payA3Id,
+            invoiceId: invoiceA3Id,
+            reconciliationStatus: 'MANUAL_OVERRIDE',
+            reconciledAt: '2026-05-06T11:20:00.000Z',
+            reconciledByUserId: 'supervisor-1',
+            voucherCode: 'VCH-LEG-0003',
+            batchNumber: 'BATCH-LEG',
+          }),
+        ],
+      });
+
+      expect(result).toMatchObject({
+        received: 1,
+        processed: 1,
+        failed: 0,
+      });
+
+      const after = await snapshotPayment(payA3Id);
+      // The legacy actor value persists verbatim in its existing column...
+      expect(after.reconciled_by_user_id).toBe('supervisor-1');
+      // ...and the new column stays null: no key sent means no supervisor
+      // credential declared, never an accidental write.
+      expect(after.override_supervisor_ref).toBeNull();
+      expect(after.reconciliation_status).toBe('MANUAL_OVERRIDE');
+      expect(after.voucher_code).toBe('VCH-LEG-0003');
+      expect(after.batch_number).toBe('BATCH-LEG');
+      // Fiscal snapshot untouched, as always.
+      expect(after.amount).toBe(before.amount);
+      expect(after.method).toBe(before.method);
     },
     TEST_TIMEOUT_MS,
   );

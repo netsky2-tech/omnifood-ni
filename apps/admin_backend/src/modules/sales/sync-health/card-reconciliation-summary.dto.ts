@@ -25,4 +25,13 @@ export class CardReconciliationSummaryDto {
 
   /** Report generation time — technical metadata only. */
   generatedAt!: string;
+
+  /** Card payments whose persisted reconciliation_status is MANUAL_OVERRIDE. */
+  manualOverrideCount!: number;
+
+  /**
+   * Sum of the persisted NIO payment amounts over the manual-override rows.
+   * Provenance: invoice_payments.amount_nio (same column as pendingAmountNio).
+   */
+  manualOverrideAmountNio!: number;
 }

@@ -1,8 +1,10 @@
 import 'reflect-metadata';
+import { resolve } from 'node:path';
 import { Controller, Get, Module } from '@nestjs/common';
 import { AppModule } from '../app/app.module';
 import {
   enumerateAppRoutes,
+  findUnregisteredSourceControllers,
   verifyRouteTransportRegistry,
   TRANSPORT_DECLARATIONS,
   type RouteRecord,
@@ -50,6 +52,30 @@ describe('route transport registry (AppModule route table)', () => {
         record.route === '/inventory/shrinkage' && record.httpMethod === 'POST',
     );
     expect(shrinkage?.guards).toContain('SyncTransportGuard');
+  });
+
+  it('serves and declares every @Controller class declared in source files', () => {
+    // Source scan, not module graph: a controller never registered in a
+    // module produces no routes, so every served-route rule is blind to it
+    // (it silently 404s forever). Guard against that root class.
+    const srcDir = resolve(__dirname, '..', '..');
+    const orphans = findUnregisteredSourceControllers(
+      srcDir,
+      routes,
+      TRANSPORT_DECLARATIONS,
+    );
+    // Known orphan, left unregistered deliberately and reported here for a
+    // founder decision: `InventoryController` (dead POST /inventory/purchase
+    // surface) was found by this same guard and must not disappear silently.
+    // Every OTHER source-declared controller must be served AND declared.
+    expect(orphans).toEqual([
+      {
+        controller: 'InventoryController',
+        declared: false,
+        file: 'modules/inventory/inventory.controller.ts',
+        served: false,
+      },
+    ]);
   });
 
   it('classifies every route and matches declared transports to the guards actually present', () => {
