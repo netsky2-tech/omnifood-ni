@@ -37,7 +37,13 @@ import { buildDashboardDrilldownUrl } from "./domain/navigation-context";
 
 export type AttentionSeverity = "critical" | "warning" | "info";
 
-export type AttentionKey = "stock" | "vouchers" | "voids" | "sequence" | "audit";
+export type AttentionKey =
+  | "stock"
+  | "vouchers"
+  | "overrides"
+  | "voids"
+  | "sequence"
+  | "audit";
 
 /**
  * Temporal scope of a signal's data, rendered as a quiet chip so the owner
@@ -67,6 +73,7 @@ export interface AttentionSignal {
 const SIGNAL_LABELS: Record<AttentionKey, string> = {
   stock: "Stock crítico",
   vouchers: "Vouchers pendientes",
+  overrides: "Overrides manuales",
   voids: "Anulaciones",
   sequence: "Secuencia fiscal",
   audit: "Auditoría / Seguridad",
@@ -78,13 +85,14 @@ const SIGNAL_LABELS: Record<AttentionKey, string> = {
  * `range.start`/`range.end`).
  *
  * - `stock`: inventory alerts snapshot — no date range.
- * - `vouchers`: card-reconciliation summary is explicitly an
+ * - `vouchers`, `overrides`: card-reconciliation summary is explicitly an
  *   outstanding-state snapshot (see `fetchCardReconciliationSummary`).
  * - `voids`, `sequence`, `audit`: date-scoped to the page range.
  */
 const SIGNAL_SCOPES: Record<AttentionKey, AttentionScope> = {
   stock: "current",
   vouchers: "current",
+  overrides: "current",
   voids: "period",
   sequence: "period",
   audit: "period",
@@ -93,6 +101,7 @@ const SIGNAL_SCOPES: Record<AttentionKey, AttentionScope> = {
 const SIGNAL_ACTION_LABELS: Record<AttentionKey, string> = {
   stock: "Ver productos",
   vouchers: "Revisar vouchers",
+  overrides: "Ver overrides",
   voids: "Ver anulaciones",
   sequence: "Revisar secuencia",
   audit: "Ver auditoría",
@@ -233,9 +242,40 @@ export function useAttentionSignals(range: LocalDateRange): AttentionSignal[] {
               {
                 source: "dashboard",
                 sourceWidget: "attention",
-                filters: { paymentMethod: "card" },
+                // Only the tab + the status filter the destination consumes
+                // (§9.2/§9.3): never the page date range — the server filters
+                // reconciliations by reconciled_at, which is NULL while
+                // pending, so dates would rebuild the old dead end as an
+                // empty list.
+                filters: { reconciliationStatus: "PENDIENTE" },
               },
-              { tab: "summary" },
+              { tab: "reconciliations" },
+            ),
+          )
+        : null,
+  );
+
+  // Awareness, not error: a manual override is a legitimate, policy-approved
+  // operation, so info severity. Same exceptions-only rule as everywhere
+  // else — zero overrides renders nothing (no "all good" noise row).
+  const overrides = toSignal(
+    "overrides",
+    reconciliationQuery,
+    reconciliationQuery.data,
+    (d) =>
+      d.manualOverrideCount > 0
+        ? item(
+            "overrides",
+            "info",
+            `${d.manualOverrideCount} override(s) manuales · ${formatAttentionCurrency(d.manualOverrideAmountNio)}`,
+            buildDashboardDrilldownUrl(
+              "/sales",
+              {
+                source: "dashboard",
+                sourceWidget: "attention",
+                filters: { reconciliationStatus: "MANUAL_OVERRIDE" },
+              },
+              { tab: "reconciliations" },
             ),
           )
         : null,
@@ -323,5 +363,5 @@ export function useAttentionSignals(range: LocalDateRange): AttentionSignal[] {
     return null;
   });
 
-  return [stock, vouchers, voids, sequence, audit];
+  return [stock, vouchers, overrides, voids, sequence, audit];
 }
