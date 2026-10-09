@@ -40,6 +40,7 @@ import 'package:pos_app/domain/models/loyalty/reward_definition.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_ticket_snapshot.dart';
 import 'package:pos_app/domain/models/loyalty/customer_identification.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
+import 'package:pos_app/domain/services/config/discount_policy_service.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
 import '../../../../domain/services/printer/thermal_logo_processor.dart';
@@ -182,6 +183,7 @@ class SaleViewModel extends ChangeNotifier {
       _loadCurrentUserRole();
       loadExchangeRates();
       loadTenantConfig();
+      loadDiscountCaps();
     }
   }
 
@@ -243,6 +245,7 @@ class SaleViewModel extends ChangeNotifier {
       _loadCurrentUserRole();
       loadExchangeRates();
       loadTenantConfig();
+      loadDiscountCaps();
       loadCompanyTaxRegime();
     }
   }
@@ -641,6 +644,46 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
+  // SOHO-P3 S1b: owner-configured manual discount caps, projected from the
+  // fiscal snapshot into local_configs and read through the typed accessor
+  // layer. null = NO CAP (unconfigured or explicitly cleared) — same
+  // three-state contract as the wire: a cap of 0 forbids manual discounts
+  // entirely. Refreshed at construction and again before every prompt (see
+  // SaleView), so a synced cap change reaches a running terminal without a
+  // restart.
+  double? _maxDiscountAmountCap;
+  double? get maxDiscountAmountCap => _maxDiscountAmountCap;
+
+  double? _maxDiscountPercentCap;
+  double? get maxDiscountPercentCap => _maxDiscountPercentCap;
+
+  Future<void> loadDiscountCaps() async {
+    try {
+      _maxDiscountAmountCap = await _tenantConfigService.getMaxDiscountAmount();
+      _maxDiscountPercentCap =
+          await _tenantConfigService.getMaxDiscountPercent();
+      notifyListeners();
+    } catch (_) {
+      // Non-blocking fallback: keep the last known caps.
+    }
+  }
+
+  /// Operator-visible configured limit for the manual discount prompt, shown
+  /// BEFORE the cashier types an amount. Null when no cap is configured.
+  /// Both bounds are shown when both are configured; the effective (binding)
+  /// limit is the minimum and is stated verbatim in the rejection message.
+  String? get manualDiscountLimitLabel {
+    final amount = _maxDiscountAmountCap;
+    final percent = _maxDiscountPercentCap;
+    if (amount == null && percent == null) return null;
+    final parts = <String>[
+      if (amount != null) 'C\$ ${amount.toStringAsFixed(2)} por monto',
+      if (percent != null)
+        '${percent % 1 == 0 ? percent.toStringAsFixed(0) : percent.toString()}% del subtotal',
+    ];
+    return 'Límite de descuento manual: ${parts.join(' · ')}';
+  }
+
   TaxRegime? _companyTaxRegime;
   TaxRegime? get companyTaxRegime => _companyTaxRegime;
 
@@ -935,6 +978,34 @@ class SaleViewModel extends ChangeNotifier {
     if (_requiresSupervisorForRestrictedActions &&
         !_isSupervisorOverrideActive) {
       _errorMessage = 'Acceso denegado.';
+      notifyListeners();
+      return;
+    }
+
+    // SOHO-P3 S1b — DD-2: the supervisor override does NOT bypass the cap.
+    // The override authorizes WHO may discount; the cap is the owner's
+    // policy on HOW MUCH. If the owner wants a higher limit for supervisors,
+    // the owner raises the cap — so this gate runs for every role, after the
+    // authorization gate above.
+    //
+    // SOHO-P3 S1b — DD-3: the cap is evaluated against the RESULTING
+    // ACCUMULATED manual discount (`_manualDiscount + requestedAmount`), not
+    // against each request in isolation, so two successive requests under
+    // the cap cannot together exceed it. The percent base is the order's
+    // GROSS subtotal from the fiscal calculation (grossSubtotal), which does
+    // not depend on discounts, so there is no circular dependency.
+    final decision = const DiscountPolicyService().evaluateManualDiscount(
+      requestedAmount: discountAmount,
+      accumulatedManualDiscount: _manualDiscount,
+      grossSubtotal: grossSubtotal,
+      maxDiscountAmount: _maxDiscountAmountCap,
+      maxDiscountPercent: _maxDiscountPercentCap,
+    );
+    if (!decision.allowed) {
+      // Rejection mutates NO state: the accumulated discount and any prior
+      // state stay untouched; the operator learns the effective limit and
+      // which cap bound it through the standard error channel.
+      _errorMessage = decision.rejectionMessage;
       notifyListeners();
       return;
     }

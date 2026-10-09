@@ -143,7 +143,7 @@ Separar acumuladores (`manualDiscount` / `promoDiscounts`), `totalDiscounts = ma
 
 *Checks:* suites enfocadas con `--concurrency=1` (nunca la suite completa en este host).
 
-**S1b · Tope de descuento manual (D-A) — S1b-1 IMPLEMENTADO, en verificación**
+**S1b · Tope de descuento manual (D-A) — S1b-1 COMMITEADO (`6f6afa0b`), S1b-2 IMPLEMENTADO Y VERIFICADO**
 
 Cortado en dos unidades: la configuración (backend + web) y después la proyección y el enforcement en el POS. El orden respeta `forbidNonWhitelisted` (`main.ts:49-53`), que rechaza con 400 cualquier propiedad desconocida: si el POS manda el campo antes de que el backend lo declare, **tira el lote completo**.
 
@@ -160,6 +160,30 @@ Cortado en dos unidades: la configuración (backend + web) y después la proyecc
 2. **El JCS del POS omite `null`** (`activation_required_config_adapter.dart:105`) mientras el del backend lo incluye. Reusar el canonicalizador del POS para verificar la huella fiscal produce un falso conflicto de integridad.
 
 **Hallazgos de la verificación independiente de S1b-1:** el contrato es simétrico en los seis saltos y no hay bug de coerción por falsedad; una aserción e2e exacta quedaba rota (`test/onboarding/fiscal-setup.e2e-spec.ts:445`) por quedar fuera de las superficies del worker, y se corrige en el mismo commit.
+
+### S1b-2 · Proyección y enforcement en el POS (implementado y verificado)
+
+**Proyección:** claves locales `max_discount_amount` / `max_discount_percent`. Semántica de instantánea completa: un número finito `>= 0` **escribe**; `null`, **ausente** y corrupto/fuera de rango **borran** la clave local, porque la instantánea es completa y un tope ausente significa "sin tope". El borde del sobre rechaza fuera de rango con `ArgumentError` antes de cualquier commit, y `isProjectionComplete` cubre las dos llaves simétricamente (faltante, incorrecta o obsoleta → incompleto).
+
+**Enforcement:** en `applyManualDiscount`, **después** del gate de rol/override, así que DD-2 se cumple por construcción — el servicio de política es ciego al rol y recibe sólo montos. El tope por porcentaje usa `grossSubtotal`, que se acumula **antes** de aplicar descuentos, así que no hay dependencia circular. Un rechazo no muta ningún estado de descuento.
+
+**Evidencia propia: cinco mutaciones, todas restauradas byte-idénticas.**
+| Mutación | Fallas | Garantía anclada |
+|---|---|---|
+| Quitar el gate del tope | 6 | El tope se aplica en todas sus formas |
+| Evaluar por pedido en vez del acumulado | 2 | DD-3 (lo anclan dos tests, no uno) |
+| Dejar que el override salte el tope | 1 | DD-2 |
+| No borrar el tope local al limpiarlo | 3 | `Expected: null / Actual: <LocalConfigEntity>` — el tope viejo sobrevivía |
+| Renombrar la llave del lector | 1 | La guarda de contrato de llaves |
+
+**Guarda agregada:** las llaves locales están duplicadas como literales en la capa de datos (`FiscalProjectionKeys`) y en la de dominio (`TenantConfigService`). Un rename de un solo lado daría "tope escrito y nunca leído" — el tope jamás se aplicaría, sin error. Se agregó un test que fija la igualdad: la divergencia ahora es un test rojo. Se evaluó extraer una constante compartida y se descartó: la duplicación es la convención existente para todas las llaves (`operation_mode`, etc.), y unificar sólo las nuevas rompería la consistencia por un refactor fuera de alcance.
+
+**Riesgo aceptado, no arreglado:** `loadDiscountCaps()` envuelve sus lecturas en un `catch` vacío y **falla abierto** (conserva el último valor conocido, que puede ser `null`). Escenario concreto pero improbable: una terminal nueva donde toda lectura de `local_configs` falle (base bloqueada) aplicaría un descuento por encima del tope **en silencio**. Se verificó que el riesgo no es permanente: la vista refresca los topes antes de cada prompt, y `applyManualDiscount` sólo es alcanzable desde ahí. Se deja como está porque fallar cerrado bloquearía la operación legítima ante un error de lectura, y la verificación independiente no lo consideró alcanzable.
+
+**Hallazgo refutado:** la verificación reportó que el mock estaba "a medio regenerar" por no tener overrides de los tres miembros nuevos. Es falso: ese archivo tampoco tiene overrides de `errorMessage`, `companyTaxRegime`, `selectedCustomer` ni `activeLoadedHoldTicket`, getters nullable que existen desde siempre; el generador de este repo simplemente no los produce. Comprobado con `dart run build_runner build`, que responde **0 outputs (0 actions)**: regenerar produce exactamente ese contenido, así que no hay churn latente.
+
+**Anomalía reportada sin resolver:** una única corrida con 1 falla sobre 121 tests que no se pudo reproducir; cuatro corridas posteriores limpias (128/128, 151/151, 152/152) y el archivo de widget solo, dos veces, 14/14. Consistente con el flake de toolchain ya documentado en `AGENTS.md`.
+
 
 
 
@@ -199,6 +223,8 @@ Por superficie, en el orden del cliente: (1) descuento manual con mutación de c
 ### Decisiones de diseño tomadas durante la ejecución
 
 - **DD-1 · Base de validación de canje de lealtad — CORREGIDA tras verificación.** La decisión original (validar contra el total neto **solo** de promociones) estaba **invertida** y se revirtió. `LoyaltyService.validateRedemption` usa el total de la orden **únicamente como techo** (`loyalty_service.dart:75`: `if (discountAmount > orderTotal) → failure`) y no existe mínimo de compra en ninguna parte (verificado por grep: el único `minOrderAmount` es de elegibilidad de promociones, `promotions_engine.dart:61`). Un techo más chico **restringe** el canje, nunca lo desbloquea. Al no descontar el componente manual, la base quedaba **más grande** que el residual que el cliente realmente paga, y los puntos podían canjearse contra valor ya regalado. Estado alcanzable: bruto 200, promo 100, manual 15, 900 puntos → base 100, canje de 90 **aceptado**, pero `totalDiscounts = 205 > 200`: el cálculo fiscal recortaba (`invoice_fiscal_calculator.dart:201-203`) y el cliente quemaba puntos de más. Base correcta: `rawSubtotal - _promotionDiscount - _manualDiscount`, que restaura el invariante `totalDiscounts <= bruto` **en el momento del canje**.
+- **DD-2 · El override de supervisor NO salta el tope.** El override autoriza **quién** descuenta; el tope es la política del dueño sobre **cuánto**. Si el dueño quiere un límite mayor para supervisores, sube el tope.
+- **DD-3 · El tope se evalúa sobre el acumulado, no sobre cada pedido.** La comparación es `_manualDiscount + montoSolicitado` contra el tope efectivo, para que dos pedidos sucesivos por debajo del tope no lo superen entre los dos.
 
 ---
 

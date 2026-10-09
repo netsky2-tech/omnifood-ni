@@ -265,6 +265,38 @@ void main() {
     },
   );
 
+  testWidgets(
+    'manual discount prompt shows the configured cap BEFORE typing (SOHO-P3 S1b)',
+    (tester) async {
+      when(mockViewModel.cart).thenReturn([
+        const CartItem(
+          productId: 'p-1',
+          productName: 'Producto 1',
+          quantity: 1,
+          unitPrice: 155,
+          taxRate: 0.15,
+        ),
+      ]);
+      // The view refreshes the caps (D-5 style freshness) before opening the
+      // prompt, then renders the effective limit next to the amount field.
+      when(mockViewModel.loadDiscountCaps()).thenAnswer((_) async {});
+      when(mockViewModel.manualDiscountLimitLabel)
+          .thenReturn('Límite de descuento manual: C\$ 40.00 (por monto)');
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('DESCUENTO MANUAL'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('manual_discount_limit_label')), findsOneWidget);
+      expect(find.textContaining('Límite de descuento manual'), findsOneWidget);
+      // The prompt still offers the existing flow (amount field + Aplicar).
+      expect(find.text('Monto de descuento'), findsOneWidget);
+      expect(find.text('Aplicar'), findsOneWidget);
+    },
+  );
+
   testWidgets('presents supervisor override modal before close-box restricted action', (tester) async {
     when(mockAuthRepository.authorizeOverride(
       supervisorId: anyNamed('supervisorId'),

@@ -2121,10 +2121,16 @@ class CartSummary extends StatelessWidget {
   }
 
   Future<void> _requestSupervisorOverrideForManualDiscount(BuildContext context) async {
+    final viewModel = context.read<SaleViewModel>();
+    // SOHO-P3 S1b: refresh the caps before every prompt (D-5 freshness
+    // precedent) so the operator sees the CURRENT configured limit and the
+    // enforcement gate evaluates against it.
+    await viewModel.loadDiscountCaps();
+    if (!context.mounted) return;
+
     final amount = await _promptManualDiscountAmount(context);
     if (!context.mounted || amount == null || amount <= 0) return;
 
-    final viewModel = context.read<SaleViewModel>();
     viewModel.applyManualDiscount(amount);
 
     if (viewModel.errorMessage != 'Acceso denegado.') {
@@ -2171,17 +2177,40 @@ class CartSummary extends StatelessWidget {
 
   Future<double?> _promptManualDiscountAmount(BuildContext context) async {
     final controller = TextEditingController();
+    // SOHO-P3 S1b: show the configured effective limit BEFORE typing so the
+    // cashier does not have to discover it by rejection. The rejection path
+    // below is unchanged: an over-cap amount still reaches
+    // applyManualDiscount, which refuses it through the standard error
+    // channel (error SnackBar) without mutating any state.
+    final limitLabel = context.read<SaleViewModel>().manualDiscountLimitLabel;
     return showDialog<double>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Descuento manual'),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 380),
-          child: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Monto de descuento'),
-            autofocus: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (limitLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    limitLabel,
+                    key: const Key('manual_discount_limit_label'),
+                    style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(dialogContext).colorScheme.error,
+                    ),
+                  ),
+                ),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Monto de descuento'),
+                autofocus: true,
+              ),
+            ],
           ),
         ),
         actions: [
