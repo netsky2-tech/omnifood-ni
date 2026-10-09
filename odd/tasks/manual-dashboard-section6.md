@@ -21,7 +21,17 @@
 - [x] **T5** Verificación (delegate `gentle-ai-verify`, 7 checks): refs 14/14 resuelven · 14 PNG 1440×900 · 0 orphans (38 PNG = 14 dsh + 24 pos) · tsc 0 · oxlint 0 · git status solo artefactos esperados · refs `manual_v0.1` corregidas (CD-12 registry + cierre-oom + este doc)
 - [ ] **T6** Commits convencionales (spec + script · manual v0.2 + imágenes · ODD)
 - [x] **T7** Revisión nativa: candidato = rama como PR slice (`baseRef=601edc90`, committedOnly) · lineage `review-3d8f0ac96df7abae` · medium tier (1 lente `review-reliability`, riesgo `executable_change` por el spec) · **APPROVED** + authority burned (`gentle-ai.review-acknowledged/v1`, target `f4299be8`, revision `2aa5251d`) · 4 hallazgos advisories informativos (R3-A WARNING spec:404-405; R3-B/C/D SUGGESTION spec:37-39 / 473-596 / 122-131) — ninguno bloqueante, sin corrección ofrecida
-- [ ] **T8** Reporte + decisión de merge/PR (usuario)
+- [x] **T8** Reporte entregado (primera ronda)
+
+### Ronda 2 (feedback del usuario, incorporado al alcance)
+- [x] **T9** Fix de renderizado: `$` escapado en §3/§8 (líneas 42, 49, 183) — validado: único `$` sin escapar es el de la línea 75 dentro de code span (protegido)
+- [x] **T10** Terminología: `allow_quantities`, «Price Delta», params `min`/`max`, «Sync Freshness» eliminados — grep final: 0 términos restantes; conservado copy literal UI en español («Permitir cantidades», «Precio adicional», «Mínimo/Máximo de selección»)
+- [x] **T11** §4.1 reescrita como «Reportes de Ventas» con las 6 pestañas reales (scout `mv1fkvkt-8-vihd`, path:line) + Nota de ausencia de lista cronológica (diseño: factura-level → Fiscal › Exportaciones); §4.2 reubican en **Fiscal › Anulaciones** con columnas reales (Factura/Cajero/Total/Motivo/Fecha) y sin claim de PIN de supervisor; alt de `dsh_03` corregido; changelog v0.2 ampliado
+- [x] **T12** Inventario: 33→38 PNG (L307/L336), Backoffice 9→14, fila de sesión `2026-10-09` agregada, peso ~3.5→~4.1 MB y rango 25–170 KB; las 2 menciones restantes a 33 son históricas fechadas (método del 10-08 y «contenía» en pasado)
+- [ ] **T13** Verificación + commits + review preflight
+
+### Follow-up diferido (acordado con el usuario)
+- Secciones sin capturas (§7 Inventario, §9 Usuarios, §10 Flota, §11 Asistencia) — agregar imágenes en una feature futura.
 
 ## Hallazgos
 - **D-2 (corregido): `dsh_09` obsoleto por el reuse-skip del spec.** La rama de reuse saltaba la captura del diálogo de creación, dejando para siempre una imagen de desarrollo cuyo fondo mostraba la fila «Jarabes» ya existente — contradiciendo el Paso 1 ("diálogo todavía vacío" sobre lista sin el grupo). Evidencia RED: corrida completa 8/8 con md5 de `dsh_09` sin cambio (`e957673c…`). Fix (test-first): capturar `dsh_09` en TODA corrida bajo filtro «Activos» con aserción `toHaveCount(0)` de ausencia del grupo (y desactivación previa si una corrida interrumpida lo dejó activo, esperando que el toast salga del frame). GREEN reuse: `dbfc272a…`; GREEN fresh: byte-idéntico (determinismo). Se eliminó también la constante `SLUG` sin uso (oxlint).
