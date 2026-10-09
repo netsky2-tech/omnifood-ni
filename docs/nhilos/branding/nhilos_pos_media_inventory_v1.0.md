@@ -1,13 +1,14 @@
 # NHILOS POS — Inventario de Medios y Capturas de Pantalla
 
 **Documento:** `nhilos_pos_media_inventory_v1.0.md`
-**Versión:** 1.0 (Evidencia requiere revalidación — Gate D)
-**Estado:** `CONTENIDO APROBADO / EVIDENCIA OBSOLETA — REVALIDACIÓN REQUERIDA ANTES DE PUBLICAR`
-**Build de producción de origen:** `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED — el build anclado vigente es `b4b5ad27`; los activos deben re-capturarse o re-verificarse contra `b4b5ad27` antes de cualquier publicación, según `G-09` de `nhilos_branding_document_governance_v1.0.md`)
+**Versión:** 1.0 (Evidencia revalidada — Gate D parcial)
+**Estado:** `CONTENIDO APROBADO / GATE D PARCIAL — 7 ACTIVOS VIGENTES · 1 OBSOLETO · 6 FALTANTES`
+**Build anclado vigente:** `b4b5ad27`
+**Evidencia de origen:** capturas ADB del `2026-10-02` sobre terminal `MIRAY Q80 / iPOS`, en `docs/nhilos/manuals/images/` (`NH-AUD-POS-001`). Build de la captura original: `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED). La revalidación contra el build anclado está documentada en §5, según `G-09` de `nhilos_branding_document_governance_v1.0.md`.
 **Ruta pública:** Página profunda de producto NHILOS POS (`/pos`)
 **Upstream de contenido:** `nhilos_pos_product_page_content_v1.1.md`
 **Upstream de auditoría técnica:** `product_claim_audit_od02_v1.3.md`
-**Fecha de actualización:** 2026-10-08 (revalidación de evidencia pendiente; captura original 2026-10-02)
+**Fecha de actualización:** 2026-10-08 (revalidación de evidencia ejecutada; captura original 2026-10-02)
 
 > **Nota de conversión (2026-10-08):** este documento reemplaza al binario
 > `NHILOS POS - Media Inventory.docx`, que no era diffeable ni indexable. El contenido se
@@ -15,10 +16,10 @@
 > `branding_reality_audit_v0.1.md` (hallazgos B3, H9, M4, M11, H10).
 
 > **Advertencia de revalidación (G-09):** los activos de medios de este inventario fueron
-> capturados en el build `7af1521` (2026-09-26). El build anclado vigente es `b4b5ad27`
-> (2026-10-08), e incluye cambios sustanciales de la UI del POS (remediación UX Nivel 1/2/3).
-> Ningún activo puede publicarse hasta ser re-capturado o re-verificado contra `b4b5ad27`.
-> El cierre de Gate D declarado en §5 NO está vigente.
+> capturados el `2026-10-02` sobre un terminal `MIRAY Q80 / iPOS`, cuando el build de referencia
+> era `7af1521`. El build anclado vigente es `b4b5ad27` (2026-10-08) e incluye cambios que
+> alteraron superficies capturadas. La revalidación está documentada en §5 y el estado resultante
+> de Gate D en §6: ningún activo puede publicarse sin estar `VIGENTE` y convertido a WebP/AVIF.
 
 ---
 
@@ -47,29 +48,42 @@ deben re-capturarse o re-verificarse contra `b4b5ad27` antes de cualquier public
 
 ---
 
-## 2. Inventario Maestro de Activos de Medios (Build `7af1521`)
+## 2. Inventario Maestro de Activos de Medios (Build anclado `b4b5ad27`)
 
-La siguiente tabla consolida los doce activos de medios capturados (build de origen
-`7af1521`, revalidación contra `b4b5ad27` pendiente) que componen la biblioteca
-visual de NHILOS POS, más un activo nuevo pendiente de captura (`MEDIA-LOY-01`,
-superficie loyalty añadida al contrato de contenido como §15). Ningún activo está autorizado para publicación en su estado actual.
+La siguiente tabla consolida los activos de medios que componen la biblioteca visual oficial de
+NHILOS POS. La columna **Evidencia existente** apunta al archivo real que hoy respalda el activo
+en el repositorio; el **Veredicto** es el resultado de la revalidación documentada en §5.
 
-| Asset ID | Pantalla / Workflow | Dispositivo / Formato | Ubicación en Código / Build `7af1521` | Estado Gate D |
+| Asset ID | Pantalla / Workflow | Evidencia existente (`docs/nhilos/manuals/images/`) | Ubicación en Código (`b4b5ad27`) | Veredicto |
 |---|---|---|---|---|
-| `MEDIA-POS-01` | Interfaz principal de venta táctil con buscador y carrito | Capture HD / Sunmi V2s & Tablet 10" | `apps/pos_app/lib/ui/features/sales` | `APPROVED` |
-| `MEDIA-POS-02` | Modal de Cobro Bimoneda (NIO/USD) y vuelto automático | Capture HD / Sunmi V2s | `multi_currency_checkout_dialog.dart` | `APPROVED` |
-| `MEDIA-POS-03` | Motor de División de Cuentas (Split Bill) y Propina DGI | Capture HD / Tablet 10" | `split_bill_engine.dart` / `tip_engine.dart` | `APPROVED` |
-| `MEDIA-POS-04` | Modal de Autorización por PIN (Supervisor Override) | Capture HD / Sunmi V2s | `supervisor_override_modal.dart` | `APPROVED` |
-| `MEDIA-POS-05` | Retención de cuentas abiertas y mapa de mesas | Capture HD / Tablet 10" | `apps/pos_app/lib/ui/features/sales/tables/table_layout_view.dart`, `apps/pos_app/lib/domain/services/sales/table_order_service.dart` | `PENDING CAPTURE — NO APPROVED` |
-| `MEDIA-HW-01` | Ticket de venta impreso en papel térmico de 58mm (DT 09-2007) | Foto HD / Sunmi V2s Hardware | `receipt_58mm_formatter.dart` | `APPROVED` |
-| `MEDIA-HW-02` | Pantalla Digital de Cocina (KDS) con temporizador SLA | Capture HD / Tablet Android 10" | `kitchen_display_view.dart` | `APPROVED` |
-| `MEDIA-DASH-01` | Owner Dashboard v2: KPIs de Venta y Sync Freshness Badge | Capture Web / Browser Desktop | `apps/owner_dashboard/src/features/dashboard` | `APPROVED` |
-| `MEDIA-DASH-02` | Ranking de Productos Top y Mix de Ventas por % | Capture Web / Browser Desktop | `top-products-chart.tsx` | `APPROVED` |
-| `MEDIA-INV-01` | Módulo de Recetas/BOM y Costeo Promedio Ponderado | Capture Web / Backoffice Web | `apps/admin_backend/src/modules/inventory` | `APPROVED` |
-| `MEDIA-INV-02` | Kardex Inmutable Delta Ledger y Registro de Mermas | Capture Web / Backoffice Web | `kardex_recalculation_engine.dart` | `APPROVED` |
-| `MEDIA-ONB-01` | Setup Center e Importador CSV de Catálogos e Insumos | Capture Web / Backoffice Web | `setup-center-view.tsx` | `APPROVED` |
-| `MEDIA-FISC-01` | Panel de Reportes Fiscales Exportables DGI y Notas de Crédito | Capture Web / Backoffice Web | `fiscal-page.tsx` | `APPROVED` |
-| `MEDIA-LOY-01` | Identificación de cliente y saldo de puntos en caja (QR `NHL1:{code}`, código, teléfono o nombre) y canje de puntos como descuento | Capture HD / Sunmi V2s & Tablet 10" | `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart` (panel de loyalty y canje), `apps/pos_app/lib/domain/services/sales/customer_identification_service.dart` | `PENDING CAPTURE — NO APPROVED` |
+| `MEDIA-POS-01` | Interfaz principal de venta táctil con buscador y carrito | `pos_03_catalogo_soho.png`, `pos_04_carrito_barra.png`, `pos_05_detalle_carrito.png` | `apps/pos_app/lib/ui/features/sales` | `VIGENTE` |
+| `MEDIA-POS-02` | Modal de Cobro Bimoneda (NIO/USD) y vuelto automático | `pos_06_pantalla_cobro.png`, `pos_07_cobro_efectivo_vuelto.png`, `pos_08_cobro_dolares.png` | `multi_currency_checkout_dialog.dart` | `OBSOLETA — RECAPTURAR` |
+| `MEDIA-POS-03` | División de cuentas (Split Bill) y propina | sin captura del diálogo de división | `split_bill_engine.dart` / `tip_engine.dart` | `FALTANTE` |
+| `MEDIA-POS-04` | Autorización de supervisor (override por PIN) | `pos_13_dialogo_anular_factura.png`, `pos_16_cierre_turno_corte_z.png` | `supervisor_override_modal.dart` | `VIGENTE (parcial)` |
+| `MEDIA-POS-05` | Retención de cuentas abiertas y mapa de mesas | `pos_05a_carrito_en_espera.png`, `pos_05b_lista_cuentas_abiertas.png`, `pos_05c_dialogo_abandonar_cuenta.png`, `pos_05d_editar_cuenta_abierta.png` | `apps/pos_app/lib/ui/features/sales/tables/table_layout_view.dart`, `apps/pos_app/lib/domain/services/sales/table_order_service.dart` | `VIGENTE` |
+| `MEDIA-HW-01` | Ticket de venta impreso en papel térmico (DT 09-2007) | sin fotografía de ticket impreso | `apps/pos_app/lib/domain/services/printer/receipt_layout_formatter.dart` (58 mm y 80 mm) | `FALTANTE` |
+| `MEDIA-HW-02` | Pantalla Digital de Cocina (KDS) con temporizador SLA | `pos_11_kds_pantalla_cocina.png` | `kitchen_display_view.dart` | `VIGENTE` |
+| `MEDIA-DASH-01` | Owner Dashboard v2: KPIs de Venta y Sync Freshness Badge | `dsh_02_kpis_ventas.png` | `apps/owner_dashboard/src/features/dashboard` | `VIGENTE` |
+| `MEDIA-DASH-02` | Ranking de Productos Top y Mix de Ventas por % | `dsh_02_kpis_ventas.png` (verificar que el ranking sea legible en el encuadre) | `top-products-chart.tsx` | `VIGENTE (verificar encuadre)` |
+| `MEDIA-INV-01` | Módulo de Recetas/BOM y Costeo Promedio Ponderado | sin captura | `apps/admin_backend/src/modules/inventory` | `FALTANTE` |
+| `MEDIA-INV-02` | Kardex Inmutable Delta Ledger y Registro de Mermas | sin captura | `kardex_recalculation_engine.dart` | `FALTANTE` |
+| `MEDIA-ONB-01` | Setup Center e Importador CSV de Catálogos e Insumos | sin captura | `setup-center-view.tsx` | `FALTANTE` |
+| `MEDIA-FISC-01` | Panel de Reportes Fiscales Exportables DGI y Notas de Crédito | `dsh_06_fiscal.png` | `fiscal-page.tsx` | `VIGENTE` |
+| `MEDIA-LOY-01` | Identificación de cliente y saldo de puntos en caja (QR `NHL1:{code}`, código, teléfono o nombre) y canje de puntos como descuento | sin captura | `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart` (panel de loyalty y canje), `apps/pos_app/lib/domain/services/sales/customer_identification_service.dart` | `FALTANTE` |
+
+### Evidencia existente sin activo asignado
+
+La biblioteca de capturas contiene evidencia real que este inventario todavía no asigna a ningún
+activo. No se descarta: se registra para que la decisión de asignación sea explícita.
+
+| Captura | Superficie | Observación |
+|---|---|---|
+| `pos_05e_modal_modificadores.png`, `pos_05f_carrito_con_modificadores.png` | Modificadores en el ticket | Respaldan `PC-FOH-02` / `CW-002`; el inventario aún no define un activo de modificadores en caja. |
+| `dsh_07_modificadores_grupos.png`, `dsh_08_modificadores_categoria.png`, `dsh_09_crear_grupo_modificador.png` | Administración de modificadores en backoffice | Mismo caso, lado backoffice. |
+| `pos_09_menu_lateral.png`, `pos_10_historial_ventas.png`, `pos_12_detalle_factura_acciones.png`, `pos_13_dialogo_anular_factura.png` | Consulta, historial y anulación | Respaldan `PC-PAY-02` / `PC-SEC-02` / `PC-SEC-03`; sin activo dedicado. |
+| `pos_14_control_caja_turnos.png`, `pos_15_lectura_parcial_corte_x.png`, `pos_16_cierre_turno_corte_z.png`, `pos_16b_bloqueo_corte_z_cuentas.png` | Caja, turnos y cortes X/Z | Respaldan `PC-PAY-02`; sin activo dedicado. |
+| `dsh_01_login.png`, `dsh_03_historial_comprobantes.png`, `dsh_04_catalogo_productos.png`, `dsh_05_sesiones_caja.png` | Backoffice: login, historial, catálogo, sesiones de caja | Sin activo dedicado. |
+| `pos_01_admin_login.png`, `pos_01_seleccionar_usuario.png`, `pos_02_login_pin.png` | Acceso al terminal | Sin activo dedicado; `pos_01_admin_login.png` no está referenciada por el manual vigente y requiere clasificación. |
 
 ---
 
@@ -281,17 +295,33 @@ Para asegurar la calidad visual e integridad técnica exigida en la especificaci
 del sitio web (`nhilos_website_non_functional_spec_v1.0.md`), todos los activos del inventario
 cumplen con los siguientes estándares:
 
-### Presupuesto de Peso y Formatos
+### Dispositivo de captura verificado
 
-- **Formatos Autorizados:** WebP y AVIF con fallback automático en PNG para navegadores antiguos.
-- **Compresión:** la especificación no funcional del sitio (`nhilos_website_non_functional_spec_v1.0.md`)
-  **no define un presupuesto de peso por imagen individual**; define únicamente una carga
-  inicial máxima de página (`< 2.5 MB` comprimido) servida en formatos modernos (`WebP` o
-  `AVIF` con fallback a JPG/PNG). No se declara ningún tope por captura ni por fotografía.
-- **Dimensiones de Captura:**
-  - Terminal Móvil (Sunmi V2s): 1080 x 2160 px (Relación 18:9).
-  - Tablet Android (KDS / FOH): 1920 x 1200 px (Relación 16:10).
-  - Owner Dashboard Web: 2560 x 1440 px (Desktop Full HD/2K).
+La evidencia existente no fue capturada en el dispositivo que este documento declaraba:
+
+- **Terminal POS:** `MIRAY Q80 / iPOS` — Android 12, pantalla táctil **800 x 1280 px vertical**,
+  impresora térmica **80 mm**, gaveta de efectivo y escáner. Fuente:
+  `docs/nhilos/audits/pos_experience_audit_v1.0.md` (`NH-AUD-POS-001`, 2026-10-02) y
+  `docs/nhilos/manuals/nhilos_pos_user_manual_v0.1.md` (terminal objetivo declarado).
+- **Backoffice web:** capturas de navegador a **1440 x 900 px**.
+- **Sunmi V2s:** es una plataforma soportada por el código (`printer_config_service.dart`, driver
+  `SUNMI_V2S`), pero **no es el dispositivo que produjo la evidencia existente**. No se declaran
+  dimensiones de captura para un dispositivo del que no hay capturas.
+
+Las dimensiones anteriores (1080 x 2160 y 2560 x 1440) no tenían fuente en el repositorio y
+correspondían a dispositivos distintos de los que capturaron la evidencia. Fueron reemplazadas
+por las dimensiones reales medidas sobre los archivos de `docs/nhilos/manuals/images/`
+(33 PNG: 800 x 1280 las del terminal, 1440 x 900 las de backoffice).
+
+### Formatos y peso real de la evidencia
+
+- Los 33 archivos existentes están en **PNG**. Deben convertirse a WebP/AVIF con fallback PNG
+  antes de publicarse, según la especificación no funcional.
+- Peso total de la biblioteca: ~3.5 MB. La mayoría de los archivos está entre 60 y 170 KB; dos
+  superan los 180 KB (`pos_16b_bloqueo_corte_z_cuentas.png` 214 KB,
+  `pos_15_lectura_parcial_corte_x.png` 210 KB) y requieren compresión al convertirse.
+- La especificación no funcional **no define un presupuesto de peso por imagen**; define una
+  carga inicial máxima de página. Por eso no se declara un tope por captura.
 
 ### Tratamiento de Datos Sensibles
 
@@ -303,29 +333,87 @@ cumplen con los siguientes estándares:
 
 ---
 
-## 5. Estado de Aprobación de Gate D y Firma de Verificación
+## 5. Revalidación de Medios contra el Build Anclado (`b4b5ad27`)
 
-El presente Inventario de Medios fue evaluado contra la matriz de verificación de artefactos
-de producción. **El cierre original quedó obsoleto por el re-anclaje del build vigente**;
-la verificación se registra con su estado real:
+**Fecha de revalidación:** 2026-10-08
+**Método:** auditoría read-only del contenido del repositorio (33 capturas en
+`docs/nhilos/manuals/images/`, sus manuales de referencia y la auditoría de experiencia de
+transición). No se ejecutó captura nueva ni se requirió hardware.
+
+### Punto de partida corregido
+
+Este documento asumía que no existían capturas y que había que producirlas todas. **Eso era
+falso.** El repositorio contiene 33 capturas reales de hardware, tomadas por ADB sobre un terminal
+**MIRAY Q80 / iPOS**, documentadas por `NH-AUD-POS-001` (2026-10-02) y referenciadas por los
+manuales de POS y de Owner Dashboard. La revalidación consiste en auditar esa evidencia, no en
+reemplazarla entera.
+
+### Veredictos
+
+| Veredicto | Activos | Significado |
+|---|---|---|
+| `VIGENTE` (7) | `MEDIA-POS-01`, `MEDIA-POS-04` (parcial), `MEDIA-POS-05`, `MEDIA-HW-02`, `MEDIA-DASH-01`, `MEDIA-DASH-02` (verificar encuadre), `MEDIA-FISC-01` | Existe captura real de la superficie y no hay evidencia de que haya cambiado entre la fecha de captura y el build anclado. Requiere conversión a WebP/AVIF antes de publicar. |
+| `OBSOLETA` (1) | `MEDIA-POS-02` | Existe captura, pero **muestra una UI que ya cambió**. |
+| `FALTANTE` (6) | `MEDIA-POS-03`, `MEDIA-HW-01`, `MEDIA-INV-01`, `MEDIA-INV-02`, `MEDIA-ONB-01`, `MEDIA-LOY-01` | No existe ninguna captura de esa superficie. Requiere captura nueva. |
+
+### Evidencia de la obsolescencia de `MEDIA-POS-02`
+
+- Capturas afectadas: `pos_06_pantalla_cobro.png`, `pos_07_cobro_efectivo_vuelto.png`,
+  `pos_08_cobro_dolares.png`, tomadas el **2026-10-02**.
+- El build anclado `b4b5ad27` contiene los campos **`Nombre Cliente`** y
+  **`RUC / Cédula (Opcional)`** en `apps/pos_app/lib/ui/features/sales/widgets/multi_currency_checkout_dialog.dart`
+  (líneas 507 y 535), incorporados el **2026-10-07** (merges `26fa162c`, `8858d6c1`, `9cd6dd9c`).
+- Es decir: la captura de la pantalla de cobro es **cinco días anterior** al cambio que alteró esa
+  misma pantalla. Publicarla mostraría una UI que ya no corresponde al build vigente.
+- Nota heredada: la sección de medios del contrato de contenido documenta además el cambio de
+  facturación con nombre en `nhilos_pos_product_page_content_v1.1.md`, que declara la necesidad de
+  capturas post-remediación.
+
+### Reclasificación de `MEDIA-HW-01`
+
+El activo se describía como "ticket impreso en papel térmico de **58 mm**". El terminal verificado
+imprime **80 mm** y el código soporta ambas anchuras
+(`apps/pos_app/lib/domain/services/printer/receipt_layout_formatter.dart`). El activo se
+reclasificó a "ticket impreso en papel térmico" y se marcó `FALTANTE`: no existe fotografía de un
+ticket impreso.
+
+### Qué falta para cerrar cada clase
+
+1. **`OBSOLETA`** → recapturar la pantalla de cobro contra `b4b5ad27` mostrando los campos fiscales
+   nuevos.
+2. **`FALTANTE`** → capturar seis superficies: diálogo de división de cuenta, ticket impreso,
+   recetas/BOM y costeo, kardex y mermas, Setup Center con importación CSV, y loyalty en caja.
+3. **Todos** → convertir de PNG a WebP/AVIF con fallback PNG, comprimir los dos archivos que
+   superan los 180 KB, y redactar el alt text definitivo por activo.
+
+---
+
+## 6. Estado de Aprobación de Gate D y Firma de Verificación
+
+El cierre original de Gate D quedó obsoleto y se restituye con su estado granular real. El
+veredicto **no es uniforme**: hay evidencia válida, evidencia obsoleta y superficies sin evidencia.
 
 ```text
 ================================================================================
 VERIFICACIÓN DE GATE D (EVIDENCIA Y MEDIOS) — NHILOS POS
 ================================================================================
-[✓] Cero prototipos o mockups de Figma presentes en el inventario.
-[✗] Los activos provienen del commit 7af1521ea077ce8bc1faed1aa7189a6186eac515,
-    que ya NO es el build anclado vigente (`b4b5ad27`): la UI del POS cambió
-    sustancialmente entre ambos builds (remediación UX Nivel 1/2/3).
-[✓] Mapeo completo de las 14 secciones de la página profunda de producto (/pos)
-    con los títulos de nhilos_pos_product_page_content_v1.1.md.
-[✓] Textos alternativos (alt text) redactados para cumplimiento WCAG 2.1 AA.
-[✓] Presupuesto de peso y rendimiento web alineados a la spec no funcional
-    (< 2.5 MB carga inicial; sin tope por imagen declarado en la spec).
+[✓] Cero prototipos o mockups de Figma: la evidencia existente son capturas
+    reales de hardware tomadas por ADB (NH-AUD-POS-001).
+[✓] Existe evidencia real para 7 de 14 activos, en buen estado respecto del
+    build anclado (`b4b5ad27`).
+[✗] MEDIA-POS-02 (pantalla de cobro): captura del 2026-10-02, anterior al
+    cambio de facturación con nombre del 2026-10-07 que alteró esa pantalla.
+[✗] 6 activos sin ninguna captura: MEDIA-POS-03, MEDIA-HW-01, MEDIA-INV-01,
+    MEDIA-INV-02, MEDIA-ONB-01, MEDIA-LOY-01.
+[✗] Toda la biblioteca está en PNG; falta la conversión a WebP/AVIF con fallback
+    exigida por la especificación no funcional.
+[✓] Mapeo de las 14 secciones contra nhilos_pos_product_page_content_v1.1.md.
+[✓] Dispositivo y dimensiones de captura corregidos a la evidencia real
+    (MIRAY Q80 / iPOS, 800x1280; backoffice 1440x900).
 
-ESTADO DE CIERRE:           NOT VALID — REVALIDATION REQUIRED
-AUTORIZACIÓN DE PUBLICACIÓN: RETIRADA. Los activos capturados en 7af1521 deben
-re-capturarse o re-verificarse contra b4b5ad27 y volver a pasar Gate D antes de
-cualquier publicación. No existe hoy un sello de "PUBLICATION UNLOCKED" vigente.
+ESTADO DE CIERRE:            GATE D NO SUPERADO — PARCIAL
+AUTORIZACIÓN DE PUBLICACIÓN: bloqueada para MEDIA-POS-02 (obsoleta) y para los
+6 activos faltantes. Los 7 activos vigentes pueden publicarse una vez convertidos
+a WebP/AVIF con su alt text. No existe ningún sello de "PUBLICATION UNLOCKED".
 ================================================================================
 ```
