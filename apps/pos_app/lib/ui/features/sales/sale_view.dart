@@ -2225,6 +2225,17 @@ class CartSummary extends StatelessWidget {
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'Monto de descuento'),
                     autofocus: true,
+                    // Device-reported defect: after a refusal the inline
+                    // message kept claiming the OLD amount was not permitted
+                    // while the operator corrected it. The refusal clears on
+                    // the text change itself — the same moment the claim
+                    // stops being true — and reappears only if a new Aplicar
+                    // is refused again.
+                    onChanged: (_) {
+                      if (inlineRejection != null) {
+                        setDialogState(() => inlineRejection = null);
+                      }
+                    },
                   ),
                   if (inlineRejection != null)
                     Padding(

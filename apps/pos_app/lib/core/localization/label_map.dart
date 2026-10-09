@@ -428,6 +428,52 @@ const Map<String, String> kAuditDegradedLabels = <String, String>{
 const Map<String, String> kActivationBackendVerdictLabels =
     kActivationCheckStatusLabels;
 
+/// Audit-log metadata JSON keys (`audit_logs.metadata`) written by the
+/// POS's own audit writers. Only the keys verified at the real emit sites
+/// are mapped — no meaning is invented for a key that has not been
+/// confirmed; unverified keys degrade honestly in the view (underscores to
+/// spaces) instead of being hidden or dumped as JSON.
+///
+/// Sources (every metadata emit site, exhaustive):
+/// - `lib/data/repositories/sales/sales_repository_impl.dart`
+///   (SALE_CREATED: invoice_id, number, total; REPRINT_REQUESTED:
+///   invoice_id, number, reason_code, reason_detail, reprint_at;
+///   SALE_VOIDED: invoice_id, reason, reason_code, reason_detail;
+///   CREDIT_NOTE_CREATED: original_id, new_id, refundReasonPolicy,
+///   authorizedByUserId).
+/// - `lib/domain/services/fulfillment/durable_print_service.dart`
+///   (PRINT_PAYLOAD_CORRUPT: fulfillmentId, jobId, documentKind;
+///   REPRINT_REQUESTED: jobId, userId, role, reason).
+/// - `lib/ui/features/sales/sale_view.dart` (logForensic metadata:
+///   action for SUPERVISOR_OVERRIDE_CLOSE_SESSION and
+///   SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT; action + justification for
+///   DRAWER_OPENED_MANUALLY).
+///
+/// Values are rendered verbatim next to their label: the evidence value is
+/// never reinterpreted, only the KEY is humanised. Cloud-projected or
+/// dashboard-written keys not in this map pass through humanised per the
+/// [localize] convention.
+const Map<String, String> kAuditMetadataKeyLabels = <String, String>{
+  'invoice_id': 'Factura (ID)',
+  'number': 'Número de factura',
+  'total': 'Total',
+  'reason_code': 'Código del motivo',
+  'reason_detail': 'Detalle del motivo',
+  'reprint_at': 'Momento de reimpresión',
+  'reason': 'Motivo',
+  'original_id': 'Factura original (ID)',
+  'new_id': 'Nota de crédito (ID)',
+  'refundReasonPolicy': 'Política del motivo de devolución',
+  'authorizedByUserId': 'Autorizada por (ID)',
+  'fulfillmentId': 'Pedido (ID)',
+  'jobId': 'Trabajo de impresión (ID)',
+  'documentKind': 'Tipo de documento',
+  'userId': 'Usuario (ID)',
+  'role': 'Rol',
+  'action': 'Acción',
+  'justification': 'Justificación',
+};
+
 /// Registry of every exported label family. The regression guard walks this
 /// map, so any family added here is automatically covered by the test.
 const Map<String, Map<String, String>> kAllLabelMaps = <String,
@@ -451,6 +497,7 @@ const Map<String, Map<String, String>> kAllLabelMaps = <String,
   'kAuthorityInertRecipeLabels': kAuthorityInertRecipeLabels,
   'kAuditDegradedLabels': kAuditDegradedLabels,
   'kAuditLedgerActionLabels': kAuditLedgerActionLabels,
+  'kAuditMetadataKeyLabels': kAuditMetadataKeyLabels,
   'kActivationBackendVerdictLabels': kActivationBackendVerdictLabels,
 };
 

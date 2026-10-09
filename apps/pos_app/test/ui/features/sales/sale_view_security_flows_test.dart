@@ -491,6 +491,80 @@ void main() {
         verify(mockViewModel.applyManualDiscount(3.0)).called(1);
       },
     );
+
+    testWidgets(
+      'the inline refusal clears the moment the operator edits the amount',
+      (tester) async {
+        // Device-reported defect: after a refusal the inline message kept
+        // claiming the OLD amount was not permitted while the operator
+        // corrected it — a small lie on screen at the exact moment the
+        // operator is deciding. The refusal must clear on the text change
+        // itself (the same moment the claim stops being true), not wait for
+        // the next Aplicar.
+        stubCaps();
+        await openPromptAndType(tester, '30');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+        expect(find.text(expectedRejection), findsOneWidget);
+
+        // The cashier corrects 30 -> 20, which IS permitted. The stale
+        // refusal must be gone NOW, while the dialog stays open and the
+        // typed value is preserved.
+        await tester.enterText(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                widget.decoration?.labelText == 'Monto de descuento',
+          ),
+          '20',
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text(expectedRejection), findsNothing);
+        expect(find.byKey(const Key('manual_discount_inline_rejection')),
+            findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Aplicar'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'a refusal followed by a still-invalid Aplicar shows the refusal again',
+      (tester) async {
+        // Clearing on edit must not swallow a REAL new refusal: edit to
+        // another over-cap amount, press Aplicar, and the verdict must be
+        // shown again for the new amount.
+        stubCaps();
+        await openPromptAndType(tester, '30');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+        expect(find.text(expectedRejection), findsOneWidget);
+
+        await tester.enterText(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                widget.decoration?.labelText == 'Monto de descuento',
+          ),
+          '40',
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(expectedRejection), findsNothing);
+
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text(expectedRejection), findsOneWidget);
+        expect(find.byKey(const Key('manual_discount_inline_rejection')),
+            findsOneWidget);
+        verifyNever(mockViewModel.applyManualDiscount(any));
+      },
+    );
   });
 
   testWidgets('presents supervisor override modal before close-box restricted action', (tester) async {

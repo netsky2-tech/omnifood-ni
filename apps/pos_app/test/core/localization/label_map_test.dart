@@ -79,6 +79,8 @@ void main() {
       expect(kAllLabelMaps['kSyncErrorLabels'], same(kSyncErrorLabels));
       expect(kAllLabelMaps['kAuditLedgerActionLabels'],
           same(kAuditLedgerActionLabels));
+      expect(kAllLabelMaps['kAuditMetadataKeyLabels'],
+          same(kAuditMetadataKeyLabels));
       expect(kAllLabelMaps['kActivationBackendVerdictLabels'],
           same(kActivationBackendVerdictLabels));
     });
@@ -225,6 +227,44 @@ void main() {
           'Impresión detenida por datos corruptos');
       // Dashboard-only codes never written by the POS pass through unchanged.
       expect(localize('USER_CREATED', kAuditLedgerActionLabels), 'USER_CREATED');
+    });
+
+    test('audit metadata key labels cover every POS emit-site key', () {
+      // Exhaustive against the POS's own metadata emit sites:
+      // sales_repository_impl (log / prepareLog), durable_print_service,
+      // sale_view logForensic. Unverified keys are intentionally absent:
+      // the view humanises them instead of inventing a meaning.
+      expect(kAuditMetadataKeyLabels.keys.toList(), [
+        'invoice_id',
+        'number',
+        'total',
+        'reason_code',
+        'reason_detail',
+        'reprint_at',
+        'reason',
+        'original_id',
+        'new_id',
+        'refundReasonPolicy',
+        'authorizedByUserId',
+        'fulfillmentId',
+        'jobId',
+        'documentKind',
+        'userId',
+        'role',
+        'action',
+        'justification',
+      ]);
+      // Spot checks across every emitting action family.
+      expect(localize('invoice_id', kAuditMetadataKeyLabels), 'Factura (ID)');
+      expect(localize('number', kAuditMetadataKeyLabels),
+          'Número de factura');
+      expect(localize('reason_code', kAuditMetadataKeyLabels),
+          'Código del motivo');
+      expect(localize('refundReasonPolicy', kAuditMetadataKeyLabels),
+          'Política del motivo de devolución');
+      expect(localize('fulfillmentId', kAuditMetadataKeyLabels), 'Pedido (ID)');
+      expect(localize('justification', kAuditMetadataKeyLabels),
+          'Justificación');
     });
 
     test('cash movement types cover every code with a Spanish label (D-14)', () {
