@@ -202,6 +202,29 @@ Dos defectos, con las dos causas confirmadas en código.
 **Nota de proceso:** el worker falló dos veces por errores de infraestructura. La segunda vez dejó la librería completa pero sin regenerar los cuatro mocks (que sin `togglePromotion` no compilaban) ni el test de widget; el orquestador cerró ambas cosas a mano. La regeneración se hizo con filtro ajustado y sin `--delete-conflicting-outputs`, midiendo el inventario de generados antes y después (109 archivos, hash de lista idéntico).
 
 
+## 6bis. S6 · Clase decimal del panel + mensajes de error sin fuga (adelantado por hallazgo en campo)
+
+**Origen:** el usuario, probando la UI de modifiers, encontró que al guardar aparece un error **en inglés** y que el formulario **exige escribir `0`** cuando él mismo muestra `0.00` en los inputs. Ninguno de los 150+ tests del bloque lo detectó. Ese es el punto: son tests **por capa con la frontera mockeada**, y los tres defectos viven exactamente **en la frontera** — la forma del payload, el idioma del mensaje y el formato que el input muestra contra lo que la validación acepta.
+
+**Cadena causal (toda verificada en código):**
+1. `modifier-option.entity.ts:55-61` declara la columna `decimal` **sin transformer**. El driver de Postgres devuelve `numeric` como **string** y TypeScript miente declarándolo `number`, así que el API serializa `"0.00"`. El input lo muestra tal cual y al enviar sin tocarlo viaja un string que `@IsNumber()` (`create-modifier-option.dto.ts:22`) rechaza. Escribir `0` re-dispara `onChange` con `valueAsNumber` → número real → pasa.
+2. `apps/owner_dashboard/src/lib/api-error.ts` (`getApiErrorMessage`): **antes** del `switch` que mapea 400 a español, devuelve el `message` crudo del backend. class-validator devuelve un **array** de restricciones en inglés, el código lo une y lo muestra; el filtro anti-basura sólo descarta `{`, `at `, `AxiosError` y `node_modules`. El helper lo usan **28 archivos**: la fuga no es de modifiers.
+3. La clase **ya estaba documentada y arreglada** para productos en `odd/tasks/products-decimal-contract.md`, con causa raíz idéntica, y ese trabajo declaró explícitamente fuera de alcance "otras entidades con columnas `decimal` (88 en el repo)". La clase se arregló para un módulo y el módulo nuevo la reprodujo.
+4. **El defecto está fijado por un test:** `purchases-tab.test.tsx:515` afirma que se renderiza `id should not be empty`. La intención era buena (nunca `[object Object]`), pero el efecto es un test verde defendiendo inglés técnico en pantalla.
+5. **Por qué no se vio:** `modifier-group-form.test.tsx` **mockea** `useCreateModifierOption`, así que el payload nunca cruza la validación real del DTO; y el archivo **no compila bajo `tsc`** (`:376` usa `as ModifierOption` sin importarlo). vitest pasa porque esbuild borra los tipos sin chequearlos.
+
+**Radio medido:** 85 columnas `decimal` (inventory 46, sales 28, onboarding 10, modifiers 1). **14 de los 16 clientes de API del panel NO normalizan** sus numéricos — sólo `product-api.ts` y `dashboard-api.ts` lo hacen. `getApiErrorMessage`: 28 consumidores.
+
+**Decisiones tomadas:** (a) arreglo **repo-wide** de `getApiErrorMessage` **más** una guarda falsable anti-fuga; (b) el e2e real es **replay del payload exacto del navegador contra el backend vivo**; (c) el orden es terminar S3a primero, después esta clase.
+
+**Plan:**
+- **S6a · modifiers (lo que el cliente está tocando ahora):** coerción de numéricos en la respuesta del backend (patrón de `product-response.ts`), normalización en `modifiers-api.ts`, arreglo del tipo roto del archivo de test, y un test que alimente la **forma real del API** (decimal como string) y afirme que el input muestra un número y que el guardado manda un número.
+- **S6b · mensajes de error:** `getApiErrorMessage` nunca devuelve texto técnico; actualizar `purchases-tab.test.tsx` que hoy fija la fuga; y una **guarda falsable** que falle si un mensaje de validación del backend llega crudo a la UI. Cuidado de diseño: el backend **sí** emite mensajes de negocio en español que deben mostrarse (por ejemplo el 409 de nombre duplicado), así que el arreglo necesita un criterio explícito de "mensaje de negocio" en vez de descartar todo.
+- **S6c · e2e real:** replay del payload exacto del navegador contra backend vivo, afirmando 201 y tipos numéricos en la respuesta.
+- **S6d · barrido medido (agendado):** los 14 clientes restantes, con inventario por cliente y por campo. No se arreglan a ciegas: primero se mide cuáles campos el panel realmente lee como números.
+
+---
+
 **S3 · Historial útil para auditar el día (H1, H3)**
 Filtro de fecha, fila de totales del período, límite/paginación, y dejar de tragar errores por fila.
 *TDD:* RED de filtrado por rango y de totales; test de que un fallo de contexto por fila se hace visible.
