@@ -1,0 +1,39 @@
+# ODD: Manual Owner Dashboard — sección 6 paso a paso + refresco de capturas dsh
+
+**Rama:** `docs/dashboard-manual-section6` (desde `main` 601edc90) · **Worktree:** `/home/octavio_morales/omnifood-ni-modifiers-web-e2e`
+**Alcance (elegido por el usuario):** reescribir la sección 6 (Modificadores) del manual como walkthrough paso a paso con captura por paso, Y re-capturar las 9 imágenes `dsh_*` existentes contra el estado actual. El resto del manual no se toca salvo versión.
+**Por qué ahora:** el flujo de modifiers quedó verificado y mergeado (features `0cad99c3`…`601edc90`); las capturas actuales (`dsh_07/08/09`) son del 7/10, anteriores al fix del contrato decimal.
+
+## Contexto y decisiones
+- Manual: `docs/nhilos/manuals/nhilos_owner_dashboard_manual_v0.2.md` (renombrado desde v0.1; voseo, NH-MAN-DSH-001, CLIENT-READY; §6 reescrita en esta feature).
+- Capturas: `docs/nhilos/manuals/images/dsh_NN_desc.png` (convención existente; dsh_01..09 se REEMPLAZAN con mismo nombre, walkthrough agrega dsh_10+).
+- **Tenant de captura: `soho`** (no el fixture) para consistencia con el manual (58 productos SOHO, grupos Leche/Endulzante/Extras). Login `admin@soho.com` / `C0ntr4sen4` / `tenantSlug: soho` → `http://soho.localhost:5174`.
+- **Cambio de entorno (DB dev local):** el hash del owner de SOHO no matcheaba password conocido → `UPDATE users SET password_hash` (bcrypt 10) a `C0ntr4sen4` en la DB `omnifood` de este host. Solo DB dev, cero cambios de repo.
+- Stack: backend `:3300` (CORS con `soho.localhost:5174`) + vite `:5174`, logs `/tmp/mwe-backend.log`, `/tmp/mwe-vite.log`.
+- Método: spec Playwright **live** dedicada (gate propio `NHILOS_MANUAL_CAPTURE=1`, script `test:e2e:capture` — NO corre en la suite live normal) que recorre el flujo real y escribe los PNG en `docs/nhilos/manuals/images/` — reutilizable para futuras actualizaciones del manual ("aprovechando el flujo de e2e").
+- Escritura: un solo writer (superficies: spec + manual), capturas correrán después, verificación final serial.
+
+## Tareas
+- [x] **T1** Rama + credenciales soho + stack real
+- [x] **T2** Writer: spec Playwright live de capturas (`apps/owner_dashboard/e2e/manual-screenshots.live.spec.ts`, 8 tests seriales, cleanup inclusive) + reescritura de la sección 6 a walkthrough paso a paso (voseo, 8 pasos, refs dsh_07..14) + bump `Versión: 0.2`
+- [x] **T3** Correr la spec → 14 PNG escritos/reemplazados en `docs/nhilos/manuals/images/` (todos 1440×900)
+- [x] **T4** Revisión del manual contra las imágenes reales + fix del defecto D-2 (ver Hallazgos): labels de UI verificados contra código, 8 capturas §6 revisadas visualmente, §3/§5 alineado a capturas nuevas
+- [x] **T5** Verificación (delegate `gentle-ai-verify`, 7 checks): refs 14/14 resuelven · 14 PNG 1440×900 · 0 orphans (38 PNG = 14 dsh + 24 pos) · tsc 0 · oxlint 0 · git status solo artefactos esperados · refs `manual_v0.1` corregidas (CD-12 registry + cierre-oom + este doc)
+- [ ] **T6** Commits convencionales (spec + script · manual v0.2 + imágenes · ODD)
+- [ ] **T7** Revisión nativa (`gentle_review inspect`) por candidato
+- [ ] **T8** Reporte + decisión de merge/PR (usuario)
+
+## Hallazgos
+- **D-2 (corregido): `dsh_09` obsoleto por el reuse-skip del spec.** La rama de reuse saltaba la captura del diálogo de creación, dejando para siempre una imagen de desarrollo cuyo fondo mostraba la fila «Jarabes» ya existente — contradiciendo el Paso 1 ("diálogo todavía vacío" sobre lista sin el grupo). Evidencia RED: corrida completa 8/8 con md5 de `dsh_09` sin cambio (`e957673c…`). Fix (test-first): capturar `dsh_09` en TODA corrida bajo filtro «Activos» con aserción `toHaveCount(0)` de ausencia del grupo (y desactivación previa si una corrida interrumpida lo dejó activo, esperando que el toast salga del frame). GREEN reuse: `dbfc272a…`; GREEN fresh: byte-idéntico (determinismo). Se eliminó también la constante `SLUG` sin uso (oxlint).
+- Backend **no tiene hard-delete** de grupos (soft-delete por diseño, disciplina estilo DGI): higiene final del tenant hecha por SQL directo. Estado final: tenant `soho` con exactamente Leche/Endulzante/Extras activos y **cero filas Jarabes** (grupo, opciones y adjuntos eliminados) → futuras corridas de captura arrancan en estado fresh.
+- `dsh_10` documenta honestamente el flujo create-then-edit: el diálogo de creación NO tiene editor de opciones (gate `isEditing`), las opciones se agregan reabriendo en edición — el manual lo explica en una nota «Importante».
+- **Gap doc-vs-UI (follow-up, fuera de alcance):** §4.1 describe «Historial de Comprobantes» como lista cronológica con drill-down; la UI actual de Ventas tiene pestañas (Resumen, Ventas por Hora, Top Productos, …) y el writer no encontró esa lista. Requiere revisión humana (puede existir en otra ruta).
+- §3/§5: los números de ejemplo se reescribieron para calzar con las capturas nuevas (día sin ventas: C$0.00 / 0 tickets / «Sin base comparable»; «Atención Requerida» = 1 voucher C$50 + 1 override C$220; terminal `S23TEST`; descuadres -C$90/-C$270).
+- El inventario de medios que afirma "33 PNG" queda desactualizado (pasa a 38): actualizar en su doc de auditoría, no en este cambio.
+
+## Evidencia de comandos
+- `UPDATE users … password_hash` (DB dev) → login 201 OWNER, 3 grupos soho: Leche 1×4, Endulzante 0×3, Extras 0×3.
+- RED: `npm run test:e2e:capture` 8/8 con md5 `dsh_09` sin cambio (`e957673c…`). GREEN reuse: 8/8, `dbfc272a…`. GREEN fresh (tras psql-delete de Jarabes): 8/8, `dbfc272a…` byte-idéntico.
+- `npx tsc --noEmit` 0 · `npx oxlint e2e/manual-screenshots.live.spec.ts` 0 tras eliminar `SLUG` sin uso.
+- Limpieza final BD: tenant `soho` = Leche/Endulzante/Extras activos, 0 filas Jarabes.
+- Verify battery: 6/7 PASS + CHECK 5 corregido en el momento (3 paths actualizados).
