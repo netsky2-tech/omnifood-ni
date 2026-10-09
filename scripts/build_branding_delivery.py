@@ -363,6 +363,60 @@ def verify():
     return broken_files, broken_anchors, anchors
 
 
+SVG_NS = "{http://www.w3.org/2000/svg}"
+
+
+def measure_text(element, offset_x, offset_y, size, mono, found):
+    """Accumulate every text node's absolute position and estimated width."""
+    transform = element.get("transform", "")
+    for match in re.finditer(r"translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)", transform):
+        offset_x += float(match.group(1))
+        offset_y += float(match.group(2))
+    if element.get("font-size"):
+        size = float(element.get("font-size").replace("px", ""))
+    family = element.get("font-family", "")
+    if family:
+        mono = "mono" in family.lower() or "Menlo" in family
+    if element.tag == f"{SVG_NS}text" and (element.text or "").strip():
+        x = offset_x + float(element.get("x", 0) or 0)
+        y = offset_y + float(element.get("y", 0) or 0)
+        own = float(element.get("font-size", size) or size)
+        width = len(element.text.strip()) * own * (0.62 if mono else 0.56)
+        anchor = element.get("text-anchor", "")
+        left = x - width / 2 if anchor == "middle" else (x - width if anchor == "end" else x)
+        found.append((element.text.strip(), left + width, y))
+    for child in element:
+        measure_text(child, offset_x, offset_y, size, mono, found)
+
+
+def check_illustrations():
+    """An illustration with text outside its own canvas renders as cut copy. That is
+    silent and easy to miss: measure every text node against the viewBox and fail."""
+    import xml.etree.ElementTree as ET
+
+    broken = []
+    for root_doc, _ in ORDER:
+        markdown = open(os.path.join(SRC, root_doc), encoding="utf-8").read()
+        for _, absolute in images_in(markdown, os.path.dirname(root_doc)):
+            if not absolute.endswith(".svg"):
+                continue
+            try:
+                svg = ET.parse(absolute).getroot()
+            except ET.ParseError as error:
+                broken.append(f"{os.path.basename(absolute)}: unparseable ({error})")
+                continue
+            view = [float(v) for v in svg.get("viewBox").split()]
+            width, height = view[2], view[3]
+            found = []
+            measure_text(svg, 0, 0, 12, False, found)
+            for text, right, y in found:
+                if right > width - 4:
+                    broken.append(f"{os.path.basename(absolute)}: text past the right edge «{text[:34]}»")
+                if y > height - 4:
+                    broken.append(f"{os.path.basename(absolute)}: text past the bottom «{text[:34]}»")
+    return broken
+
+
 def warns():
     """A document path written as plain code instead of a link is invisible to a
     reader who cannot resolve repository paths. That is exactly how the reading-order
@@ -396,9 +450,13 @@ def main():
     print(f"  anchors verified: {anchors} | broken links: {len(broken_files)} | broken anchors: {len(broken_anchors)}")
     for entry in (broken_files + broken_anchors)[:20]:
         print(f"    {entry}")
+    broken_svg = check_illustrations()
+    print(f"  illustrations checked: {len(broken_svg)} problems")
+    for entry in broken_svg[:20]:
+        print(f"    {entry}")
     warns()
-    if broken_files or broken_anchors:
-        sys.exit("Delivery checks failed: a generated link does not resolve.")
+    if broken_files or broken_anchors or broken_svg:
+        sys.exit("Delivery checks failed: a link does not resolve or an illustration is cut.")
 
 
 if __name__ == "__main__":

@@ -1,48 +1,65 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
-  <rect width="900" height="400" fill="#FFFFFF"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" width="900" height="480" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="900" height="480" fill="#FFFFFF"/>
   <text x="24" y="34" font-size="15" font-weight="700" fill="#0F172A">Ejemplo de forma — cómo se empaqueta una entrega</text>
   <text x="24" y="54" font-size="12" fill="#64748B">Sin sufijos inventados. Un archivo por pieza. Nada que exista solo dentro de un PDF.</text>
 
-  <g transform="translate(24,80)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12.5" fill="#0F172A">
-    <g transform="translate(0,0)">
-      <rect width="400" height="290" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
-      <g transform="translate(16,26)">
-        <text font-weight="700">entrega-2026-11-04/</text>
-        <text y="22">├── 01-marca/</text>
-        <text y="42" fill="#64748B">│   ├── logo-primary.svg</text>
-        <text y="62" fill="#64748B">│   ├── logo-horizontal.svg</text>
-        <text y="82" fill="#64748B">│   ├── logo-mark.svg</text>
-        <text y="102" fill="#64748B">│   ├── logo-negative.svg</text>
-        <text y="122" fill="#64748B">│   ├── logo-mono.svg</text>
-        <text y="142" fill="#64748B">│   └── lockup-nhilos-pos.svg</text>
-        <text y="166">├── 02-derivados/</text>
-        <text y="186" fill="#64748B">│   ├── favicon-16.png</text>
-        <text y="206" fill="#64748B">│   ├── app-icon-1024.png</text>
-        <text y="226" fill="#64748B">│   └── favicon.svg</text>
-        <text y="250">├── 03-documentos/</text>
-        <text y="270" fill="#64748B">│   └── sistema-de-identidad.pdf</text>
-      </g>
+  <!-- Arbol dibujado con indentacion y guias: no depende de fuente monoespaciada -->
+  <g transform="translate(24,84)">
+    <rect width="410" height="300" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+    <text x="16" y="26" font-size="12" font-weight="600" fill="#1E3A40">entrega-2026-11-04/</text>
+
+    <g stroke="#CBD5E1" stroke-width="1" fill="none">
+      <line x1="22" y1="38" x2="22" y2="286"/>
+      <line x1="52" y1="38" x2="52" y2="196"/>
+      <line x1="82" y1="150" x2="82" y2="286"/>
     </g>
-    <g transform="translate(428,0)">
-      <rect width="424" height="290" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
-      <g transform="translate(16,26)">
-        <text y="26">├── 04-tokens/</text>
-        <text y="46" fill="#64748B">│   └── tokens.csv</text>
-        <text y="70">├── 05-web/</text>
-        <text y="90" fill="#64748B">│   ├── b1-wireframes/</text>
-        <text y="110" fill="#64748B">│   ├── b2-pantallas/</text>
-        <text y="130" fill="#64748B">│   ├── componentes/</text>
-        <text y="150" fill="#64748B">│   └── assets-exportados/</text>
-        <text y="174">└── LEEME.txt</text>
-      </g>
-      <g transform="translate(16,222)" font-family="Inter, sans-serif" font-size="11" fill="#64748B">
-        <text y="0">El LEEME explica qué hay en cada carpeta y qué</text>
-        <text y="18">quedó pendiente. Es corto: una pantalla.</text>
-      </g>
+
+    <g font-size="12" font-family="ui-monospace,Menlo,monospace">
+      <text x="16" y="62" fill="#0F172A" font-weight="700">01-marca/</text>
+      <text x="46" y="86" fill="#64748B">logo-primary.svg</text>
+      <text x="46" y="108" fill="#64748B">logo-horizontal.svg</text>
+      <text x="46" y="130" fill="#64748B">logo-mark.svg</text>
+      <text x="46" y="152" fill="#64748B">logo-negative.svg</text>
+      <text x="46" y="174" fill="#64748B">logo-mono.svg</text>
+      <text x="46" y="196" fill="#64748B">lockup-nhilos-pos.svg</text>
+
+      <text x="76" y="222" fill="#0F172A" font-weight="700">02-derivados/</text>
+      <text x="106" y="244" fill="#64748B">favicon-16.png</text>
+      <text x="106" y="266" fill="#64748B">app-icon-1024.png</text>
+      <text x="106" y="288" fill="#64748B">favicon.svg</text>
     </g>
   </g>
 
-  <g transform="translate(24,382)" font-family="Inter, sans-serif" font-size="11" fill="#64748B">
-    <text>Mal: <tspan fill="#DC2626">logo-final-v2-bueno.svg</tspan> · <tspan fill="#DC2626">presentacion-con-todo.pdf</tspan> · <tspan fill="#DC2626">marca.psd</tspan></text>
+  <g transform="translate(456,84)">
+    <rect width="420" height="300" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+    <g stroke="#CBD5E1" stroke-width="1" fill="none">
+      <line x1="22" y1="20" x2="22" y2="150"/>
+      <line x1="52" y1="20" x2="52" y2="102"/>
+    </g>
+    <g font-size="12" font-family="ui-monospace,Menlo,monospace">
+      <text x="16" y="44" fill="#0F172A" font-weight="700">03-documentos/</text>
+      <text x="46" y="68" fill="#64748B">sistema-de-identidad.pdf</text>
+      <text x="46" y="90" fill="#64748B">sistema-de-identidad.md</text>
+
+      <text x="46" y="126" fill="#0F172A" font-weight="700">04-tokens/</text>
+      <text x="76" y="150" fill="#64748B">tokens.csv</text>
+      <text x="76" y="172" fill="#64748B">tokens.json</text>
+    </g>
+    <g stroke="#CBD5E1" stroke-width="1" fill="none">
+      <line x1="22" y1="182" x2="22" y2="256"/>
+    </g>
+    <g font-size="12" font-family="ui-monospace,Menlo,monospace">
+      <text x="16" y="206" fill="#0F172A" font-weight="700">05-web/</text>
+      <text x="46" y="230" fill="#64748B">b1-wireframes/</text>
+      <text x="46" y="252" fill="#64748B">b2-pantallas/</text>
+      <text x="46" y="274" fill="#64748B">componentes/ · assets/</text>
+    </g>
+    <text x="16" y="296" font-family="Inter,sans-serif" font-size="11" fill="#64748B">más LEEME.txt: qué hay en cada carpeta y qué quedó pendiente.</text>
+  </g>
+
+  <g transform="translate(24,404)">
+    <rect width="852" height="60" rx="6" fill="#E6EFF0"/>
+    <text x="16" y="24" font-size="11.5" fill="#1E3A40" font-weight="600">Nunca así</text>
+    <text x="16" y="44" font-size="11.5" fill="#DC2626">logo-final-v2-bueno.svg  ·  todo-en-una-lamina.pdf  ·  marca.psd  ·  version-final-DEFINITIVA/</text>
   </g>
 </svg>

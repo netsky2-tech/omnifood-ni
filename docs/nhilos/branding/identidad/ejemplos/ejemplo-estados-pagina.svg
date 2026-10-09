@@ -30,7 +30,7 @@
       <g transform="translate(720,0)"><rect width="156" height="120" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-dasharray="4 3"/>
         <text x="10" y="20" font-size="11" fill="#64748B" font-weight="600">No disponible</text>
         <text x="10" y="46" font-size="11.5" fill="#0F172A">Este contenido</text><text x="10" y="60" font-size="11.5" fill="#0F172A">no está listo.</text>
-        <text x="10" y="82" font-size="10.5" fill="#64748B">Nunca una página en blanco</text>
+        <text x="10" y="82" font-size="10.5" fill="#64748B">Nunca una página vacía</text>
         <text x="10" y="104" font-size="10.5" fill="#64748B">+ alternativa útil</text></g>
     </g>
   </g>
