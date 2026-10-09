@@ -7,7 +7,7 @@
 **Aplica a:** Propietarios (Owners), administradores y gerentes de SOHO Café (`NH-T0001`)  
 **Acceso Web:** Portal Backoffice en la Nube  
 
-> **Cambios v0.2:** sección 6 reescrita paso a paso con capturas actualizadas contra la funcionalidad verificada del sistema.
+> **Cambios v0.2:** sección 6 reescrita paso a paso con capturas actualizadas; correcciones de renderizado, terminología y alineación de §3–§4 con la UI real.
 
 ---
 
@@ -29,7 +29,7 @@ El Owner Dashboard es una plataforma web a la que podés acceder desde cualquier
 > **El punto de venta físico (POS) es la fuente de verdad operativa de tu negocio.**  
 > El Owner Dashboard web refleja la información que **ya ha sido sincronizada a la nube** a través de internet. Si el terminal físico de SOHO Café se queda temporalmente sin señal de Wi-Fi o internet en Managua, los cajeros seguirán cobrando sin problema, pero esas ventas aparecerán en el Dashboard web recién cuando el terminal recupere conectividad y complete su subida.
 
-En la barra superior del portal verás siempre el indicador de **Frescura de Sincronización** (*Sync Freshness*), indicando la fecha y hora exacta del último reporte recibido desde la caja.
+En la barra superior del portal verás siempre el indicador de **Frescura de Sincronización**, que muestra la fecha y hora exactas del último reporte recibido desde la caja.
 
 ---
 
@@ -39,14 +39,14 @@ Al iniciar sesión, la pantalla de inicio te presenta los indicadores clave de r
 
 ![Vista General de KPIs del Negocio](images/dsh_02_kpis_ventas.png)
 
-1. **Ventas Netas del Período:** Monto total facturado en Córdobas (C$) en el rango seleccionado (la captura muestra el inicio del día, sin ventas registradas: C$ 0.00).
+1. **Ventas Netas del Período:** Monto total facturado en Córdobas (C\$) en el rango seleccionado (la captura muestra el inicio del día, sin ventas registradas: C\$ 0.00).
 2. **Volumen de Facturas (Tickets):** Cantidad de comprobantes emitidos válidos (en la captura, 0 al inicio del día).
 3. **Ticket Promedio:** Gasto medio por cliente (sin base comparable hasta registrar ventas del día).
 4. **Margen Bruto Teórico:** Indicador de rentabilidad (en el Día 1 de SOHO se muestra sin costo de ventas hasta cargar las recetas).
 5. **Evolución y Ventas por Hora:** Gráfica interactiva de facturación a lo largo de las horas del día.
 6. **Top Productos Más Vendidos:** Ranking de rotación (ej. *Cappuccino 12oz*, *Espresso Doble*, *Cappuccino 8oz*).
 7. **Mix de Métodos de Pago:** Desglose consolidado del dinero recibido (Efectivo NIO, USD, Tarjetas).
-8. **Atención Requerida:** Resumen automático de alertas del negocio (en la captura: 1 voucher pendiente por C$ 50.00 y 1 override manual por C$ 220.00).
+8. **Atención Requerida:** Resumen automático de alertas del negocio (en la captura: 1 voucher pendiente por C\$ 50.00 y 1 override manual por C\$ 220.00).
 
 ---
 
@@ -54,16 +54,22 @@ Al iniciar sesión, la pantalla de inicio te presenta los indicadores clave de r
 
 En la sección lateral **Ventas**:
 
-![Historial de Ventas y Rendimiento](images/dsh_03_historial_comprobantes.png)
+![Reportes de Ventas — pestaña Resumen con KPIs y desglose por método de pago](images/dsh_03_historial_comprobantes.png)
 
-### 4.1 Historial de Comprobantes
-* Consulta la lista cronológica completa de todas las facturas y comprobantes emitidos.
-* Filtrá por rango de fechas, número de ticket, cajero o método de pago.
-* Hacé clic en cualquier ticket para visualizar el desglose detallado de productos, impuestos, descuentos y método de pago aplicado.
+### 4.1 Reportes de Ventas (pestañas del módulo)
+* **Resumen:** ventas brutas, cantidad de facturas y ticket promedio del rango seleccionado, con el desglose por método de pago (Efectivo NIO/USD, Tarjeta NIO/USD, Otros) — como muestra la captura.
+* **Ventas por Hora:** distribución de la facturación a lo largo del día.
+* **Top Productos:** ranking de rotación de productos.
+* **Rendimiento Cajeros:** métricas por operador de caja.
+* **Reconciliaciones:** listado por pago con Estado, Monto, Método, Voucher, Fecha, Operador y Terminal; con filtro de estado y paginación para cuadrar cada voucher contra el arqueo.
+* **Notas de Crédito:** con el permiso de emisión, elegí una de las 50 facturas más recientes (Factura, Estado, Total, Fecha) y emití la nota desde el diálogo.
+
+> **Nota:** el dashboard no ofrece una lista cronológica general de facturas con drill-down: el detalle a nivel factura se obtiene desde **Fiscal › Exportaciones** (Excel/CSV) y el trazado por pago desde **Reconciliaciones**.
 
 ### 4.2 Auditoría de Anulaciones (Voids)
-* Visualizá todas las ventas que fueron anuladas en la caja física.
-* Podrás verificar: qué cajero solicitó la anulación, qué supervisor la autorizó mediante su PIN, la hora exacta y el motivo ingresado.
+* La auditoría de anulaciones vive en **Fiscal › Anulaciones** (no en este módulo).
+* La tabla muestra **Factura, Cajero, Total, Motivo y Fecha** de cada venta anulada, con el total de anulaciones y el monto total anulado, filtrables por rango de fechas.
+* La anulación ocurre en el POS con autorización de supervisor; el dashboard solo la refleja ya sincronizada.
 
 ### 4.3 Sesiones de Caja y Reportes de Cierre (Cortes Z)
 En la sección **Sesiones de caja** del menú lateral:
@@ -107,8 +113,8 @@ En el ejemplo de SOHO Café: **Leche** (`Obligatorio 1/1`, 4 opciones), **Endulz
 **Paso 2 — Definir las reglas del grupo.** Completá:
 
 * **Nombre del grupo:** (ej. *Jarabes*).
-* **Rango de selección:** cantidad mínima (`min`) y máxima (`max`) requerida (ej. `min=1, max=1` para selección única obligatoria; `min=0, max=3` para opcionales; en el ejemplo `0/2`).
-* **Cantidades por opción (`allow_quantities`):** activá el interruptor **Permitir cantidades** cuando el cliente pueda solicitar unidades repetidas (ej. 2 shots de espresso o 2 raciones de sirope).
+* **Rango de selección:** cantidad mínima y máxima que el cliente puede elegir, con los campos **Mínimo de selección** y **Máximo de selección** (ej. `1/1` para selección única obligatoria; `0/3` para opcionales; en el ejemplo `0/2`).
+* **Cantidades por opción:** activá el interruptor **Permitir cantidades** cuando el cliente pueda solicitar unidades repetidas (ej. 2 shots de espresso o 2 raciones de sirope).
 * **Orden de mostrado:** el número define la posición del grupo en la pantalla de la cajera.
 
 Guardá con **Crear**.
@@ -118,7 +124,7 @@ Guardá con **Crear**.
 **Paso 3 — Agregar las opciones.** En la lista, hacé clic en el ícono de lápiz (**Editar grupo**) de tu grupo. En la sección **«Opciones del grupo»** pulsá **+ Agregar opción** una vez por cada opción y completá:
 
 * **Nombre** de la opción (ej. *Vainilla*, *Caramelo*).
-* **Precio adicional** (**Price Delta**) en Córdobas (ej. `15.00` o `5.00`; usá `0.00` si la opción no cuesta nada).
+* **Precio adicional** en Córdobas (ej. `15.00` o `5.00`; usá `0.00` si la opción no cuesta nada).
 * **Orden** de presentación dentro del grupo.
 * **Predeterminado:** marcá la opción que aparece preseleccionada al ordenar (solo una puede ser predeterminada).
 
@@ -180,7 +186,7 @@ En la sección **Fiscal** del menú lateral:
 ![Módulo de Control Fiscal DGI](images/dsh_06_fiscal.png)
 
 1. **Cumplimiento DGI (Disposición Técnica 09-2007):**
-   * Resumen mensual de ventas brutas (C$ 4,571.00), cantidad de facturas (28) e IVA recaudado (C$ 0.00 bajo Cuota Fija).
+   * Resumen mensual de ventas brutas (C\$ 4,571.00), cantidad de facturas (28) e IVA recaudado (C\$ 0.00 bajo Cuota Fija).
    * Clasificación de ventas exentas / no sujetas y notas de crédito emitidas.
    * Pista de auditoría inalterable con la numeración secuencial ascendente de facturas.
    * Registro completo de comprobantes anulados (ningún número se salta ni se destruye).
