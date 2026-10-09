@@ -44,6 +44,10 @@ import { UserRole } from '../identity/entities/user.entity';
 import { FxRateResolverService } from './fx-rate-resolver.service';
 import { GetBcnFxRateQueryDto } from './dto/get-bcn-fx-rate-query.dto';
 import { ListPurchasesQueryDto } from './dto/list-purchases-query.dto';
+import {
+  serializePurchaseDocument,
+  serializePurchaseDocuments,
+} from './purchase-document-response';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 import { CountSessionService } from './count-session.service';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
@@ -209,14 +213,19 @@ export class InventoryMovementController {
     @Query() query: ListPurchasesQueryDto,
     @GetTenantId() tenantId: string,
   ) {
-    return this.purchaseService.listPurchases({
-      tenantId,
-      startDate: query.startDate,
-      endDate: query.endDate,
-      supplierId: query.supplierId,
-      insumoId: query.insumoId,
-      limit: query.limit,
-    });
+    // Response-boundary decimal coercion: the entity's five decimal columns
+    // reach Node as driver strings (see purchase-document-response.ts), and
+    // the owner panel consumes unit_cost_nio directly.
+    return serializePurchaseDocuments(
+      await this.purchaseService.listPurchases({
+        tenantId,
+        startDate: query.startDate,
+        endDate: query.endDate,
+        supplierId: query.supplierId,
+        insumoId: query.insumoId,
+        limit: query.limit,
+      }),
+    );
   }
 
   @Post('purchases')
@@ -234,7 +243,7 @@ export class InventoryMovementController {
     @Body() dto: PurchaseDocumentDto,
     @GetTenantId() tenantId: string,
   ) {
-    return this.purchaseService.recordPurchase({
+    const result = await this.purchaseService.recordPurchase({
       id: dto.id,
       tenantId,
       insumoId: dto.insumoId,
@@ -252,6 +261,13 @@ export class InventoryMovementController {
       receivedDate: dto.receivedDate,
       expirationDate: dto.expirationDate,
     });
+    // Response-boundary decimal coercion on the exposed document (see
+    // purchase-document-response.ts): the decimals were assigned in code,
+    // so this is an identity pass-through kept for a uniform wire contract.
+    return {
+      ...result,
+      purchaseDocument: serializePurchaseDocument(result.purchaseDocument),
+    };
   }
 
   /**
@@ -336,7 +352,7 @@ export class InventoryMovementController {
     @Body() dto: ManualPurchaseDto,
     @GetTenantId() tenantId: string,
   ) {
-    return this.purchaseService.recordPurchase({
+    const result = await this.purchaseService.recordPurchase({
       id: randomUUID(),
       tenantId,
       insumoId: dto.insumoId,
@@ -355,6 +371,11 @@ export class InventoryMovementController {
       expirationDate: dto.expirationDate,
       messageLocale: 'es',
     });
+    // Same identity pass-through as the device write path above.
+    return {
+      ...result,
+      purchaseDocument: serializePurchaseDocument(result.purchaseDocument),
+    };
   }
 
   @Post('purchases/:id/correction')
@@ -365,11 +386,17 @@ export class InventoryMovementController {
     @Body() dto: PurchaseCorrectionDto,
     @GetTenantId() tenantId: string,
   ) {
-    return this.purchaseService.correctPurchase({
+    const result = await this.purchaseService.correctPurchase({
       tenantId,
       purchaseDocumentId: id,
       reason: dto.reason,
     });
+    // Same identity pass-through as the write paths above, on the exposed
+    // correction document.
+    return {
+      ...result,
+      correctionDocument: serializePurchaseDocument(result.correctionDocument),
+    };
   }
 
   @Post('shrinkage')

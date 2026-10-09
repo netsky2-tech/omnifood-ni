@@ -746,4 +746,14 @@ Las tres unidades cierran los **cuatro** formularios que el handoff nombraba. El
 
 **Evidencia:** 51/51 en las seis suites unitarias/controlador, 5/5 en las tres de base real, y **aserciones preexistentes actualizadas a conciencia porque fijaban la forma cruda** (una en `insumo.controller.spec`, cuatro en `cash-shift.controller.spec`) — un spec que pinnea la mentira es parte del defecto.
 
-**Diferido medido, no arreglado:** (a) `/inventory/purchases` es **la misma clase y real**: `PurchaseDocument[]` crudo, 5 columnas decimales, y el panel lo disimula con `Number(d.unit_cost_nio) || 0`; (b) `/inventory/suppliers` verificado **sin** columnas decimales; (c) los reportes fiscales verificados numéricos; (d) `/onboarding/templates/:code` crudo pero **sin consumidor numérico encontrado**; (e) el preview/commit de import del onboarding **sin verificar**. Y la clase de fondo sigue: **89 columnas sin transformer**, con la coerción viviendo sólo en estos bordes de respuesta, por diseño.
+### S6d-2 · El cuarto caso: compras — CERRADO
+
+`GET /inventory/purchases` devolvía `PurchaseDocument[]` crudo (5 columnas decimales) y el panel lo disimulaba con `Number(d.unit_cost_nio) || 0`. Mapper propio calcado de los anteriores, cableado en **las cuatro** rutas que exponen la entidad (listar, registrar, registro manual y corregir). Dos detalles honestos que reportó el worker: `PurchaseDocument` **no tiene decimales nullable** (así que el contrato "null se conserva" aplica a los campos no numéricos nullable, y lo afirma igual), y los caminos de escritura son identidad (los decimales se asignan en código, Postgres sólo hidrata columnas generadas), pero se mapean igual para que el contrato del cable sea uniforme.
+
+**Mutaciones propias, restauradas byte-idénticas:** dejar pasar el string → fallan unitaria, controlador **y base real** (`Expected: 12.5 / Received: "12.5000"`); y que la lista devuelva las entidades crudas → falla el borde del controlador, o sea que el **cableado** es load-bearing y no decorativo.
+
+**Evidencia:** 53/53 unitarias + controlador, 2/2 contra PostgreSQL real.
+
+**Residual declarado, no arreglado:** el `insumo` **anidado** dentro de las respuestas de compra sigue trayendo strings del driver en sus columnas decimales, porque es otro camino de serialización (el del controlador de insumos ya está arreglado). Es la clase previa, fuera de alcance.
+
+**Diferido medido, no arreglado:** (a) ~~`/inventory/purchases`~~ **cerrado arriba**; (b) `/inventory/suppliers` verificado **sin** columnas decimales; (c) los reportes fiscales verificados numéricos; (d) `/onboarding/templates/:code` crudo pero **sin consumidor numérico encontrado**; (e) el preview/commit de import del onboarding **sin verificar**. Y la clase de fondo sigue: **89 columnas sin transformer**, con la coerción viviendo sólo en estos bordes de respuesta, por diseño.
