@@ -1,11 +1,78 @@
 import { api, type ApiClientMethodOptions } from "@/lib/api";
+import { toFiniteNumber } from "@/lib/numeric";
 import type {
   ModifierGroup,
   ModifierGroupInput,
   ModifierOption,
   ModifierOptionInput,
 } from "./types";
-import type { EffectiveModifierGroup } from "./effective-types";
+import type {
+  EffectiveModifierGroup,
+  EffectiveModifierOption,
+} from "./effective-types";
+
+/**
+ * Honest wire types: Postgres `numeric` reaches the client as strings, so
+ * `price_delta` is untrusted at this boundary even though `ModifierOption`
+ * declares it as `number`. Everything else is an `integer`/`boolean`/`uuid`
+ * column, which node-postgres returns with its declared type already.
+ */
+export type RawModifierOption = Omit<ModifierOption, "price_delta"> & {
+  price_delta: unknown;
+};
+
+export type RawModifierGroup = Omit<ModifierGroup, "options"> & {
+  options: RawModifierOption[];
+};
+
+export type RawEffectiveModifierOption = Omit<
+  EffectiveModifierOption,
+  "price_delta"
+> & {
+  price_delta: unknown;
+};
+
+export type RawEffectiveModifierGroup = Omit<
+  EffectiveModifierGroup,
+  "options"
+> & {
+  options: RawEffectiveModifierOption[];
+};
+
+/** Mirrors the backend response boundary in `apps/admin_backend/src/modules/modifiers/modifier-response.ts`. */
+export function normalizeModifierOption(
+  raw: RawModifierOption,
+): ModifierOption {
+  return {
+    ...raw,
+    price_delta: toFiniteNumber(raw.price_delta),
+  };
+}
+
+export function normalizeModifierGroup(raw: RawModifierGroup): ModifierGroup {
+  return {
+    ...raw,
+    options: raw.options.map(normalizeModifierOption),
+  };
+}
+
+export function normalizeModifierGroupList(
+  raws: RawModifierGroup[],
+): ModifierGroup[] {
+  return raws.map(normalizeModifierGroup);
+}
+
+export function normalizeEffectiveGroups(
+  raws: RawEffectiveModifierGroup[],
+): EffectiveModifierGroup[] {
+  return raws.map((group) => ({
+    ...group,
+    options: group.options.map((option) => ({
+      ...option,
+      price_delta: toFiniteNumber(option.price_delta),
+    })),
+  }));
+}
 
 /**
  * HTTP functions for the modifier-groups screen. Same client and tenant
@@ -30,20 +97,21 @@ export function fetchModifierGroups(
   // keeps the legacy URL (and its caching) unchanged.
   if (filters.status) params.set("status", filters.status);
   const qs = params.toString();
-  return api.get<ModifierGroup[]>(
-    `/modifier-groups${qs ? `?${qs}` : ""}`,
-    opts,
-  );
+  return api
+    .get<RawModifierGroup[]>(`/modifier-groups${qs ? `?${qs}` : ""}`, opts)
+    .then<ModifierGroup[], never>(normalizeModifierGroupList);
 }
 
 export function fetchEffectiveGroups(
   productId: string,
   opts?: ApiClientMethodOptions,
 ) {
-  return api.get<EffectiveModifierGroup[]>(
-    `/modifier-groups/effective?product_id=${productId}`,
-    opts,
-  );
+  return api
+    .get<RawEffectiveModifierGroup[]>(
+      `/modifier-groups/effective?product_id=${productId}`,
+      opts,
+    )
+    .then<EffectiveModifierGroup[], never>(normalizeEffectiveGroups);
 }
 
 export function attachGroupToCategory(
@@ -98,7 +166,9 @@ export function createModifierGroup(
   input: ModifierGroupInput,
   opts?: ApiClientMethodOptions,
 ) {
-  return api.post<ModifierGroup>("/modifier-groups", input, opts);
+  return api
+    .post<RawModifierGroup>("/modifier-groups", input, opts)
+    .then(normalizeModifierGroup);
 }
 
 export function updateModifierGroup(
@@ -106,7 +176,9 @@ export function updateModifierGroup(
   input: Partial<ModifierGroupInput>,
   opts?: ApiClientMethodOptions,
 ) {
-  return api.patch<ModifierGroup>(`/modifier-groups/${id}`, input, opts);
+  return api
+    .patch<RawModifierGroup>(`/modifier-groups/${id}`, input, opts)
+    .then(normalizeModifierGroup);
 }
 
 export function deactivateModifierGroup(
@@ -121,11 +193,13 @@ export function reactivateModifierGroup(
   id: string,
   opts?: ApiClientMethodOptions,
 ) {
-  return api.patch<ModifierGroup>(
-    `/modifier-groups/${id}`,
-    { is_active: true },
-    opts,
-  );
+  return api
+    .patch<RawModifierGroup>(
+      `/modifier-groups/${id}`,
+      { is_active: true },
+      opts,
+    )
+    .then(normalizeModifierGroup);
 }
 
 export function createModifierOption(
@@ -133,11 +207,9 @@ export function createModifierOption(
   input: ModifierOptionInput,
   opts?: ApiClientMethodOptions,
 ) {
-  return api.post<ModifierOption>(
-    `/modifier-groups/${groupId}/options`,
-    input,
-    opts,
-  );
+  return api
+    .post<RawModifierOption>(`/modifier-groups/${groupId}/options`, input, opts)
+    .then(normalizeModifierOption);
 }
 
 export function updateModifierOption(
@@ -146,11 +218,13 @@ export function updateModifierOption(
   input: Partial<ModifierOptionInput>,
   opts?: ApiClientMethodOptions,
 ) {
-  return api.patch<ModifierOption>(
-    `/modifier-groups/${groupId}/options/${optionId}`,
-    input,
-    opts,
-  );
+  return api
+    .patch<RawModifierOption>(
+      `/modifier-groups/${groupId}/options/${optionId}`,
+      input,
+      opts,
+    )
+    .then(normalizeModifierOption);
 }
 
 export function deactivateModifierOption(
@@ -170,11 +244,13 @@ export function reactivateModifierOption(
   optionId: string,
   opts?: ApiClientMethodOptions,
 ) {
-  return api.patch<ModifierOption>(
-    `/modifier-groups/${groupId}/options/${optionId}`,
-    { is_active: true },
-    opts,
-  );
+  return api
+    .patch<RawModifierOption>(
+      `/modifier-groups/${groupId}/options/${optionId}`,
+      { is_active: true },
+      opts,
+    )
+    .then(normalizeModifierOption);
 }
 
 interface ApiErrorShape {
