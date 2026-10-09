@@ -647,4 +647,501 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       });
     });
   });
+
+  describe('Program form validation (unit C, form sweep)', () => {
+    async function openCreateProgramDialog(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getByRole('button', { name: /nuevo programa/i }));
+      expect(
+        screen.getByRole('heading', { name: /nuevo programa de lealtad/i }),
+      ).toBeInTheDocument();
+    }
+
+    // RED/GREEN core: today the form is native-only — whatever jsdom does with
+    // the `required` attribute (block the submit, or let it through), the
+    // app's Spanish message never renders and the guard is not the app's.
+    it('create: an empty name shows the app\'s Spanish message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      // SPEND_POINTS is the seeded default; its guided fields are valid as
+      // seeded, so the empty name is the only invalid field.
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      expect(
+        await screen.findByText('El nombre del programa es obligatorio'),
+      ).toBeInTheDocument();
+      expect(mockCreateProgram).not.toHaveBeenCalled();
+    });
+
+    it('create: SPEND_POINTS with spend block 0 shows the Spanish minimum message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Puntos por Compra');
+      fireEvent.change(screen.getByLabelText(/monto bloque \(c\$\)/i), {
+        target: { value: '0' },
+      });
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      expect(
+        await screen.findByText('El monto bloque debe ser mayor o igual a 1'),
+      ).toBeInTheDocument();
+      expect(mockCreateProgram).not.toHaveBeenCalled();
+    });
+
+    it('create: SPEND_POINTS with points-per-block 0 shows the Spanish minimum message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Puntos por Compra');
+      fireEvent.change(screen.getByLabelText(/puntos por bloque/i), {
+        target: { value: '0' },
+      });
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      expect(
+        await screen.findByText(
+          'Los puntos por bloque deben ser mayores o iguales a 1',
+        ),
+      ).toBeInTheDocument();
+      expect(mockCreateProgram).not.toHaveBeenCalled();
+    });
+
+    it('create: PRODUCT_STAMPS with empty eligible products shows the Spanish required message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Sellos por Producto');
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'PRODUCT_STAMPS',
+      );
+      await user.clear(screen.getByLabelText(/productos elegibles/i));
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      expect(
+        await screen.findByText('Indique al menos un producto elegible'),
+      ).toBeInTheDocument();
+      expect(mockCreateProgram).not.toHaveBeenCalled();
+    });
+
+    it('create: PRODUCT_STAMPS with units-per-unit 0 shows the Spanish minimum message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Sellos por Producto');
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'PRODUCT_STAMPS',
+      );
+      fireEvent.change(screen.getByLabelText(/sellos por unidad/i), {
+        target: { value: '0' },
+      });
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      expect(
+        await screen.findByText(
+          'Los sellos por unidad deben ser mayores o iguales a 1',
+        ),
+      ).toBeInTheDocument();
+      expect(mockCreateProgram).not.toHaveBeenCalled();
+    });
+
+    it('create: VISIT_STAMPS with units-per-visit 0 shows the Spanish minimum message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Club de Visitas');
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'VISIT_STAMPS',
+      );
+      fireEvent.change(screen.getByLabelText(/sellos por visita/i), {
+        target: { value: '0' },
+      });
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      expect(
+        await screen.findByText(
+          'Los sellos por visita deben ser mayores o iguales a 1',
+        ),
+      ).toBeInTheDocument();
+      expect(mockCreateProgram).not.toHaveBeenCalled();
+    });
+
+    it('create: VISIT_STAMPS with a negative minimum spend shows the Spanish minimum message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Club de Visitas');
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'VISIT_STAMPS',
+      );
+      fireEvent.change(screen.getByLabelText(/gasto mínimo/i), {
+        target: { value: '-5' },
+      });
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      expect(
+        await screen.findByText('El gasto mínimo debe ser mayor o igual a 0'),
+      ).toBeInTheDocument();
+      expect(mockCreateProgram).not.toHaveBeenCalled();
+    });
+
+    // Regression trap: minimumSpendNio is OPTIONAL and seeds as '' — an empty
+    // string means "not provided" and must submit exactly as before.
+    it('create: VISIT_STAMPS with an empty minimum spend submits exactly as before', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Club de Visitas');
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'VISIT_STAMPS',
+      );
+      // unitsPerVisit seeds as 1 and minSpend seeds as '' — both legal today.
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      await waitFor(() => {
+        expect(mockCreateProgram).toHaveBeenCalledTimes(1);
+      });
+      expect(mockCreateProgram).toHaveBeenCalledWith({
+        name: 'Club de Visitas',
+        program_type: 'VISIT_STAMPS',
+        earning_rule: { unitsPerVisit: 1 },
+      });
+    });
+
+    // Regression trap, the mirror of the one above: the native attribute was
+    // min={0} WITHOUT required, so an explicitly typed 0 is a real value the
+    // operator meant to set and must stay legal — only the EMPTY string means
+    // "not provided". Without this pin, a schema that rejects 0 would sail past
+    // the empty-string trap and break the legitimate case silently.
+    it('create: VISIT_STAMPS with an explicitly typed 0 minimum spend is valid', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Club Cero');
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'VISIT_STAMPS',
+      );
+      await user.type(screen.getByLabelText(/gasto mínimo/i), '0');
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      await waitFor(() => {
+        expect(mockCreateProgram).toHaveBeenCalledTimes(1);
+      });
+      expect(
+        mockCreateProgram.mock.calls[0][0].earning_rule.minimumSpendNio,
+      ).toBe(0);
+    });
+
+    it('an invalid value left in an inactive branch does not block a legitimate VISIT_STAMPS submit', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Club de Visitas');
+      // Leave an INVALID value behind in each inactive branch…
+      fireEvent.change(screen.getByLabelText(/monto bloque \(c\$\)/i), {
+        target: { value: '0' },
+      });
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'PRODUCT_STAMPS',
+      );
+      fireEvent.change(screen.getByLabelText(/sellos por unidad/i), {
+        target: { value: '0' },
+      });
+      // …then submit the active branch, which must not inherit those refusals.
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'VISIT_STAMPS',
+      );
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      await waitFor(() => {
+        expect(mockCreateProgram).toHaveBeenCalledTimes(1);
+      });
+      expect(mockCreateProgram).toHaveBeenCalledWith({
+        name: 'Club de Visitas',
+        program_type: 'VISIT_STAMPS',
+        earning_rule: { unitsPerVisit: 1 },
+      });
+    });
+
+    it('an invalid value left in an inactive branch does not block a legitimate SPEND_POINTS submit', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openCreateProgramDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Puntos por Compra');
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'VISIT_STAMPS',
+      );
+      fireEvent.change(screen.getByLabelText(/sellos por visita/i), {
+        target: { value: '0' },
+      });
+      fireEvent.change(screen.getByLabelText(/gasto mínimo/i), {
+        target: { value: '-5' },
+      });
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      expect(
+        await screen.findByText(
+          'Los sellos por visita deben ser mayores o iguales a 1',
+        ),
+      ).toBeInTheDocument();
+      expect(mockCreateProgram).not.toHaveBeenCalled();
+
+      // Now the legit branch: its seeded spend-block values are valid, and the
+      // refusals left in the inactive visit branch must not block it.
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de programa/i),
+        'SPEND_POINTS',
+      );
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      await waitFor(() => {
+        expect(mockCreateProgram).toHaveBeenCalledTimes(1);
+      });
+      expect(mockCreateProgram).toHaveBeenCalledWith({
+        name: 'Puntos por Compra',
+        program_type: 'SPEND_POINTS',
+        earning_rule: { spendBlockNio: 10, pointsPerBlock: 1 },
+      });
+    });
+  });
+
+  describe('Reward form validation (unit C, form sweep)', () => {
+    async function openRewardDialog(user: ReturnType<typeof userEvent.setup>) {
+      await user.click(screen.getByText('Smash Burger Club'));
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /agregar/i })).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole('button', { name: /agregar/i }));
+      expect(
+        screen.getByRole('heading', { name: /nueva recompensa/i }),
+      ).toBeInTheDocument();
+    }
+
+    // RED/GREEN core: today the form is native-only — the app's Spanish
+    // message never renders for an empty required name.
+    it('create: an empty name shows the app\'s Spanish message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openRewardDialog(user);
+      // DISCOUNT_AMOUNT is the seeded default; its amount and the cost seed
+      // valid, so the empty name is the only invalid field.
+      await user.click(screen.getByRole('button', { name: /crear recompensa/i }));
+
+      expect(
+        await screen.findByText('El nombre de la recompensa es obligatorio'),
+      ).toBeInTheDocument();
+      expect(mockCreateReward).not.toHaveBeenCalled();
+    });
+
+    it('create: cost 0 shows the Spanish minimum message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openRewardDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Descuento C$50');
+      fireEvent.change(screen.getByLabelText(/costo en unidades/i), {
+        target: { value: '0' },
+      });
+      await user.click(screen.getByRole('button', { name: /crear recompensa/i }));
+
+      expect(
+        await screen.findByText(
+          'El costo en unidades debe ser mayor o igual a 1',
+        ),
+      ).toBeInTheDocument();
+      expect(mockCreateReward).not.toHaveBeenCalled();
+    });
+
+    it('create: DISCOUNT_AMOUNT with amount 0 shows the Spanish minimum message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openRewardDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Descuento C$50');
+      fireEvent.change(screen.getByLabelText(/monto de descuento \(c\$\)/i), {
+        target: { value: '0' },
+      });
+      await user.click(screen.getByRole('button', { name: /crear recompensa/i }));
+
+      expect(
+        await screen.findByText(
+          'El monto de descuento debe ser mayor o igual a 1',
+        ),
+      ).toBeInTheDocument();
+      expect(mockCreateReward).not.toHaveBeenCalled();
+    });
+
+    it('create: FREE_PRODUCT with an empty product ID shows the Spanish required message and never calls the API', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openRewardDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Producto gratis');
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de recompensa/i),
+        'FREE_PRODUCT',
+      );
+      await user.clear(screen.getByLabelText(/id de producto a entregar/i));
+      await user.click(screen.getByRole('button', { name: /crear recompensa/i }));
+
+      expect(
+        await screen.findByText('Indique el ID del producto a entregar'),
+      ).toBeInTheDocument();
+      expect(mockCreateReward).not.toHaveBeenCalled();
+    });
+
+    it('a FREE_PRODUCT reward does not demand the DISCOUNT branch amount and submits as before', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openRewardDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Producto gratis');
+      // Leave an INVALID amount behind in the inactive DISCOUNT branch…
+      fireEvent.change(screen.getByLabelText(/monto de descuento \(c\$\)/i), {
+        target: { value: '0' },
+      });
+      // …then submit the FREE_PRODUCT branch, which must not inherit it.
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de recompensa/i),
+        'FREE_PRODUCT',
+      );
+      await user.click(screen.getByRole('button', { name: /crear recompensa/i }));
+
+      await waitFor(() => {
+        expect(mockCreateReward).toHaveBeenCalledTimes(1);
+      });
+      expect(mockCreateReward).toHaveBeenCalledWith({
+        programId: 'prog-smash',
+        input: {
+          name: 'Producto gratis',
+          description: undefined,
+          reward_type: 'FREE_PRODUCT',
+          cost_units: 10,
+          benefit_config: { productId: 'prod-smash' },
+        },
+      });
+    });
+
+    it('a DISCOUNT_AMOUNT reward does not demand the FREE_PRODUCT branch product ID and submits as before', async () => {
+      const user = userEvent.setup();
+      render(
+        <TestWrapper>
+          <LoyaltyPage />
+        </TestWrapper>,
+      );
+
+      await openRewardDialog(user);
+      await user.type(screen.getByLabelText(/nombre/i), 'Descuento C$50');
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de recompensa/i),
+        'FREE_PRODUCT',
+      );
+      await user.clear(screen.getByLabelText(/id de producto a entregar/i));
+      // …then submit the DISCOUNT_AMOUNT branch, which must not inherit it.
+      await user.selectOptions(
+        screen.getByLabelText(/tipo de recompensa/i),
+        'DISCOUNT_AMOUNT',
+      );
+      await user.click(screen.getByRole('button', { name: /crear recompensa/i }));
+
+      await waitFor(() => {
+        expect(mockCreateReward).toHaveBeenCalledTimes(1);
+      });
+      expect(mockCreateReward).toHaveBeenCalledWith({
+        programId: 'prog-smash',
+        input: {
+          name: 'Descuento C$50',
+          description: undefined,
+          reward_type: 'DISCOUNT_AMOUNT',
+          cost_units: 10,
+          benefit_config: { amountNio: 50 },
+        },
+      });
+    });
+  });
 });

@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export type LoyaltyProgramType = 'SPEND_POINTS' | 'PRODUCT_STAMPS' | 'VISIT_STAMPS';
 
 export const LOYALTY_PROGRAM_TYPES: { id: LoyaltyProgramType; label: string }[] = [
@@ -182,3 +184,140 @@ export interface RewardProfitAwareView {
   estimatedIncentiveCostInWindowNio: ProfitAwareMetric<number>;
   effectiveIncentiveRatePct: ProfitAwareMetric<number>;
 }
+
+// --- Loyalty form validation (Unit C, form sweep) ---
+
+/**
+ * The program and reward dialogs leaned on the browser: `required` and
+ * numeric `min` attributes only ran inside constraint validation, so the
+ * native balloon replaced the app's Spanish inline errors, and any submit
+ * not coming from the button (e.g. a programmatic requestSubmit()) bypassed
+ * the guard entirely.
+ *
+ * Fidelity rules, measured against the native attributes:
+ * - The conditional fields are validated ONLY for the branch the form is
+ *   actually showing (guided mode AND the selected program/reward type),
+ *   exactly like the native attributes, which only existed on the inputs the
+ *   active branch rendered. A value left in an INACTIVE branch — even an
+ *   invalid one — must never block a legitimate submit, so the conditional
+ *   checks live in the refinement and the base object accepts anything.
+ * - `name` is validated RAW (no trim): native `required` only blocks the
+ *   empty string, so a whitespace-only value was valid before and MUST
+ *   remain valid (the submit path never trimmed it either).
+ * - The numeric inputs mirror the old state handling (`Number(e.target.value)`):
+ *   a cleared input becomes 0, which the `min 1` rules then refuse. Native
+ *   `min 0` on the OPTIONAL minimum spend refuses negatives only; an empty
+ *   string means "not provided" and stays legal.
+ * - No maximum is invented anywhere (native had none), and the JSON-advanced
+ *   mode keeps its handler-level parse with its own message: the JSON
+ *   textarea carried no native constraint, only that parse guarded it.
+ */
+
+const finiteNumber = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isFinite(v);
+
+export const programFormSchema = z
+  .object({
+    name: z.string().min(1, 'El nombre del programa es obligatorio'),
+    programType: z.enum(['SPEND_POINTS', 'PRODUCT_STAMPS', 'VISIT_STAMPS']),
+    useCustomJson: z.boolean(),
+    // Base object never fails on the conditional fields: an inactive branch's
+    // value (even invalid) must not block the submit, so the type and range
+    // checks happen in the refinement for the ACTIVE branch only.
+    spendBlockNio: z.number().or(z.nan()),
+    pointsPerBlock: z.number().or(z.nan()),
+    eligibleProductIds: z.string(),
+    unitsPerPurchasedUnit: z.number().or(z.nan()),
+    unitsPerVisit: z.number().or(z.nan()),
+    minimumSpendNio: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    const issue = (field: string, message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message });
+    const guardNumber = (
+      field: string,
+      value: number,
+      notANumber: string,
+      belowMinimum: string,
+    ) => {
+      if (!finiteNumber(value)) issue(field, notANumber);
+      else if (value < 1) issue(field, belowMinimum);
+    };
+
+    if (values.useCustomJson) return;
+    if (values.programType === 'SPEND_POINTS') {
+      guardNumber(
+        'spendBlockNio',
+        values.spendBlockNio,
+        'El monto bloque debe ser un número',
+        'El monto bloque debe ser mayor o igual a 1',
+      );
+      guardNumber(
+        'pointsPerBlock',
+        values.pointsPerBlock,
+        'Los puntos por bloque deben ser un número',
+        'Los puntos por bloque deben ser mayores o iguales a 1',
+      );
+    } else if (values.programType === 'PRODUCT_STAMPS') {
+      // Native `required` only blocked the empty string.
+      if (values.eligibleProductIds.length < 1)
+        issue('eligibleProductIds', 'Indique al menos un producto elegible');
+      guardNumber(
+        'unitsPerPurchasedUnit',
+        values.unitsPerPurchasedUnit,
+        'Los sellos por unidad deben ser un número',
+        'Los sellos por unidad deben ser mayores o iguales a 1',
+      );
+    } else {
+      guardNumber(
+        'unitsPerVisit',
+        values.unitsPerVisit,
+        'Los sellos por visita deben ser un número',
+        'Los sellos por visita deben ser mayores o iguales a 1',
+      );
+      // OPTIONAL: native min={0} without required. Empty means "not provided".
+      if (values.minimumSpendNio.trim() !== '') {
+        const minSpend = Number(values.minimumSpendNio);
+        if (!Number.isFinite(minSpend))
+          issue('minimumSpendNio', 'El gasto mínimo debe ser un número');
+        else if (minSpend < 0)
+          issue('minimumSpendNio', 'El gasto mínimo debe ser mayor o igual a 0');
+      }
+    }
+  });
+
+export type ProgramFormValues = z.infer<typeof programFormSchema>;
+
+export const rewardFormSchema = z
+  .object({
+    name: z.string().min(1, 'El nombre de la recompensa es obligatorio'),
+    description: z.string(),
+    rewardType: z.enum(['DISCOUNT_AMOUNT', 'FREE_PRODUCT']),
+    useCustomJson: z.boolean(),
+    // The cost input renders in EVERY mode and branch, so unlike the
+    // conditional fields it is validated at object level, exactly where the
+    // native attributes always applied.
+    costUnits: z
+      .number({ invalid_type_error: 'El costo en unidades debe ser un número' })
+      .min(1, 'El costo en unidades debe ser mayor o igual a 1'),
+    amountNio: z.number().or(z.nan()),
+    productId: z.string(),
+  })
+  .superRefine((values, ctx) => {
+    const issue = (field: string, message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message });
+
+    if (values.useCustomJson) return;
+    if (values.rewardType === 'DISCOUNT_AMOUNT') {
+      if (!finiteNumber(values.amountNio))
+        issue('amountNio', 'El monto de descuento debe ser un número');
+      else if (values.amountNio < 1)
+        issue('amountNio', 'El monto de descuento debe ser mayor o igual a 1');
+    } else {
+      // Native `required` only blocked the empty string.
+      if (values.productId.length < 1)
+        issue('productId', 'Indique el ID del producto a entregar');
+    }
+  });
+
+export type RewardFormValues = z.infer<typeof rewardFormSchema>;

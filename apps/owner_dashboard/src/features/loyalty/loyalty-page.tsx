@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Search, Star, Trophy, Tag, Edit, ToggleLeft, ToggleRight, TrendingUp } from 'lucide-react';
 import { RewardProfitAwareDialog } from './reward-profit-aware-dialog';
 import {
@@ -17,16 +19,16 @@ import {
 } from './use-loyalty';
 import type {
   LoyaltyProgram,
-  LoyaltyProgramType,
   LoyaltyProgramStatus,
   CreateLoyaltyProgramInput,
   UpdateLoyaltyProgramInput,
-  RewardType,
   RewardDefinition,
   CreateRewardInput,
   UpdateRewardInput,
+  ProgramFormValues,
+  RewardFormValues,
 } from './types';
-import { LOYALTY_PROGRAM_TYPES, REWARD_TYPES } from './types';
+import { LOYALTY_PROGRAM_TYPES, REWARD_TYPES, programFormSchema, rewardFormSchema } from './types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -59,40 +61,44 @@ function ProgramForm({
   onCancel: () => void;
 }) {
   const isEditing = !!initial;
-  const [name, setName] = useState(initial?.name ?? '');
-  const [programType, setProgramType] = useState<LoyaltyProgramType>(initial?.program_type ?? 'SPEND_POINTS');
 
   const rule = initial?.earning_rule as Record<string, unknown> | undefined;
 
-  // Specific fields for SPEND_POINTS
-  const [spendBlockNio, setSpendBlockNio] = useState<number>(
-    Number(rule?.spendBlockNio ?? 10)
-  );
-  const [pointsPerBlock, setPointsPerBlock] = useState<number>(
-    Number(rule?.pointsPerBlock ?? 1)
-  );
+  // Unit C (form sweep): the app owns validation through the zod schema in
+  // types.ts (single source of operator feedback). The native HTML
+  // constraints this form used to rely on (name: required; the guided-rule
+  // numeric inputs: type=number min=1 required; the eligible-ids text:
+  // required; the optional minimum spend: min=0) only ran inside the
+  // browser's constraint validation: the balloon replaced the app's Spanish
+  // inline errors, and any submit not coming from the button (e.g. a
+  // programmatic requestSubmit()) bypassed the guard entirely.
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<ProgramFormValues>({
+    resolver: zodResolver(programFormSchema),
+    defaultValues: {
+      name: initial?.name ?? '',
+      programType: initial?.program_type ?? 'SPEND_POINTS',
+      useCustomJson: false,
+      spendBlockNio: Number(rule?.spendBlockNio ?? 10),
+      pointsPerBlock: Number(rule?.pointsPerBlock ?? 1),
+      eligibleProductIds: Array.isArray(rule?.eligibleProductIds)
+        ? (rule.eligibleProductIds as string[]).join(', ')
+        : 'prod-smash',
+      unitsPerPurchasedUnit: Number(rule?.unitsPerPurchasedUnit ?? 1),
+      unitsPerVisit: Number(rule?.unitsPerVisit ?? 1),
+      minimumSpendNio:
+        rule?.minimumSpendNio != null ? String(rule.minimumSpendNio) : '',
+    },
+  });
+  const programType = watch('programType');
+  const useCustomJson = watch('useCustomJson');
 
-  // Specific fields for PRODUCT_STAMPS
-  const [eligibleProductIds, setEligibleProductIds] = useState<string>(
-    Array.isArray(rule?.eligibleProductIds)
-      ? (rule.eligibleProductIds as string[]).join(', ')
-      : 'prod-smash'
-  );
-  const [unitsPerPurchasedUnit, setUnitsPerPurchasedUnit] = useState<number>(
-    Number(rule?.unitsPerPurchasedUnit ?? 1)
-  );
-
-  // Specific fields for VISIT_STAMPS
-  const [unitsPerVisit, setUnitsPerVisit] = useState<number>(
-    Number(rule?.unitsPerVisit ?? 1)
-  );
-  const [minimumSpendNio, setMinimumSpendNio] = useState<string>(
-    rule?.minimumSpendNio != null
-      ? String(rule.minimumSpendNio)
-      : ''
-  );
-
-  const [useCustomJson, setUseCustomJson] = useState(false);
+  // Specific field for VISIT_STAMPS (JSON advanced mode textarea)
   const [earningRule, setEarningRule] = useState(
     JSON.stringify(initial?.earning_rule ?? {}, null, 2),
   );
@@ -102,13 +108,15 @@ function ProgramForm({
   const updateMutation = useUpdateProgram();
   const isPending = createMutation.isPending || updateMutation.isPending;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Resolver-validated entry point: this only runs when the schema accepted
+  // every field the ACTIVE branch renders, so the handler-level JSON parse
+  // keeps its exact pre-sweep behavior and message.
+  const onValid = async (values: ProgramFormValues) => {
     if (isPending) return;
     setError(null);
 
     let parsedRule: Record<string, unknown>;
-    if (useCustomJson) {
+    if (values.useCustomJson) {
       try {
         parsedRule = JSON.parse(earningRule);
       } catch {
@@ -116,48 +124,48 @@ function ProgramForm({
         return;
       }
     } else {
-      if (programType === 'SPEND_POINTS') {
+      if (values.programType === 'SPEND_POINTS') {
         parsedRule = {
-          spendBlockNio: Number(spendBlockNio),
-          pointsPerBlock: Number(pointsPerBlock),
+          spendBlockNio: Number(values.spendBlockNio),
+          pointsPerBlock: Number(values.pointsPerBlock),
         };
-      } else if (programType === 'PRODUCT_STAMPS') {
-        const prodList = eligibleProductIds
+      } else if (values.programType === 'PRODUCT_STAMPS') {
+        const prodList = values.eligibleProductIds
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean);
         parsedRule = {
           eligibleProductIds: prodList.length > 0 ? prodList : ['prod-smash'],
-          unitsPerPurchasedUnit: Number(unitsPerPurchasedUnit),
+          unitsPerPurchasedUnit: Number(values.unitsPerPurchasedUnit),
         };
       } else {
         parsedRule = {
-          unitsPerVisit: Number(unitsPerVisit),
-          ...(minimumSpendNio.trim() ? { minimumSpendNio: Number(minimumSpendNio) } : {}),
+          unitsPerVisit: Number(values.unitsPerVisit),
+          ...(values.minimumSpendNio.trim() ? { minimumSpendNio: Number(values.minimumSpendNio) } : {}),
         };
       }
     }
 
     try {
       if (isEditing) {
-        const input: UpdateLoyaltyProgramInput = { name, earning_rule: parsedRule };
+        const input: UpdateLoyaltyProgramInput = { name: values.name, earning_rule: parsedRule };
         await updateMutation.mutateAsync({ programId: initial.id, input });
         toast({
           variant: "success",
           title: "Programa actualizado",
-          description: `El programa "${name}" fue actualizado exitosamente.`,
+          description: `El programa "${values.name}" fue actualizado exitosamente.`,
         });
       } else {
         const input: CreateLoyaltyProgramInput = {
-          name,
-          program_type: programType,
+          name: values.name,
+          program_type: values.programType,
           earning_rule: parsedRule,
         };
         await createMutation.mutateAsync(input);
         toast({
           variant: "success",
           title: "Programa creado",
-          description: `El programa "${name}" fue creado exitosamente.`,
+          description: `El programa "${values.name}" fue creado exitosamente.`,
         });
       }
       onSuccess();
@@ -173,16 +181,24 @@ function ProgramForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    // noValidate: the application's own zod validation (via the RHF
+    // resolver) is the single source of operator feedback. Native HTML
+    // constraint validation would otherwise block the submit event
+    // before the resolver runs, replacing the design system's Spanish
+    // inline errors with the browser's own validation bubble (browser
+    // language and styling).
+    <form onSubmit={handleSubmit(onValid)} noValidate className="space-y-4">
       <div>
         <label htmlFor="program-name" className="block text-sm font-medium mb-1">Nombre</label>
         <Input
           id="program-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          {...register('name')}
           placeholder="Ej: Smash Burger Club"
-          required
+          aria-invalid={Boolean(errors.name)}
         />
+        {errors.name && (
+          <p className="text-xs text-destructive">{errors.name.message}</p>
+        )}
       </div>
 
       {!isEditing && (
@@ -190,8 +206,7 @@ function ProgramForm({
           <label htmlFor="program-type" className="block text-sm font-medium mb-1">Tipo de programa</label>
           <select
             id="program-type"
-            value={programType}
-            onChange={(e) => setProgramType(e.target.value as LoyaltyProgramType)}
+            {...register('programType')}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors"
           >
             {LOYALTY_PROGRAM_TYPES.map((t) => (
@@ -217,11 +232,16 @@ function ProgramForm({
                 <Input
                   id="spend-block"
                   type="number"
-                  min={1}
-                  value={spendBlockNio}
-                  onChange={(e) => setSpendBlockNio(Number(e.target.value))}
-                  required
+                  {...register('spendBlockNio', {
+                    // Mirrors the old `Number(e.target.value)` state handling:
+                    // an emptied input submits as 0, a typed value as its number.
+                    setValueAs: (v) => (v === '' ? 0 : Number(v)),
+                  })}
+                  aria-invalid={Boolean(errors.spendBlockNio)}
                 />
+                {errors.spendBlockNio && (
+                  <p className="text-xs text-destructive">{errors.spendBlockNio.message}</p>
+                )}
               </div>
               <div>
                 <label htmlFor="points-per-block" className="block text-xs font-medium mb-1">
@@ -230,11 +250,14 @@ function ProgramForm({
                 <Input
                   id="points-per-block"
                   type="number"
-                  min={1}
-                  value={pointsPerBlock}
-                  onChange={(e) => setPointsPerBlock(Number(e.target.value))}
-                  required
+                  {...register('pointsPerBlock', {
+                    setValueAs: (v) => (v === '' ? 0 : Number(v)),
+                  })}
+                  aria-invalid={Boolean(errors.pointsPerBlock)}
                 />
+                {errors.pointsPerBlock && (
+                  <p className="text-xs text-destructive">{errors.pointsPerBlock.message}</p>
+                )}
               </div>
             </div>
           )}
@@ -247,11 +270,13 @@ function ProgramForm({
                 </label>
                 <Input
                   id="eligible-products"
-                  value={eligibleProductIds}
-                  onChange={(e) => setEligibleProductIds(e.target.value)}
+                  {...register('eligibleProductIds')}
                   placeholder="prod-smash, prod-burger"
-                  required
+                  aria-invalid={Boolean(errors.eligibleProductIds)}
                 />
+                {errors.eligibleProductIds && (
+                  <p className="text-xs text-destructive">{errors.eligibleProductIds.message}</p>
+                )}
               </div>
               <div>
                 <label htmlFor="units-per-unit" className="block text-xs font-medium mb-1">
@@ -260,11 +285,14 @@ function ProgramForm({
                 <Input
                   id="units-per-unit"
                   type="number"
-                  min={1}
-                  value={unitsPerPurchasedUnit}
-                  onChange={(e) => setUnitsPerPurchasedUnit(Number(e.target.value))}
-                  required
+                  {...register('unitsPerPurchasedUnit', {
+                    setValueAs: (v) => (v === '' ? 0 : Number(v)),
+                  })}
+                  aria-invalid={Boolean(errors.unitsPerPurchasedUnit)}
                 />
+                {errors.unitsPerPurchasedUnit && (
+                  <p className="text-xs text-destructive">{errors.unitsPerPurchasedUnit.message}</p>
+                )}
               </div>
             </div>
           )}
@@ -278,11 +306,14 @@ function ProgramForm({
                 <Input
                   id="units-per-visit"
                   type="number"
-                  min={1}
-                  value={unitsPerVisit}
-                  onChange={(e) => setUnitsPerVisit(Number(e.target.value))}
-                  required
+                  {...register('unitsPerVisit', {
+                    setValueAs: (v) => (v === '' ? 0 : Number(v)),
+                  })}
+                  aria-invalid={Boolean(errors.unitsPerVisit)}
                 />
+                {errors.unitsPerVisit && (
+                  <p className="text-xs text-destructive">{errors.unitsPerVisit.message}</p>
+                )}
               </div>
               <div>
                 <label htmlFor="min-spend" className="block text-xs font-medium mb-1">
@@ -291,11 +322,13 @@ function ProgramForm({
                 <Input
                   id="min-spend"
                   type="number"
-                  min={0}
-                  value={minimumSpendNio}
-                  onChange={(e) => setMinimumSpendNio(e.target.value)}
+                  {...register('minimumSpendNio')}
                   placeholder="0"
+                  aria-invalid={Boolean(errors.minimumSpendNio)}
                 />
+                {errors.minimumSpendNio && (
+                  <p className="text-xs text-destructive">{errors.minimumSpendNio.message}</p>
+                )}
               </div>
             </div>
           )}
@@ -317,7 +350,7 @@ function ProgramForm({
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={() => setUseCustomJson(!useCustomJson)}
+          onClick={() => setValue('useCustomJson', !useCustomJson)}
           className="text-xs text-primary underline"
         >
           {useCustomJson ? 'Usar formulario guiado' : 'Modo JSON avanzado'}
@@ -348,24 +381,40 @@ function RewardForm({
   onCancel: () => void;
 }) {
   const isEditing = !!initial;
-  const [name, setName] = useState(initial?.name ?? '');
-  const [description, setDescription] = useState(initial?.description ?? '');
-  const [rewardType, setRewardType] = useState<RewardType>(initial?.reward_type ?? 'DISCOUNT_AMOUNT');
-  const [costUnits, setCostUnits] = useState(initial?.cost_units ?? 10);
 
   const benefit = initial?.benefit_config as Record<string, unknown> | undefined;
 
-  // Specific field for DISCOUNT_AMOUNT
-  const [amountNio, setAmountNio] = useState<number>(
-    Number(benefit?.amountNio ?? 50)
-  );
+  // Unit C (form sweep): same pattern as the program form — the app owns
+  // validation through the zod schema in types.ts. The native HTML
+  // constraints this form used to rely on (name: required; cost:
+  // type=number min=1 required; the DISCOUNT_AMOUNT amount:
+  // type=number min=1 required; the FREE_PRODUCT product ID: required) only
+  // ran inside the browser's constraint validation: the balloon replaced the
+  // app's Spanish inline errors, and any submit not coming from the button
+  // bypassed the guard entirely.
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors },
+  } = useForm<RewardFormValues>({
+    resolver: zodResolver(rewardFormSchema),
+    defaultValues: {
+      name: initial?.name ?? '',
+      description: initial?.description ?? '',
+      rewardType: initial?.reward_type ?? 'DISCOUNT_AMOUNT',
+      useCustomJson: false,
+      costUnits: initial?.cost_units ?? 10,
+      amountNio: Number(benefit?.amountNio ?? 50),
+      productId:
+        typeof benefit?.productId === 'string' ? benefit.productId : 'prod-smash',
+    },
+  });
+  const rewardType = watch('rewardType');
+  const useCustomJson = watch('useCustomJson');
 
-  // Specific field for FREE_PRODUCT
-  const [productId, setProductId] = useState<string>(
-    typeof benefit?.productId === 'string' ? benefit.productId : 'prod-smash'
-  );
-
-  const [useCustomJson, setUseCustomJson] = useState(false);
+  // Specific field for JSON advanced mode textarea
   const [benefitConfig, setBenefitConfig] = useState(
     JSON.stringify(initial?.benefit_config ?? {}, null, 2),
   );
@@ -375,13 +424,15 @@ function RewardForm({
   const updateMutation = useUpdateReward();
   const isPending = createMutation.isPending || updateMutation.isPending;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Resolver-validated entry point: this only runs when the schema accepted
+  // every field the ACTIVE branch renders, so the handler-level JSON parse
+  // keeps its exact pre-sweep behavior and message.
+  const onValid = async (values: RewardFormValues) => {
     if (isPending) return;
     setError(null);
 
     let parsedConfig: Record<string, unknown>;
-    if (useCustomJson) {
+    if (values.useCustomJson) {
       try {
         parsedConfig = JSON.parse(benefitConfig);
       } catch {
@@ -389,40 +440,40 @@ function RewardForm({
         return;
       }
     } else {
-      if (rewardType === 'DISCOUNT_AMOUNT') {
-        parsedConfig = { amountNio: Number(amountNio) };
+      if (values.rewardType === 'DISCOUNT_AMOUNT') {
+        parsedConfig = { amountNio: Number(values.amountNio) };
       } else {
-        parsedConfig = { productId: productId.trim() || 'prod-smash' };
+        parsedConfig = { productId: values.productId.trim() || 'prod-smash' };
       }
     }
 
     try {
       if (isEditing) {
         const input: UpdateRewardInput = {
-          name,
-          description: description || undefined,
-          cost_units: costUnits,
+          name: values.name,
+          description: values.description || undefined,
+          cost_units: values.costUnits,
           benefit_config: parsedConfig,
         };
         await updateMutation.mutateAsync({ rewardId: initial.id, input });
         toast({
           variant: "success",
           title: "Recompensa actualizada",
-          description: `"${name}" fue actualizada exitosamente.`,
+          description: `"${values.name}" fue actualizada exitosamente.`,
         });
       } else {
         const input: CreateRewardInput = {
-          name,
-          description: description || undefined,
-          reward_type: rewardType,
-          cost_units: costUnits,
+          name: values.name,
+          description: values.description || undefined,
+          reward_type: values.rewardType,
+          cost_units: values.costUnits,
           benefit_config: parsedConfig,
         };
         await createMutation.mutateAsync({ programId, input });
         toast({
           variant: "success",
           title: "Recompensa creada",
-          description: `"${name}" fue creada exitosamente.`,
+          description: `"${values.name}" fue creada exitosamente.`,
         });
       }
       onSuccess();
@@ -438,24 +489,31 @@ function RewardForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    // noValidate: the application's own zod validation (via the RHF
+    // resolver) is the single source of operator feedback. Native HTML
+    // constraint validation would otherwise block the submit event
+    // before the resolver runs, replacing the design system's Spanish
+    // inline errors with the browser's own validation bubble (browser
+    // language and styling).
+    <form onSubmit={handleSubmit(onValid)} noValidate className="space-y-4">
       <div>
         <label htmlFor="reward-name" className="block text-sm font-medium mb-1">Nombre</label>
         <Input
           id="reward-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+          {...register('name')}
           placeholder="Ej: 1 Smash Burger gratis"
-          required
+          aria-invalid={Boolean(errors.name)}
         />
+        {errors.name && (
+          <p className="text-xs text-destructive">{errors.name.message}</p>
+        )}
       </div>
 
       <div>
         <label htmlFor="reward-desc" className="block text-sm font-medium mb-1">Descripción</label>
         <Input
           id="reward-desc"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          {...register('description')}
           placeholder="Opcional"
         />
       </div>
@@ -465,8 +523,7 @@ function RewardForm({
           <label htmlFor="reward-type" className="block text-sm font-medium mb-1">Tipo de recompensa</label>
           <select
             id="reward-type"
-            value={rewardType}
-            onChange={(e) => setRewardType(e.target.value as RewardType)}
+            {...register('rewardType')}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors"
           >
             {REWARD_TYPES.map((t) => (
@@ -481,11 +538,16 @@ function RewardForm({
         <Input
           id="cost-units"
           type="number"
-          min={1}
-          value={costUnits}
-          onChange={(e) => setCostUnits(Number(e.target.value))}
-          required
+          {...register('costUnits', {
+            // Mirrors the old `Number(e.target.value)` state handling:
+            // an emptied input submits as 0, a typed value as its number.
+            setValueAs: (v) => (v === '' ? 0 : Number(v)),
+          })}
+          aria-invalid={Boolean(errors.costUnits)}
         />
+        {errors.costUnits && (
+          <p className="text-xs text-destructive">{errors.costUnits.message}</p>
+        )}
       </div>
 
       {/* Dynamic structured fields according to reward type */}
@@ -502,11 +564,14 @@ function RewardForm({
               <Input
                 id="benefit-amount"
                 type="number"
-                min={1}
-                value={amountNio}
-                onChange={(e) => setAmountNio(Number(e.target.value))}
-                required
+                {...register('amountNio', {
+                  setValueAs: (v) => (v === '' ? 0 : Number(v)),
+                })}
+                aria-invalid={Boolean(errors.amountNio)}
               />
+              {errors.amountNio && (
+                <p className="text-xs text-destructive">{errors.amountNio.message}</p>
+              )}
             </div>
           ) : (
             <div>
@@ -515,11 +580,13 @@ function RewardForm({
               </label>
               <Input
                 id="benefit-product"
-                value={productId}
-                onChange={(e) => setProductId(e.target.value)}
+                {...register('productId')}
                 placeholder="prod-smash"
-                required
+                aria-invalid={Boolean(errors.productId)}
               />
+              {errors.productId && (
+                <p className="text-xs text-destructive">{errors.productId.message}</p>
+              )}
             </div>
           )}
         </div>
@@ -540,7 +607,7 @@ function RewardForm({
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={() => setUseCustomJson(!useCustomJson)}
+          onClick={() => setValue('useCustomJson', !useCustomJson)}
           className="text-xs text-primary underline"
         >
           {useCustomJson ? 'Usar formulario guiado' : 'Modo JSON avanzado'}

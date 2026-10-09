@@ -700,3 +700,26 @@ Esquema `productFormSchema` en `product-types.ts` (una sola forma: create y edic
 **Evidencia:** RED citado antes de tocar producción (5 tests fallando con la mutación llamada y sin mensaje de la app), 41/41 en los cuatro archivos de test existentes, `tsc --noEmit` sin issues, y los payloads de create y edición pineados por aserciones `toEqual` exactas que **son anteriores** a este cambio.
 
 **Nota de proceso (error mío, y una disciplina que funcionó):** las superficies que derivé incluían `w5-e2e-products.test.tsx`, que **no existe** — lo inferí del e2e del catálogo. El worker lo detectó, **se negó a reportar un pass count de un archivo inexistente** y paró a preguntar en vez de crear un archivo nuevo con cobertura auto-derivada. Respuesta: opción (a), mi lista estaba mal. Una cifra inventada habría sido peor que una unidad incompleta.
+
+### Unidad C · El par de lealtad (programa y recompensa) — CERRADO
+
+Dos esquemas condicionales en `features/loyalty/types.ts`. **La decisión de diseño que importa:** el objeto base **nunca falla por un campo condicional** (`z.number().or(z.nan())`) y el `superRefine` valida **sólo la rama activa**, así que un valor inválido dejado atrás en una rama inactiva no bloquea un envío legítimo — y eso está pineado en las **dos** direcciones (no bloquea la inactiva, sí exige la activa). `costUnits` queda en el objeto base porque su input se renderiza en toda rama, exactamente donde siempre aplicó el atributo nativo.
+
+**Tabla de ramas:** SPEND_POINTS → nombre + monto bloque ≥1 + puntos por bloque ≥1 · PRODUCT_STAMPS → nombre + ids no vacío + sellos por unidad ≥1 · VISIT_STAMPS → nombre + sellos por visita ≥1 + gasto mínimo **opcional** (≥0 sólo si no está vacío) · JSON avanzado → sólo nombre, con el parse del handler y sus mensajes **sin mover** y su test intacto. Recompensa: DISCOUNT_AMOUNT → nombre + costo ≥1 + monto ≥1 · FREE_PRODUCT → nombre + costo ≥1 + productId no vacío · JSON → nombre + costo.
+
+**Dato medido que corrige el diagnóstico:** acá **jsdom sí aplica los `min` numéricos** (a diferencia de `step` en la unidad B) — probado con jsdom 30.0.1: un `input type=number min=1 value=0 required` bloquea el submit. El RED de esta unidad fue "submit bloqueado y mensaje ausente", no "mutación llamada con datos malos".
+
+**Mutaciones propias:** endurecer el objeto base → falla `an invalid value left in an inactive branch does not block a legitimate VISIT_STAMPS submit`; quitar el requerido de `productId` en la rama de producto gratis → falla su test.
+
+**Y una mutación mía que NO falló, que es el hallazgo más útil de la unidad.** Cambiar `minSpend < 0` por `<= 0` pasó en verde: con el campo **vacío**, el `if (trim() !== '')` corta antes de comparar, así que mi cambio cayó en código muerto *para ese caso* — y de paso destapó que **nadie pineaba que un `0` tipeado explícitamente sea válido**, cuando el atributo nativo era `min={0}` sin `required`. Agregué ese pin y repetí la misma mutación: ahora falla (`create: VISIT_STAMPS with an explicitly typed 0 minimum spend is valid`). **Un hueco encontrado por una mutación mal dirigida sigue siendo un hueco.**
+
+**Evidencia:** RED citado (12 guardas fallando con el mensaje español ausente), 47/47 en las tres suites de lealtad —34 del par programa/recompensa (17 previos + 16 nuevos + el pin agregado), 6 de profit-aware y 8 del perfil de cliente, ambos **intactos**— y `tsc --noEmit` sin issues.
+
+### Cierre del barrido
+
+Las tres unidades cierran los **cuatro** formularios que el handoff nombraba. El patrón es el mismo en las tres: esquema que **espeja los atributos** (ni más estricto, ni más laxo), `noValidate` con el comentario que explica por qué, atributos nativos retirados por inertes, mensajes en español por campo según §18.2/§18.3 del estándar, y un test por atributo para que "no se perdió ninguna guarda" sea verificable en vez de afirmado.
+
+**Diferidos, registrados y no tocados:**
+1. Los **tres que ya usan RHF+zod** (login, promociones, modifiers) sólo necesitan `noValidate`: una línea cada uno, más los tests de que su esquema sigue siendo la única guarda. Es una unidad chica propia.
+2. El **quinto** formulario de lealtad (`customer-loyalty-profile.tsx`), que el handoff no nombra: sólo `type=number` nativo y ya tiene guardas JS. Se dejó intacto a propósito (su suite fue red de regresión, 8/8).
+3. El grupo con **guardas JS ad-hoc** (suppliers, insumos, purchases, RecipeForm) **no se rompe** con `noValidate` porque su guarda es JS, pero sus atributos nativos (`RecipeForm` hasta `max={99.99}`, `suppliers-tab.tsx:496` `required`) necesitan paridad de esquema **antes** de agregarlo.
