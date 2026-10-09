@@ -525,3 +525,43 @@ La tabla `invoice_item_modifiers` sólo tenía `id`, `invoice_item_id`, `name`, 
 **El borde honesto se preserva:** una venta anterior a `a137a116` no tiene filas de modifiers porque nunca se registraron. Para esas, el reimpreso **no imprime nada** — jamás se fabrica ni se rellena hacia atrás — y **no lanza**: el contrato fail-closed (`REPRINT_SNAPSHOT_UNAVAILABLE`) sigue limitado a la instantánea fiscal, y los tests de esa denegación pasan sin cambios.
 
 **Evidencia:** el test nuevo nace en rojo (`Expected: an object with length of <1> / Actual: [] / Which: has length of <0>`) y queda verde 10/10; incluye una aserción sobre el **texto impreso** (contiene el nombre del extra), que es lo más profundo que este arnés alcanza — el driver de la impresora no se ejercita, y eso queda dicho. Suites contiguas verdes (`sales_repository_impl_test` 42/42, `sale_view_model_void_test` 18/18, `activation_controlled_sale_runner_test` 34/34) y el fixture cross-app **byte-idéntico**. Mutación propia: volver la carga al default vacío → `Expected: <1> / Actual: []`; restaurada byte-idéntica.
+
+---
+
+## 13. S1c-3 · El origen del descuento en reportes y en la web
+
+**La pregunta que responde:** el hallazgo D3 del §1 —"imposible responder *cuánto se descontó a mano este mes*"—. El "quién lo autorizó" ya lo sirve la bitácora (S4); acá va el **cuánto por origen**.
+
+### S1c-3a · Los totales por origen en el reporte del panel — CERRADO
+
+El corte sale del mapa: `getDashboard` **ya carga los ítems** con `relations: ['items','payments']` dentro de `runInTenantTransaction`, así que el agregado es un *fold* en TypeScript, no SQL crudo. Y hay un detalle que lo vuelve correcto **por construcción** en vez de por disciplina: `totalDiscountsNio` se compone sumando `invoice_items.discount` (`salesRowDiscounts`) sobre las filas que pasan `isRevenueAffectingDocument`. Por lo tanto el fold por origen vive **en el mismo bucle, sobre las mismas filas, con el mismo predicado y el mismo `round2`** — y esta identidad es exacta para toda entrada:
+
+```
+manualDiscountNio + promotionDiscountNio + loyaltyDiscountNio + discountOriginUnattributedNio === totalDiscountsNio
+```
+
+Un segundo cálculo paralelo habría dado dos números que "casi" coinciden; el dueño no puede reconciliar con un *casi*.
+
+**Contrato del campo nuevo `discountOriginUnattributedNio`** ("sin origen registrado"):
+- un desglose `NULL`/ausente (legado) manda **todo** el descuento de esa línea acá — **jamás** se presenta como un cero de origen: decir "descuento manual: C$0.00" cuando en realidad no se registró es fabricar un hecho fiscal;
+- un desglose **parcial** deja su residual acá;
+- un desglose que **sobre-declara** produce un residual **negativo**, y **no se recorta**: la identidad se mantiene sobre datos que se contradicen a sí mismos en vez de esconder el problema;
+- las llaves **desconocidas se ignoran**: el CHECK de la base las prohíbe, pero un reporte nunca debe inflar un total con entrada no validada.
+
+**Mutaciones propias, todas restauradas byte-idénticas:**
+
+| Mutación | Resultado | Garantía anclada |
+|---|---|---|
+| Un `NULL` no va a "sin origen" (se descarta) | `Expected: 50 / Received: 0` (3 tests) | Legado nunca se convierte en cero de origen |
+| Recortar el residual negativo a 0 | `Expected: -20 / Received: 0` | La identidad se mantiene aunque los datos se contradigan |
+| Iterar todas las llaves en vez de las tres conocidas | `Expected: 0 / Received: 999` | Entrada no validada no puede inflar un total fiscal |
+
+**Evidencia:** 46/46 en el spec puro de semántica (8 casos nuevos), 34/34 del servicio, 19/19 del controlador = **99/99**; `getTopProducts` (el otro consumidor de `computeSalesReportingTotals`) verificado sin cambios. Ejemplo trabajado del fixture: líneas 40 (manual) + 70 (promo 45 / manual 25) + 15 (lealtad) + una línea legado de 30 con `NULL` → manual 65, promoción 45, lealtad 15, sin origen 30, total **155** ✓.
+
+### S1c-3b · La superficie web — PENDIENTE
+La más chica posible: el bloque "Descuentos" de `tips-summary.tsx:88-97`, que es **la única cifra de descuento renderizada** en el panel y ya tiene canal de props desde `dashboard-page.tsx:200-204`. Confirmado que **no existe ninguna tabla a nivel de línea** en el panel.
+
+⚠ **Cuidado que ya identifiqué:** el normalizador del panel (`dashboard-api.ts:144`) colapsa *ausente* a `0` con `toFiniteNumber`. Para estos campos eso mentiría contra un backend viejo (mostraría "manual: C$0.00" con un total de C$279 de legado), así que la web tiene que **distinguir ausente de cero** y no renderizar el desglose cuando el API no lo reporta.
+
+### S1c-3c · El libro de ventas (export) — PENDIENTE
+Una fila por factura: agregar columnas por origen al DTO del export, al CSV (`:959,977`), al XLSX (`:1053,1075`) —el PDF no tiene columna de descuento— más los tipos y el **fixture de contrato** del panel (`fiscal-dtos.json` + `w4-contract.test.ts`). El spec del export **pinnea el header CSV exacto**, así que agregar columnas rompe ese pin y hay que actualizarlo a conciencia.

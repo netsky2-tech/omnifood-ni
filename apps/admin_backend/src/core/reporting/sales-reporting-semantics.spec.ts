@@ -3,11 +3,12 @@ import {
   computeDailySalesSeries,
   computeSalesReportingTipsSummary,
   computeSalesReportingTotals,
+  SalesReportingInvoiceRow,
+  SalesReportingTotals,
   isCogsCoverageRelevantSale,
   isCompletedTicketDocument,
   isRevenueAffectingDocument,
   resolveInvoiceLocalDayBucket,
-  SalesReportingInvoiceRow,
   salesRowDiscounts,
   salesRowNetSales,
 } from './sales-reporting-semantics';
@@ -158,6 +159,12 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
         averageTicketNetNio: 1243.33,
         totalTaxNio: 559.5,
         totalDiscountsNio: 150,
+        // S1c-3: the known fixture predates provenance — every line's
+        // discount is unattributed, no origin total is fabricated.
+        manualDiscountNio: 0,
+        promotionDiscountNio: 0,
+        loyaltyDiscountNio: 0,
+        discountOriginUnattributedNio: 150,
       });
     });
 
@@ -275,6 +282,11 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
         averageTicketNetNio: null,
         totalTaxNio: 0,
         totalDiscountsNio: 0,
+        // S1c-3 additive fields on the empty period.
+        manualDiscountNio: 0,
+        promotionDiscountNio: 0,
+        loyaltyDiscountNio: 0,
+        discountOriginUnattributedNio: 0,
       });
     });
 
@@ -291,6 +303,200 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
       expect(totals.netSalesNio).toBe(637.2);
       expect(totals.totalDiscountsNio).toBe(62.8);
       expect(totals.preDiscountSalesNio).toBe(700);
+    });
+  });
+
+  /**
+   * S1c-3 reconciliation contract: the four per-origin fields must sum to
+   * totalDiscountsNio EXACTLY (no tolerance) — same rows, same predicate,
+   * same rounding discipline. A consumer of the dashboard reconciles
+   * against this identity, so the module must guarantee it.
+   */
+  const expectOriginIdentity = (totals: SalesReportingTotals): void => {
+    expect(
+      totals.manualDiscountNio +
+        totals.promotionDiscountNio +
+        totals.loyaltyDiscountNio +
+        totals.discountOriginUnattributedNio,
+    ).toBe(totals.totalDiscountsNio);
+  };
+
+  describe('computeSalesReportingTotals per-origin discount attribution (S1c-3)', () => {
+    it('lands the whole discount in unattributed when the breakdown is NULL (legacy) or absent', () => {
+      // NULL means legacy/unknown (no backfill, D-A2): it must surface as the
+      // unattributed remainder, NEVER as a fabricated origin zero.
+      const totals = computeSalesReportingTotals([
+        {
+          isCanceled: false,
+          subtotal: 1000,
+          items: [{ discount: 30, discountOrigin: null }],
+        },
+        {
+          isCanceled: false,
+          subtotal: 500,
+          items: [{ discount: 20 }],
+        },
+      ]);
+
+      expect(totals.manualDiscountNio).toBe(0);
+      expect(totals.promotionDiscountNio).toBe(0);
+      expect(totals.loyaltyDiscountNio).toBe(0);
+      expect(totals.discountOriginUnattributedNio).toBe(50);
+      expect(totals.totalDiscountsNio).toBe(50);
+      expectOriginIdentity(totals);
+    });
+
+    it('attributes a mixed document across manual, promotion and loyalty with EXACT identity (no tolerance)', () => {
+      const totals = computeSalesReportingTotals([
+        {
+          isCanceled: false,
+          subtotal: 1000,
+          totalTax: 150,
+          items: [
+            { discount: 40, discountOrigin: { manual: 40 } },
+            { discount: 70, discountOrigin: { promotion: 45, manual: 25 } },
+            { discount: 15, discountOrigin: { loyalty: 15 } },
+          ],
+        },
+      ]);
+
+      expect(totals.manualDiscountNio).toBe(65);
+      expect(totals.promotionDiscountNio).toBe(45);
+      expect(totals.loyaltyDiscountNio).toBe(15);
+      expect(totals.discountOriginUnattributedNio).toBe(0);
+      expect(totals.totalDiscountsNio).toBe(125);
+      expectOriginIdentity(totals);
+    });
+
+    it('sends a PARTIAL breakdown residual to unattributed and keeps the identity exact', () => {
+      const totals = computeSalesReportingTotals([
+        {
+          isCanceled: false,
+          subtotal: 1000,
+          items: [{ discount: 50, discountOrigin: { manual: 30 } }],
+        },
+      ]);
+
+      expect(totals.manualDiscountNio).toBe(30);
+      expect(totals.promotionDiscountNio).toBe(0);
+      expect(totals.loyaltyDiscountNio).toBe(0);
+      expect(totals.discountOriginUnattributedNio).toBe(20);
+      expect(totals.totalDiscountsNio).toBe(50);
+      expectOriginIdentity(totals);
+    });
+
+    it('keeps a NEGATIVE residual unclamped when the breakdown over-states the line discount', () => {
+      // The write path never produces an over-stated breakdown, but if stored
+      // data contradicts itself the identity must still hold: 60 + 10 - 20
+      // === 50. Clamping any origin total would break reconciliation.
+      const totals = computeSalesReportingTotals([
+        {
+          isCanceled: false,
+          subtotal: 1000,
+          items: [
+            { discount: 50, discountOrigin: { manual: 60, promotion: 10 } },
+          ],
+        },
+      ]);
+
+      expect(totals.manualDiscountNio).toBe(60);
+      expect(totals.promotionDiscountNio).toBe(10);
+      expect(totals.loyaltyDiscountNio).toBe(0);
+      expect(totals.discountOriginUnattributedNio).toBe(-20);
+      expect(totals.totalDiscountsNio).toBe(50);
+      expectOriginIdentity(totals);
+    });
+
+    it('ignores an unknown breakdown key so unvalidated input cannot inflate any total', () => {
+      // The DB CHECK forbids unknown keys, but a report must never inflate a
+      // total from unvalidated input either: only manual/promotion/loyalty
+      // are read, defensively, the way `discount` is read.
+      const totals = computeSalesReportingTotals([
+        {
+          isCanceled: false,
+          subtotal: 1000,
+          items: [
+            {
+              discount: 25,
+              discountOrigin: { manual: 25, bossDiscount: 999 } as Record<
+                string,
+                unknown
+              >,
+            },
+          ],
+        },
+      ]);
+
+      expect(totals.manualDiscountNio).toBe(25);
+      expect(totals.promotionDiscountNio).toBe(0);
+      expect(totals.loyaltyDiscountNio).toBe(0);
+      expect(totals.discountOriginUnattributedNio).toBe(0);
+      expect(totals.totalDiscountsNio).toBe(25);
+      expectOriginIdentity(totals);
+    });
+
+    it('gives a credit-note row (discount 0, NULL origin) no origin contribution and keeps the identity', () => {
+      // A credit note IS revenue-affecting (its amounts net as persisted) but
+      // carries discount 0 and no provenance, so it adds nothing to any
+      // origin total nor to totalDiscountsNio.
+      const totals = computeSalesReportingTotals([
+        {
+          isCanceled: false,
+          subtotal: 1000,
+          items: [{ discount: 40, discountOrigin: { manual: 40 } }],
+        },
+        {
+          isCanceled: false,
+          subtotal: -300,
+          type: 'creditNote',
+          items: [{ discount: 0, discountOrigin: null }],
+        },
+      ]);
+
+      expect(totals.manualDiscountNio).toBe(40);
+      expect(totals.promotionDiscountNio).toBe(0);
+      expect(totals.loyaltyDiscountNio).toBe(0);
+      expect(totals.discountOriginUnattributedNio).toBe(0);
+      expect(totals.totalDiscountsNio).toBe(40);
+      expectOriginIdentity(totals);
+    });
+
+    it('excludes a canceled document from every origin total exactly as before', () => {
+      const rows: SalesReportingInvoiceRow[] = [
+        ...KNOWN_FIXTURE,
+        {
+          isCanceled: true,
+          subtotal: 99999,
+          totalTax: 1,
+          items: [
+            {
+              discount: 999,
+              discountOrigin: { manual: 400, promotion: 300, loyalty: 299 },
+            },
+          ],
+        },
+      ];
+
+      const totals = computeSalesReportingTotals(rows);
+      expect(totals.manualDiscountNio).toBe(0);
+      expect(totals.promotionDiscountNio).toBe(0);
+      expect(totals.loyaltyDiscountNio).toBe(0);
+      expect(totals.discountOriginUnattributedNio).toBe(150);
+      expect(totals.totalDiscountsNio).toBe(150);
+      expectOriginIdentity(totals);
+    });
+
+    it('keeps rows with no items loaded at zero across every origin total, exactly as today', () => {
+      const totals = computeSalesReportingTotals([
+        { isCanceled: false, subtotal: 730, totalTax: 109.5 },
+      ]);
+
+      expect(totals.manualDiscountNio).toBe(0);
+      expect(totals.promotionDiscountNio).toBe(0);
+      expect(totals.loyaltyDiscountNio).toBe(0);
+      expect(totals.discountOriginUnattributedNio).toBe(0);
+      expect(totals.totalDiscountsNio).toBe(0);
+      expectOriginIdentity(totals);
     });
   });
 
