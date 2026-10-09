@@ -30,7 +30,7 @@ redacción: es de **contrato documental**. Hay tres fallas estructurales:
 3. **La evidencia está congelada en un build viejo.** El OD-02 se auditó contra `7af1521`
    (2026-09-26) y el Media Inventory contra el mismo commit. Desde entonces entraron **575
    commits**, incluida la remediación Nivel 1/2/3 de POS, el sync outbound de customers y la
-   reconciliación de vouchers. Al re-verificar los 34 claims: **30 sin cambio, 3 con deriva,
+   reconciliación de vouchers. Al re-verificar los 34 claims: **31 sin cambio, 3 con deriva,
    0 insostenibles** — la base técnica resistió bien, pero **2 rutas de evidencia ya no
    existen** y **un límite declarado quedó obsoleto**.
 
@@ -104,7 +104,7 @@ implementado, sincronizado y auditado. Es valor real de producto que hoy no se c
 
 ## 6. Re-verificación de la matriz OD-02 (34 claims) contra `origin/main`
 
-**Resultado: 30 `SIN CAMBIO` · 3 `DERIVA` · 0 `YA NO SOSTENIBLE` · 0 `NUEVO CLAIMABLE` dentro de la matriz.**
+**Resultado: 31 `SIN CAMBIO` · 3 `DERIVA` · 0 `YA NO SOSTENIBLE` · 0 `NUEVO CLAIMABLE` dentro de la matriz.** (31 + 3 = 34; la cifra anterior decía 30 y no cuadraba con el total auditado.)
 
 La matriz resistió bien los 575 commits. Las tres derivas:
 

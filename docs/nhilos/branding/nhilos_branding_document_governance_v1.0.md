@@ -111,7 +111,7 @@ a él como upstream. Si un documento necesita una regla que vive arriba, la cita
 | 4 | `nhilos_website_information_architecture_content_wireframe_v1.0.md` | `branding/` | IA y contenido del sitio | 1.0 | `APPROVED` |
 | 5 | `nhilos_website_homepage_content_v1.1.md` | `branding/` | Contrato de contenido de la homepage | 1.1 | `APPROVED / PUBLICATION GATED` |
 | 6 | `nhilos_pos_product_page_content_v1.1.md` | `branding/` | Contrato de contenido de producto | 1.1 | `APPROVED / PUBLICATION GATED` |
-| 7 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `CONTENIDO APROBADO / GATE D PARCIAL — 7 VIGENTES · 1 OBSOLETO · 6 FALTANTES` |
+| 7 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `CONTENIDO APROBADO / GATE D PARCIAL — 1 VIGENTE · 1 OBSOLETA · 6 A REVERIFICAR · 6 FALTANTES` |
 | — | `nhilos_pos_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficie POS | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_backoffice_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficies backoffice | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_website_non_functional_spec_v1.0.md` | `branding/Recursos/` | Spec no funcional del sitio | 1.0 | `DRAFT` — gates heredados por la IA (§18.1 `NF-01`..`NF-13`) |
@@ -125,8 +125,8 @@ las especificaciones de expresión por producto. La constitución los marca como
 
 ## 6. Control de cambios
 
-1. Un cambio en el paso 1 obliga a revisar los pasos 2 a 6.
-2. Un cambio en el paso 2 (nuevo claim admisible o claim retirado) obliga a revisar los pasos 3 a 6.
+1. Un cambio en el paso 1 obliga a revisar los pasos 2 a 7.
+2. Un cambio en el paso 2 (nuevo claim admisible o claim retirado) obliga a revisar los pasos 3 a 7.
 3. Un cambio de rutas o navegación del sitio se decide en el paso 4 (IA wireframe) y nunca en el
    paso 3. El Brief contribuye mensajes por capacidad, no rutas: no puede introducirlas,
    prescribirlas ni propagarlas.

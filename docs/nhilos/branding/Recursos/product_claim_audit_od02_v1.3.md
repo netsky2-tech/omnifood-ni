@@ -247,12 +247,14 @@ Funcionalidades implementadas en código que requieren evidencia visual antes de
 Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` (§3), este documento versión 1.3 es la **autoridad de claims** del set. Los documentos downstream que consumen sus claims admisibles son:
 1. `nhilos_website_product_marketing_brief_v1.0.md`
 2. `nhilos_website_information_architecture_content_wireframe_v1.0.md`
+3. `nhilos_website_homepage_content_v1.1.md`
+4. `nhilos_pos_product_page_content_v1.1.md`
 
 ---
 
 # Reconciliación v1.2–v1.3 — Re-anclaje a b4b5ad27 y adenda de lealtad
 
-Resultado headline: de los 34 claims auditados en el re-anclaje original (el registro asciende hoy a 43 con las extensiones loyalty `PC-LOY-01..06` y FOH `PC-FOH-01..03`), **30 sin cambio, 3 con deriva, 0 ya no sostenibles** tras 575 commits (`7af1521…` → `b4b5ad27`, 2026-10-08).
+Resultado headline: de los 34 claims auditados en el re-anclaje original (el registro asciende hoy a 43 con las extensiones loyalty `PC-LOY-01..06` y FOH `PC-FOH-01..03`), **31 sin cambio, 3 con deriva, 0 ya no sostenibles** tras 575 commits (`7af1521…` → `b4b5ad27`, 2026-10-08).
 
 | # | Corrección | Antes | Después |
 |---|---|---|---|

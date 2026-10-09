@@ -9,7 +9,7 @@
 **Date:** 2026-10-02  
 **Authority:** Contrato de contenido aprobado para la página profunda de producto.  
 **Nota de revisión interna (post-aprobación, sin bump de versión):** tras la aprobación de v1.1 se añadieron dos secciones como extensiones trazadas: Loyalty & Promotions (Section 13, §15) y Cumplimiento Fiscal DGI (Section 14, §16, añadida en esta revisión). Como consecuencia, las secciones de cierre del documento se renumeraron y sus referencias internas se actualizaron. La versión formal permanece `1.1`; esta nota existe para que la adición posterior a la aprobación no se pierda.  
-**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
+**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0) → `nhilos_website_homepage_content_v1.1.md` (v1.1)  
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara según el contexto que el prospecto comparte (Sección 12), y los estados de éxito y error le devuelven un siguiente paso definido.  
 **DEPENDENCIA SATISFECHA:** `nhilos_website_homepage_content_v1.1.md` (v1.1) existe ahora en el repositorio como contrato de contenido de la homepage. La dependencia de creación está cerrada en esa versión; lo que permanece pendiente es el contraste cruzado de Gate E contra dicho documento (OD-PP-12) y la verificación de capacidades contra builds y evidencia vigentes, que siguen siendo gates separados de publicación.
 **GATE DE PUBLICACIÓN:** la publicación de esta página requiere (a) el Gate E ejecutado y documentado: contraste cruzado contra `nhilos_website_homepage_content_v1.1.md` v1.1 (división de labores, terminología y CTAs), y (b) la verificación de capacidades contra el build vigente; la revalidación de medios permanece trackada por separado en Gate D (OD-PP-06).
@@ -1533,7 +1533,7 @@ Se promueve este documento a:
 
 > **Version 1.1 — APPROVED / AUTHORITATIVE CONTENT CONTRACT FOR NHILOS POS PRODUCT PAGE**
 
-La aprobación cubre la arquitectura narrativa, el orden de las trece secciones, los criterios editoriales, el modelo de claims, las restricciones de contenido y los gates de publicación. No certifica que cada funcionalidad descrita esté disponible, ni aprueba capturas, compatibilidad, soporte, condiciones comerciales, privacidad o consistencia final con la homepage.
+La aprobación cubre la arquitectura narrativa, el orden de las catorce secciones, los criterios editoriales, el modelo de claims, las restricciones de contenido y los gates de publicación. No certifica que cada funcionalidad descrita esté disponible, ni aprueba capturas, compatibilidad, soporte, condiciones comerciales, privacidad o consistencia final con la homepage.
 
 En la revisión posterior del registro de auditoría se verificó el cierre parcial del conjunto de decisiones OD-PP contra artefactos del repositorio: OD-PP-04 y OD-PP-07 `CLOSED`, OD-PP-09 `CLOSED WITH CONDITION` (unificación de canales DR-0), siete decisiones `PARTIALLY RESOLVED` con evidencia vinculada (OD-PP-01/02/03/05/06/08/11) y dos `OPEN` (OD-PP-10, OD-PP-12 / Gate E). Esta reconciliación se registra en §20 y §23.3 y no modifica el alcance de la aprobación: la promoción sigue siendo una decisión editorial independiente del permiso de publicación, que permanece `NOT GRANTED`.
 
@@ -1582,6 +1582,8 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 # Anexo A — Matriz de Trazabilidad de Claims (Product Page → OD-02)
 
 **Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, §Reglas) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.3.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`, `LY-*`, `FI-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`, `PC-LOY-*`, `PC-FOH-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
+
+**Alcance de la matriz.** Esta matriz cubre los IDs de slot que anclan una **aserción de capacidad o de promesa**. Los IDs `FAQ-01`..`FAQ-10` de la sección 11 son slots de **pregunta**, no de claim: no afirman una capacidad y por eso no llevan fila aquí. Su respaldo se rastrea dentro de la propia sección de FAQ, donde cada respuesta cita el claim que la sostiene.
 
 | Claim ID | Sección | Assertion (resumen) | OD-02 ID(s) | Tipo | Estado |
 | :---- | :---- | :---- | :---- | :---- | :---- |
