@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 516" width="900" height="516" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="900" height="460" fill="#FFFFFF"/>
+  <text x="24" y="34" font-size="15" font-weight="700" fill="#0F172A">Ejemplo de forma — master tokens (A13)</text>
+  <text x="24" y="54" font-size="12" fill="#64748B">Esta es la pieza que convierte archivos en sistema. Sin ella, cada aplicación de la marca se rehace a mano.</text>
+
+  <g transform="translate(24,74)">
+    <rect width="852" height="406" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+    <text x="20" y="28" font-size="12" font-weight="600" fill="#1E3A40">Tabla de tokens · fuente única de la marca</text>
+
+    <g font-size="11" fill="#64748B" font-weight="600">
+      <text x="24" y="56">CATEGORÍA</text>
+      <text x="120" y="56">TOKEN</text>
+      <text x="300" y="56">VALOR</text>
+      <text x="460" y="56">USO</text>
+      <text x="650" y="56">¿VARÍA POR PRODUCTO?</text>
+    </g>
+    <line x1="20" y1="66" x2="832" y2="66" stroke="#CBD5E1"/>
+
+    <g font-size="11.5" fill="#0F172A">
+      <text x="24" y="90" font-weight="600">Color</text>
+      <text x="120" y="90" font-family="ui-monospace,Menlo,monospace">color.ink.base</text>
+      <text x="300" y="90" font-family="ui-monospace,Menlo,monospace">#1A1A1A</text>
+      <text x="460" y="90" fill="#64748B">Texto y superficies</text>
+      <text x="650" y="90" fill="#64748B">No</text>
+      <text x="120" y="110" font-family="ui-monospace,Menlo,monospace">color.accent.base</text>
+      <text x="300" y="110" font-family="ui-monospace,Menlo,monospace">#E4572E</text>
+      <text x="460" y="110" fill="#64748B">Acción y énfasis</text>
+      <text x="650" y="110" fill="#64748B">No</text>
+      <text x="120" y="130" font-family="ui-monospace,Menlo,monospace">color.state.success</text>
+      <text x="300" y="130" font-family="ui-monospace,Menlo,monospace">#0F7B4F</text>
+      <text x="460" y="130" fill="#64748B">Estado del sistema</text>
+      <text x="650" y="130" fill="#1E3A40">Sí — es de producto</text>
+      <line x1="20" y1="144" x2="832" y2="144" stroke="#E2E8F0"/>
+
+      <text x="24" y="168" font-weight="600">Tipografía</text>
+      <text x="120" y="168" font-family="ui-monospace,Menlo,monospace">type.family.display</text>
+      <text x="300" y="168" font-family="ui-monospace,Menlo,monospace">Marca Sans</text>
+      <text x="460" y="168" fill="#64748B">Títulos</text>
+      <text x="650" y="168" fill="#64748B">No</text>
+      <text x="120" y="188" font-family="ui-monospace,Menlo,monospace">type.family.text</text>
+      <text x="300" y="188" font-family="ui-monospace,Menlo,monospace">Marca Sans</text>
+      <text x="460" y="188" fill="#64748B">Texto corrido</text>
+      <text x="650" y="188" fill="#64748B">No</text>
+      <text x="120" y="208" font-family="ui-monospace,Menlo,monospace">type.size.body</text>
+      <text x="300" y="208" font-family="ui-monospace,Menlo,monospace">16 / 24</text>
+      <text x="460" y="208" fill="#64748B">Texto base</text>
+      <text x="650" y="208" fill="#64748B">No</text>
+      <line x1="20" y1="222" x2="832" y2="222" stroke="#E2E8F0"/>
+
+      <text x="24" y="246" font-weight="600">Radios</text>
+      <text x="120" y="246" font-family="ui-monospace,Menlo,monospace">radius.card</text>
+      <text x="300" y="246" font-family="ui-monospace,Menlo,monospace">12</text>
+      <text x="460" y="246" fill="#64748B">Tarjetas y modales</text>
+      <text x="650" y="246" fill="#64748B">No</text>
+      <text x="120" y="266" font-family="ui-monospace,Menlo,monospace">radius.button</text>
+      <text x="300" y="266" font-family="ui-monospace,Menlo,monospace">8</text>
+      <text x="460" y="266" fill="#64748B">Botones y chips</text>
+      <text x="650" y="266" fill="#64748B">No</text>
+      <line x1="20" y1="280" x2="832" y2="280" stroke="#E2E8F0"/>
+
+      <text x="24" y="304" font-weight="600">Espaciado</text>
+      <text x="120" y="304" font-family="ui-monospace,Menlo,monospace">space.unit</text>
+      <text x="300" y="304" font-family="ui-monospace,Menlo,monospace">4</text>
+      <text x="460" y="304" fill="#64748B">Base de la escala</text>
+      <text x="650" y="304" fill="#64748B">No</text>
+      <text x="120" y="324" font-family="ui-monospace,Menlo,monospace">space.scale</text>
+      <text x="300" y="324" font-family="ui-monospace,Menlo,monospace">4·8·12·16·24·32</text>
+      <text x="460" y="324" fill="#64748B">Escala completa</text>
+      <text x="650" y="324" fill="#64748B">No</text>
+      <line x1="20" y1="338" x2="832" y2="338" stroke="#E2E8F0"/>
+
+      <text x="24" y="360" font-weight="600">Sombras</text>
+      <text x="120" y="360" font-family="ui-monospace,Menlo,monospace">shadow.raised</text>
+      <text x="300" y="360" font-family="ui-monospace,Menlo,monospace">0 2 6 rgba(.10)</text>
+      <text x="460" y="360" fill="#64748B">Elevación única</text>
+      <text x="650" y="360" fill="#64748B">No</text>
+      <text x="24" y="384" font-weight="600">Movimiento</text>
+      <text x="120" y="384" font-family="ui-monospace,Menlo,monospace">motion.fast</text>
+      <text x="300" y="384" font-family="ui-monospace,Menlo,monospace">120 ms</text>
+      <text x="460" y="384" fill="#64748B">Microinteracción</text>
+      <text x="650" y="384" fill="#64748B">No</text>
+    </g>
+  </g>
+  <text x="24" y="500" font-size="11" fill="#64748B">Formato: tabla (no solo Figma), y exportada como CSV o JSON para que el equipo pueda consumirla.</text>
+</svg>

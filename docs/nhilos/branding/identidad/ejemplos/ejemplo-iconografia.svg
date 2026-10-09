@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" width="900" height="380" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="900" height="380" fill="#FFFFFF"/>
+  <text x="24" y="34" font-size="15" font-weight="700" fill="#0F172A">Ejemplo de forma — sistema de iconografía (A9)</text>
+  <text x="24" y="54" font-size="12" fill="#64748B">No es "una librería de íconos": es la retícula y las reglas que hacen que un ícono nuevo pertenezca.</text>
+
+  <g font-size="11" fill="#64748B">
+    <!-- retricula -->
+    <g transform="translate(24,74)">
+      <rect width="300" height="286" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="16" y="24" font-size="12" font-weight="600" fill="#1E3A40">Retícula y formas clave</text>
+      <g transform="translate(40,58)">
+        <rect x="0" y="0" width="96" height="96" fill="none" stroke="#CBD5E1" stroke-dasharray="3 3"/>
+        <circle cx="48" cy="48" r="44" fill="none" stroke="#CBD5E1" stroke-dasharray="3 3"/>
+        <rect x="10" y="0" width="76" height="96" fill="none" stroke="#CBD5E1" stroke-dasharray="3 3"/>
+        <rect x="0" y="10" width="96" height="76" fill="none" stroke="#CBD5E1" stroke-dasharray="3 3"/>
+        <g transform="translate(28,28)" stroke="#0F172A" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="4" width="32" height="32" rx="9"/>
+        </g>
+      </g>
+      <g transform="translate(168,58)">
+        <text y="0">Trazo · 2 px a 24 px</text>
+        <text y="20">Esquinas · radio 2 px</text>
+        <text y="40">Terminaciones · redondeadas</text>
+        <text y="60">Relleno · solo para estado activo</text>
+        <text y="80">Tamaños · 16 / 24 / 32</text>
+      </g>
+      <g transform="translate(16,178)" font-size="11.5" fill="#0F172A">
+        <text y="0" font-weight="600" fill="#1E3A40">Reglas del sistema</text>
+        <text y="22">· Un ícono se dibuja sobre la forma clave más cercana.</text>
+        <text y="40">· Ningún ícono cambia el grosor de trazo.</text>
+        <text y="58">· El ícono no compite con el texto: acompaña.</text>
+        <text y="76">· Si un ícono necesita dos conceptos, son dos íconos.</text>
+      </g>
+    </g>
+    <!-- set consistente -->
+    <g transform="translate(340,74)">
+      <rect width="536" height="130" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="16" y="24" font-size="12" font-weight="600" fill="#1E3A40">El conjunto entregado, en sus tres tamaños</text>
+      <g transform="translate(24,44)" stroke="#0F172A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <g><rect x="0" y="0" width="44" height="44" rx="6"/><path d="M8 14h28M8 22h20M8 30h24"/></g>
+        <g transform="translate(64,0)"><rect x="0" y="0" width="44" height="44" rx="6"/><path d="M10 30V16l12-8 12 8v14"/><path d="M18 30v-8h8v8"/></g>
+        <g transform="translate(128,0)"><rect x="0" y="0" width="44" height="44" rx="6"/><circle cx="22" cy="22" r="11"/><path d="M22 15v7l5 3"/></g>
+        <g transform="translate(192,0)"><rect x="0" y="0" width="44" height="44" rx="6"/><path d="M12 22h20M22 12v20"/></g>
+        <g transform="translate(256,0)"><rect x="0" y="0" width="44" height="44" rx="6"/><path d="M22 11l11 22H11z"/></g>
+        <g transform="translate(320,0)"><rect x="0" y="0" width="44" height="44" rx="6"/><path d="M22 12a10 10 0 100 20 10 10 0 000-20zM12 22h20"/></g>
+      </g>
+      <g transform="translate(24,104)" stroke="#64748B" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.75">
+        <g><rect x="0" y="0" width="24" height="24" rx="4"/><path d="M5 8h14M5 12h10M5 16h12"/></g>
+        <g transform="translate(38,0)"><rect x="0" y="0" width="24" height="24" rx="4"/><path d="M6 17V9l6-4 6 4v8"/></g>
+        <g transform="translate(76,0)"><rect x="0" y="0" width="24" height="24" rx="4"/><circle cx="12" cy="12" r="6"/><path d="M12 8v4l3 2"/></g>
+        <g transform="translate(114,0)"><rect x="0" y="0" width="24" height="24" rx="4"/><path d="M7 12h10M12 7v10"/></g>
+        <g transform="translate(152,0)"><rect x="0" y="0" width="24" height="24" rx="4"/><path d="M12 6l6 12H6z"/></g>
+        <g transform="translate(190,0)"><rect x="0" y="0" width="24" height="24" rx="4"/><path d="M12 7a5 5 0 100 10 5 5 0 000-10zM7 12h10"/></g>
+      </g>
+    </g>
+    <!-- formatos -->
+    <g transform="translate(340,220)">
+      <rect width="536" height="140" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="16" y="24" font-size="12" font-weight="600" fill="#1E3A40">Entrega y comportamiento</text>
+      <g transform="translate(20,44)" font-size="11.5" fill="#0F172A">
+        <text y="0">· Un archivo por ícono, en SVG, con el nombre del concepto.</text>
+        <text y="20">· Sprite o set exportado si el proyecto usa uno, pero el SVG suelto primero.</text>
+        <text y="40">· Un ícono activo puede rellenarse; el resto nunca.</text>
+        <text y="60">· El ícono hereda el color del texto que acompaña, salvo en estado.</text>
+        <text y="80">· Nunca se rotan, se inclinan ni se les cambia el trazo.</text>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 340" width="900" height="340" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="900" height="340" fill="#FFFFFF"/>
+  <text x="24" y="34" font-size="15" font-weight="700" fill="#0F172A">Ejemplo de forma — dirección de imagen y fotografía (A10)</text>
+  <text x="24" y="54" font-size="12" fill="#64748B">Con referencias y con lo que se descarta. Sin fotos reales acá: lo que se ejemplifica es el criterio y su documentación.</text>
+
+  <g font-size="11.5" fill="#64748B">
+    <g transform="translate(24,76)">
+      <rect width="410" height="240" rx="6" fill="#F8FAFC" stroke="#0F7B4F"/>
+      <text x="16" y="26" font-size="12" font-weight="700" fill="#0F7B4F">✓  Lo que sí</text>
+      <g transform="translate(16,42)" fill="#0F172A">
+        <g><rect width="180" height="46" rx="4" fill="#fff" stroke="#E2E8F0"/><text x="10" y="20" font-size="11.5">Negocio real, en operación</text><text x="10" y="36" font-size="10.5" fill="#64748B">la caja tal como es, sin montar</text></g>
+        <g transform="translate(196,0)"><rect width="180" height="46" rx="4" fill="#fff" stroke="#E2E8F0"/><text x="10" y="20" font-size="11.5">Personas reales trabajando</text><text x="10" y="36" font-size="10.5" fill="#64748B">sin poses ni dirección de actor</text></g>
+        <g transform="translate(0,56)"><rect width="180" height="46" rx="4" fill="#fff" stroke="#E2E8F0"/><text x="10" y="20" font-size="11.5">Producto real</text><text x="10" y="36" font-size="10.5" fill="#64748B">el sistema en uso, no maquetado</text></g>
+        <g transform="translate(196,56)"><rect width="180" height="46" rx="4" fill="#fff" stroke="#E2E8F0"/><text x="10" y="20" font-size="11.5">Hardware real</text><text x="10" y="36" font-size="10.5" fill="#64748B">el equipo que se entrega</text></g>
+        <g transform="translate(0,112)"><rect width="180" height="46" rx="4" fill="#fff" stroke="#E2E8F0"/><text x="10" y="20" font-size="11.5">Contexto operativo</text><text x="10" y="36" font-size="10.5" fill="#64748B">el local, la barra, la fila</text></g>
+      </g>
+      <text x="16" y="222" fill="#64748B">Tratamiento: luz disponible, color natural,</text>
+      <text x="16" y="238" fill="#64748B">encuadre simple. La imagen no compite con el dato.</text>
+    </g>
+
+    <g transform="translate(456,76)">
+      <rect width="420" height="240" rx="6" fill="#F8FAFC" stroke="#DC2626"/>
+      <text x="16" y="26" font-size="12" font-weight="700" fill="#DC2626">✗  Lo que se descarta</text>
+      <g transform="translate(16,42)" fill="#64748B">
+        <g><rect width="184" height="46" rx="4" fill="#fff" stroke="#E2E8F0" stroke-dasharray="3 3"/><text x="10" y="20" font-size="11.5" fill="#0F172A">Stock genérico</text><text x="10" y="36" font-size="10.5">no es este negocio ni este país</text></g>
+        <g transform="translate(200,0)"><rect width="184" height="46" rx="4" fill="#fff" stroke="#E2E8F0" stroke-dasharray="3 3"/><text x="10" y="20" font-size="11.5" fill="#0F172A">Poses corporativas</text><text x="10" y="36" font-size="10.5">manos apretadas, sonrisa al vacío</text></g>
+        <g transform="translate(0,56)"><rect width="184" height="46" rx="4" fill="#fff" stroke="#E2E8F0" stroke-dasharray="3 3"/><text x="10" y="20" font-size="11.5" fill="#0F172A">Composiciones falsas</text><text x="10" y="36" font-size="10.5">escenografía que nunca pasa</text></g>
+        <g transform="translate(200,56)"><rect width="184" height="46" rx="4" fill="#fff" stroke="#E2E8F0" stroke-dasharray="3 3"/><text x="10" y="20" font-size="11.5" fill="#0F172A">Sobreproducción</text><text x="10" y="36" font-size="10.5">luz de estudio sobre una caja</text></g>
+        <g transform="translate(0,112)"><rect width="184" height="46" rx="4" fill="#fff" stroke="#E2E8F0" stroke-dasharray="3 3"/><text x="10" y="20" font-size="11.5" fill="#0F172A">Marca ajena visible</text><text x="10" y="36" font-size="10.5">competidores en el encuadre</text></g>
+      </g>
+      <text x="16" y="222" fill="#64748B">Toda referencia debe venir con su enlace y</text>
+      <text x="16" y="238" fill="#64748B">la razón por la que encaja. Sin eso, no es una referencia.</text>
+    </g>
+  </g>
+</svg>
