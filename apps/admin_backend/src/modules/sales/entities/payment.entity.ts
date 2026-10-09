@@ -94,7 +94,7 @@ export class Payment {
    * `reconciled_by_user_id` separate from the typed supervisor string the
    * POS used to abuse that column with.
    */
-  @Column({ name: 'override_supervisor_ref', nullable: true })
+  @Column({ name: 'override_supervisor_ref', type: 'text', nullable: true })
   overrideSupervisorRef?: string;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
