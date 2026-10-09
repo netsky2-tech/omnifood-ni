@@ -40,7 +40,7 @@ Brechas confirmadas contra el código entregado:
   `Cliente: Contado` + RUC está prohibida); `N/A`/blanco cuenta como ausencia.
 - `docs/nhilos/manuals/nhilos_pos_user_manual_v0.1.md` §10 (DGI) no dice que el nombre/RUC son un
   **snapshot** que no se retroactiva.
-- `docs/nhilos/manuals/nhilos_owner_dashboard_manual_v0.1.md:150-151` — §8.2 "Exportación de Datos
+- `docs/nhilos/manuals/nhilos_owner_dashboard_manual_v0.2.md` (en v0.1, líneas 150-151) — §8.2 "Exportación de Datos
   para Contador" no menciona que el libro de ventas ahora tiene columna de cliente.
 - `apps/admin_backend/src/modules/sales/services/sales-export.service.ts:955` (CSV `Cliente`),
   `:1049` (xlsx `Cliente / RUC`), `:441-466` (precedencia: snapshot de la factura → nombre del

@@ -2,10 +2,12 @@
 ## NHILOS POS — Backoffice Administrativo para Propietarios
 
 **Document ID:** NH-MAN-DSH-001 (CD-12)  
-**Versión:** 0.1  
+**Versión:** 0.2  
 **Estado:** CLIENT-READY  
 **Aplica a:** Propietarios (Owners), administradores y gerentes de SOHO Café (`NH-T0001`)  
-**Acceso Web:** Portal Backoffice en la Nube
+**Acceso Web:** Portal Backoffice en la Nube  
+
+> **Cambios v0.2:** sección 6 reescrita paso a paso con capturas actualizadas contra la funcionalidad verificada del sistema.
 
 ---
 
@@ -37,14 +39,14 @@ Al iniciar sesión, la pantalla de inicio te presenta los indicadores clave de r
 
 ![Vista General de KPIs del Negocio](images/dsh_02_kpis_ventas.png)
 
-1. **Ventas Netas del Período:** Monto total facturado en Córdobas (C$) en el rango seleccionado (ej. C$ 510.00).
-2. **Volumen de Facturas (Tickets):** Cantidad de comprobantes emitidos válidos (ej. 5 transacciones).
-3. **Ticket Promedio:** Gasto medio por cliente (ej. C$ 102.00).
+1. **Ventas Netas del Período:** Monto total facturado en Córdobas (C$) en el rango seleccionado (la captura muestra el inicio del día, sin ventas registradas: C$ 0.00).
+2. **Volumen de Facturas (Tickets):** Cantidad de comprobantes emitidos válidos (en la captura, 0 al inicio del día).
+3. **Ticket Promedio:** Gasto medio por cliente (sin base comparable hasta registrar ventas del día).
 4. **Margen Bruto Teórico:** Indicador de rentabilidad (en el Día 1 de SOHO se muestra sin costo de ventas hasta cargar las recetas).
 5. **Evolución y Ventas por Hora:** Gráfica interactiva de facturación a lo largo de las horas del día.
 6. **Top Productos Más Vendidos:** Ranking de rotación (ej. *Cappuccino 12oz*, *Espresso Doble*, *Cappuccino 8oz*).
 7. **Mix de Métodos de Pago:** Desglose consolidado del dinero recibido (Efectivo NIO, USD, Tarjetas).
-8. **Atención Requerida:** Resumen automático de alertas de seguridad y facturas anuladas (ej. 2 anulaciones registradas por C$ 225.00).
+8. **Atención Requerida:** Resumen automático de alertas del negocio (en la captura: 1 voucher pendiente por C$ 50.00 y 1 override manual por C$ 220.00).
 
 ---
 
@@ -68,9 +70,9 @@ En la sección **Sesiones de caja** del menú lateral:
 
 ![Sesiones de Caja y Diferencias de Efectivo](images/dsh_05_sesiones_caja.png)
 
-* Verificá quién abrió y cerró cada terminal de la sucursal (`pos-local-...`).
+* Verificá quién abrió y cerró cada terminal de la sucursal (`S23TEST`).
 * Control del tiempo de turno: fecha y hora exacta de apertura y de cierre.
-* **Control de Descuadres:** Consulta de la diferencia de efectivo reportada en el arqueo ciego (ej. `-C$5.00` o `-C$25.00`) para detectar faltantes de caja de inmediato.
+* **Control de Descuadres:** Consulta de la diferencia de efectivo reportada en el arqueo ciego (ej. `-C$90.00` o `-C$270.00`) para detectar faltantes de caja de inmediato.
 
 ---
 
@@ -90,36 +92,71 @@ En la sección **Productos** del menú lateral:
 
 ## 6. Módulo de Modificadores y Extras (Centro de Operaciones)
 
-En la sección **Modificadores** del menú lateral (acceso con rol **Owner** o **Manager**), el sistema ofrece un centro de control unificado para administrar opciones compartidas (leches, endulzantes, adicionales, jarabes o salsas):
+En la sección **Modificadores** del menú lateral (acceso con rol **Owner** o **Manager**), el sistema ofrece un centro de control unificado para administrar opciones compartidas (leches, endulzantes, adicionales, jarabes o salsas). La pestaña **Grupos** lista todos los grupos con su regla de selección, la cantidad de opciones y su orden:
 
 ![Centro de Operaciones de Modificadores — Pestaña Grupos](images/dsh_07_modificadores_grupos.png)
 
-### 6.1 Pestaña «Grupos»
-Permite definir los conjuntos de opciones y sus reglas matemáticas:
-* **Creación de Grupos:** Botón **"Nuevo grupo"** para especificar:
-  * **Nombre del grupo:** (ej. *Leche*, *Extras*, *Endulzante*).
-  * **Rango de selección:** Cantidad mínima (`min`) y máxima (`max`) requerida (ej. `min=1, max=1` para selección única obligatoria; `min=0, max=3` para opcionales).
-  * **Cantidades por opción (`allow_quantities`):** Activar cuando el cliente pueda solicitar unidades repetidas (ej. 2 shots de espresso o 2 raciones de sirope).
-  * **Lista de Opciones:** Cada opción con su nombre, costo adicional en Córdobas (**Price Delta**, ej. `+C$ 15.00` o `C$ 0.00`) y opción por defecto opcional.
+En el ejemplo de SOHO Café: **Leche** (`Obligatorio 1/1`, 4 opciones), **Endulzante** (`Opcional 0/2`, 3 opciones) y **Extras** (`Opcional 0/3` con **Con cantidades**, 4 opciones).
 
-![Diálogo para Crear o Editar un Grupo de Modificadores](images/dsh_09_crear_grupo_modificador.png)
+### 6.1 Pestaña «Grupos»: crear un grupo con sus opciones, paso a paso
 
-* **Buscador y Filtro de Estados:**  
-  * Buscador rápido para filtrar grupos por nombre o por opciones internas.  
-  * Selector de estado (**Activos**, **Inactivos**, **Todos**) que permite auditar grupos archivados y **reactivarlos** con un solo clic sin perder la parametrización histórica.
+**Paso 1 — Abrir el diálogo de creación.** Hacé clic en el botón **"Nuevo grupo"** (arriba a la derecha). Se abre el diálogo **«Nuevo grupo de modificadores»**, todavía vacío:
+
+![Diálogo «Nuevo grupo de modificadores» recién abierto, con nombre y reglas en blanco](images/dsh_09_crear_grupo_modificador.png)
+
+**Paso 2 — Definir las reglas del grupo.** Completá:
+
+* **Nombre del grupo:** (ej. *Jarabes*).
+* **Rango de selección:** cantidad mínima (`min`) y máxima (`max`) requerida (ej. `min=1, max=1` para selección única obligatoria; `min=0, max=3` para opcionales; en el ejemplo `0/2`).
+* **Cantidades por opción (`allow_quantities`):** activá el interruptor **Permitir cantidades** cuando el cliente pueda solicitar unidades repetidas (ej. 2 shots de espresso o 2 raciones de sirope).
+* **Orden de mostrado:** el número define la posición del grupo en la pantalla de la cajera.
+
+Guardá con **Crear**.
+
+> **Importante:** el diálogo de creación define únicamente el nombre y las reglas. Las opciones del grupo se agregan en el paso siguiente, reabriendo el grupo desde la lista.
+
+**Paso 3 — Agregar las opciones.** En la lista, hacé clic en el ícono de lápiz (**Editar grupo**) de tu grupo. En la sección **«Opciones del grupo»** pulsá **+ Agregar opción** una vez por cada opción y completá:
+
+* **Nombre** de la opción (ej. *Vainilla*, *Caramelo*).
+* **Precio adicional** (**Price Delta**) en Córdobas (ej. `15.00` o `5.00`; usá `0.00` si la opción no cuesta nada).
+* **Orden** de presentación dentro del grupo.
+* **Predeterminado:** marcá la opción que aparece preseleccionada al ordenar (solo una puede ser predeterminada).
+
+![Diálogo del grupo con sus opciones y precios cargados, antes de guardar](images/dsh_10_formulario_grupo_completo.png)
+
+**Paso 4 — Guardar.** Pulsá **Actualizar**: el grupo queda listado con su regla (ej. «Opcional 0/2» con **Con cantidades**) y la cantidad de opciones («2 opciones»):
+
+![Grupo creado y listado con sus opciones, reglas y distintivo «Con cantidades»](images/dsh_11_grupo_creado_con_opciones.png)
+
+**Paso 5 — Verificar la persistencia.** Recargá la página completa (F5). El grupo y sus opciones siguen en la lista exactamente igual: esa es la prueba real de que quedó guardado en el servidor y no solo en la pantalla:
+
+![El grupo y sus opciones persisten después de recargar la página](images/dsh_12_persistencia_tras_recarga.png)
+
+**Buscador y filtro de estados:** sobre la lista tenés un buscador rápido para filtrar grupos por nombre, y el selector de estado (**Activos**, **Inactivos**, **Todos**) que permite auditar grupos archivados y **reactivarlos** con un solo clic sin perder la parametrización histórica (ver el paso 8).
 
 ### 6.2 Pestaña «Por categoría» (Asignación Masiva)
-Permite vincular grupos de modificadores directamente a una categoría completa del catálogo de ventas (ej. colgar *Leche*, *Endulzante* y *Extras* a la categoría `CAFÉ CALIENTE`):
+
+**Paso 6 — Enganchar el grupo a una categoría.** Entrá a la pestaña **Por categoría**, elegí la categoría en el selector **Categoría** (ej. `CAFÉ CALIENTE`) y, en la sección **«Grupos disponibles»**, hacé clic en **Agregar** sobre el grupo que querés colgar (ej. *Jarabes*). El grupo pasa a la sección **«Grupos de la categoría»**:
 
 ![Asignación de Modificadores por Categoría](images/dsh_08_modificadores_categoria.png)
 
 * **Herencia Automática:** Todo producto existente o futuro que pertenezca a esa categoría heredará de inmediato estos modificadores en el POS al sincronizar.
 * **Orden de Presentación:** Podés definir el orden en el que aparecerán los grupos en la pantalla de la cajera (ej. 1º Leche, 2º Endulzante, 3º Extras).
 
-### 6.3 Pestaña «Por producto» (Excepciones y Personalización Específica)
-Permite gestionar excepciones a nivel de producto individual:
-* Visualiza la lista de grupos heredados de su categoría con el distintivo *«Heredado de categoría»*.
-* Permite agregar modificadores específicos exclusivos de ese producto o anular un grupo heredado para un caso particular.
+### 6.3 Pestaña «Por producto» (Herencia y Excepciones)
+
+**Paso 7 — Verificar la herencia en un producto real.** Entrá a la pestaña **Por producto**, buscá el producto en **Buscar producto** (ej. «Americano») y seleccionalo de la lista. La sección **«Heredado de la categoría»** muestra los grupos que el producto recibe por pertenecer a su categoría, cada uno con el distintivo **«Heredado»**:
+
+![Producto que hereda los grupos de su categoría, con el distintivo «Heredado»](images/dsh_13_producto_heredado.png)
+
+* En el ejemplo, *Americano 12oz* recibe **Leche**, **Extras** y el grupo **Jarabes** creado en esta guía, todos con el distintivo **«Heredado»**.
+* Desde acá también gestionás las excepciones a nivel de producto individual:
+  * **Agregar un grupo exclusivo:** en **Grupo** elegí el grupo (los ya efectivos se marcan «(ya presente)») y pulsá **Agregar como excepción**; el grupo pasa a **«Excepciones de este producto»** con el distintivo **«De este producto»** y deja de listarse como heredado: la configuración del producto gana sobre la de la categoría.
+  * **Quitar una excepción:** con el ícono ✕ de la fila la eliminás y la herencia de la categoría se retoma automáticamente.
+
+**Paso 8 — Desactivar y reactivar un grupo.** Volvé a la pestaña **Grupos** y hacé clic en el ícono de apagado del grupo (**Desactivar grupo**). Confirmá en el diálogo: el sistema nunca borra el grupo — ninguna parametrización histórica se destruye — solo lo desactiva. Con el filtro **Todos** (o **Inactivos**) lo vas a ver listado con la etiqueta **«Desactivado»** y el ícono de encendido que lo **reactiva** con un clic, conservando sus opciones y asignaciones:
+
+![Grupo desactivado, visible con el filtro «Todos» y su opción de reactivación](images/dsh_14_desactivacion_grupo.png)
 
 ---
 
@@ -143,7 +180,7 @@ En la sección **Fiscal** del menú lateral:
 ![Módulo de Control Fiscal DGI](images/dsh_06_fiscal.png)
 
 1. **Cumplimiento DGI (Disposición Técnica 09-2007):**
-   * Resumen mensual de ventas brutas (C$ 510.00), cantidad de facturas (5) e IVA recaudado (C$ 0.00 bajo Cuota Fija).
+   * Resumen mensual de ventas brutas (C$ 4,571.00), cantidad de facturas (28) e IVA recaudado (C$ 0.00 bajo Cuota Fija).
    * Clasificación de ventas exentas / no sujetas y notas de crédito emitidas.
    * Pista de auditoría inalterable con la numeración secuencial ascendente de facturas.
    * Registro completo de comprobantes anulados (ningún número se salta ni se destruye).
