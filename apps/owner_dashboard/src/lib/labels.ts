@@ -166,6 +166,48 @@ export const auditActorRefLabels: Record<string, string> = {
 };
 
 /**
+ * POS counter-ledger action labels (S4b bitacora view). Keys are the exact
+ * `audit_logs.action` codes written by the POS sales/print writers (anulaciones,
+ * notas de crédito, reimpresiones, impresión corrupta) and the identity
+ * services (gaveta, overrides, usuarios), as classified by the SINGLE backend
+ * AuditRiskClassifier table (S4a block in audit-risk-classifier.ts). A new
+ * backend code passes through untouched via `localize`; the guard in
+ * src/__tests__/labels.test.ts pins this key set against that table.
+ */
+export const auditLedgerActionLabels: Record<string, string> = {
+  SALE_CREATED: "Venta registrada",
+  SALE_VOIDED: "Anulación de factura",
+  CREDIT_NOTE_CREATED: "Nota de crédito emitida",
+  SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT: "Descuento manual autorizado",
+  SUPERVISOR_OVERRIDE_CLOSE_SESSION: "Cierre de sesión autorizado",
+  SUPERVISOR_OVERRIDE_APPROVED: "Autorización de supervisor aprobada",
+  SUPERVISOR_OVERRIDE_REJECTED: "Autorización de supervisor rechazada",
+  DRAWER_OPENED_MANUALLY: "Apertura manual de gaveta",
+  REPRINT_REQUESTED: "Reimpresión solicitada",
+  PRINT_PAYLOAD_CORRUPT: "Impresión detenida por datos corruptos",
+  SALE_INVENTORY_REMEDIATED: "Corrección de inventario sobre factura",
+  USER_CREATED: "Usuario creado",
+  USER_UPDATED: "Usuario modificado",
+  USER_DEACTIVATED: "Usuario desactivado",
+  USER_PERMISSIONS_UPDATED: "Permisos de usuario actualizados",
+};
+
+/**
+ * POS counter-ledger entity type labels (S4b bitacora view). Keys are the
+ * exact `audit_logs.target_type` values written by the POS sales writers
+ * (invoice, credit_note) and the identity services (CASH_DRAWER,
+ * SUPERVISOR_OVERRIDE, USER). Unknown values pass through untouched via
+ * `localize`.
+ */
+export const auditLedgerTargetTypeLabels: Record<string, string> = {
+  invoice: "Factura",
+  credit_note: "Nota de crédito",
+  CASH_DRAWER: "Caja / gaveta",
+  SUPERVISOR_OVERRIDE: "Autorización de supervisor",
+  USER: "Usuario",
+};
+
+/**
  * Menu-import skipped-recipe reasons, verified against
  * `menu-import.service.ts` (`reason: 'VERSION_ALREADY_EXISTS'`). Used in the
  * wizard preview so the owner never sees a raw backend enum (BX-010). Unknown

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -102,6 +102,97 @@ function mockFetchOk(events: unknown = EVENTS) {
       });
     }
     return new Response(JSON.stringify(events), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+}
+
+// --- S4b: POS forensic ledger surface (GET /operations/audit/ledger) ---
+
+const LEDGER_ENTRY_CRITICAL = {
+  id: "led-1",
+  occurredAt: "2026-09-24T15:30:00.000Z",
+  actorEmail: "maria@test.ni",
+  actorUserId: "u-9",
+  action: "SALE_VOIDED",
+  severity: "CRITICAL",
+  targetType: "invoice",
+  targetId: "inv-uuid-1",
+  deviceId: "pos-01",
+  sequenceNo: 42,
+};
+
+const LEDGER_ENTRY_WARNING = {
+  id: "led-2",
+  occurredAt: "2026-09-24T16:45:00.000Z",
+  actorEmail: "juan@test.ni",
+  actorUserId: "u-10",
+  action: "DRAWER_OPENED_MANUALLY",
+  severity: "WARNING",
+  targetType: null,
+  targetId: null,
+  deviceId: "pos-02",
+  sequenceNo: 7,
+};
+
+const LEDGER_OK = {
+  entries: [LEDGER_ENTRY_CRITICAL, LEDGER_ENTRY_WARNING],
+  limit: 50,
+  truncated: false,
+  generatedAt: "2026-09-25T14:00:00.000Z",
+};
+
+const USERS_OK = [
+  {
+    id: "u-9",
+    email: "maria@test.ni",
+    name: "María",
+    role: "CASHIER",
+    is_active: true,
+    created_at: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "u-10",
+    email: "juan@test.ni",
+    name: "Juan",
+    role: "CASHIER",
+    is_active: true,
+    created_at: "2026-01-01T00:00:00.000Z",
+  },
+];
+
+function mockLedgerFetchOk(
+  options: {
+    ledger?: unknown;
+    integrity?: unknown;
+    integrityStatus?: number;
+    users?: unknown;
+  } = {},
+) {
+  fetchSpy.mockImplementation(async (url: string) => {
+    const u = String(url);
+    if (u.includes("/operations/audit/integrity")) {
+      return new Response(
+        JSON.stringify(
+          options.integrity ?? {
+            alerts: [],
+            generatedAt: "2026-09-25T03:00:00.000Z",
+          },
+        ),
+        {
+          status: options.integrityStatus ?? 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+    if (u.includes("/identity/users")) {
+      return new Response(JSON.stringify(options.users ?? USERS_OK), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify(options.ledger ?? LEDGER_OK), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -377,5 +468,153 @@ describe("Audit page (batch 6 slice 6b — finding H6)", () => {
     });
     const warningChip = screen.getByRole("button", { name: "Advertencia" });
     expect(warningChip).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("Audit page — POS ledger surface (S4b)", () => {
+  it("renders the ledger with actor, action, entity, device and severity, and never calls the platform events endpoint", async () => {
+    mockLedgerFetchOk();
+    renderAuditPage("/audit?view=ledger");
+
+    // The actor email also labels a filter option, so anchor on the table
+    // row via the localized action text.
+    await waitFor(() => {
+      expect(screen.getByText("Anulación de factura")).toBeInTheDocument();
+    });
+    const criticalRow = screen.getByText("Anulación de factura").closest("tr");
+    expect(criticalRow).toHaveTextContent("maria@test.ni");
+    expect(screen.queryByText("SALE_VOIDED")).not.toBeInTheDocument();
+    // Entity type is named in human language (the filter option shares the
+    // label, so scope the assertion to the table row).
+    expect(within(criticalRow as HTMLElement).getByText("Factura")).toBeInTheDocument();
+    // Device column exists and shows which terminal produced the entry.
+    expect(screen.getByText("pos-01")).toBeInTheDocument();
+    expect(screen.getByText("Dispositivo")).toBeInTheDocument();
+    expect(screen.getAllByText("Crítico").length).toBeGreaterThan(0);
+
+    // Two separated sources: the ledger view must not silently read the
+    // change_log store, and it sends the explicit page cap.
+    const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(
+      calls.some((u) => u.includes("/operations/audit/ledger") && u.includes("limit=50")),
+    ).toBe(true);
+    expect(calls.some((u) => u.includes("/operations/audit/events"))).toBe(false);
+
+    // The response was NOT truncated (2 < 50), so no incompleteness warning.
+    expect(
+      screen.queryByText(/puede haber más registros/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("forwards the actor and entity filters to the ledger API and shows them as clearable chips (§14)", async () => {
+    const user = userEvent.setup();
+    mockLedgerFetchOk();
+    renderAuditPage("/audit?view=ledger");
+
+    const actorSelect = await screen.findByLabelText("Filtrar por actor");
+    // Wait until the users read resolved and the actor options exist.
+    await screen.findByRole("option", { name: "maria@test.ni" });
+    await user.selectOptions(actorSelect, "u-9");
+
+    await waitFor(() => {
+      const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
+      expect(
+        calls.some(
+          (u) =>
+            u.includes("/operations/audit/ledger") && u.includes("actorUserId=u-9"),
+        ),
+      ).toBe(true);
+    });
+    // The active filter is visible with its human identity and clearable.
+    expect(screen.getByText(/Actor: maria@test.ni/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Quitar filtro de actor" }),
+    ).toBeInTheDocument();
+
+    const entitySelect = screen.getByLabelText("Filtrar por entidad");
+    await user.selectOptions(entitySelect, "invoice");
+
+    await waitFor(() => {
+      const calls = fetchSpy.mock.calls.map((c) => String(c[0]));
+      expect(
+        calls.some(
+          (u) =>
+            u.includes("/operations/audit/ledger") && u.includes("targetType=invoice"),
+        ),
+      ).toBe(true);
+    });
+    expect(screen.getByText(/Entidad: Factura/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Quitar filtro de entidad" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an honest truncation notice when the ledger API reports truncated (§15)", async () => {
+    mockLedgerFetchOk({ ledger: { ...LEDGER_OK, truncated: true } });
+    renderAuditPage("/audit?view=ledger");
+
+    await waitFor(() => {
+      expect(screen.getByText("Anulación de factura")).toBeInTheDocument();
+    });
+    // The honest flag — not the row count — drives the notice.
+    expect(
+      screen.getByText(/puede haber más registros/i),
+    ).toBeInTheDocument();
+  });
+
+  it("distinguishes a FAILED integrity check from a genuine no-alerts result (§34)", async () => {
+    mockLedgerFetchOk({ integrityStatus: 500 });
+    renderAuditPage("/audit?view=ledger");
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Error en el servidor/),
+      ).toBeInTheDocument();
+    });
+    // A failure must never be dressed as a clean result.
+    expect(
+      screen.queryByText(/no registró huecos/i),
+    ).not.toBeInTheDocument();
+    // Meaningful retry, scoped to the integrity read.
+    expect(
+      screen.getByRole("button", { name: /Reintentar/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the genuine empty integrity result as a nightly-check report, not an absolute guarantee", async () => {
+    mockLedgerFetchOk();
+    renderAuditPage("/audit?view=ledger");
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/no registró huecos/i),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText(/No pudimos cargar la verificación de integridad/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("visibly distinguishes severity with the page's badge conventions (color is never the only signal, §46)", async () => {
+    mockLedgerFetchOk();
+    renderAuditPage("/audit?view=ledger");
+
+    await waitFor(() => {
+      expect(screen.getByText("Anulación de factura")).toBeInTheDocument();
+    });
+
+    const criticalRow = screen
+      .getByText("Anulación de factura")
+      .closest("tr");
+    expect(criticalRow).not.toBeNull();
+    const criticalBadge = within(criticalRow as HTMLElement).getByText("Crítico");
+    expect(criticalBadge.className).toContain("bg-red-50");
+
+    const warningRow = screen
+      .getByText("Apertura manual de gaveta")
+      .closest("tr");
+    expect(warningRow).not.toBeNull();
+    const warningBadge = within(warningRow as HTMLElement).getByText("Advertencia");
+    expect(warningBadge.className).toContain("bg-amber-50");
   });
 });
