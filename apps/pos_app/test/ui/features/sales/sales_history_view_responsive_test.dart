@@ -566,4 +566,86 @@ void main() {
       expect(find.text('00-00-00-00002222'), findsOneWidget);
     });
   });
+
+  // Honesty fix (device-reported defect): tapping a legitimate date
+  // filter that matches zero invoices used to swallow the ENTIRE header —
+  // the operator lost the active-filter label, the clear action and the
+  // totals, and could not un-trap themselves. The header must always
+  // render on a successful read; the empty state replaces only the list.
+  group('S3b filtered-to-empty keeps the header', () {
+    testWidgets(
+        'an ACTIVE DATE FILTER with an EMPTY result keeps the header reachable and does not blame a search',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      // The history is NOT empty, but every invoice is a year old: the
+      // "Hoy" preset legitimately matches zero invoices.
+      final pastInvoice = Invoice(
+        id: 'inv-past',
+        number: '00-00-00-00003333',
+        createdAt: DateTime.now().subtract(const Duration(days: 365)),
+        userId: 'c1',
+        subtotal: 10,
+        totalTax: 0,
+        total: 10,
+        isCanceled: false,
+      );
+      final vm = _FakeSalesHistoryViewModel([pastInvoice], const []);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      await tester
+          .tap(find.byKey(const Key('sales_history_date_filter_today')));
+      await tester.pumpAndSettle();
+
+      // The header SURVIVES the empty result: filter label, clear action
+      // and totals row all stay visible.
+      expect(find.byKey(const Key('sales_history_date_filter_label')),
+          findsOneWidget);
+      expect(find.byKey(const Key('sales_history_date_filter_clear')),
+          findsOneWidget);
+      expect(
+          find.byKey(const Key('sales_history_totals_row')), findsOneWidget);
+      expect(find.text('Facturas: 0'), findsOneWidget);
+      expect(find.text('Total: C\$ 0.00'), findsOneWidget);
+      expect(find.text('Anuladas: 0 (excluidas del dinero)'), findsOneWidget);
+      // The copy must not claim a SEARCH mismatch when the cause is the
+      // date filter.
+      expect(find.text('No hay facturas que coincidan con la búsqueda.'),
+          findsNothing);
+
+      // The operator is not trapped: the clear action still works.
+      await tester
+          .tap(find.byKey(const Key('sales_history_date_filter_clear')));
+      await tester.pumpAndSettle();
+      expect(find.text('Sin filtro de fecha'), findsOneWidget);
+      expect(find.text('00-00-00-00003333'), findsOneWidget);
+    });
+
+    testWidgets(
+        'with NO filter and a genuinely EMPTY history the copy says so honestly',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final vm = _FakeSalesHistoryViewModel(const [], const []);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      // The header still renders (nothing was filtered away).
+      expect(find.byKey(const Key('sales_history_date_filter_label')),
+          findsOneWidget);
+      expect(find.text('Sin filtro de fecha'), findsOneWidget);
+      expect(
+          find.byKey(const Key('sales_history_totals_row')), findsOneWidget);
+      expect(find.text('Facturas: 0'), findsOneWidget);
+      // The honest cause: no sales recorded YET — not a filter/search blame.
+      expect(find.text('Aún no hay ventas registradas'), findsOneWidget);
+      expect(find.text('No hay facturas que coincidan con la búsqueda.'),
+          findsNothing);
+    });
+  });
 }

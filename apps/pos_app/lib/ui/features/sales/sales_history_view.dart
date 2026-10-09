@@ -163,15 +163,17 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
     // S3b: the list renders the WINDOWED set, never the full filtered set.
     final rows = viewModel.visibleInvoices;
 
-    if (!hasLoadError && rows.isEmpty) {
-      return const Center(
-        child: DsEmptyState(
-          icon: Icons.receipt_long_outlined,
-          title: 'Sin facturas encontradas',
-          description: 'No hay facturas que coincidan con la búsqueda.',
-        ),
-      );
-    }
+    // Honesty fix (device-reported defect): the header owns the date
+    // filter AND the totals, so it must render whenever the read
+    // SUCCEEDED — even when the filtered result is empty. Otherwise the
+    // operator loses the active-filter label and the clear action and is
+    // trapped by their own filter. The empty state replaces ONLY the list
+    // area, and its copy names the actual cause: applied filters/search
+    // (with the way out in the header) vs a genuinely empty history.
+    final hasActiveFilter = viewModel.filterDateFrom != null ||
+        viewModel.filterDateTo != null ||
+        viewModel.searchQuery.isNotEmpty;
+    final showEmptyState = !hasLoadError && rows.isEmpty;
 
     return Column(
       children: [
@@ -182,7 +184,25 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
           _buildRowContextNotice(context, viewModel),
         _buildHistoryHeader(context, viewModel, colorScheme),
         Expanded(
-          child: ListView.separated(
+          child: showEmptyState
+              ? Center(
+                  child: hasActiveFilter
+                      ? const DsEmptyState(
+                          icon: Icons.filter_alt_off_outlined,
+                          title: 'Sin resultados para el filtro',
+                          description:
+                              'Ninguna factura coincide con los filtros '
+                              'aplicados. Quite el filtro de fecha o la '
+                              'búsqueda en el encabezado para ver todo el '
+                              'historial.',
+                        )
+                      : const DsEmptyState(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'Aún no hay ventas registradas',
+                          description: 'Cuando emita facturas, aparecerán aquí.',
+                        ),
+                )
+              : ListView.separated(
             itemCount:
                 rows.length + (viewModel.hasMoreVisibleInvoices ? 1 : 0),
             separatorBuilder: (context, _) => const Divider(height: 1),
