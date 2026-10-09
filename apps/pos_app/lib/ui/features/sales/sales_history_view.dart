@@ -155,7 +155,15 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (viewModel.filteredInvoices.isEmpty) {
+    // S3b: the three states are now DISTINGUISHABLE. The genuine EMPTY
+    // state only exists when the read SUCCEEDED — a failed read renders
+    // the honest error (plus any retained rows) and never this copy,
+    // because a failed read must not look like a quiet day.
+    final hasLoadError = viewModel.hasLoadError;
+    // S3b: the list renders the WINDOWED set, never the full filtered set.
+    final rows = viewModel.visibleInvoices;
+
+    if (!hasLoadError && rows.isEmpty) {
       return const Center(
         child: DsEmptyState(
           icon: Icons.receipt_long_outlined,
@@ -165,143 +173,415 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
       );
     }
 
-    return ListView.separated(
-      itemCount: viewModel.filteredInvoices.length,
-      separatorBuilder: (context, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final invoice = viewModel.filteredInvoices[index];
-        final isSelected = !isHandheld && _selectedInvoice?.id == invoice.id;
-        final rowCtx = viewModel.getRowContext(invoice.id);
-        final timeStr = DateFormat('HH:mm').format(invoice.createdAt);
-        final dateStr = DateFormat('dd/MM/yyyy').format(invoice.createdAt);
-        final cashierText = rowCtx != null && rowCtx.cashierName.isNotEmpty
-            ? '$timeStr · ${rowCtx.cashierName}'
-            : '$dateStr $timeStr';
-        final itemsSummary = rowCtx?.itemsSummary ?? '';
-        final paymentMethod = rowCtx?.paymentMethodSummary ?? '';
+    return Column(
+      children: [
+        // S3b: honest failure surface — shown even when stale rows are
+        // retained below, so degraded data is never mistaken for truth.
+        if (hasLoadError) _buildLoadErrorBanner(context, viewModel, colorScheme),
+        if (viewModel.rowContextFailureCount > 0)
+          _buildRowContextNotice(context, viewModel),
+        _buildHistoryHeader(context, viewModel, colorScheme),
+        Expanded(
+          child: ListView.separated(
+            itemCount:
+                rows.length + (viewModel.hasMoreVisibleInvoices ? 1 : 0),
+            separatorBuilder: (context, _) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              if (index >= rows.length) {
+                // S3b: the "ver más" affordance at the end of the window.
+                return _buildRevealMoreFooter(context, viewModel, rows.length);
+              }
+              final invoice = rows[index];
+              final isSelected = !isHandheld && _selectedInvoice?.id == invoice.id;
+              final rowCtx = viewModel.getRowContext(invoice.id);
+              final timeStr = DateFormat('HH:mm').format(invoice.createdAt);
+              final dateStr = DateFormat('dd/MM/yyyy').format(invoice.createdAt);
+              final cashierText = rowCtx != null && rowCtx.cashierName.isNotEmpty
+                  ? '$timeStr · ${rowCtx.cashierName}'
+                  : '$dateStr $timeStr';
+              final itemsSummary = rowCtx?.itemsSummary ?? '';
+              final paymentMethod = rowCtx?.paymentMethodSummary ?? '';
 
-        return Container(
-          color: invoice.isCanceled
-              ? NhilosColors.dangerLight.withOpacity(0.5)
-              : (isSelected ? colorScheme.primaryContainer.withValues(alpha: 0.15) : null),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    invoice.number,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: NhilosColors.textPrimary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (invoice.isCanceled) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: const BoxDecoration(
-                      color: NhilosColors.dangerLight,
-                      borderRadius: NhilosRadii.badgeRadius,
-                      border: Border.fromBorderSide(BorderSide(color: NhilosColors.dangerBorder)),
-                    ),
-                    child: const Text(
-                      'ANULADA',
-                      style: TextStyle(
-                        color: NhilosColors.danger,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 3),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 2,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      cashierText,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: NhilosColors.textSecondary,
-                      ),
-                    ),
-                    if (paymentMethod.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: NhilosColors.neutralGray,
-                          borderRadius: NhilosRadii.badgeRadius,
-                          border: Border.all(color: NhilosColors.border),
-                        ),
+              return Container(
+                color: invoice.isCanceled
+                    ? NhilosColors.dangerLight.withOpacity(0.5)
+                    : (isSelected
+                        ? colorScheme.primaryContainer.withValues(alpha: 0.15)
+                        : null),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  title: Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          paymentMethod,
+                          invoice.number,
                           style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: NhilosColors.neutralGrayDark,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                            color: NhilosColors.textPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (invoice.isCanceled) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: const BoxDecoration(
+                            color: NhilosColors.dangerLight,
+                            borderRadius: NhilosRadii.badgeRadius,
+                            border: Border.fromBorderSide(
+                                BorderSide(color: NhilosColors.dangerBorder)),
+                          ),
+                          child: const Text(
+                            'ANULADA',
+                            style: TextStyle(
+                              color: NhilosColors.danger,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
+                      ],
+                    ],
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 3),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            cashierText,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: NhilosColors.textSecondary,
+                            ),
+                          ),
+                          if (paymentMethod.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: NhilosColors.neutralGray,
+                                borderRadius: NhilosRadii.badgeRadius,
+                                border:
+                                    Border.all(color: NhilosColors.border),
+                              ),
+                              child: Text(
+                                paymentMethod,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: NhilosColors.neutralGrayDark,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                  ],
+                      if (itemsSummary.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          itemsSummary,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: NhilosColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'C\$ ${invoice.total.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: invoice.isCanceled
+                              ? NhilosColors.danger
+                              : colorScheme.primary,
+                        ),
+                      ),
+                      if (isHandheld) const Icon(Icons.chevron_right, size: 20),
+                    ],
+                  ),
+                  selected: isSelected,
+                  selectedTileColor:
+                      colorScheme.primaryContainer.withValues(alpha: 0.15),
+                  onTap: () {
+                    if (isHandheld) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => InvoiceDetailScreen(invoice: invoice),
+                        ),
+                      );
+                    } else {
+                      setState(() => _selectedInvoice = invoice);
+                    }
+                  },
                 ),
-                if (itemsSummary.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    itemsSummary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: NhilosColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'C\$ ${invoice.total.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    color: invoice.isCanceled ? NhilosColors.danger : colorScheme.primary,
-                  ),
-                ),
-                if (isHandheld) const Icon(Icons.chevron_right, size: 20),
-              ],
-            ),
-            selected: isSelected,
-            selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.15),
-            onTap: () {
-              if (isHandheld) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => InvoiceDetailScreen(invoice: invoice),
-                  ),
-                );
-              } else {
-                setState(() => _selectedInvoice = invoice);
-              }
+              );
             },
           ),
-        );
-      },
+        ),
+      ],
+    );
+  }
+
+  /// S3b: honest failure banner for a failed invoice read. Reuses the
+  /// app-wide error pattern (error icon + message + REINTENTAR, as in
+  /// StockAlertsView); the load error message comes verbatim from the
+  /// view model. Rendered together with — never instead of — any stale
+  /// retained rows.
+  Widget _buildLoadErrorBanner(
+    BuildContext context,
+    SalesHistoryViewModel viewModel,
+    ColorScheme colorScheme,
+  ) {
+    return Container(
+      key: const Key('sales_history_load_error_banner'),
+      width: double.infinity,
+      color: NhilosColors.dangerLight,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, color: colorScheme.error),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              viewModel.loadErrorMessage!,
+              style: TextStyle(
+                color: colorScheme.error,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            key: const Key('sales_history_retry_button'),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+            onPressed: viewModel.loadInvoices,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// S3b: quiet-but-readable notice that N rows could not load their
+  /// per-invoice detail (items/payments), so a degraded row is not
+  /// silently mistaken for a row without items.
+  Widget _buildRowContextNotice(
+    BuildContext context,
+    SalesHistoryViewModel viewModel,
+  ) {
+    final count = viewModel.rowContextFailureCount;
+    final detail = count == 1
+        ? '1 fila no pudo mostrar su detalle (artículos y forma de pago).'
+        : '$count filas no pudieron mostrar su detalle (artículos y forma de pago).';
+    final surface = Theme.of(context).colorScheme.surfaceContainerHigh;
+    return Container(
+      key: const Key('sales_history_row_context_notice'),
+      width: double.infinity,
+      color: surface,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.info_outline,
+            size: 18,
+            color: NhilosColors.textSecondary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              detail,
+              style: const TextStyle(
+                fontSize: 12,
+                color: NhilosColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// S3b: the always-visible operational header — date-range filter with
+  /// an HONEST label (default is NO filter) and the totals row for the
+  /// FULL filtered set. Cancelled invoices are counted separately and
+  /// explicitly excluded from the money, so they can never look like they
+  /// contributed to the day's figures.
+  Widget _buildHistoryHeader(
+    BuildContext context,
+    SalesHistoryViewModel viewModel,
+    ColorScheme colorScheme,
+  ) {
+    final totals = viewModel.filteredTotals;
+    String money(double value) => 'C\$ ${value.toStringAsFixed(2)}';
+    return Container(
+      width: double.infinity,
+      color: colorScheme.surfaceContainerLow,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildDateFilterRow(context, viewModel),
+          const SizedBox(height: 4),
+          Wrap(
+            key: const Key('sales_history_totals_row'),
+            spacing: 16,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'Facturas: ${totals.invoiceCount}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: NhilosColors.textPrimary,
+                ),
+              ),
+              Text(
+                'Subtotal: ${money(totals.subtotalSum)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                  color: NhilosColors.textPrimary,
+                ),
+              ),
+              Text(
+                'IVA: ${money(totals.taxSum)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                  color: NhilosColors.textPrimary,
+                ),
+              ),
+              Text(
+                'Total: ${money(totals.totalSum)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                  color: NhilosColors.textPrimary,
+                ),
+              ),
+              Text(
+                'Anuladas: ${totals.cancelledCount} (excluidas del dinero)',
+                key: const Key('sales_history_totals_cancelled'),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  color: NhilosColors.danger,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// S3b: date-range control. The default is NO filter (label says so
+  /// honestly); the "Hoy" preset sets today's local fiscal day on both
+  /// inclusive bounds, and the clear affordance restores the unfiltered
+  /// view. The active range is always shown so the operator knows what
+  /// they are looking at.
+  Widget _buildDateFilterRow(
+    BuildContext context,
+    SalesHistoryViewModel viewModel,
+  ) {
+    final from = viewModel.filterDateFrom;
+    final to = viewModel.filterDateTo;
+    final active = from != null || to != null;
+    String label;
+    if (!active) {
+      label = 'Sin filtro de fecha';
+    } else {
+      final formatter = DateFormat('dd/MM/yyyy');
+      if (from != null && to != null) {
+        label = DateTime(from.year, from.month, from.day) ==
+                DateTime(to.year, to.month, to.day)
+            ? 'Filtro: ${formatter.format(from)}'
+            : 'Filtro: ${formatter.format(from)} – ${formatter.format(to)}';
+      } else if (from != null) {
+        label = 'Filtro: desde ${formatter.format(from)}';
+      } else {
+        label = 'Filtro: hasta ${formatter.format(to!)}';
+      }
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            key: const Key('sales_history_date_filter_label'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: NhilosColors.textSecondary,
+            ),
+          ),
+        ),
+        TextButton.icon(
+          key: const Key('sales_history_date_filter_today'),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            minimumSize: const Size(0, 36),
+          ),
+          icon: const Icon(Icons.today, size: 16),
+          label: const Text('Hoy'),
+          onPressed: () {
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            viewModel.setDateRange(today, today);
+          },
+        ),
+        if (active)
+          IconButton(
+            key: const Key('sales_history_date_filter_clear'),
+            tooltip: 'Quitar filtro de fecha',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: viewModel.clearDateRange,
+          ),
+      ],
+    );
+  }
+
+  /// S3b: footer affordance at the end of the display window. Remaining
+  /// count is shown honestly; tapping reveals the next page of rows.
+  Widget _buildRevealMoreFooter(
+    BuildContext context,
+    SalesHistoryViewModel viewModel,
+    int visibleCount,
+  ) {
+    final remaining = viewModel.filteredInvoices.length - visibleCount;
+    return Center(
+      child: TextButton.icon(
+        key: const Key('sales_history_reveal_more_button'),
+        icon: const Icon(Icons.expand_more),
+        label: Text('Ver más ($remaining restantes)'),
+        onPressed: viewModel.revealMoreVisible,
+      ),
     );
   }
 }
