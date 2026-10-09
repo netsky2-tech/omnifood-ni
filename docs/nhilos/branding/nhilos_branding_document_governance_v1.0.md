@@ -49,7 +49,7 @@ el set.
         │                                      │
         │                                      ▼
         │                                 nhilos_brand_identity_system.md
-        │                                 (a producir por diseño — constitución §49)
+        │                                 (a producir por diseño — previsto en el anexo D, diferido por §47 `BR-D01`)
         ▼
 2. product_claim_audit_od02_v1.3.md                    [branding/Recursos/]
    Autoridad de claims. Inventario de lo que el producto REALMENTE hace,
@@ -137,13 +137,13 @@ a él como upstream. Si un documento necesita una regla que vive arriba, la cita
 
 ### Roadmap de documentos de marca pendientes
 
-La constitución §49 exige una secuencia. Ningún documento se produce «porque está en la lista»:
+La constitución prevé esta secuencia (árbol documental del anexo D) y declara explícitamente que v1.0 se aprueba **sin requerir** que el sistema de identidad esté diseñado (§47 `BR-D01`, §48). Ningún documento se produce «porque está en la lista»:
 cada uno se produce cuando su disparador aparece. Así se evita olvidarlo **y** se evita generar
 versiones flacas que nadie usa.
 
 | Documento | Estado | Disparador que lo justifica |
 |---|---|---|
-| `nhilos_brand_identity_system.md` | **Pendiente — es el entregable de diseño en curso** | Existe el brief (`I`). Se produce cuando el diseñador entregue la identidad. |
+| `nhilos_brand_identity_system.md` | **Pendiente — es el entregable de diseño en curso** | Existe el brief (`I`). Se produce cuando el diseñador entregue la identidad. La constitución lo deja **diferido** (§47 `BR-D01`), no exigido. |
 | `nhilos_verbal_identity_guide.md` | Pendiente | Hoy la autoridad verbal es la constitución §14 y alcanza. Se justifica cuando haya **más de un redactor o agencia** escribiendo para la marca. |
 | `product_expression_specs/nhilos_pos_brand_expression.md` | Pendiente | Se justifica cuando exista un **segundo producto** y haya que definir qué puede variar por producto. Hoy POS es la única expresión vigente. |
 | `product_expression_specs/` (conta, erp) | Pendiente | Cuando esos productos se aprueben. Hoy son líneas previstas, no aprobadas. |

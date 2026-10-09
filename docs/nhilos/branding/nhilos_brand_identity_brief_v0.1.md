@@ -3,8 +3,8 @@
 **Documento:** `nhilos_brand_identity_brief_v0.1.md`
 **Versión:** 0.1
 **Estado:** `FOR DESIGN — INPUT DOCUMENT`
-**Autoridad de origen:** `nhilos_brand_experience_principles_v1.0.md` (§1, §2, §5, §6, §13, §14, §22, §23, §24, §49)
-**Produce:** `nhilos_brand_identity_system.md` — el documento que el diseñador entrega, exigido por la constitución §49
+**Autoridad de origen:** `nhilos_brand_experience_principles_v1.0.md` (§1, §2, §5, §6, §13, §14, §22, §23, §24, §29, §41, §48)
+**Produce:** `nhilos_brand_identity_system.md` — el sistema que el diseñador entrega. La constitución lo prevé como derivación futura (árbol documental del anexo D) y lo deja **explícitamente diferido**: v1.0 se aprueba sin requerir que esté diseñado (§47 `BR-D01`, §48). No hay mandato pendiente; es decisión del cliente completar la marca.
 **Gobernanza:** `nhilos_branding_document_governance_v1.0.md`
 **Fecha:** 2026-10-08
 
@@ -103,14 +103,20 @@ evaluar su mérito estético.
 | `R-01` | **Prohibido autodescribirse como premium, lujo, exclusivo o equivalente.** El cuidado se demuestra, no se declara. | §13.12, §7 |
 | `R-02` | **Sobriedad como mecanismo, no como estilo.** 70/20/10 es disciplina: el 70% del peso visual es aire y estructura, no ornamento. | §5.3, §23 |
 | `R-03` | **Una sola marca con productos, no sub-marcas.** Nada de nombres nuevos por módulo ni "NHILOS POS by NHILOS". | §1.2, §1.3 |
-| `R-04` | **Nada existe únicamente para colocar el logo.** Si un elemento visual no aporta comprensión, orientación o acción, se elimina. | §1267, §43 |
-| `R-05` | **Tiene que funcionar en monocromo y en baja resolución.** El mark se imprime en ticket térmico de 58 y 80 mm: negro puro, ~203 dpi, sin medios tonos. Un mark con líneas finas de color desaparece ahí. | Restricción de soporte real |
-| `R-06` | **Tiene que funcionar a 16×16 px** como favicon y a tamaño de ícono de app, sin perder lectura. | Derivación obligatoria |
+| `R-04` | **"Nada debe existir únicamente para colocar el logo."** Si un elemento visual no aporta comprensión, orientación o acción, se elimina. | §41 |
+| `R-05` | **Tiene que funcionar en monocromo y en baja resolución.** El mark se imprime en ticket térmico y se procesa a 1 bit. Un mark con líneas finas de color desaparece ahí. | `PC-HW-01` (58 mm), `receipt_layout_formatter.dart`, `thermal_logo_processor.dart` |
+| `R-06` | **Tiene que funcionar a 16×16 px** como favicon y a tamaño de ícono de app, sin perder lectura. | Requisito de derivación |
 | `R-07` | **Tiene que funcionar sobre las dos superficies de producto:** fondo claro del backoffice y fondo oscuro del KDS. | `nhilos_tokens.dart`, estándar POS |
 | `R-08` | **Contraste verificable:** 4.5:1 para texto, 3:1 para elementos de UI (WCAG 2.1 AA). Ninguna combinación de marca puede incumplirlo. | `nhilos_website_non_functional_spec_v1.0.md` |
 | `R-09` | **No romper los tokens de producto vigentes** sin declarar migración. La paleta de marca debe reconciliarse con `nhilos_tokens.dart` o proponer explícitamente el cambio y su costo. | `nhilos_tokens.dart` |
 | `R-10` | **Nada de imágenes literales de tecnología:** servidores, nubes, engranajes, candados, gráficos de barras ascendentes, siluetas de manos apretadas, ni genéricos de stock. | §7, §24, §5.3 |
-| `R-11` | **La marca no habla de sí misma.** La comunicación gira sobre la operación del cliente, no sobre NHILOS. | §5.5, §23 |
+| `R-11` | **"No empezar hablando de nosotros."** La propuesta abre por el cliente, su contexto y su problema; NHILOS aparece después. | §29 |
+
+**Nota de trazabilidad (`G-04`):** `R-05` describe una **condición de diseño**, no un claim. El
+producto sí imprime en 58 mm (registrado como `PC-HW-01`) y el código también genera layouts de
+80 mm (`receipt_layout_formatter.dart`, `format80mm()`), pero **esa capacidad de 80 mm no tiene
+fila propia en el registro de claims**. Queda reportada al dueño de claims: el brief no puede
+crear claims, y la copia pública no debe afirmar anchuras sin fila de respaldo.
 
 ### Sobre el estado de la propiedad del nombre
 
@@ -128,18 +134,20 @@ Lo que existe hoy, medido en el repositorio:
 | Activo | Estado | Ruta |
 |---|---|---|
 | Logo en uso | Existe. `N` navy con tratamiento de aguja e hilo, divisor vertical, "POS" apilado. PNG 2161×2161 RGBA. | `apps/owner_dashboard/public/logo.png` |
-| Favicon del dashboard | **No es el logo.** Violeta y celeste (`#863bff`, `#7e14ff`, `#47bfff`). Marca ajena en la pestaña del navegador. | `apps/owner_dashboard/public/favicon.svg` |
+| Favicon del dashboard | **Es el logo y está bien.** `index.html` carga `/favicon.png`, byte-idéntico a `logo.png`. | `apps/owner_dashboard/index.html`, `public/favicon.png` |
+| Ícono huérfano | Existe un `favicon.svg` (violeta y celeste: `#863bff`, `#7e14ff`, `#47bfff`, `#ede6ff`), residuo de scaffolding, que **ninguna página referencia**. No contamina hoy; evidencia que no hay gobierno de íconos. | `apps/owner_dashboard/public/favicon.svg` |
 | Paleta de producto | Implementada con tokens: `brandPrimary #1E3A40` (deep teal), `brandNavy #0F292E`, semánticos success/warning/danger. Radios 12/8/4 dp. | `apps/pos_app/lib/ui/design_system/nhilos_tokens.dart` |
 | Tipografía de producto | **Inter**, compartida por toda la suite, incluido el KDS oscuro. | Estándar POS §42.7 |
-| Paleta documentada | `#059669 #0F172A #0F292E #1E3A40 #3949AB #795548 #D97706 #DC2626 #E2E8F0 #F8FAFC #FFFFFF` | Estándar POS §42.1/§42.2 |
+| Paleta documentada | Aprobada: `#F8FAFC` `#FFFFFF` `#E2E8F0` `#0F172A` `#64748B` `#1E3A40` `#0F292E` `#059669` `#DC2626` `#D97706`. **Prohibidos expresamente:** `#795548` (marrón) y `#3949AB` (morado). | Estándar POS §42.1 |
 | Sistema de identidad | **No existe.** | — |
 | Guía verbal separada | **No existe.** El contenido de §14 de la constitución es hoy la autoridad. | — |
 | Especificaciones de expresión por producto | **No existen.** | — |
 | Fotografía propia | No hay fotografía de marca. Existen 33 capturas de pantalla del producto, la mayoría anteriores a la remediación UX vigente. | `docs/nhilos/manuals/images/` |
 
-**Deriva detectada:** el favicon del dashboard contradice el logo, y el verde del hilo del logo no
-corresponde a ningún color de la paleta documentada. Son exactamente las dos fallas que un sistema
-de identidad existe para impedir.
+**Deriva detectada, y es una sola:** el verde del hilo del logo (`#00BE84` / `#03BD85`) no
+corresponde a ningún color de la paleta documentada ni de los tokens. Es exactamente la falla que un
+sistema de identidad existe para impedir. El `favicon.svg` huérfano es un síntoma menor del mismo
+vacío: sin sistema, los activos sueltos se acumulan.
 
 ---
 
@@ -165,9 +173,10 @@ arquitectura declarada en §1.2.
    aguja es un **instrumento**, no un significado. La marca dice *conectar*; la aguja dice
    *coser*. Y el `N` ya carga la metáfora del hilo: la aguja es redundante y agrega literalidad.
 2. **El mark es frágil en los dos soportes donde la marca realmente va a vivir.** Los hilos verdes
-   son líneas finas de color. En **ticket térmico de 58/80 mm** (negro puro, ~203 dpi, sin medios
-   tonos) esas líneas desaparecen o se empastan, y el divisor verde se pierde. A **16×16 px** como
-   favicon, el mismo problema. Viola `R-05` y `R-06`.
+   son líneas finas de color. El ticket térmico es monocromo y de baja resolución física: el
+   procesador de logo lo reduce a 1 bit (`thermal_logo_processor.dart`), y ahí las líneas finas
+   desaparecen o se empastan y el divisor verde se pierde. A **16×16 px** como favicon, el mismo
+   problema. Viola `R-05` y `R-06`.
 3. **Depende del color para leerse.** Si se pasa a un color plano, la relación `N`–hilo se
    desarma. Viola la exigencia de `R-05` y debilita `R-07`.
 
@@ -243,8 +252,8 @@ inventar un significado nuevo, debe hacer visible el que ya existe.
 Una propuesta de identidad se acepta cuando:
 
 1. **Se lee sin color.** En negro puro, sin medias tintas, se reconoce la marca.
-2. **Sobrevive a 16 px y a 203 dpi.** Favicon y ticket térmico, verificados con impresión de prueba
-   o simulación fiel.
+2. **Sobrevive a 16 px y a impresión térmica.** Favicon y ticket, verificados con impresión de
+   prueba o simulación fiel a 1 bit.
 3. **Aporta significado, no decoración.** Cada elemento puede defenderse con una frase que conecte
    con el propósito, la esencia o un principio. Si no, se elimina (`R-04`).
 4. **Cumple las restricciones `R-01`..`R-11`** sin excepciones.
@@ -268,16 +277,17 @@ La identidad no termina en la web. Debe convivir con lo que ya está implementad
   propone otra, debe justificarse y declarar el impacto de migración.
 - **KDS:** superficie oscura, alto contraste, uso a distancia. El mark y la paleta deben funcionar
   ahí (verificar contraste, `R-08`).
-- **Ticket térmico:** monocromo, sin medios tonos, 58 y 80 mm de ancho. El mark impreso debe
-  ser legible y no consumir ancho útil de la factura (`R-05`).
-- **Favicon y app icon:** deben derivar del mismo sistema, no inventarse aparte. El caso actual
-  (`favicon.svg` violeta contra `logo.png` navy) es el ejemplo de lo que no debe volver a pasar.
+- **Ticket térmico:** monocromo y de baja resolución física (el logo se procesa a 1 bit). El mark
+  impreso debe ser legible y no consumir ancho útil de la factura (`R-05`).
+- **Favicon y app icon:** deben derivar del mismo sistema, no inventarse aparte. Hoy el dashboard
+  acierta (`favicon.png` es el logo), pero convive con un `favicon.svg` huérfano de otro origen. El
+  sistema debe dejar un único origen de íconos y prohibir activos sueltos en las carpetas públicas.
 
 ---
 
 ## 9. Estructura técnica requerida
 
-La constitución §22 exige esta jerarquía. La identidad debe entregarse en esta forma:
+La constitución §22 establece esta jerarquía para el futuro sistema. La identidad debe entregarse en esta forma:
 
 ```text
 NHILOS MASTER TOKENS          (color, tipografía, radios, espaciado, sombras, motion)

@@ -64,7 +64,10 @@ de sistema, jerarquía y espacios. Sin excepción.
 
 ## 3. Alcance de `F1`
 
-**Qué se prototipa.** El sitio comercial público, con las rutas que la IA aprobó:
+**Qué se prototipa.** El sitio comercial público. La IA define la **jerarquía lógica** de la
+información y deja la **decisión técnica de URL abierta** (su §2.1 lo declara). La estructura de
+abajo es lo que se prototipa; el nombre final de cada URL se decide antes de producción y **no
+bloquea el prototipo**.
 
 ```text
 /                    Home
@@ -73,8 +76,8 @@ de sistema, jerarquía y espacios. Sin excepción.
 /soporte             Soporte
 /recursos            Recursos → Guías, FAQ
 /nosotros            Nosotros
-/solicitar-demo      Conversión (URL definitiva pendiente de decisión)
-legal/privacidad     Privacidad y Términos
+/solicitar-demo      Conversión
+/legal/privacidad    Privacidad y Términos
 ```
 
 **Bloques de la homepage que hay que resolver visualmente:** `H00` a `H13` según el wireframe
@@ -115,7 +118,7 @@ condiciones comerciales, y la operación de la demo.
 
 | Decisión | Valor |
 |---|---|
-| CTA único de conversión | **"Solicitar una demo"**, en header, footer, versión móvil y CTA final |
+| CTA único de conversión | **"Solicitar una demo"**, en header, footer, versión móvil y CTA final. La regla `N-04` que lo fija está en estado `DERIVED / PROPOSED` con validación comercial pendiente: es decisión de trabajo, no cierre definitivo |
 | Rutas de capacidad de primer nivel | **Prohibidas.** Inventario, fiscal, hardware y dashboard se argumentan dentro de la página de producto, no como rutas propias (`N-03`) |
 | Portafolio futuro | **Prohibido** mostrar `Conta`, `ERP` o "coming soon" (`N-02`) |
 | Relación homepage ↔ página de producto | La homepage introduce; la página de producto resuelve. No pueden repetirse el hero ni convertirse en listas de módulos |
