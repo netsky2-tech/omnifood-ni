@@ -757,3 +757,41 @@ Las tres unidades cierran los **cuatro** formularios que el handoff nombraba. El
 **Residual declarado, no arreglado:** el `insumo` **anidado** dentro de las respuestas de compra sigue trayendo strings del driver en sus columnas decimales, porque es otro camino de serialización (el del controlador de insumos ya está arreglado). Es la clase previa, fuera de alcance.
 
 **Diferido medido, no arreglado:** (a) ~~`/inventory/purchases`~~ **cerrado arriba**; (b) `/inventory/suppliers` verificado **sin** columnas decimales; (c) los reportes fiscales verificados numéricos; (d) `/onboarding/templates/:code` crudo pero **sin consumidor numérico encontrado**; (e) el preview/commit de import del onboarding **sin verificar**. Y la clase de fondo sigue: **89 columnas sin transformer**, con la coerción viviendo sólo en estos bordes de respuesta, por diseño.
+
+---
+
+## 16. Cierre del bloque: rig y despliegue
+
+### Estado final del rig (2026-10-09)
+
+| Ítem | Estado | Acción |
+|---|---|---|
+| Hash de contraseña del dueño (`admin@soho.com`) | **Restaurado byte a byte** desde `~/.cache/s4b-backup/hash_original.txt` | Hecho. La temporal `C0ntr4sen4` **sigue entrando** (201) porque ambos son hashes bcrypt del mismo valor: la fila volvió al backup sin cambiarle nada al operador |
+| Topes del tenant SOHO | `MAX_DISCOUNT_AMOUNT` y `MAX_DISCOUNT_PERCENT` activos con **tumba nula** = sin tope | Ya estaba así (coincide con el handoff). La historia de la tabla es la auditoría append-only de las validaciones; **no se toca** |
+| Revisión fiscal | 17 | Sin cambios |
+| Espejo | `180961` + **`180962`/`180963`/`180964` aplicadas** (las tres de la rama) | Hecho, para que el `dist` de la rama y el esquema coincidan |
+| Backend `:3000` | **`dist` reconstruido desde la rama**, pid 116169 (reemplaza al de `main`) | Se deja corriendo: es el estado consistente (código de la rama + esquema de la rama) |
+| Vite `:5173` | Sirviendo este worktree | Se deja corriendo |
+| Procesos de otras sesiones (`:3300`, `:5174`) | **Ya no existen** (los apagó su propia sesión); en esta sesión nunca se tocaron | — |
+| Artefactos de prueba | Spec live temporal borrada; **0 filas** con desglose; captura en `~/.cache/s1c3/live-card.png` como evidencia | Hecho |
+| Repo | Árbol limpio, sin archivos temporales | Verificado |
+| `.env` y `apps/pos_app/android/key.properties` | Copias gitignoreadas (las necesita el rig local) | Se dejan; están fuera de git por diseño |
+
+### Coordinación del despliegue — el orden no es negociable
+
+**El backend va primero.** La rama hace que el POS empiece a mandar dos campos nuevos: `items[].discountOrigin` y `modifiers[].quantity`. Con `whitelist: true, forbidNonWhitelisted: true`, un campo desconocido es un **400 del lote de 500 entero**, y el camino de ventas del POS deja esos registros **pendientes**: reenvía el mismo lote envenenado en cada pasada. Desplegar el POS antes que el backend no pierde un detalle: **tapona la cola de sync para siempre**.
+
+Secuencia:
+1. Desplegar el backend con la rama (incluye los DTO de `discountOrigin` y de `quantity`, y las migraciones `180962` → `180963` → `180964`, en ese orden).
+2. Verificar contra el entorno desplegado que una venta CON extras entra completa (los modifiers con su cantidad) y que el desglose por origen viaja.
+3. Recién entonces construir y distribuir el APK del POS.
+
+Comandos usados en local y que sirven de molde: `node dist/scripts/run-pending-migrations.js` (aplica las pendientes con el data-source de la rama; `npm run migration:show/run` no resuelve el import bajo pnpm) y `nest build` para el `dist`.
+
+Estado de la rama: **17 commits adelante de `origin`, 0 atrás** — el push y el PR son decisión del usuario, no de esta sesión.
+
+### Lo que se lleva a una sesión nueva
+
+**S5** (conciliación de QR/transferencia, lealtad, Fase 8.3) y **KDS** (los 17 tickets `PENDIENTE` en `FOODPARK_QSR`, que debía auto-despachar) quedan **explícitamente para una sesión fresca**: requieren trabajo de campo y decisiones de producto (D-D y D-E siguen abiertas). También quedan diferidos, ya medidos y documentados: el barrido del quinto formulario de lealtad y del grupo con guardas JS, los tres formularios que sólo necesitan `noValidate`, las **89 columnas sin transformer** y las rutas sin verificar del onboarding.
+
+**Lo que queda probado y lo que no, sin adornos:** el desglose por origen está validado en vivo (base real, API real, navegador real) y las tres rutas numéricas están probadas contra PostgreSQL real; lo que **no** está probado es un push desde la tablet con modifiers o desglose (requiere la S23 con `adb reverse`), el driver de la impresora, y `w4-e2e-fiscal` (excluido de vitest, necesita backend vivo).
