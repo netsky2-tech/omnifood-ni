@@ -723,3 +723,27 @@ Las tres unidades cierran los **cuatro** formularios que el handoff nombraba. El
 1. Los **tres que ya usan RHF+zod** (login, promociones, modifiers) sólo necesitan `noValidate`: una línea cada uno, más los tests de que su esquema sigue siendo la única guarda. Es una unidad chica propia.
 2. El **quinto** formulario de lealtad (`customer-loyalty-profile.tsx`), que el handoff no nombra: sólo `type=number` nativo y ya tiene guardas JS. Se dejó intacto a propósito (su suite fue red de regresión, 8/8).
 3. El grupo con **guardas JS ad-hoc** (suppliers, insumos, purchases, RecipeForm) **no se rompe** con `noValidate` porque su guarda es JS, pero sus atributos nativos (`RecipeForm` hasta `max={99.99}`, `suppliers-tab.tsx:496` `required`) necesitan paridad de esquema **antes** de agregarlo.
+
+---
+
+## 15. S6d · La mentira numérica en el cable: medición y arreglo en el origen
+
+**Lo que la medición cambió.** "14 de 16 clientes del panel sin normalizar" era una **métrica proxy**. Medido: **89 columnas** `decimal`/`numeric` **sin** transformer (inventario 46, ventas 32, onboarding 10, modifiers 1), **6 con** transformer (customers, promotions) y productos/modifiers cubiertos por **mapper de respuesta**. No hay serializador global ni interceptor donde engancharse. Y de todo lo que el panel consume, **sólo tres rutas** devuelven la entidad cruda y por lo tanto mandan strings: `/insumos`, `/sales/admin/invoices`, `/sales/shifts`.
+
+**Dos "aristas" del informe las falsifiqué yo antes de tocar nada:** `catalog_value.sort_order` es `int` (Postgres lo devuelve número, así que el esquema que agregué en el barrido es seguro) y el preview de compras **calcula** `previousCppNio` con `Number(...)` (el `.toFixed(2)` del formulario no puede tirar `TypeError`). Eran inferencias, no mediciones — y de eso dependía no romper dos formularios que acababa de arreglar.
+
+**Decisión: arreglar en el origen, no cliente por cliente.** El tipo TypeScript declara `number` y el JSON traía string: la mentira es del contrato de la API, y normalizar en cada cliente la dejaría en pie para todo consumidor futuro. Tres mappers de respuesta calcados de `product-response.ts` (el patrón que el repo ya usa para productos y modifiers), aplicados en **todas** las salidas de esas rutas, incluidos los caminos de create/update que devolvían `repo.save(entity)`.
+
+**Semántica de la ausencia, explícita y justificada:** las columnas no nullables fallan cerrado a 0 igual que `product-response.ts`; las **nullable conservan `null`** — coercionar una decimal nullable a 0 fabricaría un hecho que la fila nunca tuvo.
+
+**La red de regresión que no existía:** el explorador midió que **ningún test del repo** fijaba un payload de cable con decimales en string. Por eso hay un spec **contra PostgreSQL real** por ruta: persiste la fila por el repositorio real, comprueba que el driver entrega `string` crudo y que el mapper lo vuelve `number`. Sin base real eso no se prueba, y por eso está.
+
+**Mutaciones propias, restauradas byte-idénticas:**
+| Mutación | Resultado | Garantía anclada |
+|---|---|---|
+| El mapper deja pasar el string | unitaria **y** base real: `Expected: 12.5 / Received: "12.5000"` y `Expected: "number" / Received: "string"` | El cable deja de mentir |
+| El nullable fabrica 0 | `Received: 0` donde se esperaba `null` | No se inventa un hecho que la fila no tenía |
+
+**Evidencia:** 51/51 en las seis suites unitarias/controlador, 5/5 en las tres de base real, y **aserciones preexistentes actualizadas a conciencia porque fijaban la forma cruda** (una en `insumo.controller.spec`, cuatro en `cash-shift.controller.spec`) — un spec que pinnea la mentira es parte del defecto.
+
+**Diferido medido, no arreglado:** (a) `/inventory/purchases` es **la misma clase y real**: `PurchaseDocument[]` crudo, 5 columnas decimales, y el panel lo disimula con `Number(d.unit_cost_nio) || 0`; (b) `/inventory/suppliers` verificado **sin** columnas decimales; (c) los reportes fiscales verificados numéricos; (d) `/onboarding/templates/:code` crudo pero **sin consumidor numérico encontrado**; (e) el preview/commit de import del onboarding **sin verificar**. Y la clase de fondo sigue: **89 columnas sin transformer**, con la coerción viviendo sólo en estos bordes de respuesta, por diseño.

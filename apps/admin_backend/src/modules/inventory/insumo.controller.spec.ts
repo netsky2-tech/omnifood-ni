@@ -24,8 +24,22 @@ describe('InsumoController', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Driver-like shape: Postgres `numeric` reaches Node as strings, so the
+    // response mapper must coerce these into numbers (mirrors product-response).
     insumoRepo.find.mockResolvedValue([
-      { id: 'ins-1', tenant_id: 'tenant-A', name: 'Arroz', is_active: true },
+      {
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+        name: 'Arroz',
+        is_active: true,
+        conversionFactor: '1.0000',
+        stock: '12.5000',
+        existenciaActual: '12.5000',
+        averageCost: '350.25',
+        parLevel: '5000.0000',
+        minStock: '1000.0000',
+        maxStock: null,
+      },
     ]);
     insumoRepo.findOne.mockResolvedValue(null);
   });
@@ -36,9 +50,25 @@ describe('InsumoController', () => {
   it('binds app.tenant_id inside one transaction before the first protected read, resolving the repository from that manager', async () => {
     const result = await buildController().list(undefined, 'tenant-A');
 
+    // The response boundary coerces the driver strings into JSON numbers.
     expect(result).toEqual([
-      { id: 'ins-1', tenant_id: 'tenant-A', name: 'Arroz', is_active: true },
+      {
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+        name: 'Arroz',
+        is_active: true,
+        conversionFactor: 1,
+        stock: 12.5,
+        existenciaActual: 12.5,
+        averageCost: 350.25,
+        parLevel: 5000,
+        minStock: 1000,
+        maxStock: null,
+      },
     ]);
+    expect(typeof result[0].stock).toBe('number');
+    expect(typeof result[0].parLevel).toBe('number');
+    expect(typeof result[0].averageCost).toBe('number');
     expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
       'tenant-A',
     ]);

@@ -12,6 +12,11 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { Insumo } from './entities/insumo.entity';
+import {
+  serializeInsumo,
+  serializeInsumos,
+  InsumoResponse,
+} from './insumo-response';
 import { CreateInsumoDto } from './dto/create-insumo.dto';
 import { UpdateInsumoDto } from './dto/update-insumo.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
@@ -45,7 +50,7 @@ export class InsumoController {
   async list(
     @Query('includeInactive') includeInactive?: string,
     @GetTenantId() tenantId?: string,
-  ): Promise<Insumo[]> {
+  ): Promise<InsumoResponse[]> {
     const normalizedTenantId = this.requireTenant(tenantId);
 
     const where: Record<string, unknown> = {
@@ -56,7 +61,7 @@ export class InsumoController {
       where.is_active = true;
     }
 
-    return runInTenantTransaction(
+    const insumos = await runInTenantTransaction(
       this.dataSource,
       normalizedTenantId,
       (manager) =>
@@ -65,16 +70,17 @@ export class InsumoController {
           order: { name: 'ASC' },
         }),
     );
+    return serializeInsumos(insumos);
   }
 
   @Post()
   async create(
     @Body() dto: CreateInsumoDto,
     @GetTenantId() tenantId?: string,
-  ): Promise<Insumo> {
+  ): Promise<InsumoResponse> {
     const normalizedTenantId = this.requireTenant(tenantId);
 
-    return runInTenantTransaction(
+    const saved = await runInTenantTransaction(
       this.dataSource,
       normalizedTenantId,
       async (manager) => {
@@ -112,6 +118,7 @@ export class InsumoController {
         return repo.save(insumo);
       },
     );
+    return serializeInsumo(saved);
   }
 
   @Put(':id')
@@ -119,10 +126,10 @@ export class InsumoController {
     @Param('id') id: string,
     @Body() dto: UpdateInsumoDto,
     @GetTenantId() tenantId?: string,
-  ): Promise<Insumo> {
+  ): Promise<InsumoResponse> {
     const normalizedTenantId = this.requireTenant(tenantId);
 
-    return runInTenantTransaction(
+    const saved = await runInTenantTransaction(
       this.dataSource,
       normalizedTenantId,
       async (manager) => {
@@ -167,5 +174,6 @@ export class InsumoController {
         return repo.save(insumo);
       },
     );
+    return serializeInsumo(saved);
   }
 }
