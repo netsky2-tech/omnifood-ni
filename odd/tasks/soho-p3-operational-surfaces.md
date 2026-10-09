@@ -683,3 +683,20 @@ El diálogo tiene esquema propio (`catalogValueFormSchema(isEdit)` en `features/
 | Quitar el patrón del código | `code with an illegal character shows the Spanish charset message...` | Cada atributo nativo tiene su regla |
 
 **Evidencia:** RED citado antes de tocar producción (`jsdom` bloquea el submit y el mensaje español no aparece), GREEN 34/34 en las dos suites del catálogo, `tsc --noEmit` sin issues, y paridad de payload create/edición (en edición el `code` no se renderiza ni se envía, y el esquema lo relaja para que nunca rechace una edición legítima).
+
+### Unidad B · Product (diálogo) — CERRADO
+
+Esquema `productFormSchema` en `product-types.ts` (una sola forma: create y edición renderizan los mismos atributos nativos, así que no hace falta factory — verificado, no supuesto), RHF + `zodResolver`, `noValidate` y errores en línea en español. Atributos nativos retirados por inertes: `required` + `maxLength={200}` del nombre, `required` del select de UOM, y `step="0.01"` + `min="0"` del precio. Se conservaron `type="text"`/`type="number"` porque son comportamiento de teclado, no validación.
+
+**Fidelidad medida contra los atributos, incluido el que jsdom no aplica:** la regla de "más de 2 decimales" **no** sale de jsdom (que nunca aplicó `step`), sale de `step="0.01"` — o sea que reproduce la guarda del navegador real, y por eso tiene su propio test. `sellPrice = 0` sigue siendo legal y el precio sigue viajando como **número** (`setValueAs`), respetando el contrato decimal que este repo ya tiene pineado (`products-decimal-contract`).
+
+**Mutaciones propias, todas restauradas byte-idénticas:**
+| Mutación | Resultado | Garantía anclada |
+|---|---|---|
+| Precio mínimo 0.01 (**sobre-endurecer**) | **2** tests: la trampa `sellPrice = 0 stays valid...` y el nombre de sólo espacios | El esquema cubre el atributo, no más |
+| Quitar la regla de 2 decimales | `a sellPrice with more than 2 decimals is refused...` | El `step` nativo tiene su regla |
+| Quitar `uom` requerido (rama create) | `create: an empty UOM shows the app's Spanish message...` | Cada requerido nativo tiene su regla |
+
+**Evidencia:** RED citado antes de tocar producción (5 tests fallando con la mutación llamada y sin mensaje de la app), 41/41 en los cuatro archivos de test existentes, `tsc --noEmit` sin issues, y los payloads de create y edición pineados por aserciones `toEqual` exactas que **son anteriores** a este cambio.
+
+**Nota de proceso (error mío, y una disciplina que funcionó):** las superficies que derivé incluían `w5-e2e-products.test.tsx`, que **no existe** — lo inferí del e2e del catálogo. El worker lo detectó, **se negó a reportar un pass count de un archivo inexistente** y paró a preguntar en vez de crear un archivo nuevo con cobertura auto-derivada. Respuesta: opción (a), mi lista estaba mal. Una cifra inventada habría sido peor que una unidad incompleta.

@@ -1,10 +1,15 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProductPage } from "@/features/catalog/product-page";
 import { useProducts } from "@/features/catalog/use-product";
 import type { Product } from "@/features/catalog/product-types";
+
+const mocks = vi.hoisted(() => ({
+  createMutateAsync: vi.fn(),
+  updateMutateAsync: vi.fn(),
+}));
 
 vi.mock("@/features/catalog/use-product", () => {
   const useProductsMock = vi.fn((_type?: string, _inactive?: boolean) => ({
@@ -32,11 +37,11 @@ vi.mock("@/features/catalog/use-product", () => {
     useProducts: useProductsMock,
     usePaginatedProducts: usePaginatedProductsMock,
     useCreateProduct: vi.fn(() => ({
-      mutateAsync: vi.fn().mockResolvedValue({}),
+      mutateAsync: mocks.createMutateAsync,
       isPending: false,
     })),
     useUpdateProduct: vi.fn(() => ({
-      mutateAsync: vi.fn().mockResolvedValue({}),
+      mutateAsync: mocks.updateMutateAsync,
       isPending: false,
     })),
     useDeactivateProduct: vi.fn(() => ({
@@ -48,7 +53,7 @@ vi.mock("@/features/catalog/use-product", () => {
 
 vi.mock("@/features/catalog/use-catalog", () => ({
   useCatalogValues: vi.fn(() => ({
-    data: [],
+    data: [{ code: "un", name: "Unidad" }],
     isLoading: false,
     error: null,
   })),
@@ -301,6 +306,186 @@ describe("W5 — ProductPage create dialog", () => {
     await user.click(screen.getByText("Cancelar"));
     await waitFor(() => {
       expect(screen.queryByText("Nuevo Producto")).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("W5 — ProductPage form validation (unit B, form sweep)", () => {
+  beforeEach(() => {
+    mocks.createMutateAsync.mockReset().mockResolvedValue({});
+    mocks.updateMutateAsync.mockReset().mockResolvedValue({});
+  });
+
+  function makeProduct(overrides: Partial<Product> = {}): Product {
+    return {
+      id: "p1",
+      tenant_id: "t1",
+      name: "Plato del Día",
+      uom: "un",
+      product_type: "COMPOUND",
+      category_code: null,
+      warehouse_id: null,
+      is_perishable: false,
+      stock: 0,
+      averageCost: 25,
+      sellPrice: 45,
+      is_active: true,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      ...overrides,
+    };
+  }
+
+  async function openCreateDialog() {
+    const user = userEvent.setup();
+    render(<ProductPage />, { wrapper: TestWrapper });
+    await user.click(screen.getByText("+ Nuevo Producto"));
+    await screen.findByText("Nuevo Producto");
+    return user;
+  }
+
+  async function openEditDialog(product: Product) {
+    vi.mocked(useProducts).mockReturnValue({
+      data: [product],
+      isLoading: false,
+      error: null,
+    } as any);
+    const user = userEvent.setup();
+    render(<ProductPage />, { wrapper: TestWrapper });
+    await screen.findByText(product.name);
+    await user.click(screen.getByText("Editar"));
+    await screen.findByText("Editar Producto");
+    return user;
+  }
+
+  // RED/GREEN core: today the dialog is native-only — jsdom fires the submit
+  // event regardless of constraint validity, so an empty required name/UOM
+  // reaches the API and the app's Spanish message never renders.
+  it("create: an empty name shows the app's Spanish message and does not call the API", async () => {
+    const user = await openCreateDialog();
+    await user.click(screen.getByLabelText("No, se compra y se revende tal cual"));
+    await user.selectOptions(screen.getAllByRole("combobox")[0]!, "un");
+    expect(screen.getByText("Crear")).toBeEnabled();
+
+    await user.click(screen.getByText("Crear"));
+
+    expect(screen.getByText("El nombre es obligatorio")).toBeInTheDocument();
+    expect(mocks.createMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("create: an empty UOM shows the app's Spanish message and does not call the API", async () => {
+    const user = await openCreateDialog();
+    await user.type(
+      screen.getByPlaceholderText("Ej: Taza de Capuccino"),
+      "Producto Nuevo",
+    );
+    await user.click(screen.getByLabelText("No, se compra y se revende tal cual"));
+    expect(screen.getByText("Crear")).toBeEnabled();
+
+    await user.click(screen.getByText("Crear"));
+
+    expect(
+      screen.getByText("La unidad de medida es obligatoria"),
+    ).toBeInTheDocument();
+    expect(mocks.createMutateAsync).not.toHaveBeenCalled();
+  });
+
+  // One test per native attribute so "no guard was lost" is verifiable.
+  // Native maxLength={200} (jsdom keeps a programmatically set overlong value,
+  // as a browser does for the constraint) must map to a schema maximum.
+  it("a name longer than 200 characters is refused with the app's Spanish message", async () => {
+    const user = await openEditDialog(makeProduct());
+    fireEvent.change(screen.getByPlaceholderText("Ej: Taza de Capuccino"), {
+      target: { value: "x".repeat(201) },
+    });
+
+    await user.click(screen.getByText("Guardar"));
+
+    expect(
+      screen.getByText("El nombre no debe exceder 200 caracteres"),
+    ).toBeInTheDocument();
+    expect(mocks.updateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  // Native min="0" on the price input.
+  it("a negative sellPrice is refused with the app's Spanish message", async () => {
+    const user = await openEditDialog(makeProduct());
+    fireEvent.change(screen.getByPlaceholderText("0.00"), {
+      target: { value: "-5" },
+    });
+
+    await user.click(screen.getByText("Guardar"));
+
+    expect(
+      screen.getByText("El precio de venta debe ser mayor o igual a 0"),
+    ).toBeInTheDocument();
+    expect(mocks.updateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  // Native step="0.01": a value with more than 2 decimals never passed
+  // constraint validation in a real browser; the schema must keep that guard.
+  it("a sellPrice with more than 2 decimals is refused with the app's Spanish message", async () => {
+    const user = await openEditDialog(makeProduct());
+    fireEvent.change(screen.getByPlaceholderText("0.00"), {
+      target: { value: "1.234" },
+    });
+
+    await user.click(screen.getByText("Guardar"));
+
+    expect(
+      screen.getByText("El precio de venta no puede tener más de 2 decimales"),
+    ).toBeInTheDocument();
+    expect(mocks.updateMutateAsync).not.toHaveBeenCalled();
+  });
+
+  // Triangulation (additive-only contract): native `required` only blocked the
+  // empty string, so a whitespace-only name was valid today and MUST stay
+  // valid — the payload keeps trimming, exactly as before the schema existed.
+  it("a whitespace-only name stays valid and submits the trimmed payload as before", async () => {
+    const user = await openCreateDialog();
+    await user.click(screen.getByLabelText("No, se compra y se revende tal cual"));
+    await user.selectOptions(screen.getAllByRole("combobox")[0]!, "un");
+    await user.type(screen.getByPlaceholderText("Ej: Taza de Capuccino"), "   ");
+    expect(screen.getByText("Crear")).toBeEnabled();
+
+    await user.click(screen.getByText("Crear"));
+
+    await waitFor(() => {
+      expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.createMutateAsync.mock.calls[0]![0]).toEqual({
+      name: "",
+      uom: "un",
+      product_type: "SIMPLE",
+      category_code: undefined,
+      sellPrice: 0,
+      is_perishable: false,
+    });
+  });
+
+  // Regression trap: sellPrice = 0 is legal today and MUST stay legal, with
+  // the exact same payload shape as before the schema existed.
+  it("sellPrice = 0 stays valid and submits the exact same update payload", async () => {
+    const user = await openEditDialog(makeProduct());
+    fireEvent.change(screen.getByPlaceholderText("0.00"), {
+      target: { value: "0" },
+    });
+
+    await user.click(screen.getByText("Guardar"));
+
+    await waitFor(() => {
+      expect(mocks.updateMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.updateMutateAsync.mock.calls[0]![0]).toEqual({
+      id: "p1",
+      input: {
+        name: "Plato del Día",
+        uom: "un",
+        product_type: "COMPOUND",
+        category_code: undefined,
+        sellPrice: 0,
+        is_perishable: false,
+      },
     });
   });
 });
