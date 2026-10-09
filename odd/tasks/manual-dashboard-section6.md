@@ -20,7 +20,7 @@
 - [x] **T4** Revisión del manual contra las imágenes reales + fix del defecto D-2 (ver Hallazgos): labels de UI verificados contra código, 8 capturas §6 revisadas visualmente, §3/§5 alineado a capturas nuevas
 - [x] **T5** Verificación (delegate `gentle-ai-verify`, 7 checks): refs 14/14 resuelven · 14 PNG 1440×900 · 0 orphans (38 PNG = 14 dsh + 24 pos) · tsc 0 · oxlint 0 · git status solo artefactos esperados · refs `manual_v0.1` corregidas (CD-12 registry + cierre-oom + este doc)
 - [ ] **T6** Commits convencionales (spec + script · manual v0.2 + imágenes · ODD)
-- [ ] **T7** Revisión nativa (`gentle_review inspect`) por candidato
+- [x] **T7** Revisión nativa: candidato = rama como PR slice (`baseRef=601edc90`, committedOnly) · lineage `review-3d8f0ac96df7abae` · medium tier (1 lente `review-reliability`, riesgo `executable_change` por el spec) · **APPROVED** + authority burned (`gentle-ai.review-acknowledged/v1`, target `f4299be8`, revision `2aa5251d`) · 4 hallazgos advisories informativos (R3-A WARNING spec:404-405; R3-B/C/D SUGGESTION spec:37-39 / 473-596 / 122-131) — ninguno bloqueante, sin corrección ofrecida
 - [ ] **T8** Reporte + decisión de merge/PR (usuario)
 
 ## Hallazgos
@@ -37,3 +37,4 @@
 - `npx tsc --noEmit` 0 · `npx oxlint e2e/manual-screenshots.live.spec.ts` 0 tras eliminar `SLUG` sin uso.
 - Limpieza final BD: tenant `soho` = Leche/Endulzante/Extras activos, 0 filas Jarabes.
 - Verify battery: 6/7 PASS + CHECK 5 corregido en el momento (3 paths actualizados).
+- Revisión nativa: forecast `pi_host_relay`/1 run corrido 2× — 1ª admisión rechazada por campo extra `evidence_extra` en el payload del reviewer (slot no consumido); payload movido a `/tmp/gentle-rejected-backup/` → forecast→ack fresco → APPROVED → ack completado vía facade. Commits cubiertos: `7556739b`, `1b78a261`, `4a1e37b7`.
