@@ -558,8 +558,21 @@ Un segundo cálculo paralelo habría dado dos números que "casi" coinciden; el 
 
 **Evidencia:** 46/46 en el spec puro de semántica (8 casos nuevos), 34/34 del servicio, 19/19 del controlador = **99/99**; `getTopProducts` (el otro consumidor de `computeSalesReportingTotals`) verificado sin cambios. Ejemplo trabajado del fixture: líneas 40 (manual) + 70 (promo 45 / manual 25) + 15 (lealtad) + una línea legado de 30 con `NULL` → manual 65, promoción 45, lealtad 15, sin origen 30, total **155** ✓.
 
-### S1c-3b · La superficie web — PENDIENTE
-La más chica posible: el bloque "Descuentos" de `tips-summary.tsx:88-97`, que es **la única cifra de descuento renderizada** en el panel y ya tiene canal de props desde `dashboard-page.tsx:200-204`. Confirmado que **no existe ninguna tabla a nivel de línea** en el panel.
+### S1c-3b · La superficie web — CERRADO
+El bloque "Descuentos" de `tips-summary.tsx` (la **única cifra de descuento renderizada** en el panel) ahora muestra el desglose debajo del total: `Descuento manual`, `Descuento por promoción`, `Descuento por lealtad` y `Sin origen registrado`. Anatomía de fila idéntica a las vecinas (misma tipografía, `tabular-nums`, indentación de un nivel) siguiendo el estándar NHILOS §42.5/§42.6 — cero lenguaje visual nuevo, cero componente nuevo. La fila del total queda intacta.
+
+**La trampa que se evitó, y que es todo el punto de la unidad:** el normalizador colapsaba *ausente* a `0` con `toFiniteNumber`. Para estos campos eso habría mentido contra un backend viejo: un negocio cuyos C$279 de descuentos son **todos legado** habría leído "Descuento manual: C$0.00", que es un hecho fiscal inventado. Los cuatro campos entran como **opcionales** y el normalizador **preserva la ausencia** (la llave se omite, nunca se rellena con 0), mientras que un `0` genuino sigue siendo `0`: son dos hechos distintos y se muestran distinto. Cuando el API no reporta el desglose, **no se renderiza nada** — ni ceros ni placeholders.
+
+La fila "Sin origen registrado" aparece sólo cuando es distinto de cero; si es **negativa** se muestra igual, porque es una inconsistencia de datos guardados que el dueño tiene que ver, no un cero para esconder.
+
+**Mutaciones propias, todas restauradas byte-idénticas:**
+| Mutación | Test que falla | Garantía anclada |
+|---|---|---|
+| Colapsar ausente a `0` (la trampa) | `preserves absence: missing fields stay undefined, never fabricated 0` (2 tests) | Ausente nunca se convierte en un cero fiscal |
+| Mostrar la fila "sin origen" siempre | `hides the unattributed row when it is exactly zero` | Cero genuino no necesita fila |
+| Esconder el valor negativo | `renders the unattributed row for a negative value (stored-data inconsistency)` | Una contradicción de datos no se oculta |
+
+**Evidencia:** 24/24 en `dashboard-v2-tips.spec.tsx` (7 tests nuevos), 54/54 en acceptance + w2-sales, `tsc --noEmit` con 0 issues. **Límite declarado:** la verificación es contra el contrato del cable y la capa mockeada; no se validó contra un backend vivo (queda para la validación de punta a punta, que necesita el `dist` reconstruido). También se reportó, sin tocar, un hazard latente en `kpi-deltas.ts` (`isTipsSummaryApplicable` revienta con `undefined` en vez de `null`), hoy inalcanzable porque la prop es requerida.
 
 ⚠ **Cuidado que ya identifiqué:** el normalizador del panel (`dashboard-api.ts:144`) colapsa *ausente* a `0` con `toFiniteNumber`. Para estos campos eso mentiría contra un backend viejo (mostraría "manual: C$0.00" con un total de C$279 de legado), así que la web tiene que **distinguir ausente de cero** y no renderizar el desglose cuando el API no lo reporta.
 

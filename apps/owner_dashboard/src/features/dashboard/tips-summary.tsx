@@ -30,7 +30,7 @@
  * contract ships.
  */
 import { isTipsSummaryApplicable, tipParticipationPercent } from "./kpi-deltas";
-import type { TipsSummaryWire } from "./dashboard-api";
+import type { DashboardV2Report } from "./dashboard-api";
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("es-NI", {
@@ -44,6 +44,19 @@ function formatPercent(value: number | null): string {
   return value === null ? "—" : `${value.toFixed(1)}%`;
 }
 
+/**
+ * The four wire-optional per-origin discount fields (P3). All fields are
+ * optional: absent means the backend did not report the breakdown, and the
+ * UI must render NOTHING for it — never a fabricated C$0.00.
+ */
+export type DiscountOriginBreakdown = Pick<
+  DashboardV2Report,
+  | "manualDiscountNio"
+  | "promotionDiscountNio"
+  | "loyaltyDiscountNio"
+  | "discountOriginUnattributedNio"
+>;
+
 export interface TipsSummaryCardProps {
   /** Current-period tips summary from the V2 dashboard report. */
   summary: TipsSummaryWire | null;
@@ -51,12 +64,18 @@ export interface TipsSummaryCardProps {
   preDiscountSalesNio?: number | null;
   /** Period discounts (V2 explicit semantics, post-credit-note net). */
   totalDiscountsNio?: number | null;
+  /**
+   * Per-origin discount breakdown (P3); only present when the backend
+   * reported it. Rendered beneath the Descuentos total, which is unchanged.
+   */
+  discountOriginBreakdown?: DiscountOriginBreakdown | null;
 }
 
 export function TipsSummaryCard({
   summary,
   preDiscountSalesNio = null,
   totalDiscountsNio = null,
+  discountOriginBreakdown = null,
 }: TipsSummaryCardProps) {
   const discounts =
     totalDiscountsNio !== null && Number.isFinite(totalDiscountsNio)
@@ -77,6 +96,28 @@ export function TipsSummaryCard({
     ? tipParticipationPercent(tips.tippedTicketCount, tips.tipCoverage.totalInvoicesCount)
     : null;
 
+  // P3: the breakdown renders ONLY when the API reports it — when the fields
+  // are absent (older backend) we render nothing extra, because a fabricated
+  // "C$0.00" per origin would state a fiscal fact the wire never sent.
+  const breakdown =
+    discountOriginBreakdown !== null && discountOriginBreakdown !== undefined
+      ? discountOriginBreakdown
+      : null;
+  const reportedOrigins: Array<[string, number]> = breakdown
+    ? (
+        [
+          ["Descuento manual", breakdown.manualDiscountNio],
+          ["Descuento por promoción", breakdown.promotionDiscountNio],
+          ["Descuento por lealtad", breakdown.loyaltyDiscountNio],
+        ] as Array<[string, number | undefined]>
+      ).filter((entry): entry is [string, number] => entry[1] !== undefined)
+    : [];
+  const unattributedNio = breakdown?.discountOriginUnattributedNio;
+  // Shown only when NOT zero: a genuine 0 needs no row, but a negative value
+  // is a stored-data inconsistency the owner must still see (never hidden).
+  const showUnattributed = unattributedNio !== undefined && unattributedNio !== 0;
+  const showOriginBreakdown = reportedOrigins.length > 0 || showUnattributed;
+
   return (
     <div
       data-testid="tips-summary-card"
@@ -96,6 +137,29 @@ export function TipsSummaryCard({
             </span>
           </span>
         </div>
+        {showOriginBreakdown && (
+          // Sub-rows of Descuentos: same row anatomy/typography as the
+          // neighbouring rows (standard §42.5/§42.6 — tighter grouping inside
+          // one idea, tabular figures), indented one level, no new pattern.
+          <div className="space-y-3 pl-4">
+            {reportedOrigins.map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{label}</span>
+                <span className="font-medium tabular-nums text-card-foreground">
+                  {formatCurrency(value)}
+                </span>
+              </div>
+            ))}
+            {showUnattributed && unattributedNio !== undefined && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Sin origen registrado</span>
+                <span className="font-medium tabular-nums text-card-foreground">
+                  {formatCurrency(unattributedNio)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
         {tips && (
           <div className="space-y-3 border-t border-border pt-3">
             <div className="flex items-center justify-between text-sm">

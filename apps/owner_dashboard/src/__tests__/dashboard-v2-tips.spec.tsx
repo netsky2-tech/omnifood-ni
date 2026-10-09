@@ -26,6 +26,7 @@ import {
   tipParticipationPercent,
 } from "@/features/dashboard/kpi-deltas";
 import { useDashboardKpis } from "@/features/dashboard/use-dashboard-kpis";
+import { useDashboardV2Report } from "@/features/dashboard/rentabilidad-card";
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
 
 vi.mock("@/lib/tenant", () => ({ useTenantId: () => "tenant-1" }));
@@ -45,12 +46,23 @@ vi.mock("@/features/dashboard/use-dashboard-kpis", () => ({
   useDashboardKpis: vi.fn(),
 }));
 
+// Only the hook is mocked: RentabilidadCard stays real, and the page feeds
+// the discount-origin breakdown through the same props channel as
+// preDiscountSalesNio (useDashboardV2Report → TipsSummaryCard).
+vi.mock("@/features/dashboard/rentabilidad-card", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useDashboardV2Report: vi.fn(),
+}));
+
 vi.mock("@/features/sales/use-sales-reports", () => ({
   useSalesDashboard: vi.fn(),
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: no V2 report (page renders em-dashes for the discount rate),
+  // matching what the real hook returned before these P3 tests.
+  vi.mocked(useDashboardV2Report).mockReturnValue({ data: undefined } as never);
 });
 
 const TIPS_SUMMARY = {
@@ -208,7 +220,132 @@ describe("TipsSummaryCard (PRD §21.2/§21.4)", () => {
   });
 });
 
-describe("DashboardPage — tips summary band (Batch 7)", () => {
+// ---------------------------------------------------------------------------
+// P3: per-origin discount breakdown (manual / promotion / loyalty / unattributed).
+// Identity the owner reconciles against:
+//   manual + promotion + loyalty + unattributed === totalDiscountsNio
+// The four wire fields are OPTIONAL and absence-preserving: an older backend
+// does not send them, and absence must NEVER collapse to 0.
+// ---------------------------------------------------------------------------
+
+const BREAKDOWN = {
+  manualDiscountNio: 120,
+  promotionDiscountNio: 90,
+  loyaltyDiscountNio: 50,
+  discountOriginUnattributedNio: 19,
+};
+
+describe("normalizeDashboardReport — discount-origin breakdown (additive, absence-preserving)", () => {
+  it("preserves absence: missing fields stay undefined, never fabricated 0", () => {
+    const report = normalizeDashboardReport({ totalDiscountsNio: "279" });
+    expect(report.totalDiscountsNio).toBe(279);
+    // reason: an older backend's absent breakdown means "origin unknown",
+    // not zero — collapsing it to 0 would fabricate a fiscal fact for a
+    // tenant whose discounts are all legacy.
+    expect(report.manualDiscountNio).toBeUndefined();
+    expect(report.promotionDiscountNio).toBeUndefined();
+    expect(report.loyaltyDiscountNio).toBeUndefined();
+    expect(report.discountOriginUnattributedNio).toBeUndefined();
+    expect(report).not.toHaveProperty("manualDiscountNio");
+    expect(report).not.toHaveProperty("promotionDiscountNio");
+    expect(report).not.toHaveProperty("loyaltyDiscountNio");
+    expect(report).not.toHaveProperty("discountOriginUnattributedNio");
+  });
+
+  it("keeps a genuine 0 as 0, coerces numeric strings, and lets null stay absent", () => {
+    const report = normalizeDashboardReport({
+      manualDiscountNio: "0",
+      promotionDiscountNio: "100.50",
+      loyaltyDiscountNio: null,
+      discountOriginUnattributedNio: "-10.25",
+    });
+    expect(report.manualDiscountNio).toBe(0);
+    expect(report.promotionDiscountNio).toBe(100.5);
+    expect(report.loyaltyDiscountNio).toBeUndefined();
+    expect(report.discountOriginUnattributedNio).toBe(-10.25);
+  });
+});
+
+describe("TipsSummaryCard — discount-origin breakdown (P3)", () => {
+  it("renders reported origin rows beneath the unchanged total row", () => {
+    render(
+      <TipsSummaryCard
+        summary={null}
+        totalDiscountsNio={279}
+        discountOriginBreakdown={BREAKDOWN}
+      />,
+    );
+    expect(screen.getByText("Descuentos")).toBeInTheDocument();
+    expect(screen.getByText(/C\$279\.00/)).toBeInTheDocument();
+    expect(screen.getByText("Descuento manual")).toBeInTheDocument();
+    expect(screen.getByText("C$120.00")).toBeInTheDocument();
+    expect(screen.getByText("Descuento por promoción")).toBeInTheDocument();
+    expect(screen.getByText("C$90.00")).toBeInTheDocument();
+    expect(screen.getByText("Descuento por lealtad")).toBeInTheDocument();
+    expect(screen.getByText("C$50.00")).toBeInTheDocument();
+    expect(screen.getByText("Sin origen registrado")).toBeInTheDocument();
+    expect(screen.getByText("C$19.00")).toBeInTheDocument();
+  });
+
+  it("renders nothing extra when the four fields are absent (older backend)", () => {
+    render(<TipsSummaryCard summary={null} totalDiscountsNio={279} />);
+    // reason: absent wire fields mean the origin split is UNKNOWN — an older
+    // backend never computed it — so rendering "C$0.00" per origin would
+    // fabricate a fiscal fact; the breakdown block must simply not exist.
+    expect(screen.queryByText("Descuento manual")).not.toBeInTheDocument();
+    expect(screen.queryByText("Descuento por promoción")).not.toBeInTheDocument();
+    expect(screen.queryByText("Descuento por lealtad")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sin origen registrado")).not.toBeInTheDocument();
+    expect(screen.queryByText("C$0.00")).not.toBeInTheDocument();
+  });
+
+  it("renders the unattributed row equal to the whole total for a legacy tenant", () => {
+    render(
+      <TipsSummaryCard
+        summary={null}
+        totalDiscountsNio={279}
+        discountOriginBreakdown={{ discountOriginUnattributedNio: 279 }}
+      />,
+    );
+    expect(screen.getByText("Sin origen registrado")).toBeInTheDocument();
+    // The total row and the unattributed row both show C$279.00 — that is
+    // the honest legacy picture, not a rendering bug.
+    expect(screen.getAllByText(/C\$279\.00/)).toHaveLength(2);
+    expect(screen.queryByText("Descuento manual")).not.toBeInTheDocument();
+  });
+
+  it("hides the unattributed row when it is exactly zero", () => {
+    render(
+      <TipsSummaryCard
+        summary={null}
+        totalDiscountsNio={279}
+        discountOriginBreakdown={{
+          manualDiscountNio: 279,
+          discountOriginUnattributedNio: 0,
+        }}
+      />,
+    );
+    expect(screen.getByText("Descuento manual")).toBeInTheDocument();
+    expect(screen.queryByText("Sin origen registrado")).not.toBeInTheDocument();
+  });
+
+  it("renders the unattributed row for a negative value (stored-data inconsistency)", () => {
+    render(
+      <TipsSummaryCard
+        summary={null}
+        totalDiscountsNio={279}
+        discountOriginBreakdown={{
+          manualDiscountNio: 290,
+          discountOriginUnattributedNio: -11,
+        }}
+      />,
+    );
+    expect(screen.getByText("Sin origen registrado")).toBeInTheDocument();
+    expect(screen.getByText("-C$11.00")).toBeInTheDocument();
+  });
+});
+
+describe("DashboardPage — discount-origin breakdown wiring (P3)", () => {
   const salesPagePayload = {
     grossSales: 15000,
     invoiceCount: 42,
@@ -296,6 +433,42 @@ describe("DashboardPage — tips summary band (Batch 7)", () => {
     expect(screen.queryByText("Total Propinas")).not.toBeInTheDocument();
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.queryByText("Resumen de Ventas")).not.toBeInTheDocument();
+  });
+
+  it("feeds the reported discount-origin breakdown through the existing props channel", () => {
+    mockPage(TIPS_SUMMARY);
+    vi.mocked(useDashboardV2Report).mockReturnValue({
+      data: {
+        totalDiscountsNio: 279,
+        preDiscountSalesNio: 5000,
+        manualDiscountNio: 120,
+        promotionDiscountNio: 90,
+        loyaltyDiscountNio: 50,
+        discountOriginUnattributedNio: 19,
+      },
+    } as never);
+    renderPage();
+
+    expect(screen.getByTestId("tips-summary-card")).toBeInTheDocument();
+    expect(screen.getByText("Descuento manual")).toBeInTheDocument();
+    expect(screen.getByText("Descuento por promoción")).toBeInTheDocument();
+    expect(screen.getByText("Descuento por lealtad")).toBeInTheDocument();
+    expect(screen.getByText("Sin origen registrado")).toBeInTheDocument();
+  });
+
+  it("renders no origin rows when the report does not carry the breakdown", () => {
+    mockPage(null);
+    vi.mocked(useDashboardV2Report).mockReturnValue({
+      data: { totalDiscountsNio: 279, preDiscountSalesNio: 5000 },
+    } as never);
+    renderPage();
+
+    // reason: the breakdown is fed from the wire-optional fields; an older
+    // backend's report has them absent, and the UI must not invent zero rows.
+    expect(screen.getByTestId("tips-summary-card")).toBeInTheDocument();
+    expect(screen.queryByText("Descuento manual")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sin origen registrado")).not.toBeInTheDocument();
+    expect(screen.queryByText("C$0.00")).not.toBeInTheDocument();
   });
 });
 
