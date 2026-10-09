@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/sales/cart_item.dart';
+import '../../../domain/services/config/discount_policy_service.dart';
 import '../../../domain/services/printer/kitchen_modifier_lines.dart';
 import '../../../domain/models/sales/hold_ticket.dart';
 import '../../../data/services/sync_service.dart';
@@ -2177,56 +2178,103 @@ class CartSummary extends StatelessWidget {
 
   Future<double?> _promptManualDiscountAmount(BuildContext context) async {
     final controller = TextEditingController();
+    final viewModel = context.read<SaleViewModel>();
     // SOHO-P3 S1b: show the configured effective limit BEFORE typing so the
-    // cashier does not have to discover it by rejection. The rejection path
-    // below is unchanged: an over-cap amount still reaches
-    // applyManualDiscount, which refuses it through the standard error
-    // channel (error SnackBar) without mutating any state.
-    final limitLabel = context.read<SaleViewModel>().manualDiscountLimitLabel;
+    // cashier does not have to discover it by rejection.
+    final limitLabel = viewModel.manualDiscountLimitLabel;
     return showDialog<double>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Descuento manual'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 380),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (limitLabel != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    limitLabel,
-                    key: const Key('manual_discount_limit_label'),
-                    style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(dialogContext).colorScheme.error,
+      builder: (dialogContext) {
+        // Device-reported defect: the OLD path closed the dialog on Aplicar
+        // and let the view model's refusal surface only through
+        // _presentError's ScaffoldMessenger SnackBar, which renders on the
+        // scaffold BEHIND the cart modal bottom sheet — the operator saw
+        // nothing anywhere and reasonably believed the discount applied.
+        // The prompt now carries the verdict itself: it evaluates the typed
+        // amount with the SAME rule the view model enforces —
+        // DiscountPolicyService fed with the view model's exposed caps
+        // (maxDiscountAmountCap / maxDiscountPercentCap), gross subtotal and
+        // accumulated manual discount, so there is one rule and one
+        // implementation — and on refusal it keeps the dialog OPEN with the
+        // cause-naming message INLINE, where the cashier is looking. The
+        // view model's enforcement is untouched and still guards the apply
+        // path; this pre-check only decides whether the dialog may close.
+        String? inlineRejection;
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('Descuento manual'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (limitLabel != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        limitLabel,
+                        key: const Key('manual_discount_limit_label'),
+                        style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(dialogContext).colorScheme.error,
+                        ),
+                      ),
                     ),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Monto de descuento'),
+                    autofocus: true,
                   ),
-                ),
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Monto de descuento'),
-                autofocus: true,
+                  if (inlineRejection != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        inlineRejection!,
+                        key: const Key('manual_discount_inline_rejection'),
+                        style:
+                            Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(dialogContext).colorScheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final amount = double.tryParse(controller.text.trim());
+                  if (amount != null && amount > 0) {
+                    final decision = const DiscountPolicyService()
+                        .evaluateManualDiscount(
+                      requestedAmount: amount,
+                      accumulatedManualDiscount: viewModel.manualDiscount,
+                      grossSubtotal: viewModel.grossSubtotal,
+                      maxDiscountAmount: viewModel.maxDiscountAmountCap,
+                      maxDiscountPercent: viewModel.maxDiscountPercentCap,
+                    );
+                    if (!decision.allowed) {
+                      // Refusal: keep the dialog open, show the cause.
+                      setDialogState(
+                        () => inlineRejection = decision.rejectionMessage,
+                      );
+                      return;
+                    }
+                  }
+                  Navigator.pop(dialogContext, amount);
+                },
+                child: const Text('Aplicar'),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              double.tryParse(controller.text.trim()),
-            ),
-            child: const Text('Aplicar'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
