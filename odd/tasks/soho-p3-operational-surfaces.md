@@ -613,3 +613,30 @@ Captura en `~/.cache/s1c3/live-card.png`. La spec temporal se **borró** (no que
 **Lo que esta validación NO prueba, dicho claro:** un push **real del dispositivo** con desglose (o con modifiers) — haría falta la S23 con `adb reverse`; el cable está probado por el replay contra esquema y base reales (§11 y §12), no por la tablet. Tampoco prueba el flujo de un negocio cuyo POS sea anterior a la rama (que es, justamente, el caso "sin origen").
 
 **Estado del rig al terminar:** backend en `:3000` con el `dist` de la rama; espejo con `180962`/`180963`/`180964` aplicadas; contraseña temporal del dueño (`C0ntr4sen4`) **sigue puesta** — su restauración corresponde a la limpieza del rig, junto con los topes y los `.env`/`key.properties` copiados.
+
+### S1c-3c · El libro de ventas — CERRADO
+
+Las cuatro columnas por origen entran en el libro de ventas (CSV, XLSX y JSON) **al lado** de `Descuento (NIO)`, que no se toca. El PDF no tiene columna de descuento y no se tocó.
+
+**La instrucción clave de esta unidad fue no crear una segunda implementación.** La regla de atribución se **extrajo** a `salesRowDiscountOrigins(row)` en el módulo puro, y **el fold del panel y el bucle del export llaman a la misma función**. Una copia habría dejado al libro y al panel capaces de discrepar sobre *por qué* existe un descuento — que es exactamente el defecto que esta unidad no debía crear. La extracción es idéntica en valor (los 46 casos previos del módulo siguen verdes sin debilitar una sola aserción).
+
+**Guardianes nuevos, y son la parte que importa:** el spec puro afirma que *plegar el helper reproduce los totales del período* (anti-deriva interna), y el spec del export afirma que la fila del libro **coincide exactamente** con `computeSalesReportingTotals` para la misma ventana de una sola factura (anti-deriva **entre superficies**). Son dos formas de decir lo mismo: una sola regla, dos consumidores, imposible que se separen en silencio.
+
+**Pin del header CSV actualizado a conciencia** (el spec lo fijaba exacto):
+```
+antes:  ...,"Descuento (NIO)","Total (NIO)",...
+después:...,"Descuento (NIO)","Descuento Manual (NIO)","Descuento Promoción (NIO)",
+         "Descuento Lealtad (NIO)","Descuento Sin Origen (NIO)","Total (NIO)",...
+```
+
+**Ejemplo trabajado de la fila pineada:** líneas 40 (manual) + 70 (promoción 45 / manual 25) + 15 (lealtad) → `discountNio = 125.00`; cuatro valores: manual **65.00**, promoción **45.00**, lealtad **15.00**, sin origen **0.00**; identidad 65 + 45 + 15 + 0 = **125** ✓, y los mismos cuatro coinciden con `computeSalesReportingTotals` de la misma factura.
+
+**La tabla fiscal del panel NO necesitó cambio**, y eso se reportó en vez de inventar trabajo: construye sus columnas dinámicamente desde `Object.keys(rows[0])`, así que los cuatro campos fluyen solos. Al no haber cambio visual, el estándar de experiencia NHILOS no aplicó a ninguna decisión de diseño.
+
+**Mutaciones propias, todas restauradas byte-idénticas:**
+| Mutación | Resultado | Garantía anclada |
+|---|---|---|
+| Descartar el `NULL` en el helper | **6** tests nombrados: el caso legado del export, la reconciliación del fixture, el `NULL`→sin origen, la exclusión de anuladas, y **los dos guardianes de deriva** | Legado nunca se convierte en cero de origen, y la regla es una sola |
+| El export lee el helper sin los ítems | 4 tests: la fila CSV, la identidad por fila, el caso legado y el guardián cross-superficie | El libro deriva de las líneas reales de la factura |
+
+**Evidencia:** backend 90/90 (semántica + export), web 143/143 (contrato + api + fiscal) y `tsc --noEmit` con 0 issues. **Límite declarado:** `w4-e2e-fiscal.test.ts` está excluido de vitest y exige backend vivo, así que el contrato e2e de los campos nuevos por el cable no quedó probado; ese archivo no afirma campos de fila, por lo que no necesitó cambio.

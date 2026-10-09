@@ -352,6 +352,78 @@ export function allocateInvoiceLineNetSales(row: {
 /** Known keys of a persisted per-line discount-origin breakdown (D-A2). */
 const DISCOUNT_ORIGIN_KEYS = ['manual', 'promotion', 'loyalty'] as const;
 
+/**
+ * Per-origin discount attribution of ONE invoice row (S1c-3c): the single
+ * implementation of the S1c-3 rule, shared by the dashboard's period fold
+ * (computeSalesReportingTotals) and the DGI sales book export, so the two
+ * surfaces can never disagree about WHY a discount exists.
+ *
+ * Per line, over the row's persisted items:
+ * - NULL/absent breakdown → ALL of the line's discount is unattributed
+ *   (NULL means legacy/unknown and is NEVER presented as an origin zero);
+ * - otherwise each of the three known origins gets its stored amount and
+ *   the residual `discount - Σ known` goes to unattributed. Unknown keys
+ *   are ignored defensively: the DB CHECK forbids them, but a report must
+ *   never inflate a total from unvalidated input. The residual MAY be
+ *   negative when a stored breakdown over-states its line's discount — it
+ *   is intentionally NOT clamped, so the identity
+ *   `manual + promotion + loyalty + unattributed === salesRowDiscounts(row)`
+ *   keeps holding on self-contradicting stored data.
+ *
+ * Cancellation-agnostic on purpose: it answers "where did THIS row's
+ * discount come from?"; the period fold applies the revenue predicate
+ * (isRevenueAffectingDocument) on top, exactly as it does for
+ * salesRowDiscounts.
+ */
+export interface SalesRowDiscountOrigins {
+  manual: number;
+  promotion: number;
+  loyalty: number;
+  unattributed: number;
+}
+
+export function salesRowDiscountOrigins(
+  row: SalesReportingInvoiceRow,
+): SalesRowDiscountOrigins {
+  let manual = 0;
+  let promotion = 0;
+  let loyalty = 0;
+  let unattributed = 0;
+
+  if (row.items && row.items.length > 0) {
+    for (const item of row.items) {
+      const lineDiscount = Number(item.discount ?? 0);
+      const breakdown = item.discountOrigin;
+      if (breakdown == null) {
+        unattributed = round2(unattributed + lineDiscount);
+        continue;
+      }
+      const record = breakdown as Record<string, unknown>;
+      let attributed = 0;
+      for (const origin of DISCOUNT_ORIGIN_KEYS) {
+        const raw = record[origin];
+        if (raw === null || raw === undefined) {
+          continue;
+        }
+        const amount = Number(raw);
+        attributed = round2(attributed + amount);
+        if (origin === 'manual') {
+          manual = round2(manual + amount);
+        } else if (origin === 'promotion') {
+          promotion = round2(promotion + amount);
+        } else {
+          loyalty = round2(loyalty + amount);
+        }
+      }
+      unattributed = round2(
+        unattributed + round2(lineDiscount - attributed),
+      );
+    }
+  }
+
+  return { manual, promotion, loyalty, unattributed };
+}
+
 /** Aggregates the §7.2 KPI set over the WU10 reporting predicates. */
 export function computeSalesReportingTotals(
   rows: readonly SalesReportingInvoiceRow[],
@@ -380,49 +452,21 @@ export function computeSalesReportingTotals(
     totalDiscountsNio = round2(totalDiscountsNio + salesRowDiscounts(row));
 
     // S1c-3: attribute each revenue-affecting line's discount to its origin
-    // breakdown. Same loop, same rows, same predicate as the
-    // totalDiscountsNio accumulation directly above. Per line:
-    // - NULL/absent breakdown → ALL of the line's discount is unattributed
-    //   (NULL means legacy/unknown and is NEVER presented as an origin zero);
-    // - otherwise each of the three known origins gets its stored amount and
-    //   the residual `discount - Σ known` goes to unattributed. Unknown keys
-    //   are ignored defensively: the DB CHECK forbids them, but a report
-    //   must never inflate a total from unvalidated input. The residual MAY
-    //   be negative when a stored breakdown over-states its line's discount
-    //   — it is intentionally NOT clamped, so the identity keeps holding on
-    //   self-contradicting stored data.
-    if (row.items && row.items.length > 0) {
-      for (const item of row.items) {
-        const lineDiscount = Number(item.discount ?? 0);
-        const breakdown = item.discountOrigin;
-        if (breakdown == null) {
-          discountOriginUnattributedNio = round2(
-            discountOriginUnattributedNio + lineDiscount,
-          );
-          continue;
-        }
-        const record = breakdown as Record<string, unknown>;
-        let attributed = 0;
-        for (const origin of DISCOUNT_ORIGIN_KEYS) {
-          const raw = record[origin];
-          if (raw === null || raw === undefined) {
-            continue;
-          }
-          const amount = Number(raw);
-          attributed = round2(attributed + amount);
-          if (origin === 'manual') {
-            manualDiscountNio = round2(manualDiscountNio + amount);
-          } else if (origin === 'promotion') {
-            promotionDiscountNio = round2(promotionDiscountNio + amount);
-          } else {
-            loyaltyDiscountNio = round2(loyaltyDiscountNio + amount);
-          }
-        }
-        discountOriginUnattributedNio = round2(
-          discountOriginUnattributedNio + round2(lineDiscount - attributed),
-        );
-      }
-    }
+    // breakdown via the ONE extracted rule (S1c-3c, salesRowDiscountOrigins)
+    // — the SAME helper the DGI sales book export calls. Same loop, same
+    // rows, same predicate as the totalDiscountsNio accumulation directly
+    // above, so the owner-facing identity
+    // manual + promotion + loyalty + unattributed === totalDiscounts
+    // holds EXACTLY for every input and the two surfaces cannot drift.
+    const rowOrigins = salesRowDiscountOrigins(row);
+    manualDiscountNio = round2(manualDiscountNio + rowOrigins.manual);
+    promotionDiscountNio = round2(
+      promotionDiscountNio + rowOrigins.promotion,
+    );
+    loyaltyDiscountNio = round2(loyaltyDiscountNio + rowOrigins.loyalty);
+    discountOriginUnattributedNio = round2(
+      discountOriginUnattributedNio + rowOrigins.unattributed,
+    );
     // Deliberate split: the amount nets (revenue predicate) but the credit
     // note never counts as a ticket (ticket predicate) — and since issue
     // #624 it stays out of the average-ticket numerator as well, so that

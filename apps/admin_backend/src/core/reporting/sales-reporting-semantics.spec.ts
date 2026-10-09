@@ -9,6 +9,7 @@ import {
   isCompletedTicketDocument,
   isRevenueAffectingDocument,
   resolveInvoiceLocalDayBucket,
+  salesRowDiscountOrigins,
   salesRowDiscounts,
   salesRowNetSales,
 } from './sales-reporting-semantics';
@@ -497,6 +498,154 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
       expect(totals.discountOriginUnattributedNio).toBe(0);
       expect(totals.totalDiscountsNio).toBe(0);
       expectOriginIdentity(totals);
+    });
+  });
+
+  // S1c-3c: the ONE per-row attribution rule, extracted so the DGI sales
+  // book export calls the same helper the dashboard's period fold calls.
+  describe('salesRowDiscountOrigins per-row attribution (S1c-3c — one rule, two surfaces)', () => {
+    it('attributes a mixed row exactly as the S1c-3 period totals do', () => {
+      const row: SalesReportingInvoiceRow = {
+        isCanceled: false,
+        subtotal: 1000,
+        items: [
+          { discount: 40, discountOrigin: { manual: 40 } },
+          { discount: 70, discountOrigin: { promotion: 45, manual: 25 } },
+          { discount: 15, discountOrigin: { loyalty: 15 } },
+        ],
+      };
+
+      expect(salesRowDiscountOrigins(row)).toEqual({
+        manual: 65,
+        promotion: 45,
+        loyalty: 15,
+        unattributed: 0,
+      });
+    });
+
+    it('lands a NULL or absent breakdown entirely in unattributed (legacy, never fabricated)', () => {
+      const nullRow: SalesReportingInvoiceRow = {
+        isCanceled: false,
+        subtotal: 1000,
+        items: [{ discount: 30, discountOrigin: null }],
+      };
+      const absentRow: SalesReportingInvoiceRow = {
+        isCanceled: false,
+        subtotal: 500,
+        items: [{ discount: 20 }],
+      };
+
+      expect(salesRowDiscountOrigins(nullRow)).toEqual({
+        manual: 0,
+        promotion: 0,
+        loyalty: 0,
+        unattributed: 30,
+      });
+      expect(salesRowDiscountOrigins(absentRow)).toEqual({
+        manual: 0,
+        promotion: 0,
+        loyalty: 0,
+        unattributed: 20,
+      });
+    });
+
+    it('keeps a NEGATIVE residual unclamped when the breakdown over-states the line discount', () => {
+      const row: SalesReportingInvoiceRow = {
+        isCanceled: false,
+        subtotal: 1000,
+        items: [
+          { discount: 50, discountOrigin: { manual: 60, promotion: 10 } },
+        ],
+      };
+
+      expect(salesRowDiscountOrigins(row)).toEqual({
+        manual: 60,
+        promotion: 10,
+        loyalty: 0,
+        unattributed: -20,
+      });
+    });
+
+    it('ignores unknown breakdown keys so unvalidated input cannot inflate a row', () => {
+      const row: SalesReportingInvoiceRow = {
+        isCanceled: false,
+        subtotal: 1000,
+        items: [
+          {
+            discount: 25,
+            discountOrigin: {
+              manual: 25,
+              bossDiscount: 999,
+            } as Record<string, unknown>,
+          },
+        ],
+      };
+
+      expect(salesRowDiscountOrigins(row)).toEqual({
+        manual: 25,
+        promotion: 0,
+        loyalty: 0,
+        unattributed: 0,
+      });
+    });
+
+    it('returns all zeros for a row with no items', () => {
+      expect(
+        salesRowDiscountOrigins({ isCanceled: false, subtotal: 730 }),
+      ).toEqual({ manual: 0, promotion: 0, loyalty: 0, unattributed: 0 });
+    });
+
+    it('feeds computeSalesReportingTotals: folding the helper reproduces the period totals EXACTLY (drift guard)', () => {
+      const rows: SalesReportingInvoiceRow[] = [
+        {
+          isCanceled: false,
+          subtotal: 1000,
+          items: [
+            { discount: 40, discountOrigin: { manual: 40 } },
+            { discount: 50, discountOrigin: { manual: 30 } },
+          ],
+        },
+        {
+          isCanceled: false,
+          subtotal: 500,
+          items: [{ discount: 20 }],
+        },
+        ...KNOWN_FIXTURE,
+        // Canceled rows are excluded by the period fold — the helper stays
+        // per-row and cancellation-agnostic, exactly like salesRowDiscounts.
+        {
+          isCanceled: true,
+          subtotal: 999,
+          items: [{ discount: 10, discountOrigin: { loyalty: 10 } }],
+        },
+      ];
+
+      const totals = computeSalesReportingTotals(rows);
+      const folded = rows
+        .filter((row) => isRevenueAffectingDocument(row))
+        .reduce(
+          (acc, row) => {
+            const origins = salesRowDiscountOrigins(row);
+            return {
+              manual: acc.manual + origins.manual,
+              promotion: acc.promotion + origins.promotion,
+              loyalty: acc.loyalty + origins.loyalty,
+              unattributed: acc.unattributed + origins.unattributed,
+            };
+          },
+          { manual: 0, promotion: 0, loyalty: 0, unattributed: 0 },
+        );
+
+      expect(folded.manual).toBe(totals.manualDiscountNio);
+      expect(folded.promotion).toBe(totals.promotionDiscountNio);
+      expect(folded.loyalty).toBe(totals.loyaltyDiscountNio);
+      expect(folded.unattributed).toBe(totals.discountOriginUnattributedNio);
+      expect(
+        folded.manual +
+          folded.promotion +
+          folded.loyalty +
+          folded.unattributed,
+      ).toBe(totals.totalDiscountsNio);
     });
   });
 
