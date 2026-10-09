@@ -13,6 +13,7 @@ export default defineConfig({
     include: [
       "src/__tests__/w1.integration.test.ts",
       "src/__tests__/w4-e2e-fiscal.test.ts",
+      "src/__tests__/modifiers-live.integration.test.ts",
     ],
     testTimeout: 15_000,
   },
