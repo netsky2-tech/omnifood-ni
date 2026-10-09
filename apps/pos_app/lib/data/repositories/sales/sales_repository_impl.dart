@@ -758,9 +758,29 @@ class SalesRepositoryImpl implements SalesRepository {
       (key, value) => MapEntry(key, value is String ? value : ''),
     );
 
+    // SOHO P3: a fiscal document must be REPRODUCIBLE. Load every persisted
+    // modifier row of the invoice in ONE batched query (no N+1) and hand
+    // each line its rows through toItemDomain — its empty default is what
+    // silently dropped the extras the original printed. A sale persisted
+    // before modifier rows existed keeps the empty default: nothing was
+    // recorded, so nothing is printed (never fabricate, never backfill) —
+    // the fail-closed contract above stays limited to the fiscal header
+    // snapshot.
+    final modifierRows = await itemDao.getModifierRowsByInvoiceId(invoiceId);
+    final modifiersByItemId = <String, List<Modifier>>{};
+    for (final row in modifierRows) {
+      (modifiersByItemId[row.invoiceItemId] ??= [])
+          .add(SalesMapper.toModifierDomain(row));
+    }
     final items =
         (await itemDao.getItemsByInvoiceId(invoiceId))
-            .map(SalesMapper.toItemDomain)
+            .map(
+              (item) => SalesMapper.toItemDomain(
+                item,
+                modifiers: modifiersByItemId[item.id] ??
+                    const <Modifier>[],
+              ),
+            )
             .toList();
     final payments =
         (await paymentDao.getPaymentsByInvoiceId(invoiceId))

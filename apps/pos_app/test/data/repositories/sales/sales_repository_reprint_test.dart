@@ -10,7 +10,11 @@ import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
 import 'package:pos_app/data/repositories/sales/sales_repository_impl.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/printer/receipt_document.dart';
+import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/services/printer/receipt_layout_formatter.dart';
 import 'package:pos_app/domain/usecases/sales/void_decision.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -26,6 +30,8 @@ void main() {
   late MockAuditRepository auditRepository;
   late MockDgiNumberingService numberingService;
   late MockReverseSaleInventoryUseCase reverseInventoryUseCase;
+  late MockProcessSaleInventoryUseCase processInventoryUseCase;
+  late MockInventoryRepository inventoryRepository;
   late SalesRepositoryImpl repository;
 
   const originalHeader = {
@@ -122,6 +128,8 @@ void main() {
     auditRepository = MockAuditRepository();
     numberingService = MockDgiNumberingService();
     reverseInventoryUseCase = MockReverseSaleInventoryUseCase();
+    processInventoryUseCase = MockProcessSaleInventoryUseCase();
+    inventoryRepository = MockInventoryRepository();
     when(reverseInventoryUseCase.execute(any, any)).thenAnswer((_) async => []);
     when(auditRepository.log(any, metadata: anyNamed('metadata')))
         .thenAnswer((_) async {});
@@ -135,9 +143,9 @@ void main() {
       numberingService: numberingService,
       movementEngine: MockMovementEngine(),
       auditRepository: auditRepository,
-      processInventoryUseCase: MockProcessSaleInventoryUseCase(),
+      processInventoryUseCase: processInventoryUseCase,
       reverseInventoryUseCase: reverseInventoryUseCase,
-      inventoryRepository: MockInventoryRepository(),
+      inventoryRepository: inventoryRepository,
     );
   });
 
@@ -232,6 +240,165 @@ void main() {
 
       expect(paper, contains('*** DOCUMENTO ANULADO ***'));
       expect(paper, contains('*** REIMPRESIÓN ***'));
+    });
+  });
+
+  group('SOHO P3: the reprint rebuilds the modifiers the sale actually carried', () {
+    // The synchronous half of this defect is fixed at a137a116: a real
+    // checkout persists invoice_item_modifiers inside the sale transaction.
+    // The reprint half: prepareReprintInvoice rebuilt lines through
+    // SalesMapper.toItemDomain with its EMPTY default modifier list, so a
+    // reprinted fiscal document silently dropped the extras the original
+    // printed. A fiscal document must be REPRODUCIBLE.
+    const cartModifier = Modifier(
+      id: 'mod-michelada-01',
+      name: 'Michelada Extra',
+      extraPrice: 30.0,
+      quantity: 2,
+    );
+
+    Invoice checkoutInvoice(String id) => Invoice(
+          id: id,
+          number: 'draft',
+          createdAt: DateTime.parse('2026-09-24T12:00:00Z'),
+          userId: 'cashier-1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          syncStatus: SyncStatus.pending,
+          type: InvoiceType.regular,
+        );
+
+    InvoiceItem checkoutItem(
+      String invoiceId, {
+      required bool withModifiers,
+    }) =>
+        InvoiceItem(
+          id: 'line-mods-1',
+          invoiceId: invoiceId,
+          productId: 'prod-1',
+          productName: 'Cerveza Preparada',
+          quantity: 2,
+          unitPrice: 50,
+          originalTaxRate: 0.15,
+          appliedTaxRate: 0.15,
+          taxAmount: 15,
+          total: 115,
+          selectedModifiers:
+              withModifiers ? const [cartModifier] : const [],
+        );
+
+    const checkoutPayment = Payment(
+      id: 'pay-reprint-mods-1',
+      invoiceId: 'inv-checkout-mods',
+      method: PaymentMethod.cash,
+      amount: 115,
+      amountNio: 115,
+      changeGiven: 0,
+    );
+
+    /// Real checkout needs an open shift (B1a-4) and issuance config so the
+    /// D-13 fiscal snapshot is complete at saveSale time.
+    Future<void> seedIssuableCheckoutContext() async {
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'shift-1',
+          userId: 'cashier-1',
+          terminalId: 'term-1',
+          openedAt: 1700000000000,
+          isClosed: false,
+        ),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(
+          key: 'printer_header_business_name',
+          value: 'Café Original',
+        ),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'ruc', value: 'A0011234567890'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+      );
+      // The REAL transaction DAO is the fiscal authority (D-21): it reads
+      // and advances the configured DGI sequence itself.
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '11'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01-'),
+      );
+    }
+
+    void stubRealCheckout() {
+      when(numberingService.getNextNumber())
+          .thenAnswer((_) async => '001-001-01-00000011');
+      when(numberingService.incrementNumber()).thenAnswer((_) async {});
+      when(inventoryRepository.getProductById('prod-1'))
+          .thenAnswer((_) async => null);
+      when(processInventoryUseCase.execute(any)).thenAnswer((_) async => []);
+    }
+
+    test('a real checkout line with a quantity-2 modifier reprints with '
+        'name, extraPrice and quantity intact', () async {
+      await seedIssuableCheckoutContext();
+      stubRealCheckout();
+
+      await repository.saveSale(
+        invoice: checkoutInvoice('inv-checkout-mods'),
+        items: [checkoutItem('inv-checkout-mods', withModifiers: true)],
+        payments: [checkoutPayment],
+      );
+
+      final preparation = await repository.prepareReprintInvoice(
+        'inv-checkout-mods',
+        'CLIENTE_PERDIO_TICKET',
+      );
+
+      final modifiers = preparation.items.single.selectedModifiers;
+      expect(modifiers, hasLength(1));
+      // The same values the original sale carried. The persisted row id is
+      // regenerated by toItemModifierEntities (Uuid), so only the values
+      // the original carried are asserted.
+      expect(modifiers.single.name, cartModifier.name);
+      expect(modifiers.single.extraPrice, cartModifier.extraPrice);
+      expect(modifiers.single.quantity, cartModifier.quantity);
+      expect(modifiers.single.id, isNotEmpty);
+
+      // And the modifiers reach the object the printer consumes: the
+      // formatter already renders them when they are present.
+      final document = ReceiptDocument.fromInvoice(
+        preparation.invoice,
+        items: preparation.items,
+        payments: preparation.payments,
+        taxRegime: TaxRegime.regimenGeneral,
+        isReprint: true,
+        reprintAt: DateTime(2026, 9, 25, 9, 30),
+        businessName: preparation.fiscalHeader['businessName'],
+        ruc: preparation.fiscalHeader['ruc'],
+      );
+      final paper = ReceiptLayoutFormatter.format80mm()
+          .formatReceiptDocumentText(document);
+      expect(paper, contains('Michelada Extra'));
+    });
+
+    test('a sale with NO modifier rows (the legacy pre-a137a116 shape) '
+        'reprints with NO modifiers and does not throw', () async {
+      // THE HONEST BOUNDARY: a sale persisted before a137a116 has no
+      // modifier rows, because they were never recorded. The reprint must
+      // print NO modifiers (never fabricate, never backfill) and must NOT
+      // throw — the fail-closed contract stays limited to the fiscal
+      // header snapshot, which seedIssuedInvoice provides.
+      await seedIssuedInvoice();
+
+      final preparation = await repository.prepareReprintInvoice(
+        'inv-reprint-1',
+        'CLIENTE_PERDIO_TICKET',
+      );
+
+      expect(preparation.items, hasLength(1));
+      expect(preparation.items.single.selectedModifiers, isEmpty);
     });
   });
 
