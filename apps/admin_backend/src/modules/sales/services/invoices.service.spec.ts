@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { calculateSyncPayloadHash, InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
 import { Payment } from '../entities/payment.entity';
 import { SyncInvoiceDto } from '../dto/sync-invoice.dto';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
@@ -26,6 +27,7 @@ describe('InvoicesService', () => {
   let service: InvoicesService;
   let invoiceRepo: { upsert: jest.Mock; find?: jest.Mock; findOne: jest.Mock };
   let itemRepo: { upsert: jest.Mock; find: jest.Mock };
+  let modifierRepo: { delete: jest.Mock; insert: jest.Mock };
   let paymentRepo: { upsert: jest.Mock; find?: jest.Mock };
   let userRepo: { findOne: jest.Mock };
   let movementRepo: {
@@ -67,6 +69,10 @@ describe('InvoicesService', () => {
       findOne: jest.fn().mockResolvedValue(null),
     };
     itemRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
+    // SOHO P3 (modifier quantity): the transaction-scoped modifier
+    // repository the service resolves via manager.getRepository to mirror
+    // an item's modifier lines inside the sale's own transaction.
+    modifierRepo = { delete: jest.fn(), insert: jest.fn() };
     paymentRepo = { upsert: jest.fn(), find: jest.fn().mockResolvedValue([]) };
     userRepo = {
       findOne: jest.fn().mockResolvedValue({
@@ -114,6 +120,7 @@ describe('InvoicesService', () => {
       getRepository: jest.fn((target: unknown) => {
         if (target === Invoice) return invoiceRepo;
         if (target === InvoiceItem) return itemRepo;
+        if (target === InvoiceItemModifier) return modifierRepo;
         if (target === Payment) return paymentRepo;
         if (target === User) return userRepo;
         if (target === InventorySyncReceipt) return receiptRepo;
@@ -537,6 +544,83 @@ describe('InvoicesService', () => {
           id: 'inv-tenant-stamp',
           tenant_id: tenantId,
         }),
+        ['id'],
+      );
+    });
+
+    it('persists item modifier lines with quantity inside the sale transaction (SOHO P3)', async () => {
+      // LAYER 2 of the modifier-quantity defect: the item upsert cannot
+      // write the `modifiers` array (no such column; the @OneToMany cascade
+      // only applies to `save`, not `upsert`), so the service must mirror
+      // the modifier lines explicitly, in the SAME transaction, and strip
+      // the array from the item payload.
+      const tenantId = 'tenant-1';
+      recipeService.getSnapshot.mockResolvedValue({
+        recipeVersion: { id: 'rv-burger-v3', product_id: 'prod-burger' },
+        components: [],
+      });
+      const dto: SyncInvoiceDto = {
+        id: 'inv-modifiers-1',
+        number: '012',
+        createdAt: new Date().toISOString(),
+        userId: 'user-1',
+        subtotal: 110,
+        totalTax: 16.5,
+        total: 126.5,
+        paymentStatus: 'PAID',
+        items: [
+          {
+            id: 'item-mod-1',
+            productId: 'prod-burger',
+            productName: 'Cerveza Preparada',
+            quantity: 1,
+            unitPrice: 50,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 16.5,
+            total: 126.5,
+            discount: 0,
+            modifiers: [
+              { name: 'Michelada Extra', extraPrice: 30, quantity: 2 },
+              // Legacy terminal shape: no quantity key at all.
+              { name: 'Sin Cebolla', extraPrice: 0 },
+            ],
+          },
+        ],
+        payments: [],
+      };
+
+      await service.syncInvoices(tenantId, [dto]);
+
+      // The child rows are written through the TRANSACTION-scoped modifier
+      // repository with the payload's quantity — and absence defaults to 1
+      // (the honest default: a modifier line without a quantity IS one
+      // unit, the POS's own local default).
+      expect(modifierRepo.insert).toHaveBeenCalledWith([
+        {
+          invoiceItemId: 'item-mod-1',
+          name: 'Michelada Extra',
+          extraPrice: 30,
+          quantity: 2,
+        },
+        {
+          invoiceItemId: 'item-mod-1',
+          name: 'Sin Cebolla',
+          extraPrice: 0,
+          quantity: 1,
+        },
+      ]);
+      // Deterministic mirror: the item's previous modifier lines are
+      // replaced (scoped to THIS invoice's item ids), never appended to.
+      expect(modifierRepo.delete).toHaveBeenCalledWith({
+        invoiceItemId: expect.anything(),
+      });
+      // The un-writable `modifiers` array is stripped from the item
+      // payload — the upsert never receives it.
+      expect(itemRepo.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.not.objectContaining({ modifiers: expect.anything() }),
+        ]),
         ['id'],
       );
     });
@@ -2294,9 +2378,14 @@ describe('InvoicesService', () => {
         find: jest.fn().mockResolvedValue([]),
       };
       const txPaymentRepo = { upsert: jest.fn() };
+      // SOHO P3 (modifier quantity): the modifier lines are mirrored inside
+      // the SAME transaction — this tx-scoped mock proves they route through
+      // the transaction manager like invoice/items/payments do.
+      const txModifierRepo = { delete: jest.fn(), insert: jest.fn() };
       txManager.getRepository.mockImplementation((target: unknown) => {
         if (target === Invoice) return txInvoiceRepo;
         if (target === InvoiceItem) return txItemRepo;
+        if (target === InvoiceItemModifier) return txModifierRepo;
         if (target === Payment) return txPaymentRepo;
         return undefined;
       });
@@ -3630,6 +3719,7 @@ describe('InvoicesService', () => {
         if (target === InventorySyncOutbox) return outboxRepo;
         if (target === Invoice) return invoiceRepo;
         if (target === InvoiceItem) return itemRepo;
+        if (target === InvoiceItemModifier) return modifierRepo;
         if (target === Payment) return paymentRepo;
         return undefined;
       });

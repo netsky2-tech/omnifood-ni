@@ -8,7 +8,9 @@ import {
   IsObject,
   IsOptional,
   IsArray,
+  IsInt,
   IsPositive,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -202,6 +204,23 @@ export class CreateModifierDto {
 
   @IsNumber()
   extraPrice: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  // SOHO P3 (modifier quantity): how many units of this option the line
+  // includes. OPTIONAL on purpose — deployed terminals ALREADY send it
+  // (the POS wire map is {name, extraPrice, quantity}, sales_mapper.dart:
+  // 713-718) while older ones omit it, and with the production pipe config
+  // (whitelist + forbidNonWhitelisted) requiring it would 400-reject every
+  // legacy terminal's whole batch. Min(1) is the honest floor, not just
+  // non-zero: a modifier line without a quantity IS one unit — the POS's
+  // own local default (invoice_item_modifier_entity.dart:30) — so 0 or a
+  // negative is a payload corruption, rejected here with a named error
+  // (min / IsInt) instead of surviving validation and persisting as a 0.
+  // Absence persists as 1 (the database column default, migration
+  // 1809640000000), never as a fabricated business value.
+  quantity?: number;
 }
 
 export class CreatePaymentDto {

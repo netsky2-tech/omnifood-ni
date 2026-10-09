@@ -403,3 +403,133 @@ describe('SyncInvoiceDto per-line discountOrigin amounts breakdown (D-A2)', () =
     expect(dto.items[0]).not.toHaveProperty('discountOrigin');
   });
 });
+
+describe('CreateModifierDto modifier quantity (SOHO P3)', () => {
+  const baseModifier = {
+    name: 'Michelada Extra',
+    extraPrice: 30,
+  };
+
+  const baseItem = {
+    id: 'item-1',
+    productId: 'prod-1',
+    productName: 'Cerveza Preparada',
+    quantity: 1,
+    unitPrice: 50,
+    originalTaxRate: 0.15,
+    appliedTaxRate: 0.15,
+    taxAmount: 16.5,
+    total: 126.5,
+    discount: 0,
+    modifiers: [baseModifier],
+  };
+
+  const basePayload = {
+    id: 'inv-1',
+    number: '001',
+    createdAt: new Date().toISOString(),
+    userId: 'user-1',
+    subtotal: 110,
+    totalTax: 16.5,
+    total: 126.5,
+    paymentStatus: 'PAID',
+    items: [baseItem],
+    payments: [],
+  };
+
+  const validate = (payload: Record<string, unknown>) => {
+    const dto = plainToInstance(SyncInvoiceDto, payload);
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidUnknownValues: false,
+      // Mirrors the production ValidationPipe (main.ts): whitelist plus
+      // forbidNonWhitelisted. An unknown member must be REJECTED, not
+      // stripped into silent data loss.
+      forbidNonWhitelisted: true,
+    });
+    return { dto, errors };
+  };
+
+  const flatten = (
+    error: import('class-validator').ValidationError,
+  ): string[] => [error.property, ...(error.children ?? []).flatMap(flatten)];
+
+  // The nested array path (items → modifiers → element) is an
+  // implementation detail of class-validator's error tree; find the
+  // quantity error anywhere under it.
+  const findQuantityError = (
+    error: import('class-validator').ValidationError,
+  ): import('class-validator').ValidationError | undefined => {
+    if (error.property === 'quantity') return error;
+    for (const child of error.children ?? []) {
+      const found = findQuantityError(child);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const quantityErrors = (
+    errors: import('class-validator').ValidationError[],
+  ) =>
+    errors
+      .map(findQuantityError)
+      .filter(
+        (error): error is import('class-validator').ValidationError =>
+          error !== undefined,
+      );
+
+  it('accepts the POS wire shape {name, extraPrice, quantity} and keeps quantity after validation', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: 2 }] },
+      ],
+    });
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0].modifiers?.[0].quantity).toBe(2);
+  });
+
+  it('leaves quantity OPTIONAL: older terminals omit it and must stay valid', () => {
+    const { dto, errors } = validate(basePayload);
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0].modifiers?.[0].quantity).toBeUndefined();
+  });
+
+  it('rejects quantity 0 with the named min constraint', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: 0 }] },
+      ],
+    });
+
+    const quantityError = quantityErrors(errors);
+    expect(quantityError).toHaveLength(1);
+    expect(Object.keys(quantityError[0].constraints ?? {})).toContain('min');
+  });
+
+  it('rejects a NEGATIVE quantity with the named min constraint', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: -3 }] },
+      ],
+    });
+
+    const quantityError = quantityErrors(errors);
+    expect(quantityError).toHaveLength(1);
+    expect(Object.keys(quantityError[0].constraints ?? {})).toContain('min');
+  });
+
+  it('rejects a NON-INTEGER quantity (fractional units of an option are meaningless)', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: 1.5 }] },
+      ],
+    });
+
+    expect(errors.flatMap(flatten)).toContain('quantity');
+  });
+});

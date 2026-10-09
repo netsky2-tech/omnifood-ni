@@ -451,3 +451,48 @@ Esa tercera fila se registra como está: el reset es **seguro contra la clase de
 **S1c-2 queda cerrado.** Lo que sigue es **S1c-3**: reportes aditivos (`discountNio`/`totalDiscounts` **no se tocan** — invariantes de reconciliación en `sales-reports.service.ts:354-359`) y la columna de origen en la web.
 
 ⚠ **Orden de despliegue (hereda §10):** el backend va **primero**. El POS no debe mandar el campo a producción antes que el backend esté desplegado; en la rama van juntos, en producción no.
+
+---
+
+## 12. Hallazgo grave durante la verificación de S1c-2: los modifiers no llegan a la nube
+
+**Cómo apareció:** por el replay cross-app que se construyó para S1c-2 (el payload real del POS contra el backend y una base reales, §11). Saltó sobre un campo que **no** era el asunto del trabajo, y lo encontró un verificador al que se le pidió falsificar, no confirmar. La lección operativa: **un fixture prueba el campo para el que se escribió** — el nuestro se armó alrededor de `discountOrigin` y por eso no veía nada del resto del contrato.
+
+### Capa 1 — PROBADA Y ARREGLADA: el lote entero rechazado por una llave anidada
+
+El mapper manda cada modifier como `{'name', 'extraPrice', 'quantity'}` (`sales_mapper.dart:713-718`) y `CreateModifierDto` declaraba sólo `name` y `extraPrice`. Con `whitelist: true, forbidNonWhitelisted: true` (`main.ts:49-53`), replayed contra el `SyncBatchEnvelopeDto` real, la única línea de rechazo es:
+
+```
+records.0.invoice.items.0.modifiers.0.property quantity should not exist
+```
+
+Un 400 del **lote de 500**, y el camino de ventas del POS no pasa por el bloque de ack en un no-2xx: los registros **quedan pendientes y se reintentan**, o sea el lote envenenado se reenvía completo en cada pasada. El propio código ya documentaba la clase ("400s the ENTIRE batch — so one bad row blocks every good row forever").
+
+### Capa 2 — PROBADA Y ARREGLADA: el cloud no persistía los hijos
+
+La tabla `invoice_item_modifiers` sólo tenía `id`, `invoice_item_id`, `name`, `extra_price`, y el path de venta hacía `upsert` del ítem esparciendo el array `modifiers`: el cascade del `@OneToMany` aplica a `save`, **no** a `upsert`. Arreglado dentro de la **misma transacción** (delete acotado a los ítems de esa factura + insert), con semántica de espejo idempotente: un re-sync reemplaza las filas del ítem en vez de dejar basura.
+
+### Capa 3 — PROBADA, **NO ARREGLADA**: el POS no manda modifiers nunca
+
+Éste es el hallazgo que importa, y corrige una deducción mía previa (creí que `invoice_items.modifiers_json` guardaba los extras: **esa columna no existe**, vive sólo en `hold_ticket_items` y `kitchen_order_items`).
+
+| Punto | Evidencia |
+|---|---|
+| `InvoiceItemEntity` no tiene ningún campo de modifiers | `lib/data/models/sales/invoice_item_entity.dart` (grep: NONE) |
+| `toItemEntity` no los mapea → se pierden al persistir | `sales_mapper.dart` `toItemEntity` |
+| El checkout pasa `[]` como lista de modifiers a la transacción | `sales_repository_impl.dart:225-244` |
+| El push mapea con `toItemDomain`, cuyo default es `const []` | `sales_repository_impl.dart:522-529` + `sales_mapper.dart:391-413` |
+| `toItemModifierEntities` no tiene llamadores | `sales_mapper.dart:515` |
+
+**Consecuencia:** la nube nunca registró un extra de ninguna venta (0 filas), y el POS tampoco puede reconstruirlos localmente. El dinero está bien —el precio del extra entra en el total del ítem y el ticket impreso se arma en memoria— pero **una reimpresión armada desde las filas locales no puede mostrar los extras**, y un documento fiscal tiene que ser reproducible. Requiere autorización: es código de producción del POS y tiene que salir **después** de este backend.
+
+⚠ **Orden, ahora con dientes:** backend primero. Si el POS empieza a mandar modifiers antes que el backend los acepte, cada venta con extras pasa de "pierde el detalle" a **"tapa la cola de sync para siempre"**.
+
+### Lo arreglado en esta unidad (backend)
+
+- `CreateModifierDto.quantity` **opcional** (`@IsOptional @IsInt @Min(1)`). Opcional a propósito: las terminales desplegadas ya lo mandan y las viejas lo omiten — exigirlo rechazaría el lote de las viejas. `0` y negativos se rechazan con error nombrado.
+- Columna `quantity integer NOT NULL DEFAULT 1` en `invoice_item_modifiers` + migración `1809640000000`. El default es **factual, no inventado**: el cloud sólo aceptó `name` y `extra_price`, así que toda fila existente viene de un modifier de una unidad, que es exactamente el default local del POS (`invoice_item_modifier_entity.dart:30`). RLS sin cambios (es una columna).
+- `test/fixtures/sales/pos-modifier-payload.json`: fixture capturado por la **cadena productora real** (checkout real con un modifier de cantidad 2 → filas reales → `SalesMapper.toSyncJson` + `SyncService.buildSalesSyncRecord`), con **una desviación documentada**: el array de modifiers se re-engancha en la costura del test, porque hoy ese es el punto que producción tira; una unidad POS posterior deberá fijar el camino del runner y cerrar la desviación. Dos capturas dan sha256 idéntico.
+- `test/sales/pos-modifier-payload.db.e2e-spec.ts`: replay contra esquema aislado real, pipe de producción, ruta real y `InvoicesService` real. Afirma: aceptado de punta a punta, filas persistidas con `name`/`extra_price`/`quantity`, payload legacy (sin la llave) persiste 1, y `quantity: 0` rechazado sin persistir nada.
+
+**Evidencia:** el replay nuevo 3/3 **con el RED citado** (400 del lote y `column "quantity" does not exist`), el replay de S1c-2 6/6 intacto, 130/130 unitarias tocadas, 8/8 del spec contra base real (que ejercita la migración nueva), 34/34 de la cadena productora del POS. Todo verificado por el orquestador además del worker.
