@@ -19,7 +19,7 @@
 - [x] **T3** Correr la spec → 14 PNG escritos/reemplazados en `docs/nhilos/manuals/images/` (todos 1440×900)
 - [x] **T4** Revisión del manual contra las imágenes reales + fix del defecto D-2 (ver Hallazgos): labels de UI verificados contra código, 8 capturas §6 revisadas visualmente, §3/§5 alineado a capturas nuevas
 - [x] **T5** Verificación (delegate `gentle-ai-verify`, 7 checks): refs 14/14 resuelven · 14 PNG 1440×900 · 0 orphans (38 PNG = 14 dsh + 24 pos) · tsc 0 · oxlint 0 · git status solo artefactos esperados · refs `manual_v0.1` corregidas (CD-12 registry + cierre-oom + este doc)
-- [ ] **T6** Commits convencionales (spec + script · manual v0.2 + imágenes · ODD)
+- [x] **T6** Commits convencionales: `7556739b` (spec+script), `1b78a261` (manual v0.2 + imágenes), `4a1e37b7` (ODD)
 - [x] **T7** Revisión nativa: candidato = rama como PR slice (`baseRef=601edc90`, committedOnly) · lineage `review-3d8f0ac96df7abae` · medium tier (1 lente `review-reliability`, riesgo `executable_change` por el spec) · **APPROVED** + authority burned (`gentle-ai.review-acknowledged/v1`, target `f4299be8`, revision `2aa5251d`) · 4 hallazgos advisories informativos (R3-A WARNING spec:404-405; R3-B/C/D SUGGESTION spec:37-39 / 473-596 / 122-131) — ninguno bloqueante, sin corrección ofrecida
 - [x] **T8** Reporte entregado (primera ronda)
 
@@ -30,8 +30,17 @@
 - [x] **T12** Inventario: 33→38 PNG (L307/L336), Backoffice 9→14, fila de sesión `2026-10-09` agregada, peso ~3.5→~4.1 MB y rango 25–170 KB; las 2 menciones restantes a 33 son históricas fechadas (método del 10-08 y «contenía» en pasado)
 - [x] **T13** Verificación inline (greps de `$`/términos/§4 leído de vuelta + conteos inventario) + commits `efd5c9cd` (manual+inventario) y `2ef02fac` (ODD ronda 2) + revisión nativa del candidato ronda 2
 
+### Ronda 3 (feedback del usuario: follow-ups alcanzables + dsh_02 con «Este mes»)
+- [x] **T14** Evidencia (inline): preset «Este mes` en `date-range-picker.tsx:19` (trigger `aria-label="Seleccionar rango de fechas"`, presets botones plain-text); datos oct-2026 soho = **28 facturas / C$ 4,571.00**; páginas existentes `/inventory` (h1 «Inventario»), `/recipes` (h1 «Recetas y BOM»), `/users` (h1 «Gestión de Usuarios» + card «Permisos granulares» `users-page.tsx:168`); estado SOHO: recetas 0, kardex 0, usuarios 2, productos 58; **sin ruta `devices`** (grep «Dispositivos»/fleet sin hits) → §10 diferida; **gap §9**: texto «Ajustes > Usuarios y Permisos» vs ruta real `/users` (sidebar «Administración > Usuarios»)
+- [x] **T15** Spec: dsh_02 con preset «Este mes» (asserts: rango del mes, `4,571` visible, «Evolución de ventas» visible y placeholder de 2+ días ausente) + 3 capturas nuevas dsh_15 Inventario / dsh_16 Recetas y BOM / dsh_17 Gestión de Usuarios → **RED** (locator multi-match `4,571.00` en 2 tarjetas, mes ya filtraba ✓) → **GREEN 8/8** (32.6s)
+- [x] **T16** Manual: §3 reescrito con datos reales del mes (C\$ 4,571.00 / 28 tickets / C\$ 163.25 / gráfico 1–9 oct / Americano 8oz 14 u C\$ 1,311.00 28.7% / Atención Requerida 4 alertas) + instrucción del preset; §7 con dsh_15/16 (estado Día 1); §9 ruta real «Administración > Usuarios» + dsh_17 + PIN 4-8 dígitos verificado en `user-dialog.tsx:188` + roles visibles; changelog ampliado
+- [x] **T17** Inventario 38→41 (L307/L336), Backoffice 14→17, fila de sesión nueva para `dsh_02` recapturado + `dsh_15/16/17`, peso ~4.4 MB (rango 25–170 y 2>180 KB siguen ciertos) · Verificación: 17 refs resuelven · 0 `$` sin escapar · 0 términos ingleses · 0 orphans (41 PNG) · tsc 0 · oxlint 0 · 1440×900
+- [ ] **T18** Commits ronda 3 + revisión nativa (spec = cambio ejecutable → candidato real)
+
 ### Follow-up diferido (acordado con el usuario)
-- Secciones sin capturas (§7 Inventario, §9 Usuarios, §10 Flota, §11 Asistencia) — agregar imágenes en una feature futura.
+- Ronda 3 resuelve los alcanzables: §7 (rutas `/inventory`, `/recipes` existen) y §9 (`/users` existe) reciben capturas nuevas.
+- **§10 Flota: diferida por decisión del usuario** (confirmado sin evidencia de feature: no hay ruta `devices` ni código «Dispositivos» en el dashboard).
+- §11 Asistencia: sin captura posible (canales estáticos, sin página).
 
 ## Hallazgos
 - **D-2 (corregido): `dsh_09` obsoleto por el reuse-skip del spec.** La rama de reuse saltaba la captura del diálogo de creación, dejando para siempre una imagen de desarrollo cuyo fondo mostraba la fila «Jarabes» ya existente — contradiciendo el Paso 1 ("diálogo todavía vacío" sobre lista sin el grupo). Evidencia RED: corrida completa 8/8 con md5 de `dsh_09` sin cambio (`e957673c…`). Fix (test-first): capturar `dsh_09` en TODA corrida bajo filtro «Activos» con aserción `toHaveCount(0)` de ausencia del grupo (y desactivación previa si una corrida interrumpida lo dejó activo, esperando que el toast salga del frame). GREEN reuse: `dbfc272a…`; GREEN fresh: byte-idéntico (determinismo). Se eliminó también la constante `SLUG` sin uso (oxlint).
