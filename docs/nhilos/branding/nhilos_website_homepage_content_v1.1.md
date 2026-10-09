@@ -894,7 +894,7 @@ Los ítems `[x]` corresponden a cierre editorial/estructural de este contrato; l
 
 | ID | Decision / dependency | Status | Owner | Note |
 | :---- | :---- | :---- | :---- | :---- |
-| OD-HM-01 | Cobertura de capacidades profundas sin cita en la homepage: `PC-FISC-03` (validación Cédula/RUC), `PC-PAY-05` (split bill), `PC-INV-06` (producción batch), `PC-ONB-02` (importación CSV). | `OPEN` | Product / Content | Corresponde a la página de producto decidir si las incorpora (división de labores §2.2); la homepage no las cita para no convertirse en lista de módulos. |
+| OD-HM-01 | Cobertura de capacidades profundas sin cita en la homepage: `PC-FISC-03` (validación Cédula/RUC), `PC-PAY-05` (split bill), `PC-INV-06` (producción batch), `PC-ONB-02` (importación CSV). | `CLOSED` | Product / Content | Resuelto: la homepage no las cita, por división de labores (§2.2), y la página de producto las incorporó como secciones y claims propios (`FI-003`, `CW-007`, `CV-006`, `IM-006`). No queda ningún claim `APPROVED_WEBSITE` sin cobertura publicada. |
 | OD-HM-02 | Copy definitivo del hero y de la línea de credenciales. | `PROPOSED` | Marketing | Derivado del Brief §5.1; requiere validación editorial. |
 | OD-HM-03 | Media del build vigente con provenance para H02/H04/H07. | `EVIDENCE_REQUIRED` | Content / Product | Depende del inventario de medios (Gate D, OD-IA-07). |
 | OD-HM-04 | Operación de demo (owner, canal, SLA, flujo). | `EVIDENCE_REQUIRED / OPEN` | Commercial / Web | OD-IA-03 del wireframe; bloquea la experiencia posterior al CTA. |

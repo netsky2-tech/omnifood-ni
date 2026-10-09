@@ -275,50 +275,50 @@ Resultado headline: de los 34 claims auditados en el re-anclaje original (el reg
 
 # Índice inverso — Claims publicados que citan cada claim del OD-02
 
-**Propósito.** Trazabilidad inversa exigida por `G-04` (`nhilos_branding_document_governance_v1.0.md`): para cada claim técnico del OD-02, qué Claim IDs de la página de producto (`nhilos_pos_product_page_content_v1.1.md`, Anexo A) lo citan como respaldo. Los Claim IDs de la página son IDs de slot de contenido, no IDs de capacidad técnica; no existe correspondencia 1:1. Un claim `huérfano` no es defecto por sí solo: si su estado público es `APPROVED_WEBSITE`, la omisión indica un hueco de cobertura de la página; si es `DO_NOT_CLAIM / FUTUREWARE`, la omisión es la conducta correcta.
+**Propósito.** Trazabilidad inversa exigida por `G-04` (`nhilos_branding_document_governance_v1.0.md`): para cada claim técnico del OD-02, qué Claim IDs de los contratos de contenido publicados lo citan como respaldo. Los contratos son `nhilos_website_homepage_content_v1.1.md` (§17, ids `HM-*`) y `nhilos_pos_product_page_content_v1.1.md` (Anexo A, ids por sección). Los Claim IDs de contenido son IDs de slot, no IDs de capacidad técnica; no existe correspondencia 1:1. Un claim `huérfano` no es defecto por sí solo: si su estado público es `APPROVED_WEBSITE`, la omisión indica un hueco de cobertura del sitio; si es `DO_NOT_CLAIM / FUTUREWARE`, la omisión es la conducta correcta.
 
-| OD-02 ID | Product Page Claim IDs que lo citan | Estado (citado / huérfano) |
-| :---- | :---- | :---- |
-| PC-OFF-01 | PP-001, PC-001, CW-001, CT-001, CT-002, RL-001 | citado |
-| PC-OFF-02 | PP-001, CW-001, CT-001, CV-001 | citado |
-| PC-OFF-03 | CT-003 | citado |
-| PC-OFF-04 | — | huérfano |
-| PC-OFF-05 | — | huérfano (futureware, no debe citarse) |
-| PC-FISC-01 | — | huérfano |
-| PC-FISC-02 | — | huérfano |
-| PC-FISC-03 | — | huérfano |
-| PC-FISC-04 | — | huérfano (futureware, no debe citarse) |
-| PC-PAY-01 | CW-003, CW-004, RL-001 | citado |
-| PC-PAY-02 | — | huérfano |
-| PC-PAY-03 | — | huérfano (futureware, no debe citarse) |
-| PC-PAY-04 | CW-003, RL-001 | citado |
-| PC-PAY-05 | — | huérfano |
-| PC-PAY-06 | CW-003 | citado |
-| PC-INV-01 | PC-003 | citado |
-| PC-INV-02 | CV-002 | citado |
-| PC-INV-03 | CV-002 | citado |
-| PC-INV-04 | PC-003 | citado |
-| PC-INV-05 | CV-002 | citado |
-| PC-INV-06 | — | huérfano |
-| PC-HW-01 | HC-001, HC-003 | citado |
-| PC-HW-02 | HC-001, HC-003 | citado |
-| PC-HW-03 | HC-001 | citado |
-| PC-SEC-01 | — | huérfano |
-| PC-SEC-02 | CV-003, RL-002 | citado |
-| PC-SEC-03 | CV-003 | citado |
-| PC-DASH-01 | CW-006, CV-001, RL-003 | citado |
-| PC-DASH-02 | CW-006, CV-004, RL-003 | citado |
-| PC-DASH-03 | CW-006, RL-003 | citado |
-| PC-DASH-04 | CW-006, CV-001, CV-002, RL-003 | citado |
-| PC-ONB-01 | IM-002 | citado |
-| PC-ONB-02 | — | huérfano |
-| PC-ONB-03 | IM-001, IM-002, IM-004 | citado |
-| PC-LOY-01 | LY-001 | citado |
-| PC-LOY-02 | LY-002 | citado |
-| PC-LOY-03 | LY-003 | citado |
-| PC-LOY-04 | LY-004 | citado |
-| PC-LOY-05 | LY-005 | citado |
-| PC-LOY-06 | LY-006 | citado |
-| PC-FOH-01 | PC-002, CW-005 | citado |
-| PC-FOH-02 | CW-002 | citado |
-| PC-FOH-03 | CT-005 | citado |
+| OD-02 ID | Homepage (`HM-*`) | Página de producto | Estado |
+|---|---|---|---|
+| PC-OFF-01 | HM-03–HM-04, HM-11, HM-14, HM-17, HM-29–HM-30 | PP-001, PC-001, CW-001, CT-001, CT-002, RL-001 | citado |
+| PC-OFF-02 | HM-03, HM-04, HM-08, HM-17, HM-29, HM-30 | PP-001, CW-001, CT-001, CV-001 | citado |
+| PC-OFF-03 | HM-04, HM-10, HM-19, HM-31 | CT-003 | citado |
+| PC-OFF-04 | HM-18 | — | citado |
+| PC-OFF-05 | — | — | huérfano (futureware, no debe citarse) |
+| PC-FISC-01 | HM-05 | FI-001 | citado |
+| PC-FISC-02 | HM-05 | FI-002 | citado |
+| PC-FISC-03 | — | FI-003 | citado |
+| PC-FISC-04 | — | — | huérfano (futureware, no debe citarse) |
+| PC-PAY-01 | HM-06 | CW-003, CW-004, RL-001 | citado |
+| PC-PAY-02 | HM-06 | — | citado |
+| PC-PAY-03 | — | — | huérfano (futureware, no debe citarse) |
+| PC-PAY-04 | HM-06, HM-14 | CW-003, RL-001 | citado |
+| PC-PAY-05 | — | CW-007 | citado |
+| PC-PAY-06 | — | CW-003 | citado |
+| PC-INV-01 | HM-12, HM-32 | PC-003 | citado |
+| PC-INV-02 | HM-12, HM-15, HM-32 | CV-002 | citado |
+| PC-INV-03 | — | CV-002 | citado |
+| PC-INV-04 | HM-12 | PC-003 | citado |
+| PC-INV-05 | — | CV-002 | citado |
+| PC-INV-06 | — | CV-006 | citado |
+| PC-HW-01 | — | HC-001, HC-003 | citado |
+| PC-HW-02 | — | HC-001, HC-003 | citado |
+| PC-HW-03 | — | HC-001 | citado |
+| PC-SEC-01 | HM-09 | — | citado |
+| PC-SEC-02 | HM-15 | CV-003, RL-002 | citado |
+| PC-SEC-03 | — | CV-003 | citado |
+| PC-DASH-01 | HM-07, HM-13, HM-16, HM-21, HM-29 | CW-006, CV-001, RL-003 | citado |
+| PC-DASH-02 | HM-07, HM-13, HM-22 | CW-006, CV-004, RL-003 | citado |
+| PC-DASH-03 | HM-13, HM-16, HM-21 | CW-006, RL-003 | citado |
+| PC-DASH-04 | HM-23 | CW-006, CV-001, CV-002, RL-003 | citado |
+| PC-ONB-01 | HM-24 | IM-002 | citado |
+| PC-ONB-02 | — | IM-006 | citado |
+| PC-ONB-03 | HM-24 | IM-001, IM-002, IM-004 | citado |
+| PC-LOY-01 | — | LY-001 | citado |
+| PC-LOY-02 | — | LY-002 | citado |
+| PC-LOY-03 | — | LY-003 | citado |
+| PC-LOY-04 | — | LY-004 | citado |
+| PC-LOY-05 | — | LY-005 | citado |
+| PC-LOY-06 | — | LY-006 | citado |
+| PC-FOH-01 | — | PC-002, CW-005 | citado |
+| PC-FOH-02 | HM-11 | CW-002 | citado |
+| PC-FOH-03 | HM-20, HM-31 | CT-005 | citado |

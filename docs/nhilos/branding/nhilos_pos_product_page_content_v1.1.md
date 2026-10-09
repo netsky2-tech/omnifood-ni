@@ -8,6 +8,7 @@
 **Version:** 1.1  
 **Date:** 2026-10-02  
 **Authority:** Contrato de contenido aprobado para la página profunda de producto.  
+**Nota de revisión interna (post-aprobación, sin bump de versión):** tras la aprobación de v1.1 se añadieron dos secciones como extensiones trazadas: Loyalty & Promotions (Section 13, §15) y Cumplimiento Fiscal DGI (Section 14, §16, añadida en esta revisión). Como consecuencia, las secciones de cierre del documento se renumeraron y sus referencias internas se actualizaron. La versión formal permanece `1.1`; esta nota existe para que la adición posterior a la aprobación no se pierda.  
 **Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` §11): la demo se prepara según el contexto que el prospecto comparte (Sección 12), y los estados de éxito y error le devuelven un siguiente paso definido.  
 **DEPENDENCIA SATISFECHA:** `nhilos_website_homepage_content_v1.1.md` (v1.1) existe ahora en el repositorio como contrato de contenido de la homepage. La dependencia de creación está cerrada en esa versión; lo que permanece pendiente es el contraste cruzado de Gate E contra dicho documento (OD-PP-12) y la verificación de capacidades contra builds y evidencia vigentes, que siguen siendo gates separados de publicación.
@@ -322,6 +323,8 @@ Una cuenta está lista para cobrarse y el equipo necesita registrar el medio de 
 
 El cajero selecciona el método disponible y completa el flujo correspondiente. En el esquema semiautomático de tarjeta documentado, la transacción financiera ocurre en el datáfono bancario y NHILOS POS registra el pago tras la confirmación del cajero.
 
+Cuando la modalidad de operación lo soporta, la cuenta puede dividirse entre comensales o combinar formas de pago, con validación de cuadre exacto antes de cerrar la venta.
+
 **Efecto**
 
 La venta conserva el registro del cobro en el sistema. La aprobación financiera depende del datáfono y del adquirente.
@@ -386,6 +389,7 @@ Representar los workflows con una secuencia breve de pasos y capturas reales. Ev
 | CW-004 | El esquema de tarjeta puede requerir confirmación manual posterior al datáfono. | Flujo actual por adaptador y dispositivo. | Payments |
 | CW-005 | Existen cuentas abiertas/retención en modalidades soportadas. | E2E y matriz de modalidad. | Product |
 | CW-006 | Existen superficies de consulta para información operativa. | Rutas, roles, semántica y estado de disponibilidad. | Product / Backoffice |
+| CW-007 | La cuenta puede dividirse entre comensales o combinar formas de pago con cuadre exacto, en las modalidades soportadas. | Prueba de split bill por modalidad y validación de cuadre exacto de centavos. | Product / Payments |
 
 &nbsp;
 
@@ -511,7 +515,7 @@ Explicar cómo el registro de operaciones puede aportar contexto para revisar lo
 
 **Situación:** una existencia cambia por compras, ventas, producción o ajustes.
 
-**Comportamiento:** el sistema registra movimientos según los procesos de inventario configurados y las capacidades disponibles.
+**Comportamiento:** el sistema registra movimientos según los procesos de inventario configurados y las capacidades disponibles. Cuando el negocio pre-elabora insumos, las órdenes de producción registran el consumo de los insumos base y el incremento del stock del pre-elaborado.
 
 **Efecto:** los registros permiten consultar el historial y el estado de inventario dentro del alcance de las vistas vigentes.
 
@@ -555,6 +559,7 @@ No afirmar:
 | CV-003 | Determinadas acciones pueden quedar registradas en bitácora. | Eventos instrumentados y consultas verificadas. | Engineering / Security |
 | CV-004 | La información presentada refleja su frescura y alcance. | Contrato de sincronización y copy de estados. | Product / Operations |
 | CV-005 | Los indicadores y términos públicos tienen semántica aprobada. | Diccionario de KPI y revisión de negocio. | Product / Finance |
+| CV-006 | Las órdenes de producción y pre-elaboración batch para sub-recetas registran el consumo de insumos base y el incremento del stock pre-elaborado. | Flujo de orden de producción y prueba de descuento/incremento en almacén. | Product |
 
 &nbsp;
 
@@ -823,7 +828,7 @@ Cuando exista autoridad suficiente, describir:
 - información que debe preparar el negocio;  
 - responsables de cada etapa;  
 - equipos requeridos;  
-- configuración incluida;  
+- configuración incluida, incluyendo la carga del catálogo, que puede apoyarse en la importación asistida desde archivos CSV conforme a la plantilla oficial de productos e insumos;  
 - pruebas y criterios de aceptación;  
 - capacitación contemplada;  
 - condiciones para go-live;  
@@ -854,6 +859,7 @@ La meta de onboarding documentada en un PRD no equivale automáticamente a un co
 | IM-003 | La capacitación forma parte del alcance cuando así se acuerda. | Oferta y contrato aplicables. | Commercial / Operations |
 | IM-004 | El go-live depende de criterios definidos. | Gate y acta de aceptación. | Operations |
 | IM-005 | Los tiempos y entregables publicados reflejan compromisos vigentes. | Política comercial aprobada. | Commercial |
+| IM-006 | La carga del catálogo e insumos puede apoyarse en la importación asistida desde archivos CSV conforme a la plantilla oficial. | Prueba del asistente de importación con la plantilla oficial y manejo de filas no conformes. | Operations |
 
 &nbsp;
 
@@ -1250,7 +1256,59 @@ No publicar sin evidencia adicional, ni insinuar:
 
 ---
 
-# 16\. Cross-Section Claim Register
+# 16\. Section 14 — Cumplimiento Fiscal DGI (DT 09-2007)
+
+> **Nota de trazabilidad:** sección añadida como extensión posterior a la v1.1 aprobada, siguiendo el patrón de la Section 13. Los claims de esta sección citan el bloque fiscal del OD-02 (`PC-FISC-01..03`), registrado en el OD-02 antes de ser citado aquí (orden de gobernanza `G-04`). La homepage difiere estas capacidades a esta página (decisión abierta `OD-HM-01` de `nhilos_website_homepage_content_v1.1.md`): la homepage introduce, esta página resuelve.
+
+## Purpose
+
+Explicar el cumplimiento fiscal del POS bajo la Disposición Técnica DGI 09-2007 para Sistemas Computarizados de Facturación, con los límites exactos de cada capacidad. Para un comprador en Nicaragua, la numeración correlativa inalterable y la trazabilidad de facturas son parte de la decisión de compra; la sección debe generar una expectativa correcta sobre lo que el sistema hace hoy y lo que explícitamente no hace.
+
+## Proposed copy
+
+**Eyebrow**
+
+> Cumplimiento fiscal
+
+**Headline**
+
+> **Numeración correlativa inalterable y facturas que no se borran.**
+
+**Supporting copy**
+
+> NHILOS POS emite facturas correlativas conforme a la Disposición Técnica DGI 09-2007 para Sistemas Computarizados de Facturación: numeración consecutiva e inalterable, con prefijo y folio inicial configurados previamente según la autorización de la DGI. Las facturas no se eliminan; una anulación se registra como Nota de Crédito con autorización supervisada. La validación de Cédula y RUC nicaragüense ayuda a prevenir errores tipográficos al facturar.
+
+**Status:** `PROPOSED / EVIDENCE_REQUIRED`
+
+## Situation → Behavior → Effect
+
+- **Situación:** el negocio factura bajo DT 09-2007 y no puede permitirse saltos de folio, numeración duplicada ni registros alterados: son causas típicas de multas y observaciones de la DGI.
+- **Comportamiento:** al emitir una factura, el sistema asigna el consecutivo fiscal correlativo siguiente bajo la numeración autorizada; las facturas guardadas no se eliminan físicamente y toda anulación se procesa como Nota de Crédito que requiere PIN de supervisor y genera un evento trazable; al capturar datos fiscales del cliente, el sistema valida sintácticamente el formato y el algoritmo de la Cédula y del RUC nicaragüense.
+- **Efecto:** la facturación mantiene consecutivos ordenados y registros estables dentro del esquema de Sistemas Computarizados de Facturación, con anulaciones supervisadas y menos errores de captura, sin equivaler a una garantía absoluta de cumplimiento ni a facturación electrónica en línea.
+
+## Restrictions
+
+No publicar sin evidencia adicional, ni insinuar:
+
+- cumplimiento fiscal garantizado o absoluto; la numeración opera dentro del esquema de Sistemas Computarizados de Facturación de la DT 09-2007 y su validez depende de la parametrización y autorización vigentes;
+- la capacidad requiere que el prefijo y el folio inicial sean configurados y autorizados por la DGI de antemano; sin esa parametrización inicial, el consecutivo no puede emitirse;
+- facturación electrónica en línea ni transmisión de XML firmado en tiempo real: NHILOS POS no es FE online; la emisión electrónica con XML y CUFE es una capacidad futura no implementada (`PC-FISC-04`, estado `DO_NOT_CLAIM / FUTUREWARE` en el OD-02) y no se reclama en este documento;
+- validación de Cédula/RUC conectada en vivo al padrón de la DGI: la validación es sintáctica y algorítmica, sin consulta en línea;
+- “cero riesgo de auditoría”, “cumplimiento total” o cualquier formulación absoluta de cumplimiento normativo.
+
+## Claim IDs
+
+| ID | Claim | OD-02 source | Evidence needed | Gate |
+| :---- | :---- | :---- | :---- | :---- |
+| FI-001 | El POS emite facturas con consecutivos fiscales correlativos e inalterables bajo DT 09-2007, con prefijo y folio inicial previamente configurados y autorizados por la DGI. | PC-FISC-01 | Flujo de emisión demostrable sobre la parametrización autorizada; prueba de correlatividad sin saltos ni duplicados. | Product / Legal |
+| FI-002 | Las facturas no se eliminan; la anulación se realiza exclusivamente vía Nota de Crédito con autorización de supervisor y evento trazable. | PC-FISC-02 | Demostración de ausencia de borrado físico, flujo de Nota de Crédito con PIN de supervisor y registro inmutable del evento. | Product / Legal |
+| FI-003 | El sistema valida sintácticamente Cédula y RUC nicaragüense (Personas Naturales y Jurídicas) para prevenir errores tipográficos, sin consulta en vivo al padrón DGI. | PC-FISC-03 | Prueba del validador por tipo de documento; evidencia de que no existe consulta online al padrón. | Product |
+
+&nbsp;
+
+---
+
+# 17\. Cross-Section Claim Register
 
 Este registro consolida los claims mínimos de la página y sirve como base para la fase de verificación.
 
@@ -1258,17 +1316,18 @@ Este registro consolida los claims mínimos de la página y sirve como base para
 | :---- | :---- | :---- | :---- |
 | PP-001–PP-004 | Product Promise | Posicionamiento y alcance | Product |
 | PC-001–PC-004 | Product in Context | Contextos de uso | Product |
-| CW-001–CW-006 | Core Workflows | Flujos de venta, cobro, retención y consulta | Product / Payments |
+| CW-001–CW-007 | Core Workflows | Flujos de venta, cobro, split bill, retención y consulta | Product / Payments |
 | CT-001–CT-005 | Continuity | Operación local y sincronización | Engineering / Product |
-| CV-001–CV-005 | Control / Visibility | Datos, inventario, bitácora y métricas | Product / Finance / Security |
+| CV-001–CV-006 | Control / Visibility | Datos, inventario, producción, bitácora y métricas | Product / Finance / Security |
 | RL-001–RL-004 | Roles | Tareas, permisos y superficies | Product / Security |
 | GL-001–GL-004 | Gallery | Veracidad y vigencia de media | Product / Content / Legal |
-| IM-001–IM-005 | Implementation | Proceso y compromisos | Operations / Commercial |
+| IM-001–IM-006 | Implementation | Proceso, carga de catálogo y compromisos | Operations / Commercial |
 | HC-001–HC-004 | Hardware / Compatibility | Dispositivos y periféricos | Engineering |
 | SP-001–SP-004 | Support | Canales y condiciones de atención | Operations / Commercial |
 | FAQ-01–FAQ-10 | FAQs | Respuestas públicas | Owners por tema |
 | DM-001–DM-004 | Demo CTA | Conversión y tratamiento de datos | Web / Commercial / Legal |
 | LY-001–LY-006 | Loyalty & Promotions (§15) | Identificación de cliente, puntos, canje y promociones | Product / Engineering |
+| FI-001–FI-003 | Cumplimiento Fiscal DGI (§16) | Numeración correlativa DT 09-2007, inmutabilidad de facturas y validación fiscal | Product / Legal |
 
 &nbsp;
 
@@ -1293,7 +1352,7 @@ Un claim no se considera aprobado por estar documentado en un PRD. Se requiere e
 
 ---
 
-# 17\. Publication Gates
+# 18\. Publication Gates
 
 ## Gate A — Product truth
 
@@ -1354,7 +1413,7 @@ Confirmar:
 
 ---
 
-# 18\. Editorial and UX Rules
+# 19\. Editorial and UX Rules
 
 ## Writing rules
 
@@ -1383,7 +1442,7 @@ Alinear la presentación con la identidad NHILOS y el sistema visual del website
 
 ---
 
-# 19\. Open Decisions & Dependencies
+# 20\. Open Decisions & Dependencies
 
 Las siguientes decisiones deben cerrarse antes de la publicación. La tabla registra el estado de cierre verificado contra artefactos del repositorio:
 
@@ -1406,11 +1465,11 @@ Las siguientes decisiones deben cerrarse antes de la publicación. La tabla regi
 
 ---
 
-# 20\. Definition of Done
+# 21\. Definition of Done
 
 La página puede pasar a diseño/implementación cuando:
 
-- [x] las 13 secciones conservan el orden contractual (12 originales + Loyalty & Promotions añadida como Section 13, con renumeración de las secciones de cierre del documento);  
+— [x] las 14 secciones conservan el orden contractual (12 originales + Loyalty & Promotions como Section 13 y Cumplimiento Fiscal DGI como Section 14, añadidas como extensiones post-aprobación, con renumeración de las secciones de cierre del documento);  
 - [x] cada bloque respeta Situación → Comportamiento → Efecto;  
 - [x] los claims funcionales tienen evidencia o permanecen bloqueados — el registro existe y todo claim sin evidencia verificada permanece bloqueado; la verificación claim por claim es prerrequisito de publicación, no de esta lista;  
 - [x] continuidad describe escenarios concretos y sus límites — escenarios y topología single-terminal Q80 documentados; la evidencia de pruebas es materia de Gate B;  
@@ -1421,14 +1480,14 @@ La página puede pasar a diseño/implementación cuando:
 - [x] las FAQs responden preguntas reales y no contradicen el copy principal;  
 - [ ] la demo tiene un flujo funcional y responsable de seguimiento — flujo definido, receptor web/comercial sin asignar (OD-PP-10);  
 - [ ] privacidad y accesibilidad han sido revisadas — aviso de datos de cliente CLIENT-READY; falta adenda de privacidad del formulario y revisión final de accesibilidad (OD-PP-11, Gate C/E);  
-- [ ] se completaron los publication gates aplicables — estado actual de Gates A–E en §22.3;  
+- [ ] se completaron los publication gates aplicables — estado actual de Gates A–E en §23.3;  
 - [x] existe un registro de claims con responsables y fecha de aprobación — el registro y sus campos obligatorios están definidos; las entradas quedan sujetas a la verificación de claims.
 
-Los ítems marcados `[x]` corresponden a cierre editorial/estructural verificado en la auditoría del contrato. Los ítems `[ ]` son gate-dependent y se rigen por el estado de Gates A–E y por las decisiones OD-PP registradas en §19.
+Los ítems marcados `[x]` corresponden a cierre editorial/estructural verificado en la auditoría del contrato. Los ítems `[ ]` son gate-dependent y se rigen por el estado de Gates A–E y por las decisiones OD-PP registradas en §20.
 
 ---
 
-# 21\. Final Content Contract
+# 22\. Final Content Contract
 
 La página profunda de NHILOS POS debe demostrar el producto desde la operación real: qué situación atiende, qué hace el sistema y qué efecto observable produce. Su función no es maximizar la cantidad de funcionalidades anunciadas, sino reducir la incertidumbre del visitante y facilitar una evaluación informada.
 
@@ -1442,14 +1501,14 @@ La página no debe vender como disponible lo que solo está diseñado, planifica
 
 ---
 
-# 22\. Audit & Promotion Record
+# 23\. Audit & Promotion Record
 
 **Audit:** `CONTENT-CONTRACT AUDIT — CLOSED WITH PUBLICATION BLOCKERS`  
 **Reviewed version:** `1.0`  
 **Promoted version:** `1.1`  
 **Date:** `2026-10-02`
 
-## 22.1 Findings and corrective actions
+## 23.1 Findings and corrective actions
 
 | ID | Finding | Correction / disposition | Closure status |
 | :---- | :---- | :---- | :---- |
@@ -1461,14 +1520,14 @@ La página no debe vender como disponible lo que solo está diseñado, planifica
 | AA-06 | Implementación y soporte podían crear compromisos comerciales no aprobados. | Se condicionan alcance, entregables, canales, cobertura y SLA al modelo comercial/operativo aprobado. | `CLOSED — commercial approval pending` |
 | AA-07 | No existe un expediente de evidencia completo para cada claim. | Se formalizan los campos obligatorios del registro y se mantiene bloqueada la publicación de claims no aprobados. | `CLOSED — evidence collection pending` |
 | AA-08 | Faltaba separar el cierre editorial del permiso de publicación. | Se establece la promoción del contrato como decisión independiente y se conserva `Publication authority: NOT GRANTED`. | `CLOSED` |
-| AA-09 | Las decisiones OD-PP-01 a OD-PP-12 carecían de trazabilidad de estado, evidencia y resolución detallada, impidiendo distinguir cierres reales de pendientes. | Se expande la tabla de §19 con columnas Status, Owner, Evidence / Concrete Artifact Linkage y Detailed Resolution, vinculando cada decisión a artefactos del repositorio (NH-SA-0001, NH-SO-0001, NH-MAN-DSH-001, NH-AUD-POS-001, OP-01/OP-07, CD-05/06/14/15, NH-CHK-HW-001, NH-POL-SUP-001, NH-POL-DAT-001, readiness §14). | `CLOSED — evidence integrated` |
-| AA-10 | La Definition of Done no distinguía ítems editoriales/estructurales verificados de condiciones gate-dependent, lo que permitía leer la lista como bloqueo total o como aprobación total. | Se actualiza §20: los ítems de cierre editorial/estructural verificado quedan marcados `[x]` y los gate-dependent permanecen `[ ]` con referencia explícita a su OD-PP y gate correspondiente. | `CLOSED — delineation applied` |
+| AA-09 | Las decisiones OD-PP-01 a OD-PP-12 carecían de trazabilidad de estado, evidencia y resolución detallada, impidiendo distinguir cierres reales de pendientes. | Se expande la tabla de §20 con columnas Status, Owner, Evidence / Concrete Artifact Linkage y Detailed Resolution, vinculando cada decisión a artefactos del repositorio (NH-SA-0001, NH-SO-0001, NH-MAN-DSH-001, NH-AUD-POS-001, OP-01/OP-07, CD-05/06/14/15, NH-CHK-HW-001, NH-POL-SUP-001, NH-POL-DAT-001, readiness §14). | `CLOSED — evidence integrated` |
+| AA-10 | La Definition of Done no distinguía ítems editoriales/estructurales verificados de condiciones gate-dependent, lo que permitía leer la lista como bloqueo total o como aprobación total. | Se actualiza §21: los ítems de cierre editorial/estructural verificado quedan marcados `[x]` y los gate-dependent permanecen `[ ]` con referencia explícita a su OD-PP y gate correspondiente. | `CLOSED — delineation applied` |
 | AA-11 | El estado de las vistas administrativas y su frescura no contaba con artefacto de referencia, dejando Gate A y la sección de dashboard sin sustento verificable. | Inventario de vistas y contrato de frescura del Owner Dashboard establecidos en NH-MAN-DSH-001 §2–§9; OD-PP-04 pasa a `CLOSED`. | `CLOSED — artifact published` |
-| AA-12 | La lista de blockers residuales no especificaba el estado exacto de cierre de las OD-PP, el estado de Gates A–E ni el prerrequisito de verificación de claims, y carecía de disposición formal de autoridad de publicación. | Se reescribe §22.3 con el estado de cierre exacto de OD-PP-01 a OD-PP-12, el estado por gate (A–E), el prerrequisito de verificación de claims y la declaración final de autoridad de publicación. | `CLOSED — disposition formalized` |
+| AA-12 | La lista de blockers residuales no especificaba el estado exacto de cierre de las OD-PP, el estado de Gates A–E ni el prerrequisito de verificación de claims, y carecía de disposición formal de autoridad de publicación. | Se reescribe §23.3 con el estado de cierre exacto de OD-PP-01 a OD-PP-12, el estado por gate (A–E), el prerrequisito de verificación de claims y la declaración final de autoridad de publicación. | `CLOSED — disposition formalized` |
 
 &nbsp;
 
-## 22.2 Promotion decision
+## 23.2 Promotion decision
 
 Se promueve este documento a:
 
@@ -1476,9 +1535,9 @@ Se promueve este documento a:
 
 La aprobación cubre la arquitectura narrativa, el orden de las trece secciones, los criterios editoriales, el modelo de claims, las restricciones de contenido y los gates de publicación. No certifica que cada funcionalidad descrita esté disponible, ni aprueba capturas, compatibilidad, soporte, condiciones comerciales, privacidad o consistencia final con la homepage.
 
-En la revisión posterior del registro de auditoría se verificó el cierre parcial del conjunto de decisiones OD-PP contra artefactos del repositorio: OD-PP-04 y OD-PP-07 `CLOSED`, OD-PP-09 `CLOSED WITH CONDITION` (unificación de canales DR-0), siete decisiones `PARTIALLY RESOLVED` con evidencia vinculada (OD-PP-01/02/03/05/06/08/11) y dos `OPEN` (OD-PP-10, OD-PP-12 / Gate E). Esta reconciliación se registra en §19 y §22.3 y no modifica el alcance de la aprobación: la promoción sigue siendo una decisión editorial independiente del permiso de publicación, que permanece `NOT GRANTED`.
+En la revisión posterior del registro de auditoría se verificó el cierre parcial del conjunto de decisiones OD-PP contra artefactos del repositorio: OD-PP-04 y OD-PP-07 `CLOSED`, OD-PP-09 `CLOSED WITH CONDITION` (unificación de canales DR-0), siete decisiones `PARTIALLY RESOLVED` con evidencia vinculada (OD-PP-01/02/03/05/06/08/11) y dos `OPEN` (OD-PP-10, OD-PP-12 / Gate E). Esta reconciliación se registra en §20 y §23.3 y no modifica el alcance de la aprobación: la promoción sigue siendo una decisión editorial independiente del permiso de publicación, que permanece `NOT GRANTED`.
 
-## 22.3 Residual publication blockers
+## 23.3 Residual publication blockers
 
 Los siguientes elementos permanecen abiertos y no deben interpretarse como defectos del contrato aprobado; son condiciones de salida a producción. Esta sección es la disposición formal de cierre vigente y sustituye a la lista genérica de la versión 1.0 del registro.
 
@@ -1503,7 +1562,7 @@ Los siguientes elementos permanecen abiertos y no deben interpretarse como defec
 
 ### Prerrequisito de verificación de claims
 
-Ningún claim del registro (§16) puede publicarse sin verificación registrada con versión/build, escenario, responsable, estado y fecha. Los claims sin evidencia permanecen bloqueados; el registro con responsables y fecha de aprobación es prerrequisito de Gate A y Gate D, y su cumplimiento se auditará contra la versión publicada del producto (anclada a `b4b5ad27` o posterior).
+Ningún claim del registro (§17) puede publicarse sin verificación registrada con versión/build, escenario, responsable, estado y fecha. Los claims sin evidencia permanecen bloqueados; el registro con responsables y fecha de aprobación es prerrequisito de Gate A y Gate D, y su cumplimiento se auditará contra la versión publicada del producto (anclada a `b4b5ad27` o posterior).
 
 ### Disposición final de autoridad de publicación
 
@@ -1522,7 +1581,7 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 
 # Anexo A — Matriz de Trazabilidad de Claims (Product Page → OD-02)
 
-**Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, §Reglas) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.3.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`, `LY-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`, `PC-LOY-*`, `PC-FOH-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
+**Propósito.** La regla de gobernanza `G-04` (`nhilos_branding_document_governance_v1.0.md`, §Reglas) exige que todo claim técnico publicado cite un ID de claim del OD-02 (`product_claim_audit_od02_v1.3.md`), que es la autoridad de claims de la cadena. Los Claim IDs de esta página (`PP-*`, `PC-*`, `CW-*`, `CT-*`, `CV-*`, `RL-*`, `GL-*`, `IM-*`, `HC-*`, `SP-*`, `DM-*`, `LY-*`, `FI-*`) son **IDs de slot de contenido** que anclan una aserción dentro de una sección; los IDs del OD-02 (`PC-OFF-*`, `PC-FISC-*`, `PC-PAY-*`, `PC-INV-*`, `PC-HW-*`, `PC-SEC-*`, `PC-DASH-*`, `PC-ONB-*`, `PC-LOY-*`, `PC-FOH-*`) son **IDs de capacidad técnica**. No existe correspondencia 1:1 entre ambos universos: esta matriz registra, para cada claim de la página, el/los IDs del OD-02 que lo respaldan técnicamente, o declara explícitamente que no hay base. Ningún claim `RESPALDADO` puede publicarse sin citar su ID OD-02; ningún claim `SIN BASE OD-02` puede publicarse como capacidad técnica sin resolver previamente su anclaje (ver sub-sección siguiente).
 
 | Claim ID | Sección | Assertion (resumen) | OD-02 ID(s) | Tipo | Estado |
 | :---- | :---- | :---- | :---- | :---- | :---- |
@@ -1581,6 +1640,12 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 | LY-004 | §15 Loyalty & Promotions | Identificación del cliente por QR, código, teléfono o nombre, totalmente offline. | PC-LOY-04 | TÉCNICO | RESPALDADO |
 | LY-005 | §15 Loyalty & Promotions | Promociones aplicadas de forma automática y determinista en el POS, administradas centralmente. | PC-LOY-05 | TÉCNICO | RESPALDADO |
 | LY-006 | §15 Loyalty & Promotions | Configuración de programas/recompensas, ajuste de puntos con actor y motivo, economía profit-aware. | PC-LOY-06 | TÉCNICO | RESPALDADO |
+| CW-007 | §5 Core Workflows | División de cuenta entre comensales o formas de pago combinadas con cuadre exacto, en modalidades soportadas. | PC-PAY-05 | TÉCNICO | RESPALDADO |
+| CV-006 | §7 Control / Visibility | Órdenes de producción y pre-elaboración batch para sub-recetas registran consumo de insumos base e incremento de stock pre-elaborado. | PC-INV-06 | TÉCNICO | RESPALDADO |
+| IM-006 | §10 Implementation | Importación asistida de catálogos e insumos desde archivos CSV conforme a la plantilla oficial. | PC-ONB-02 | TÉCNICO | RESPALDADO |
+| FI-001 | §16 Cumplimiento Fiscal DGI | Consecutivos fiscales correlativos e inalterables bajo DT 09-2007, con prefijo y folio inicial autorizados por la DGI. | PC-FISC-01 | TÉCNICO | RESPALDADO |
+| FI-002 | §16 Cumplimiento Fiscal DGI | Inmutabilidad de facturas; anulación exclusiva vía Nota de Crédito con autorización de supervisor. | PC-FISC-02 | TÉCNICO | RESPALDADO |
+| FI-003 | §16 Cumplimiento Fiscal DGI | Validación sintáctica de Cédula y RUC nicaragüense, sin consulta en vivo al padrón DGI. | PC-FISC-03 | TÉCNICO | RESPALDADO |
 
 Notas de la matriz:
 

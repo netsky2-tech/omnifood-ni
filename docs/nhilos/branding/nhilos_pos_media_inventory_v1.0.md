@@ -60,6 +60,7 @@ superficie loyalty añadida al contrato de contenido como §15). Ningún activo 
 | `MEDIA-POS-02` | Modal de Cobro Bimoneda (NIO/USD) y vuelto automático | Capture HD / Sunmi V2s | `multi_currency_checkout_dialog.dart` | `APPROVED` |
 | `MEDIA-POS-03` | Motor de División de Cuentas (Split Bill) y Propina DGI | Capture HD / Tablet 10" | `split_bill_engine.dart` / `tip_engine.dart` | `APPROVED` |
 | `MEDIA-POS-04` | Modal de Autorización por PIN (Supervisor Override) | Capture HD / Sunmi V2s | `supervisor_override_modal.dart` | `APPROVED` |
+| `MEDIA-POS-05` | Retención de cuentas abiertas y mapa de mesas | Capture HD / Tablet 10" | `apps/pos_app/lib/ui/features/sales/tables/table_layout_view.dart`, `apps/pos_app/lib/domain/services/sales/table_order_service.dart` | `PENDING CAPTURE — NO APPROVED` |
 | `MEDIA-HW-01` | Ticket de venta impreso en papel térmico de 58mm (DT 09-2007) | Foto HD / Sunmi V2s Hardware | `receipt_58mm_formatter.dart` | `APPROVED` |
 | `MEDIA-HW-02` | Pantalla Digital de Cocina (KDS) con temporizador SLA | Capture HD / Tablet Android 10" | `kitchen_display_view.dart` | `APPROVED` |
 | `MEDIA-DASH-01` | Owner Dashboard v2: KPIs de Venta y Sync Freshness Badge | Capture Web / Browser Desktop | `apps/owner_dashboard/src/features/dashboard` | `APPROVED` |
@@ -74,7 +75,7 @@ superficie loyalty añadida al contrato de contenido como §15). Ningún activo 
 
 ## 3. Mapeo Exhaustivo por Sección de la Página de Producto (v1.1)
 
-A continuación se detalla la asignación de cada activo visual a las 13 secciones estructuradas
+A continuación se detalla la asignación de cada activo visual a las 14 secciones estructuradas
 (12 originales + Loyalty & Promotions, §15 de `nhilos_pos_product_page_content_v1.1.md`)
 de la página de producto `/pos`, con los títulos exactos del contrato de contenido,
 definiendo su rol contextual, pie de foto (caption) sugerido y
@@ -110,8 +111,11 @@ texto de accesibilidad (alt text).
 - **Activo Workflow B (Cobro Bimoneda):** `MEDIA-POS-02` (Modal Checkout Bimoneda NIO/USD).
 - **Activo Workflow C (Pagos Tarjeta):** `MEDIA-POS-03` (Captura de código de autorización
   BAC/Banpro).
-- **Activo Workflow D (Fiscal DGI):** `MEDIA-HW-01` (Detalle de ticket fiscal correlativo
-  DT 09-2007).
+- **Activo Workflow D (Mantener una cuenta abierta):** sin activo capturado. La superficie de
+  retención de cuentas y mapa de mesas (`table_layout_view.dart`, `table_order_service.dart`)
+  requiere una captura nueva; ver `MEDIA-POS-05` en §2.
+- **Activo Workflow E (Consultar información operativa):** `MEDIA-DASH-01` (Superficies de
+  consulta operativa del terminal).
 - **Rol Contextual:** Guiar al usuario paso a paso en la ejecución de una transacción completa
   en Nicaragua.
 - **Pie de Foto Sugerido:** "Checkout bimoneda con cálculo de vuelto en Córdobas o Dólares y
@@ -238,7 +242,6 @@ texto de accesibilidad (alt text).
   prospecto.
 
 ### Sección 13 — Loyalty & Promotions (§15 del contrato de contenido)
-
 - **Activo Principal:** `MEDIA-LOY-01` (Identificación de cliente y saldo de puntos en caja con
   QR `NHL1:{code}`; **pendiente de captura, no aprobado**).
 - **Rol Contextual:** Demostrar la identificación offline del cliente y el canje de puntos como
@@ -251,6 +254,24 @@ texto de accesibilidad (alt text).
   vigente (`b4b5ad27`) y pasar Gate D antes de cualquier publicación. Ninguna imagen de esta
   superficie existe aún; no se marca ningún activo como aprobado.
 - **Claims respaldados (OD-02):** `PC-LOY-01..06` vía `LY-001..LY-006` del contrato de contenido.
+
+### Sección 14 — Cumplimiento Fiscal DGI (DT 09-2007) (§16 del contrato de contenido)
+
+- **Activo Principal:** `MEDIA-HW-01` (Ticket fiscal impreso en papel térmico de 58mm con
+  correlativo DT 09-2007).
+- **Activo Secundario:** `MEDIA-FISC-01` (Panel de reportes fiscales exportables y notas de
+  crédito en el backoffice web).
+- **Rol Contextual:** Demostrar que la emisión fiscal es correlativa e inalterable, que la
+  anulación solo ocurre por nota de crédito supervisada, y que el negocio obtiene sus reportes
+  fiscales exportables.
+- **Pie de Foto Sugerido:** "Comprobante fiscal con numeración correlativa e inalterable, y
+  reportes fiscales exportables desde el panel administrativo."
+- **Texto Alt (a11y):** "Ticket térmico de NHILOS POS mostrando la numeración correlativa y el
+  desglose de impuestos, junto al panel de reportes fiscales del backoffice."
+- **Restricción de medios:** ninguna captura de esta sección puede sugerir facturación
+  electrónica en línea ni transmisión de XML firmado; esa capacidad no está implementada.
+- **Claims respaldados (OD-02):** `PC-FISC-01..03` vía `FI-001..FI-003` del contrato de
+  contenido.
 
 ---
 
@@ -296,7 +317,7 @@ VERIFICACIÓN DE GATE D (EVIDENCIA Y MEDIOS) — NHILOS POS
 [✗] Los activos provienen del commit 7af1521ea077ce8bc1faed1aa7189a6186eac515,
     que ya NO es el build anclado vigente (`b4b5ad27`): la UI del POS cambió
     sustancialmente entre ambos builds (remediación UX Nivel 1/2/3).
-[✓] Mapeo completo de las 13 secciones de la página profunda de producto (/pos)
+[✓] Mapeo completo de las 14 secciones de la página profunda de producto (/pos)
     con los títulos de nhilos_pos_product_page_content_v1.1.md.
 [✓] Textos alternativos (alt text) redactados para cumplimiento WCAG 2.1 AA.
 [✓] Presupuesto de peso y rendimiento web alineados a la spec no funcional
