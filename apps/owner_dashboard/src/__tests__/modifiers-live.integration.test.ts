@@ -415,13 +415,17 @@ describe("Modifiers live API — CRUD + validations + attachments + effective re
     expect(effective.status).toBe(200);
     const mine = effective.data.filter((group) => group.group_id === groupId);
     expect(mine, "group must resolve through category CAFE").toHaveLength(1);
-    expect(mine[0].source).toBe("category");
-    expect(mine[0].min_selected).toBe(0);
-    expect(mine[0].max_selected).toBe(3);
-    expect(mine[0].allow_quantities).toBe(true);
-    const optionNames = mine[0].options.map((option) => option.name);
+    // Optional chaining instead of a non-null assertion: if the group were
+    // missing, every value below would be undefined and fail its assertion —
+    // the checks stay just as strict while satisfying `tsc -b`'s indexed
+    // access rules.
+    expect(mine[0]?.source).toBe("category");
+    expect(mine[0]?.min_selected).toBe(0);
+    expect(mine[0]?.max_selected).toBe(3);
+    expect(mine[0]?.allow_quantities).toBe(true);
+    const optionNames = mine[0]?.options.map((option) => option.name);
     expect(optionNames).toEqual(expect.arrayContaining(["Extra shot", "Vainilla"]));
-    for (const option of mine[0].options) {
+    for (const option of mine[0]?.options ?? []) {
       expect(
         typeof option.price_delta,
         `effective option "${option.name}" price_delta must be a number, got ${JSON.stringify(option.price_delta)}`,
@@ -448,7 +452,7 @@ describe("Modifiers live API — CRUD + validations + attachments + effective re
     const mine = overridden.data.filter((group) => group.group_id === groupId);
     // Override rule: attached at BOTH levels → appears EXACTLY ONCE.
     expect(mine, "group must appear exactly once after dual attach").toHaveLength(1);
-    expect(mine[0].source).toBe("product");
+    expect(mine[0]?.source).toBe("product");
 
     const detach = await request<{ success: boolean }>(
       "DELETE",
@@ -468,7 +472,7 @@ describe("Modifiers live API — CRUD + validations + attachments + effective re
     expect(restored.status).toBe(200);
     const restoredMine = restored.data.filter((group) => group.group_id === groupId);
     expect(restoredMine).toHaveLength(1);
-    expect(restoredMine[0].source).toBe("category");
+    expect(restoredMine[0]?.source).toBe("category");
   });
 
   it("drops inactive options from effective resolution and restores them", async () => {

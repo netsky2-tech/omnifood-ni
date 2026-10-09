@@ -13,6 +13,7 @@
     "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:live": "playwright test -c playwright.live.config.ts",
+    "test:e2e:capture": "NHILOS_MANUAL_CAPTURE=1 playwright test -c playwright.live.config.ts manual-screenshots",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
