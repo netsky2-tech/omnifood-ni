@@ -63,6 +63,7 @@ ORDER = [
     ("gobernanza/branding_reality_audit_v0.1.md", "Auditoría de realidad"),
     ("identidad/nhilos_brand_identity_brief_v0.1.md", "Brief de identidad de marca"),
     ("identidad/nhilos_design_kickoff_handover_v0.1.md", "Paquete de inicio para diseño"),
+    ("identidad/nhilos_design_deliverables_guide_v0.1.md", "Guía de entregables para diseño"),
     ("claims/product_claim_audit_od02_v1.3.md", "Registro de claims (OD-02)"),
     ("web/nhilos_website_product_marketing_brief_v1.0.md", "Brief de marketing"),
     ("web/nhilos_website_information_architecture_content_wireframe_v1.0.md",
@@ -124,7 +125,56 @@ def assign_ids(body, prefix, single):
         toc.append((level, title, full))
         return f'<h{level} id="{full}">{inner}</h{level}>'
 
-    return RE_HEADING.sub(repl, body), toc
+    body = wrap_tables(RE_HEADING.sub(repl, body))
+    return body, toc
+
+
+def wrap_tables(html):
+    """Wide tables need their own horizontal scroll on a phone. Wrapping them keeps the
+    document from scrolling sideways as a whole."""
+    return re.sub(r"<table>(.*?)</table>", r'<div class="tw"><table>\1</table></div>',
+                  html, flags=re.S)
+
+
+RE_IMG = re.compile(r'!\[[^\]]*\]\(([^)\s]+)')
+
+
+def images_in(markdown, base_rel):
+    """Relative image sources of a document, as (relative_src, absolute_path) pairs."""
+    found = []
+    for src in RE_IMG.findall(markdown):
+        if src.startswith(("http://", "https://", "data:", "/")):
+            continue
+        absolute = os.path.normpath(os.path.join(SRC, base_rel, src))
+        if os.path.exists(absolute):
+            found.append((src, absolute))
+    return found
+
+
+def copy_images(markdown, base_rel):
+    """Mirror images next to the generated page so relative srcs keep working."""
+    for src, absolute in images_in(markdown, base_rel):
+        destination = os.path.join(OUT, base_rel, src)
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        shutil.copy(absolute, destination)
+
+
+def inline_images(html, base_rel):
+    """A single-file delivery cannot reference sibling files: embed them instead."""
+    import base64
+
+    def repl(match):
+        src = match.group(1)
+        if src.startswith(("http://", "https://", "data:")):
+            return match.group(0)
+        absolute = os.path.normpath(os.path.join(SRC, base_rel, src))
+        if not os.path.exists(absolute):
+            return match.group(0)
+        mime = "image/svg+xml" if absolute.endswith(".svg") else "image/png"
+        payload = base64.b64encode(open(absolute, "rb").read()).decode()
+        return f'src="data:{mime};base64,{payload}"'
+
+    return re.sub(r'src="([^"]+)"', repl, html)
 
 
 def prep(markdown):
@@ -143,7 +193,9 @@ def render(markdown, prefix, single):
                 return f'href="#{prefix}--{target[1:]}"'
             path, _, anchor = target.partition("#")
             key = os.path.basename(path).replace(".html", "")
-            return f'href="#{key}--{anchor}"'
+            # A document link with no anchor points at that document's top heading,
+            # emitted below as `<h1 id="<key>--top">`.
+            return f'href="#{key}--{anchor}"' if anchor else f'href="#{key}--top"'
         body = re.sub(r'href="([^"]+)"', href, body)
     return body, toc
 
@@ -201,6 +253,7 @@ def build_site():
                  + "</span><span>"
                  + (f'<a href="{up}{following[0].replace(".md", ".html")}">{following[1]} →</a>' if following else "")
                  + "</span></div>")
+        copy_images(markdown, os.path.dirname(rel))
         destination = os.path.join(OUT, rel.replace(".md", ".html"))
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         open(destination, "w", encoding="utf-8").write(
@@ -241,8 +294,10 @@ def build_single_and_pdf(css):
     parts.append("</div><hr>")
     for rel, title in everything:
         source = os.path.join(NH, rel) if rel in {n for n, _ in EXTRA} else os.path.join(SRC, rel)
-        body, _ = render(open(source, encoding="utf-8").read(),
-                         os.path.basename(rel).replace(".md", ""), single=True)
+        raw = open(source, encoding="utf-8").read()
+        base_rel = os.path.dirname(rel) if rel in {p for p, _ in ORDER} else ""
+        body, _ = render(raw, os.path.basename(rel).replace(".md", ""), single=True)
+        body = inline_images(body, base_rel)
         parts.append('<div style="page-break-before:always"></div>'
                      f'<h1 id="{os.path.basename(rel).replace(".md", "")}--top" style="margin-top:70px">{title}</h1>')
         parts.append(body)
@@ -308,6 +363,29 @@ def verify():
     return broken_files, broken_anchors, anchors
 
 
+def warns():
+    """A document path written as plain code instead of a link is invisible to a
+    reader who cannot resolve repository paths. That is exactly how the reading-order
+    tables shipped unclickable once. Warn, do not fail: some mentions are historical."""
+    known = {os.path.basename(p) for p, _ in ORDER} | {os.path.basename(p) for p, _ in EXTRA} | {"README.md"}
+    suspects = []
+    for base in (SRC, NH):
+        for directory, _, filenames in os.walk(base):
+            for filename in filenames:
+                if not filename.endswith(".md"):
+                    continue
+                page = os.path.join(directory, filename)
+                for number, line in enumerate(open(page, encoding="utf-8"), 1):
+                    for candidate in re.findall(r"`([^`\s]+\.md)`", line):
+                        if os.path.basename(candidate) in known:
+                            suspects.append(f"{os.path.relpath(page, REPO)}:{number} `{candidate}`")
+    if suspects:
+        print("  warning: document paths written as plain code, not links:")
+        for entry in suspects[:10]:
+            print(f"    {entry}")
+    return suspects
+
+
 def main():
     css = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "branding_delivery.css"),
                encoding="utf-8").read()
@@ -318,6 +396,7 @@ def main():
     print(f"  anchors verified: {anchors} | broken links: {len(broken_files)} | broken anchors: {len(broken_anchors)}")
     for entry in (broken_files + broken_anchors)[:20]:
         print(f"    {entry}")
+    warns()
     if broken_files or broken_anchors:
         sys.exit("Delivery checks failed: a generated link does not resolve.")
 
