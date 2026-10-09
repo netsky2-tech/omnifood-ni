@@ -578,3 +578,38 @@ La fila "Sin origen registrado" aparece sólo cuando es distinto de cero; si es 
 
 ### S1c-3c · El libro de ventas (export) — PENDIENTE
 Una fila por factura: agregar columnas por origen al DTO del export, al CSV (`:959,977`), al XLSX (`:1053,1075`) —el PDF no tiene columna de descuento— más los tipos y el **fixture de contrato** del panel (`fiscal-dtos.json` + `w4-contract.test.ts`). El spec del export **pinnea el header CSV exacto**, así que agregar columnas rompe ese pin y hay que actualizarlo a conciencia.
+
+### Validación de punta a punta (hecha, con la rama viva) — CERRADA
+
+**Preparación del rig:** `dist` reconstruido desde la rama (`nest build`) y backend reiniciado (`:3000`, sólo nuestro pid; los procesos de la otra sesión en `:3300`/`:5174` no se tocaron). Al espejo se le aplicaron **exactamente** las tres migraciones pendientes: `180962`, `180963`, `180964`.
+
+**Prueba viva 1 — la rama honesta sobre datos reales.** Tres líneas reales con descuento (125.00 + 20.00 + 9.00 = 154.00) y **ningún** desglose registrado. El reporte vivo responde:
+
+```
+manual 0 | promo 0 | lealtad 0 | sin origen 154 | total 154   → identidad OK
+```
+
+O sea: el legado se reporta como **"sin origen registrado"**, no como ceros de origen. Ésa era exactamente la trampa, y está desmentida en vivo.
+
+**Prueba viva 2 — las cuatro ramas a la vez.** Puse un desglose temporal en dos de esas líneas reales (125 → manual 100 + promoción 25; 20 → lealtad 20) y dejé la tercera en `NULL`:
+
+```
+manual 100 | promo 25 | lealtad 20 | sin origen 9 | total 154 → identidad OK
+```
+
+**Prueba viva 3 — el navegador.** Con el `dist` de la rama, la base real y el proxy de Vite hacia `:3000`, una spec live temporal (patrón del arnés `settings-discount-cap.live.spec.ts`) leyó la tarjeta tal como la ve el dueño:
+
+```
+Flujos separados de ventas
+Descuentos                C$154.00 · 3.3% base
+  Descuento manual        C$100.00
+  Descuento por promoción C$25.00
+  Descuento por lealtad   C$20.00
+  Sin origen registrado   C$9.00
+```
+
+Captura en `~/.cache/s1c3/live-card.png`. La spec temporal se **borró** (no queda en el repo) y la mutación de prueba se **revirtió exacta**: hoy 0 filas tienen desglose y el reporte volvió a `sin origen 154`, verificado después del revert.
+
+**Lo que esta validación NO prueba, dicho claro:** un push **real del dispositivo** con desglose (o con modifiers) — haría falta la S23 con `adb reverse`; el cable está probado por el replay contra esquema y base reales (§11 y §12), no por la tablet. Tampoco prueba el flujo de un negocio cuyo POS sea anterior a la rama (que es, justamente, el caso "sin origen").
+
+**Estado del rig al terminar:** backend en `:3000` con el `dist` de la rama; espejo con `180962`/`180963`/`180964` aplicadas; contraseña temporal del dueño (`C0ntr4sen4`) **sigue puesta** — su restauración corresponde a la limpieza del rig, junto con los topes y los `.env`/`key.properties` copiados.
