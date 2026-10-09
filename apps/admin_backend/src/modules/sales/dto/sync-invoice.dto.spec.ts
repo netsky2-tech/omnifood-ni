@@ -251,3 +251,81 @@ describe('SyncInvoiceDto fx-rate fiscal fields (D-6)', () => {
     });
   });
 });
+
+describe('SyncInvoiceDto per-line discountOrigin (D-A2)', () => {
+  const baseItem = {
+    id: 'item-1',
+    productId: 'prod-1',
+    productName: 'Burger',
+    quantity: 1,
+    unitPrice: 10,
+    originalTaxRate: 0.15,
+    appliedTaxRate: 0.15,
+    taxAmount: 1.5,
+    total: 11.5,
+    discount: 1,
+  };
+
+  const basePayload = {
+    id: 'inv-1',
+    number: '001',
+    createdAt: new Date().toISOString(),
+    userId: 'user-1',
+    subtotal: 100,
+    totalTax: 15,
+    total: 115,
+    paymentStatus: 'PAID',
+    items: [baseItem],
+    payments: [],
+  };
+
+  const validate = (payload: Record<string, unknown>) => {
+    const dto = plainToInstance(SyncInvoiceDto, payload);
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidUnknownValues: false,
+    });
+    return { dto, errors };
+  };
+
+  it('accepts a per-line discountOrigin and keeps it after whitelist stripping', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: 'promotion' }],
+    });
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0].discountOrigin).toBe('promotion');
+  });
+
+  it('accepts explicit null: the cloud must not fabricate an origin (no backfill)', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: null }],
+    });
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0].discountOrigin).toBeNull();
+  });
+
+  it('rejects a value outside the categorical members instead of storing it silently', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: 'boss-discount' }],
+    });
+
+    // The failure is reported nested: items -> "0" (array index) -> the
+    // offending item's discountOrigin property.
+    const flatten = (
+      error: import('class-validator').ValidationError,
+    ): string[] => [error.property, ...(error.children ?? []).flatMap(flatten)];
+    expect(errors.flatMap(flatten)).toContain('discountOrigin');
+  });
+
+  it('leaves the field optional so payloads whose items omit it still validate (backward-compat contract for every deployed terminal)', () => {
+    const { dto, errors } = validate(basePayload);
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0]).not.toHaveProperty('discountOrigin');
+  });
+});

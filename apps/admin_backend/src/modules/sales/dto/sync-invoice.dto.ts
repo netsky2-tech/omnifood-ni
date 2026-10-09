@@ -9,6 +9,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+import { DiscountOrigin } from '../entities/discount-origin.enum';
 
 export class InventorySnapshotBindingDto {
   @IsNumber()
@@ -92,6 +93,16 @@ export class CreateInvoiceItemDto {
 
   @IsNumber()
   discount: number;
+
+  @IsEnum(DiscountOrigin)
+  @IsOptional()
+  // D-A2: WHY this line has a discount. OPTIONAL on purpose — every deployed
+  // terminal omits it today, and a payload that omits it must stay valid —
+  // forbidNonWhitelisted rejects the WHOLE batch on an unknown property, so
+  // the field must be whitelisted BEFORE any terminal starts sending it.
+  // Absence (or null) persists as NULL: the backend never fabricates an
+  // origin and there is no backfill for historical rows.
+  discountOrigin?: DiscountOrigin | null;
 
   @IsString()
   @IsOptional()

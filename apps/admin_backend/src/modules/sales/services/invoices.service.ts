@@ -404,6 +404,11 @@ export class InvoicesService {
           appliedTaxRate: originItem.appliedTaxRate,
           taxAmount,
           total,
+          // discount is forced to 0 on a credit-note line: there is no
+          // discount amount here, so there is nothing to attribute and
+          // discount_origin stays NULL (copying the origin line's discount
+          // origin would attribute a discount to a line that has none —
+          // NULL, not a fabricated value, is the honest encoding).
           discount: 0,
           notes: dto.notes ?? null,
           originInvoiceItemId: requested.originInvoiceItemId,
@@ -2069,6 +2074,10 @@ export class InvoicesService {
         taxAmount: Number(item.taxAmount),
         total: Number(item.total),
         discount: Number(item.discount),
+        // D-A2: provenance is part of the payload identity. A replay that
+        // differs only in discount origin is a materially different payload
+        // and must conflict, not silently rewrite provenance.
+        discountOrigin: item.discountOrigin ?? null,
         variantId: item.variantId,
         notes: item.notes,
         recipeVersionId: item.recipeVersionId,
@@ -2595,6 +2604,10 @@ export class InvoicesService {
               taxAmount: Number(item.taxAmount),
               total: Number(item.total),
               discount: Number(item.discount),
+              // D-A2: keep the hash symmetric with the stored-side mapping in
+              // skipMatchingCreditNoteReplay; `?? null` makes legacy payloads
+              // (field absent) hash identically to their stored NULL rows.
+              discountOrigin: item.discountOrigin ?? null,
               variantId: item.variantId ?? null,
               notes: item.notes ?? null,
               recipeVersionId: item.recipeVersionId ?? null,

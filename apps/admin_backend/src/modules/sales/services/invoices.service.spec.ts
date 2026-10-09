@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { calculateSyncPayloadHash, InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
+import { DiscountOrigin } from '../entities/discount-origin.enum';
 import { Payment } from '../entities/payment.entity';
 import { SyncInvoiceDto } from '../dto/sync-invoice.dto';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
@@ -641,6 +642,144 @@ describe('InvoicesService', () => {
           { allowCreditNotes: true },
         ),
       ).rejects.toThrow('conflicts with an existing credit-note invoice');
+
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+      expect(paymentRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('persists per-line discountOrigin and does not drop or fabricate it (D-A2)', async () => {
+      const tenantId = 'tenant-1';
+      const dto: SyncInvoiceDto = {
+        id: 'inv-discount-origin',
+        number: '003',
+        createdAt: new Date().toISOString(),
+        userId: 'user-1',
+        subtotal: 200,
+        totalTax: 30,
+        total: 230,
+        paymentStatus: 'PAID',
+        items: [
+          {
+            id: 'item-discounted',
+            productId: 'prod-1',
+            productName: 'Burger',
+            quantity: 2,
+            unitPrice: 100,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 30,
+            total: 230,
+            discount: 20,
+            discountOrigin: DiscountOrigin.LOYALTY,
+          },
+          {
+            id: 'item-plain',
+            productId: 'prod-2',
+            productName: 'Salad',
+            quantity: 1,
+            unitPrice: 50,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 7.5,
+            total: 57.5,
+            discount: 0,
+            // No discountOrigin: legacy/undecorated lines must stay
+            // undefined here so the column persists NULL — never a
+            // fabricated origin.
+          },
+        ],
+        payments: [],
+      };
+
+      await service.syncInvoices(tenantId, [dto]);
+
+      expect(itemRepo.upsert).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'item-discounted',
+            discountOrigin: 'loyalty',
+          }),
+        ]),
+        ['id'],
+      );
+      const [[upsertCall]] = itemRepo.upsert.mock.calls as [
+        [Array<Record<string, unknown>>, string[]],
+      ];
+      const plainLine = upsertCall.find((r) => r['id'] === 'item-plain');
+      expect(plainLine).toBeDefined();
+      expect(plainLine?.['discountOrigin']).toBeUndefined();
+    });
+
+    it('rejects a credit-note replay that differs ONLY in per-line discountOrigin (provenance is part of the payload hash)', async () => {
+      const stored = {
+        ...creditNoteInvoice,
+        items: creditNoteInvoice.items.map((item) => ({
+          ...item,
+          discountOrigin: DiscountOrigin.PROMOTION,
+        })),
+      };
+      invoiceRepo.findOne.mockResolvedValueOnce({
+        ...stored,
+        tenant_id: 'tenant-1',
+        created_at: new Date(creditNoteInvoice.createdAt),
+        payments: [],
+      });
+
+      // Same amounts, same ids, same everything — only the discount origin
+      // was rewritten in transit. That is a materially different payload:
+      // silently accepting it would let a replay rewrite provenance.
+      await expect(
+        service.syncInvoices(
+          'tenant-1',
+          [
+            {
+              ...creditNoteInvoice,
+              items: creditNoteInvoice.items.map((item) => ({
+                ...item,
+                discountOrigin: DiscountOrigin.LOYALTY,
+              })),
+            },
+          ],
+          txManager as never,
+          { allowCreditNotes: true },
+        ),
+      ).rejects.toThrow('conflicts with an existing credit-note invoice');
+
+      expect(invoiceRepo.upsert).not.toHaveBeenCalled();
+      expect(itemRepo.upsert).not.toHaveBeenCalled();
+      expect(paymentRepo.upsert).not.toHaveBeenCalled();
+    });
+
+    it('treats a credit-note replay carrying the SAME per-line discountOrigin as idempotent (legacy replays omit it and stay idempotent too)', async () => {
+      const stored = {
+        ...creditNoteInvoice,
+        items: creditNoteInvoice.items.map((item) => ({
+          ...item,
+          discountOrigin: DiscountOrigin.PROMOTION,
+        })),
+      };
+      invoiceRepo.findOne.mockResolvedValueOnce({
+        ...stored,
+        tenant_id: 'tenant-1',
+        created_at: new Date(creditNoteInvoice.createdAt),
+        payments: [],
+      });
+
+      await service.syncInvoices(
+        'tenant-1',
+        [
+          {
+            ...creditNoteInvoice,
+            items: creditNoteInvoice.items.map((item) => ({
+              ...item,
+              discountOrigin: DiscountOrigin.PROMOTION,
+            })),
+          },
+        ],
+        txManager as never,
+        { allowCreditNotes: true },
+      );
 
       expect(invoiceRepo.upsert).not.toHaveBeenCalled();
       expect(itemRepo.upsert).not.toHaveBeenCalled();

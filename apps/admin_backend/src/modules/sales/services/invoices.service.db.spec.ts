@@ -18,6 +18,7 @@ import { Tenant } from '../../tenant/entities/tenant.entity';
 import { UserRole } from '../../identity/entities/user.entity';
 import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
+import { DiscountOrigin } from '../entities/discount-origin.enum';
 import { Invoice } from '../entities/invoice.entity';
 import { Payment } from '../entities/payment.entity';
 import type { SyncBatchRecordDto } from '../dto/sync-batch.dto';
@@ -1303,5 +1304,198 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
       );
     },
     TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'persists per-line discount_origin exactly as synced and lets PostgreSQL reject an invalid member (D-A2)',
+    async () => {
+      const fixture = await createMigrationBuiltSchemaFixture();
+      const schema = fixture.schema;
+      process.stdout.write(
+        `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
+      );
+      const tenantId = randomUUID();
+      const absentInvoiceId = randomUUID();
+      const valuedInvoiceId = randomUUID();
+      const absentItemId = randomUUID();
+      const valuedItemId = randomUUID();
+      let dataSource: DataSource | null = null;
+
+      try {
+        // Superuser connection: this test exercises the persistence contract
+        // (what the sync path writes and what the database accepts), not an
+        // RLS read path. The schema is built exclusively by the real
+        // migration set, so the discount_origin column and its enum type are
+        // the ones production would have — not an entity-derived copy.
+        dataSource = new DataSource({
+          type: 'postgres',
+          ...postgresConnection,
+          schema,
+          entities: [
+            Tenant,
+            Invoice,
+            InvoiceItem,
+            InvoiceItemModifier,
+            Payment,
+            InventorySyncReceipt,
+            InventorySyncOutbox,
+          ],
+          extra: {
+            allowExitOnIdle: true,
+            options: `-c search_path=${schema},public -c statement_timeout=15000`,
+          },
+        });
+        await dataSource.initialize();
+
+        await dataSource.getRepository(Tenant).save(
+          dataSource.getRepository(Tenant).create({
+            id: tenantId,
+            name: 'Tenant Discount Origin',
+            slug: normalizeTenantSlug('Tenant Discount Origin'),
+          }),
+        );
+
+        const service = new InvoicesService(
+          dataSource,
+          dataSource.getRepository(Invoice),
+          dataSource.getRepository(InvoiceItem),
+          dataSource.getRepository(Payment),
+          createMockAuthorizingUserRepository(),
+          {} as never,
+          dataSource.getRepository(InventorySyncReceipt),
+          dataSource.getRepository(InventorySyncOutbox),
+          { findActiveVersion: jest.fn(), getSnapshot: jest.fn() } as never,
+          { explode: jest.fn() } as never,
+        );
+
+        // BACKWARD COMPATIBILITY (the point of this slice): a payload whose
+        // invoice items OMIT discount_origin — every deployed terminal today
+        // — must still be accepted, persisting NULL. No origin is fabricated.
+        await service.syncInvoices(tenantId, [
+          {
+            id: absentInvoiceId,
+            number: 'A-DO-001',
+            createdAt: new Date().toISOString(),
+            userId: 'd0000000-0000-4000-8000-00000000000d',
+            subtotal: 10,
+            totalTax: 1.5,
+            total: 11.5,
+            paymentStatus: 'PAID',
+            type: 'regular',
+            items: [
+              {
+                id: absentItemId,
+                productId: 'a1000000-0000-4000-8000-0000000000b1',
+                productName: 'Burger',
+                quantity: 1,
+                unitPrice: 10,
+                originalTaxRate: 0.15,
+                appliedTaxRate: 0.15,
+                taxAmount: 1.5,
+                total: 11.5,
+                discount: 2,
+              },
+            ],
+            payments: [],
+          },
+        ]);
+
+        // A payload that INCLUDES discount_origin must persist the value.
+        await service.syncInvoices(tenantId, [
+          {
+            id: valuedInvoiceId,
+            number: 'A-DO-002',
+            createdAt: new Date().toISOString(),
+            userId: 'd0000000-0000-4000-8000-00000000000d',
+            subtotal: 10,
+            totalTax: 1.5,
+            total: 11.5,
+            paymentStatus: 'PAID',
+            type: 'regular',
+            items: [
+              {
+                id: valuedItemId,
+                productId: 'a1000000-0000-4000-8000-0000000000b1',
+                productName: 'Burger',
+                quantity: 1,
+                unitPrice: 10,
+                originalTaxRate: 0.15,
+                appliedTaxRate: 0.15,
+                taxAmount: 1.5,
+                total: 11.5,
+                discount: 2,
+                discountOrigin: DiscountOrigin.PROMOTION,
+              },
+            ],
+            payments: [],
+          },
+        ]);
+
+        const rows = (await dataSource.query(
+          `SELECT id::text, discount_origin::text AS origin
+             FROM invoice_items
+            WHERE tenant_id = $1
+            ORDER BY id::text`,
+          [tenantId],
+        )) as Array<{ id: string; origin: string | null }>;
+        expect(rows).toHaveLength(2);
+        const absentRow = rows.find((row) => row.id === absentItemId);
+        const valuedRow = rows.find((row) => row.id === valuedItemId);
+        expect(absentRow?.origin).toBeNull();
+        expect(valuedRow?.origin).toBe('promotion');
+
+        // The migration must have built the schema-conventional enum type,
+        // not an unbounded varchar: catalog-level proof of the constraint.
+        const enumType = (await dataSource.query(
+          `SELECT count(*)::int AS n
+             FROM pg_type t
+             JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE n.nspname = current_schema()
+              AND t.typname = 'invoice_items_discount_origin_enum'`,
+        )) as Array<{ n: number }>;
+        expect(enumType[0].n).toBe(1);
+        const members = (await dataSource.query(
+          `SELECT string_agg(v::text, ',' ORDER BY v::text) AS members
+             FROM unnest(enum_range(NULL::invoice_items_discount_origin_enum)) AS v`,
+        )) as Array<{ members: string }>;
+        expect(members[0].members).toBe('loyalty,manual,promotion');
+
+        // NEGATIVE proof: the DATABASE itself rejects a value outside the
+        // members — nothing can silently store an unknown origin, not even a
+        // writer that bypasses the DTO validation.
+        let violationCode: string | undefined;
+        try {
+          await dataSource.query(
+            `INSERT INTO invoice_items (
+               id, tenant_id, invoice_id, product_id, product_name, quantity,
+               unit_price, original_tax_rate, applied_tax_rate, tax_amount,
+               total, discount, discount_origin
+             ) VALUES (
+               $1, $2, $3, 'a1000000-0000-4000-8000-0000000000b1', 'Burger',
+               1.0000, 10.00, 0.1500, 0.1500, 1.5000, 11.50, 0.00, 'bogus'
+             )`,
+            [randomUUID(), tenantId, absentInvoiceId],
+          );
+        } catch (error) {
+          violationCode = (error as { code?: string }).code;
+        }
+        expect(violationCode).toBe('22P02');
+        await expect(
+          dataSource.getRepository(InvoiceItem).countBy({
+            tenant_id: tenantId,
+          }),
+        ).resolves.toBe(2);
+      } finally {
+        try {
+          if (dataSource?.isInitialized) {
+            await dataSource.destroy();
+          }
+          await fixture.close();
+        } catch {
+          // Best-effort cleanup.
+        }
+      }
+    },
+    240000,
   );
 });

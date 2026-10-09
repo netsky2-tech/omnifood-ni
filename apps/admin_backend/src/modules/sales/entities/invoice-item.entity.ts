@@ -9,6 +9,7 @@ import {
 } from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { InvoiceItemModifier } from './invoice-item-modifier.entity';
+import { DiscountOrigin } from './discount-origin.enum';
 
 export interface InventorySnapshotBinding {
   bindingOrdinal: number;
@@ -78,6 +79,18 @@ export class InvoiceItem {
 
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   discount: number;
+
+  /// Why this line's discount exists (D-A2): manual, promotion or loyalty.
+  /// Nullable: legacy rows and undiscounted lines carry no origin and none
+  /// is ever fabricated (no backfill). The PostgreSQL type is the
+  /// schema-conventional `invoice_items_discount_origin_enum`.
+  @Column({
+    name: 'discount_origin',
+    type: 'enum',
+    enum: DiscountOrigin,
+    nullable: true,
+  })
+  discountOrigin?: DiscountOrigin | null;
 
   @Column({ name: 'variant_id', nullable: true })
   variantId: string;
