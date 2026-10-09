@@ -929,6 +929,58 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       expect(result.maxDiscountAmount).toBeNull();
     });
 
+    it('clears a persisted percent cap with a superseding null tombstone on explicit null (numeric twin)', async () => {
+      configureActiveRows([
+        capParamRow('MAX_DISCOUNT_PERCENT', 10, 1),
+      ]);
+
+      const result = await service.configureFiscalSetup(
+        tenantId,
+        baseDto({ maxDiscountPercent: null }),
+        userId,
+      );
+
+      expect(savedRowsFor('MAX_DISCOUNT_PERCENT')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'MAX_DISCOUNT_PERCENT',
+            paramValue: null,
+            version: 2,
+            isActive: true,
+            effectiveTo: null,
+          }),
+        ]),
+      );
+      // No cap: the tombstone reads back as absent.
+      expect(result.maxDiscountPercent).toBeNull();
+    });
+
+    it('clears a whitespace-only code through the same tombstone — trimming happens before the clear decision', async () => {
+      configureActiveRows([
+        capParamRow('DGI_AUTHORIZATION_CODE', 'DGI-OLD-002', 1),
+      ]);
+
+      await service.configureFiscalSetup(
+        tenantId,
+        baseDto({ dgiAuthorizationCode: '   ' }),
+        userId,
+      );
+
+      expect(savedRowsFor('DGI_AUTHORIZATION_CODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'DGI_AUTHORIZATION_CODE',
+            paramValue: null,
+            version: 2,
+          }),
+        ]),
+      );
+      // Never a stored whitespace value and never a sentinel string.
+      for (const row of savedRowsFor('DGI_AUTHORIZATION_CODE')) {
+        expect((row as { paramValue?: unknown }).paramValue).toBeNull();
+      }
+    });
+
     it('skips the write when the submitted cap equals the governing row (idempotent)', async () => {
       configureActiveRows([capParamRow('MAX_DISCOUNT_PERCENT', 15, 1)]);
 
