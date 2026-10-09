@@ -519,13 +519,15 @@ describe('Sync batch route (e2e)', () => {
     );
   });
 
-  it('accepts and forwards a valid per-line discount_origin to the sync service (D-A2)', async () => {
+  it('accepts and forwards a valid per-line discount_origin amounts breakdown to the sync service (D-A2)', async () => {
     const record = buildSaleRecord(2);
     const saleInvoice = record.invoice as Record<string, unknown>;
     const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
     record.invoice = {
       ...saleInvoice,
-      items: [{ ...saleItem, discountOrigin: 'promotion' }],
+      // Mixed origins on one line are the whole point of the breakdown (D-A2):
+      // a promotion on the item plus a manual discount on the order.
+      items: [{ ...saleItem, discountOrigin: { manual: 5, promotion: 10 } }],
     };
     syncBatch.mockResolvedValue({
       received: 1,
@@ -555,16 +557,19 @@ describe('Sync batch route (e2e)', () => {
       string,
       Array<{ invoice: { items: Array<Record<string, unknown>> } }>,
     ];
-    expect(calledRecords[0].invoice.items[0].discountOrigin).toBe('promotion');
+    expect(calledRecords[0].invoice.items[0].discountOrigin).toEqual({
+      manual: 5,
+      promotion: 10,
+    });
   });
 
-  it('rejects an invalid discount_origin and refuses the WHOLE batch before the sync service runs', async () => {
+  it('rejects an unknown KEY inside the discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
     const record = buildSaleRecord(3);
     const saleInvoice = record.invoice as Record<string, unknown>;
     const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
     record.invoice = {
       ...saleInvoice,
-      items: [{ ...saleItem, discountOrigin: 'boss-discount' }],
+      items: [{ ...saleItem, discountOrigin: { bossDiscount: 5 } }],
     };
 
     const response = await request(app.getHttpServer())
@@ -574,9 +579,70 @@ describe('Sync batch route (e2e)', () => {
       .expect(400);
 
     const body = response.body as ValidationErrorResponse;
-    expect(body.message).toEqual(
-      expect.arrayContaining([expect.stringContaining('discountOrigin')]),
-    );
+    expect(JSON.stringify(body.message)).toContain('discountOrigin');
+    expect(JSON.stringify(body.message)).toContain('bossDiscount');
+    expect(syncBatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a NEGATIVE amount inside the discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
+    const record = buildSaleRecord(4);
+    const saleInvoice = record.invoice as Record<string, unknown>;
+    const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
+    record.invoice = {
+      ...saleInvoice,
+      items: [{ ...saleItem, discountOrigin: { manual: -3 } }],
+    };
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ records: [record] })
+      .expect(400);
+
+    const body = response.body as ValidationErrorResponse;
+    expect(JSON.stringify(body.message)).toContain('discountOrigin');
+    expect(syncBatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a ZERO amount inside the discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
+    const record = buildSaleRecord(5);
+    const saleInvoice = record.invoice as Record<string, unknown>;
+    const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
+    record.invoice = {
+      ...saleInvoice,
+      items: [{ ...saleItem, discountOrigin: { manual: 0 } }],
+    };
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ records: [record] })
+      .expect(400);
+
+    const body = response.body as ValidationErrorResponse;
+    expect(JSON.stringify(body.message)).toContain('discountOrigin');
+    expect(JSON.stringify(body.message)).toContain('must be a positive number');
+    expect(syncBatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects an EMPTY discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
+    const record = buildSaleRecord(6);
+    const saleInvoice = record.invoice as Record<string, unknown>;
+    const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
+    record.invoice = {
+      ...saleInvoice,
+      items: [{ ...saleItem, discountOrigin: {} }],
+    };
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ records: [record] })
+      .expect(400);
+
+    const body = response.body as ValidationErrorResponse;
+    expect(JSON.stringify(body.message)).toContain('discountOrigin');
+    expect(JSON.stringify(body.message)).toContain('must be a non-empty object');
     expect(syncBatch).not.toHaveBeenCalled();
   });
 });

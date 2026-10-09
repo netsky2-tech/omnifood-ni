@@ -9,7 +9,7 @@ import {
 } from 'typeorm';
 import { Invoice } from './invoice.entity';
 import { InvoiceItemModifier } from './invoice-item-modifier.entity';
-import { DiscountOrigin } from './discount-origin.enum';
+import { DiscountOriginBreakdown } from './discount-origin.enum';
 
 export interface InventorySnapshotBinding {
   bindingOrdinal: number;
@@ -80,17 +80,23 @@ export class InvoiceItem {
   @Column('decimal', { precision: 12, scale: 2, default: 0 })
   discount: number;
 
-  /// Why this line's discount exists (D-A2): manual, promotion or loyalty.
-  /// Nullable: legacy rows and undiscounted lines carry no origin and none
-  /// is ever fabricated (no backfill). The PostgreSQL type is the
-  /// schema-conventional `invoice_items_discount_origin_enum`.
+  /// WHY and HOW MUCH this line's discount exists (D-A2, amounts breakdown):
+  /// e.g. {"manual": 5, "promotion": 10}. One line can be discounted by
+  /// MORE THAN ONE origin at once (a promotion on the item plus a manual
+  /// discount on the order), so the single categorical column this replaced
+  /// (1809620000000) could not express provenance; only origins with a
+  /// NON-ZERO amount are present. Nullable: legacy rows and undiscounted
+  /// lines carry no breakdown and none is ever fabricated (no backfill).
+  /// The PostgreSQL type is jsonb guarded by
+  /// chk_invoice_items_discount_origin_breakdown (keys ⊆ DiscountOrigin,
+  /// values positive numbers), added by
+  /// 1809630000000-ReplaceDiscountOriginWithBreakdown.
   @Column({
     name: 'discount_origin',
-    type: 'enum',
-    enum: DiscountOrigin,
+    type: 'jsonb',
     nullable: true,
   })
-  discountOrigin?: DiscountOrigin | null;
+  discountOrigin?: DiscountOriginBreakdown | null;
 
   @Column({ name: 'variant_id', nullable: true })
   variantId: string;

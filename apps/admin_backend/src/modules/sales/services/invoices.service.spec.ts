@@ -3,7 +3,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { calculateSyncPayloadHash, InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
-import { DiscountOrigin } from '../entities/discount-origin.enum';
 import { Payment } from '../entities/payment.entity';
 import { SyncInvoiceDto } from '../dto/sync-invoice.dto';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
@@ -648,7 +647,7 @@ describe('InvoicesService', () => {
       expect(paymentRepo.upsert).not.toHaveBeenCalled();
     });
 
-    it('persists per-line discountOrigin and does not drop or fabricate it (D-A2)', async () => {
+    it('persists the per-line discountOrigin breakdown and does not drop or fabricate it (D-A2)', async () => {
       const tenantId = 'tenant-1';
       const dto: SyncInvoiceDto = {
         id: 'inv-discount-origin',
@@ -671,7 +670,9 @@ describe('InvoicesService', () => {
             taxAmount: 30,
             total: 230,
             discount: 20,
-            discountOrigin: DiscountOrigin.LOYALTY,
+            // Mixed origins are the whole point of the breakdown (D-A2): a
+            // promotion on the item PLUS a manual discount on the order.
+            discountOrigin: { manual: 5, promotion: 15 },
           },
           {
             id: 'item-plain',
@@ -698,7 +699,7 @@ describe('InvoicesService', () => {
         expect.arrayContaining([
           expect.objectContaining({
             id: 'item-discounted',
-            discountOrigin: 'loyalty',
+            discountOrigin: { manual: 5, promotion: 15 },
           }),
         ]),
         ['id'],
@@ -711,12 +712,12 @@ describe('InvoicesService', () => {
       expect(plainLine?.['discountOrigin']).toBeUndefined();
     });
 
-    it('rejects a credit-note replay that differs ONLY in per-line discountOrigin (provenance is part of the payload hash)', async () => {
+    it('rejects a credit-note replay that differs ONLY in the per-line discountOrigin breakdown (provenance is part of the payload hash)', async () => {
       const stored = {
         ...creditNoteInvoice,
         items: creditNoteInvoice.items.map((item) => ({
           ...item,
-          discountOrigin: DiscountOrigin.PROMOTION,
+          discountOrigin: { promotion: 10 },
         })),
       };
       invoiceRepo.findOne.mockResolvedValueOnce({
@@ -726,8 +727,8 @@ describe('InvoicesService', () => {
         payments: [],
       });
 
-      // Same amounts, same ids, same everything — only the discount origin
-      // was rewritten in transit. That is a materially different payload:
+      // Same amounts, same ids, same everything — only the breakdown was
+      // rewritten in transit. That is a materially different payload:
       // silently accepting it would let a replay rewrite provenance.
       await expect(
         service.syncInvoices(
@@ -737,7 +738,7 @@ describe('InvoicesService', () => {
               ...creditNoteInvoice,
               items: creditNoteInvoice.items.map((item) => ({
                 ...item,
-                discountOrigin: DiscountOrigin.LOYALTY,
+                discountOrigin: { promotion: 10, loyalty: 20 },
               })),
             },
           ],
@@ -751,12 +752,12 @@ describe('InvoicesService', () => {
       expect(paymentRepo.upsert).not.toHaveBeenCalled();
     });
 
-    it('treats a credit-note replay carrying the SAME per-line discountOrigin as idempotent (legacy replays omit it and stay idempotent too)', async () => {
+    it('treats a credit-note replay carrying the SAME per-line discountOrigin breakdown as idempotent (legacy replays omit it and stay idempotent too)', async () => {
       const stored = {
         ...creditNoteInvoice,
         items: creditNoteInvoice.items.map((item) => ({
           ...item,
-          discountOrigin: DiscountOrigin.PROMOTION,
+          discountOrigin: { promotion: 10 },
         })),
       };
       invoiceRepo.findOne.mockResolvedValueOnce({
@@ -773,7 +774,7 @@ describe('InvoicesService', () => {
             ...creditNoteInvoice,
             items: creditNoteInvoice.items.map((item) => ({
               ...item,
-              discountOrigin: DiscountOrigin.PROMOTION,
+              discountOrigin: { promotion: 10 },
             })),
           },
         ],
