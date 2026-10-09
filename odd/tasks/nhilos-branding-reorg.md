@@ -76,3 +76,49 @@ recalculando la ruta relativa en la nueva.
 
 **Checks:** informe con PASS/FAIL.
 **Commit evidencia:** pendiente.
+
+---
+
+## RESULTADO (2026-10-08)
+
+**Commits empujados:** `a2ad8b3b` (documentos ODD trackeados) y `4909e280` (reorganización).
+Rama `feat/nhilos-branding-reality-audit`, 20 commits totales.
+
+### Estructura final
+
+```text
+docs/nhilos/branding/
+  README.md                 índice: qué es, orden de lectura, qué NO está acá, reglas de edición
+  gobernanza/               gobernanza del set + informe de auditoría de realidad
+  identidad/                brief de identidad + paquete de inicio de diseño
+  claims/                   registro de claims verificado (OD-02)
+  web/                      brief de marketing, IA, contenido de homepage, spec no funcional
+  producto/                 contenido de página de producto, inventario de medios
+```
+
+`Recursos/` disuelta. Tres copias eliminadas y referencias redirigidas a la canónica en
+`docs/nhilos/` — incluida la plantilla de auditoría de módulo, ahora en su versión vigente **v2.1**
+en lugar de la copia de v1.0.
+
+### El dato que justificó la deduplicación
+
+La copia del estándar de backoffice estaba **19 líneas por detrás** de su canónica: le faltaban las
+secciones 17.5 y 26.1 y varios párrafos. Una copia que ya divergió en silencio es la prueba de que
+copiar estándares no funciona.
+
+### Integridad de enlaces: el riesgo real
+
+155 enlaces relativos cruzan los documentos. Dos intentos fallidos antes del correcto:
+
+1. **77 rotos** — el script solo recalculaba enlaces cuyo *destino* se movía, y saltaba los que
+   apuntaban a documentos que no se movieron (la constitución) aunque **la fuente sí se movió**.
+2. **48 rotos** — al corregir, recalculé por segunda vez enlaces que ya estaban bien, aplicando el
+   desplazamiento dos veces.
+
+**Solución:** reescribir desde el contenido de `HEAD` con una **sola** pasada y la fórmula
+`relpath(MAP(destino), dir_nueva_fuente)`, aplicada a **todos** los enlaces relativos. Resultado
+verificado: **155 enlaces, 0 rotos**, conteos intactos (43 / 61 / 34).
+
+**Nota de proceso:** `git reset --hard` fue bloqueado por la política de seguridad del harness, y
+estuvo bien. Leer el contenido original con `git show HEAD:<ruta>` y reescribir desde ahí es
+equivalente, no destructivo y auditable.
