@@ -19,6 +19,7 @@ import {
 } from "./use-modifiers";
 import { modifierGroupFormSchema, type ModifierGroupFormData } from "./schema";
 import { describeModifierError } from "./modifiers-api";
+import { toFiniteNumber } from "@/lib/numeric";
 import { type ModifierGroup, type ModifierOption } from "./types";
 
 interface ModifierGroupFormProps {
@@ -108,7 +109,13 @@ export function ModifierGroupForm({
           key: nextOptionRowKey(),
           id: option.id,
           name: option.name,
-          price_delta: option.price_delta,
+          // Defense at the component boundary: a Postgres decimal that
+          // reaches this form as a string must never sit in row state, or
+          // the save echoes the string back and the backend @IsNumber
+          // rejects it (the client-reported defect). Primary normalization
+          // lives in modifiers-api.ts; this guards any payload that
+          // bypasses that layer (cache, fixture, future call site).
+          price_delta: toFiniteNumber(option.price_delta),
           is_default: option.is_default,
           sort_order: option.sort_order,
           is_active: (option as OptionWithActiveState).is_active,

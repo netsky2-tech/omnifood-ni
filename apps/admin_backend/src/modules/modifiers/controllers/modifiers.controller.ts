@@ -24,6 +24,12 @@ import {
   AttachProductDto,
 } from '../dto/attach-modifier-group.dto';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
+import {
+  serializeEffectiveGroups,
+  serializeModifierGroup,
+  serializeModifierGroups,
+  serializeModifierOption,
+} from '../modifier-response';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
@@ -53,11 +59,18 @@ export class ModifiersController {
   ) {
     // status is validated inside the service (normalizeStatusFilter,
     // same doctrine as assertUuid): invalid values are a clean 400.
-    return this.modifiersService.findAll(this.requireTenant(tenantId), {
-      category_id: categoryId,
-      product_id: productId,
-      status: status as ModifierGroupStatusFilter | undefined,
-    });
+    const groups = await this.modifiersService.findAll(
+      this.requireTenant(tenantId),
+      {
+        category_id: categoryId,
+        product_id: productId,
+        status: status as ModifierGroupStatusFilter | undefined,
+      },
+    );
+    // Response boundary: Postgres numeric reaches Node as a string while the
+    // entity declares number — every decimal field leaves as a JSON number
+    // (see modifier-response.ts).
+    return serializeModifierGroups(groups);
   }
 
   // NOTE: declared BEFORE @Get(':id') so 'effective' is not captured as an
@@ -70,16 +83,21 @@ export class ModifiersController {
   ) {
     // Missing or malformed product_id is rejected with 400 by the service
     // (assertUuid), the same doctrine as the other uuid inputs.
-    return this.modifiersService.getEffectiveGroups(
+    const groups = await this.modifiersService.getEffectiveGroups(
       this.requireTenant(tenantId),
       productId ?? '',
     );
+    return serializeEffectiveGroups(groups);
   }
 
   @Get(':id')
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER, UserRole.WAITER)
   async findOne(@Param('id') id: string, @GetTenantId() tenantId?: string) {
-    return this.modifiersService.findOne(this.requireTenant(tenantId), id);
+    const group = await this.modifiersService.findOne(
+      this.requireTenant(tenantId),
+      id,
+    );
+    return serializeModifierGroup(group);
   }
 
   @Post()
@@ -88,7 +106,11 @@ export class ModifiersController {
     @Body() dto: CreateModifierGroupDto,
     @GetTenantId() tenantId?: string,
   ) {
-    return this.modifiersService.createGroup(this.requireTenant(tenantId), dto);
+    const group = await this.modifiersService.createGroup(
+      this.requireTenant(tenantId),
+      dto,
+    );
+    return serializeModifierGroup(group);
   }
 
   @Patch(':id')
@@ -98,11 +120,12 @@ export class ModifiersController {
     @Body() dto: UpdateModifierGroupDto,
     @GetTenantId() tenantId?: string,
   ) {
-    return this.modifiersService.updateGroup(
+    const group = await this.modifiersService.updateGroup(
       this.requireTenant(tenantId),
       id,
       dto,
     );
+    return serializeModifierGroup(group);
   }
 
   @Delete(':id')
@@ -119,11 +142,12 @@ export class ModifiersController {
     @Body() dto: CreateModifierOptionDto,
     @GetTenantId() tenantId?: string,
   ) {
-    return this.modifiersService.createOption(
+    const option = await this.modifiersService.createOption(
       this.requireTenant(tenantId),
       groupId,
       dto,
     );
+    return serializeModifierOption(option);
   }
 
   @Patch(':groupId/options/:optionId')
@@ -134,12 +158,13 @@ export class ModifiersController {
     @Body() dto: UpdateModifierOptionDto,
     @GetTenantId() tenantId?: string,
   ) {
-    return this.modifiersService.updateOption(
+    const option = await this.modifiersService.updateOption(
       this.requireTenant(tenantId),
       groupId,
       optionId,
       dto,
     );
+    return serializeModifierOption(option);
   }
 
   @Delete(':groupId/options/:optionId')

@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ModifierGroupForm } from "./modifier-group-form";
 import { modifierGroupFormSchema, modifierOptionFormSchema } from "./schema";
-import { type ModifierGroup } from "./types";
+import {
+  normalizeEffectiveGroups,
+  normalizeModifierGroup,
+  normalizeModifierOption,
+} from "./modifiers-api";
+import { type ModifierGroup, type ModifierOption } from "./types";
 import {
   Dialog,
   DialogContent,
@@ -156,6 +161,77 @@ describe("modifierGroupFormSchema", () => {
       sort_order: 0,
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("modifiers decimal contract at the API boundary", () => {
+  it("normalizes a string price_delta into a number for every response path", () => {
+    const rawOption = {
+      id: "opt-1",
+      name: "Entera",
+      price_delta: "0.00",
+      is_default: false,
+      sort_order: 0,
+    } as unknown as Parameters<typeof normalizeModifierOption>[0];
+    const option = normalizeModifierOption(rawOption);
+
+    expect(typeof option.price_delta).toBe("number");
+    expect(option.price_delta).toBe(0);
+  });
+
+  it("normalizes options inside a group payload and keeps other fields intact", () => {
+    const rawGroup = {
+      id: "group-1",
+      name: "Leche",
+      min_selected: 1,
+      max_selected: 3,
+      allow_quantities: true,
+      sort_order: 2,
+      is_active: true,
+      options: [
+        {
+          id: "opt-1",
+          name: "Entera",
+          price_delta: "15.25",
+          is_default: true,
+          sort_order: 0,
+        },
+      ],
+    } as unknown as Parameters<typeof normalizeModifierGroup>[0];
+    const group = normalizeModifierGroup(rawGroup);
+
+    expect(typeof group.options[0]!.price_delta).toBe("number");
+    expect(group.options[0]!.price_delta).toBe(15.25);
+    expect(group.name).toBe("Leche");
+    expect(group.min_selected).toBe(1);
+    expect(group.options[0]!.is_default).toBe(true);
+  });
+
+  it("normalizes the effective-groups resolution and preserves negatives", () => {
+    const raw = [
+      {
+        group_id: "group-1",
+        name: "Leche",
+        min_selected: 1,
+        max_selected: 3,
+        allow_quantities: true,
+        source: "category",
+        options: [
+          {
+            id: "opt-1",
+            name: "Descuento",
+            price_delta: "-2.50",
+            is_default: false,
+            sort_order: 0,
+          },
+        ],
+      },
+    ] as unknown as Parameters<typeof normalizeEffectiveGroups>[0];
+    const [group] = normalizeEffectiveGroups(raw);
+
+    expect(typeof group!.options[0]!.price_delta).toBe("number");
+    expect(group!.options[0]!.price_delta).toBe(-2.5);
+    expect(group!.source).toBe("category");
   });
 });
 
@@ -320,6 +396,39 @@ describe("ModifierGroupForm", () => {
     );
     const entera = optionCalls.find((call) => call.optionId === "opt-1");
     expect(entera?.input.price_delta).toBe(-2);
+  });
+
+  it("surfaces a string decimal from the real wire shape as a submit-ready number", async () => {
+    // Regression for the client-reported defect: a Postgres `numeric`
+    // reaches the client as the string "0.00"; the form showed "0.00" in
+    // the input yet demanded typing 0, and the echoed STRING failed the
+    // backend @IsNumber on save. The input must surface a numeric value the
+    // user can submit unchanged, and the payload handed to the mutation
+    // must carry a real number — asserted on the actual payload object,
+    // NOT on a mocked request shape.
+    const wireShapeGroup = {
+      ...mockGroup,
+      options: [
+        { ...mockGroup.options[0]!, price_delta: "0.00" },
+        mockGroup.options[1]!,
+      ],
+    } as unknown as ModifierGroup;
+    renderForm(wireShapeGroup);
+
+    const enteraPrice = screen.getByLabelText(/precio adicional.*entera/i);
+    expect(enteraPrice).toHaveValue(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /actualizar/i }));
+    await waitFor(() => {
+      expect(mockUpdateOption.mutateAsync).toHaveBeenCalledTimes(2);
+    });
+    const optionCalls = mockUpdateOption.mutateAsync.mock.calls.map(
+      (call) => call[0],
+    );
+    const entera = optionCalls.find((call) => call.optionId === "opt-1");
+    expect(entera).toBeDefined();
+    expect(typeof entera!.input.price_delta).toBe("number");
+    expect(entera!.input.price_delta).toBe(0);
   });
 
   it("maps a 409 conflict to the friendly Spanish message, never the raw body", async () => {
