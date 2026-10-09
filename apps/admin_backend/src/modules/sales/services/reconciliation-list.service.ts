@@ -97,7 +97,9 @@ export class ReconciliationListService {
       conditions.push(`p.method = $${parameters.length}`);
     }
 
-    const startDate = ReconciliationListService.resolveDateBound(query.startDate);
+    const startDate = ReconciliationListService.resolveDateBound(
+      query.startDate,
+    );
     if (startDate) {
       parameters.push(startDate);
       conditions.push(`p.reconciled_at >= $${parameters.length}`);
@@ -116,7 +118,9 @@ export class ReconciliationListService {
       this.dataSource,
       tenantId,
       async (manager) => {
-        const countRows = await manager.query<Array<{ total: string | number }>>(
+        const countRows = await manager.query<
+          Array<{ total: string | number }>
+        >(
           `SELECT COUNT(*)::int AS total
              FROM invoice_payments p
              JOIN invoices i ON i.id = p.invoice_id
@@ -156,7 +160,9 @@ export class ReconciliationListService {
         );
 
         return {
-          reconciliations: rows.map(ReconciliationListService.toDto),
+          reconciliations: rows.map((row) =>
+            ReconciliationListService.toDto(row),
+          ),
           pagination: {
             page,
             limit,
