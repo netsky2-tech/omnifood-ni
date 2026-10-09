@@ -640,3 +640,29 @@ después:...,"Descuento (NIO)","Descuento Manual (NIO)","Descuento Promoción (N
 | El export lee el helper sin los ítems | 4 tests: la fila CSV, la identidad por fila, el caso legado y el guardián cross-superficie | El libro deriva de las líneas reales de la factura |
 
 **Evidencia:** backend 90/90 (semántica + export), web 143/143 (contrato + api + fiscal) y `tsc --noEmit` con 0 issues. **Límite declarado:** `w4-e2e-fiscal.test.ts` está excluido de vitest y exige backend vivo, así que el contrato e2e de los campos nuevos por el cable no quedó probado; ese archivo no afirma campos de fila, por lo que no necesitó cambio.
+
+---
+
+## 14. Barrido de los formularios que dependen de la validación nativa
+
+**Inventario:** 15 formularios en el panel y **sólo uno** con `noValidate` (el fiscal). Clasificados: 3 ya usan RHF+zod (login, promociones, modifiers) → les falta **sólo** `noValidate`, una línea cada uno; 1 con RHF sin resolver pero con reglas JS (`catalog-acquisition-modal`); 1 con `safeParse` de su esquema **más** `required` nativo (`user-dialog`); **4 native-only** (los del handoff); y 5 con guardas JS ad-hoc (inventario ×3, recetas, y un quinto de lealtad).
+
+**El diagnóstico es peor que "globo en inglés":** en un navegador real el globo nativo bloquea el submit y el feedback de la app nunca corre —la misma clase de defecto que el formulario fiscal—, pero además **cualquier submit que no venga del botón esquiva la guarda nativa por completo**: un `form.requestSubmit()` programático (que un test ya usa, `product-type-create.test.tsx:143-163`) o una llamada directa al handler. Hoy la única guarda real es el navegador, y es esquivable. De ahí el orden: **esquema primero, `noValidate` después**; al revés se pierden `required`/`pattern`/`min`/`max` en silencio.
+
+**Contratos nativos a cubrir, atributo por atributo:**
+| Formulario | Lo que la guarda nativa cubre hoy |
+|---|---|
+| Catalog (valor) | `code` required + `pattern ^[A-Za-z0-9_-]+$` + maxLength 64; `name` required + maxLength 120; `sortOrder` number min 0 |
+| Product | `name` required + maxLength 200; `uom` required (sólo en create); `sellPrice` number step 0.01 min 0, **no requerido** |
+| Lealtad, programa | `name` required; por forma de regla: SPEND_POINTS / PRODUCT_STAMPS / VISIT_STAMPS con `min 1` requeridos y un `min 0` opcional |
+| Lealtad, recompensa | `name` required; `cost` min 1 required; `amount` min 1 required en la rama de descuento; `productId` required en la rama de producto gratis |
+
+**Riesgo de regresión que hay que evitar: no inventar restricciones nuevas.** Valores legítimos hoy que un esquema ingenuo rompería: `sortOrder = 0`, `sellPrice = 0`, `amountNio = 50`, `minSpend = ''` (opcional vacío), `eligibleIds` con texto libre. El esquema cubre **lo que el atributo ya cubría** y nada más; endurecer de más rompe flujo legítimo, que es el modo de falla opuesto pero igual de real.
+
+**Cómo se obtiene el RED (técnica medida en el repo):** jsdom aplica las mismas restricciones nativas, así que un test que envía con un requerido vacío **observa el bug**: el submit queda bloqueado y el mensaje español no aparece. Después del arreglo, ese mismo test prueba que la app es dueña del feedback.
+
+**Estilo obligatorio:** mensajes literales por campo, en español, según el estándar §18.2 (dicen qué está mal y cómo corregirlo; prohibido `Invalid`, `Error`, texto crudo del backend y nombres técnicos del DTO) y §18.3 (preservar lo cargado; enfocar al error accionable). Render: `aria-invalid` + `<p className="text-xs text-destructive">{errors.X.message}</p>`.
+
+**Corte en tres unidades:** **A** catalog (la más chica, fija el patrón), **B** product (requeridos condicionales + el camino de cambio de tipo + 5 archivos de test), **C** el par de lealtad (mecánicamente idénticos entre sí → una sola unidad de revisión).
+
+**Hallazgos diferidos, no arreglados:** (a) el **quinto** formulario de lealtad (`customer-loyalty-profile.tsx:75`) que el handoff no nombra — sólo `type=number` nativo y ya tiene guardas JS; (b) el grupo con guardas JS ad-hoc (suppliers/insumos/purchases/RecipeForm) **no se rompe** con `noValidate` porque su guarda es JS, pero sus atributos nativos (`RecipeForm` hasta `max={99.99}`, `suppliers-tab.tsx:496` `required`) necesitan paridad de esquema **antes** de agregarlo; (c) los tres que ya usan RHF+zod necesitan sólo `noValidate` — cambio de una línea cada uno, merece su unidad chica.
