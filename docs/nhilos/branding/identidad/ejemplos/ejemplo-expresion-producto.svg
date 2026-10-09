@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="900" height="400" fill="#FFFFFF"/>
+  <text x="24" y="34" font-size="15" font-weight="700" fill="#0F172A">Ejemplo de forma — reglas de expresión por producto (A14)</text>
+  <text x="24" y="54" font-size="12" fill="#64748B">Define qué se hereda sin cambios y qué puede variar. Es lo que permite sumar un producto sin rediseñar la marca.</text>
+
+  <path d="M450 74 L450 92" stroke="#64748B" stroke-width="1.3" marker-end="url(#fl)"/>
+  <path d="M150 96 L750 96 L750 120" stroke="#64748B" stroke-width="1.3"/>
+  <path d="M450 96 L450 120" stroke="#64748B" stroke-width="1.3"/>
+  <path d="M150 96 L150 120" stroke="#64748B" stroke-width="1.3"/>
+  <path d="M750 96 L750 120" stroke="#64748B" stroke-width="1.3"/>
+
+  <g font-size="11">
+    <g transform="translate(24,74)">
+      <rect width="852" height="22" rx="4" fill="#E6EFF0" stroke="#1E3A40"/>
+      <text x="14" y="15" font-size="11.5" font-weight="700" fill="#1E3A40">NHILOS MASTER TOKENS — fuente única, se hereda sin cambios</text>
+    </g>
+
+    <!-- columnas -->
+    <g transform="translate(24,124)">
+      <rect width="270" height="212" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="14" y="22" font-size="12" font-weight="700" fill="#0F172A">NHILOS (marca madre)</text>
+      <text x="14" y="40" fill="#64748B">Caso base. Define todo.</text>
+      <g transform="translate(14,56)" fill="#0F172A">
+        <text y="0">· Mark principal e isotipo</text>
+        <text y="22">· Paleta completa</text>
+        <text y="44">· Tipografía y escala</text>
+        <text y="66">· Iconografía</text>
+        <text y="88">· Retícula y espaciado</text>
+        <text y="110">· Dirección de imagen</text>
+        <text y="132" fill="#64748B" font-size="10.5">Nada se redefine acá.</text>
+      </g>
+    </g>
+
+    <g transform="translate(314,124)">
+      <rect width="270" height="212" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="14" y="22" font-size="12" font-weight="700" fill="#0F172A">NHILOS POS</text>
+      <text x="14" y="40" fill="#64748B">Expresión vigente hoy.</text>
+      <g transform="translate(14,56)" fill="#0F172A">
+        <text y="0">· Hereda: mark, paleta, tipografía, retícula.</text>
+        <text y="22">· Hereda: dirección de imagen.</text>
+        <text y="44" fill="#1E3A40">Puede variar:</text>
+        <text y="66">· Colores de estado (éxito, alerta, peligro)</text>
+        <text y="88">· Superficie oscura del KDS</text>
+        <text y="110">· Densidad de la pantalla de venta</text>
+        <text y="132" fill="#64748B" font-size="10.5">El lockup es marca + producto.</text>
+      </g>
+    </g>
+
+    <g transform="translate(604,124)">
+      <rect width="272" height="212" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-dasharray="4 3"/>
+      <text x="14" y="22" font-size="12" font-weight="700" fill="#64748B">Producto futuro</text>
+      <text x="14" y="40" fill="#64748B">Plantilla, no un diseño.</text>
+      <g transform="translate(14,56)" fill="#64748B">
+        <text y="0">La regla debe permitir sumar un</text>
+        <text y="22">producto nuevo sin tocar la marca:</text>
+        <text y="52" fill="#0F172A">1. Hereda los master tokens.</text>
+        <text y="74" fill="#0F172A">2. Declara qué de su dominio</text>
+        <text y="90" fill="#0F172A">   necesita distinto.</text>
+        <text y="112" fill="#0F172A">3. Lo justifica por función,</text>
+        <text y="128" fill="#0F172A">   no por gusto.</text>
+        <text y="158" font-size="10.5">Si necesita cambiar el mark,</text>
+        <text y="174" font-size="10.5">no es un producto: es otra marca.</text>
+      </g>
+    </g>
+  </g>
+
+  <g transform="translate(24,356)">
+    <rect width="852" height="34" rx="6" fill="#E6EFF0"/>
+    <text x="14" y="22" font-size="11.5" fill="#1E3A40">Regla que decide los empates: <tspan font-weight="700">lo que varía se justifica por función del producto, nunca por preferencia estética.</tspan></text>
+  </g>
+  <defs><marker id="fl" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+    <path d="M0 0 L10 5 L0 10 z" fill="#64748B"/></marker></defs>
+</svg>

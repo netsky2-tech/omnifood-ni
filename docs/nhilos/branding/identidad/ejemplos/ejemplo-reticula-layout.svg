@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" width="900" height="360" font-family="Inter, -apple-system, Segoe UI, Roboto, sans-serif">
+  <rect width="900" height="360" fill="#FFFFFF"/>
+  <text x="24" y="34" font-size="15" font-weight="700" fill="#0F172A">Ejemplo de forma — retícula y layout (A11)</text>
+  <text x="24" y="54" font-size="12" fill="#64748B">Columnas, márgenes, espaciado y cómo se comporta al cambiar el ancho. Sin esto, cada pantalla se compone distinto.</text>
+
+  <g font-size="11" fill="#64748B">
+    <g transform="translate(24,74)">
+      <rect width="410" height="180" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="16" y="24" font-size="12" font-weight="600" fill="#1E3A40">Desktop · 12 columnas</text>
+      <g transform="translate(20,40)">
+        <rect width="370" height="110" fill="#fff" stroke="#E2E8F0"/>
+        <g fill="#E6EFF0">
+          <rect x="10" y="10" width="21" height="90"/><rect x="41" y="10" width="21" height="90"/>
+          <rect x="72" y="10" width="21" height="90"/><rect x="103" y="10" width="21" height="90"/>
+          <rect x="134" y="10" width="21" height="90"/><rect x="165" y="10" width="21" height="90"/>
+          <rect x="196" y="10" width="21" height="90"/><rect x="227" y="10" width="21" height="90"/>
+          <rect x="258" y="10" width="21" height="90"/><rect x="289" y="10" width="21" height="90"/>
+          <rect x="320" y="10" width="21" height="90"/><rect x="351" y="10" width="21" height="90"/>
+        </g>
+        <g stroke="#E4572E" stroke-width="1"><line x1="10" y1="118" x2="10" y2="126"/><line x1="372" y1="118" x2="372" y2="126"/></g>
+        <text x="191" y="132" font-size="10" fill="#E4572E" text-anchor="middle">ancho útil</text>
+      </g>
+      <text x="16" y="172" fill="#64748B">Margen 24 · gutter 10 · ancho útil máx. 1200</text>
+    </g>
+
+    <g transform="translate(456,74)">
+      <rect width="420" height="180" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="16" y="24" font-size="12" font-weight="600" fill="#1E3A40">Tablet y móvil · la misma retícula, reducida</text>
+      <g transform="translate(20,40)">
+        <g>
+          <rect width="130" height="110" fill="#fff" stroke="#E2E8F0"/>
+          <g fill="#E6EFF0"><rect x="8" y="10" width="22" height="90"/><rect x="38" y="10" width="22" height="90"/><rect x="68" y="10" width="22" height="90"/><rect x="98" y="10" width="22" height="90"/></g>
+          <text x="65" y="126" font-size="10" text-anchor="middle">Tablet · 8</text>
+        </g>
+        <g transform="translate(150,0)">
+          <rect width="90" height="110" fill="#fff" stroke="#E2E8F0"/>
+          <g fill="#E6EFF0"><rect x="8" y="10" width="32" height="90"/><rect x="48" y="10" width="32" height="90"/></g>
+          <text x="45" y="126" font-size="10" text-anchor="middle">Móvil · 4</text>
+        </g>
+        <g transform="translate(258,0)" font-size="10.5" fill="#0F172A">
+          <text y="14">Reglas del sistema:</text>
+          <text y="34" fill="#64748B">· La escala de espaciado no cambia.</text>
+          <text y="52" fill="#64748B">· Cambia la cantidad de columnas.</text>
+          <text y="70" fill="#64748B">· El contenido, no el layout, decide</text>
+          <text y="86" fill="#64748B">   cuántas columnas usa cada bloque.</text>
+          <text y="104" fill="#64748B">· Ningún bloque define su propio margen.</text>
+        </g>
+      </g>
+    </g>
+
+    <g transform="translate(24,266)">
+      <rect width="852" height="70" rx="6" fill="#F8FAFC" stroke="#E2E8F0"/>
+      <text x="16" y="24" font-size="12" font-weight="600" fill="#1E3A40">Lo que hay que entregar con la retícula</text>
+      <g transform="translate(16,40)" font-size="11" fill="#64748B">
+        <text x="0" y="12">· Los anchos cubiertos y la cantidad de columnas de cada uno.</text>
+        <text x="430" y="12">· Márgenes, gutter y ancho útil máximo.</text>
+        <text x="0" y="30">· La relación con la escala de espaciado de los tokens.</text>
+        <text x="430" y="30">· Cómo se comporta una tabla ancha, que es el caso difícil.</text>
+      </g>
+    </g>
+  </g>
+</svg>

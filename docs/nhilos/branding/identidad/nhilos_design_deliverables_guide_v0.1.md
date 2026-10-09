@@ -82,29 +82,88 @@ explorar **al menos tres direcciones** antes de cerrar. Lo que sí se copia de e
 > justamente las dos piezas que un encargo de agencia normalmente no pide. Si faltan, la entrega se
 > devuelve.
 
-### 3.2 Ejemplos de forma
+### 3.2 Ejemplos de forma, entregable por entregable
 
-**Construcción y área de resguardo.** La retícula de construcción muestra cómo está hecho el mark
-(proporciones, alineaciones, radios). El área de resguardo define cuánto aire necesita para no
-ahogarse, expresada en una unidad del propio mark.
+Cada bloque muestra **una** de las piezas de la tabla, con lo que debe contener. La marca es de
+relleno: mirá la estructura, no los valores.
+
+**`A1` `A2` `A3` `A4` — El mark, su construcción, sus variantes y sus lockups.**
+Los dos primeros muestran cómo está hecho el mark y cuánto aire necesita. El tercero muestra las
+seis variantes obligatorias y, sobre todo, **la relación marca madre / producto**: `NHILOS` es la
+marca, `NHILOS POS` es el producto, y el lockup es lo que hace visible esa arquitectura. Es la pieza
+que impide que mañana aparezca un logotipo nuevo por módulo.
 
 ![Ejemplo de retícula de construcción y área de resguardo](ejemplos/ejemplo-construccion.svg)
 
-**Usos incorrectos.** No alcanza con decir "no lo deformes". Hay que **mostrarlo**, y mostrar
-correcciones concretas: qué sí hacer en cada caso.
+![Ejemplo de variantes del mark y lockups de producto](ejemplos/ejemplo-variantes-lockups.svg)
+
+**`A5` `A6` — Resguardo, tamaños mínimos y usos incorrectos.**
+No alcanza con decir "no lo deformes". Hay que **mostrarlo**, y mostrar qué hacer en cada caso.
 
 ![Ejemplo de usos incorrectos y su corrección](ejemplos/ejemplo-usos-incorrectos.svg)
 
-**Paleta.** Cada color necesita sus valores en los cuatro espacios de color, porque se imprime, se
-ve en pantalla y se publica en redes. Y una proporción de uso, porque una paleta sin proporción
-termina con todo el mundo eligiendo su color favorito.
+**`A7` — Paleta.**
+Cada color con sus cuatro valores —porque se imprime, se ve en pantalla y se publica en redes— y una
+proporción de uso, porque una paleta sin proporción termina con todo el mundo eligiendo su favorito.
 
 ![Ejemplo de ficha de paleta](ejemplos/ejemplo-paleta.svg)
 
-**Escala tipográfica.** No "la fuente es X", sino la escala completa con tamaños, pesos,
-interlineado y casos de uso. Es lo que permite que dos personas distintas compongan igual.
+**`A8` — Tipografía.**
+No "la fuente es X", sino la escala completa con tamaños, pesos, interlineado y casos de uso. Es lo
+que permite que dos personas distintas compongan igual.
 
 ![Ejemplo de escala tipográfica](ejemplos/ejemplo-escala-tipografica.svg)
+
+**`A9` — Iconografía.**
+No es "una librería de íconos": es la retícula y las reglas que hacen que un ícono nuevo pertenezca
+al sistema sin que haya que preguntar.
+
+![Ejemplo de sistema de iconografía](ejemplos/ejemplo-iconografia.svg)
+
+**`A10` — Dirección de imagen.**
+Qué tipo de foto y qué se descarta, con referencias enlazadas. Cada referencia debe venir con la
+razón por la que encaja.
+
+![Ejemplo de dirección de imagen](ejemplos/ejemplo-direccion-imagen.svg)
+
+**`A11` — Retícula y layout.**
+Columnas, márgenes, espaciado y comportamiento por ancho. Sin esto, cada pantalla se compone
+distinto y el sistema no se sostiene.
+
+![Ejemplo de retícula y layout](ejemplos/ejemplo-reticula-layout.svg)
+
+**`A12` — Derivaciones.**
+Favicon, ícono de app y cualquier sello o marca de agua. Deben **derivar del mismo sistema**, no
+inventarse aparte. El ejemplo de empaquetado en `§5` muestra los archivos que se esperan.
+
+**`A13` — Master tokens.** ← *La pieza que convierte archivos en sistema.*
+Es la que un encargo de agencia normalmente no pide, y por eso es la que más se omite. En tabla, no
+solo en Figma, y exportada para que el equipo la consuma.
+
+![Ejemplo de master tokens](ejemplos/ejemplo-master-tokens.svg)
+
+**`A14` — Reglas de expresión por producto.** ← *La segunda que más se omite.*
+Define qué se hereda sin cambios y qué puede variar por producto, y con qué criterio se decide. Es
+lo que permite sumar un producto sin rediseñar la marca.
+
+![Ejemplo de reglas de expresión por producto](ejemplos/ejemplo-expresion-producto.svg)
+
+**`A15` — Guía consolidada.**
+Todo lo anterior en un recorrido con índice. La estructura esperada:
+
+| Sección | Contenido |
+|---|---|
+| 1 · La marca | Propósito, esencia y slogan, citados de la constitución |
+| 2 · El mark | Construcción, variantes, lockups, resguardo, tamaños mínimos, usos incorrectos |
+| 3 · Color | Paleta, valores, proporción, contraste |
+| 4 · Tipografía | Familias, escala, licenciamiento |
+| 5 · Iconografía | Retícula, reglas, el conjunto |
+| 6 · Imagen | Dirección, referencias, qué evitar |
+| 7 · Retícula y layout | Columnas, espaciado, comportamiento |
+| 8 · Derivaciones | Favicon, ícono de app, sellos |
+| 9 · Tokens | La tabla completa |
+| 10 · Expresión por producto | Qué se hereda y qué varía |
+| 11 · Aplicación | Ejemplos de la marca aplicada, en piezas reales |
 
 ### 3.3 Ficha de ejemplo: cómo se documenta una pieza
 
@@ -146,36 +205,49 @@ Y así una ficha de variante:
 
 | # | Pieza | Qué debe contener |
 |---|---|---|
-| B1.1 | **Mapa del sitio** | Las rutas y la relación entre páginas |
+| B1.1 | **Mapa del sitio** | Las rutas y su relación, con el propósito de cada una en una frase |
 | B1.2 | **Wireframes por página** | Todas las rutas del alcance, con jerarquía real y contenido real |
-| B1.3 | **Estados** | `hover`, `focus`, `activo`, `deshabilitado`, `cargando`, `vacío`, `error` (ver 4.3) |
+| B1.3 | **Estados** | De componente **y** de página (ver 4.4) |
 | B1.4 | **Responsive** | Los anchos definidos, con la retícula de cada uno |
 | B1.5 | **Flujo de conversión** | El recorrido hasta "Solicitar una demo", incluido el formulario y sus errores |
 | B2.1 | **Pantallas finales** | Las mismas de `B1`, con la identidad aplicada |
-| B2.2 | **Especificación de componentes** | Cada componente con sus medidas, espaciados y estados |
-| B2.3 | **Tokens del sitio** | Los valores de color, tipografía y espaciado en formato de tabla |
+| B2.2 | **Especificación de componentes** | Cada componente acotado: medidas, espaciados y estados (ver 4.5) |
+| B2.3 | **Tokens del sitio** | Los valores en tabla, con el mismo formato que `A13` |
 | B2.4 | **Assets exportados** | Imágenes e íconos en los formatos y tamaños que el sitio necesita |
-| B2.5 | **Evidencia de accesibilidad** | Contraste medido, foco visible, y cómo se comporta con movimiento reducido |
+| B2.5 | **Evidencia de accesibilidad** | Contraste **medido**, foco visible y movimiento reducido (ver 4.6) |
 
-### 4.3 Los estados no se pueden omitir
+### 4.3 Ejemplo de forma — mapa del sitio (`B1.1`)
 
-Es el hueco más común en una entrega de sitio: se diseña el camino feliz y el resto se improvisa en
-código. Cada uno de estos tiene que estar diseñado, y no es "lo mismo pero gris":
+Es la primera pieza de `B1` y la que ordena todo lo demás. Declara las rutas, qué página introduce y
+cuál resuelve, la única ruta de conversión, y **qué no existe todavía**.
+
+![Ejemplo de mapa del sitio](ejemplos/ejemplo-mapa-sitio.svg)
+
+### 4.4 Ejemplos de forma — estados (`B1.3`)
+
+Hay dos niveles y se entregan los dos. **Estados de componente**, que es el que casi todos entregan:
 
 ![Ejemplo de matriz de estados de un componente](ejemplos/ejemplo-estados-componente.svg)
 
-Y a nivel de página, además de los estados de componente, hacen falta: **página sin resultados**,
-**página 404**, **formulario con error de validación**, **formulario enviado con éxito** y
-**contenido no disponible**.
+Y **estados de página**, que es el que casi todos omiten. Acá la página entera cambia y define un
+siguiente paso:
 
-### 4.4 La accesibilidad no es un extra
+![Ejemplo de estados de página](ejemplos/ejemplo-estados-pagina.svg)
 
-Los umbrales ya están definidos en `nhilos_website_non_functional_spec_v1.0.md` y son **criterios de
-aceptación**, no mejoras posteriores: contraste mínimo, foco visible, tamaño de área táctil y
-respeto por el movimiento reducido. La entrega debe incluir **el contraste medido**, no la promesa
-de que se ve bien.
+### 4.5 Ejemplo de forma — especificación de componente (`B2.2`)
 
----
+Un componente no se entrega como imagen: se entrega **acotado**. Medidas, espaciados, tokens usados
+y el comportamiento de cada estado. Es lo que permite que se construya sin interpretar.
+
+![Ejemplo de especificación de componente](ejemplos/ejemplo-especificacion-componente.svg)
+
+### 4.6 Ejemplo de forma — evidencia de accesibilidad (`B2.5`)
+
+La accesibilidad es un **criterio de aceptación**, no una mejora posterior. La entrega incluye el
+contraste medido por combinación, con la herramienta y la fecha. Una combinación que no se midió no
+está aprobada; "se ve bien" no es evidencia.
+
+![Ejemplo de evidencia de accesibilidad](ejemplos/ejemplo-accesibilidad.svg)
 
 ## 5. Cómo se empaqueta la entrega
 
@@ -204,23 +276,37 @@ Pasá esta lista antes de mandar. Si algo queda sin marcar, no está listo.
 - [ ] El mark se lee **en negro puro**, sin depender del color.
 - [ ] Se imprimió una prueba a tamaño de favicon (16 px) y es reconocible.
 - [ ] Se imprimió una prueba en térmico monocromo y no se empasta.
-- [ ] Existen las cinco variantes de A3 y los lockups de A4.
+- [ ] Existen las **seis** variantes: principal, horizontal, isotipo, monocromo, negativo y un color.
+- [ ] Existe el **lockup de producto** (`NHILOS` + `NHILOS POS`) y la regla de relación marca madre / producto.
 - [ ] El área de resguardo está expresada en una unidad del mark, no en milímetros sueltos.
+- [ ] El tamaño mínimo está declarado **por soporte**: impresión, pantalla, favicon, app.
 - [ ] Hay al menos 6 usos incorrectos mostrados, cada uno con su corrección.
 - [ ] Cada color de la paleta tiene HEX, RGB, CMYK, uso y proporción.
-- [ ] La tipografía declara su licenciamiento y de dónde se descarga.
+- [ ] La tipografía declara familia, escala, licenciamiento y de dónde se descarga.
+- [ ] La iconografía declara retícula, grosor de trazo y reglas, y entrega **un archivo por ícono**.
+- [ ] La dirección de imagen trae referencias enlazadas, cada una con la razón por la que encaja.
+- [ ] La retícula declara columnas, márgenes, gutter y comportamiento por ancho.
+- [ ] Favicon e ícono de app **derivan** del sistema; no se inventaron aparte.
 - [ ] Los **master tokens** están en tabla y cubren color, tipografía, radios, espaciado, sombras y movimiento.
-- [ ] Las **reglas de expresión por producto** están escritas.
+- [ ] Los tokens están exportados en un formato que el equipo pueda consumir (CSV o JSON, no solo Figma).
+- [ ] Las **reglas de expresión por producto** están escritas, con el criterio para decidir los empates.
+- [ ] La guía consolidada tiene índice y sigue el orden de `A15` (§3.2).
 - [ ] Alguien que no sos vos aplicó la marca a una pieza nueva usando solo la guía, y salió bien.
 
 **Entregable B**
 - [ ] `B1` está en gris neutro: **ningún** color, tipografía ni logo final.
+- [ ] El mapa del sitio declara ruta, propósito, y qué **no** existe todavía.
 - [ ] Están **todas** las rutas del alcance, no solo la home.
-- [ ] Están todos los estados de 4.3, no solo el camino feliz.
-- [ ] Están resolverse los estados de página de 4.3 (404, sin resultados, error de formulario).
+- [ ] Hay **una sola** ruta de conversión.
+- [ ] Están todos los estados de componente (§4.4).
+- [ ] Están los estados de **página**: 404, sin resultados, error de formulario, envío exitoso y contenido no disponible.
 - [ ] Los anchos de pantalla están cubiertos y la retícula de cada uno es explícita.
-- [ ] El contraste está **medido y anotado**, no estimado.
+- [ ] El caso difícil está resuelto: **una tabla ancha en pantalla chica**.
+- [ ] Cada componente viene **acotado**: medidas, espaciados y tokens usados (§4.5).
+- [ ] Los tokens del sitio siguen el mismo formato que `A13`.
+- [ ] El contraste está **medido y anotado por combinación**, con herramienta y fecha (§4.6).
 - [ ] El foco de teclado es visible en todos los elementos interactivos.
+- [ ] El **movimiento reducido** está cubierto.
 - [ ] Los assets están exportados con la convención de nombres de §5.
 - [ ] No quedó ninguna pieza que solo exista dentro de un PDF.
 
