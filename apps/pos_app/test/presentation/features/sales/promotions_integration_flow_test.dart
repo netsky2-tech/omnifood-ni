@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
@@ -65,11 +69,23 @@ class FakeAuthRepository implements AuthRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Controllable stand-in for the real [SyncService]: the test drives the
+/// inbound-sync stream directly, so no network path is exercised.
+class FakeSyncService extends Mock implements SyncService {
+  final _controller = StreamController<InboundSyncResult>.broadcast();
+
+  @override
+  Stream<InboundSyncResult> get onInboundSync => _controller.stream;
+
+  void emitSync(InboundSyncResult result) => _controller.add(result);
+}
+
 void main() {
   late AppDatabase database;
   late FakeSalesRepository salesRepo;
   late FakeInventoryRepository inventoryRepo;
   late FakeAuthRepository authRepo;
+  late FakeSyncService fakeSync;
   late SaleViewModel viewModel;
 
   final pBeer = const Product(
@@ -116,6 +132,7 @@ void main() {
     salesRepo = FakeSalesRepository();
     inventoryRepo = FakeInventoryRepository();
     authRepo = FakeAuthRepository();
+    fakeSync = FakeSyncService();
 
     viewModel = SaleViewModel(
       salesRepo,
@@ -127,6 +144,8 @@ void main() {
       TenantConfigService(database.localConfigDao),
       KitchenOrderService(database),
       PrinterConfigService(database.localConfigDao),
+      null, // printerPort
+      fakeSync,
     );
     viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
   });
@@ -239,6 +258,89 @@ void main() {
       expect(invoice.subtotal, equals(192.0));
       expect(invoice.totalTax, closeTo(28.80, 0.01)); // 15% de 192
       expect(invoice.total, closeTo(220.80, 0.01));
+    });
+  });
+
+  /// SOHO P3 S2 (defect 1): the open checkout must learn about promotions
+  /// that arrive through the inbound-sync stream. The cloud is authoritative;
+  /// SyncService consumes the `promotions` delta into
+  /// `promotionDao.savePromotions`, then announces the delivery on
+  /// `onInboundSync` — and the running checkout must re-evaluate without a
+  /// view-model reinitialization.
+  group('SaleViewModel - promotion reload on inbound sync (SOHO P3 S2)', () {
+    // The listener chain is fire-and-forget over real async SQLite I/O, so a
+    // bounded wall-clock wait is the honest way to observe the reload.
+    Future<void> waitUntil(bool Function() condition) async {
+      for (var i = 0; i < 100 && !condition(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    test('applies a promotion that arrives through the inbound sync stream',
+        () async {
+      // Checkout already open with items and no promotion configured.
+      viewModel.addToCart(pBeer, quantity: 2);
+      expect(viewModel.totalDiscounts, equals(0.0));
+
+      // The delta lands in SQLite exactly as SyncService consumes it
+      // (savePromotions upsert), then the inbound event is announced.
+      await database.promotionDao.savePromotion(
+        PromotionEntity(
+          id: 'promo-late-2x1',
+          name: '2x1 Tardío en Cervezas',
+          type: 'buyXGetYFree',
+          targetProductId: 'prod-toña',
+          buyQuantity: 1,
+          getQuantity: 1,
+          priority: 10,
+          isActive: true,
+        ),
+      );
+      fakeSync.emitSync(InboundSyncResult(promotionsCount: 1, timestamp: 't'));
+
+      await waitUntil(() => viewModel.totalDiscounts > 0);
+      expect(viewModel.totalDiscounts, equals(50.0));
+      expect(viewModel.subtotal, equals(50.0)); // 100 bruto - 50 desc
+    });
+
+    test('drops the discount when a later delta deactivates the promotion',
+        () async {
+      viewModel.addToCart(pBeer, quantity: 2);
+      await database.promotionDao.savePromotion(
+        PromotionEntity(
+          id: 'promo-late-2x1',
+          name: '2x1 Tardío en Cervezas',
+          type: 'buyXGetYFree',
+          targetProductId: 'prod-toña',
+          buyQuantity: 1,
+          getQuantity: 1,
+          priority: 10,
+          isActive: true,
+        ),
+      );
+      fakeSync.emitSync(InboundSyncResult(promotionsCount: 1, timestamp: 't1'));
+      await waitUntil(() => viewModel.totalDiscounts > 0);
+      expect(viewModel.totalDiscounts, equals(50.0));
+
+      // Cloud is authoritative: the next delta re-delivers the same row with
+      // isActive=false (savePromotions is a replace-upsert).
+      await database.promotionDao.savePromotion(
+        PromotionEntity(
+          id: 'promo-late-2x1',
+          name: '2x1 Tardío en Cervezas',
+          type: 'buyXGetYFree',
+          targetProductId: 'prod-toña',
+          buyQuantity: 1,
+          getQuantity: 1,
+          priority: 10,
+          isActive: false,
+        ),
+      );
+      fakeSync.emitSync(InboundSyncResult(promotionsCount: 1, timestamp: 't2'));
+
+      await waitUntil(() => viewModel.totalDiscounts == 0.0);
+      expect(viewModel.totalDiscounts, equals(0.0));
+      expect(viewModel.subtotal, equals(100.0));
     });
   });
 }

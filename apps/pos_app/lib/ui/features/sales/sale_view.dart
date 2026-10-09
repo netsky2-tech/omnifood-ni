@@ -2400,7 +2400,7 @@ class PromotionsManagerDialog extends StatelessWidget {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Control de Promociones',
+              'Promociones',
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -2419,39 +2419,66 @@ class PromotionsManagerDialog extends StatelessWidget {
                   ),
                 ),
               )
-            : ListView.separated(
-                itemCount: promotions.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final promo = promotions[index];
-                  return SwitchListTile(
-                    dense: true,
-                    isThreeLine: true,
-                    title: Text(
-                      promo.name,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: promo.isActive ? colorScheme.onSurface : Colors.grey,
-                      ),
+            : Column(
+                children: [
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: promotions.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final promo = promotions[index];
+                        // SOHO P3 S2 (defect 2): the cloud is authoritative
+                        // for promotions; the former SwitchListTile offered a
+                        // local-only write that the next delta silently
+                        // reverted. The surface is now strictly read-only.
+                        return ListTile(
+                          dense: true,
+                          isThreeLine: true,
+                          title: Text(
+                            promo.name,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: promo.isActive
+                                  ? colorScheme.onSurface
+                                  : Colors.grey,
+                            ),
+                          ),
+                          subtitle: Text(
+                            promo.type == PromotionType.buyXGetYFree
+                                ? '2x1 (Paga ${promo.buyQuantity} Lleva ${promo.buyQuantity + promo.getQuantity})'
+                                : (promo.type == PromotionType.percentageDiscount
+                                    ? '${promo.discountValue.toStringAsFixed(0)}% de descuento'
+                                    : 'Descuento C\$ ${promo.discountValue.toStringAsFixed(2)}'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: promo.isActive
+                                  ? Colors.deepOrange.shade800
+                                  : Colors.grey,
+                            ),
+                          ),
+                          trailing: Text(
+                            promo.isActive ? 'Activa' : 'Inactiva',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color:
+                                  promo.isActive ? Colors.green : Colors.grey,
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                    subtitle: Text(
-                      promo.type == PromotionType.buyXGetYFree
-                          ? '2x1 (Paga ${promo.buyQuantity} Lleva ${promo.buyQuantity + promo.getQuantity})'
-                          : (promo.type == PromotionType.percentageDiscount
-                              ? '${promo.discountValue.toStringAsFixed(0)}% de descuento'
-                              : 'Descuento C\$ ${promo.discountValue.toStringAsFixed(2)}'),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: promo.isActive ? Colors.deepOrange.shade800 : Colors.grey,
-                      ),
+                  ),
+                  const Divider(height: 1),
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Text(
+                      'Las promociones se activan y desactivan desde el panel de negocio (web).',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                      textAlign: TextAlign.center,
                     ),
-                    value: promo.isActive,
-                    activeColor: Colors.deepOrange,
-                    onChanged: (val) {
-                      viewModel.togglePromotion(promo.id, val);
-                    },
-                  );
-                },
+                  ),
+                ],
               ),
       ),
       actions: [

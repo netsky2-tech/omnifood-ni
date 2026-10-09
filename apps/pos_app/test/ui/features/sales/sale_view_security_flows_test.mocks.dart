@@ -916,23 +916,6 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
       ) as _i18.Future<void>);
 
   @override
-  _i18.Future<void> togglePromotion(
-    String? promoId,
-    bool? isActive,
-  ) =>
-      (super.noSuchMethod(
-        Invocation.method(
-          #togglePromotion,
-          [
-            promoId,
-            isActive,
-          ],
-        ),
-        returnValue: _i18.Future<void>.value(),
-        returnValueForMissingStub: _i18.Future<void>.value(),
-      ) as _i18.Future<void>);
-
-  @override
   _i18.Future<void> loadProducts() => (super.noSuchMethod(
         Invocation.method(
           #loadProducts,

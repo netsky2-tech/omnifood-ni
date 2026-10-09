@@ -12,6 +12,7 @@ import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/data/daos/sales/cash_movement_dao.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
+import 'package:pos_app/domain/models/sales/promotion.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/services/config/business_mode_evaluator.dart';
@@ -673,4 +674,58 @@ void main() {
     verify(mockViewModel.openSession(0, balanceUsd: 0.0)).called(1);
   });
 
+  group('PromotionsManagerDialog is read-only (SOHO P3 S2)', () {
+    // Defect 2: the dialog used to render a SwitchListTile whose onChanged
+    // wrote ONLY the local SQLite row, and the next cloud delta silently
+    // reverted it. The cloud is authoritative, so the POS must not offer a
+    // write control. This test pins that the control is gone AND that the
+    // operator still learns the promotion state and where to change it.
+    testWidgets('shows promotion state without any write control', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      when(mockViewModel.allPromotions).thenReturn(const [
+        Promotion(
+          id: 'promo-active',
+          name: '2x1 Toña',
+          type: PromotionType.buyXGetYFree,
+          buyQuantity: 1,
+          getQuantity: 1,
+          isActive: true,
+        ),
+        Promotion(
+          id: 'promo-inactive',
+          name: '10% Café',
+          type: PromotionType.percentageDiscount,
+          discountValue: 10,
+          isActive: false,
+        ),
+      ]);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<SaleViewModel>.value(
+          value: mockViewModel,
+          child: const MaterialApp(
+            home: Scaffold(body: PromotionsManagerDialog()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The write affordance is gone; the cloud owns activation.
+      expect(find.byType(Switch), findsNothing);
+      expect(find.byType(SwitchListTile), findsNothing);
+
+      // The state is still visible and honestly labelled.
+      expect(find.text('2x1 Toña'), findsOneWidget);
+      expect(find.text('10% Café'), findsOneWidget);
+      expect(find.text('Activa'), findsOneWidget);
+      expect(find.text('Inactiva'), findsOneWidget);
+
+      // The operator is told where promotions are actually managed.
+      expect(find.textContaining('panel de negocio'), findsOneWidget);
+    });
+  });
 }

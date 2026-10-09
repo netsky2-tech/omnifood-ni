@@ -606,6 +606,16 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as _i15.Future<void>);
 
   @override
+  _i15.Future<void> loadDiscountCaps() => (super.noSuchMethod(
+        Invocation.method(
+          #loadDiscountCaps,
+          [],
+        ),
+        returnValue: _i15.Future<void>.value(),
+        returnValueForMissingStub: _i15.Future<void>.value(),
+      ) as _i15.Future<void>);
+
+  @override
   void setCompanyTaxRegime(_i16.TaxRegime? regime) => super.noSuchMethod(
         Invocation.method(
           #setCompanyTaxRegime,
@@ -745,23 +755,6 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
         Invocation.method(
           #loadPromotions,
           [],
-        ),
-        returnValue: _i15.Future<void>.value(),
-        returnValueForMissingStub: _i15.Future<void>.value(),
-      ) as _i15.Future<void>);
-
-  @override
-  _i15.Future<void> togglePromotion(
-    String? promoId,
-    bool? isActive,
-  ) =>
-      (super.noSuchMethod(
-        Invocation.method(
-          #togglePromotion,
-          [
-            promoId,
-            isActive,
-          ],
         ),
         returnValue: _i15.Future<void>.value(),
         returnValueForMissingStub: _i15.Future<void>.value(),

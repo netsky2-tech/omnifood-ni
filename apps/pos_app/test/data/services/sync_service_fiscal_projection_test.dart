@@ -51,6 +51,10 @@ void main() {
 
   final capturedPosts = <Map<String, dynamic>>[];
 
+  // Per-test extras merged into the inbound `deltas` payload, so a test can
+  // deliver a specific delta without rebuilding the whole response.
+  final extraDeltas = <String, dynamic>{};
+
   setUpAll(() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -58,6 +62,7 @@ void main() {
 
   setUp(() async {
     capturedPosts.clear();
+    extraDeltas.clear();
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
 
     mockDio = Dio(BaseOptions(baseUrl: 'https://cloud.omnifood.ni'));
@@ -69,6 +74,7 @@ void main() {
             'serverTime': '2026-03-30T14:00:00Z',
             'currentVersion': 1787745600000,
             'deltas': {
+              ...extraDeltas,
               'products': [],
               'catalogValues': [],
               'insumos': [],
@@ -166,6 +172,41 @@ void main() {
       expect(ackPost['data']['revision'], 1);
       expect(ackPost['data']['fingerprint'],
           '9999999999999999999999999999999999999999999999999999999999999999');
+    });
+
+    test(
+        'a promotions delta is counted on the emitted event and projected into SQLite',
+        () async {
+      // SOHO P3 S2 (defect 1): the open checkout reloads promotions when the
+      // inbound event reports DELIVERED ROWS. That signal is only real if the
+      // ingestion site counts them — a view-model test that hand-builds
+      // `InboundSyncResult(promotionsCount: 1)` proves the reaction but not
+      // the wiring, and the wiring is exactly what fails silently in this
+      // repository's history (a handler that existed and was never mounted).
+      // Pin the count at its source, through the real ingest path.
+      extraDeltas['promotions'] = [
+        {
+          'id': 'promo-sync-1',
+          'name': '2x1 Sincronizada',
+          'type': 'buyXGetYFree',
+          'buyQuantity': 1,
+          'getQuantity': 1,
+          'isActive': true,
+        },
+      ];
+
+      final result = await syncService.pullInboundDeltas();
+
+      expect(result, isNotNull);
+      expect(
+        result!.promotionsCount,
+        1,
+        reason: 'the ingestion site must count the delivered promotion rows, '
+            'or the checkout never learns a promotion arrived',
+      );
+
+      final projected = await database.promotionDao.getAllPromotions();
+      expect(projected.map((p) => p.id), contains('promo-sync-1'));
     });
 
     test('offline durability: projection survives restart without WAN',

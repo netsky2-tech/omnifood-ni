@@ -168,6 +168,7 @@ class SaleViewModel extends ChangeNotifier {
         if (event.productsCount > 0 || event.catalogValuesCount > 0) {
           loadProducts();
         }
+        _reloadPromotionsOnInboundSync(event);
       });
     }
     if (autoLoad) {
@@ -231,6 +232,7 @@ class SaleViewModel extends ChangeNotifier {
         if (event.productsCount > 0 || event.catalogValuesCount > 0) {
           loadProducts();
         }
+        _reloadPromotionsOnInboundSync(event);
       });
     }
     if (autoLoad) {
@@ -1192,10 +1194,26 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> togglePromotion(String promoId, bool isActive) async {
-    await _database.promotionDao.setPromotionActive(promoId, isActive);
-    await loadPromotions();
+  /// SOHO P3 S2 (defect 1): the open checkout must re-evaluate promotions
+  /// when a delta delivers rows. We use the precise `promotionsCount`
+  /// signal instead of reloading on every inbound sync:
+  /// [InboundSyncResult] already carries per-delta counts and the
+  /// promotions delta populates it at the source, so a promotions-only
+  /// delta is the only thing that pays for this reload (one local SQLite
+  /// read plus a re-evaluation). The cloud is authoritative: without this
+  /// reload, a promotion created or changed in the owner dashboard stayed
+  /// invisible until the view model was rebuilt.
+  void _reloadPromotionsOnInboundSync(InboundSyncResult event) {
+    if (event.promotionsCount > 0) {
+      loadPromotions();
+    }
   }
+
+  // SOHO P3 S2 (defect 2): `togglePromotion` was removed. The cloud is
+  // authoritative for promotions — a local-only write here was silently
+  // reverted by the next cloud delta, offering the operator a write control
+  // that never stuck. Activation/deactivation happens ONLY in the business
+  // panel (web); the POS renders promotion state read-only.
 
   void _applyPromotions() {
     final result = _promotionsEngine.evaluate(

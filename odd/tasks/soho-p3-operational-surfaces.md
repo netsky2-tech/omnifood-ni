@@ -187,9 +187,20 @@ Cortado en dos unidades: la configuración (backend + web) y después la proyecc
 
 
 
-**S2 · Rastro y activación de promociones (P1, P2, P3)**
-Recargar promociones en el listener de inbound del checkout; quitar el toggle del POS (decisión D-B: nube autoritativa).
-*TDD:* RED que afirme que un delta de promoción dispara `loadPromotions` y que el resultado queda evaluado en el carrito abierto; test que afirme que el POS ya no ofrece el toggle.
+**S2 · Rastro y activación de promociones (P1, P2, P3) — IMPLEMENTADO, en verificación**
+
+Dos defectos, con las dos causas confirmadas en código.
+
+**D-P1 · El checkout abierto nunca se enteraba de una promoción nueva.** Las promociones llegaban a la tablet (delta `promotions` consumido en `sync_service.dart`), pero el listener de inbound recargaba **solo** productos. Una promo creada o cambiada en la web quedaba invisible hasta reinicializar el view model. Ahora `InboundSyncResult` lleva `promotionsCount`, **poblado en el sitio de ingesta** (`sync_service.dart:4781`, desde `promotionEntities.length`), y el checkout recarga cuando es mayor que cero. Se eligió la señal precisa en vez de recargar en cada sync: el evento ya llevaba contadores por delta y el sitio de ingesta ya tenía la lista.
+
+**D-P2 · El POS ofrecía un control de escritura que la nube revertía en silencio.** El `SwitchListTile` escribía **solo** la fila local de SQLite; el siguiente delta la pisaba. Decisión D-B aplicada: la nube es autoritativa, el POS quedó de **solo lectura** — `ListTile` con estado `Activa`/`Inactiva` y una nota en español que dice dónde se administran. `togglePromotion` se eliminó del view model en vez de dejarlo muerto: un método público que escribe estado local de promociones es un footgun que invita a reconectarlo y reintroducir la reversión silenciosa. `promotionDao.setPromotionActive` queda sin uso y se reporta como candidato de limpieza, **sin** tocarlo: vive en la capa generada.
+
+**Hallazgo de verificación más valioso — el cable que existía y nada probaba.** El test de recarga del worker **fabricaba el evento a mano** (`InboundSyncResult(promotionsCount: 1, ...)`). Eso pinnea la reacción del VM pero **no** que el `SyncService` real produzca ese contador. Lo demostré con una mutación: poner `promotionsCount: 0` en el sitio de ingesta **pasaba todos los tests**. Es la misma clase que ya golpeó a este proyecto (el controlador que existía y no se montó). Se cerró agregando un test que conduce la **ruta real de ingesta** a través del fake HTTP en `sync_service_fiscal_projection_test.dart`, afirmando `promotionsCount == 1` y la proyección a SQLite; con eso, la mutación falla con `Expected: <1> Actual: <0>`. Lección durable: **un test que construye su propia entrada no prueba que la producción construya esa entrada.**
+
+**Evidencia:** tres mutaciones, todas restauradas byte-idénticas — quitar la recarga del listener (`Expected <50.0> Actual <0.0>`), reintroducir un control de escritura en el diálogo (falla el test de solo lectura), y no propagar el contador (falla el test de ingesta, tras cerrar el hueco). 96/96 en las siete suites enfocadas.
+
+**Nota de proceso:** el worker falló dos veces por errores de infraestructura. La segunda vez dejó la librería completa pero sin regenerar los cuatro mocks (que sin `togglePromotion` no compilaban) ni el test de widget; el orquestador cerró ambas cosas a mano. La regeneración se hizo con filtro ajustado y sin `--delete-conflicting-outputs`, midiendo el inventario de generados antes y después (109 archivos, hash de lista idéntico).
+
 
 **S3 · Historial útil para auditar el día (H1, H3)**
 Filtro de fecha, fila de totales del período, límite/paginación, y dejar de tragar errores por fila.
