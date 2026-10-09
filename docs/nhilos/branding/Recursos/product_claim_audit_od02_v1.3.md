@@ -2,7 +2,8 @@
 
 **Documento:** `product_claim_audit_od02_v1.3.md`  
 **Versión:** 1.3 (Reconciliación Normativa + Re-anclaje + Adenda de Lealtad)  
-**Estado:** `CLOSED / VERIFIED / RE-ANCHORED`  
+**Estado:** `CLOSED / VERIFIED / RE-ANCHORED — ANCLAJE PROVISIONAL`
+**Anclaje:** `b4b5ad27` (`origin/main`, 2026-10-08). **Provisional**: existe una línea de trabajo en curso (auditoría P3 de descuentos y promociones e2e) que cambia comportamiento publicado. Los claims en riesgo y la obligación de re-anclaje están listados en `nhilos_branding_document_governance_v1.0.md` §7.  
 **Gate:** OD-02 — Product Claim Inventory  
 **Scope:** NHILOS POS public website  
 **Upstream authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0)  

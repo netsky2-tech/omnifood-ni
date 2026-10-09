@@ -353,9 +353,16 @@ Fechas tomadas del commit que agregó cada archivo:
 ## 5. Revalidación de Medios contra el Build Anclado (`b4b5ad27`)
 
 **Fecha de revalidación:** 2026-10-08
+**Estado:** **DIFERIDA** — la revalidación de capturas se ejecutará contra el build final, no contra
+el anclaje provisional. Motivo: hay una línea de trabajo en curso (auditoría P3 de descuentos y
+promociones e2e) que cambia comportamiento publicado de lealtad, promociones, modificadores y
+descuentos, y por lo tanto también las superficies capturadas. Ver
+`nhilos_branding_document_governance_v1.0.md` §7. Capturar ahora obligaría a recapturar después.
+Lo que sigue sí se ejecutó: la auditoría de la evidencia existente, su procedencia, sus
+dimensiones reales y la ventana de cambio por superficie.
 **Método:** auditoría read-only del contenido del repositorio (33 capturas en
 `docs/nhilos/manuals/images/`, sus manuales de referencia y la auditoría de experiencia de
-transición). No se ejecutó captura nueva ni se requirió hardware.
+terminal). No se ejecutó captura nueva ni se requirió hardware.
 ### Punto de partida corregido
 
 Este documento asumía que no existían capturas y que había que producirlas todas. Eso era falso:
@@ -451,8 +458,9 @@ VERIFICACIÓN DE GATE D (EVIDENCIA Y MEDIOS) — NHILOS POS
     con procedencia fechada por commit.
 
 ESTADO DE CIERRE:            GATE D NO SUPERADO — PARCIAL
+REVALIDACIÓN DE CAPTURAS:    DIFERIDA hasta el build final de la línea P3 en curso
 AUTORIZACIÓN DE PUBLICACIÓN: habilitada solo para MEDIA-FISC-01 una vez convertido
-a WebP/AVIF con alt text. Bloqueada para MEDIA-POS-02 (obsoleta), para los 6
+en WebP/AVIF con alt text. Bloqueada para MEDIA-POS-02 (obsoleta), para los 6
 activos faltantes y para los 6 que requieren reverificación. No existe ningún
 sello de "PUBLICATION UNLOCKED".
 ================================================================================

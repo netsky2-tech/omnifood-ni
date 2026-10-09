@@ -111,7 +111,7 @@ a él como upstream. Si un documento necesita una regla que vive arriba, la cita
 | 4 | `nhilos_website_information_architecture_content_wireframe_v1.0.md` | `branding/` | IA y contenido del sitio | 1.0 | `APPROVED` |
 | 5 | `nhilos_website_homepage_content_v1.1.md` | `branding/` | Contrato de contenido de la homepage | 1.1 | `APPROVED / PUBLICATION GATED` |
 | 6 | `nhilos_pos_product_page_content_v1.1.md` | `branding/` | Contrato de contenido de producto | 1.1 | `APPROVED / PUBLICATION GATED` |
-| 7 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `CONTENIDO APROBADO / GATE D PARCIAL — 1 VIGENTE · 1 OBSOLETA · 6 A REVERIFICAR · 6 FALTANTES` |
+| 7 | `nhilos_pos_media_inventory_v1.0.md` | `branding/` | Evidencia visual (Gate D) | 1.0 | `CONTENIDO APROBADO / GATE D PARCIAL — 1 VIGENTE · 1 OBSOLETA · 6 A REVERIFICAR · 6 FALTANTES / REVALIDACIÓN DE CAPTURAS DIFERIDA (§7)` |
 | — | `nhilos_pos_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficie POS | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_backoffice_experience_standard_v1.0.md` | `branding/Recursos/` | Estándar UX superficies backoffice | 1.0 | `APPROVED / REFERENCE` |
 | — | `nhilos_website_non_functional_spec_v1.0.md` | `branding/Recursos/` | Spec no funcional del sitio | 1.0 | `DRAFT` — gates heredados por la IA (§18.1 `NF-01`..`NF-13`) |
@@ -138,7 +138,45 @@ las especificaciones de expresión por producto. La constitución los marca como
 
 ---
 
-## 7. Estado de cierre respecto de la auditoría de realidad
+## 7. Estado de anclaje y obligación de re-anclaje
+
+**Anclaje vigente del set:** `b4b5ad27` (`origin/main`, 2026-10-08).
+
+`G-08` obliga a re-anclar cuando el build se mueve. Hoy hay un motivo concreto y conocido, no
+hipotético: existe una línea de trabajo en curso (**auditoría P3 de descuentos y promociones
+e2e, web + POS**) que **cambia comportamiento que este set ya publica**. Mientras esa línea no
+cierre, el anclaje `b4b5ad27` queda declarado como **provisional** y los claims de la tabla
+siguiente quedan marcados como **pendientes de re-verificación**.
+
+| Línea de trabajo en curso | Superficie | Claims del OD-02 en riesgo |
+|---|---|---|
+| Acumuladores independientes, base de lealtad y etiquetas de UI | Lealtad | `PC-LOY-01`, `PC-LOY-06` |
+| Tope de descuento: configuración, proyección al POS y rechazo en descuento manual | Descuentos | `PC-LOY-02`, `PC-PAY-04` |
+| Promociones: retiro del toggle en POS y recarga con checkout abierto | Promociones | `PC-LOY-05` |
+| Origen del descuento por línea (backend, prorrateo y reporte) | Descuentos / reportes | `PC-LOY-02`, `PC-DASH-04` |
+| Historial de ventas: filtro de fecha, totales del conjunto y fracasos honestos | Reportes | `PC-DASH-04` |
+| Modifiers: coerción de decimales y normalización en la API | Modificadores | `PC-FOH-02` |
+| Mensajes de error sin fuga de datos internos | Contratos de API | `PC-SEC-03` |
+| Proyección de `audit_logs` al panel con actor y entidad | Auditoría | `PC-SEC-03` |
+| QR / transferencia, topología de KDS, Fase 8.3 | Pagos y cocina | `PC-PAY-01`, `PC-HW-03` |
+
+### Obligación al cerrar esa línea de trabajo
+
+1. **Re-verificar** cada claim de la tabla contra el nuevo build; clasificar `SIN CAMBIO`,
+   `DERIVA` o `YA NO SOSTENIBLE`, y actualizar límites donde corresponda.
+2. **Re-anclar** el OD-02 a un commit concreto y actualizar la fecha de la cabecera.
+3. **Revalidar los medios** contra el build final: era exactamente el motivo por el que la
+   revalidación de capturas quedó diferida (ver `nhilos_pos_media_inventory_v1.0.md` §5).
+4. **Revisar los contratos de contenido** (homepage y página de producto) para que ninguna copia
+   publicada contradiga el comportamiento nuevo, especialmente en descuentos, promociones,
+   lealtad y modificadores.
+
+Ningún documento de este set puede publicarse con el anclaje marcado como provisional si alguno de
+los claims en riesgo cambió.
+
+---
+
+## 8. Estado de cierre respecto de la auditoría de realidad
 
 Este documento cierra el contrato de autoridad. Los hallazgos de contenido restantes se corrigen
 en los documentos que corresponden, según el plan `R1–R12` de
