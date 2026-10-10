@@ -49,24 +49,34 @@ const UUID_INPUT_EXCEPTIONS: UuidInputException[] = [
   // S4 closed the promotions entry (2026-10-10): PromotionForm's
   // target_product_id is now EntitySearchSelect + useProductSearch, and the
   // S4 pins in PromotionForm.test.tsx keep the replacement in place.
+  // S5 determination (2026-10-10): referenceVersionId references a
+  // **recipe version** — the published RecipeVersion of the product chosen as
+  // a SUB_RECIPE ingredient (admin_backend recipe.service.ts stores it verbatim
+  // into recipe_detail.reference_version_id). NO governed selector was wired:
+  // the fetch surface the selector needs does not exist. The backend's
+  // recipe.controller.ts only exposes GET /recipes/products/:id/active,
+  // GET /recipes/suggestions, GET /recipes/:id/snapshot, POST versions and
+  // POST :id/publish — there is no way to LIST the versions of a product, so
+  // a selector over this entity would be fake (unfetchable options). Missing
+  // surface, in the S3 shape: a `GET /recipes/products/:productId/versions`
+  // (id, version_number, version_note, vigencia; tenant RLS; paginated)
+  // plus a dashboard hook to back EntitySearchSelect — an architecture
+  // decision, not a form patch.
   {
     file: "features/recipes/RecipeForm.tsx",
     field: "referenceVersionId",
     reason:
-      "Encontrado por este guard en el RED (el barrido del ODD lo tenía como 'a verificar'): input de texto libre cuyo placeholder pide 'UUID de versión (opcional)'. Espera la superficie de búsqueda de versiones de receta que llega con el selector reutilizable.",
+      "Encontrado por este guard en el RED (el barrido del ODD lo tenía como 'a verificar'): input de texto libre cuyo placeholder pide 'UUID de versión (opcional)'. Determinación S5 (2026-10-10): referencia una RecipeVersion (la versión publicada del producto elegido como sub-receta). NO se reemplazó por selector: no existe la superficie de consulta para listar versiones de un producto (el controller de recipes no tiene GET de versiones por producto), así que un selector sería falso sobre una entidad no consultable. Espera la superficie 'GET /recipes/products/:productId/versions' + hook, en la forma de S3.",
     acceptedOn: "2026-10-10",
     removalCondition:
-      "odd/tasks/no-uuid-inputs.md slice S5 — el barrido reemplaza referenceVersionId por el selector con búsqueda textual.",
+      "odd/tasks/no-uuid-inputs.md slice S5 — cerrará cuando exista la superficie de consulta de versiones (S3: endpoint que liste las versiones de un producto + hook) y el barrido reemplace referenceVersionId por el selector con búsqueda textual.",
   },
-  {
-    file: "features/loyalty/loyalty-page.tsx",
-    field: "productId",
-    reason:
-      "Encontrado por este guard en el RED (candidato 'a verificar' del barrido, ahora confirmado): label 'ID de producto a entregar' sobre un input de texto libre que registra productId. Espera la superficie de búsqueda de productos (S3).",
-    acceptedOn: "2026-10-10",
-    removalCondition:
-      "odd/tasks/no-uuid-inputs.md slice S5 — el barrido reemplaza productId por el selector con búsqueda textual.",
-  },
+  // The loyalty entry closed 2026-10-10 (owner-approved, slices 1+3): the
+  // FREE_PRODUCT reward form's productId is EntitySearchSelect +
+  // useProductSearch with NO default selection, the fabricated 'prod-smash'
+  // default and the onValid '|| prod-smash' fallback are removed, and
+  // w10-loyalty-programs-rewards.test.tsx pins the governed contract
+  // (empty selection blocks submit; the payload carries the picked uuid).
 ];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

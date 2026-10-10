@@ -31,12 +31,25 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { useCatalogValues } from '@/features/catalog/use-catalog';
+import { useProductById } from '@/features/catalog/use-product-search';
 import { PromotionForm } from './PromotionForm';
 import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/promotions';
 import { formatCurrency, formatDate, DAYS_OF_WEEK } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { useRbac } from '@/lib/rbac';
 import { getApiErrorMessage } from '@/lib/api-error';
+
+/**
+ * §17.6 display side: a stored target_product_id is a foreign key the
+ * operator cannot read. The selector's edit-mode label source (useProductById,
+ * the S3 hook) resolves it to the human name; an id the query cannot resolve
+ * falls back to the same short-id display the category target already uses,
+ * never the raw full uuid.
+ */
+function ProductTargetLabel({ id }: { id: string }) {
+  const { data: product } = useProductById(id);
+  return <>Producto: {product?.name ?? `…${id.slice(-8)}`}</>;
+}
 
 export function PromotionsList() {
   const { canPerformAction } = useRbac();
@@ -231,7 +244,7 @@ export function PromotionsList() {
                     <Badge variant="outline">{PROMOTION_TYPE_LABELS[promotion.type]}</Badge>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {promotion.target_product_id ? `Producto: ${promotion.target_product_id}` : ''}
+                    {promotion.target_product_id ? <ProductTargetLabel id={promotion.target_product_id} /> : ''}
                     {promotion.target_category_id ? `Categoría: ${formatCategoryTarget(promotion.target_category_id)}` : ''}
                     {!promotion.target_product_id && !promotion.target_category_id ? 'Global' : ''}
                   </TableCell>
@@ -381,7 +394,7 @@ export function PromotionsList() {
                 {viewingPromotion.target_product_id && (
                   <div className="col-span-2">
                     <p className="text-muted-foreground">Producto objetivo</p>
-                    <p className="font-medium">{viewingPromotion.target_product_id}</p>
+                    <p className="font-medium"><ProductTargetLabel id={viewingPromotion.target_product_id} /></p>
                   </div>
                 )}
                 {viewingPromotion.target_category_id && (

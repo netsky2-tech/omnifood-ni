@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// §17.6 (loyalty slice): a FREE_PRODUCT reward's product target comes from
+// the governed selector (EntitySearchSelect + useProductSearch), so the only
+// value it can carry is the uuid of a product row the operator picked by its
+// human label. Empty means "nothing picked yet" and blocks submit; free text
+// is rejected exactly like the promotions form's target_product_id.
+const PRODUCT_UUID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
 export type LoyaltyProgramType = 'SPEND_POINTS' | 'PRODUCT_STAMPS' | 'VISIT_STAMPS';
 
 export const LOYALTY_PROGRAM_TYPES: { id: LoyaltyProgramType; label: string }[] = [
@@ -314,9 +322,15 @@ export const rewardFormSchema = z
       else if (values.amountNio < 1)
         issue('amountNio', 'El monto de descuento debe ser mayor o igual a 1');
     } else {
-      // Native `required` only blocked the empty string.
-      if (values.productId.length < 1)
-        issue('productId', 'Indique el ID del producto a entregar');
+      // §17.6: the product is picked from the governed selector, never
+      // typed. Empty = nothing picked; anything else must be a uuid. The
+      // old "Indique el ID del producto a entregar" asked the operator to
+      // transcribe an identifier — the selector replaces that surface.
+      const trimmed = values.productId.trim();
+      if (trimmed.length < 1)
+        issue('productId', 'Seleccione el producto a entregar');
+      else if (!PRODUCT_UUID_PATTERN.test(trimmed))
+        issue('productId', 'Seleccione un producto válido');
     }
   });
 

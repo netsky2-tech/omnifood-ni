@@ -29,6 +29,11 @@ import type {
   RewardFormValues,
 } from './types';
 import { LOYALTY_PROGRAM_TYPES, REWARD_TYPES, programFormSchema, rewardFormSchema } from './types';
+import { EntitySearchSelect } from '@/components/ui/entity-search-select';
+import {
+  useProductSearch,
+  useProductById,
+} from '@/features/catalog/use-product-search';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -407,12 +412,33 @@ function RewardForm({
       useCustomJson: false,
       costUnits: initial?.cost_units ?? 10,
       amountNio: Number(benefit?.amountNio ?? 50),
-      productId:
-        typeof benefit?.productId === 'string' ? benefit.productId : 'prod-smash',
+      // §17.6: no default selection — the operator picks the product from
+      // the governed selector. The old fabricated default ('prod-smash')
+      // is gone; an empty selection blocks submit with the schema's
+      // Spanish message instead of inventing an identifier.
+      productId: typeof benefit?.productId === 'string' ? benefit.productId : '',
     },
   });
   const rewardType = watch('rewardType');
   const useCustomJson = watch('useCustomJson');
+  const watchedProductId = watch('productId');
+
+  // §17.6 selector wiring: the search text goes to the query hook verbatim
+  // (flexible matching lives in the hook/backend, exactly as promotions).
+  // The stored row's human label comes from useProductById so an edit
+  // dialog never shows the operator a raw identifier.
+  const [productSearch, setProductSearch] = useState('');
+  const {
+    data: productSearchData,
+    isLoading: isProductSearchLoading,
+    isError: isProductSearchError,
+    refetch: refetchProducts,
+  } = useProductSearch(productSearch);
+  const storedProductId =
+    isEditing && rewardType === 'FREE_PRODUCT'
+      ? watchedProductId || undefined
+      : undefined;
+  const { data: storedProduct } = useProductById(storedProductId);
 
   // Specific field for JSON advanced mode textarea
   const [benefitConfig, setBenefitConfig] = useState(
@@ -443,7 +469,13 @@ function RewardForm({
       if (values.rewardType === 'DISCOUNT_AMOUNT') {
         parsedConfig = { amountNio: Number(values.amountNio) };
       } else {
-        parsedConfig = { productId: values.productId.trim() || 'prod-smash' };
+        // §17.6: the resolver guarantees a picked uuid; the trim is
+        // belt-and-braces only. The old `|| 'prod-smash'` fallback is
+        // deliberately gone: it fired exactly when a whitespace-only
+        // product id reached onValid (the only empty-ish value the old
+        // schema's length<1 check let through) and fabricated an
+        // identifier that could travel to the backend.
+        parsedConfig = { productId: values.productId.trim() };
       }
     }
 
@@ -575,14 +607,27 @@ function RewardForm({
             </div>
           ) : (
             <div>
-              <label htmlFor="benefit-product" className="block text-xs font-medium mb-1">
-                ID de producto a entregar
-              </label>
-              <Input
-                id="benefit-product"
-                {...register('productId')}
-                placeholder="prod-smash"
-                aria-invalid={Boolean(errors.productId)}
+              <EntitySearchSelect
+                inputId="benefit-product"
+                label="Producto a entregar"
+                value={watchedProductId ?? ''}
+                onChange={(id) =>
+                  setValue('productId', id, { shouldValidate: true })
+                }
+                options={(productSearchData?.data ?? []).map((product) => ({
+                  id: product.id,
+                  label: product.name,
+                }))}
+                search={productSearch}
+                onSearchChange={setProductSearch}
+                isLoading={isProductSearchLoading}
+                isError={isProductSearchError}
+                onRetry={() => void refetchProducts()}
+                emptyMessage="No hay productos todavía. Cree productos en el catálogo."
+                selectedLabel={storedProduct?.name}
+                total={productSearchData?.total}
+                onVerTodos={() => setProductSearch('')}
+                placeholder="Ej: Smash Burger, Café"
               />
               {errors.productId && (
                 <p className="text-xs text-destructive">{errors.productId.message}</p>
