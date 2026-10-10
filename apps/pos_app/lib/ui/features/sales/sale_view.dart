@@ -221,6 +221,11 @@ class SaleView extends StatefulWidget {
 class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteAware {
   late final SaleViewModel _viewModel;
   bool _errorPresentationScheduled = false;
+
+  /// Round-2 D-3: the mobile cart is a modal bottom sheet, so a Scaffold
+  /// SnackBar renders BEHIND it and the operator has to collapse the cart to
+  /// read a refusal. While the sheet is open its own banner owns the message.
+  bool _isCartSheetOpen = false;
   bool _loyaltyWarningPresentationScheduled = false;
   ModalRoute<void>? _modalRoute;
 
@@ -274,6 +279,12 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
         _viewModel.errorMessage == null) {
       return;
     }
+
+    // Round-2 D-3: while the mobile cart sheet is open, that sheet renders
+    // the message in its own banner (the Scaffold SnackBar would sit behind
+    // the modal). Neither duplicate it nor clear it out from under it here;
+    // the sheet clears it when it closes.
+    if (_isCartSheetOpen) return;
 
     _errorPresentationScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -618,6 +629,7 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   }
 
   void _showMobileCartBottomSheet(BuildContext context) {
+    _isCartSheetOpen = true;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -635,6 +647,7 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
           builder: (_, scrollController) {
             return Column(
               children: [
+                const _CartSheetErrorBanner(),
                 Container(
                   width: 40,
                   height: 4,
@@ -655,7 +668,12 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
           },
         );
       },
-    );
+    ).whenComplete(() {
+      _isCartSheetOpen = false;
+      // The sheet's banner owned the refusal while it was open; drop it now
+      // so it cannot leak into the next interaction.
+      _viewModel.clearError();
+    });
   }
 
 
@@ -981,6 +999,61 @@ class RecallTicketsDialog extends StatelessWidget {
 
     if (confirmed != true) return;
     await viewModel.abandonHoldTicket(ticket);
+  }
+}
+
+/// Watches the view model and hands the operator-facing refusal to the
+/// presentational banner (round-2 D-3).
+class _CartSheetErrorBanner extends StatelessWidget {
+  const _CartSheetErrorBanner();
+
+  @override
+  Widget build(BuildContext context) =>
+      CartSheetErrorBanner(message: context.watch<SaleViewModel>().errorMessage);
+}
+
+/// Round-2 D-3: the mobile cart is a modal bottom sheet, so a
+/// `ScaffoldMessenger` SnackBar renders in the page Scaffold BEHIND it and
+/// the operator has to collapse the cart to notice a refusal. While the
+/// sheet is open the message is rendered here, at the top of the sheet,
+/// where the operator is already looking.
+class CartSheetErrorBanner extends StatelessWidget {
+  const CartSheetErrorBanner({super.key, required this.message});
+
+  /// Operator-facing message; null or empty renders nothing.
+  final String? message;
+
+  @override
+  Widget build(BuildContext context) {
+    final error = message;
+    if (error == null || error.isEmpty) return const SizedBox.shrink();
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      key: const Key('cart_sheet_error_banner'),
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.error_outline, color: colorScheme.error, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              error,
+              style: TextStyle(
+                color: colorScheme.onErrorContainer,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
