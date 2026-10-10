@@ -381,6 +381,26 @@ describe('PromotionForm', () => {
     expect(payload).not.toHaveProperty('end_date');
   });
 
+  // R3-001 pin: in EDIT mode a cleared date must travel as an explicit
+  // null on the update payload — the update is a partial patch, so an
+  // omitted key would leave the stored date untouched and the operator's
+  // clear would silently fail while the field's copy says empty is
+  // allowed. (CREATE keeps omitting the key; see the create pins above.)
+  it('update payload carries a cleared date as an explicit null, not an omitted key', async () => {
+    const localStart = new Date(2025, 0, 15).getTime();
+    const localEnd = new Date(2025, 1, 20).getTime();
+    renderForm({ ...mockPromotion, start_date: localStart, end_date: localEnd });
+    fireEvent.change(screen.getByLabelText('Fecha Inicio'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /actualizar/i }));
+    await waitFor(() => {
+      expect(mockUpdatePromotion.mutateAsync).toHaveBeenCalled();
+    });
+    const dto = mockUpdatePromotion.mutateAsync.mock.calls[0]![0].dto;
+    expect(dto).toHaveProperty('start_date', null);
+    // An untouched date keeps travelling as an epoch-ms number.
+    expect(dto.end_date).toBe(localEnd);
+  });
+
   // AP-10: a rejected create must surface the surface's own Spanish copy,
   // never the backend's raw property name.
   it('a rejected create shows Spanish copy, never a raw backend property name', async () => {

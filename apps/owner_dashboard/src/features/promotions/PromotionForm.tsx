@@ -117,11 +117,28 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
     // A selected uuid is always sent unchanged.
     const { target_category_id, start_date, end_date, ...rest } = data;
     // Promo-fix: date inputs carry 'YYYY-MM-DD'; the backend's DTOs and
-    // bigint columns expect epoch-ms numbers. A cleared date is omitted
-    // entirely (absent = no date bound), never sent as 0 or ''.
+    // bigint columns expect epoch-ms numbers.
+    // R3-001: a cleared date differs by mode. On UPDATE it must travel as
+    // an explicit null — a partial patch leaves an omitted key untouched,
+    // so omitting it would resurrect the stored date while the field's
+    // copy says empty is allowed (same clearing pattern as
+    // target_category_id below; the backend accepts the null: @IsOptional
+    // skips it and the service's Object.assign clears the column). On
+    // CREATE the key stays omitted entirely (absent = no date bound).
+    // The `as unknown as number` cast exists only because the FE mirror
+    // type (types/promotions.ts) still types these keys as `number` and
+    // is outside this correction's edit surface.
     const dateRange = {
-      ...(start_date ? { start_date: dateInputValueToEpochMs(start_date) } : {}),
-      ...(end_date ? { end_date: dateInputValueToEpochMs(end_date) } : {}),
+      ...(start_date
+        ? { start_date: dateInputValueToEpochMs(start_date) }
+        : isEditing
+          ? { start_date: null as unknown as number }
+          : {}),
+      ...(end_date
+        ? { end_date: dateInputValueToEpochMs(end_date) }
+        : isEditing
+          ? { end_date: null as unknown as number }
+          : {}),
     };
     try {
       if (isEditing) {
