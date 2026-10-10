@@ -2,7 +2,9 @@
 
 - **Status:** REVIEWED ×2 — `f2e5f8c9` approved by `review-bd2c8471dd9fffc1`; unit 2
   (`d8a17901`, branch scope) approved by `review-a3a6dda7260ed188`; both receipts acknowledged.
-  Push + PR authorized by the user; **PR #833 CI green**, merge is the user's call.
+  Push + PR authorized by the user → **PR #833 MERGED** as `900ff8463dae5af0840cee57f31681de00cad383`
+  (2026-10-09, merge-commit convention, branch deleted on remote); issue **#828 CLOSED**.
+  CI green before merge: Owner Dashboard `lint-and-test` 1m59s, Cloudflare Pages, GitGuardian.
 - **Issue:** #828 (`status:approved`, `type:bug`) — backflow of review `review-3beb46530ec87586` (PR #827)
 - **Branch:** `fix/live-suites-base-url` from `main` (`dc9842fe`)
 - **Worktree:** `/home/octavio_morales/omnifood-ni-live-suites-hardening` (isolated — never write on `main`)
@@ -67,7 +69,8 @@
       `NHILOS_LIVE_API=` → `""` → login URL `"/identity/login"` (the confusing failure);
       with the helper, `NHILOS_LIVE_API= npm run test:integration` → **42/42**.
 - [x] Issue #828 → **PR #833** (`type:bug`) **green** (lint-and-test / Cloudflare Pages /
-      GitGuardian) + two native reviews APPROVED and acknowledged. Merge: user's decision.
+      GitGuardian) + two native reviews APPROVED and acknowledged → **MERGED `900ff846`, #828
+      CLOSED**.
 
 ## Tasks
 
@@ -159,6 +162,12 @@ in the touched files); `playwright test --list -c playwright.live.config.ts` →
   are suspect (blank-env behaviour is fixed here); changing credentials is a separate decision
   for the manual owner.
 - #830 keeps the suite inventory (`w1-api`/`w5-api` named `.integration` but running in `npm test`).
+
+## Delivery
+
+- **PR #833** → merged into `main` as `900ff8463dae5af0840cee57f31681de00cad383`; remote branch
+  deleted; issue #828 closed by the PR body. This `docs(odd)` evidence commit stays local and is
+  folded into the next owner-dashboard PR (#830) to avoid a one-paragraph review round.
 
 ## Commits
 
