@@ -1,6 +1,9 @@
 # Feature: Dashboard suite inventory — contract/api vs live (issue #830)
 
-- **Status:** IMPLEMENTED — verified by the orchestrator; native review + PR pending.
+- **Status:** CLOSED — PR #840 merged into main as `bc8ea6ff`, issue #830 closed with evidence.
+- **Delivery:** merge commit `bc8ea6ff`; CI green (`lint-and-test` 1m54s, Cloudflare Pages,
+  GitGuardian). Remote + local branch `chore/dashboard-suite-inventory` and the worktree
+  `~/omnifood-ni-suite-inventory` were removed after the merge.
 - **Routing:** implementation delegated to `gentle-ai-worker` (task `mv1o076l-2-lh8z`) with narrow
   edit surfaces; the orchestrator re-verified everything (the worker's GREEN was not the record).
 - **Inventory sources:** `gentle-ai-explore` task `mv1nsxtu-1-ety0` (per-file runner + network
