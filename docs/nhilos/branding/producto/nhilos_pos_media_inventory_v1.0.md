@@ -332,6 +332,29 @@ Fechas tomadas del commit que agregó cada archivo:
 | `2026-10-09` | `dsh_02`–`dsh_09`, `dsh_10`–`dsh_14` | Refresco completo de las capturas backoffice y alta de las 5 del walkthrough de modificadores (manual v0.2, spec `manual-screenshots.live.spec.ts`, 1440×900). |
 | `2026-10-09` | `dsh_02` (recaptura con preset «Este mes»), `dsh_15`, `dsh_16`, `dsh_17` | Dashboard con rango «Este mes» (KPIs, gráfico y alertas con datos reales del mes) + altas de Inventario, Recetas y BOM y Gestión de Usuarios para §7/§9 del manual (misma spec, 1440×900). |
 
+### Cómo se regeneran las capturas del backoffice
+
+Las 41 capturas no se dibujan a mano: `dsh_*` las produce la spec live
+`apps/owner_dashboard/e2e/manual-screenshots.live.spec.ts` escribiendo directo en este directorio.
+
+```bash
+cd apps/owner_dashboard
+NHILOS_MANUAL_CAPTURE=1 MANUAL_E2E_PASS=<credencial-del-tenant-soho> \
+  npm run test:e2e:capture
+```
+
+Tres hechos que hay que saber antes de tocar esta sección:
+
+- Corre contra el tenant **`soho`**, no contra `soho-test-fixture` (el de las suites live
+  automatizadas): los datos del walkthrough —categoría `CAFÉ CALIENTE`, producto `Americano 12oz`,
+  exactamente 3 grupos de modificadores activos— solo existen en `soho`. La spec aborta si
+  `MANUAL_E2E_BASE_URL` apunta a otro tenant.
+- `MANUAL_E2E_PASS` es **obligatoria por entorno**: desde #839 no hay credencial commiteada, y una
+  variable ausente o en blanco falla antes de la primera navegación sin imprimir el valor.
+- El script ad-hoc `scripts/capture_dashboard.cjs` fue eliminado: duplicaba la captura, tenía la
+  contraseña hardcodeada y apuntaba a `:5173`, que en este host pertenece a otro worktree. La ruta
+  documentada es la de arriba.
+
 ### Formatos y peso real de la evidencia
 
 - Los 41 archivos están en **PNG**. Deben convertirse a WebP/AVIF con fallback PNG antes de

@@ -23,6 +23,13 @@
  *   be a base URL (relative path, missing scheme, credentials, query string,
  *   fragment) throws `LiveApiConfigError`, which names the variable and never
  *   echoes its value.
+ * - **Credentials are different from targets** (issue #839): `resolveLiveEnv`
+ *   may carry a committed default for *targets* (API origin, ports — #828 kept
+ *   canonical defaults there), but `requiredLiveEnv` exists for live-suite
+ *   CREDENTIALS (passwords, tokens), which must NEVER have a committed
+ *   default: a real credential sitting in the repo is a leak, not a
+ *   convenience. Unset/blank throws `LiveApiConfigError` naming only the
+ *   variable.
  *
  * This module reads `process.env` only and has no Vite/`import.meta.env`
  * dependency, which is what lets the same rules run in Vitest (node
@@ -64,6 +71,27 @@ export function envValue(raw: unknown): string | undefined {
 /** Reads a live-suite variable, falling back when it is unset or blank. */
 export function resolveLiveEnv(name: string, fallback: string): string {
   return envValue(process.env[name]) ?? fallback;
+}
+
+/**
+ * Reads a live-suite CREDENTIAL from the environment; there is no fallback.
+ *
+ * Unlike *targets* (API origin, ports), for which #828 kept canonical
+ * committed defaults in `resolveLiveEnv`, a credential must never carry a
+ * committed default (issue #839: a working password in the repo is a leak).
+ * Unset or blank throws `LiveApiConfigError` naming ONLY the variable — the
+ * value is never echoed, because the error may surface in CI logs.
+ */
+export function requiredLiveEnv(name: string): string {
+  const value = envValue(process.env[name]);
+  if (value === undefined) {
+    throw new LiveApiConfigError(
+      `Missing required live-suite credential: ${name}. ` +
+        "Export it (or set it in the CI env block) before running this suite; " +
+        "credentials never carry a committed default.",
+    );
+  }
+  return value;
 }
 
 function parseApiBaseUrl(value: string): URL {

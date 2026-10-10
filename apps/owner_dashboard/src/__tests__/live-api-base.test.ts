@@ -4,6 +4,7 @@ import {
   LIVE_WEB_BASE_DEFAULT,
   LiveApiConfigError,
   envValue,
+  requiredLiveEnv,
   resolveLiveApiBase,
   resolveLiveApiOrigin,
   resolveLiveEnv,
@@ -164,6 +165,56 @@ describe("absolute-URL guard (review advisory R3-URL-CONSTRUCT-THROWS)", () => {
     }
     expect(caught).toBeInstanceOf(LiveApiConfigError);
     expect(caught).not.toBeInstanceOf(TypeError);
+  });
+});
+
+describe("requiredLiveEnv (issue #839: credentials never carry a committed default)", () => {
+  it("returns the trimmed value of a populated variable", () => {
+    vi.stubEnv("MANUAL_E2E_PASS", "  real-password-123 ");
+    expect(requiredLiveEnv("MANUAL_E2E_PASS")).toBe("real-password-123");
+  });
+
+  it("throws naming the variable when it is unset", () => {
+    vi.stubEnv("MANUAL_E2E_PASS", undefined);
+    let caught: unknown;
+    try {
+      requiredLiveEnv("MANUAL_E2E_PASS");
+      expect.unreachable("expected LiveApiConfigError");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(LiveApiConfigError);
+    expect((caught as Error).message).toContain("MANUAL_E2E_PASS");
+  });
+
+  it("throws when the variable is present but empty", () => {
+    vi.stubEnv("MANUAL_E2E_PASS", "");
+    expect(() => requiredLiveEnv("MANUAL_E2E_PASS")).toThrow(LiveApiConfigError);
+    expect(() => requiredLiveEnv("MANUAL_E2E_PASS")).toThrow(/MANUAL_E2E_PASS/);
+  });
+
+  it("throws when the variable is whitespace only", () => {
+    vi.stubEnv("MANUAL_E2E_PASS", "   \t ");
+    expect(() => requiredLiveEnv("MANUAL_E2E_PASS")).toThrow(LiveApiConfigError);
+    expect(() => requiredLiveEnv("MANUAL_E2E_PASS")).toThrow(/MANUAL_E2E_PASS/);
+  });
+
+  it("never echoes the value in the thrown message", () => {
+    // The marker sits in the environment while a DIFFERENT required variable
+    // fails: a broken implementation that echoed values (or dumped env) would
+    // leak it. The message names only the failing variable.
+    vi.stubEnv("MANUAL_E2E_PASS", "s3cret-marker");
+    let caught: unknown;
+    try {
+      requiredLiveEnv("MANUAL_E2E_EMAIL");
+      expect.unreachable("expected LiveApiConfigError");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(LiveApiConfigError);
+    const message = (caught as Error).message;
+    expect(message).toContain("MANUAL_E2E_EMAIL");
+    expect(message).not.toContain("s3cret-marker");
   });
 });
 
