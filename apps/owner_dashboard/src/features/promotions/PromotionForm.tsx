@@ -23,6 +23,10 @@ import {
   type PromotionFormData,
 } from './schema';
 import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/promotions';
+import type {
+  CreatePromotionDto,
+  UpdatePromotionDto,
+} from '@/types/promotions';
 import { DAYS_OF_WEEK, cn } from '@/lib/utils';
 import { useCreatePromotion, useUpdatePromotion } from '@/hooks/use-promotions';
 import { useCatalogValues } from '@/features/catalog/use-catalog';
@@ -141,35 +145,25 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
     const { target_category_id, start_date, end_date, ...rest } = data;
     // Promo-fix: date inputs carry 'YYYY-MM-DD'; the backend's DTOs and
     // bigint columns expect epoch-ms numbers.
-    // R3-001: a cleared date differs by mode. On UPDATE it must travel as
-    // an explicit null — a partial patch leaves an omitted key untouched,
-    // so omitting it would resurrect the stored date while the field's
-    // copy says empty is allowed (same clearing pattern as
-    // target_category_id below; the backend accepts the null: @IsOptional
-    // skips it and the service's Object.assign clears the column). On
-    // CREATE the key stays omitted entirely (absent = no date bound).
-    // The `as unknown as number` cast exists only because the FE mirror
-    // type (types/promotions.ts) still types these keys as `number` and
-    // is outside this correction's edit surface.
-    const dateRange = {
-      ...(start_date
-        ? { start_date: dateInputValueToEpochMs(start_date) }
-        : isEditing
-          ? { start_date: null as unknown as number }
-          : {}),
-      ...(end_date
-        ? { end_date: dateInputValueToEpochMs(end_date) }
-        : isEditing
-          ? { end_date: null as unknown as number }
-          : {}),
-    };
+    // R3-001: a cleared date differs by mode — and S6 makes that difference
+    // live in the TYPES too (no more `null as unknown as number` cast):
+    // - UPDATE: the cleared date travels as an explicit null (the contract's
+    //   "clear": UpdatePromotionDto.start_date/end_date are `number | null`;
+    //   @IsOptional skips the null and the service's Object.assign clears
+    //   the column). The key is ALWAYS present on update — omitting it
+    //   would leave the stored date untouched in a partial patch.
+    // - CREATE: the key is omitted entirely when cleared (absent = no date
+    //   bound; CreatePromotionDto stays number-only). Omitting is what
+    //   create means, so the create shape keeps its own narrower type.
     try {
       if (isEditing) {
         // T0.5'd: '' -> explicit null (clear to global); a selected uuid is
-        // sent unchanged.
-        const dto = {
+        // sent unchanged. Same rule for the dates (R3-001/S6): always
+        // present, null when cleared.
+        const dto: UpdatePromotionDto = {
           ...rest,
-          ...dateRange,
+          start_date: start_date ? dateInputValueToEpochMs(start_date) : null,
+          end_date: end_date ? dateInputValueToEpochMs(end_date) : null,
           target_category_id: target_category_id ? target_category_id : null,
         };
         await updatePromotion.mutateAsync({ id: initialData!.id, dto });
@@ -181,9 +175,13 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
         // instead of an inactive-looking control; activation toggling is
         // the update path's job.
         const { is_active: _createIsActive, ...createRest } = rest;
-        const payload = {
+        // R3-001/S6: the CREATE shape keeps its own narrower date type —
+        // keys present only when set (epoch-ms numbers), omitted when
+        // cleared. Omitting is what create means.
+        const payload: CreatePromotionDto = {
           ...createRest,
-          ...dateRange,
+          ...(start_date ? { start_date: dateInputValueToEpochMs(start_date) } : {}),
+          ...(end_date ? { end_date: dateInputValueToEpochMs(end_date) } : {}),
           ...(target_category_id ? { target_category_id } : {}),
         };
         await createPromotion.mutateAsync(payload);
