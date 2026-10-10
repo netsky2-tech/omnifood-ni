@@ -28,6 +28,7 @@ import {
 } from '../dto/audit-query.dto';
 import { AuditTrailService } from '../services/audit-trail.service';
 import { AuditVerificationService } from '../services/audit-verification.service';
+import { deriveAuditTarget } from '../services/audit-target-derivation';
 import { SyncTransportGuard } from '../guards/sync-transport.guard';
 import { RequireSyncScopes } from '../decorators/sync-scopes.decorator';
 
@@ -130,13 +131,23 @@ export class AuditController {
 
       const persistedLog = { ...log };
       delete persistedLog.metadata_raw;
+      const normalizedMetadata = log.metadata === undefined ? {} : log.metadata;
+      // Round-2 F-4a: the POS never sends the entity columns, so every POS
+      // row rendered "—" in the owner's ledger. Derive them from the action
+      // + metadata the push already carries; a POS-supplied value still wins.
+      const derivedTarget = deriveAuditTarget(
+        resolvedAction,
+        normalizedMetadata,
+      );
       logsToSave.push({
         ...persistedLog,
         action: resolvedAction,
         user_id: logActorUserId,
         tenant_id: tenantId,
-        metadata: log.metadata === undefined ? {} : log.metadata,
+        metadata: normalizedMetadata,
         timestamp: new Date(log.timestamp),
+        target_type: persistedLog.target_type ?? derivedTarget.target_type,
+        target_id: persistedLog.target_id ?? derivedTarget.target_id,
       });
     }
 
