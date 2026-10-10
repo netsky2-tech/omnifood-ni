@@ -47,6 +47,17 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { getApiErrorMessage } from '@/lib/api-error';
 
+/**
+ * §17.6 edit-mode label for a stored eligible-product id outside the current
+ * search results (hooks per chip instance, never hooks in a loop). The
+ * operator sees the human name; an unresolvable id degrades to the same
+ * short-id display the promotions list uses — never the raw uuid.
+ */
+function EligibleProductChipLabel({ id }: { id: string }) {
+  const { data: product } = useProductById(id);
+  return <>{product?.name ?? `…${id.slice(-8)}`}</>;
+}
+
 const STATUS_LABELS: Record<
   LoyaltyProgramStatus,
   { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" }
@@ -92,8 +103,11 @@ function ProgramForm({
       spendBlockNio: Number(rule?.spendBlockNio ?? 10),
       pointsPerBlock: Number(rule?.pointsPerBlock ?? 1),
       eligibleProductIds: Array.isArray(rule?.eligibleProductIds)
-        ? (rule.eligibleProductIds as string[]).join(', ')
-        : 'prod-smash',
+        ? // §17.6: the stored uuids from the governed multi selector — no
+          // fabricated default. An empty stored list stays empty and the
+          // ACTIVE branch's schema decides whether that blocks submit.
+          (rule.eligibleProductIds as string[])
+        : [],
       unitsPerPurchasedUnit: Number(rule?.unitsPerPurchasedUnit ?? 1),
       unitsPerVisit: Number(rule?.unitsPerVisit ?? 1),
       minimumSpendNio:
@@ -102,6 +116,19 @@ function ProgramForm({
   });
   const programType = watch('programType');
   const useCustomJson = watch('useCustomJson');
+  const watchedEligibleProductIds = watch('eligibleProductIds');
+
+  // §17.6 selector wiring (multi mode): the operator's search text goes to
+  // the query hook verbatim; picking adds the row's uuid to the payload and
+  // re-clicking (or a chip's Quitar) removes it. Same contract as the
+  // single-select forms, for a plural datum.
+  const [eligibleSearch, setEligibleSearch] = useState('');
+  const {
+    data: eligibleSearchData,
+    isLoading: isEligibleSearchLoading,
+    isError: isEligibleSearchError,
+    refetch: refetchEligibleProducts,
+  } = useProductSearch(eligibleSearch);
 
   // Specific field for VISIT_STAMPS (JSON advanced mode textarea)
   const [earningRule, setEarningRule] = useState(
@@ -135,12 +162,14 @@ function ProgramForm({
           pointsPerBlock: Number(values.pointsPerBlock),
         };
       } else if (values.programType === 'PRODUCT_STAMPS') {
-        const prodList = values.eligibleProductIds
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
+        // §17.6: the resolver guarantees at least one picked uuid. The old
+        // `prodList.length > 0 ? prodList : ['prod-smash']` fallback is
+        // deliberately gone: it fired whenever the operator left the old
+        // comma-list EMPTY OR WHITESPACE (create defaulted to 'prod-smash',
+        // and a cleared field produced '' → empty list) and fabricated an
+        // identifier that traveled to the backend as the earning rule.
         parsedRule = {
-          eligibleProductIds: prodList.length > 0 ? prodList : ['prod-smash'],
+          eligibleProductIds: values.eligibleProductIds,
           unitsPerPurchasedUnit: Number(values.unitsPerPurchasedUnit),
         };
       } else {
@@ -270,14 +299,34 @@ function ProgramForm({
           {programType === 'PRODUCT_STAMPS' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="eligible-products" className="block text-xs font-medium mb-1">
-                  Productos elegibles (IDs)
-                </label>
-                <Input
-                  id="eligible-products"
-                  {...register('eligibleProductIds')}
-                  placeholder="prod-smash, prod-burger"
-                  aria-invalid={Boolean(errors.eligibleProductIds)}
+                <EntitySearchSelect
+                  inputId="eligible-products"
+                  label="Productos elegibles"
+                  multiple
+                  value={watchedEligibleProductIds ?? []}
+                  onToggle={(id) =>
+                    setValue(
+                      'eligibleProductIds',
+                      (watchedEligibleProductIds ?? []).includes(id)
+                        ? watchedEligibleProductIds.filter((x) => x !== id)
+                        : [...(watchedEligibleProductIds ?? []), id],
+                      { shouldValidate: true },
+                    )
+                  }
+                  options={(eligibleSearchData?.data ?? []).map((product) => ({
+                    id: product.id,
+                    label: product.name,
+                  }))}
+                  search={eligibleSearch}
+                  onSearchChange={setEligibleSearch}
+                  isLoading={isEligibleSearchLoading}
+                  isError={isEligibleSearchError}
+                  onRetry={() => void refetchEligibleProducts()}
+                  emptyMessage="No hay productos todavía. Cree productos en el catálogo."
+                  renderSelectedLabel={(id) => <EligibleProductChipLabel id={id} />}
+                  total={eligibleSearchData?.total}
+                  onVerTodos={() => setEligibleSearch('')}
+                  placeholder="Ej: Smash Burger, Café"
                 />
                 {errors.eligibleProductIds && (
                   <p className="text-xs text-destructive">{errors.eligibleProductIds.message}</p>

@@ -65,7 +65,7 @@ const MOCK_PROGRAMS: LoyaltyProgram[] = [
     status: 'ACTIVE',
     starts_at: null,
     ends_at: null,
-    earning_rule: { eligibleProductIds: ['prod-smash'], unitsPerPurchasedUnit: 1 },
+    earning_rule: { eligibleProductIds: [SMASH_PRODUCT_ID], unitsPerPurchasedUnit: 1 },
     eligibility_rule: {},
     config_version: 2,
     created_at: '2026-01-01T00:00:00Z',
@@ -268,9 +268,25 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       // Select PRODUCT_STAMPS
       await user.selectOptions(screen.getByLabelText(/tipo de programa/i), 'PRODUCT_STAMPS');
 
-      // Verify dynamic fields appeared
-      expect(screen.getByLabelText(/productos elegibles/i)).toBeInTheDocument();
+      // Verify dynamic fields appeared (§17.6: a governed multi selector,
+      // not the old free-text comma list)
+      expect(
+        screen.getByRole('combobox', { name: 'Productos elegibles' }),
+      ).toBeInTheDocument();
       expect(screen.getByLabelText(/sellos por unidad/i)).toBeInTheDocument();
+
+      // The operator's text reaches the search hook verbatim...
+      fireEvent.change(
+        screen.getByRole('combobox', { name: 'Productos elegibles' }),
+        { target: { value: 'smash' } },
+      );
+      expect(useProductSearch).toHaveBeenCalledWith('smash');
+      // ...and picking the row shows its human label while the payload
+      // carries the picked uuids (a partial match, never an exact id/name).
+      await user.click(screen.getByRole('option', { name: /Smash Burger/ }));
+      expect(
+        screen.getByRole('button', { name: /Quitar Smash Burger/ }),
+      ).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: /crear programa/i }));
 
@@ -279,7 +295,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
           name: 'Smash Burger Club',
           program_type: 'PRODUCT_STAMPS',
           earning_rule: {
-            eligibleProductIds: ['prod-smash'],
+            eligibleProductIds: [SMASH_PRODUCT_ID],
             unitsPerPurchasedUnit: 1,
           },
         });
@@ -446,7 +462,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
           input: {
             name: 'Smash Burger Club VIP',
             earning_rule: {
-              eligibleProductIds: ['prod-smash'],
+              eligibleProductIds: [SMASH_PRODUCT_ID],
               unitsPerPurchasedUnit: 1,
             },
           },
@@ -767,7 +783,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       expect(mockCreateProgram).not.toHaveBeenCalled();
     });
 
-    it('create: PRODUCT_STAMPS with empty eligible products shows the Spanish required message and never calls the API', async () => {
+    it('create: PRODUCT_STAMPS with nothing selected shows the Spanish required message and never calls the API', async () => {
       const user = userEvent.setup();
       render(
         <TestWrapper>
@@ -781,11 +797,13 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
         screen.getByLabelText(/tipo de programa/i),
         'PRODUCT_STAMPS',
       );
-      await user.clear(screen.getByLabelText(/productos elegibles/i));
+      // §17.6: no default selection and nothing to type — an empty list
+      // must BLOCK submit, not fabricate ['prod-smash'].
+      expect(screen.queryByText(/Seleccionado/)).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /crear programa/i }));
 
       expect(
-        await screen.findByText('Indique al menos un producto elegible'),
+        await screen.findByText('Seleccione al menos un producto elegible'),
       ).toBeInTheDocument();
       expect(mockCreateProgram).not.toHaveBeenCalled();
     });

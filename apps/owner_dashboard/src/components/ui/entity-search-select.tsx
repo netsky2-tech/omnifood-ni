@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
  *
  * The component is driven entirely by props — it fetches nothing itself — so
  * the same selector serves products, categories or any other entity the
- * consumer backs with a hook.
+ * consumer backs with a hook, in single or list form.
  */
 
 export interface EntitySearchOption {
@@ -32,15 +32,11 @@ export interface EntitySearchOption {
   hint?: string;
 }
 
-export interface EntitySearchSelectProps {
+interface EntitySearchCommonProps {
   /** DOM id of the search input (used by the Label's htmlFor). */
   inputId: string;
   /** Visible label for the whole control. */
   label: string;
-  /** Selected entity id; '' means nothing selected. */
-  value: string;
-  /** Receives the chosen entity id (the payload datum, not the label). */
-  onChange: (id: string) => void;
   /** Rows to show, exactly as the consumer's hook returned them. */
   options: EntitySearchOption[];
   /** Current search text (controlled). */
@@ -53,11 +49,6 @@ export interface EntitySearchSelectProps {
   onRetry?: () => void;
   /** Copy when there is nothing to select at all (no term, empty dataset). */
   emptyMessage?: string;
-  /**
-   * Label for the stored selection when it is not among `options` (edit
-   * mode: the stored id's row may be outside the current search results).
-   */
-  selectedLabel?: string;
   /** Total matching rows server-side, when the source is paginated. */
   total?: number;
   /** Fallback "long list" threshold when `total` is unknown. Default 25. */
@@ -68,27 +59,64 @@ export interface EntitySearchSelectProps {
   disabled?: boolean;
 }
 
+export type EntitySearchSelectProps = EntitySearchCommonProps &
+  (
+    | {
+        /** Single mode (default): one governed selection. */
+        multiple?: false;
+        /** Selected entity id; '' means nothing selected. */
+        value: string;
+        /** Receives the chosen entity id (the payload datum, not the label). */
+        onChange: (id: string) => void;
+        /**
+         * Label for the stored selection when it is not among `options`
+         * (edit mode: the stored id's row may be outside the search results).
+         */
+        selectedLabel?: string;
+      }
+    | {
+        /**
+         * Multi mode: a governed LIST selection (e.g. eligibleProductIds) —
+         * the same §17.6 contract for a plural datum, so the next form that
+         * needs a list does not have to invent one.
+         */
+        multiple: true;
+        /** The picked entity ids, in payload order. */
+        value: string[];
+        /**
+         * Called with the clicked row's id on EVERY click: the consumer owns
+         * add/remove (toggle) semantics, so re-clicking a picked row is the
+         * consumer's un-pick.
+         */
+        onToggle: (id: string) => void;
+        /**
+         * Per-id label renderer for stored rows outside the current results
+         * (edit mode). Must render the human label, never a raw identifier.
+         */
+        renderSelectedLabel?: (id: string) => React.ReactNode;
+      }
+  );
+
 const LIST_MAX_HEIGHT_CLASS = "max-h-56 overflow-y-auto";
 
-export function EntitySearchSelect({
-  inputId,
-  label,
-  value,
-  onChange,
-  options,
-  search,
-  onSearchChange,
-  isLoading = false,
-  isError = false,
-  onRetry,
-  emptyMessage = "No hay registros todavía.",
-  selectedLabel,
-  total,
-  verTodosThreshold = 25,
-  onVerTodos,
-  placeholder = "Escriba para buscar…",
-  disabled = false,
-}: EntitySearchSelectProps) {
+export function EntitySearchSelect(props: EntitySearchSelectProps) {
+  const {
+    inputId,
+    label,
+    options,
+    search,
+    onSearchChange,
+    isLoading = false,
+    isError = false,
+    onRetry,
+    emptyMessage = "No hay registros todavía.",
+    total,
+    verTodosThreshold = 25,
+    onVerTodos,
+    placeholder = "Escriba para buscar…",
+    disabled = false,
+  } = props;
+
   const listId = useId();
   const [activeIndex, setActiveIndex] = useState(-1);
 
@@ -103,15 +131,21 @@ export function EntitySearchSelect({
     setSeenTerm(term);
     setActiveIndex(-1);
   }
-  const selectedOption = options.find((option) => option.id === value);
-  const selectedDisplay = selectedOption
-    ? selectedOption.label
-    : value
-      ? (selectedLabel ?? value)
-      : "";
 
-  const select = (option: EntitySearchOption) => {
-    onChange(option.id);
+  // Mode normalization: the JSX below works on plain locals so the
+  // discriminated union is narrowed once, here, and never re-tested.
+  const multi = props.multiple === true;
+  const multiProps = multi ? props : undefined;
+  const singleProps = multi ? undefined : props;
+  const selectedIds: string[] = multiProps
+    ? multiProps.value
+    : singleProps?.value
+      ? [singleProps.value]
+      : [];
+
+  const pick = (id: string) => {
+    if (multiProps) multiProps.onToggle(id);
+    else singleProps?.onChange(id);
     setActiveIndex(-1);
   };
 
@@ -126,7 +160,7 @@ export function EntitySearchSelect({
     } else if (event.key === "Enter" && activeIndex >= 0) {
       event.preventDefault();
       const option = options[activeIndex];
-      if (option) select(option);
+      if (option) pick(option.id);
     } else if (event.key === "Escape") {
       setActiveIndex(-1);
     }
@@ -140,6 +174,17 @@ export function EntitySearchSelect({
     (total !== undefined
       ? total > options.length
       : options.length >= verTodosThreshold);
+
+  // Human label for a selection chip. An id the current results (or the
+  // consumer's edit-mode fallback) cannot resolve renders as a SHORT id —
+  // never the raw full identifier.
+  const chipLabelFor = (id: string): React.ReactNode => {
+    const option = options.find((o) => o.id === id);
+    if (option) return option.label;
+    if (multiProps?.renderSelectedLabel) return multiProps.renderSelectedLabel(id);
+    if (singleProps?.selectedLabel) return singleProps.selectedLabel;
+    return `…${id.slice(-8)}`;
+  };
 
   return (
     <div className="space-y-2">
@@ -168,22 +213,36 @@ export function EntitySearchSelect({
         />
       </div>
 
-      {value && (
-        <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2">
-          <span className="text-sm font-medium">
-            Seleccionado: {selectedDisplay}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={disabled}
-            aria-label={`Quitar ${selectedDisplay} de la selección`}
-            onClick={() => onChange("")}
-          >
-            <X aria-hidden="true" className="h-4 w-4" />
-            Quitar
-          </Button>
+      {selectedIds.length > 0 && (
+        <div className="space-y-1">
+          {selectedIds.map((id) => {
+            const display = chipLabelFor(id);
+            const removeLabel =
+              typeof display === "string"
+                ? `Quitar ${display} de la selección`
+                : "Quitar de la selección";
+            return (
+              <div
+                key={id}
+                className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2"
+              >
+                <span className="text-sm font-medium">
+                  {multi ? display : `Seleccionado: ${display}`}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={disabled}
+                  aria-label={removeLabel}
+                  onClick={() => (multiProps ? multiProps.onToggle(id) : singleProps?.onChange(""))}
+                >
+                  <X aria-hidden="true" className="h-4 w-4" />
+                  Quitar
+                </Button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -253,14 +312,14 @@ export function EntitySearchSelect({
                 type="button"
                 role="option"
                 id={`${listId}-option-${index}`}
-                aria-selected={value === option.id}
+                aria-selected={selectedIds.includes(option.id)}
                 className={cn(
                   "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none",
                   activeIndex === index && "bg-muted/60",
-                  value === option.id &&
+                  selectedIds.includes(option.id) &&
                     "bg-primary/10 font-medium text-primary",
                 )}
-                onClick={() => select(option)}
+                onClick={() => pick(option.id)}
               >
                 <span className="block">{option.label}</span>
                 {option.hint && (

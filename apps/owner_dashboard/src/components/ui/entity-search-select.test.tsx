@@ -14,7 +14,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { useState } from "react";
-import { EntitySearchSelect, type EntitySearchOption } from "./entity-search-select";
+import {
+  EntitySearchSelect,
+  type EntitySearchOption,
+  type EntitySearchSelectProps,
+} from "./entity-search-select";
 
 const CAFE_DE_OLLA: EntitySearchOption = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -27,7 +31,9 @@ const CAPUCHINO: EntitySearchOption = {
   label: "CAPUCHINO",
 };
 
-function Harness(props: Partial<Parameters<typeof EntitySearchSelect>[0]> = {}) {
+type SingleModeProps = Extract<EntitySearchSelectProps, { multiple?: false }>;
+
+function Harness(props: Partial<SingleModeProps> = {}) {
   const [search, setSearch] = useState(props.search ?? "");
   const [value, setValue] = useState(props.value ?? "");
   return (
@@ -194,6 +200,106 @@ describe("EntitySearchSelect — keyboard interaction", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+describe("EntitySearchSelect — multi mode: a governed LIST selection", () => {
+  const BURGER: EntitySearchOption = {
+    id: "33333333-3333-4333-8333-333333333333",
+    label: "Smash Burger",
+  };
+
+  function MultiHarness(props: {
+    value?: string[];
+    onToggle?: (id: string) => void;
+    renderSelectedLabel?: (id: string) => React.ReactNode;
+  }) {
+    const [search, setSearch] = useState("");
+    const [picked, setPicked] = useState<string[]>(props.value ?? []);
+    return (
+      <EntitySearchSelect
+        inputId="entity-multi"
+        label="Productos elegibles"
+        multiple
+        value={picked}
+        onToggle={(id) =>
+          props.onToggle
+            ? props.onToggle(id)
+            : setPicked((ids) =>
+                ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
+              )
+        }
+        options={[CAFE_DE_OLLA, BURGER]}
+        search={search}
+        onSearchChange={setSearch}
+        renderSelectedLabel={props.renderSelectedLabel}
+      />
+    );
+  }
+
+  it("every row click reports the clicked id to the consumer — add AND remove are the consumer's toggle", () => {
+    const onToggle = vi.fn();
+    render(<MultiHarness value={[]} onToggle={onToggle} />);
+    fireEvent.click(screen.getByRole("option", { name: /Smash Burger/ }));
+    expect(onToggle).toHaveBeenCalledWith(BURGER.id);
+    // Re-clicking the picked row still reports the id: the consumer decides
+    // it means un-pick.
+    fireEvent.click(screen.getByRole("option", { name: /Smash Burger/ }));
+    expect(onToggle).toHaveBeenCalledTimes(2);
+  });
+
+  it("picked rows render as human-label chips (ids never shown) with aria-selected on the rows", () => {
+    render(<MultiHarness value={[BURGER.id, CAFE_DE_OLLA.id]} />);
+    const chips = screen.getAllByText(/Smash Burger|Café de Olla/);
+    expect(chips.length).toBeGreaterThanOrEqual(2);
+    // The chip labels are the human names; no raw uuid anywhere.
+    for (const chip of chips) {
+      expect(chip.textContent).not.toMatch(/33333333|11111111/);
+    }
+    expect(screen.getByRole("option", { name: /Smash Burger/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("option", { name: /Café de Olla/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("a chip's Quitar hands the id back to the consumer's toggle", () => {
+    const onToggle = vi.fn();
+    render(<MultiHarness value={[BURGER.id]} onToggle={onToggle} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /Quitar Smash Burger/ }),
+    );
+    expect(onToggle).toHaveBeenCalledWith(BURGER.id);
+  });
+
+  it("an empty selection renders no chips — the consumer decides whether empty blocks submit", () => {
+    render(<MultiHarness value={[]} />);
+    expect(screen.queryByText(/Seleccionado/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Quitar/ })).not.toBeInTheDocument();
+  });
+
+  it("a stored id outside the current results renders through the consumer's label renderer, never as a raw id", () => {
+    render(
+      <MultiHarness
+        value={["99999999-9999-4999-8999-999999999999"]}
+        renderSelectedLabel={() => "Smash Burger Doble"}
+      />,
+    );
+    const chip = screen.getByText("Smash Burger Doble");
+    expect(chip.textContent).not.toMatch(/99999999/);
+  });
+
+  it("keyboard Enter toggles the highlighted row in multi mode", () => {
+    const onToggle = vi.fn();
+    render(<MultiHarness value={[]} onToggle={onToggle} />);
+    const input = screen.getByRole("combobox", { name: "Productos elegibles" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onToggle).toHaveBeenCalledWith(CAFE_DE_OLLA.id);
+  });
+});
+
 
 describe("EntitySearchSelect — the standard's states", () => {
   it("loading: renders the searching state before any rows exist", () => {

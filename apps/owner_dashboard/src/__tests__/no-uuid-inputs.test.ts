@@ -141,21 +141,30 @@ function quotedCopyValue(tag: string, name: string): string | undefined {
 
 /**
  * Identifier-shaped token test. A token is an identifier datum when its last
- * word is `id` (snake_case `*_id`, or a bare `id`) or a camelCase `*Id`.
- * "valid", "paid", "product-search" do NOT match; "target_product_id" and
- * "referenceVersionId" do. SCREAMING_SNAKE tokens (all caps) are code
- * constants naming an HTML element id (e.g. `URL_INPUT_ID`), not data, and
- * never count.
+ * word is an identifier noun in singular OR PLURAL form: snake_case `*_id`
+ * / `*_ids` (the re-split below drops underscores, so the last word is the
+ * bare `id`/`ids`), or camelCase `*Id` / `*Ids` (`target_product_id`,
+ * `eligibleProductIds`). "valid", "paid", "product-search" do NOT match;
+ * "product-ids-search" does not match either — the datum is a token's HEAD
+ * noun, so only the last word decides. SCREAMING_SNAKE tokens (all caps) are
+ * code constants naming an HTML element id (e.g. `URL_INPUT_ID`), not data,
+ * and never count.
  */
 function isIdentifierToken(raw: string): boolean {
   const words = raw.split(/[^A-Za-z0-9]+/).filter(Boolean);
   const last = words[words.length - 1];
   if (!last) return false;
   if (/^[A-Z][A-Z0-9_]*$/.test(last)) return false;
-  return last.toLowerCase() === "id" || /[a-z]I[dD]$/.test(last);
+  const lower = last.toLowerCase();
+  if (lower === "id" || lower === "ids") return true;
+  return /[a-z]I[dD]$/.test(last) || /[a-z]I[dD]s$/.test(last);
 }
 
-/** Identifier tokens appearing in the places a form binds its datum: id, name, register(...), value={...}. */
+/**
+ * Identifier tokens appearing in the places a form binds its datum: id, name, register(...), value={...}.
+ * The datum is a token's HEAD noun, so only the LAST word decides (see
+ * isIdentifierToken): "product-ids-search" is a search affordance, not data.
+ */
 function identifierTokensInTag(tag: string): string[] {
   const tokens: string[] = [];
   for (const name of ["id", "name", "value"]) {
@@ -173,12 +182,15 @@ function identifierTokensInTag(tag: string): string[] {
     tokens.push(m[1] ?? "");
   }
   // Deduplicate and keep only identifier-shaped raw strings, trimmed to the
-  // meaningful token for reporting.
+  // meaningful token for reporting. The datum is a token's HEAD noun: only
+  // the LAST word decides. find-first would let a segment like "ids" inside
+  // "product-ids-search" impersonate data; the last word cannot — it is the
+  // noun the operator's field is actually named by.
   const out: string[] = [];
   for (const raw of tokens) {
     const words = raw.split(/[^A-Za-z0-9_]+/).filter(Boolean);
-    const shaped = words.find((w) => isIdentifierToken(w));
-    if (shaped && !out.includes(shaped)) out.push(shaped);
+    const last = words[words.length - 1];
+    if (last && isIdentifierToken(last) && !out.includes(last)) out.push(last);
   }
   return out;
 }
@@ -413,5 +425,38 @@ describe("no-uuid-inputs guard (§17.6): no free-text input for a foreign key", 
     const violations = scanSource("features/demo/DemoForm.tsx", quotedSample);
     expect(violations).toHaveLength(1);
     expect(violations[0]?.field).toBe("product_id");
+  });
+
+  it("flags PLURAL identifier fields — the form the singular detector was blind to (§17.6, loyalty eligibleProductIds)", () => {
+    // The exact shape that slipped through: a free-text comma list bound to
+    // a camelCase plural. The datum is still a foreign key — one row per
+    // comma — so the plural must be caught exactly like the singular.
+    const camelPluralSample =
+      '<Input id="eligible-products" placeholder="prod-smash, prod-burger" {...register(\'eligibleProductIds\')} />';
+    const camelViolations = scanSource(
+      "features/demo/DemoForm.tsx",
+      camelPluralSample,
+    );
+    expect(camelViolations).toHaveLength(1);
+    expect(camelViolations[0]?.field).toBe("eligibleProductIds");
+
+    // Snake-case plural binds are the same datum.
+    const snakePluralSample =
+      '<Input name="product_ids" placeholder="IDs separados por coma" />';
+    expect(scanSource("features/demo/DemoForm.tsx", snakePluralSample)).toHaveLength(1);
+  });
+
+  it("does not flag a plural carried by a governed shape: hidden input or search affordance", () => {
+    // A plural datum can legitimately appear as a HIDDEN input carrying the
+    // ids a governed selector picked — carriage, not entry: the operator
+    // cannot type into it. The type filter (hidden ≠ text) must keep
+    // exempting it now that plurals are detected.
+    const hiddenCarrierSample =
+      '<Input type="hidden" name="eligibleProductIds" value={pickedIds.join(",")} />';
+    expect(scanSource("features/demo/DemoForm.tsx", hiddenCarrierSample)).toEqual([]);
+    // The selector's visible search input stays exempt (search affordance).
+    const searchSample =
+      '<Input id="product-ids-search" placeholder="Buscar productos..." value={search} onChange={(e) => onSearchChange(e.target.value)} />';
+    expect(scanSource("features/demo/DemoForm.tsx", searchSample)).toEqual([]);
   });
 });

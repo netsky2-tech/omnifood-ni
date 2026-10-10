@@ -234,7 +234,10 @@ export const programFormSchema = z
     // checks happen in the refinement for the ACTIVE branch only.
     spendBlockNio: z.number().or(z.nan()),
     pointsPerBlock: z.number().or(z.nan()),
-    eligibleProductIds: z.string(),
+    // §17.6 (loyalty slice 2): a LIST datum — the uuids of the products the
+    // operator picked from the governed multi selector, one row per comma of
+    // the old free-text field. Never a typed identifier.
+    eligibleProductIds: z.array(z.string()),
     unitsPerPurchasedUnit: z.number().or(z.nan()),
     unitsPerVisit: z.number().or(z.nan()),
     minimumSpendNio: z.string(),
@@ -267,9 +270,15 @@ export const programFormSchema = z
         'Los puntos por bloque deben ser mayores o iguales a 1',
       );
     } else if (values.programType === 'PRODUCT_STAMPS') {
-      // Native `required` only blocked the empty string.
+      // §17.6: the products are picked from the governed multi selector,
+      // never typed. Empty = nothing picked (the old fabricated
+      // ['prod-smash'] default is gone); anything picked must be a uuid.
       if (values.eligibleProductIds.length < 1)
-        issue('eligibleProductIds', 'Indique al menos un producto elegible');
+        issue('eligibleProductIds', 'Seleccione al menos un producto elegible');
+      else if (
+        values.eligibleProductIds.some((id) => !PRODUCT_UUID_PATTERN.test(id))
+      )
+        issue('eligibleProductIds', 'Seleccione productos válidos');
       guardNumber(
         'unitsPerPurchasedUnit',
         values.unitsPerPurchasedUnit,
