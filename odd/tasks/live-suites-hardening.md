@@ -1,6 +1,7 @@
 # Feature: Live-suite hardening — NHILOS_LIVE_API fallback + canonical :3300 (issue #828)
 
-- **Status:** IMPLEMENTED — checks green locally; native review + PR pending
+- **Status:** REVIEWED — commit `f2e5f8c9` approved by native review `review-bd2c8471dd9fffc1`
+  (lens `review-reliability`, tier medium, 2 informational advisories); push/PR pending the user's decision
 - **Issue:** #828 (`status:approved`, `type:bug`) — backflow of review `review-3beb46530ec87586` (PR #827)
 - **Branch:** `fix/live-suites-base-url` from `main` (`dc9842fe`)
 - **Worktree:** `/home/octavio_morales/omnifood-ni-live-suites-hardening` (isolated — never write on `main`)
@@ -86,8 +87,27 @@
       `npm run start:dev` (→ `:3000`) and the stale `pass: admin` prerequisites in the w1 header
       were corrected. `localhost:3000` sweep classified above.
 - [x] **T6** Checks as listed in Acceptance criteria (all green).
-- [ ] **T7** Work-unit commit + evidence recorded here and in the mirror; native review
-      (ASSESS on the candidate) → PR `type:bug` linked to #828.
+- [x] **T7a** Work-unit commit `f2e5f8c9` (10 files, +327/−24) + evidence here and in the
+      Engram mirror (obs 10047).
+- [x] **T7b** RDD ASSESS on the committed candidate (`baseRef=HEAD~1`, committedOnly): risk
+      **medium**, writer profile `large` (runtime), plan = writer self-verification, no separate
+      verifier — the self-verification is the executed evidence above.
+- [x] **T7c** Native ordinary review `review-bd2c8471dd9fffc1` → **APPROVED** and acknowledged
+      (authority burned, `gentle-ai.review-acknowledged/v1`). Two non-blocking advisories
+      recorded below.
+- [ ] **T7d** Push + PR `type:bug` linked to #828 (user decision; delivery follows ordinary
+      repository policy, never the review receipt).
+
+## Native review advisories (non-blocking, candidate approved)
+
+- **R3-NO-API-PREFIX-VALIDATION** (`src/lib/live-api-base.ts:50-53`, SUGGESTION): the helper
+  documents that `NHILOS_LIVE_API` must include the `/api` prefix but does not validate it.
+  Deliberate for now — normalization was an explicit non-goal; if operators keep forgetting the
+  prefix, adding the `/api` append (like `src/lib/api-base-url.ts` does for the app) is the fix.
+- **R3-URL-CONSTRUCT-THROWS** (`playwright.live.config.ts:45`, WARNING):
+  `new URL(resolveLiveApiBase()).origin` throws a bare `TypeError` if an operator sets
+  `NHILOS_LIVE_API` to a relative value. Fail-fast is correct (a relative base is unusable for a
+  browser dev server), but the message should name the variable instead of `TypeError`.
 
 ## Follow-ups found (not in this issue)
 
@@ -100,4 +120,7 @@
 
 ## Commits
 
-(to be recorded as work units land — see T7)
+- `f2e5f8c9` — `fix(dashboard): make live-suite env fallback immune to blank NHILOS_LIVE_API`
+  (work unit: helper + 18-case unit spec + wiring in 4 live suites + 2 Playwright files +
+  vitest/playwright live configs + this ODD doc). Native review `review-bd2c8471dd9fffc1`
+  APPROVED + acknowledged.
