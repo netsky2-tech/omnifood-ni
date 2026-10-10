@@ -62,23 +62,24 @@
 
 ### B1 · D-1 — la proyección de lealtad se recomputa
 - **Qué:** `customer_loyalty_account_projection.balance_units` queda stale (1500 vs 704) tras el push del POS por `POST /loyalty/point-transactions/sync`; `balance_after` en 0.00.
-- **Esperado:** el ingest recomputa la proyección desde el ledger (y `balance_after` deja de ser 0).
+- **Causa raíz (confirmada):** `appendTransaction` (`loyalty-ledger.service.ts:108`) — el camino que usa `LoyaltySyncIngestionService.ingestPointTransactions` — **no toca la proyección**; `recomputeCustomerBalance` (`:220`) y `rebuildProjection` (`:233`) sí escriben `balance_units` pero **nadie las llama desde la ingesta**.
+- **Esperado:** tras el append, recomputar **por `customer_id` afectado** (agrupar para no recomputar N veces por lote) y dejar de emitir `balance_after = 0`.
 
 ### B2 · F-4a — la entidad en el ledger del dueño
 - **Qué:** `audit_logs.target_type`/`target_id` NULL en todas las filas del POS → la columna "entidad" del panel sale "—".
-- **Esperado:** la entidad viaja tipada (o el ledger la deriva del metadata sin exponer el blob).
+- **Esperado:** la entidad viaja tipada en el camino del POS (o el ledger la deriva del metadata sin exponer el blob, `audit-logs.dto.ts:14`).
 
-### B3 · F-5b — el cajero en el Corte Z
+### B3 · F-5b — el cajero en el Corte Z — **DECIDIDO: snapshot del turno**
 - **Qué:** el Z imprime *"Cajero: Operador no disponible"* aunque el turno tiene `cashier_name`.
-- **Esperado:** el nombre resuelto (o un fallback honesto, nunca el uuid).
+- **Decisión del dueño (2026-10-10):** el Z usa **`cash_shift_sessions.cashier_name`** como fuente primaria (el snapshot del nombre al abrir el turno), **sin** lookup contra la tabla de usuarios; si no hay ninguno, fallback honesto **"Operador no identificado"**, nunca el uuid.
 
-### B4 · F-8d — el resumen del día reconcilia
-- **Qué:** Subtotal 5414.75 vs Total 5526.00 con IVA 0; el descuento de la NC (111.25) desaparece.
-- **Esperado:** identidad Subtotal/Total del resumen diario (subtotal de la NC coherente con el de la venta).
+### B4 · F-8d — el resumen del día reconcilia — **DECIDIDO: corregir el documento + backfill**
+- **Qué:** Subtotal 5414.75 vs Total 5526.00 con IVA 0; el descuento de la NC (111.25) desaparece. La NC guarda `subtotal` **bruto** (−125) mientras la venta lo guarda **neto** (13.75).
+- **Decisión del dueño (2026-10-10):** la NC guarda `subtotal` **neto** y el **reverso del descuento por línea**, de modo que el documento quede internamente consistente y el encabezado del día reconcilie. Incluye **backfill de las NC existentes** (hoy hay una: factura 44). Toca `sales_repository_impl.createCreditNote` + el resumen/reportes de la nube.
 
-### B5 · F-8e — decidir el documento de la NC upstream
+### B5 · F-8e — el documento de la NC upstream — **DECIDIDO: enviarla a la nube**
 - **Qué:** la nube recibe el evento `CREDIT_NOTE_CREATED` pero no el documento de la NC (DEC-1).
-- **Esperado:** decisión explícita (documentar la salvedad o enviar la NC), escrita en el doc.
+- **Decisión del dueño (2026-10-10):** **enviar la NC a la nube** (no se documenta la salvedad). Implica un camino de sync propio para el documento: payload + aceptación upstream + estado pendiente/aceptada, análogo al outbound de ventas. **Es un bloque de trabajo en sí mismo** → merece su propia unidad/PR, con idempotencia y el estado del documento en la nube.
 
 ---
 
