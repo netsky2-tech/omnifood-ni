@@ -128,6 +128,37 @@ void main() {
       expect(find.byKey(const Key('test_drawer_button')), findsOneWidget);
     });
 
+    testWidgets(
+      'the simulator driver never claims physical hardware (round-2 F-6)',
+      (tester) async {
+        // The S23 round configuration: the mock adapter reports `ready` and
+        // has no hardware behind it.
+        when(mockConfigService.getPrinterConfig()).thenAnswer(
+          (_) async => const PrinterConfig(
+            driverType: PrinterDriverType.mock,
+            autoPrintInvoice: true,
+            autoPrintKitchen: false,
+            openDrawerOnCash: true,
+            paperWidthMm: 58,
+            headerBusinessName: 'NHILOS POS HW Test',
+            taxRegime: 'REGIMEN_GENERAL',
+          ),
+        );
+
+        await tester.pumpWidget(buildTestWidget());
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Modo Simulador'), findsOneWidget);
+        expect(
+          find.text('Impresora Conectada y Lista'),
+          findsNothing,
+          reason: 'a simulator has no thermal head and no paper; the driver '
+              'decides the copy, never the status the double reports',
+        );
+        expect(find.textContaining('cabezal térmico'), findsNothing);
+      },
+    );
+
     testWidgets('tapping test print triggers printInvoice and shows feedback', (tester) async {
       tester.view.physicalSize = const Size(1024, 1000);
       tester.view.devicePixelRatio = 1.0;
