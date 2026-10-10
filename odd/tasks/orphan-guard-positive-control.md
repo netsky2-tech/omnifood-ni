@@ -1,6 +1,9 @@
 # Feature: Orphan-guard positive control + payment.entity no-migration note (issue #829)
 
-- **Status:** DELIVERED as PR #841 (candidate `120a8d99`), native review approved + acknowledged.
+- **Status:** CLOSED — PR #841 merged into main as `e1452a87`, issue #829 closed with evidence.
+- **Delivery:** CI added the proof this host cannot produce: `lint-and-test` **6m43s** green, which
+  is unit + `test:db` + `test:e2e` (`--runInBand`) + `verify-schema-build.sh` against a Postgres
+  service, plus `build` 22s. That covers the three local checks I explicitly recorded as not run.
 - **Commits:** `120a8d99` (test work unit: spec + fixture + entity note + this document).
 - **Issue:** #829 (`status:approved`, `type:tests`) — advisories `R3-ORPHAN-POSITIVE-CONTROL` and
   `R3-PAYMENT-TYPE-NO-MIGRATION` from review `review-3beb46530ec87586` (PR #827).
@@ -56,7 +59,11 @@
       `test:db` / `test:e2e` / `verify-schema-build.sh` were NOT run locally and are stated as
       unverified here: this candidate adds a spec, one fixture outside `src`, and a comment — no
       entity, migration, or schema file. CI covers them with its Postgres service.
-- [x] Work-unit commit `120a8d99` + native review + PR #841 (`type:tests`). Merge pending CI green.
+- [x] Work-unit commit `120a8d99` + native review + PR #841 (`type:tests`) → merged `e1452a87`.
+      Note kept on purpose: the PR head carries one extra passive commit (`780779b5`, this document's
+      evidence) that landed **after** the acknowledgement, so it was never part of the reviewed
+      candidate. Amending the reviewed commit instead would have made the reviewed tree silently
+      differ from the PR head — the honest order is: review the code, then document it.
 
 ## Tooling incident found while verifying (worth its own follow-up)
 
