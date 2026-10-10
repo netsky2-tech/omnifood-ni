@@ -90,6 +90,7 @@ import 'ui/features/inventory/suppliers/supplier_view.dart';
 import 'ui/features/inventory/warehouses/warehouse_view.dart';
 import 'data/repositories/sales/sales_repository_impl.dart';
 import 'presentation/features/sales/view_models/sale_view_model.dart';
+import 'presentation/features/sales/sale_view_model_wiring.dart';
 import 'ui/features/sales/sale_view.dart';
 import 'ui/features/sales/sales_history_view.dart';
 import 'presentation/features/sales/view_models/sales_history_view_model.dart';
@@ -114,8 +115,6 @@ import 'ui/features/config/activation/activation_terminal_view.dart';
 import 'ui/features/auth/views/login_view.dart';
 import 'ui/features/auth/views/lock_screen_view.dart';
 import 'domain/services/sales/dgi_numbering_service.dart';
-import 'domain/services/sales/customer_identification_service.dart';
-import 'data/adapters/customer_identification_adapters.dart';
 import 'data/services/sales/dgi_numbering_service_impl.dart';
 import 'domain/usecases/inventory/process_sale_inventory_use_case.dart';
 import 'domain/usecases/inventory/reverse_sale_inventory_use_case.dart';
@@ -657,33 +656,17 @@ void main() async {
         ChangeNotifierProvider(create: (_) => SalesHistoryViewModel(database)),
         // SaleViewModel MUST be defined before CashShiftViewModel because
         // CashShiftViewModel's create callback reads SaleViewModel via ctx.read.
+        // Construction lives in sale_view_model_wiring.dart so the production
+        // wiring test can pin it: a wiring defect is only testable through the
+        // exact code path production executes (see that file's header).
         ChangeNotifierProvider(
-          create: (_) => SaleViewModel(
-            salesRepository,
-            inventoryRepository,
-            authRepository,
-            database,
-            TableOrderService(database),
-            true,
-            null,
-            null,
-            null,
-            null,
-            syncService,
-            null,
-            null,
-            deviceId,
-            // M11: inject the full identification adapter chain (QR, code,
-            // phone, search). Without this, identifyCustomer returned null
-            // for EVERY input in production — including manual code entry.
-            CustomerIdentificationService(
-              [
-                QrIdentificationAdapter(database.customerDao),
-                CustomerCodeIdentificationAdapter(database.customerDao),
-                PhoneIdentificationAdapter(database.customerDao),
-                SearchIdentificationAdapter(database.customerDao),
-              ],
-            ),
+          create: (_) => buildSaleViewModel(
+            salesRepository: salesRepository,
+            inventoryRepository: inventoryRepository,
+            authRepository: authRepository,
+            database: database,
+            syncService: syncService,
+            deviceId: deviceId,
           ),
         ),
         ChangeNotifierProvider(

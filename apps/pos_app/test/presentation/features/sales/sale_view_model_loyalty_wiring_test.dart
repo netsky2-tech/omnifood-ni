@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:mockito/annotations.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/presentation/features/sales/sale_view_model_wiring.dart';
+import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
@@ -971,6 +973,101 @@ void main() {
         ); // cleared by clearCart → processSale end
       },
     );
+  });
+
+  // Production wiring: these tests exercise buildSaleViewModel — the EXACT
+  // function main.dart executes — never a hand-built replica. A hand replica
+  // is exactly the trap that let the P3 loyalty defect ship: the test VM was
+  // wired correctly while the till was inoperable.
+  group('production wiring (buildSaleViewModel — the code path main.dart runs)', () {
+    // Customer with points well above the reward cost, mirroring the real
+    // S23 observation (1,500 points selected, nothing rendered in the cart).
+    const richCustomer = Customer(
+      id: customerId,
+      name: 'Carlos Rico',
+      pointsBalance: 15.0,
+      isActive: true,
+      customerCode: 'DEF456ABC123',
+    );
+
+    void arrangeLoyaltyCatalog() {
+      // _reEvaluateLoyalty scopes DAO lookups by the selected customer id.
+      when(
+        mockProgramDao.getActivePrograms(customerId),
+      ).thenAnswer((_) async => [testProgramEntity]);
+      when(
+        mockRewardDao.getActiveRewards(customerId),
+      ).thenAnswer((_) async => [testRewardEntity]);
+    }
+
+    test(
+        'loyalty surface is LIVE: evaluation non-null, program carried, '
+        'reward CTA eligible, selectReward not a no-op', () async {
+      arrangeLoyaltyCatalog();
+
+      final vm = buildSaleViewModel(
+        salesRepository: mockSalesRepo,
+        inventoryRepository: mockInventoryRepo,
+        authRepository: mockAuthRepo,
+        database: mockDb,
+        deviceId: 'test-terminal',
+      );
+
+      await vm.selectCustomer(richCustomer);
+
+      // The evaluation surface LoyaltyCompactWidget/RewardCtaWidget read.
+      expect(vm.currentEvaluation, isNotNull);
+      expect(
+        vm.currentEvaluation!.programs.map((p) => p.programId),
+        contains(programId),
+      );
+
+      // RewardCtaWidget renders iff hasAnyEligibleReward && nextReward != null.
+      expect(vm.currentEvaluation!.hasAnyEligibleReward, isTrue);
+      expect(vm.currentEvaluation!.nextReward, isNotNull);
+      expect(vm.currentEvaluation!.nextReward!.rewardId, rewardId);
+
+      // selectReward must no longer be a silent no-op (pre-fix it returned
+      // early because _rewardInteraction was null).
+      vm.selectReward(rewardId);
+      expect(vm.selectedReward, isNotNull);
+      expect(vm.selectedReward!.id, rewardId);
+    });
+
+    test(
+        'CONTRAST (the trap): the PLAIN positional constructor still yields a '
+        'NULL evaluation — the pre-fix production state, kept as an explicit '
+        'regression marker', () async {
+      arrangeLoyaltyCatalog();
+
+      // The pre-fix main.dart construction, verbatim: plain positional
+      // constructor, whose initializer list hard-codes _evaluationService =
+      // null and _rewardInteraction = null.
+      final vm = SaleViewModel(
+        mockSalesRepo,
+        mockInventoryRepo,
+        mockAuthRepo,
+        mockDb,
+        TableOrderService(mockDb),
+        true, // autoLoad
+        null, // tenantConfigService
+        null, // kitchenOrderService
+        null, // printerConfigService
+        null, // printerPort
+        null, // syncService
+        null, // promotionsEngine
+        null, // loyaltyService
+        'test-terminal',
+      );
+
+      await vm.selectCustomer(richCustomer);
+
+      // Customer selected, program and reward exist — yet the surface is dead.
+      expect(vm.currentEvaluation, isNull);
+      // And selectReward is a silent no-op.
+      vm.selectReward(rewardId);
+      expect(vm.selectedReward, isNull);
+    });
   });
 }
 
