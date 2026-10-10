@@ -433,28 +433,8 @@ class _AuditLogViewState extends State<AuditLogView> {
   /// Parses the audit metadata into insertion-ordered key/value entries.
   /// Returns null when the payload is empty, absent, or not a JSON object —
   /// the caller then renders it verbatim instead of guessing a structure.
-  List<MapEntry<String, String>>? _metadataEntries(dynamic metadata) {
-    if (metadata == null) return null;
-    final raw = metadata.toString();
-    if (raw.trim().isEmpty) return null;
-    try {
-      final decoded = json.decode(raw);
-      if (decoded is Map) {
-        return [
-          for (final entry in decoded.entries)
-            MapEntry(
-              entry.key.toString(),
-              entry.value is String
-                  ? entry.value as String
-                  : entry.value.toString(),
-            ),
-        ];
-      }
-    } catch (_) {
-      // Not JSON: fall through to the verbatim rendering.
-    }
-    return null;
-  }
+  List<MapEntry<String, String>>? _metadataEntries(dynamic metadata) =>
+      auditMetadataPrimaryEntries(metadata);
 
   /// Spanish label for a metadata key from the verified POS emit sites
   /// ([kAuditMetadataKeyLabels]); unverified keys humanise honestly
@@ -473,6 +453,58 @@ class _AuditLogViewState extends State<AuditLogView> {
     } catch (_) {
       return metadata.toString();
     }
+  }
+}
+
+/// Metadata keys whose value is a machine identifier with no operator
+/// meaning. They stay reachable inside the collapsed raw JSON, which is the
+/// documented home for forensic evidence: round-2 F-4c read a bare invoice
+/// UUID under "Factura (ID)" and learned nothing from it.
+const Set<String> kAuditMetadataIdentifierKeys = <String>{'invoice_id'};
+
+/// The PRIMARY (labelled) rows of an audit metadata payload: identifiers
+/// dropped, machine codes humanised. Returns null when the payload is not a
+/// JSON object, which the caller degrades verbatim.
+List<MapEntry<String, String>>? auditMetadataPrimaryEntries(dynamic metadata) {
+  if (metadata == null) return null;
+  final raw = metadata.toString();
+  if (raw.trim().isEmpty) return null;
+  try {
+    final decoded = json.decode(raw);
+    if (decoded is Map) {
+      return [
+        for (final entry in decoded.entries)
+          if (!kAuditMetadataIdentifierKeys.contains(entry.key.toString()))
+            MapEntry(
+              entry.key.toString(),
+              humanizeAuditMetadataValue(
+                entry.key.toString(),
+                entry.value is String
+                    ? entry.value as String
+                    : entry.value.toString(),
+              ),
+            ),
+      ];
+    }
+  } catch (_) {
+    // Not JSON: fall through to the verbatim rendering.
+  }
+  return null;
+}
+
+/// Human copy for an audit metadata VALUE.
+///
+/// The wire keeps machine codes (a void reason, a reprint reason) and the
+/// operator must not read them raw: F-4c reported `CLIENTE_DESISTE` twice,
+/// once as the reason and once as its own code. Unknown codes pass through
+/// unchanged, exactly like `localize`.
+String humanizeAuditMetadataValue(String key, String value) {
+  switch (key) {
+    case 'reason':
+    case 'reason_code':
+      return kVoidReasonLabels[value] ?? kReprintReasonLabels[value] ?? value;
+    default:
+      return value;
   }
 }
 
