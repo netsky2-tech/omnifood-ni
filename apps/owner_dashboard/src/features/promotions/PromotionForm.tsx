@@ -15,7 +15,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { promotionFormSchema, type PromotionFormData } from './schema';
+import {
+  promotionFormSchema,
+  dateInputValueToEpochMs,
+  epochMsToDateInputValue,
+  type PromotionFormData,
+} from './schema';
 import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/promotions';
 import { DAYS_OF_WEEK, cn } from '@/lib/utils';
 import { useCreatePromotion, useUpdatePromotion } from '@/hooks/use-promotions';
@@ -56,8 +61,9 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
       days_of_week: [],
       start_time: '',
       end_time: '',
-      start_date: undefined,
-      end_date: undefined,
+      // Date inputs deliver 'YYYY-MM-DD' text; '' means no date bound.
+      start_date: '',
+      end_date: '',
       priority: 0,
       is_stackable: true,
       is_active: true,
@@ -83,8 +89,9 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
         days_of_week: initialData.days_of_week || [],
         start_time: initialData.start_time || '',
         end_time: initialData.end_time || '',
-        start_date: initialData.start_date ?? undefined,
-        end_date: initialData.end_date ?? undefined,
+        // Entity stores epoch-ms numbers; the date input needs YYYY-MM-DD.
+        start_date: epochMsToDateInputValue(initialData.start_date),
+        end_date: epochMsToDateInputValue(initialData.end_date),
         priority: initialData.priority,
         is_stackable: initialData.is_stackable,
         is_active: initialData.is_active,
@@ -108,20 +115,35 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
     // - UPDATE: send an explicit null so Object.assign clears the column
     //   (omitting the key would leave the old target untouched).
     // A selected uuid is always sent unchanged.
-    const { target_category_id, ...rest } = data;
+    const { target_category_id, start_date, end_date, ...rest } = data;
+    // Promo-fix: date inputs carry 'YYYY-MM-DD'; the backend's DTOs and
+    // bigint columns expect epoch-ms numbers. A cleared date is omitted
+    // entirely (absent = no date bound), never sent as 0 or ''.
+    const dateRange = {
+      ...(start_date ? { start_date: dateInputValueToEpochMs(start_date) } : {}),
+      ...(end_date ? { end_date: dateInputValueToEpochMs(end_date) } : {}),
+    };
     try {
       if (isEditing) {
         // T0.5'd: '' -> explicit null (clear to global); a selected uuid is
         // sent unchanged.
         const dto = {
           ...rest,
+          ...dateRange,
           target_category_id: target_category_id ? target_category_id : null,
         };
         await updatePromotion.mutateAsync({ id: initialData!.id, dto });
         toast({ variant: 'success', title: 'Promoción actualizada' });
       } else {
+        // Promo-fix: is_active is NOT in CreatePromotionDto's whitelist
+        // (forbidNonWhitelisted rejects the whole request otherwise), and
+        // every promotion is born active. The create view shows that fact
+        // instead of an inactive-looking control; activation toggling is
+        // the update path's job.
+        const { is_active: _createIsActive, ...createRest } = rest;
         const payload = {
-          ...rest,
+          ...createRest,
+          ...dateRange,
           ...(target_category_id ? { target_category_id } : {}),
         };
         await createPromotion.mutateAsync(payload);
@@ -321,24 +343,26 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="start_date">Fecha Inicio (timestamp)</Label>
+            <Label htmlFor="start_date">Fecha Inicio</Label>
             <Input
               id="start_date"
-              type="number"
-              placeholder="Timestamp en milisegundos"
-              {...form.register('start_date', { valueAsNumber: true })}
+              type="date"
+              {...form.register('start_date')}
             />
-            <p className="text-xs text-muted-foreground">Opcional: timestamp Unix en ms</p>
+            <p className="text-xs text-muted-foreground">
+              Opcional: deja vacío para que la promoción no tenga fecha de inicio
+            </p>
           </div>
           <div>
-            <Label htmlFor="end_date">Fecha Fin (timestamp)</Label>
+            <Label htmlFor="end_date">Fecha Fin</Label>
             <Input
               id="end_date"
-              type="number"
-              placeholder="Timestamp en milisegundos"
-              {...form.register('end_date', { valueAsNumber: true })}
+              type="date"
+              {...form.register('end_date')}
             />
-            <p className="text-xs text-muted-foreground">Opcional: timestamp Unix en ms</p>
+            <p className="text-xs text-muted-foreground">
+              Opcional: deja vacío para que la promoción no venza
+            </p>
           </div>
         </div>
 
@@ -362,13 +386,24 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
             </Label>
           </div>
           <div className="flex items-end">
-            <Label className="flex items-center gap-2 cursor-pointer w-full">
-              <Switch
-                checked={form.getValues('is_active')}
-                onCheckedChange={(checked) => form.setValue('is_active', checked, { shouldValidate: true })}
-              />
-              <span>Activa</span>
-            </Label>
+            {isEditing ? (
+              <Label className="flex items-center gap-2 cursor-pointer w-full">
+                <Switch
+                  checked={form.getValues('is_active')}
+                  onCheckedChange={(checked) => form.setValue('is_active', checked, { shouldValidate: true })}
+                />
+                <span>Activa</span>
+              </Label>
+            ) : (
+              // Promo-fix: on create the backend always starts the promotion
+              // active (services/promotions.service.ts hard-codes is_active:
+              // true) and is_active is not in the create whitelist. Showing
+              // the toggle here would be a control that does nothing on
+              // submit; stating the fact keeps the create lifecycle visible.
+              <p className="text-sm text-muted-foreground">
+                La promoción se crea activa
+              </p>
+            )}
           </div>
         </div>
       </div>
