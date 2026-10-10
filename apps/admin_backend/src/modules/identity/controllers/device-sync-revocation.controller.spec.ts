@@ -87,13 +87,13 @@ describe('DeviceSyncRevocationController (B17-02)', () => {
   });
 
   describe('route metadata', () => {
-    it('requires the OWNER role for revocation (method-level)', () => {
+    it('does not hardcode any role for revocation; PermissionsGuard governs access (method-level)', () => {
       expect(
         Reflect.getMetadata(
           ROLES_KEY,
           DeviceSyncRevocationController.prototype.revoke,
         ),
-      ).toEqual([UserRole.OWNER]);
+      ).toBeUndefined();
     });
 
     it('requires the DEVICE_SYNC_REVOKE permission for revocation (method-level)', () => {

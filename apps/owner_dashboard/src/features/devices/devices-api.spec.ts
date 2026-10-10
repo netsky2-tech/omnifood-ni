@@ -1,9 +1,13 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { api } from "@/lib/api";
-import { fetchDevices, normalizeTerminalDevice } from "./devices-api";
+import {
+  fetchDevices,
+  normalizeTerminalDevice,
+  revokeDevice,
+} from "./devices-api";
 
 vi.mock("@/lib/api", () => ({
-  api: { get: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn() },
 }));
 
 const validRow = {
@@ -164,5 +168,37 @@ describe("fetchDevices", () => {
   it("propagates API errors", async () => {
     vi.mocked(api.get).mockRejectedValue(new Error("boom"));
     await expect(fetchDevices()).rejects.toThrow("boom");
+  });
+});
+
+describe("revokeDevice", () => {
+  beforeEach(() => {
+    vi.mocked(api.post).mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("calls api.post with the encoded credential path and the reason body", async () => {
+    vi.mocked(api.post).mockResolvedValue(validRow);
+    await revokeDevice("cred/abc 1", "stolen terminal");
+    expect(api.post).toHaveBeenCalledWith(
+      "/identity/device-sync/credentials/cred%2Fabc%201/revoke",
+      { reason: "stolen terminal" },
+    );
+  });
+
+  it("returns the normalized terminal device", async () => {
+    vi.mocked(api.post).mockResolvedValue({ ...validRow, status: "REVOKED" });
+    const device = await revokeDevice("cred-abc", "lost");
+    expect(device).toEqual({ ...validRow, status: "REVOKED" });
+  });
+
+  it("propagates API errors", async () => {
+    vi.mocked(api.post).mockRejectedValue(new Error("revocation refused"));
+    await expect(revokeDevice("cred-abc", "lost")).rejects.toThrow(
+      "revocation refused",
+    );
   });
 });

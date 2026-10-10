@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { RefreshCw, Smartphone } from "lucide-react";
 import {
   Table,
@@ -12,7 +13,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { useCanRevokeDevice } from "@/features/auth/permissions";
 import { useDevices } from "./use-devices";
+import { RevokeDeviceModal } from "./revoke-device-modal";
 import type { DeviceSyncStatus, TerminalDevice } from "./types";
 
 interface BadgeTone {
@@ -154,7 +157,13 @@ function DevicesSkeleton() {
   );
 }
 
-function DevicesTable({ devices }: { devices: TerminalDevice[] }) {
+interface DevicesTableProps {
+  devices: TerminalDevice[];
+  canRevoke: boolean;
+  onRevoke: (device: TerminalDevice) => void;
+}
+
+function DevicesTable({ devices, canRevoke, onRevoke }: DevicesTableProps) {
   return (
     <div className="rounded-md border border-border bg-card shadow-sm">
       <Table
@@ -171,6 +180,7 @@ function DevicesTable({ devices }: { devices: TerminalDevice[] }) {
             <TableHead>Última Sincronización</TableHead>
             <TableHead>Versión POS</TableHead>
             <TableHead>Credencial</TableHead>
+            {canRevoke && <TableHead className="text-right">Acciones</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -220,6 +230,23 @@ function DevicesTable({ devices }: { devices: TerminalDevice[] }) {
                       : "—"}
                   </p>
                 </TableCell>
+                {canRevoke && (
+                  <TableCell className="text-right">
+                    {device.status === "ACTIVE" || device.status === "PENDING" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => onRevoke(device)}
+                        aria-label={`Revocar terminal ${device.terminalId}`}
+                      >
+                        Revocar
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}
@@ -232,6 +259,8 @@ function DevicesTable({ devices }: { devices: TerminalDevice[] }) {
 export function DevicesPage() {
   const { data, isLoading, isError, error, isFetching, refetch } = useDevices();
   const devices = data ?? [];
+  const [revokingDevice, setRevokingDevice] = useState<TerminalDevice | null>(null);
+  const canRevoke = useCanRevokeDevice();
 
   const activeCount = devices.filter((d) => d.status === "ACTIVE").length;
   const revokedCount = devices.filter((d) => d.status === "REVOKED").length;
@@ -337,7 +366,11 @@ export function DevicesPage() {
                 Actualizando…
               </p>
             )}
-            <DevicesTable devices={devices} />
+            <DevicesTable
+              devices={devices}
+              canRevoke={canRevoke}
+              onRevoke={(device) => setRevokingDevice(device)}
+            />
             <p className="text-xs text-muted-foreground" aria-live="polite">
               Mostrando {devices.length}{" "}
               {devices.length === 1 ? "terminal" : "terminales"}
@@ -345,6 +378,14 @@ export function DevicesPage() {
           </>
         )
       )}
+
+      <RevokeDeviceModal
+        device={revokingDevice}
+        open={revokingDevice !== null}
+        onOpenChange={(open) => {
+          if (!open) setRevokingDevice(null);
+        }}
+      />
     </div>
   );
 }

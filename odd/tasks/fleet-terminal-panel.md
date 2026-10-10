@@ -5,7 +5,66 @@
 - **Commit Evidence B17-01:** `595e41b23dc43897236df3bc4bf3b256c890366f` (`feat(identity): implement tenant terminal read model (B17-01)`)
 - **Commit Evidence B17-02:** `763a8e4a274dbd356c9a35d8e75db7b5c1ae55b7` (`feat(identity): implement owner device sync revocation endpoint (B17-02)`)
 - **Commit Evidence B17-03:** `a4bc709405b6305a2e5842c1c6827027c9b0cf34` (`feat(dashboard): implement fleet devices read panel and live suite (B17-03)`)
-- **Status:** COMPLETED — B17-01, B17-02 & B17-03
+- **Status:** COMPLETED — B17-01, B17-02 & B17-03 | IN PROGRESS — B17-04
+
+## Batch B17-04: Owner Revocation Action Modal & Form Sanitization (Issue #832)
+
+- **Authority:** Issue #832, `docs/plans/identity/batch_17_fleet_terminal_registry_and_owner_revocation.md` §4 (B17-04), User directive (permission-based delegation, non-exclusive to OWNER role), NHILoS Backoffice Experience Standard v1.0 (§18.2/§18.3, §30).
+- **Goal:** Enable authorized users (OWNER and any role granted `AppPermission.DEVICE_SYNC_REVOKE`) to revoke terminals directly from the dashboard panel via a sanitized, accessible, confirmative modal dialog with Spanish feedback.
+
+### B17-04 Tasks
+
+- [x] **T1 (B17-04): Backend permission delegation alignment**
+  - In `DeviceSyncRevocationController`: remove hardcoded `@Roles(UserRole.OWNER)` from the revoke handler so that access is governed by `PermissionsGuard` with `@RequirePermissions(AppPermission.DEVICE_SYNC_REVOKE)`.
+  - Update unit specs and live specs to prove users with `DEVICE_SYNC_REVOKE` can revoke regardless of role, while users without it receive 403 Forbidden.
+
+- [x] **T2 (B17-04): Frontend API mutation & permission helper**
+  - Add `revokeDevice(credentialId, reason)` and `useRevokeDevice()` in `features/devices/`.
+  - Add `canRevokeDevice(user)` and `useCanRevokeDevice()` in `features/auth/permissions.ts`.
+
+- [x] **T3 (B17-04): Revocation Modal Dialog with Sanitized Form**
+  - Implement `RevokeDeviceModal` (`features/devices/revoke-device-modal.tsx`):
+    - Operational warning banner (*"Esta acción desconectará inmediatamente la terminal y bloqueará cualquier operación de cobro o sincronización"*).
+    - Form with `noValidate`, React Hook Form, Zod schema (`reason` min 1, max 255; `confirmation === "REVOCAR"`).
+    - Literal Spanish error messages per NHILoS §18.2/§18.3, `aria-invalid`, `aria-describedby`.
+    - Loading spinner and error handling on submit.
+
+- [x] **T4 (B17-04): Wire action into `DevicesPage`**
+  - Add "Revocar" button in `DevicesTable` for terminals in `ACTIVE` or `PENDING` state, gated by `canRevokeDevice`.
+  - Wire modal trigger, state management, and success toast/feedback.
+
+- [x] **T5 (B17-04): Unit, Form Sanitization & Accessibility specs**
+  - Create `revoke-device-modal.spec.tsx` testing form validation (empty rejection, length constraint, confirmation keyword, error display, submit delegation).
+  - Update `devices-page.spec.tsx` to assert revoke button behavior and modal opening.
+
+- [x] **T6 (B17-04): Full verification, work-unit commit, and closeout**
+  - Run full suite, lint, and commit work unit.
+  - Verified by `gentle-ai-verify`: 34 tests in backend (including real Postgres RLS integration) and 46 tests in dashboard.
+
+---
+
+## Evidence Log — B17-04
+
+- **Backend:**
+  - `apps/admin_backend/src/modules/identity/controllers/device-sync-revocation.controller.ts`: removed hardcoded `@Roles(OWNER)` from revoke endpoint so access is governed by `PermissionsGuard` with `@RequirePermissions(AppPermission.DEVICE_SYNC_REVOKE)`, enabling dynamic delegation.
+  - `device-sync-revocation.controller.spec.ts`: 12/12 PASS (verified `ROLES_KEY` undefined on revoke, `PERMISSIONS_KEY` present and enforced).
+  - `device-sync-revocation.db.spec.ts`: 5/5 PASS (real Postgres RLS, audit event, fail-closed transport).
+  - `route-transport-registry.spec.ts`: 17/17 PASS.
+  - `tsc --noEmit` and ESLint clean.
+- **Owner Dashboard:**
+  - Permission delegation: `features/auth/permissions.ts` (`DEVICE_SYNC_REVOKE`, `canRevokeDevice(user)`, `useCanRevokeDevice()`). Tested in `permissions.spec.ts` (7/7 PASS).
+  - API & Mutation: `features/devices/devices-api.ts` (`revokeDevice`), `use-devices.ts` (`useRevokeDevice`). Tested in `devices-api.spec.ts` (17/17 PASS).
+  - Revocation Modal: `features/devices/revoke-device-modal.tsx` and `schema.ts`:
+    - Strict form sanitation with `<form noValidate ...>`, React Hook Form, Zod schema (`revokeDeviceSchema`).
+    - Literal Spanish errors per NHILoS §18.2/§18.3: "El motivo de revocación es obligatorio.", 'Debe escribir exactamente "REVOCAR" para confirmar.'.
+    - Destructive operational alert banner per NHILoS §30: warning that till will immediately lose syncing/billing ability.
+    - DialogFooter with disabled/spinner states.
+  - Wire into page: `features/devices/devices-page.tsx`:
+    - Gated "Acciones" column in `DevicesTable` rendering ghost-destructive "Revocar" button on `ACTIVE`/`PENDING` terminals when `canRevoke` is true.
+  - Unit & Modal specs: `revoke-device-modal.spec.tsx` (6/6 PASS), `devices-page.spec.tsx` (10/10 PASS).
+  - Suite-layout guard: `suite-layout.test.ts` (6/6 PASS).
+  - `tsc --noEmit` clean, `oxlint` clean.
+
 
 ## Batch B17-03: Dashboard Dispositivos Read Panel & E2E Integration (Issue #832)
 

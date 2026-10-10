@@ -14,6 +14,9 @@ import type { User } from "@/types";
 /** Canonical backend permission name (AppPermission-style `module:action`). */
 export const INVENTORY_COST_VIEW = "inventory:cost_view";
 
+/** Canonical backend permission to revoke a terminal device credential (B17-04). */
+export const DEVICE_SYNC_REVOKE = "device_sync:revoke";
+
 /** User shape once `/identity/me` starts carrying the permissions array. */
 export type UserWithPermissions = User & { permissions?: string[] };
 
@@ -33,7 +36,28 @@ export function canViewInventoryCost(user: User | null | undefined): boolean {
   );
 }
 
+/**
+ * Device revocation gate (B17-04): same fail-closed policy as the cost gate.
+ * OWNER is always granted; every other role needs an explicit
+ * `device_sync:revoke` grant (lowercase canonical or uppercase enum form).
+ */
+export function canRevokeDevice(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (user.role === "OWNER") return true;
+  const permissions = (user as UserWithPermissions).permissions;
+  if (!Array.isArray(permissions)) return false;
+  return (
+    permissions.includes(DEVICE_SYNC_REVOKE) ||
+    permissions.includes("DEVICE_SYNC_REVOKE")
+  );
+}
+
 export function useCanViewInventoryCost(): boolean {
   const user = useAuthStore((s) => s.user);
   return canViewInventoryCost(user);
+}
+
+export function useCanRevokeDevice(): boolean {
+  const user = useAuthStore((s) => s.user);
+  return canRevokeDevice(user);
 }

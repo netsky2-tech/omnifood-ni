@@ -104,3 +104,19 @@ export async function fetchDevices(
   }
   return raw.map(normalizeTerminalDevice);
 }
+
+/**
+ * Revoke a terminal device credential (POST /identity/device-sync/credentials/
+ * {credentialId}/revoke, B17-04). The backend tombstones the credential so DGI
+ * receipt sequencing stays auditable; revocation is never a delete.
+ */
+export async function revokeDevice(
+  credentialId: string,
+  reason: string,
+): Promise<TerminalDevice> {
+  const raw = await api.post<unknown>(
+    `/identity/device-sync/credentials/${encodeURIComponent(credentialId)}/revoke`,
+    { reason },
+  );
+  return normalizeTerminalDevice(raw);
+}

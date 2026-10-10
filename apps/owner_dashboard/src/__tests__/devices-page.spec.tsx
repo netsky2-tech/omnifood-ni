@@ -15,12 +15,19 @@ import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DevicesPage } from "@/features/devices";
 import { fetchDevices } from "@/features/devices/devices-api";
+import { useCanRevokeDevice } from "@/features/auth/permissions";
 import type { TerminalDevice } from "@/features/devices/types";
 
 vi.mock("@/lib/tenant", () => ({ useTenantId: () => "tenant-1" }));
 
 vi.mock("@/features/devices/devices-api", () => ({
   fetchDevices: vi.fn(),
+}));
+
+// B17-04 Task 5 — permission gate for the revocation column/button.
+// Defaults to granted (OWNER) so existing suites are unaffected.
+vi.mock("@/features/auth/permissions", () => ({
+  useCanRevokeDevice: vi.fn(() => true),
 }));
 
 function renderWithQueryClient(ui: ReactElement) {
@@ -71,6 +78,7 @@ const POPULATED_FIXTURES: TerminalDevice[] = [
 
 beforeEach(() => {
   vi.mocked(fetchDevices).mockReset();
+  vi.mocked(useCanRevokeDevice).mockReturnValue(true);
 });
 
 describe("DevicesPage — loading state", () => {
@@ -150,7 +158,52 @@ describe("DevicesPage — populated state", () => {
     );
     within(row2 as HTMLElement).getByText("Revocado");
     within(row2 as HTMLElement).getByText("Sin sincronizar");
-    within(row2 as HTMLElement).getByText("—");
+    // Two dashes: missing sequence evidence (§34) and the non-actionable
+    // Acciones cell for a REVOKED credential.
+    expect(within(row2 as HTMLElement).getAllByText("—")).toHaveLength(2);
+  });
+
+  it("gates the revocation action by permission and credential status", async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchDevices).mockResolvedValue(POPULATED_FIXTURES);
+
+    renderWithQueryClient(createElement(DevicesPage));
+
+    await screen.findByRole("table");
+
+    // B17-04: revocation is only offered to users with the revoke grant.
+    expect(
+      screen.getByRole("columnheader", { name: "Acciones" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Revocar terminal pos-term-01" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Revocar terminal pos-term-02" }),
+    ).not.toBeInTheDocument();
+
+    // Clicking Revocar opens the destructive confirmation dialog.
+    await user.click(
+      screen.getByRole("button", { name: "Revocar terminal pos-term-01" }),
+    );
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(
+      screen.getByText("Revocar credencial de terminal"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the Acciones column entirely without the revoke permission", async () => {
+    vi.mocked(useCanRevokeDevice).mockReturnValue(false);
+    vi.mocked(fetchDevices).mockResolvedValue(POPULATED_FIXTURES);
+
+    renderWithQueryClient(createElement(DevicesPage));
+
+    await screen.findByRole("table");
+
+    expect(
+      screen.queryByRole("columnheader", { name: "Acciones" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Revocar/ })).not.toBeInTheDocument();
   });
 });
 

@@ -57,7 +57,6 @@ export class DeviceSyncRevocationController {
   }
 
   @Post('credentials/:id/revoke')
-  @Roles(UserRole.OWNER)
   @RequirePermissions(AppPermission.DEVICE_SYNC_REVOKE)
   @HttpCode(HttpStatus.OK)
   async revoke(
