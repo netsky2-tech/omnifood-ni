@@ -24,12 +24,17 @@
  *   npx vitest run -c vitest.integration.config.ts src/__tests__/modifiers-live.integration.test.ts
  *
  * Override the API base with NHILOS_LIVE_API when the backend lives
- * elsewhere (never hardcode port 3000 — other worktrees own it):
+ * elsewhere (never hardcode port 3000 — other worktrees own it). Either the
+ * full base or the origin alone works — /api is appended exactly once:
  *   NHILOS_LIVE_API=http://127.0.0.1:3300/api npx vitest run ...
+ * An unset or blank value falls back to that same canonical shadow stack, and a
+ * value that cannot be a URL fails fast naming the variable
+ * (src/lib/live-api-base.ts).
  */
 import { describe, expect, it } from "vitest";
+import { resolveLiveApiBase } from "@/lib/live-api-base";
 
-const API = process.env.NHILOS_LIVE_API ?? "http://127.0.0.1:3300/api";
+const API = resolveLiveApiBase();
 
 const TENANT_SLUG = "soho-test-fixture";
 const LOGIN_BODY = {

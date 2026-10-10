@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { resolveLiveEnv, resolveLiveWebBase } from "../src/lib/live-api-base";
 
 /**
  * LIVE end-to-end for the owner-dashboard Modificadores flow.
@@ -35,10 +36,12 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 const LIVE = process.env.NHILOS_LIVE_E2E === "1";
-const BASE =
-  process.env.NHILOS_LIVE_BASE ?? "http://soho-test-fixture.localhost:5174";
-const EMAIL = process.env.NHILOS_LIVE_EMAIL ?? "sofia@omnifood.ni";
-const PASSWORD = process.env.NHILOS_LIVE_PASSWORD ?? "password123";
+// Live-suite contract (src/lib/live-api-base.ts): unset OR blank env falls back
+// to the canonical local stack (dev server 5174 on the tenant hostname), never
+// to :3000/:5173, which belong to other worktrees.
+const BASE = resolveLiveWebBase();
+const EMAIL = resolveLiveEnv("NHILOS_LIVE_EMAIL", "sofia@omnifood.ni");
+const PASSWORD = resolveLiveEnv("NHILOS_LIVE_PASSWORD", "password123");
 
 const RUN = Date.now().toString().slice(-6);
 const GROUP = `E2E Extra Café ${RUN}`;
