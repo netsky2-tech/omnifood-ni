@@ -161,7 +161,7 @@ describe("fetchDevices", () => {
     vi.mocked(api.get).mockResolvedValue([null, validRow]);
     const devices = await fetchDevices();
     expect(devices).toHaveLength(2);
-    expect(devices[0].status).toBe("PENDING");
+    expect(devices[0]?.status).toBe("PENDING");
     expect(devices[1]).toEqual(validRow);
   });
 
