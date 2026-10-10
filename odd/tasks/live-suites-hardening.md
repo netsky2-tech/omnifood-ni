@@ -95,19 +95,42 @@
 - [x] **T7c** Native ordinary review `review-bd2c8471dd9fffc1` → **APPROVED** and acknowledged
       (authority burned, `gentle-ai.review-acknowledged/v1`). Two non-blocking advisories
       recorded below.
-- [ ] **T7d** Push + PR `type:bug` linked to #828 (user decision; delivery follows ordinary
-      repository policy, never the review receipt).
+- [ ] **T7d** Unit 2 commit + its own native review, then push + PR `type:bug` linked to #828
+      (user authorized push + PR; merge only with CI green).
+
+## Unit 2 — both review advisories fixed (user decision: fix now)
+
+Test-first again. RED with the pre-fix helper exported as a bare skeleton:
+**11 named failures** (`expected 'http://127.0.0.1:3300' to be 'http://127.0.0.1:3300/api'`,
+`expected TypeError: Invalid URL … to be an instance of LiveApiConfigError`).
+
+- **R3-NO-API-PREFIX-VALIDATION** → `resolveLiveApiBase()` now parses the value and appends
+  `/api` exactly once: origin alone (`http://127.0.0.1:3300`) → `http://127.0.0.1:3300/api`;
+  `/api/` → `/api` (never doubled); any other non-empty path (proxied prefix) is preserved with
+  its trailing slash removed. Proven against the real backend:
+  `NHILOS_LIVE_API=http://127.0.0.1:3300 npm run test:integration` → **42/42**.
+- **R3-URL-CONSTRUCT-THROWS** → new `resolveLiveApiOrigin()` + `LiveApiConfigError`; the
+  Playwright live config uses it instead of `new URL(...)`. Unusable values (relative path,
+  missing scheme, non-http protocol, credentials, query string, fragment) fail fast with a
+  message that **names `NHILOS_LIVE_API` and never echoes the value** (secrets), matching the
+  existing `src/lib/api-base-url.ts` discipline. Observed in both runners:
+  `NHILOS_LIVE_API=127.0.0.1:3300/api` (vitest) and `NHILOS_LIVE_API=/api` (playwright --list)
+  → `LiveApiConfigError: Invalid NHILOS_LIVE_API: an absolute http(s) URL is required. …`
+- Contract updated in the module header and in the `modifiers-live.integration` header
+  (origin alone is now documented as valid).
+
+Checks after unit 2: `live-api-base.test.ts` **31/31**; integration unset / blank /
+origin-only → **42/42** each; full default unit suite `--no-file-parallelism` →
+**100 files, 1464 passed, 4 skipped**; `npm run typecheck` clean; `npm run lint` clean (0 hits
+in the touched files); `playwright test --list -c playwright.live.config.ts` → 15 tests / 2 files.
 
 ## Native review advisories (non-blocking, candidate approved)
 
-- **R3-NO-API-PREFIX-VALIDATION** (`src/lib/live-api-base.ts:50-53`, SUGGESTION): the helper
-  documents that `NHILOS_LIVE_API` must include the `/api` prefix but does not validate it.
-  Deliberate for now — normalization was an explicit non-goal; if operators keep forgetting the
-  prefix, adding the `/api` append (like `src/lib/api-base-url.ts` does for the app) is the fix.
-- **R3-URL-CONSTRUCT-THROWS** (`playwright.live.config.ts:45`, WARNING):
-  `new URL(resolveLiveApiBase()).origin` throws a bare `TypeError` if an operator sets
-  `NHILOS_LIVE_API` to a relative value. Fail-fast is correct (a relative base is unusable for a
-  browser dev server), but the message should name the variable instead of `TypeError`.
+- **R3-NO-API-PREFIX-VALIDATION** (`src/lib/live-api-base.ts:50-53`, SUGGESTION) — **fixed in
+  unit 2** (see above): the `/api` prefix is now appended exactly once instead of only documented.
+- **R3-URL-CONSTRUCT-THROWS** (`playwright.live.config.ts:45`, WARNING) — **fixed in unit 2**:
+  `resolveLiveApiOrigin()` raises `LiveApiConfigError` naming the variable; no bare `TypeError`
+  path is left.
 
 ## Follow-ups found (not in this issue)
 

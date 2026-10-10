@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   LIVE_API_BASE_DEFAULT,
   LIVE_WEB_BASE_DEFAULT,
+  LiveApiConfigError,
   envValue,
   resolveLiveApiBase,
+  resolveLiveApiOrigin,
   resolveLiveEnv,
   resolveLiveWebBase,
 } from "@/lib/live-api-base";
@@ -102,5 +104,77 @@ describe("canonical live-stack contract (issue #828 / R3-W1-DEFAULT-PORT-MISMATC
 
   it("documents that the API default is a full base including the /api prefix", () => {
     expect(LIVE_API_BASE_DEFAULT.endsWith("/api")).toBe(true);
+  });
+});
+
+describe("API prefix normalization (review advisory R3-NO-API-PREFIX-VALIDATION)", () => {
+  it("appends /api when the operator passes an origin only", () => {
+    // The same shape VITE_API_URL uses (origin only) is the most natural thing to
+    // type; without normalization the suite would request /identity/login on the
+    // origin and fail with a 404 that looks like a routing bug.
+    vi.stubEnv(LIVE_API_ENV, "http://127.0.0.1:3300");
+    expect(resolveLiveApiBase()).toBe("http://127.0.0.1:3300/api");
+  });
+
+  it("never doubles the prefix", () => {
+    vi.stubEnv(LIVE_API_ENV, "http://127.0.0.1:3300/api/");
+    expect(resolveLiveApiBase()).toBe("http://127.0.0.1:3300/api");
+  });
+
+  it("keeps a non-empty custom path untouched (proxied prefix), trailing slash removed", () => {
+    vi.stubEnv(LIVE_API_ENV, "https://api-staging.nhilospos.com/gateway/");
+    expect(resolveLiveApiBase()).toBe("https://api-staging.nhilospos.com/gateway");
+  });
+});
+
+describe("absolute-URL guard (review advisory R3-URL-CONSTRUCT-THROWS)", () => {
+  it.each([
+    ["a relative base", "/api"],
+    ["a host without a scheme", "localhost:3300/api"],
+    ["an unsupported protocol", "ftp://127.0.0.1:3300/api"],
+    ["embedded credentials", "https://user:pass@127.0.0.1:3300/api"],
+    ["a query string", "http://127.0.0.1:3300/api?token=super-secret"],
+    ["a fragment", "http://127.0.0.1:3300/api#token"],
+  ])("rejects %s with a LiveApiConfigError", (_label, value) => {
+    vi.stubEnv(LIVE_API_ENV, value);
+    expect(() => resolveLiveApiBase()).toThrow(LiveApiConfigError);
+    expect(() => resolveLiveApiOrigin()).toThrow(LiveApiConfigError);
+  });
+
+  it("names the offending variable instead of leaking its value", () => {
+    vi.stubEnv(LIVE_API_ENV, "http://127.0.0.1:3300/api?token=super-secret");
+    try {
+      resolveLiveApiOrigin();
+      expect.unreachable("expected LiveApiConfigError");
+    } catch (error) {
+      expect(error).toBeInstanceOf(LiveApiConfigError);
+      const message = (error as Error).message;
+      expect(message).toContain("NHILOS_LIVE_API");
+      expect(message).not.toContain("super-secret");
+    }
+  });
+
+  it("never throws a bare TypeError for a relative override", () => {
+    vi.stubEnv(LIVE_API_ENV, "127.0.0.1:3300/api");
+    let caught: unknown;
+    try {
+      resolveLiveApiOrigin();
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(LiveApiConfigError);
+    expect(caught).not.toBeInstanceOf(TypeError);
+  });
+});
+
+describe("resolveLiveApiOrigin", () => {
+  it("returns the origin of the canonical default (dev-server env must not duplicate the port)", () => {
+    vi.stubEnv(LIVE_API_ENV, undefined);
+    expect(resolveLiveApiOrigin()).toBe("http://127.0.0.1:3300");
+  });
+
+  it("returns the origin of an overridden base", () => {
+    vi.stubEnv(LIVE_API_ENV, "http://127.0.0.1:3301/api");
+    expect(resolveLiveApiOrigin()).toBe("http://127.0.0.1:3301");
   });
 });

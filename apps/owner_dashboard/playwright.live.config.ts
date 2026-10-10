@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { resolveLiveApiBase, resolveLiveWebBase } from "./src/lib/live-api-base";
+import { resolveLiveApiOrigin, resolveLiveWebBase } from "./src/lib/live-api-base";
 
 /**
  * Opt-in LIVE config for the owner dashboard. NEVER the default playwright
@@ -42,7 +42,8 @@ export default defineConfig({
       ...process.env,
       // Origin of the same backend the HTTP live suites talk to (VITE_API_URL is
       // the API ORIGIN: the dashboard appends /api itself, see src/lib/api-base-url.ts).
-      VITE_API_URL: new URL(resolveLiveApiBase()).origin,
+      // A malformed NHILOS_LIVE_API fails here as LiveApiConfigError, naming the variable.
+      VITE_API_URL: resolveLiveApiOrigin(),
     } as Record<string, string>,
   },
 });
