@@ -275,7 +275,13 @@ export function ModifierGroupForm({
   };
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    // noValidate: the application's own zod validation (via the RHF
+    // resolver) is the single source of operator feedback. Native HTML
+    // constraint validation would otherwise block the submit event
+    // before handleSubmit runs, replacing the design system's Spanish
+    // inline errors with the browser's own validation bubble (browser
+    // language and styling).
+    <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-6">
       <div className="space-y-4">
         <div>
           <Label htmlFor="modifier-group-name">Nombre *</Label>

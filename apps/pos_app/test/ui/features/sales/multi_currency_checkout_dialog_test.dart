@@ -128,6 +128,100 @@ void main() {
     expect(find.textContaining('Vuelto: C\$ 135.00'), findsOneWidget);
   });
 
+  testWidgets('quick suggestion chip label shows exactly the amount the tap applies', (tester) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    // Real-device case: a bill of C$ 202.50 makes the FIRST suggestion the
+    // exact total with cents (202.50); the rest are whole denominations.
+    when(mockSaleViewModel.grandTotalWithTip).thenReturn(202.50);
+
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pumpAndSettle();
+
+    final chips = find.byType(ActionChip);
+    expect(chips, findsWidgets);
+
+    final amountField = find.byType(TextField);
+
+    // Invariant: for EVERY chip, the amount shown in the label equals the
+    // amount the tap writes into the tender field.
+    for (var i = 0; i < tester.widgetList(chips).length; i++) {
+      final chip = tester.widget<ActionChip>(chips.at(i));
+      final labelText = (chip.label as Text).data!;
+      final labelAmount = double.parse(labelText.replaceAll(RegExp(r'[^0-9.]'), ''));
+
+      await tester.ensureVisible(chips.at(i));
+      await tester.pumpAndSettle();
+      await tester.tap(chips.at(i));
+      await tester.pumpAndSettle();
+
+      final fieldText = tester.widget<TextField>(amountField).controller!.text;
+      final appliedAmount = double.parse(fieldText);
+
+      expect(
+        appliedAmount,
+        labelAmount,
+        reason:
+            'chip label "$labelText" must equal the amount the tap applies (field: "$fieldText")',
+      );
+    }
+  });
+
+  testWidgets('the USD suggestion chip label shows exactly the amount the tap applies', (tester) async {
+    tester.view.physicalSize = const Size(1024, 768);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    // The same invariant on the OTHER currency branch: the fix formats both
+    // branches with the value's own precision, and a USD suggestion below one
+    // dollar is fractional, so a rounding label would drift here too. An
+    // independent verifier flagged that only the NIO branch was covered.
+    when(mockSaleViewModel.grandTotalWithTip).thenReturn(202.50);
+
+    await tester.pumpWidget(buildTestWidget());
+    await tester.pumpAndSettle();
+
+    final usdButton = find.widgetWithText(ChoiceChip, 'USD (\$)');
+    expect(usdButton, findsOneWidget);
+    await tester.tap(usdButton);
+    await tester.pumpAndSettle();
+
+    final chips = find.byType(ActionChip);
+    expect(chips, findsWidgets);
+
+    final amountField = find.byType(TextField);
+
+    for (var i = 0; i < tester.widgetList(chips).length; i++) {
+      final chip = tester.widget<ActionChip>(chips.at(i));
+      final labelText = (chip.label as Text).data!;
+      expect(
+        labelText.startsWith('\$'),
+        isTrue,
+        reason: 'expected a USD label on this branch, got "$labelText"',
+      );
+      final labelAmount = double.parse(
+        labelText.replaceAll(RegExp(r'[^0-9.]'), ''),
+      );
+
+      await tester.ensureVisible(chips.at(i));
+      await tester.pumpAndSettle();
+      await tester.tap(chips.at(i));
+      await tester.pumpAndSettle();
+
+      final fieldText = tester.widget<TextField>(amountField).controller!.text;
+      final appliedAmount = double.parse(fieldText);
+
+      expect(
+        appliedAmount,
+        labelAmount,
+        reason:
+            'USD chip label "$labelText" must equal the amount the tap applies (field: "$fieldText")',
+      );
+    }
+  });
+
   testWidgets('disables submit when tender is insufficient and enables when valid', (tester) async {
     tester.view.physicalSize = const Size(1024, 768);
     tester.view.devicePixelRatio = 1.0;

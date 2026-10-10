@@ -1190,14 +1190,23 @@ class _MultiCurrencyCheckoutDialogState
     );
   }
 
+  /// Formats a suggestion amount with its own precision: whole amounts have
+  /// no decimals, amounts with cents keep two. The label must show exactly
+  /// what the tap applies.
+  String _formatSuggestionAmount(double amount) {
+    return amount == amount.roundToDouble()
+        ? amount.toStringAsFixed(0)
+        : amount.toStringAsFixed(2);
+  }
+
   Widget _buildQuickSuggestionChips(List<double> suggestions) {
     return Wrap(
       spacing: 6,
       runSpacing: 4,
       children: suggestions.map((denom) {
         final label = _tenderCurrency == 'USD'
-            ? '\$ ${denom.toStringAsFixed(0)}'
-            : 'C\$ ${denom.toStringAsFixed(0)}';
+            ? '\$ ${_formatSuggestionAmount(denom)}'
+            : 'C\$ ${_formatSuggestionAmount(denom)}';
         return ActionChip(
           visualDensity: VisualDensity.compact,
           label: Text(

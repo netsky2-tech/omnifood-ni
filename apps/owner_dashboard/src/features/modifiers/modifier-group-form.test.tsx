@@ -307,6 +307,20 @@ describe("ModifierGroupForm", () => {
     expect(mockCreateGroup.mutateAsync).not.toHaveBeenCalled();
   });
 
+  it("pins noValidate on the form so the zod/RHF resolver stays the only guard", () => {
+    // (a) — the form element carries noValidate, so the browser's native
+    // constraint validation can never replace the Spanish inline errors.
+    // (b) — the app-owned guard refusing a rejected submit — is already
+    // pinned by "shows Spanish validation errors for a blank name and max
+    // below min" (mutateAsync never called). DialogContent portals the
+    // form, so look it up in the document.
+    renderForm(null);
+
+    const form = document.querySelector("form");
+    expect(form).not.toBeNull();
+    expect(form).toHaveAttribute("noValidate");
+  });
+
   it("submits a typed payload on create", async () => {
     renderForm(null);
 
