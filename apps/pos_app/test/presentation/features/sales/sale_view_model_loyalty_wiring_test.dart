@@ -67,10 +67,15 @@ class FakeLocalConfigDao extends Mock implements LocalConfigDao {
       : _configs = {
           'commercial_exchange_rate': '36.50',
           'bcn_official_exchange_rate': '36.6241',
-          if (tenantId != null) 'tenant_id': tenantId,
+          // A null value, present key: for getConfigValue an unbound terminal
+          // answers null either way, and this shape is the one the pinned
+          // analyzer can parse. The null-aware `?` element is newer than its
+          // language version (3.4.0), while the SDK lint that asks for it is
+          // fatal -- the two cannot both be satisfied until the lock moves.
+          'tenant_id': tenantId,
         };
 
-  final Map<String, String> _configs;
+  final Map<String, String?> _configs;
 
   @override
   Future<String?> getConfigValue(String? key) async => _configs[key];

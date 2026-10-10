@@ -150,7 +150,7 @@ void main() {
 
   Future<void> tapWithRealIo(
     WidgetTester tester,
-    Future action(),
+    Future<void> Function() action,
   ) async {
     await tester.runAsync(() async {
       await action();
