@@ -24,7 +24,9 @@ would break every locator. **The defaults stay; what they hide is the problem.**
 
 ## Problem (what actually needs fixing)
 
-1. **A working dev credential is committed.** `PASSWORD = resolveLiveEnv("MANUAL_E2E_PASS", "C0ntr4sen4")`
+1. **A working dev credential is committed.** The spec had a committed default for `MANUAL_E2E_PASS`
+   (the value is deliberately not repeated here; it is still published in older task docs and needs
+   rotation — see "Residual credential sightings" below).
    (`:42`). It is the `soho` owner password (set by direct DB update in `odd/tasks/manual-dashboard-section6.md`),
    so it is a real credential for a real local tenant, sitting in the repo as a fallback.
 2. **The tenant binding is invisible and silently wrong.** The spec navigates with its own absolute `BASE`
@@ -77,14 +79,14 @@ collection time is the loud behaviour we want (`--list` with
 ## Second credential path found during verification (not in the original scope)
 
 `scripts/capture_dashboard.cjs` (81 lines, added by the docs commit `352697fd`, referenced by nothing in
-the repo) still hardcoded `C0ntr4sen4` and navigated `http://soho.localhost:5173` — a duplicate manual
+the repo) still hardcoded the same default password and navigated `http://soho.localhost:5173` — a duplicate manual
 capture that also violated the port rule from #830 (`:5173` belongs to another worktree's stack on this
 host). The user chose **delete it in this PR**. The documented single path is now
 `npm run test:e2e:capture`, and the media inventory records that.
 
 ## Acceptance criteria
 
-- [x] No committed password: `grep -rn "C0ntr4sen4" --include=*.ts --include=*.cjs --include=*.json`
+- [x] No committed password: a repo-wide grep for the old default, restricted to `.ts`/`.cjs`/`.json`, returns nothing (see below for where the literal still survives)lude=*.cjs --include=*.json`
       across the repo returns nothing (it survives only in prose inside `odd/tasks/*.md`).
 - [x] Unset or blank `MANUAL_E2E_PASS` throws `LiveApiConfigError` naming `MANUAL_E2E_PASS` and nothing
       else; verified by 5 unit cases (trimmed hit, unset, empty, whitespace-only, no-value-leaked).
@@ -160,8 +162,13 @@ variants failed as `TypeError`, not `LiveApiConfigError`, proving the function d
 
 ## Residual credential sightings
 
-`grep -rln "C0ntr4sen4" .` (repo root, excluding node_modules) now matches only `odd/tasks/*.md` — prose
-quoting the old default, kept on purpose as the record of what was removed and why.
+A repo-wide grep for the old default literal still matches `odd/tasks/*.md` — other features' documents
+that recorded the dev credential in prose. This document does not quote it.
+
+**Those older sightings are a real exposure, not noise, and they are out of scope for this branch:** the
+credential is a working dev-tenant owner password that predates this issue. Rotating it and purging the
+literal from the historical task docs is tracked separately (follow-up issue), and rotation is the fix —
+removing text from a git-tracked document does not remove it from git history.
 `scripts/capture_dashboard.cjs`, the second holder, was deleted in this branch (see the section above).
 
 ## Hardening round (advisories from the first native review)
