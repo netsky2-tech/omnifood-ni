@@ -232,7 +232,7 @@ Status vocabulary:
 | CD-09 | Customer Configuration Record | Customer / Internal | P0 | CLIENT-READY TEMPLATE | Yes | `docs/nhilos/go_live/nhilos_customer_configuration_record_v0.1.md` |
 | CD-10 | Training Record | Customer / Internal | P1 | CLIENT-READY TEMPLATE | Yes | `docs/nhilos/go_live/nhilos_training_record_v0.1.md` |
 | CD-11 | POS User Manual | Customer | P0 | CLIENT-READY | Yes | `docs/nhilos/manuals/nhilos_pos_user_manual_v0.1.md` |
-| CD-12 | Owner Dashboard Manual | Customer | P0 | CLIENT-READY | Yes | `docs/nhilos/manuals/nhilos_owner_dashboard_manual_v0.1.md` |
+| CD-12 | Owner Dashboard Manual | Customer | P0 | CLIENT-READY | Yes | `docs/nhilos/manuals/nhilos_owner_dashboard_manual_v0.2.md` |
 | CD-13 | Quick Start Guide | Customer | P0 | CLIENT-READY | Yes | `docs/nhilos/manuals/nhilos_quick_start_guide_v0.1.md` |
 | CD-14 | Contingency Guide | Customer | P0 | CLIENT-READY | Yes | `docs/nhilos/manuals/nhilos_contingency_guide_v0.1.md` |
 | CD-15 | Roles & Access Matrix | Customer | P1 | MAPPED IN REPO | No | `docs/Scenarios/gestion_identidad_acceso_auditoria.md` |
@@ -1144,9 +1144,9 @@ Required:
 - provider legal identity defined accurately (founder as sole proprietorship / freelancer);
 - customer naming convention established (`NH-C0001`, `NH-T0001`, `NH-SO-0001`);
 - document IDs standardized;
-- direct founder support channels established (WhatsApp Business / direct email).
+- direct founder support channels established (WhatsApp Business [+505 8194 8526](https://wa.me/50581948526) / `soporte@nhilospos.com`).
 
-**Status:** IN PROGRESS (Naming, numbering, and legal persona models frozen; awaiting final contact routing confirmation).
+**Status:** PASS (naming, numbering, legal persona models frozen, and contact routing confirmed: WhatsApp Business +505 8194 8526 + `soporte@nhilospos.com`).
 
 ---
 

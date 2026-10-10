@@ -1,22 +1,33 @@
 /**
  * W1 Integration Tests — Real Backend + PostgreSQL
  *
- * These tests hit the actual NestJS backend on localhost:3000.
- * Prerequisites:
- *   1. Backend running: `cd apps/admin_backend && npm run start:dev`
- *   2. Database seeded: `npm run seed:test`
- *   3. PostgreSQL on 127.0.0.1:5432 (database: omnifood, user: postgres, pass: admin)
+ * These tests hit the actual NestJS backend (see API_BASE below).
+ * Prerequisites — the local SHADOW STACK, never the :3000/:5173 stack that
+ * belongs to another worktree:
+ *   1. Backend on port 3300: `cd apps/admin_backend && PORT=3300 npm run start:dev`
+ *   2. Database seeded: `npm run seed:test` (from apps/admin_backend)
+ *   3. PostgreSQL reachable with the credentials in apps/admin_backend/.env
+ *      (DB_HOST / DB_PORT / DB_USERNAME / DB_PASSWORD / DB_DATABASE — they are
+ *      machine-local, so they are not repeated here)
  *
  * Run: `pnpm run test:integration` from apps/owner_dashboard/
  */
 import { describe, expect, it } from "vitest";
+import { resolveLiveApiBase } from "@/lib/live-api-base";
 
-const API_BASE = "http://localhost:3000/api";
+// Live-suite contract (src/lib/live-api-base.ts): NHILOS_LIVE_API overrides the
+// base URL; unset OR blank falls back to the canonical shadow stack on :3300,
+// never :3000/:5173, which belong to other worktrees' stacks.
+const API_BASE = resolveLiveApiBase();
+
+// Tenant fixture shared by all three seeded roles. LoginDto/RefreshTokenDto
+// require tenantSlug (issue #556 stage 12d — the legacy no-slug path is closed).
+const TENANT_SLUG = "soho-test-fixture";
 
 const TEST_CREDENTIALS = {
-  owner: { email: "sofia@omnifood.ni", pass: "password123" },
-  manager: { email: "admin@omnifood.ni", pass: "password123" },
-  cashier: { email: "carlos@omnifood.ni", pass: "password123" },
+  owner: { email: "sofia@omnifood.ni", pass: "password123", tenantSlug: TENANT_SLUG },
+  manager: { email: "admin@omnifood.ni", pass: "password123", tenantSlug: TENANT_SLUG },
+  cashier: { email: "carlos@omnifood.ni", pass: "password123", tenantSlug: TENANT_SLUG },
 };
 
 interface LoginResponse {
@@ -102,7 +113,11 @@ describe("W1 — POST /identity/login (real backend)", () => {
     const res = await fetch(`${API_BASE}/identity/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "sofia@omnifood.ni", pass: "wrongpassword" }),
+      body: JSON.stringify({
+        email: "sofia@omnifood.ni",
+        pass: "wrongpassword",
+        tenantSlug: TENANT_SLUG,
+      }),
     });
 
     expect(res.status).toBe(401);
@@ -112,7 +127,11 @@ describe("W1 — POST /identity/login (real backend)", () => {
     const res = await fetch(`${API_BASE}/identity/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "nonexistent@omnifood.ni", pass: "password123" }),
+      body: JSON.stringify({
+        email: "nonexistent@omnifood.ni",
+        pass: "password123",
+        tenantSlug: TENANT_SLUG,
+      }),
     });
 
     expect(res.status).toBe(401);
@@ -122,7 +141,7 @@ describe("W1 — POST /identity/login (real backend)", () => {
     const res = await fetch(`${API_BASE}/identity/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "sofia@omnifood.ni" }),
+      body: JSON.stringify({ email: "sofia@omnifood.ni", tenantSlug: TENANT_SLUG }),
     });
 
     expect(res.status).toBe(400);
@@ -132,7 +151,7 @@ describe("W1 — POST /identity/login (real backend)", () => {
     const res = await fetch(`${API_BASE}/identity/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pass: "password123" }),
+      body: JSON.stringify({ pass: "password123", tenantSlug: TENANT_SLUG }),
     });
 
     expect(res.status).toBe(400);
@@ -217,7 +236,7 @@ describe("W1 — POST /identity/refresh (real backend)", () => {
 
     const { status, data } = await apiPost<RefreshResponse>(
       "/identity/refresh",
-      { userId: user.id, refreshToken: refresh_token },
+      { userId: user.id, refreshToken: refresh_token, tenantSlug: TENANT_SLUG },
     );
 
     expect(status).toBe(201);
@@ -238,6 +257,7 @@ describe("W1 — POST /identity/refresh (real backend)", () => {
       body: JSON.stringify({
         userId: login.data.user.id,
         refreshToken: "invalid-refresh-token",
+        tenantSlug: TENANT_SLUG,
       }),
     });
 
@@ -248,7 +268,7 @@ describe("W1 — POST /identity/refresh (real backend)", () => {
     const res = await fetch(`${API_BASE}/identity/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken: "some-token" }),
+      body: JSON.stringify({ refreshToken: "some-token", tenantSlug: TENANT_SLUG }),
     });
 
     expect(res.status).toBe(400);
@@ -258,7 +278,7 @@ describe("W1 — POST /identity/refresh (real backend)", () => {
     const res = await fetch(`${API_BASE}/identity/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: "some-uuid" }),
+      body: JSON.stringify({ userId: "some-uuid", tenantSlug: TENANT_SLUG }),
     });
 
     expect(res.status).toBe(400);
@@ -275,6 +295,7 @@ describe("W1 — POST /identity/refresh (real backend)", () => {
     const rotate1 = await apiPost<RefreshResponse>("/identity/refresh", {
       userId: user.id,
       refreshToken: refresh_token,
+      tenantSlug: TENANT_SLUG,
     });
     expect(rotate1.status).toBe(201);
 
@@ -282,7 +303,11 @@ describe("W1 — POST /identity/refresh (real backend)", () => {
     const res = await fetch(`${API_BASE}/identity/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: user.id, refreshToken: refresh_token }),
+      body: JSON.stringify({
+        userId: user.id,
+        refreshToken: refresh_token,
+        tenantSlug: TENANT_SLUG,
+      }),
     });
     expect(res.status).toBe(401);
   });
@@ -364,6 +389,7 @@ describe("W1 — Full session lifecycle (real backend)", () => {
     const refresh = await apiPost<RefreshResponse>("/identity/refresh", {
       userId: user.id,
       refreshToken: refresh_token,
+      tenantSlug: TENANT_SLUG,
     });
     expect(refresh.status).toBe(201);
     const newAccessToken = refresh.data.access_token;

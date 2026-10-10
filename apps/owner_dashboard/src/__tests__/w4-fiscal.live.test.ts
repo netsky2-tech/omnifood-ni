@@ -1,6 +1,13 @@
 import { describe, expect, it, beforeAll } from "vitest";
+import { resolveLiveApiBase } from "@/lib/live-api-base";
 
-const API_BASE = "http://localhost:3000/api";
+// Live-suite contract (src/lib/live-api-base.ts): NHILOS_LIVE_API overrides the
+// base URL; unset OR blank falls back to the canonical shadow stack on :3300,
+// never :3000/:5173, which belong to other worktrees' stacks.
+const API_BASE = resolveLiveApiBase();
+
+// LoginDto requires tenantSlug (issue #556 stage 12d) — same seeded tenant as w1.
+const TENANT_SLUG = "soho-test-fixture";
 
 let managerToken: string;
 let cashierToken: string;
@@ -12,7 +19,7 @@ async function loginAs(
   const res = await fetch(`${API_BASE}/identity/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, pass }),
+    body: JSON.stringify({ email, pass, tenantSlug: TENANT_SLUG }),
   });
   if (!res.ok) {
     throw new Error(`Login failed for ${email}: ${res.status}`);

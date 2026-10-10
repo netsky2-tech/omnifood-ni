@@ -63,7 +63,7 @@ Toda asistencia que exceda el soporte de defectos de la plataforma podrá solici
 
 Para garantizar la trazabilidad de los casos, los incidentes deben canalizarse a través de los medios autorizados:
 
-- **Canal Directo de Mensajería:** WhatsApp Business oficial de Soporte NHILOS.
+- **Canal Directo de Mensajería:** WhatsApp Business oficial de Soporte NHILOS: [+505 8194 8526](https://wa.me/50581948526).
 - **Canal Escrito:** `soporte@nhilospos.com` (o correo designado del fundador).
 - **Horario de Atención Estándar:** Lunes a Sábado de 8:00 AM a 8:00 PM (Hora de Managua). Atención de SEV-1 extendida según disponibilidad.
 
