@@ -196,7 +196,29 @@ void main() {
           .getActiveSessionForUserAndTerminal('real-user-42', 'term-main');
       expect(persisted, isNotNull);
       expect(persisted!.userId, 'real-user-42');
+      // Round-2 F-5b: the shift snapshots the ACTING user's display name at
+      // open time, so the Z/X reports render the name as it was at the
+      // counter without a lookup that can silently fail.
+      expect(persisted.cashierName, 'María López');
     });
+
+    test(
+      'openShift falls back to the constructor name when no identity source is injected',
+      () async {
+        // viewModel (setUp) has no authRepository: the constructor values are
+        // the only identity available.
+        await viewModel.init();
+        await viewModel.openShift(
+          initialFloatNio: 500.0,
+          initialFloatUsd: 0.0,
+        );
+
+        final persisted = await database.cashierSessionDao
+            .getActiveSessionForUserAndTerminal('user-cajero-1', 'term-main');
+        expect(persisted, isNotNull);
+        expect(persisted!.cashierName, 'Juan Pérez');
+      },
+    );
 
     test(
         'issue #552: openShift refuses to open when the identity source has no logged-in user',

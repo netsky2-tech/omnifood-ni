@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 67,
+      version: 68,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -276,7 +276,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `tax_configurations` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `rate` REAL NOT NULL, `is_active` INTEGER NOT NULL, `is_default` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `cashier_sessions` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `opened_at` INTEGER NOT NULL, `tipo_modelo` TEXT NOT NULL, `closed_at` INTEGER, `opening_balance_nio` REAL NOT NULL, `opening_balance_usd` REAL NOT NULL, `closing_counted_nio` REAL, `closing_counted_usd` REAL, `expected_nio` REAL NOT NULL, `expected_usd` REAL NOT NULL, `difference_nio` REAL, `difference_usd` REAL, `z_report_sequence` INTEGER, `is_closed` INTEGER NOT NULL, `supervisor_id` TEXT, `notes` TEXT, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `cashier_sessions` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `cashier_name` TEXT, `terminal_id` TEXT NOT NULL, `opened_at` INTEGER NOT NULL, `tipo_modelo` TEXT NOT NULL, `closed_at` INTEGER, `opening_balance_nio` REAL NOT NULL, `opening_balance_usd` REAL NOT NULL, `closing_counted_nio` REAL, `closing_counted_usd` REAL, `expected_nio` REAL NOT NULL, `expected_usd` REAL NOT NULL, `difference_nio` REAL, `difference_usd` REAL, `z_report_sequence` INTEGER, `is_closed` INTEGER NOT NULL, `supervisor_id` TEXT, `notes` TEXT, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `cash_movements` (`id` TEXT NOT NULL, `shift_id` TEXT NOT NULL, `terminal_id` TEXT NOT NULL, `type` TEXT NOT NULL, `amount_nio` REAL NOT NULL, `amount_usd` REAL NOT NULL, `reason` TEXT NOT NULL, `authorized_by_user_id` TEXT, `timestamp` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -4897,6 +4897,7 @@ class _$CashierSessionDao extends CashierSessionDao {
             (CashierSessionEntity item) => <String, Object?>{
                   'id': item.id,
                   'user_id': item.userId,
+                  'cashier_name': item.cashierName,
                   'terminal_id': item.terminalId,
                   'opened_at': item.openedAt,
                   'tipo_modelo': item.tipoModelo,
@@ -4922,6 +4923,7 @@ class _$CashierSessionDao extends CashierSessionDao {
             (CashierSessionEntity item) => <String, Object?>{
                   'id': item.id,
                   'user_id': item.userId,
+                  'cashier_name': item.cashierName,
                   'terminal_id': item.terminalId,
                   'opened_at': item.openedAt,
                   'tipo_modelo': item.tipoModelo,
@@ -4958,6 +4960,7 @@ class _$CashierSessionDao extends CashierSessionDao {
         mapper: (Map<String, Object?> row) => CashierSessionEntity(
             id: row['id'] as String,
             userId: row['user_id'] as String,
+            cashierName: row['cashier_name'] as String?,
             terminalId: row['terminal_id'] as String,
             openedAt: row['opened_at'] as int,
             tipoModelo: row['tipo_modelo'] as String,
@@ -4985,6 +4988,7 @@ class _$CashierSessionDao extends CashierSessionDao {
         mapper: (Map<String, Object?> row) => CashierSessionEntity(
             id: row['id'] as String,
             userId: row['user_id'] as String,
+            cashierName: row['cashier_name'] as String?,
             terminalId: row['terminal_id'] as String,
             openedAt: row['opened_at'] as int,
             tipoModelo: row['tipo_modelo'] as String,
@@ -5011,7 +5015,7 @@ class _$CashierSessionDao extends CashierSessionDao {
   ) async {
     return _queryAdapter.query(
         'SELECT * FROM cashier_sessions WHERE is_closed = 0 AND user_id = ?1 AND terminal_id = ?2 ORDER BY opened_at DESC LIMIT 1',
-        mapper: (Map<String, Object?> row) => CashierSessionEntity(id: row['id'] as String, userId: row['user_id'] as String, terminalId: row['terminal_id'] as String, openedAt: row['opened_at'] as int, tipoModelo: row['tipo_modelo'] as String, closedAt: row['closed_at'] as int?, openingBalanceNio: row['opening_balance_nio'] as double?, openingBalanceUsd: row['opening_balance_usd'] as double, closingCountedNio: row['closing_counted_nio'] as double?, closingCountedUsd: row['closing_counted_usd'] as double?, expectedNio: row['expected_nio'] as double?, expectedUsd: row['expected_usd'] as double, differenceNio: row['difference_nio'] as double?, differenceUsd: row['difference_usd'] as double?, zReportSequence: row['z_report_sequence'] as int?, isClosed: (row['is_closed'] as int) != 0, supervisorId: row['supervisor_id'] as String?, notes: row['notes'] as String?, syncStatus: row['sync_status'] as String),
+        mapper: (Map<String, Object?> row) => CashierSessionEntity(id: row['id'] as String, userId: row['user_id'] as String, cashierName: row['cashier_name'] as String?, terminalId: row['terminal_id'] as String, openedAt: row['opened_at'] as int, tipoModelo: row['tipo_modelo'] as String, closedAt: row['closed_at'] as int?, openingBalanceNio: row['opening_balance_nio'] as double?, openingBalanceUsd: row['opening_balance_usd'] as double, closingCountedNio: row['closing_counted_nio'] as double?, closingCountedUsd: row['closing_counted_usd'] as double?, expectedNio: row['expected_nio'] as double?, expectedUsd: row['expected_usd'] as double, differenceNio: row['difference_nio'] as double?, differenceUsd: row['difference_usd'] as double?, zReportSequence: row['z_report_sequence'] as int?, isClosed: (row['is_closed'] as int) != 0, supervisorId: row['supervisor_id'] as String?, notes: row['notes'] as String?, syncStatus: row['sync_status'] as String),
         arguments: [userId, terminalId]);
   }
 
@@ -5022,6 +5026,7 @@ class _$CashierSessionDao extends CashierSessionDao {
         mapper: (Map<String, Object?> row) => CashierSessionEntity(
             id: row['id'] as String,
             userId: row['user_id'] as String,
+            cashierName: row['cashier_name'] as String?,
             terminalId: row['terminal_id'] as String,
             openedAt: row['opened_at'] as int,
             tipoModelo: row['tipo_modelo'] as String,

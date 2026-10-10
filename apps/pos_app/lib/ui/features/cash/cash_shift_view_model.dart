@@ -116,6 +116,19 @@ class CashShiftViewModel extends ChangeNotifier {
     return currentUserId.isNotEmpty ? currentUserId : null;
   }
 
+  /// Round-2 F-5b: the ACTING user's display name, resolved the same way as
+  /// [_actingUserId] (the injected identity source wins; the constructor
+  /// value is only a fallback). The shift snapshots it at open time.
+  Future<String> _actingUserName() async {
+    final repo = authRepository;
+    if (repo != null) {
+      final user = await repo.getCurrentUser();
+      final name = user?.name.trim();
+      if (name != null && name.isNotEmpty) return name;
+    }
+    return currentUserName;
+  }
+
   /// Resolves the acting user id at ACTION time — same semantics as
   /// [_actingUserId], exposed publicly for identity-stamped sub-flows
   /// (voucher reconciliation): the injected identity source wins; when it
@@ -320,6 +333,9 @@ class CashShiftViewModel extends ChangeNotifier {
       final session = CashierSessionEntity(
         id: shiftId,
         userId: actingUserId,
+        // Round-2 F-5b: the Z/X reports render THIS snapshot — the name as it
+        // was at the counter — never a lookup that can silently fail.
+        cashierName: await _actingUserName(),
         terminalId: currentTerminalId,
         openedAt: now,
         tipoModelo: 'CAJA_CENTRAL',
