@@ -4,7 +4,7 @@
 **Standard sections covered:** §0–§58  
 **Use for:** Any backoffice module audit
 
-**Amendments:** 2026-09-30 — added governed-fields (§17.5), default-vs-required clarification (§40), alert variants (§26.1), neutral-state badge note (§26), catalog consistency row (§28), DoD form bullet, and catalog guardrail (Appendix A). Version stays v2.1.
+**Amendments:** 2026-09-30 — added governed-fields (§17.5), default-vs-required clarification (§40), alert variants (§26.1), neutral-state badge note (§26), catalog consistency row (§28), DoD form bullet, and catalog guardrail (Appendix A). 2026-10-10 — added no-identifier-inputs (§17.6): foreign-key fields (`*_id`, UUID) use a selector with flexible textual search, never free text; governed-fields audit table (§14), Forms checklist (§31), consistency row (§28), anti-pattern AP-21. Version stays v2.1.
 
 # <MODULE> — NHILOS Experience Audit
 
@@ -196,6 +196,12 @@ If any finding reveals a conflict between product authority and experience stand
 | Surface | Governed values use shared catalog selector (units/currencies/categories/suppliers) | Free text where a catalog exists? | Empty-catalog guidance present |
 |---|---|---|---|
 | | | | |
+
+### No identifier inputs (§17.6)
+
+| Surface | Foreign-key fields (`*_id`) use selector with flexible textual search (§17.6) | Free-text input asking for an identifier/UUID? | Search covers several columns; tolerant of case, accents, partial matches (§17.6) | Long lists offer "ver todos" |
+|---|---|---|---|---|
+| | | | | |
 
 ---
 
@@ -436,6 +442,7 @@ If any finding reveals a conflict between product authority and experience stand
 | Currencies | | |
 | Status vocabulary | | |
 | Catalog-governed fields use shared catalog (§17.5) | | |
+| No identifier inputs: no free-text `*_id`/UUID entry (§17.6) | | |
 | Toasts | | |
 | Empty states | | |
 | Destructive confirmations | | |
@@ -504,6 +511,7 @@ Check each applicable +1 pattern:
 | AP-18 | Success dead end | Success with no next step guidance? | |
 | AP-19 | Hidden side effect | Change impacts other data without explanation? | |
 | AP-20 | Inconsistent vocabulary | Same state called different names? | |
+| AP-21 | Identifier transcription | Any free-text input whose datum is a foreign key (`*_id`, UUID)? (§17.6) | |
 
 ---
 
@@ -605,6 +613,7 @@ A module is **NHILOS Experience Ready** only when:
 
 - [ ] Labels/requirements are clear
 - [ ] Catalog-governed fields use the shared catalog, not free text (§17.5)
+- [ ] Foreign-key fields (`*_id`) use a selector with flexible textual search — no free-text input for a UUID or identifier (§17.6)
 - [ ] Validation is actionable
 - [ ] Server errors preserve work where possible
 - [ ] Dirty-state loss is protected

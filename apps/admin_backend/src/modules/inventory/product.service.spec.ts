@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource, Repository } from 'typeorm';
-import { ProductService } from './product.service';
+import { ProductService, normalizeSearchTerm } from './product.service';
 import { Product, ProductType } from './entities/product.entity';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ChangeLogService } from '../audit/change-log.service';
@@ -180,10 +180,12 @@ describe('ProductService', () => {
         orderBy: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([
-          [makeProduct({ id: 'p1', name: 'Café Espresso' })],
-          1,
-        ]),
+        getManyAndCount: jest
+          .fn()
+          .mockResolvedValue([
+            [makeProduct({ id: 'p1', name: 'Café Espresso' })],
+            1,
+          ]),
       };
       repo.createQueryBuilder.mockReturnValue(qbMock);
     });
@@ -205,7 +207,7 @@ describe('ProductService', () => {
       expect(qbMock.andWhere).toHaveBeenCalledWith('p.is_active = true');
     });
 
-    it('supports global search across name and uom', async () => {
+    it('supports global search across name and uom, folded for case and accents (§17.6)', async () => {
       await service.listPaginated({
         tenantId: 'tenant-A',
         page: 2,
@@ -215,9 +217,54 @@ describe('ProductService', () => {
 
       expect(qbMock.skip).toHaveBeenCalledWith(10);
       expect(qbMock.take).toHaveBeenCalledWith(10);
+      // Both columns AND the bound term go through the same fold
+      // (lower + 24-char accent table), so 'cafe', 'Café' and 'CAFÉ' all
+      // match «Café de Olla». Before the §17.6 fold this predicate was
+      // plain ILIKE, which is case-insensitive and partial but NOT
+      // accent-tolerant.
       expect(qbMock.andWhere).toHaveBeenCalledWith(
-        '(p.name ILIKE :search OR p.uom ILIKE :search)',
+        `(translate(lower(p.name), 'áàäâãéèëêíìïîóòöôõúùüûñç', 'aaaaaeeeeiiiiooooouuuunc') ILIKE :search OR translate(lower(p.uom), 'áàäâãéèëêíìïîóòöôõúùüûñç', 'aaaaaeeeeiiiiooooouuuunc') ILIKE :search)`,
         { search: '%espresso%' },
+      );
+    });
+
+    it('folds the bound term: accented and uppercase input matches the folded columns', async () => {
+      // Each of these failed to match «Café de Olla» before the fold —
+      // '%CAFE%' (case handled by ILIKE, accent not) and '%Café' (the
+      // accent in the term never folded). The measured failure mode of the
+      // old predicate on a real server is pinned in the db spec.
+      for (const raw of ['Café', 'CAFE', 'café']) {
+        qbMock.andWhere.mockClear();
+        await service.listPaginated({
+          tenantId: 'tenant-A',
+          page: 1,
+          pageSize: 10,
+          search: raw,
+        });
+        const call = qbMock.andWhere.mock.calls.find((c) =>
+          String(c[0]).includes('ILIKE :search'),
+        );
+        expect(call).toBeDefined();
+        expect(call![1]).toEqual({ search: '%cafe%' });
+      }
+    });
+
+    it('folds ñ and ç like the SQL table does', () => {
+      expect(normalizeSearchTerm('AÑO')).toBe('ano');
+      expect(normalizeSearchTerm('Cañón Ç')).toBe('canon c');
+      expect(normalizeSearchTerm('Piña Colada')).toBe('pina colada');
+    });
+
+    it('ignores a whitespace-only search term entirely', async () => {
+      await service.listPaginated({
+        tenantId: 'tenant-A',
+        page: 1,
+        pageSize: 10,
+        search: '   ',
+      });
+      expect(qbMock.andWhere).not.toHaveBeenCalledWith(
+        expect.stringContaining('ILIKE :search'),
+        expect.anything(),
       );
     });
 

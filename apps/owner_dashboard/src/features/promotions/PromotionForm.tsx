@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Package, Percent, MinusCircle, Tag } from 'lucide-react';
@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { EntitySearchSelect } from '@/components/ui/entity-search-select';
 import {
   promotionFormSchema,
   dateInputValueToEpochMs,
@@ -22,9 +23,17 @@ import {
   type PromotionFormData,
 } from './schema';
 import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/promotions';
+import type {
+  CreatePromotionDto,
+  UpdatePromotionDto,
+} from '@/types/promotions';
 import { DAYS_OF_WEEK, cn } from '@/lib/utils';
 import { useCreatePromotion, useUpdatePromotion } from '@/hooks/use-promotions';
 import { useCatalogValues } from '@/features/catalog/use-catalog';
+import {
+  useProductSearch,
+  useProductById,
+} from '@/features/catalog/use-product-search';
 import { toast } from '@/hooks/use-toast';
 import { DialogFooter } from '@/components/ui/dialog';
 import { getApiErrorMessage } from '@/lib/api-error';
@@ -46,6 +55,23 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   // was deactivated still renders its own value — with an active-only list
   // the select would silently fall back to '' (global) on save.
   const { data: catalogCategories } = useCatalogValues('SALES_PRODUCT_CATEGORY', true);
+
+  // §17.6: the product target is a governed selector, never a free-text
+  // identifier. The hook owns the ?search= contract; the form only holds
+  // the operator's search text. Inactive products stay out of the list by
+  // default (includeInactive: false) — a promotion aimed at a deactivated
+  // product is a mistake the selector should not invite, and unlike the
+  // category picker there is no silent ''-fallback here: the stored value
+  // still renders via useProductById's label and travels unchanged.
+  const [productSearch, setProductSearch] = useState('');
+  const {
+    data: productSearchData,
+    isLoading: isProductSearchLoading,
+    isError: isProductSearchError,
+    refetch: refetchProducts,
+  } = useProductSearch(productSearch);
+  const storedProductId = initialData?.target_product_id || undefined;
+  const { data: storedProduct } = useProductById(storedProductId);
 
   const form = useForm<PromotionFormData>({
     resolver: zodResolver(promotionFormSchema),
@@ -74,6 +100,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   const watchedType = form.watch('type');
   const watchedDays = form.watch('days_of_week');
   const watchedCategoryId = form.watch('target_category_id');
+  const watchedProductId = form.watch('target_product_id');
 
   useEffect(() => {
     if (initialData) {
@@ -118,35 +145,25 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
     const { target_category_id, start_date, end_date, ...rest } = data;
     // Promo-fix: date inputs carry 'YYYY-MM-DD'; the backend's DTOs and
     // bigint columns expect epoch-ms numbers.
-    // R3-001: a cleared date differs by mode. On UPDATE it must travel as
-    // an explicit null — a partial patch leaves an omitted key untouched,
-    // so omitting it would resurrect the stored date while the field's
-    // copy says empty is allowed (same clearing pattern as
-    // target_category_id below; the backend accepts the null: @IsOptional
-    // skips it and the service's Object.assign clears the column). On
-    // CREATE the key stays omitted entirely (absent = no date bound).
-    // The `as unknown as number` cast exists only because the FE mirror
-    // type (types/promotions.ts) still types these keys as `number` and
-    // is outside this correction's edit surface.
-    const dateRange = {
-      ...(start_date
-        ? { start_date: dateInputValueToEpochMs(start_date) }
-        : isEditing
-          ? { start_date: null as unknown as number }
-          : {}),
-      ...(end_date
-        ? { end_date: dateInputValueToEpochMs(end_date) }
-        : isEditing
-          ? { end_date: null as unknown as number }
-          : {}),
-    };
+    // R3-001: a cleared date differs by mode — and S6 makes that difference
+    // live in the TYPES too (no more `null as unknown as number` cast):
+    // - UPDATE: the cleared date travels as an explicit null (the contract's
+    //   "clear": UpdatePromotionDto.start_date/end_date are `number | null`;
+    //   @IsOptional skips the null and the service's Object.assign clears
+    //   the column). The key is ALWAYS present on update — omitting it
+    //   would leave the stored date untouched in a partial patch.
+    // - CREATE: the key is omitted entirely when cleared (absent = no date
+    //   bound; CreatePromotionDto stays number-only). Omitting is what
+    //   create means, so the create shape keeps its own narrower type.
     try {
       if (isEditing) {
         // T0.5'd: '' -> explicit null (clear to global); a selected uuid is
-        // sent unchanged.
-        const dto = {
+        // sent unchanged. Same rule for the dates (R3-001/S6): always
+        // present, null when cleared.
+        const dto: UpdatePromotionDto = {
           ...rest,
-          ...dateRange,
+          start_date: start_date ? dateInputValueToEpochMs(start_date) : null,
+          end_date: end_date ? dateInputValueToEpochMs(end_date) : null,
           target_category_id: target_category_id ? target_category_id : null,
         };
         await updatePromotion.mutateAsync({ id: initialData!.id, dto });
@@ -158,9 +175,13 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
         // instead of an inactive-looking control; activation toggling is
         // the update path's job.
         const { is_active: _createIsActive, ...createRest } = rest;
-        const payload = {
+        // R3-001/S6: the CREATE shape keeps its own narrower date type —
+        // keys present only when set (epoch-ms numbers), omitted when
+        // cleared. Omitting is what create means.
+        const payload: CreatePromotionDto = {
           ...createRest,
-          ...dateRange,
+          ...(start_date ? { start_date: dateInputValueToEpochMs(start_date) } : {}),
+          ...(end_date ? { end_date: dateInputValueToEpochMs(end_date) } : {}),
           ...(target_category_id ? { target_category_id } : {}),
         };
         await createPromotion.mutateAsync(payload);
@@ -228,11 +249,27 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="target_product_id">Producto Objetivo (opcional)</Label>
-            <Input
-              id="target_product_id"
-              placeholder="ID del producto"
-              {...form.register('target_product_id')}
+            <EntitySearchSelect
+              inputId="target-product-search"
+              label="Producto Objetivo (opcional)"
+              value={watchedProductId ?? ''}
+              onChange={(id) =>
+                form.setValue('target_product_id', id, { shouldValidate: true })
+              }
+              options={(productSearchData?.data ?? []).map((product) => ({
+                id: product.id,
+                label: product.name,
+              }))}
+              search={productSearch}
+              onSearchChange={setProductSearch}
+              isLoading={isProductSearchLoading}
+              isError={isProductSearchError}
+              onRetry={() => void refetchProducts()}
+              emptyMessage="No hay productos todavía. Cree productos en el catálogo."
+              selectedLabel={storedProduct?.name}
+              total={productSearchData?.total}
+              onVerTodos={() => setProductSearch('')}
+              placeholder="Ej: Café, Pan"
             />
           </div>
           <div>

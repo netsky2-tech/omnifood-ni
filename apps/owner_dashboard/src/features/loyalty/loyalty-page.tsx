@@ -29,6 +29,11 @@ import type {
   RewardFormValues,
 } from './types';
 import { LOYALTY_PROGRAM_TYPES, REWARD_TYPES, programFormSchema, rewardFormSchema } from './types';
+import { EntitySearchSelect } from '@/components/ui/entity-search-select';
+import {
+  useProductSearch,
+  useProductById,
+} from '@/features/catalog/use-product-search';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +46,17 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { getApiErrorMessage } from '@/lib/api-error';
+
+/**
+ * §17.6 edit-mode label for a stored eligible-product id outside the current
+ * search results (hooks per chip instance, never hooks in a loop). The
+ * operator sees the human name; an unresolvable id degrades to the same
+ * short-id display the promotions list uses — never the raw uuid.
+ */
+function EligibleProductChipLabel({ id }: { id: string }) {
+  const { data: product } = useProductById(id);
+  return <>{product?.name ?? `…${id.slice(-8)}`}</>;
+}
 
 const STATUS_LABELS: Record<
   LoyaltyProgramStatus,
@@ -87,8 +103,11 @@ function ProgramForm({
       spendBlockNio: Number(rule?.spendBlockNio ?? 10),
       pointsPerBlock: Number(rule?.pointsPerBlock ?? 1),
       eligibleProductIds: Array.isArray(rule?.eligibleProductIds)
-        ? (rule.eligibleProductIds as string[]).join(', ')
-        : 'prod-smash',
+        ? // §17.6: the stored uuids from the governed multi selector — no
+          // fabricated default. An empty stored list stays empty and the
+          // ACTIVE branch's schema decides whether that blocks submit.
+          (rule.eligibleProductIds as string[])
+        : [],
       unitsPerPurchasedUnit: Number(rule?.unitsPerPurchasedUnit ?? 1),
       unitsPerVisit: Number(rule?.unitsPerVisit ?? 1),
       minimumSpendNio:
@@ -97,6 +116,19 @@ function ProgramForm({
   });
   const programType = watch('programType');
   const useCustomJson = watch('useCustomJson');
+  const watchedEligibleProductIds = watch('eligibleProductIds');
+
+  // §17.6 selector wiring (multi mode): the operator's search text goes to
+  // the query hook verbatim; picking adds the row's uuid to the payload and
+  // re-clicking (or a chip's Quitar) removes it. Same contract as the
+  // single-select forms, for a plural datum.
+  const [eligibleSearch, setEligibleSearch] = useState('');
+  const {
+    data: eligibleSearchData,
+    isLoading: isEligibleSearchLoading,
+    isError: isEligibleSearchError,
+    refetch: refetchEligibleProducts,
+  } = useProductSearch(eligibleSearch);
 
   // Specific field for VISIT_STAMPS (JSON advanced mode textarea)
   const [earningRule, setEarningRule] = useState(
@@ -130,12 +162,14 @@ function ProgramForm({
           pointsPerBlock: Number(values.pointsPerBlock),
         };
       } else if (values.programType === 'PRODUCT_STAMPS') {
-        const prodList = values.eligibleProductIds
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
+        // §17.6: the resolver guarantees at least one picked uuid. The old
+        // `prodList.length > 0 ? prodList : ['prod-smash']` fallback is
+        // deliberately gone: it fired whenever the operator left the old
+        // comma-list EMPTY OR WHITESPACE (create defaulted to 'prod-smash',
+        // and a cleared field produced '' → empty list) and fabricated an
+        // identifier that traveled to the backend as the earning rule.
         parsedRule = {
-          eligibleProductIds: prodList.length > 0 ? prodList : ['prod-smash'],
+          eligibleProductIds: values.eligibleProductIds,
           unitsPerPurchasedUnit: Number(values.unitsPerPurchasedUnit),
         };
       } else {
@@ -265,14 +299,34 @@ function ProgramForm({
           {programType === 'PRODUCT_STAMPS' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label htmlFor="eligible-products" className="block text-xs font-medium mb-1">
-                  Productos elegibles (IDs)
-                </label>
-                <Input
-                  id="eligible-products"
-                  {...register('eligibleProductIds')}
-                  placeholder="prod-smash, prod-burger"
-                  aria-invalid={Boolean(errors.eligibleProductIds)}
+                <EntitySearchSelect
+                  inputId="eligible-products"
+                  label="Productos elegibles"
+                  multiple
+                  value={watchedEligibleProductIds ?? []}
+                  onToggle={(id) =>
+                    setValue(
+                      'eligibleProductIds',
+                      (watchedEligibleProductIds ?? []).includes(id)
+                        ? watchedEligibleProductIds.filter((x) => x !== id)
+                        : [...(watchedEligibleProductIds ?? []), id],
+                      { shouldValidate: true },
+                    )
+                  }
+                  options={(eligibleSearchData?.data ?? []).map((product) => ({
+                    id: product.id,
+                    label: product.name,
+                  }))}
+                  search={eligibleSearch}
+                  onSearchChange={setEligibleSearch}
+                  isLoading={isEligibleSearchLoading}
+                  isError={isEligibleSearchError}
+                  onRetry={() => void refetchEligibleProducts()}
+                  emptyMessage="No hay productos todavía. Cree productos en el catálogo."
+                  renderSelectedLabel={(id) => <EligibleProductChipLabel id={id} />}
+                  total={eligibleSearchData?.total}
+                  onVerTodos={() => setEligibleSearch('')}
+                  placeholder="Ej: Smash Burger, Café"
                 />
                 {errors.eligibleProductIds && (
                   <p className="text-xs text-destructive">{errors.eligibleProductIds.message}</p>
@@ -407,12 +461,33 @@ function RewardForm({
       useCustomJson: false,
       costUnits: initial?.cost_units ?? 10,
       amountNio: Number(benefit?.amountNio ?? 50),
-      productId:
-        typeof benefit?.productId === 'string' ? benefit.productId : 'prod-smash',
+      // §17.6: no default selection — the operator picks the product from
+      // the governed selector. The old fabricated default ('prod-smash')
+      // is gone; an empty selection blocks submit with the schema's
+      // Spanish message instead of inventing an identifier.
+      productId: typeof benefit?.productId === 'string' ? benefit.productId : '',
     },
   });
   const rewardType = watch('rewardType');
   const useCustomJson = watch('useCustomJson');
+  const watchedProductId = watch('productId');
+
+  // §17.6 selector wiring: the search text goes to the query hook verbatim
+  // (flexible matching lives in the hook/backend, exactly as promotions).
+  // The stored row's human label comes from useProductById so an edit
+  // dialog never shows the operator a raw identifier.
+  const [productSearch, setProductSearch] = useState('');
+  const {
+    data: productSearchData,
+    isLoading: isProductSearchLoading,
+    isError: isProductSearchError,
+    refetch: refetchProducts,
+  } = useProductSearch(productSearch);
+  const storedProductId =
+    isEditing && rewardType === 'FREE_PRODUCT'
+      ? watchedProductId || undefined
+      : undefined;
+  const { data: storedProduct } = useProductById(storedProductId);
 
   // Specific field for JSON advanced mode textarea
   const [benefitConfig, setBenefitConfig] = useState(
@@ -443,7 +518,13 @@ function RewardForm({
       if (values.rewardType === 'DISCOUNT_AMOUNT') {
         parsedConfig = { amountNio: Number(values.amountNio) };
       } else {
-        parsedConfig = { productId: values.productId.trim() || 'prod-smash' };
+        // §17.6: the resolver guarantees a picked uuid; the trim is
+        // belt-and-braces only. The old `|| 'prod-smash'` fallback is
+        // deliberately gone: it fired exactly when a whitespace-only
+        // product id reached onValid (the only empty-ish value the old
+        // schema's length<1 check let through) and fabricated an
+        // identifier that could travel to the backend.
+        parsedConfig = { productId: values.productId.trim() };
       }
     }
 
@@ -575,14 +656,27 @@ function RewardForm({
             </div>
           ) : (
             <div>
-              <label htmlFor="benefit-product" className="block text-xs font-medium mb-1">
-                ID de producto a entregar
-              </label>
-              <Input
-                id="benefit-product"
-                {...register('productId')}
-                placeholder="prod-smash"
-                aria-invalid={Boolean(errors.productId)}
+              <EntitySearchSelect
+                inputId="benefit-product"
+                label="Producto a entregar"
+                value={watchedProductId ?? ''}
+                onChange={(id) =>
+                  setValue('productId', id, { shouldValidate: true })
+                }
+                options={(productSearchData?.data ?? []).map((product) => ({
+                  id: product.id,
+                  label: product.name,
+                }))}
+                search={productSearch}
+                onSearchChange={setProductSearch}
+                isLoading={isProductSearchLoading}
+                isError={isProductSearchError}
+                onRetry={() => void refetchProducts()}
+                emptyMessage="No hay productos todavía. Cree productos en el catálogo."
+                selectedLabel={storedProduct?.name}
+                total={productSearchData?.total}
+                onVerTodos={() => setProductSearch('')}
+                placeholder="Ej: Smash Burger, Café"
               />
               {errors.productId && (
                 <p className="text-xs text-destructive">{errors.productId.message}</p>

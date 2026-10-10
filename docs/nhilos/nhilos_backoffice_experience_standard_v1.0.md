@@ -810,6 +810,33 @@ When the system already maintains a catalog or registry for a value (units of me
 
 Free text for a governed value produces the vocabulary drift the catalog exists to prevent. If the catalog is empty, guide the user to populate it; do not fall back silently to free text.
 
+The harder case — the datum is a foreign key and the operator is asked for the identifier itself — has its own rule: §17.6.
+
+## 17.6 No identifier inputs
+
+A form field whose datum is a foreign key (`*_id`) is never a free-text input.
+
+The owner's rule, verbatim:
+
+> No puede haber inputs con UUID. Todo formulario que necesite usar registros de otras tablas debe ser un selector con búsqueda textual flexible — textual por varias columnas.
+
+A free-text input for an identifier asks the operator to transcribe a value they do not know. It guarantees typing errors, offers zero discovery of the valid choices, and invites cross-row mistakes. The sense of the control must match its datum (§17.5): an identifier is a reference to another table, so the control is a selector, not a text field.
+
+A violation is any free-text input that:
+
+- registers, names or labels a foreign key (`*_id`, or camelCase `*Id`);
+- asks the operator for an identifier in its copy ("ID del producto", "UUID de versión");
+- hardcodes a UUID as expected input in its copy.
+
+The replacement is the reusable selector with textual search, carrying the standard loading, empty-first-use, empty-filtered and error states (§27–§30). "Búsqueda flexible" is concrete, not aspirational:
+
+- it searches several columns of the referenced table, not one;
+- it is tolerant of case, accents and partial matches;
+- it never requires an exact `id` or an exact `name`;
+- for long lists it offers a "ver todos" affordance.
+
+An exact-match-only selector satisfies the shape of this rule and violates its spirit; it is not an acceptable replacement.
+
 ---
 
 # 18. Form validation

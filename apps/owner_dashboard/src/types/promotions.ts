@@ -65,8 +65,12 @@ export interface UpdatePromotionDto {
   days_of_week?: string[];
   start_time?: string;
   end_time?: string;
-  start_date?: number;
-  end_date?: number;
+  // R3-001/S6: mirrors the backend contract — an explicit null on a partial
+  // patch means "clear the date" (the service's Object.assign clears the
+  // column). Create stays number-only: there, omitting the key is what
+  // "no date bound" means, so the two DTOs keep distinct date shapes.
+  start_date?: number | null;
+  end_date?: number | null;
   priority?: number;
   is_stackable?: boolean;
   is_active?: boolean;

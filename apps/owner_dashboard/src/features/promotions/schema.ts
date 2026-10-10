@@ -10,7 +10,16 @@ const CATEGORY_UUID_PATTERN =
 export const promotionFormSchema = z.object({
   name: z.string().min(1, 'El nombre es requerido').max(100, 'Máximo 100 caracteres'),
   type: z.nativeEnum(PromotionType, { required_error: 'Seleccione un tipo de promoción' }),
-  target_product_id: z.string().optional(),
+  // §17.6 (slice S4): the product target comes from the governed selector,
+  // so the only values this field can carry are '' (nothing selected) or the
+  // uuid of a product row the operator picked by its human label. Free text
+  // is rejected here exactly like target_category_id below.
+  target_product_id: z
+    .string()
+    .refine((value) => value === '' || CATEGORY_UUID_PATTERN.test(value), {
+      message: 'Seleccione un producto válido',
+    })
+    .optional(),
   // T0.5'd: '' = nothing selected (global); anything else must be a uuid
   // chosen from the synced category picker.
   target_category_id: z

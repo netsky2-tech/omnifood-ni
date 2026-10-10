@@ -16,6 +16,10 @@ import {
   useDeactivateReward,
 } from '@/features/loyalty/use-loyalty';
 import type { LoyaltyProgram, RewardDefinition } from '@/features/loyalty/types';
+import {
+  useProductSearch,
+  useProductById,
+} from '@/features/catalog/use-product-search';
 
 vi.mock('@/features/loyalty/use-loyalty', () => ({
   usePrograms: vi.fn(),
@@ -30,6 +34,20 @@ vi.mock('@/features/loyalty/use-loyalty', () => ({
   useDeactivateReward: vi.fn(),
   useRewardProfitAware: vi.fn(),
 }));
+
+vi.mock('@/features/catalog/use-product-search', () => ({
+  useProductSearch: vi.fn(),
+  useProductById: vi.fn(),
+}));
+
+// §17.6: the reward's product target is a uuid picked from the governed
+// selector. Fixture ids are real uuids now — a bare 'prod-smash' would fail
+// the schema's uuid requirement on submit, as any typed free text does.
+const SMASH_PRODUCT_ID = '33333333-3333-4333-8333-333333333333';
+const SEARCH_RESULT_PRODUCTS = [
+  { id: SMASH_PRODUCT_ID, name: 'Smash Burger' },
+  { id: '44444444-4444-4444-8444-444444444444', name: 'Café de Olla' },
+];
 
 function TestWrapper({ children }: { children: React.ReactNode }) {
   const client = new QueryClient({
@@ -47,7 +65,7 @@ const MOCK_PROGRAMS: LoyaltyProgram[] = [
     status: 'ACTIVE',
     starts_at: null,
     ends_at: null,
-    earning_rule: { eligibleProductIds: ['prod-smash'], unitsPerPurchasedUnit: 1 },
+    earning_rule: { eligibleProductIds: [SMASH_PRODUCT_ID], unitsPerPurchasedUnit: 1 },
     eligibility_rule: {},
     config_version: 2,
     created_at: '2026-01-01T00:00:00Z',
@@ -78,7 +96,7 @@ const MOCK_REWARDS: RewardDefinition[] = [
     description: 'Canjea 10 sellos por una burger clásica',
     reward_type: 'FREE_PRODUCT',
     cost_units: 10,
-    benefit_config: { productId: 'prod-smash' },
+    benefit_config: { productId: SMASH_PRODUCT_ID },
     status: 'ACTIVE',
     starts_at: null,
     ends_at: null,
@@ -162,6 +180,22 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       mutateAsync: mockDeactivateReward,
       isPending: false,
     } as any);
+
+    vi.mocked(useProductSearch).mockReturnValue({
+      data: {
+        data: SEARCH_RESULT_PRODUCTS,
+        total: SEARCH_RESULT_PRODUCTS.length,
+        page: 1,
+        pageSize: 50,
+        totalPages: 1,
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as any);
+    vi.mocked(useProductById).mockReturnValue({
+      data: { id: SMASH_PRODUCT_ID, name: 'Smash Burger' },
+    } as any);
   });
 
   describe('Programs Listing & Filtering (LV1.5A)', () => {
@@ -234,9 +268,25 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       // Select PRODUCT_STAMPS
       await user.selectOptions(screen.getByLabelText(/tipo de programa/i), 'PRODUCT_STAMPS');
 
-      // Verify dynamic fields appeared
-      expect(screen.getByLabelText(/productos elegibles/i)).toBeInTheDocument();
+      // Verify dynamic fields appeared (§17.6: a governed multi selector,
+      // not the old free-text comma list)
+      expect(
+        screen.getByRole('combobox', { name: 'Productos elegibles' }),
+      ).toBeInTheDocument();
       expect(screen.getByLabelText(/sellos por unidad/i)).toBeInTheDocument();
+
+      // The operator's text reaches the search hook verbatim...
+      fireEvent.change(
+        screen.getByRole('combobox', { name: 'Productos elegibles' }),
+        { target: { value: 'smash' } },
+      );
+      expect(useProductSearch).toHaveBeenCalledWith('smash');
+      // ...and picking the row shows its human label while the payload
+      // carries the picked uuids (a partial match, never an exact id/name).
+      await user.click(screen.getByRole('option', { name: /Smash Burger/ }));
+      expect(
+        screen.getByRole('button', { name: /Quitar Smash Burger/ }),
+      ).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: /crear programa/i }));
 
@@ -245,7 +295,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
           name: 'Smash Burger Club',
           program_type: 'PRODUCT_STAMPS',
           earning_rule: {
-            eligibleProductIds: ['prod-smash'],
+            eligibleProductIds: [SMASH_PRODUCT_ID],
             unitsPerPurchasedUnit: 1,
           },
         });
@@ -412,7 +462,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
           input: {
             name: 'Smash Burger Club VIP',
             earning_rule: {
-              eligibleProductIds: ['prod-smash'],
+              eligibleProductIds: [SMASH_PRODUCT_ID],
               unitsPerPurchasedUnit: 1,
             },
           },
@@ -483,8 +533,19 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       const costInput = screen.getByLabelText(/costo en unidades/i);
       fireEvent.change(costInput, { target: { value: '10' } });
 
-      const prodInput = screen.getByLabelText(/id de producto a entregar/i);
-      fireEvent.change(prodInput, { target: { value: 'prod-smash' } });
+      // §17.6: the product is picked from the governed selector, never
+      // typed. The operator's text goes to the query hook verbatim...
+      fireEvent.change(
+        screen.getByRole('combobox', { name: 'Producto a entregar' }),
+        { target: { value: 'smash' } },
+      );
+      expect(useProductSearch).toHaveBeenCalledWith('smash');
+      // ...and picking the row shows its human label while the payload
+      // carries the ID (a partial match, never an exact id or exact name).
+      await user.click(screen.getByRole('option', { name: /Smash Burger/ }));
+      expect(screen.getByText(/Seleccionado:/)).toHaveTextContent(
+        'Seleccionado: Smash Burger',
+      );
 
       await user.click(screen.getByRole('button', { name: /crear recompensa/i }));
 
@@ -496,7 +557,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
             description: undefined,
             reward_type: 'FREE_PRODUCT',
             cost_units: 10,
-            benefit_config: { productId: 'prod-smash' },
+            benefit_config: { productId: SMASH_PRODUCT_ID },
           },
         });
       });
@@ -641,7 +702,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
             name: 'Smash Burger Doble gratis',
             description: 'Canjea 10 sellos por una burger clásica',
             cost_units: 10,
-            benefit_config: { productId: 'prod-smash' },
+            benefit_config: { productId: SMASH_PRODUCT_ID },
           },
         });
       });
@@ -722,7 +783,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       expect(mockCreateProgram).not.toHaveBeenCalled();
     });
 
-    it('create: PRODUCT_STAMPS with empty eligible products shows the Spanish required message and never calls the API', async () => {
+    it('create: PRODUCT_STAMPS with nothing selected shows the Spanish required message and never calls the API', async () => {
       const user = userEvent.setup();
       render(
         <TestWrapper>
@@ -736,11 +797,13 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
         screen.getByLabelText(/tipo de programa/i),
         'PRODUCT_STAMPS',
       );
-      await user.clear(screen.getByLabelText(/productos elegibles/i));
+      // §17.6: no default selection and nothing to type — an empty list
+      // must BLOCK submit, not fabricate ['prod-smash'].
+      expect(screen.queryByText(/Seleccionado/)).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /crear programa/i }));
 
       expect(
-        await screen.findByText('Indique al menos un producto elegible'),
+        await screen.findByText('Seleccione al menos un producto elegible'),
       ).toBeInTheDocument();
       expect(mockCreateProgram).not.toHaveBeenCalled();
     });
@@ -1048,7 +1111,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       expect(mockCreateReward).not.toHaveBeenCalled();
     });
 
-    it('create: FREE_PRODUCT with an empty product ID shows the Spanish required message and never calls the API', async () => {
+    it('create: FREE_PRODUCT with nothing selected blocks submit with the Spanish message and never calls the API', async () => {
       const user = userEvent.setup();
       render(
         <TestWrapper>
@@ -1062,11 +1125,13 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
         screen.getByLabelText(/tipo de recompensa/i),
         'FREE_PRODUCT',
       );
-      await user.clear(screen.getByLabelText(/id de producto a entregar/i));
+      // §17.6: there is no default selection and nothing to type — an
+      // empty selection must BLOCK submit, not fabricate an identifier.
+      expect(screen.queryByText(/Seleccionado:/)).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /crear recompensa/i }));
 
       expect(
-        await screen.findByText('Indique el ID del producto a entregar'),
+        await screen.findByText('Seleccione el producto a entregar'),
       ).toBeInTheDocument();
       expect(mockCreateReward).not.toHaveBeenCalled();
     });
@@ -1090,6 +1155,9 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
         screen.getByLabelText(/tipo de recompensa/i),
         'FREE_PRODUCT',
       );
+      // §17.6: the branch still demands a PICKED product (empty blocks
+      // submit) — the pin is that it does not demand the DISCOUNT amount.
+      await user.click(screen.getByRole('option', { name: /Smash Burger/ }));
       await user.click(screen.getByRole('button', { name: /crear recompensa/i }));
 
       await waitFor(() => {
@@ -1102,12 +1170,12 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
           description: undefined,
           reward_type: 'FREE_PRODUCT',
           cost_units: 10,
-          benefit_config: { productId: 'prod-smash' },
+          benefit_config: { productId: SMASH_PRODUCT_ID },
         },
       });
     });
 
-    it('a DISCOUNT_AMOUNT reward does not demand the FREE_PRODUCT branch product ID and submits as before', async () => {
+    it('a DISCOUNT_AMOUNT reward does not demand the FREE_PRODUCT branch product selection and submits as before', async () => {
       const user = userEvent.setup();
       render(
         <TestWrapper>
@@ -1121,7 +1189,8 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
         screen.getByLabelText(/tipo de recompensa/i),
         'FREE_PRODUCT',
       );
-      await user.clear(screen.getByLabelText(/id de producto a entregar/i));
+      // §17.6: leave the FREE_PRODUCT branch with NOTHING picked — the
+      // schema must only demand a product for the branch that is ACTIVE.
       // …then submit the DISCOUNT_AMOUNT branch, which must not inherit it.
       await user.selectOptions(
         screen.getByLabelText(/tipo de recompensa/i),

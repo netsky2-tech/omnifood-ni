@@ -1,14 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { PromotionsList } from './PromotionsList';
 import { PromotionType, type Promotion } from '@/types/promotions';
 import { usePromotions, useTogglePromotion, useDeletePromotion, useCreatePromotion, useUpdatePromotion } from '@/hooks/use-promotions';
 import { useCatalogValues } from '@/features/catalog/use-catalog';
+import { useProductById } from '@/features/catalog/use-product-search';
 import { toast } from '@/hooks/use-toast';
 
 vi.mock('@/hooks/use-promotions');
 vi.mock('@/hooks/use-toast');
 vi.mock('@/features/catalog/use-catalog');
+// §17.6 display side: the list resolves a stored target_product_id through
+// the same S3 hook the selector uses (useProductById), so it must be mocked
+// here like every other query the component consumes.
+vi.mock('@/features/catalog/use-product-search', () => ({
+  useProductById: vi.fn(),
+  useProductSearch: vi.fn(),
+}));
 vi.mock('@tanstack/react-query', () => ({
   useQuery: vi.fn(),
   useMutation: vi.fn(),
@@ -108,6 +116,9 @@ describe('PromotionsList', () => {
     (useCreatePromotion as any).mockReturnValue(mockCreatePromotion);
     (useUpdatePromotion as any).mockReturnValue(mockUpdatePromotion);
     (useCatalogValues as any).mockReturnValue({ data: mockCatalogCategories });
+    (useProductById as any).mockReturnValue({
+      data: { id: 'prod-beer', name: 'Cerveza Victoria' },
+    });
     (toast as any).mockImplementation(vi.fn());
   });
 
@@ -251,6 +262,34 @@ describe('PromotionsList', () => {
     render(<PromotionsList />);
     
     expect(screen.getByText(/error al cargar promociones/i)).toBeInTheDocument();
+  });
+
+  // §17.6 display side: a stored target_product_id is a foreign key the
+  // operator cannot read. The list must show the product NAME resolved via
+  // useProductById (the same hook the selector uses), never the raw stored
+  // uuid, in both the table and the detail dialog; an id the query cannot
+  // resolve falls back to the short-id display, like the category target.
+  describe('target product display (§17.6)', () => {
+    it('resolves a known product id to its name', () => {
+      render(<PromotionsList />);
+      expect(screen.getByText('Producto: Cerveza Victoria')).toBeInTheDocument();
+      expect(screen.queryByText('Producto: prod-beer')).not.toBeInTheDocument();
+    });
+
+    it('falls back to a short id display for an id the query cannot resolve', () => {
+      (useProductById as any).mockReturnValue({ data: undefined });
+      render(<PromotionsList />);
+      expect(screen.getByText('Producto: …rod-beer')).toBeInTheDocument();
+      expect(screen.queryByText('Producto: prod-beer')).not.toBeInTheDocument();
+    });
+
+    it('resolves the product name in the detail dialog too', () => {
+      render(<PromotionsList />);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Ver detalles' })[0]!);
+      const dialog = screen.getByRole('dialog');
+      expect(within(dialog).getByText('Producto: Cerveza Victoria')).toBeInTheDocument();
+      expect(within(dialog).queryByText('prod-beer')).not.toBeInTheDocument();
+    });
   });
 
   // T0.5'd: target_category_id is a uuid; the list must show the category
