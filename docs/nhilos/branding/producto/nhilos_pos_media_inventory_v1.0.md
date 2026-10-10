@@ -331,6 +331,7 @@ Fechas tomadas del commit que agregó cada archivo:
 | `2026-10-07` | `pos_05e`, `pos_05f`, `dsh_07`–`dsh_09` | Modificadores en caja y en backoffice. |
 | `2026-10-09` | `dsh_02`–`dsh_09`, `dsh_10`–`dsh_14` | Refresco completo de las capturas backoffice y alta de las 5 del walkthrough de modificadores (manual v0.2, spec `manual-screenshots.live.spec.ts`, 1440×900). |
 | `2026-10-09` | `dsh_02` (recaptura con preset «Este mes»), `dsh_15`, `dsh_16`, `dsh_17` | Dashboard con rango «Este mes» (KPIs, gráfico y alertas con datos reales del mes) + altas de Inventario, Recetas y BOM y Gestión de Usuarios para §7/§9 del manual (misma spec, 1440×900). |
+| `2026-10-10` | `dsh_18` | Monitoreo de Terminales de Flota para §10 del manual (1440×900). |
 
 ### Cómo se regeneran las capturas del backoffice
 

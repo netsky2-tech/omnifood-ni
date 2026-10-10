@@ -275,6 +275,13 @@ test("captures the static reference screens (login, KPIs month view, ventas, pro
     page.getByRole("heading", { level: 1, name: "Gestión de Usuarios" }),
   ).toBeVisible();
   await capture(page, "dsh_17_gestion_usuarios.png");
+
+  // dsh_18: fleet terminal monitoring (section 10) — the real devices page.
+  await page.goto(`${BASE}/devices`);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Dispositivos" }),
+  ).toBeVisible();
+  await capture(page, "dsh_18_terminales_flota.png");
 });
 
 test("shows the Modificadores Grupos tab with the three real groups", async ({

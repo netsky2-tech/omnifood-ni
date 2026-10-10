@@ -231,6 +231,8 @@ En la sección **Administración > Usuarios** del menú lateral (título «Gesti
 
 El panel de gestión de terminales está disponible en el menú lateral bajo **Administración > Dispositivos** (ruta directa `/devices`), accesible para los roles de **Dueño (Owner)** y **Gerente (Manager)**:
 
+![Panel de Monitoreo de Terminales de Flota](images/dsh_18_terminales_flota.png)
+
 1. **Panel Resumen Ejecutivo (KPIs):**
    * **Total de Terminales:** Cantidad de dispositivos físicos asociados a tu comercio.
    * **Activas:** Terminales en operación regular que pueden procesar cobros y sincronizar transacciones.
