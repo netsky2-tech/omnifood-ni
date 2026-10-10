@@ -17,10 +17,6 @@ import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { TenantCapabilityEvent } from './entities/tenant-capability-event.entity';
 import { SecurityProfile } from './entities/security-profile.entity';
-import { DeviceSyncCredential } from './entities/device-sync-credential.entity';
-import { DeviceSyncCredentialEvent } from './entities/device-sync-credential-event.entity';
-import { ActivationAttempt } from '../onboarding/entities/activation-attempt.entity';
-import { Tenant } from '../tenant/entities/tenant.entity';
 import { AuthGuard } from './guards/auth.guard';
 import { IdentityModule } from './identity.module';
 import { AuthService } from './services/auth.service';
@@ -123,28 +119,11 @@ describe('IdentityModule strict typed access-token ownership', () => {
       .useValue({})
       .overrideProvider(getRepositoryToken(TenantCapabilityEvent))
       .useValue({})
-      // B17-02: IdentityModule imports DeviceSyncModule, whose forFeature
-      // repositories would otherwise instantiate against this spec's fake
-      // DataSource; override them like the identity repositories above.
-      .overrideProvider(getRepositoryToken(DeviceSyncCredential))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(DeviceSyncCredentialEvent))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(ActivationAttempt))
-      .useValue({})
-      .overrideProvider(getRepositoryToken(Tenant))
-      .useValue({})
       .compile();
 
     authService = module.get(AuthService);
     authGuard = module.get(AuthGuard);
-    // B17-02: IdentityModule imports DeviceSyncModule, which re-exports its
-    // own JwtModule (device config, 900s access TTL). The root injector now
-    // resolves the JwtService token ambiguously, so bind the test to the
-    // exact instance the identity stack uses — the one injected into
-    // AuthService.
-    jwtService = (authService as unknown as { jwtService: JwtService })
-      .jwtService;
+    jwtService = module.get(JwtService);
   });
 
   const closeModuleAndRestoreJwtEnvironment = async (): Promise<void> => {

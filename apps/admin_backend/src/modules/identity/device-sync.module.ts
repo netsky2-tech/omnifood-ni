@@ -7,12 +7,17 @@ import { ActivationAttempt } from '../onboarding/entities/activation-attempt.ent
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { DeviceSyncCredentialService } from './services/device-sync-credential.service';
 import { DeviceSyncTokenController } from './controllers/device-sync-token.controller';
+import { DeviceSyncRevocationController } from './controllers/device-sync-revocation.controller';
 import { SyncTransportGuard } from './guards/sync-transport.guard';
+import { AuthGuard } from './guards/auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+import { PermissionsGuard } from './guards/permissions.guard';
 import {
   DEVICE_SYNC_JWT_CONFIG,
   DeviceSyncJwtConfig,
   DeviceSyncJwtConfigModule,
 } from './config/device-sync-jwt.config';
+import { IdentityJwtConfigModule } from './config/identity-jwt.config';
 
 @Module({
   imports: [
@@ -23,6 +28,7 @@ import {
       Tenant,
     ]),
     DeviceSyncJwtConfigModule,
+    IdentityJwtConfigModule,
     JwtModule.registerAsync({
       imports: [DeviceSyncJwtConfigModule],
       inject: [DEVICE_SYNC_JWT_CONFIG],
@@ -37,8 +43,14 @@ import {
       }),
     }),
   ],
-  controllers: [DeviceSyncTokenController],
-  providers: [DeviceSyncCredentialService, SyncTransportGuard],
+  controllers: [DeviceSyncTokenController, DeviceSyncRevocationController],
+  providers: [
+    DeviceSyncCredentialService,
+    SyncTransportGuard,
+    AuthGuard,
+    RolesGuard,
+    PermissionsGuard,
+  ],
   exports: [
     DeviceSyncCredentialService,
     SyncTransportGuard,

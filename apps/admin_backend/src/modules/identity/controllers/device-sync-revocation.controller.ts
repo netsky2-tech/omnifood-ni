@@ -14,7 +14,6 @@ import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { RequirePermissions } from '../decorators/permissions.decorator';
 import { AuthGuard } from '../guards/auth.guard';
-import { AuthoritativeCurrentUserGuard } from '../guards/authoritative-current-user.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { PermissionsGuard } from '../guards/permissions.guard';
 import { UserRole } from '../entities/user.entity';
@@ -32,12 +31,7 @@ import { TenantTerminalDto } from '../dto/tenant-terminal.dto';
  */
 @Controller('identity/device-sync')
 @UseInterceptors(TenantInterceptor)
-@UseGuards(
-  AuthGuard,
-  AuthoritativeCurrentUserGuard,
-  RolesGuard,
-  PermissionsGuard,
-)
+@UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
 export class DeviceSyncRevocationController {
   constructor(
     private readonly deviceSyncCredentialService: DeviceSyncCredentialService,

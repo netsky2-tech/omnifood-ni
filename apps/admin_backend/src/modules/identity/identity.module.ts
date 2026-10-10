@@ -44,8 +44,6 @@ import { OhacTenantTransaction } from './human-authorization/rls/ohac-tenant-tra
 // device secret always comes from DEVICE_SYNC_JWT_CONFIG.
 import { DeviceSyncJwtConfigModule } from './config/device-sync-jwt.config';
 import { SyncTransportGuard } from './guards/sync-transport.guard';
-import { DeviceSyncModule } from './device-sync.module';
-import { DeviceSyncRevocationController } from './controllers/device-sync-revocation.controller';
 
 @Module({
   imports: [
@@ -71,9 +69,6 @@ import { DeviceSyncRevocationController } from './controllers/device-sync-revoca
     }),
     IdentityJwtConfigModule,
     DeviceSyncJwtConfigModule,
-    // B17-02: the revocation controller is a human surface that consumes
-    // DeviceSyncCredentialService from DeviceSyncModule.
-    DeviceSyncModule,
   ],
   controllers: [
     AuthController,
@@ -81,7 +76,6 @@ import { DeviceSyncRevocationController } from './controllers/device-sync-revoca
     UsersController,
     CapabilityController,
     HumanAuthorizationRecoveryTokenController,
-    DeviceSyncRevocationController,
   ],
   providers: [
     AuthService,

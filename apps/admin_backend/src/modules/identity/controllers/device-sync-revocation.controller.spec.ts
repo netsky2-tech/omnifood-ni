@@ -126,12 +126,7 @@ describe('DeviceSyncRevocationController (B17-02)', () => {
         DeviceSyncRevocationController,
       ) as Array<new (...args: never[]) => unknown>;
 
-      expect(guards).toEqual([
-        AuthGuard,
-        AuthoritativeCurrentUserGuard,
-        RolesGuard,
-        PermissionsGuard,
-      ]);
+      expect(guards).toEqual([AuthGuard, RolesGuard, PermissionsGuard]);
     });
 
     it('applies the TenantInterceptor', () => {

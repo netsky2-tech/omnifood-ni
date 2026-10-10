@@ -32,11 +32,15 @@ describe('DeviceSyncModule', () => {
           load: [
             () => ({
               NODE_ENV: 'test',
-              JWT_SECRET: 'test-secret-at-least-thirty-two-bytes-long',
+              JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
               JWT_ISSUER: 'omnifood-admin',
               JWT_AUDIENCE: 'omnifood-pos',
               DEVICE_SYNC_JWT_AUDIENCE: 'omnifood-device-sync',
               DEVICE_SYNC_JWT_ACCESS_TTL_SECONDS: '900',
+              JWT_ACCESS_TTL_SECONDS: '3600',
+              JWT_REFRESH_TTL_SECONDS: '604800',
+              JWT_CLOCK_TOLERANCE_SECONDS: '5',
+              JWT_ALGORITHM: 'HS256',
             }),
           ],
         }),
