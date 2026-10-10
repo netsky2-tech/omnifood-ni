@@ -5,6 +5,7 @@ import { InvoicesService } from './invoices.service';
 import { SaleInventoryOutcomeService } from './sale-inventory-outcome.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
 import { Payment } from '../entities/payment.entity';
 import { User } from '../../identity/entities/user.entity';
 import {
@@ -89,6 +90,12 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
               return null;
             }),
           };
+        }
+        // The sale path mirrors an item's modifier lines inside the same
+        // transaction (delete-then-insert). The mock must expose that repo or
+        // the fall-through hands back an object without those methods.
+        if (entity === InvoiceItemModifier) {
+          return { delete: jest.fn(), insert: jest.fn() };
         }
         if (entity === Invoice) {
           return {
