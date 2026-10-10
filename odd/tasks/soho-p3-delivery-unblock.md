@@ -90,3 +90,50 @@ src/__tests__/w10-loyalty-programs-rewards.test.tsx(882,9): error TS2532: Object
 | Build dashboard | `npm run build` (tsc -b + vite) | verde |
 
 **Lo que NO se corre local:** suites completas mientras haya subagentes vivos (tope 12 GiB + 4 GiB swap, OOM mata la sesión). La validación completa es CI.
+
+---
+
+## 4. El PR #850 destapó dos bloqueadores más (2026-10-10)
+
+Al pasar el lint, **los steps que nunca habían corrido empezaron a correr**. Los dos hallazgos siguientes son de la misma familia que el resto del bloque: un gate que muere primero esconde todo lo que viene detrás.
+
+### 4.1 · POS App CI: `Generate code` falla — el `analyzer` del lock no parsea la sintaxis del bloque
+
+Log crudo del job `114116868850`:
+
+```
+[WARNING] freezed on integration_test/...: Your current `analyzer` version may not
+fully support your current SDK version.
+Analyzer language version: 3.4.0
+SDK language version: 3.11.0
+...
+[SEVERE] freezed on test/presentation/features/sales/sale_view_model_loyalty_wiring_test.dart:
+sale_view_model_loyalty_wiring_test.dart:70:24: Expected an identifier.
+```
+
+- **Causa:** el spec usaba `'tenant_id': ?tenantId` (null-aware element). Es sintaxis más nueva que la language version **3.4.0** del paquete `analyzer` que resuelve `pubspec.lock` (está como `dependency: "direct overridden"`), así que los builders (freezed, json_serializable, floor_generator, mockito) no pueden parsear el archivo.
+- **Por qué localmente no se ve:** `dart analyze` usa el analyzer **del SDK** (3.11, sí entiende la sintaxis) mientras `build_runner` usa el `analyzer` **del lock**. La verificación que vale es `flutter pub run build_runner build`. Reproducido local: mismo archivo, misma línea `70:24`, los mismos 4 builders.
+- **Arreglo:** `if (tenantId != null) 'tenant_id': tenantId,` — el collection-if existe desde Dart 2.3 y no depende del analyzer.
+- **Efecto colateral que importa:** el build fallido **borra** el `part` generado, y el `.mocks.dart` commiteado estaba **rancio**: le faltaban `getPendingSyncCustomers` y `markCustomerSynced` de `CustomerDao`. Regenerado: +32 líneas. El spec corre **27/27**.
+- **Follow-up (no hecho, es decisión del dueño):** subir el `analyzer` del lock (`flutter packages upgrade` / bump del override) para que el repo pueda usar sintaxis nueva. Es churn de dependencias de todo el monorepo.
+
+### 4.2 · Admin Backend CI: `Run unit tests` falla — los mocks de dos specs no conocen la entidad nueva
+
+Log crudo del job `114116868885`:
+
+```
+FAIL src/modules/sales/services/sale-ack-idempotency.spec.ts
+FAIL src/modules/sales/services/sale-time-v1-sync.spec.ts
+Test Suites: 2 failed, 3 skipped, 337 passed, 339 of 342 total
+Tests:       13 failed, 8 skipped, 3909 passed, 3930 total
+```
+
+- **Causa:** `ce2ab1cb` agregó la persistencia de modifiers (`manager.getRepository(InvoiceItemModifier).delete(...)` / `.insert(...)`) al camino de venta, pero **no actualizó** los dos specs de sync, cuyo `getRepository` mock devuelve `{}` para entidades desconocidas. `delete` no existe → `TypeError` → **el lote entero se rechaza** con el código de fallback `BUSINESS_RULE_VALIDATION`, y por eso los 13 fallos comparten la forma `processed: 0`.
+- **No lo causó el merge:** el merge sólo trajo 4 archivos a `admin_backend` y ninguno toca el camino de sync. `invoices.service.spec.ts` (el spec grande) **sí** mockeaba la entidad — el patrón estaba en el repo, sólo faltaba copiarlo.
+- **Arreglo:** agregar `[InvoiceItemModifier, { delete: jest.fn(), insert: jest.fn() }]` a los dos mocks. **16/16** en los dos specs.
+- **Nota de formato:** el CI corre `eslint --fix` **antes** de `npm test`, así que los mismos specs aparecen reformateados (~550 líneas donde el árbol tiene 169). Las líneas del log de CI **no** coinciden con las del repo: es el mismo archivo, no otro.
+
+### Tareas nuevas
+
+- [x] **T7 · Desbloquear POS App CI** (sintaxis + generado rancio).
+- [x] **T8 · Desbloquear Admin Backend unit tests** (mocks de los dos specs).

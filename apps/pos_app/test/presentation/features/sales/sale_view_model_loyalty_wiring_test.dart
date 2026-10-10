@@ -67,7 +67,7 @@ class FakeLocalConfigDao extends Mock implements LocalConfigDao {
       : _configs = {
           'commercial_exchange_rate': '36.50',
           'bcn_official_exchange_rate': '36.6241',
-          'tenant_id': ?tenantId,
+          if (tenantId != null) 'tenant_id': tenantId,
         };
 
   final Map<String, String> _configs;

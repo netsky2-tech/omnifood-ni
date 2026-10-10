@@ -2559,6 +2559,38 @@ class MockCustomerDao extends _i1.Mock implements _i41.CustomerDao {
         ),
         returnValue: _i56.Future<int?>.value(),
       ) as _i56.Future<int?>);
+
+  @override
+  _i56.Future<List<_i84.CustomerEntity>> getPendingSyncCustomers() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getPendingSyncCustomers,
+          [],
+        ),
+        returnValue: _i56.Future<List<_i84.CustomerEntity>>.value(
+            <_i84.CustomerEntity>[]),
+      ) as _i56.Future<List<_i84.CustomerEntity>>);
+
+  @override
+  _i56.Future<void> markCustomerSynced(String? id) => (super.noSuchMethod(
+        Invocation.method(
+          #markCustomerSynced,
+          [id],
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
+
+  @override
+  _i56.Future<void> markCustomersSynced(List<String>? ids) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #markCustomersSynced,
+          [ids],
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
 }
 
 /// A class which mocks [CustomerPointTransactionDao].
