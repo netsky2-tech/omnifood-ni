@@ -683,9 +683,26 @@ class InvoiceDetailsPanel extends StatelessWidget {
                   itemCount: items.length,
                   itemBuilder: (context, index) {
                     final item = items[index];
+                    final extras = item.selectedModifiers;
                     return ListTile(
                       title: Text(item.productName),
-                      subtitle: Text('${item.quantity.toInt()} x C\$ ${item.unitPrice.toStringAsFixed(2)}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${item.quantity.toInt()} x C\$ ${item.unitPrice.toStringAsFixed(2)}',
+                          ),
+                          // Round-2 §17.4: the extras the cart charged were
+                          // invisible here even though the receipt path
+                          // already prints them. The detail mirrors the cart.
+                          for (final extra in extras)
+                            Text(
+                              '• ${extra.name}'
+                              '${extra.extraPrice > 0 ? '  C\$ ${extra.extraPrice.toStringAsFixed(2)}' : ''}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                        ],
+                      ),
                       trailing: Text('C\$ ${item.total.toStringAsFixed(2)}'),
                     );
                   },

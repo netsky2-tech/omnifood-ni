@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../../../../core/localization/display_name_resolver.dart';
+import '../../../../domain/models/inventory/product.dart';
 import '../../../../domain/models/sales/invoice.dart';
 import '../../../../domain/models/sales/invoice_item.dart';
 import '../../../../domain/models/sales/payment.dart';
@@ -338,8 +339,27 @@ class SalesHistoryViewModel extends ChangeNotifier {
   }
 
   Future<List<InvoiceItem>> getInvoiceItems(String invoiceId) async {
-    final entities = await _database.invoiceItemDao.getItemsByInvoiceId(invoiceId);
-    return entities.map(SalesMapper.toItemDomain).toList();
+    final entities =
+        await _database.invoiceItemDao.getItemsByInvoiceId(invoiceId);
+    // Round-2 §17.4: the detail must mirror the cart, so it carries the line
+    // modifiers the receipt path already prints. One batched query for the
+    // whole invoice (never N+1), keeping each line's insertion order.
+    final modifierRows =
+        await _database.invoiceItemDao.getModifierRowsByInvoiceId(invoiceId);
+    final modifiersByItemId = <String, List<Modifier>>{};
+    for (final row in modifierRows) {
+      modifiersByItemId
+          .putIfAbsent(row.invoiceItemId, () => <Modifier>[])
+          .add(SalesMapper.toModifierDomain(row));
+    }
+    return entities
+        .map(
+          (entity) => SalesMapper.toItemDomain(
+            entity,
+            modifiers: modifiersByItemId[entity.id] ?? const <Modifier>[],
+          ),
+        )
+        .toList();
   }
 
   Future<List<Payment>> getInvoicePayments(String invoiceId) async {
