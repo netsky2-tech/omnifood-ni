@@ -2712,7 +2712,21 @@ class SaleViewModel extends ChangeNotifier {
       _errorMessage = null;
       return creditNoteId;
     } catch (e) {
-      _errorMessage = 'Error al procesar devolución: $e';
+      // Round-2 P7: a raw Dart exception must never reach the operator. The
+      // cumulative-refund refusal is a known, actionable state; everything
+      // else gets one calm Spanish message and the raw text stays in logs.
+      final raw = e.toString();
+      if (raw.contains('cumulative refund exceeds')) {
+        _errorMessage =
+            'Esta factura ya tiene todo devuelto: no se puede emitir otra '
+            'nota de crédito sobre ella.';
+      } else {
+        // ignore: avoid_print
+        print('[SaleViewModel] processReturn failed: $raw');
+        _errorMessage =
+            'No se pudo emitir la nota de crédito. Reintentá; si el problema '
+            'persiste, avisá al encargado.';
+      }
       return null;
     } finally {
       _isLoading = false;

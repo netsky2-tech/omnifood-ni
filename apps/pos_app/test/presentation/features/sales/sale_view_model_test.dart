@@ -606,6 +606,57 @@ void main() {
         terminalId: anyNamed('terminalId'),
       ));
     });
+
+    test('a cumulative-refund refusal never leaks the raw Dart error',
+        () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'owner-2',
+          name: 'Owner',
+          role: UserRole.owner,
+          isActive: true,
+        ),
+      );
+      viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
+      when(mockSalesRepo.getInvoiceByNumber('F001-000123')).thenAnswer(
+        (_) async => Invoice(
+          id: 'invoice-1',
+          number: 'F001-000123',
+          createdAt: DateTime(2026, 7, 13),
+          userId: 'cashier-1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          paymentStatus: PaymentStatus.paid,
+          syncStatus: SyncStatus.synced,
+          type: InvoiceType.regular,
+        ),
+      );
+      when(
+        mockSalesRepo.createCreditNote(
+          originalInvoiceId: anyNamed('originalInvoiceId'),
+          reason: anyNamed('reason'),
+          authorizedByUserId: anyNamed('authorizedByUserId'),
+          authorizedByRole: anyNamed('authorizedByRole'),
+          refundReasonPolicy: anyNamed('refundReasonPolicy'),
+          lines: anyNamed('lines'),
+          terminalId: anyNamed('terminalId'),
+        ),
+      ).thenThrow(
+        StateError(
+          'Credit note cumulative refund exceeds original line quantity.',
+        ),
+      );
+
+      final registered = await viewModel.processReturn('F001-000123', 'Error');
+
+      expect(registered, isNull);
+      expect(viewModel.errorMessage, contains('ya tiene todo devuelto'));
+      expect(viewModel.errorMessage, isNot(contains('Bad state')),
+          reason: 'a StateError string is never operator copy');
+      expect(viewModel.errorMessage, isNot(contains('Error al procesar')),
+          reason: 'the old copy leaked the raw exception');
+    });
   });
 
   test('processReturn reports failure when the invoice is not found', () async {
