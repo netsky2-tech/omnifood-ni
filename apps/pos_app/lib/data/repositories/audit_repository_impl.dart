@@ -598,10 +598,17 @@ class AuditRepositoryImpl implements AuditRepository {
     DateTime? end,
     String? userId,
   }) async {
+    // Round-2 F-4b: audit rows are PERSISTED in UTC with a trailing 'Z'
+    // (_buildAuditEntity) and the DAO compares the stored text against these
+    // bounds, so the bounds must use the SAME representation. A local ISO
+    // string sorts after the same moment in UTC (UTC-6 here), which silently
+    // dropped the last ~6 hours from the local list — exactly the voids and
+    // discounts of the running shift.
     final startTime =
         (start ?? DateTime.now().subtract(const Duration(days: 30)))
+            .toUtc()
             .toIso8601String();
-    final endTime = (end ?? DateTime.now()).toIso8601String();
+    final endTime = (end ?? DateTime.now()).toUtc().toIso8601String();
 
     final entities = await _auditDao.findLogsWithFilters(
       startTime,

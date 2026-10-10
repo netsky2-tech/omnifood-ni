@@ -852,4 +852,37 @@ void main() {
       expect(alerts.calls.map((call) => call[8]), everyElement(contains('duplicate_sequence')));
     });
   });
+
+  group('getLocalLogs bounds (round-2 F-4b)', () {
+    test('queries with the UTC representation the rows are persisted in',
+        () async {
+      when(mockAuditDao.findLogsWithFilters(captureAny, captureAny, captureAny))
+          .thenAnswer((_) async => <AuditLogEntity>[]);
+
+      await repository.getLocalLogs();
+
+      final captured = verify(
+        mockAuditDao.findLogsWithFilters(captureAny, captureAny, captureAny),
+      ).captured;
+      final start = captured[0] as String;
+      final end = captured[1] as String;
+
+      expect(
+        start.endsWith('Z'),
+        isTrue,
+        reason: 'rows are persisted in UTC with a trailing Z, and the DAO '
+            'compares text: a local bound sorts after them and silently '
+            'hides the last ~6 hours, exactly the shift\'s voids',
+      );
+      expect(end.endsWith('Z'), isTrue);
+      final nowUtc = DateTime.now().toUtc();
+      final endParsed = DateTime.parse(end).toUtc();
+      expect(
+        nowUtc.difference(endParsed).inMinutes.abs() <= 1,
+        isTrue,
+        reason: 'the upper bound must be "now" in UTC; a local ISO string '
+            'sorts ~6 hours behind it and silently hides the shift',
+      );
+    });
+  });
 }
