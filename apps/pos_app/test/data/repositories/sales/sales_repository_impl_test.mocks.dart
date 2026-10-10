@@ -87,12 +87,12 @@ import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.da
     as _i65;
 import 'package:pos_app/data/models/inventory/movement_entity.dart' as _i64;
 import 'package:pos_app/data/models/local_config_entity.dart' as _i93;
-import 'package:pos_app/data/models/sales/cashier_session_entity.dart' as _i61;
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart' as _i62;
 import 'package:pos_app/data/models/sales/invoice_entity.dart' as _i58;
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart' as _i59;
 import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart'
-    as _i62;
-import 'package:pos_app/data/models/sales/payment_entity.dart' as _i60;
+    as _i60;
+import 'package:pos_app/data/models/sales/payment_entity.dart' as _i61;
 import 'package:pos_app/domain/models/audit_log.dart' as _i73;
 import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i88;
 import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i87;
@@ -1470,6 +1470,18 @@ class MockInvoiceItemDao extends _i1.Mock implements _i26.InvoiceItemDao {
       ) as _i53.Future<List<_i59.InvoiceItemEntity>>);
 
   @override
+  _i53.Future<List<_i60.InvoiceItemModifierEntity>> getModifierRowsByInvoiceId(
+          String? invoiceId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getModifierRowsByInvoiceId,
+          [invoiceId],
+        ),
+        returnValue: _i53.Future<List<_i60.InvoiceItemModifierEntity>>.value(
+            <_i60.InvoiceItemModifierEntity>[]),
+      ) as _i53.Future<List<_i60.InvoiceItemModifierEntity>>);
+
+  @override
   _i53.Future<void> insertItems(List<_i59.InvoiceItemEntity>? items) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1490,7 +1502,7 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
   }
 
   @override
-  _i53.Future<List<_i60.PaymentEntity>> getPaymentsByInvoiceId(
+  _i53.Future<List<_i61.PaymentEntity>> getPaymentsByInvoiceId(
           String? invoiceId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1498,11 +1510,11 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
           [invoiceId],
         ),
         returnValue:
-            _i53.Future<List<_i60.PaymentEntity>>.value(<_i60.PaymentEntity>[]),
-      ) as _i53.Future<List<_i60.PaymentEntity>>);
+            _i53.Future<List<_i61.PaymentEntity>>.value(<_i61.PaymentEntity>[]),
+      ) as _i53.Future<List<_i61.PaymentEntity>>);
 
   @override
-  _i53.Future<List<_i60.PaymentEntity>> getPaymentsByTimeRange(
+  _i53.Future<List<_i61.PaymentEntity>> getPaymentsByTimeRange(
     int? startTime,
     int? endTime,
   ) =>
@@ -1515,22 +1527,22 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
           ],
         ),
         returnValue:
-            _i53.Future<List<_i60.PaymentEntity>>.value(<_i60.PaymentEntity>[]),
-      ) as _i53.Future<List<_i60.PaymentEntity>>);
+            _i53.Future<List<_i61.PaymentEntity>>.value(<_i61.PaymentEntity>[]),
+      ) as _i53.Future<List<_i61.PaymentEntity>>);
 
   @override
-  _i53.Future<List<_i60.PaymentEntity>> getPendingCardPayments() =>
+  _i53.Future<List<_i61.PaymentEntity>> getPendingCardPayments() =>
       (super.noSuchMethod(
         Invocation.method(
           #getPendingCardPayments,
           [],
         ),
         returnValue:
-            _i53.Future<List<_i60.PaymentEntity>>.value(<_i60.PaymentEntity>[]),
-      ) as _i53.Future<List<_i60.PaymentEntity>>);
+            _i53.Future<List<_i61.PaymentEntity>>.value(<_i61.PaymentEntity>[]),
+      ) as _i53.Future<List<_i61.PaymentEntity>>);
 
   @override
-  _i53.Future<List<_i60.PaymentEntity>> getCashPaymentsForShift(
+  _i53.Future<List<_i61.PaymentEntity>> getCashPaymentsForShift(
           String? shiftId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1538,8 +1550,8 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
           [shiftId],
         ),
         returnValue:
-            _i53.Future<List<_i60.PaymentEntity>>.value(<_i60.PaymentEntity>[]),
-      ) as _i53.Future<List<_i60.PaymentEntity>>);
+            _i53.Future<List<_i61.PaymentEntity>>.value(<_i61.PaymentEntity>[]),
+      ) as _i53.Future<List<_i61.PaymentEntity>>);
 
   @override
   _i53.Future<int?> countPendingCardPayments() => (super.noSuchMethod(
@@ -1581,15 +1593,15 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
       ) as _i53.Future<int?>);
 
   @override
-  _i53.Future<List<_i60.PaymentEntity>> getPendingReconciliations() =>
+  _i53.Future<List<_i61.PaymentEntity>> getPendingReconciliations() =>
       (super.noSuchMethod(
         Invocation.method(
           #getPendingReconciliations,
           [],
         ),
         returnValue:
-            _i53.Future<List<_i60.PaymentEntity>>.value(<_i60.PaymentEntity>[]),
-      ) as _i53.Future<List<_i60.PaymentEntity>>);
+            _i53.Future<List<_i61.PaymentEntity>>.value(<_i61.PaymentEntity>[]),
+      ) as _i53.Future<List<_i61.PaymentEntity>>);
 
   @override
   _i53.Future<void> updateReconciliationSyncStatus(
@@ -1609,7 +1621,7 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
       ) as _i53.Future<void>);
 
   @override
-  _i53.Future<void> updatePayment(_i60.PaymentEntity? payment) =>
+  _i53.Future<void> updatePayment(_i61.PaymentEntity? payment) =>
       (super.noSuchMethod(
         Invocation.method(
           #updatePayment,
@@ -1620,7 +1632,7 @@ class MockPaymentDao extends _i1.Mock implements _i27.PaymentDao {
       ) as _i53.Future<void>);
 
   @override
-  _i53.Future<void> insertPayments(List<_i60.PaymentEntity>? payments) =>
+  _i53.Future<void> insertPayments(List<_i61.PaymentEntity>? payments) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertPayments,
@@ -1640,27 +1652,27 @@ class MockCashierSessionDao extends _i1.Mock implements _i30.CashierSessionDao {
   }
 
   @override
-  _i53.Future<_i61.CashierSessionEntity?> getSessionById(String? id) =>
+  _i53.Future<_i62.CashierSessionEntity?> getSessionById(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #getSessionById,
           [id],
         ),
-        returnValue: _i53.Future<_i61.CashierSessionEntity?>.value(),
-      ) as _i53.Future<_i61.CashierSessionEntity?>);
+        returnValue: _i53.Future<_i62.CashierSessionEntity?>.value(),
+      ) as _i53.Future<_i62.CashierSessionEntity?>);
 
   @override
-  _i53.Future<_i61.CashierSessionEntity?> getActiveSession() =>
+  _i53.Future<_i62.CashierSessionEntity?> getActiveSession() =>
       (super.noSuchMethod(
         Invocation.method(
           #getActiveSession,
           [],
         ),
-        returnValue: _i53.Future<_i61.CashierSessionEntity?>.value(),
-      ) as _i53.Future<_i61.CashierSessionEntity?>);
+        returnValue: _i53.Future<_i62.CashierSessionEntity?>.value(),
+      ) as _i53.Future<_i62.CashierSessionEntity?>);
 
   @override
-  _i53.Future<_i61.CashierSessionEntity?> getActiveSessionForUserAndTerminal(
+  _i53.Future<_i62.CashierSessionEntity?> getActiveSessionForUserAndTerminal(
     String? userId,
     String? terminalId,
   ) =>
@@ -1672,11 +1684,11 @@ class MockCashierSessionDao extends _i1.Mock implements _i30.CashierSessionDao {
             terminalId,
           ],
         ),
-        returnValue: _i53.Future<_i61.CashierSessionEntity?>.value(),
-      ) as _i53.Future<_i61.CashierSessionEntity?>);
+        returnValue: _i53.Future<_i62.CashierSessionEntity?>.value(),
+      ) as _i53.Future<_i62.CashierSessionEntity?>);
 
   @override
-  _i53.Future<void> insertSession(_i61.CashierSessionEntity? session) =>
+  _i53.Future<void> insertSession(_i62.CashierSessionEntity? session) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertSession,
@@ -1687,7 +1699,7 @@ class MockCashierSessionDao extends _i1.Mock implements _i30.CashierSessionDao {
       ) as _i53.Future<void>);
 
   @override
-  _i53.Future<void> updateSession(_i61.CashierSessionEntity? session) =>
+  _i53.Future<void> updateSession(_i62.CashierSessionEntity? session) =>
       (super.noSuchMethod(
         Invocation.method(
           #updateSession,
@@ -1698,15 +1710,15 @@ class MockCashierSessionDao extends _i1.Mock implements _i30.CashierSessionDao {
       ) as _i53.Future<void>);
 
   @override
-  _i53.Future<List<_i61.CashierSessionEntity>> getAllSessions() =>
+  _i53.Future<List<_i62.CashierSessionEntity>> getAllSessions() =>
       (super.noSuchMethod(
         Invocation.method(
           #getAllSessions,
           [],
         ),
-        returnValue: _i53.Future<List<_i61.CashierSessionEntity>>.value(
-            <_i61.CashierSessionEntity>[]),
-      ) as _i53.Future<List<_i61.CashierSessionEntity>>);
+        returnValue: _i53.Future<List<_i62.CashierSessionEntity>>.value(
+            <_i62.CashierSessionEntity>[]),
+      ) as _i53.Future<List<_i62.CashierSessionEntity>>);
 
   @override
   _i53.Future<int?> countClosedSessions() => (super.noSuchMethod(
@@ -1762,7 +1774,7 @@ class MockSalesTransactionDao extends _i1.Mock
 
   @override
   _i53.Future<void> insertInvoiceItemModifiers(
-          List<_i62.InvoiceItemModifierEntity>? modifiers) =>
+          List<_i60.InvoiceItemModifierEntity>? modifiers) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertInvoiceItemModifiers,
@@ -1773,7 +1785,7 @@ class MockSalesTransactionDao extends _i1.Mock
       ) as _i53.Future<void>);
 
   @override
-  _i53.Future<void> insertPayments(List<_i60.PaymentEntity>? payments) =>
+  _i53.Future<void> insertPayments(List<_i61.PaymentEntity>? payments) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertPayments,
@@ -2021,8 +2033,8 @@ class MockSalesTransactionDao extends _i1.Mock
   _i53.Future<void> executeSaleTransaction(
     _i58.InvoiceEntity? invoice,
     List<_i59.InvoiceItemEntity>? items,
-    List<_i62.InvoiceItemModifierEntity>? modifiers,
-    List<_i60.PaymentEntity>? payments,
+    List<_i60.InvoiceItemModifierEntity>? modifiers,
+    List<_i61.PaymentEntity>? payments,
     List<_i64.MovementEntity>? movements,
     _i66.AuditLogEntity? auditLog,
     bool? shouldFail,
@@ -2048,8 +2060,8 @@ class MockSalesTransactionDao extends _i1.Mock
   _i53.Future<void> executeSaleWithDgiTransaction(
     _i58.InvoiceEntity? invoice,
     List<_i59.InvoiceItemEntity>? items,
-    List<_i62.InvoiceItemModifierEntity>? modifiers,
-    List<_i60.PaymentEntity>? payments,
+    List<_i60.InvoiceItemModifierEntity>? modifiers,
+    List<_i61.PaymentEntity>? payments,
     List<_i64.MovementEntity>? movements,
     _i66.AuditLogEntity? auditLog,
     String? nextDgiSequence,
@@ -2077,8 +2089,8 @@ class MockSalesTransactionDao extends _i1.Mock
   _i53.Future<void> executeFulfillmentSaleTransaction(
     _i58.InvoiceEntity? invoice,
     List<_i59.InvoiceItemEntity>? items,
-    List<_i62.InvoiceItemModifierEntity>? modifiers,
-    List<_i60.PaymentEntity>? payments,
+    List<_i60.InvoiceItemModifierEntity>? modifiers,
+    List<_i61.PaymentEntity>? payments,
     List<_i64.MovementEntity>? movements,
     _i66.AuditLogEntity? auditLog,
     _i68.FulfillmentRecordEntity? fulfillment,
