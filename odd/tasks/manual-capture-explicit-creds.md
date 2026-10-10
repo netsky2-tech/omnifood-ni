@@ -1,6 +1,6 @@
 # Feature: manual-capture path: no committed credential, explicit tenant binding (issue #839)
 
-- **Status:** IMPLEMENTED (delegated work done; work-unit commit + native review pending — T5)
+- **Status:** DELIVERED — PR #851 merged as `fc44002b`, issue #839 closed. Native review `review-9becdbcdc52b9351` APPROVED (receipt `sha256:517b92fc3756f466661dbfcd3e6f7645ca86c167dd866b9257be708f35b432f0`), acknowledged.
 - **Issue:** #839 — retitled after verification. Originally "stale fixture defaults"; the defaults are
   NOT stale (see Problem 0).
 - **Branch / worktree:** `test/manual-capture-explicit-creds` @ `/home/octavio_morales/omnifood-ni-manual-capture-creds`
@@ -139,14 +139,36 @@ close were ordinary repository decisions.
 - [x] **T1** Implement `requiredLiveEnv()` (or equivalent) in `src/lib/live-api-base.ts` + unit spec,
       test-first: RED observed for unset/blank, then GREEN. (Evidence below.)
 - [x] **T2** Wire the spec: password from env only, tenant-label guard, header documents the contract.
-- [x] **T3** Document the operator path. Done in the spec header + `apps/owner_dashboard/README.md`
-      ("Test suites" section, per delegation). The media inventory doc was NOT touched — it is outside
-      the delegated edit surfaces; parent may want it added separately.
-- [x] **T4** Checks: focused unit spec (36/36), suite-layout guard (6/6), `npm run typecheck` clean,
-      `npm run lint` clean (pre-existing warnings in unrelated files only),
-      `npx playwright test --list -c playwright.live.config.ts` = 15 tests in 2 files.
-- [ ] **T5** Work-unit commit + native review + PR `type:tests` → merge (user's delivery call). Not done
-      here: delegated implementation does not commit.
+- [x] **T3** Document the operator path: spec header + `apps/owner_dashboard/README.md` ("Test suites"
+      section) + a "Cómo se regeneran las capturas del backoffice" block in
+      `docs/nhilos/branding/producto/nhilos_pos_media_inventory_v1.0.md`. The media inventory was outside
+      the delegated edit surfaces, so the parent added it after reading the worker's report rather than
+      letting the worker widen its own scope.
+- [x] **T4** Checks at handoff: focused unit spec 36/36, suite-layout guard 6/6, `npm run typecheck` clean,
+      oxlint clean, `--list` live 15 tests / 2 files. Superseded by the post-review numbers below (47/47 and
+      1486 after the guard became a tested helper).
+- [x] **T5** Work-unit commit `1ac2eace` + native review `review-9becdbcdc52b9351` APPROVED + PR #851
+      (`type:tests`) merged as `fc44002b`.
+- [x] **T6** Issue #839 closed with the premise-correction table, the two plan assumptions that measurement
+      overruled, and the full check list.
+- [x] **T7** Follow-up filed as **#852** — the credential is also published in three historical `odd/tasks/`
+      documents (`soho-dia1-integral-test.md:43` with a POS PIN, `live-suites-hardening.md:160`,
+      `manual-dashboard-section6.md:11-12`). Rotating it is the fix; scrubting text from tracked files is not.
+- [x] **T8** Worktree removed, local and remote branches deleted, this document updated with the delivery
+      evidence.
+
+## What the first candidate could not know
+
+This document was written by the delegated worker and reviewed by the parent after it. Three things changed
+between that draft and the merged commit, and none of them were visible from inside the task:
+
+1. **The tenant guard became a tested helper.** It started as six lines inside the spec. Review advisories
+   showed the label comparison accepted `soho.evil.com`, so it moved to `resolveLiveWebTarget()` in
+   `src/lib/live-api-base.ts` with 11 unit cases. The focused spec went from 36 to 47 tests.
+2. **`scripts/capture_dashboard.cjs` was deleted**, which no file in the delegated surfaces suggested.
+3. **The branch was re-delivered rather than merged.** #848 died on GitGuardian, which scans the whole commit
+   range of a PR: two of its commits added credential literals that no later commit could retract without a
+   history rewrite, and the harness refuses force-push. #851 is the same content as one work-unit commit.
 
 ## Implementation notes (deviations from the literal instructions)
 
