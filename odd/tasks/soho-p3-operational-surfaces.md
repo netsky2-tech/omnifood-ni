@@ -795,3 +795,50 @@ Estado de la rama: **17 commits adelante de `origin`, 0 atrás** — el push y e
 **S5** (conciliación de QR/transferencia, lealtad, Fase 8.3) y **KDS** (los 17 tickets `PENDIENTE` en `FOODPARK_QSR`, que debía auto-despachar) quedan **explícitamente para una sesión fresca**: requieren trabajo de campo y decisiones de producto (D-D y D-E siguen abiertas). También quedan diferidos, ya medidos y documentados: el barrido del quinto formulario de lealtad y del grupo con guardas JS, los tres formularios que sólo necesitan `noValidate`, las **89 columnas sin transformer** y las rutas sin verificar del onboarding.
 
 **Lo que queda probado y lo que no, sin adornos:** el desglose por origen está validado en vivo (base real, API real, navegador real) y las tres rutas numéricas están probadas contra PostgreSQL real; lo que **no** está probado es un push desde la tablet con modifiers o desglose (requiere la S23 con `adb reverse`), el driver de la impresora, y `w4-e2e-fiscal` (excluido de vitest, necesita backend vivo).
+
+---
+
+## 17. Prueba integrada real en la S23 (2026-10-09) y hallazgos de campo
+
+**APK probado:** `1.1.0+11021` (versionCode por encima del instalado, para que no lo rechace), compilado con `--api-url http://127.0.0.1:3000/api` desde el commit `b39e84f9`, instalado por `adb install -r` y con `adb reverse tcp:3000 tcp:3000`. El bump de versión fue **local y se revirtió** (no va al PR). La app confirma su propio build en los pedidos: `ohacPosBuild=1.1.0+11021`.
+
+⚠ **El `adb reverse` es imprescindible y frágil**: se cayó en medio de la sesión (con la app ya apuntando a `127.0.0.1:3000`), y sin él las ventas quedan pendientes **sin que se note**. La cadena real es tablet → adb reverse → portproxy de Windows (`127.0.0.1:3000` → `172.31.12.126:3000`) → WSL; por eso el backend ve `172.31.0.1`.
+
+### Lo que quedó probado en el aparato
+
+Una venta real con **extras + promoción + descuento manual**, y otra con extras. Resultado en la nube (antes de la prueba: **0 filas** en `invoice_item_modifiers` y **0** líneas con desglose):
+
+```
+invoice_item_modifiers:  Leche: Almendras 20.00 x1 · Canela 5.00 x1        (factura 32)
+                         Leche: Soya 20.00 x1 · Extra shot 15.00 x1 · Leche: Entera 0.00 x1 (33)
+
+discount_origin:
+  32 · Cappuccino 12oz  d=12.50 → {"promotion": 12.5}
+  33 · Latte 12oz       d=20.43 → {"manual": 7.93, "promotion": 12.5}
+  33 · Cappuccino 8oz   d=22.07 → {"manual": 12.07, "promotion": 10}
+```
+
+**Las dos identidades cierran exactas en datos del aparato** (7.93+12.5=20.43 y 12.07+10=22.07), y la factura 33 trae el caso que justificó el `jsonb`: **una línea con dos orígenes a la vez**.
+
+El panel, ventana de hoy: `manual 20 | promoción 35 | lealtad 0 | sin origen 0 | total 55` → **identidad 55 = 55** ✓. El "0" en "sin origen" es la mejor noticia: ningún peso quedó sin procedencia.
+
+**Cadena de auditoría del `S23TEST`:** 26 → 27 → 28 → **29** (`REPRINT_REQUESTED`), sin huecos y sin rechazos. El registro que la app mostraba pendiente **era la auditoría de la reimpresión**, y se fue al forzar el sync: era latencia de reintento, no un rechazo (el backend nunca contestó 4xx en `/identity/audit`).
+
+### Hallazgos de campo (medidos, NO arreglados)
+
+1. **"Las promociones no se apilan" — REFUTADO como configuración, y ahora es una pregunta abierta de UI.** En la base **las dos están `is_stackable = t`**. Reproduje la config real con un test temporal del motor puro (borrado después):
+
+   ```
+   QTY1 total=12.5   aplicadas=[10% Cafe Caliente: 12.5]
+   QTY2 total=150.0  aplicadas=[2x1 Cappuccino 12oz: 125.0, 10% Cafe Caliente: 25.0]
+   ```
+
+   El motor **sí las apila**: con dos capuccinos el descuento correcto es **C$150**. Si el carrito mostró C$125, la discrepancia es de **pantalla**, no de cálculo. **Falta el dato decisivo**: qué mostraba la fila "Promociones" con dos unidades. Queda como lo primero a perseguir en la sesión nueva (con captura del carrito).
+2. **`comboPackage` es un no-op silencioso.** En el motor: `case PromotionType.comboPackage: break;` — un combo configurado **no descuenta nada**, sin error ni aviso.
+3. **El descuento manual se acumula y no se puede quitar.** `_manualDiscount += discountAmount` (`sale_view_model.dart:1016`) y no existe ninguna acción de quitar/limpiar en la UI (grep de "Quitar/Remover" sobre el descuento: vacío). Con los topes en "sin tope", la acumulación es **ilimitada**. Decisión de producto/UX: ¿aplicar reemplaza o suma?, ¿hace falta un "quitar descuento"?
+4. **El detalle del historial no es espejo del carrito.** `sales_history_view_model.dart:342` arma los ítems con `toItemDomain` y **sin modifiers**, así que **los extras no aparecen** (el arreglo de reimpresión `2a4443d5` cubrió el **papel**, no esta pantalla); y el detalle muestra sólo subtotal/total, sin filas de descuento, promoción ni propina. Además la cifra por línea es el **total fiscal con impuesto** (C$112.93 sobre un producto de C$100) al lado del precio unitario del carrito. Es el mismo tipo de brecha que ya se cerró en el camino de impresión: cargar las filas de modifiers y pasarlas a `toItemDomain` en esa pantalla, más las filas que faltan.
+5. **Cambio de UX heredado del barrido (a favor):** el `maxLength` nativo truncaba el tipeo en silencio en el diálogo de catálogo; ahora hay mensaje en español.
+
+### Estado del rig al terminar (S23)
+
+APK `1.1.0+11021` de la rama instalado y apuntando a `http://127.0.0.1:3000/api` (necesita `adb reverse` vivo). Backend `:3000` con el `dist` de la rama y el espejo migrado (`180962`/`180963`/`180964`). Contraseña del dueño restaurada byte a byte. El bump de versión del `pubspec` **revertido**: la rama queda limpia para el PR.
