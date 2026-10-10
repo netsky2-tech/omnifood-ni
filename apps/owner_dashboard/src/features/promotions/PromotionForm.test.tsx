@@ -268,25 +268,173 @@ describe('PromotionForm', () => {
     });
   });
 
-  // T0.5'd: the category target is a picker over the synced catalog, not
+  describe('promotion form dates and create contract (promo-fix)', () => {
+  // What <input type="date"> actually yields: a plain 'YYYY-MM-DD' string,
+  // or '' when cleared. The schema must validate THAT, never a number.
+  const dateBase = {
+    name: 'Promo',
+    type: 'comboPackage',
+  };
+
+  it('schema: accepts a date exactly as the date input delivers it', () => {
+    const result = promotionFormSchema.safeParse({
+      ...dateBase,
+      start_date: '2025-01-15',
+      end_date: '2025-02-20',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.start_date).toBe('2025-01-15');
+      expect(result.data.end_date).toBe('2025-02-20');
+    }
+  });
+
+  it('schema: treats a cleared date input as empty, not as a valid-looking value', () => {
+    const result = promotionFormSchema.safeParse({
+      ...dateBase,
+      start_date: '',
+      end_date: '',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('schema: rejects a non-date string with actionable Spanish copy', () => {
+    const result = promotionFormSchema.safeParse({
+      ...dateBase,
+      start_date: '1730000000000',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const fieldError = result.error.issues.find((issue) => issue.path[0] === 'start_date');
+      expect(fieldError).toBeDefined();
+      expect(fieldError!.message).toMatch(/fecha/i);
+    }
+  });
+
+  it('date helpers: local YYYY-MM-DD round-trips through epoch ms (backend IsInt format)', async () => {
+    const { dateInputValueToEpochMs, epochMsToDateInputValue } = await import('./schema');
+    // Built from LOCAL clock parts so the pin is timezone-independent.
+    const localMidnightMs = new Date(2025, 0, 15).getTime();
+    expect(dateInputValueToEpochMs('2025-01-15')).toBe(localMidnightMs);
+    expect(epochMsToDateInputValue(localMidnightMs)).toBe('2025-01-15');
+  });
+
+  it('date helpers: empty/absent dates map to empty, never to 0', async () => {
+    const { dateInputValueToEpochMs, epochMsToDateInputValue } = await import('./schema');
+    expect(dateInputValueToEpochMs('')).toBeUndefined();
+    expect(epochMsToDateInputValue(null)).toBe('');
+    expect(epochMsToDateInputValue(undefined)).toBe('');
+  });
+
+  it('editing a promotion renders dates as YYYY-MM-DD in date inputs', () => {
+    const localStart = new Date(2025, 0, 15).getTime();
+    const localEnd = new Date(2025, 1, 20).getTime();
+    renderForm({ ...mockPromotion, start_date: localStart, end_date: localEnd });
+    expect(screen.getByLabelText('Fecha Inicio')).toHaveValue('2025-01-15');
+    expect(screen.getByLabelText('Fecha Fin')).toHaveValue('2025-02-20');
+  });
+
+  // THE pin that would have caught the outage: the create payload's key set
+  // is exactly what CreatePromotionDto whitelists (create-promotion.dto.ts).
+  // 'is_active' is not in that whitelist, so a form that leaks it into the
+  // create payload fails this test and the backend rejects the whole request
+  // (forbidNonWhitelisted).
+  it('create payload key set matches the create endpoint whitelist exactly', async () => {
+    renderForm(null);
+    fireEvent.change(screen.getByLabelText('Nombre *'), { target: { value: 'Promo Test' } });
+    fireEvent.change(screen.getByLabelText('Fecha Inicio'), { target: { value: '2025-01-15' } });
+    fireEvent.change(screen.getByLabelText('Fecha Fin'), { target: { value: '2025-02-20' } });
+    fireEvent.click(screen.getByRole('button', { name: /crear/i }));
+    await waitFor(() => {
+      expect(mockCreatePromotion.mutateAsync).toHaveBeenCalled();
+    });
+    const payload = mockCreatePromotion.mutateAsync.mock.calls[0]![0];
+    const whitelist = [
+      'name',
+      'type',
+      'target_product_id',
+      'buy_quantity',
+      'get_quantity',
+      'discount_value',
+      'min_order_amount',
+      'days_of_week',
+      'start_time',
+      'end_time',
+      'start_date',
+      'end_date',
+      'priority',
+      'is_stackable',
+    ].sort();
+    expect(Object.keys(payload).sort()).toEqual(whitelist);
+  });
+
+  it('create payload leaves dates in the backend format (epoch ms numbers)', async () => {
+    renderForm(null);
+    fireEvent.change(screen.getByLabelText('Nombre *'), { target: { value: 'Promo Test' } });
+    fireEvent.change(screen.getByLabelText('Fecha Inicio'), { target: { value: '2025-01-15' } });
+    fireEvent.click(screen.getByRole('button', { name: /crear/i }));
+    await waitFor(() => {
+      expect(mockCreatePromotion.mutateAsync).toHaveBeenCalled();
+    });
+    const payload = mockCreatePromotion.mutateAsync.mock.calls[0]![0];
+    expect(payload.start_date).toBe(new Date(2025, 0, 15).getTime());
+    expect(payload).not.toHaveProperty('end_date');
+  });
+
+  // R3-001 pin: in EDIT mode a cleared date must travel as an explicit
+  // null on the update payload — the update is a partial patch, so an
+  // omitted key would leave the stored date untouched and the operator's
+  // clear would silently fail while the field's copy says empty is
+  // allowed. (CREATE keeps omitting the key; see the create pins above.)
+  it('update payload carries a cleared date as an explicit null, not an omitted key', async () => {
+    const localStart = new Date(2025, 0, 15).getTime();
+    const localEnd = new Date(2025, 1, 20).getTime();
+    renderForm({ ...mockPromotion, start_date: localStart, end_date: localEnd });
+    fireEvent.change(screen.getByLabelText('Fecha Inicio'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /actualizar/i }));
+    await waitFor(() => {
+      expect(mockUpdatePromotion.mutateAsync).toHaveBeenCalled();
+    });
+    const dto = mockUpdatePromotion.mutateAsync.mock.calls[0]![0].dto;
+    expect(dto).toHaveProperty('start_date', null);
+    // An untouched date keeps travelling as an epoch-ms number.
+    expect(dto.end_date).toBe(localEnd);
+  });
+
+  // AP-10: a rejected create must surface the surface's own Spanish copy,
+  // never the backend's raw property name.
+  it('a rejected create shows Spanish copy, never a raw backend property name', async () => {
+    mockCreatePromotion.mutateAsync.mockRejectedValueOnce({
+      status: 400,
+      responseBody: { message: ['property is_active should not exist'] },
+      message: 'property is_active should not exist',
+    });
+    renderForm(null);
+    fireEvent.change(screen.getByLabelText('Nombre *'), { target: { value: 'Promo Test' } });
+    fireEvent.click(screen.getByRole('button', { name: /crear/i }));
+    await waitFor(() => {
+      expect(toast).toHaveBeenCalled();
+    });
+    const toastCall = (toast as any).mock.calls[0]![0];
+    expect(toastCall.title).toBe('Error al guardar promoción');
+    expect(toastCall.description).toMatch(/solicitud inv/i);
+    expect(toastCall.description).not.toMatch(/is_active/);
+  });
+});
+
+// T0.5'd: the category target is a picker over the synced catalog, not
   // free text, and the submit contract differs by mode: create omits ''
   // (global), update maps '' to an explicit null (clear to global).
   describe("target category picker (T0.5'd)", () => {
     const catBebidas = '11111111-1111-4111-8111-111111111111';
     const catPostres = '22222222-2222-4222-8222-222222222222';
 
-    // A real submission fills the optional timestamp fields; leaving them
-    // empty trips a pre-existing NaN quirk of the numeric inputs that is
-    // outside this work unit's scope.
+    // A real submission needs only a name: the date inputs are optional and
+    // a cleared date is valid ('' = no date bound), so nothing else must be
+    // filled to reach the mutation.
     const fillRequiredFields = () => {
       fireEvent.change(screen.getByLabelText('Nombre *'), {
         target: { value: 'Promo Test' },
-      });
-      fireEvent.change(screen.getByLabelText('Fecha Inicio (timestamp)'), {
-        target: { value: '1730000000000' },
-      });
-      fireEvent.change(screen.getByLabelText('Fecha Fin (timestamp)'), {
-        target: { value: '1730086400000' },
       });
     };
 
