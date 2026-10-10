@@ -92,9 +92,9 @@ Cada uno con ruta, esperado y slot de evidencia. **El usuario maneja la UI; el a
 - **Evidencia:** `item8-nc.png`, `item8-historial-nc.png`, `item8-historial-totales.png` + `invoices`/`audit_logs` en la nube.
 
 ### 9 · Los arreglos de esta sesión, en el aparato
-- **§18.2 la etiqueta del cobro:** cuenta con **centavos** (C$ 202.50) → el chip debe decir `C$ 202.50` (antes `C$ 203`) y el campo quedar con el mismo número. **Lo más rápido de verificar y lo más caro si se equivoca: es camino de dinero.**
-- **§18.3 el tenant de lealtad:** ya cubierto por el ítem 7 (si la tarjeta aparece, el tenant se resolvió).
-- **Los `noValidate` del dashboard:** se verifican **en el navegador**, no en el aparato (formularios web). Cierre separado, sin device.
+- **§18.3 el tenant de lealtad — CUBIERTO por el ítem 7 ✅** (la tarjeta de lealtad apareció: el tenant se resolvió desde el binding del terminal).
+- **Los `noValidate` del dashboard — VERIFICADO 7/7 ✅ (2026-10-10, navegador en `:5173`).** Campos obligatorios vacíos + Enter en cada formulario → aparece el error propio de la app en español y **ningún** globito nativo del navegador; el submit válido sigue funcionando. Formularios: Login · Perfil del Negocio (`fiscal-setup-form`) · Promoción · Grupo de modificadores · Programa/Recompensa de lealtad · Perfil de lealtad del cliente · Revocar dispositivo.
+- **§18.2 la etiqueta del cobro — NO capturada en esta sesión.** El APK de la ronda **sí** incluye el arreglo (su base `006d45f6` ya trae #854), y los cobros de la ronda con centavos fueron exactos en base (factura 41 = C$13.75; 42/43 = C$93.75, con el `discount` y el `discount_origin` cerrando al centavo), pero el **texto del chip** del cobro no se capturó como evidencia. Queda pendiente de captura; requiere un terminal con la activación completa (ver T6).
 
 ### 10 · T5 y T6 de la ronda anterior (`soho-s23-device-validation.md`)
 - **T5 (#79) copia ANULADO con gate y resultado honesto — PASS en las dos rutas (2026-10-10):**
