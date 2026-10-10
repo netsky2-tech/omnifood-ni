@@ -86,6 +86,11 @@ void main() {
   late TestAuthRepository authRepo;
   late CustomerIdentificationService identificationService;
   const evaluationService = LoyaltyEvaluationService();
+
+  // P3 (18.3): the tenant the loyalty lookup resolves from the local binding --
+  // NOT the customer id. Every program and reward below used to be seeded under
+  // `customerId`, which is exactly the bug that fix removed.
+  const e2eTenantId = 'tenant-e2e';
   final rewardInteractionService = LoyaltyRewardInteractionService(
     evaluationService,
   );
@@ -128,6 +133,11 @@ void main() {
     );
     await database.localConfigDao.saveConfig(
       LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
+    );
+    // P3 (18.3): the lookup resolves its tenant from THIS key -- the same one
+    // the sync writes -- and fails closed without it.
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(key: 'tenant_id', value: e2eTenantId),
     );
     salesRepo = TestSalesRepository();
     inventoryRepo = TestInventoryRepository();
@@ -254,7 +264,7 @@ void main() {
           await database.loyaltyProgramDao.saveProgram(
             LoyaltyProgramEntity(
               id: programId,
-              tenantId: customerId,
+              tenantId: e2eTenantId,
               name: 'Puntos Cashback',
               programType: 'spendPoints',
               status: 'ACTIVE',
@@ -272,7 +282,7 @@ void main() {
           await database.loyaltyRewardDao.saveReward(
             LoyaltyRewardEntity(
               id: rewardId,
-              tenantId: customerId,
+              tenantId: e2eTenantId,
               loyaltyProgramId: programId,
               name: 'C\$20 Descuento',
               rewardType: 'discountAmount',
@@ -320,7 +330,14 @@ void main() {
 
           // 8. Verificar que la venta guardó el invoice
           expect(salesRepo.lastInvoice, isNotNull);
-          expect(salesRepo.lastInvoice!.subtotal, equals(350.0));
+          // The C$ 20 reward benefit is a DISCOUNT on the line that carries the
+          // loyalty origin (invoice_items.discount_origin), so the invoice's
+          // fiscal subtotal is the post-discount base: 350 - 20. The cart's own
+          // subtotal stays 350 -- asserted above -- because it is the
+          // pre-discount base the discount lines are subtracted from. Before
+          // the P3 fix the reward never reached the cart, so this read 350 and
+          // the customer paid C$ 20 too much.
+          expect(salesRepo.lastInvoice!.subtotal, equals(330.0));
 
           // 9. Verificar persistencia atómica en tabla SQLite customer_point_transactions
           final txRows = await database.customerPointTransactionDao
@@ -359,7 +376,7 @@ void main() {
           await database.loyaltyProgramDao.saveProgram(
             LoyaltyProgramEntity(
               id: programId,
-              tenantId: customerId,
+              tenantId: e2eTenantId,
               name: 'Puntos Re-eval',
               programType: 'spendPoints',
               status: 'ACTIVE',
@@ -377,7 +394,7 @@ void main() {
           await database.loyaltyRewardDao.saveReward(
             LoyaltyRewardEntity(
               id: rewardId,
-              tenantId: customerId,
+              tenantId: e2eTenantId,
               loyaltyProgramId: programId,
               name: 'C\$10 Descuento',
               rewardType: 'discountAmount',
@@ -430,7 +447,7 @@ void main() {
           await database.loyaltyProgramDao.saveProgram(
             LoyaltyProgramEntity(
               id: programId,
-              tenantId: customerId,
+              tenantId: e2eTenantId,
               name: 'Club de la Hamburguesa',
               programType: 'productStamps',
               status: 'ACTIVE',
@@ -448,7 +465,7 @@ void main() {
           await database.loyaltyRewardDao.saveReward(
             LoyaltyRewardEntity(
               id: rewardId,
-              tenantId: customerId,
+              tenantId: e2eTenantId,
               loyaltyProgramId: programId,
               name: 'Hamburguesa Gratis',
               rewardType: 'freeProduct',
@@ -523,7 +540,7 @@ void main() {
           await database.loyaltyProgramDao.saveProgram(
             LoyaltyProgramEntity(
               id: 'prog-spend-multi',
-              tenantId: customerId,
+              tenantId: e2eTenantId,
               name: 'Puntos Gasto',
               programType: 'spendPoints',
               status: 'ACTIVE',
@@ -542,7 +559,7 @@ void main() {
           await database.loyaltyProgramDao.saveProgram(
             LoyaltyProgramEntity(
               id: 'prog-visit-multi',
-              tenantId: customerId,
+              tenantId: e2eTenantId,
               name: 'Visitas Café',
               programType: 'visitStamps',
               status: 'ACTIVE',

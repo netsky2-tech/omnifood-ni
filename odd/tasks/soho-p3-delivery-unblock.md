@@ -137,3 +137,19 @@ Tests:       13 failed, 8 skipped, 3909 passed, 3930 total
 
 - [x] **T7 · Desbloquear POS App CI** (sintaxis + generado rancio).
 - [x] **T8 · Desbloquear Admin Backend unit tests** (mocks de los dos specs).
+
+### 4.3 · POS: el e2e de lealtad codificaba el bug que el §18.3 arregló
+
+`test/e2e/loyalty_v1_real_sqlite_e2e_test.dart` **pasa completo en `main`** y fallaba 4 tests en la rama (`currentEvaluation.programs` vacío y `selectReward` sin efecto sobre `selectedReward`). El archivo sembraba cada programa y cada recompensa con `tenantId: customerId` y su config local **nunca tuvo la clave `tenant_id`**: es exactamente el bug del §18.3, pineado en el e2e que la suit unitaria ya había re-clavado. Arreglo: sembrar el binding y re-clavar los 8 fixtures; la aserción del invoice se mueve con el diseño (el beneficio de C$20 es descuento **por línea**, así que el subtotal fiscal de la factura es 350−20 mientras el subtotal del carrito sigue en 350 — aserción que el propio test ya hacía). **6/6.**
+
+### 4.4 · Los 4 fallos preexistentes de `main` en la suite del POS (NO son del bloque)
+
+Suite completa del POS: **3394 pasan, 10 fallan**. Desglose:
+
+- **2 son flakes** de `flutter_tester` (`Unable to connect to flutter_tester process`): desaparecen corriendo los archivos aislados con `--concurrency=1`, que es el ruido de toolchain que AGENTS.md ya documenta bajo presión de memoria.
+- **4 son del bloque** (el e2e de lealtad, §4.3) → arreglados.
+- **4 son preexistentes de `main`**: `phase5_blind_count_shift_closure_integration_test.dart`, `phase3_complex_multicurrency_split_integration_test.dart` y `phase1_rbac_override_integration_test.dart` (×2). **Reproducidos idénticos en un worktree limpio de `origin/main` (`fc44002b`)**: mismos mensajes (`Bad state: No element` en `firstWhere`, `Expected: true / Actual: false`), mismos tests.
+
+  **Por qué nadie los vio:** `POS App CI` en `main` está rojo **desde 2026-10-08 20:42** (último verde: `958122cf`, 17:02) en el step `Analyze project source`. Con `analyze` fatal, `Run tests` **nunca corrió** en main: la suite completa del POS lleva ~2 días sin ejecutarse en CI. Los dos infos preexistentes que la rompían (`use_function_type_syntax_for_parameters`, en dos tests de vouchers) se arreglan en este PR, así que después de esto la suite vuelve a correr — y expone estos 4 fallos viejos.
+
+  **Decisión pendiente del usuario:** arreglarlos en este PR (fuera del alcance del bloque) o registrarlos como issue propia y entregar con el gate rojo por causa preexistente.
