@@ -27,10 +27,10 @@ La primera sugerencia es **el total exacto** (`currency_checkout_calculator.dart
 
 **Decisión de producto (entre las dos que el doc dejó planteadas):** la etiqueta muestra **exactamente lo que el tap aplica**, con la precisión del propio valor — entera sin decimales, con centavos con dos. Se descarta la otra opción (redondear también el valor aplicado) porque **cambia el dinero**: el operador cobraría 203 por una cuenta de 202.50 y el vuelto se calcularía sobre eso. Esta opción no toca ninguna semántica de dinero: sólo deja de mentir la pantalla.
 
-- [ ] `_formatSuggestionAmount(double)` → `amount == amount.roundToDouble() ? toStringAsFixed(0) : toStringAsFixed(2)`, usado en las dos ramas (NIO y USD).
-- [ ] El valor aplicado por el tap **no cambia** (`toStringAsFixed(2)`): el campo de monto usa dos decimales en todo el diálogo.
-- [ ] Test de primera: **para cada chip, la etiqueta tiene que ser el mismo monto que el tap aplica**. Con un total de 202.50 el chip dice `C$ 202.50` (antes `C$ 203`), con un total entero dice `C$ 300`, y en los dos casos el campo queda con el mismo número. RED antes del arreglo.
-- [ ] Ojo con el `Set` de `getSuggestedDenominations`: acá **no** se toca (la colisión exacto/redondeado era un riesgo de la opción descartada). Verificarlo igual con un total entero que coincida con una denominación fija (300) para que no aparezcan dos chips iguales.
+- [x] `_formatSuggestionAmount(double)` → `amount == amount.roundToDouble() ? toStringAsFixed(0) : toStringAsFixed(2)`, usado en las dos ramas (NIO y USD).
+- [x] El valor aplicado por el tap **no cambia** (`toStringAsFixed(2)`): el campo de monto usa dos decimales en todo el diálogo.
+- [x] Test de primera: **para cada chip, la etiqueta tiene que ser el mismo monto que el tap aplica**, en las dos monedas. RED antes del arreglo, y el verificador independiente probó que es un test con carga (abajo).
+- [x] **Cerrado, no aplica:** el `Set` de `getSuggestedDenominations` no se toca — sólo cambió el formato de la etiqueta, que no participa del `Set` — así que no hay colisión nueva que evitar. El verificador confirmó que `currency_checkout_calculator.dart` no está en el commit.
 
 ## Unidad 2 · Los cuatro formularios que faltaban del barrido
 
@@ -56,10 +56,10 @@ El cuarto es el que el handoff no nombraba. Su único atributo nativo es `type="
 
 ## Tareas
 
-- [ ] **T1** §18.2: RED del test de equivalencia etiqueta↔tap, después el helper y el arreglo.
-- [ ] **T2** `noValidate` + comentario en los 4 formularios, con un pin por formulario (el esquema/guarda de la app sigue siendo la única guarda).
-- [ ] **T3** Verificación: suites focales de POS y dashboard; `flutter analyze`; `tsc -b`; `oxlint`.
-- [ ] **T4** Commits por unidad de trabajo + PR chico (uno solo, `type:bug`).
+- [x] **T1** §18.2: RED del test de equivalencia etiqueta↔tap, después el helper y el arreglo.
+- [x] **T2** `noValidate` + comentario en los 4 formularios, con un pin por formulario (el esquema/guarda de la app sigue siendo la única guarda).
+- [x] **T3** Verificación: suites focales de POS y dashboard; `flutter analyze`; `tsc -b`; `oxlint`.
+- [x] **T4** Commits por unidad de trabajo + PR chico (**#854**, `type:bug`).
 - [ ] **T5** (siguiente, fuera de este PR) `odd/tasks/soho-s23-round2.md` con los 10 ítems de validación en aparato.
 
 ## Gates
@@ -72,3 +72,35 @@ El cuarto es el que el handoff no nombraba. Su único atributo nativo es `type="
 | Dashboard: suites de los 4 | los specs de login, promociones, modifiers y `w10-customer-loyalty-profile` | verdes |
 
 **Nunca** suites completas con subagentes vivos (techo de memoria de `AGENTS.md`); Jest con `--maxWorkers=2`, Flutter con `--concurrency=1` ó 2.
+
+---
+
+## Verificación (independiente, no la palabra del writer)
+
+El plan de ASSESS para este candidato salió **riesgo alto** (señal hot-path en `w1-auth.test.tsx`), así que exigió **verificador independiente** además de la auto-verificación del writer. Resultado, claim por claim:
+
+- **La prueba de carga del test del POS (lo importante):** el verificador exportó el commit a un worktree de scratch, **volvió a poner el redondeo** (`toStringAsFixed(0)` en las dos ramas, con el tap intacto en `toStringAsFixed(2)`) y corrió el test nuevo. Falló con exactamente el RED que cita el commit:
+  ```
+  Expected: <203.0>
+    Actual: <202.5>
+  chip label "C$ 203" must equal the amount the tap applies (field: "202.50")
+  ```
+  El worktree del candidato quedó byte-idéntico (`sha256` de los dos archivos igual antes y después).
+- **El test no es vacuo:** recorre **todos** los `ActionChip` (`findsWidgets` antes del bucle), parsea el monto de la etiqueta, tapea, relee el campo y compara. Con `grandTotalWithTip = 202.50` el calculador devuelve 5 sugerencias `[202.5, 300, 400, 500, 1000]`.
+- **Lo único que cambió es la etiqueta:** el valor aplicado sigue en `toStringAsFixed(2)` y `currency_checkout_calculator.dart` no está en el commit.
+- **Ninguna aserción previa se debilitó:** en los 4 archivos de test, las eliminaciones son **0** (`--numstat`); todos los hunks son bloques `it(...)` agregados.
+- **Nada fuera de lo previsto:** `git diff --name-only origin/main..HEAD` devuelve exactamente los 11 paths permitidos.
+
+**Gates** (los mismos que corrió el verificador, reproducibles desde el árbol limpio):
+
+| Gate | Resultado |
+|---|---|
+| `flutter test --concurrency=1 test/ui/features/sales/multi_currency_checkout_dialog_test.dart` | **13/13** (eran 11 + los dos nuevos) |
+| `flutter analyze` | `No issues found!` |
+| `npx tsc -b --noEmit` (dashboard) | limpio |
+| `npx oxlint src` | 0 errores, 10 warnings preexistentes en archivos no tocados |
+| 4 suites del dashboard | **74 passed / 1 skipped** (el skip es un `it.skip` preexistente) |
+
+**Huecos que el verificador dejó abiertos, y qué hice con ellos:**
+1. *"El test sólo ejercita la rama NIO; la USD está arreglada pero no cubierta."* → Cerrado: se agregó el mismo invariante con tender USD (`Chip 'USD ($)'`), 13/13. El invariante se cumple por construcción en las dos ramas porque etiqueta y campo redondean a dos decimales cuando el valor es fraccionario.
+2. *"Los chips enteros pasan con cualquiera de las dos implementaciones."* → Cierto y aceptable: el pin muerde mientras exista una sugerencia fraccionaria, y la primera sugerencia **es** el total exacto, así que siempre hay una.
