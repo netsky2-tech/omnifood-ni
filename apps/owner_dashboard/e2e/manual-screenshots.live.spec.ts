@@ -1,7 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveLiveEnv } from "../src/lib/live-api-base";
+import {
+  requiredLiveEnv,
+  resolveLiveEnv,
+  resolveLiveWebTarget,
+} from "../src/lib/live-api-base";
 
 /**
  * MANUAL SCREENSHOT CAPTURE for the owner-dashboard operation manual.
@@ -14,6 +18,23 @@ import { resolveLiveEnv } from "../src/lib/live-api-base";
  * Opt-in (needs the live stack + the soho seeded credential):
  *
  *   NHILOS_MANUAL_CAPTURE=1 npx playwright test -c playwright.live.config.ts manual-screenshots
+ *
+ * Operator contract (npm run test:e2e:capture, from apps/owner_dashboard):
+ *
+ * - Runs against the REAL `soho` tenant, NOT the `soho-test-fixture` tenant
+ *   used by the automated live suites: the walkthrough data this spec
+ *   navigates by (`CAFÉ CALIENTE` category, `Americano 12oz` product, and
+ *   exactly 3 active modifier groups) only exists in `soho`.
+ * - Required environment variables:
+ *   - `NHILOS_MANUAL_CAPTURE=1` — the opt-in gate (own gate, NOT
+ *     `NHILOS_LIVE_E2E`).
+ *   - `MANUAL_E2E_BASE_URL` — optional web origin; defaults to
+ *     `http://soho.localhost:5174`.
+ *   - `MANUAL_E2E_EMAIL` — optional login email; defaults to
+ *     `admin@soho.com`.
+ *   - `MANUAL_E2E_PASS` — REQUIRED, no committed default: the credential is
+ *     read with `requiredLiveEnv` and unset/blank fails the run before any
+ *     navigation (issue #839).
  *
  * Facts a reader should know before trusting these captures:
  *
@@ -35,11 +56,41 @@ import { resolveLiveEnv } from "../src/lib/live-api-base";
  */
 
 const CAPTURE = process.env.NHILOS_MANUAL_CAPTURE === "1";
-// Blank/unset env falls back to these defaults instead of an empty base URL or
-// an empty credential (src/lib/live-api-base.ts).
-const BASE = resolveLiveEnv("MANUAL_E2E_BASE_URL", "http://soho.localhost:5174");
+// Targets (base URL, email) keep their canonical defaults (issue #828);
+// the PASSWORD is a credential and must come from the environment, never a
+// committed fallback (issue #839). It is required when the run actually
+// starts (below), NOT at module scope: module scope also executes during
+// `playwright test --list`, and listing must keep working without the
+// credential. The requirement still lands before the first navigation.
+// Tenant binding, resolved at module scope BEFORE any navigation, through the
+// unit-tested helper (`src/lib/live-api-base.ts` -> `resolveLiveWebTarget`).
+//
+// Why it exists: this spec navigates with its own absolute BASE
+// (MANUAL_E2E_BASE_URL) on every page.goto, so `NHILOS_LIVE_BASE` — the variable
+// playwright.live.config.ts uses for baseURL — silently does nothing here. An
+// operator who sets only the canonical variable would capture against whichever
+// tenant the host actually names while believing they overrode it, and a wrong
+// tenant yields captures taken under the wrong identity (the walkthrough data
+// above only exists in `soho`).
+//
+// Why the hostname is compared EXACTLY rather than by first label:
+// `soho.evil.com` and `soho.localhost.evil.com` both start with the expected
+// label, and a label check would accept them and capture against an unrelated
+// deployment. Pointing this suite at any other host is a deliberate edit to the
+// constant below, never an environment tweak.
+const EXPECTED_TENANT_LABEL = "soho";
+const BASE = resolveLiveWebTarget(
+  "MANUAL_E2E_BASE_URL",
+  `http://${EXPECTED_TENANT_LABEL}.localhost:5174`,
+  EXPECTED_TENANT_LABEL,
+).origin;
 const EMAIL = resolveLiveEnv("MANUAL_E2E_EMAIL", "admin@soho.com");
-const PASSWORD = resolveLiveEnv("MANUAL_E2E_PASS", "C0ntr4sen4");
+let PASSWORD = "";
+test.beforeAll(() => {
+  if (CAPTURE) {
+    PASSWORD = requiredLiveEnv("MANUAL_E2E_PASS");
+  }
+});
 
 // Walkthrough data (section 6 narrative): one plausibly-named group with two
 // options carrying real price deltas, attached to a category that really has
