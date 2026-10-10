@@ -308,4 +308,55 @@ describe('LV1.5D — CustomerLoyaltyProfile', () => {
       expect(screen.getByText('Sin transacciones registradas')).toBeInTheDocument();
     });
   });
+
+  it('pins noValidate on the adjust form and keeps the JS guards as the only submit guards', async () => {
+    // This form has NO RHF; its guards are plain JS checks (delta === 0,
+    // empty reason) and the only native attribute is type="number" on the
+    // points input — so today nothing blocks a submit natively. noValidate
+    // is inert today; it is pinned so a future native attribute
+    // (required/min/max) cannot silently become the first guard and
+    // replace the Spanish inline error with the browser's own bubble.
+    const adjustMutateAsync = vi.fn().mockResolvedValue({});
+    vi.mocked(useAdjustPoints).mockReturnValue({
+      mutateAsync: adjustMutateAsync,
+      isPending: false,
+    } as any);
+
+    const user = userEvent.setup();
+    mockCustomers(MOCK_CUSTOMERS);
+    mockAccounts(MOCK_ACCOUNTS);
+    mockTransactions([]);
+
+    render(
+      <TestWrapper>
+        <CustomerLoyaltyProfile />
+      </TestWrapper>,
+    );
+
+    await user.click(screen.getByText('Carlos Mendoza'));
+    await user.click(screen.getByRole('button', { name: 'Ajuste manual' }));
+
+    // (a) — the form element carries noValidate.
+    const form = await screen.findByRole('dialog');
+    const formEl = form.querySelector('form');
+    expect(formEl).not.toBeNull();
+    expect(formEl).toHaveAttribute('noValidate');
+
+    // (b) — delta 0 is refused by the app-owned guard, never the mutation.
+    await user.click(screen.getByRole('button', { name: /aplicar ajuste/i }));
+    await waitFor(() => {
+      expect(screen.getByText('El monto debe ser diferente de cero')).toBeInTheDocument();
+    });
+    expect(adjustMutateAsync).not.toHaveBeenCalled();
+
+    // (b) — an empty reason is refused by the app-owned guard too.
+    const deltaInput = screen.getByLabelText('Cantidad de puntos');
+    await user.clear(deltaInput);
+    await user.type(deltaInput, '100');
+    await user.click(screen.getByRole('button', { name: /aplicar ajuste/i }));
+    await waitFor(() => {
+      expect(screen.getByText('La razón es obligatoria')).toBeInTheDocument();
+    });
+    expect(adjustMutateAsync).not.toHaveBeenCalled();
+  });
 });

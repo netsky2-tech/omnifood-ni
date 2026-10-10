@@ -72,7 +72,13 @@ function AdjustDialog({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    // noValidate: this form has no RHF; its guards are plain JS checks
+    // (delta === 0, empty reason). Today no native attribute can block a
+    // submit, so noValidate is inert — it is added so a future native
+    // attribute (required/min/max) cannot silently become the first guard
+    // and replace the Spanish inline error with the browser's own
+    // validation bubble (browser language and styling).
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div className="p-3 bg-muted rounded-lg text-sm">
         <p className="font-medium">{customer.name}</p>
         <p className="text-muted-foreground">Saldo actual: {customer.points_balance} pts</p>

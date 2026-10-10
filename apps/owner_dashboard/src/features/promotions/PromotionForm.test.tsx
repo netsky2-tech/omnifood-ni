@@ -229,6 +229,26 @@ describe('PromotionForm', () => {
     });
   });
 
+  it('pins noValidate on the form and keeps zod/RHF as the only submit guard', async () => {
+    renderForm(null);
+
+    // (a) — the form element carries noValidate, so the browser's native
+    // constraint validation can never replace the Spanish inline errors.
+    // (DialogContent portals the form, so look it up in the document.)
+    const form = document.querySelector('form');
+    expect(form).not.toBeNull();
+    expect(form).toHaveAttribute('noValidate');
+
+    // (b) — the schema rejects an empty name: no mutation call, Spanish
+    // inline error from the design system.
+    fireEvent.click(screen.getByRole('button', { name: /crear/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('El nombre es requerido')).toBeInTheDocument();
+    });
+    expect(mockCreatePromotion.mutateAsync).not.toHaveBeenCalled();
+  });
+
   it.skip('shows validation error for discount type without discount value', async () => {
     renderForm(null);
     

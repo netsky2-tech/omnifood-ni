@@ -83,7 +83,13 @@ export function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {/* noValidate: the application's own zod validation (via the RHF
+            resolver) is the single source of operator feedback. Native HTML
+            constraint validation would otherwise block the submit event
+            before handleSubmit runs, replacing the design system's Spanish
+            inline errors with the browser's own validation bubble (browser
+            language and styling). */}
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
           <div>
             <label
               htmlFor="email"

@@ -133,6 +133,18 @@ describe("W1 — LoginPage", () => {
     });
     expect(vi.mocked(apiModule.api.post)).not.toHaveBeenCalled();
   });
+
+  it("pins noValidate on the login form so zod/RHF stays the only guard", () => {
+    // (a) — the form element carries noValidate, so the browser's native
+    // constraint validation can never replace the Spanish inline errors.
+    // (b) — the app-owned guard refusing a rejected submit — is already
+    // pinned by "shows validation error for invalid email" and
+    // "does not submit with empty fields" (api.post never called).
+    const { container } = render(<LoginPage />, { wrapper: TestWrapper });
+    const form = container.querySelector("form");
+    expect(form).not.toBeNull();
+    expect(form).toHaveAttribute("noValidate");
+  });
 });
 
 describe("W1 — LoginPage error states", () => {

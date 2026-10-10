@@ -141,7 +141,13 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   const showDiscountFields = watchedType === PromotionType.PERCENTAGE_DISCOUNT || watchedType === PromotionType.FIXED_DISCOUNT;
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    // noValidate: the application's own zod validation (via the RHF
+    // resolver) is the single source of operator feedback. Native HTML
+    // constraint validation would otherwise block the submit event
+    // before handleSubmit runs, replacing the design system's Spanish
+    // inline errors with the browser's own validation bubble (browser
+    // language and styling).
+    <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-6">
       <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
