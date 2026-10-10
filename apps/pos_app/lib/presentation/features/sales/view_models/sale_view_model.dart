@@ -1717,6 +1717,7 @@ class SaleViewModel extends ChangeNotifier {
     _applyPromotions();
     // R-4: a cart change supersedes a stale checkout failure banner.
     _lastCheckoutError = null;
+    _clearCustomerWhenCartEmptied();
     notifyListeners();
   }
 
@@ -1741,8 +1742,16 @@ class SaleViewModel extends ChangeNotifier {
       _applyPromotions();
       // R-4: a cart change supersedes a stale checkout failure banner.
       _lastCheckoutError = null;
+      _clearCustomerWhenCartEmptied();
       notifyListeners();
     }
+  }
+
+  /// Round-2 D-2: `clearCart()` covers the explicit paths; this covers the
+  /// operator emptying the cart item by item, which never calls it (the
+  /// reported field defect: the customer stayed selected for the next sale).
+  void _clearCustomerWhenCartEmptied() {
+    if (_cart.isEmpty) clearCustomer();
   }
 
   void toggleGlobalTaxExempt() {
@@ -1752,6 +1761,12 @@ class SaleViewModel extends ChangeNotifier {
 
   void clearCart() {
     _cart.clear();
+    // Round-2 D-2: the selected customer — and every loyalty fact derived
+    // from them (evaluation, points to redeem, selected reward) — belongs to
+    // ONE cart. clearCart runs after every successful checkout and on every
+    // explicit discard, so a retained customer would award points or redeem
+    // a reward for somebody who already left the counter.
+    clearCustomer();
     _isGlobalTaxExempt = false;
     _promotionDiscount = 0.0;
     // D-7/S1a-class hygiene: the per-product promotion weights belong to ONE
