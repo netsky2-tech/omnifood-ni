@@ -84,6 +84,37 @@ capture that also violated the port rule from #830 (`:5173` belongs to another w
 host). The user chose **delete it in this PR**. The documented single path is now
 `npm run test:e2e:capture`, and the media inventory records that.
 
+## Delivery route (why this landed as #851, not #848)
+
+The work was first delivered as PR #848 on `test/manual-capture-explicit-creds` in four commits. GitGuardian
+failed it with "1 secret uncovered" and kept failing it after the literals were cleaned off the tip: the check
+scans the **whole commit range of the PR**, so `c2d66d8d` and `0b9a7f3b` — which *added* the old password as
+ODD prose and an embedded-credential URL as a test fixture — held the finding open no matter what HEAD said.
+
+Squashing is a history rewrite of an already-pushed branch, and the harness refuses a force-push as a
+destructive operation, so the branch was re-delivered instead of rewritten:
+
+- `1ac2eace` on `test/manual-capture-explicit-creds-v2` → **PR #851**, one work-unit commit, no added line
+  carrying a credential shape or the old value
+- **PR #848 closed, not merged**; its four commits stay reachable on the old branch (plus
+  `backup/manual-capture-4commits` locally), so nothing was erased — #851 replaces it
+- follow-up **omnifood-ni#852**: the same credential is still published in three *historical* `odd/tasks/`
+  documents and needs rotation, which is the only real fix (removing text from a tracked file does not
+  remove it from git history)
+
+## Native review lineage
+
+| Lineage | Candidate | Result | Acknowledged |
+| --- | --- | --- | --- |
+| `review-7988c8120f7f7730` | `c2d66d8d` (first candidate, 423 lines) | APPROVED, 5 informational advisories | yes |
+| `review-bf43ed8ce9646998` | `0b9a7f3b` (hardened guard, 613 lines) | APPROVED, 1 informational suggestion | yes |
+| `review-b03ed77f376d9fb0` | `12b16088` (scanner hygiene, 618 lines) | APPROVED, 3 informational advisories | yes |
+| `review-9becdbcdc52b9351` | `1ac2eace` (delivered candidate, 628 lines, medium tier, lens `review-reliability`) | **APPROVED** — receipt `sha256:517b92fc3756f466661dbfcd3e6f7645ca86c167dd866b9257be708f35b432f0`, 2 informational advisories (`live-api-base.test.ts:206-218`, `:243-249`, the two indirect no-leak assertion shapes) | yes — authority burned |
+
+The first three belonged to the superseded branch and are kept as history, not as authority for the delivered
+commit. No advisory opened a correction on any candidate. Review approval never authorizes delivery: merge and
+close were ordinary repository decisions.
+
 ## Acceptance criteria
 
 - [x] No committed password: a repo-wide grep for the old default, restricted to `.ts`/`.cjs`/`.json`, returns nothing (see below for where the literal still survives)lude=*.cjs --include=*.json`
