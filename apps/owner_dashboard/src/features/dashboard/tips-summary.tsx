@@ -30,7 +30,7 @@
  * contract ships.
  */
 import { isTipsSummaryApplicable, tipParticipationPercent } from "./kpi-deltas";
-import type { DashboardV2Report } from "./dashboard-api";
+import type { DashboardV2Report, TipsSummaryWire } from "./dashboard-api";
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("es-NI", {

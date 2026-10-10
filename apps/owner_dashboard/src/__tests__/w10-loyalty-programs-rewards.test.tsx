@@ -879,7 +879,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
         expect(mockCreateProgram).toHaveBeenCalledTimes(1);
       });
       expect(
-        mockCreateProgram.mock.calls[0][0].earning_rule.minimumSpendNio,
+        mockCreateProgram.mock.calls[0]![0].earning_rule.minimumSpendNio,
       ).toBe(0);
     });
 
