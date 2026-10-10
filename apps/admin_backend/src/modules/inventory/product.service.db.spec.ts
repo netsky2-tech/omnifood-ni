@@ -385,6 +385,111 @@ describe('ProductService — real PostgreSQL', () => {
     );
   });
 
+  describe('§17.6 flexible search (accent fold)', () => {
+    it(
+      'matches case, accent and partial variants across name and uom, scoped by tenant',
+      async () => {
+        await withIsolatedSchema(
+          'product_search_accent_fold',
+          async ({ dataSource }) => {
+            const tenantA = randomUUID();
+            const tenantB = randomUUID();
+            const service = createService(dataSource);
+            await seedTenant(dataSource, tenantA, 'Tenant Search A');
+            await seedTenant(dataSource, tenantB, 'Tenant Search B');
+
+            await service.create(tenantA, {
+              name: 'Café de Olla',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
+            await service.create(tenantA, {
+              name: 'CAPUCHINO',
+              uom: 'kg',
+              product_type: ProductType.SIMPLE,
+            });
+            // A cross-tenant twin: tenant A's search must never see it,
+            // proving the fold did not loosen the tenant predicate.
+            await service.create(tenantB, {
+              name: 'Café de Olla',
+              uom: 'un',
+              product_type: ProductType.SIMPLE,
+            });
+
+            // MEASURED, not assumed: the OLD predicate's failure mode on
+            // this very server — plain ILIKE is case-insensitive but does
+            // NOT fold accents, so the unaccented term missed «Café».
+            const plainIlike = await dataSource.query(
+              `SELECT 'café' ILIKE '%cafe%' AS matches, 'CAFÉ' ILIKE '%café%' AS case_only_matches`,
+            );
+            expect(plainIlike[0].matches).toBe(false);
+            expect(plainIlike[0].case_only_matches).toBe(true);
+
+            // AFTER: the same unaccented term finds the accented product.
+            const unaccented = await service.listPaginated({
+              tenantId: tenantA,
+              page: 1,
+              pageSize: 25,
+              search: 'cafe',
+            });
+            expect(unaccented.data.map((p) => p.name)).toEqual([
+              'Café de Olla',
+            ]);
+            expect(unaccented.total).toBe(1);
+
+            // Accented + uppercase term: same result as the plain term.
+            const accented = await service.listPaginated({
+              tenantId: tenantA,
+              page: 1,
+              pageSize: 25,
+              search: 'CAFÉ',
+            });
+            expect(accented.data.map((p) => p.name)).toEqual(['Café de Olla']);
+
+            // Partial + case: 'capuch' finds «CAPUCHINO».
+            const partial = await service.listPaginated({
+              tenantId: tenantA,
+              page: 1,
+              pageSize: 25,
+              search: 'capuch',
+            });
+            expect(partial.data.map((p) => p.name)).toEqual(['CAPUCHINO']);
+
+            // Second column: the uom matches too.
+            const byUom = await service.listPaginated({
+              tenantId: tenantA,
+              page: 1,
+              pageSize: 25,
+              search: 'kg',
+            });
+            expect(byUom.data.map((p) => p.name)).toEqual(['CAPUCHINO']);
+
+            // No match stays no match.
+            const none = await service.listPaginated({
+              tenantId: tenantA,
+              page: 1,
+              pageSize: 25,
+              search: 'zzz-no-match',
+            });
+            expect(none.total).toBe(0);
+
+            // Tenant scoping intact under the new predicate: the twin row
+            // in tenant B never leaks into tenant A's search results.
+            const twin = await service.listPaginated({
+              tenantId: tenantB,
+              page: 1,
+              pageSize: 25,
+              search: 'cafe',
+            });
+            expect(twin.total).toBe(1);
+            expect(twin.data[0].name).toBe('Café de Olla');
+          },
+        );
+      },
+      TEST_TIMEOUT_MS,
+    );
+  });
+
   describe('RLS / tenant isolation', () => {
     it(
       'enforces tenant isolation — tenant A cannot see tenant B products via service',

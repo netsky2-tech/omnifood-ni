@@ -14,6 +14,32 @@ export interface AuditUser {
   userEmail?: string;
 }
 
+/**
+ * §17.6 flexible search (odd/tasks/no-uuid-inputs.md slice S3): the search
+ * must be tolerant of case, accents and partial matches across several
+ * columns — never an exact id or name. The accent fold is done in SQL with
+ * `translate(lower(col), …)`, so NO extension (unaccent) and NO migration
+ * are needed; the TS helper below is its exact mirror, char for char, so
+ * the bound term and the folded columns always agree. Any change to one
+ * side must change both.
+ */
+const ACCENT_SEARCH_FROM = 'áàäâãéèëêíìïîóòöôõúùüûñç';
+const ACCENT_SEARCH_TO = 'aaaaaeeeeiiiiooooouuuunc';
+
+/** SQL-side fold of a column: lower() then the same 24-char accent table. */
+function accentFoldSql(column: string): string {
+  return `translate(lower(${column}), '${ACCENT_SEARCH_FROM}', '${ACCENT_SEARCH_TO}')`;
+}
+
+/** TS-side mirror of accentFoldSql: lowercase + the same 24-char table. */
+export function normalizeSearchTerm(term: string): string {
+  const lowered = term.toLowerCase();
+  return lowered.replace(
+    /[áàäâãéèëêíìïîóòöôõúùüûñç]/g,
+    (ch) => ACCENT_SEARCH_TO[ACCENT_SEARCH_FROM.indexOf(ch)] ?? ch,
+  );
+}
+
 @Injectable()
 export class ProductService {
   constructor(
@@ -109,9 +135,15 @@ export class ProductService {
       }
 
       if (params.search && params.search.trim().length > 0) {
-        qb.andWhere('(p.name ILIKE :search OR p.uom ILIKE :search)', {
-          search: `%${params.search.trim()}%`,
-        });
+        // §17.6: flexible search — both sides folded, so 'cafe', 'Café' and
+        // 'CAFÉ' all match «Café de Olla». Partial match preserved by the
+        // %…% wrapper. Before this change the predicate was plain ILIKE on
+        // name/uom, which is case-insensitive and partial but NOT
+        // accent-tolerant ('cafe' ILIKE '%café%' is false).
+        qb.andWhere(
+          `(${accentFoldSql('p.name')} ILIKE :search OR ${accentFoldSql('p.uom')} ILIKE :search)`,
+          { search: `%${normalizeSearchTerm(params.search.trim())}%` },
+        );
       }
 
       const allowedSortColumns: Record<string, string> = {
