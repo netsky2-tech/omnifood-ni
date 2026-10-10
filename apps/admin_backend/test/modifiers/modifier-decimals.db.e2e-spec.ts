@@ -58,13 +58,14 @@ import {
  * Loaded with `require` (not an ES import) because the backend tsconfig
  * does not enable `resolveJsonModule`.
  */
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+/* eslint-disable @typescript-eslint/no-require-imports -- fixture JSON cannot be imported statically (resolveJsonModule is off) and prettier's reflow pushes the call past a next-line directive */
 const browserCreateOptionPayload = require('../fixtures/modifiers/browser-create-option-payload.json') as {
   name: string;
   price_delta: unknown;
   is_default: boolean;
   sort_order: number;
 };
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();

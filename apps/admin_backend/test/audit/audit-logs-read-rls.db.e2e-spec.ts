@@ -271,7 +271,7 @@ describe('AuditLogsService POS forensic ledger reads (Real PostgreSQL DB, migrat
         severity: 'CRITICAL',
         targetType: 'invoice',
         targetId: 'inv-shared-001',
-        deviceId: 'POS-1',
+        deviceId: SHARED_DEVICE_ID,
         sequenceNo: 3,
       });
 
@@ -412,7 +412,7 @@ describe('AuditLogsService POS forensic ledger reads (Real PostgreSQL DB, migrat
       expect(result.alerts.map((a) => a.id)).toEqual([alertAId]);
       expect(result.alerts[0]).toEqual({
         id: alertAId,
-        deviceId: 'POS-1',
+        deviceId: SHARED_DEVICE_ID,
         actorUserId: userA1Id,
         gapStart: 41,
         gapEnd: 44,

@@ -67,8 +67,9 @@ import {
  * Loaded with `require` (not an ES import) because the backend tsconfig does
  * not enable `resolveJsonModule` (same as the modifier fixture spec).
  */
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+/* eslint-disable @typescript-eslint/no-require-imports -- fixture JSON cannot be imported statically (resolveJsonModule is off) and prettier's reflow pushes the call past a next-line directive */
 const posRecordPayload = require('../fixtures/sales/pos-discount-origin-payload.json') as SyncBatchRecordDto;
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -322,7 +323,7 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
             `SELECT discount_origin, discount FROM invoice_items
               WHERE id = $1 AND tenant_id = $2`,
             [beerItem.id, tenantId],
-          )) as PersistedBreakdownRow[];
+          )) as unknown as PersistedBreakdownRow[];
           expect(rows).toHaveLength(1);
           expect(rows[0].discount_origin).toEqual(beerItem.discountOrigin);
           expect(Number(rows[0].discount)).toBe(beerItem.discount as number);
@@ -334,7 +335,7 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
             `SELECT discount_origin, discount FROM invoice_items
               WHERE id = $1 AND tenant_id = $2`,
             [otherItem.id, tenantId],
-          )) as PersistedBreakdownRow[];
+          )) as unknown as PersistedBreakdownRow[];
           expect(otherRows).toHaveLength(1);
           expect(otherRows[0].discount_origin).toEqual(
             otherItem.discountOrigin,
@@ -591,7 +592,7 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
             `SELECT discount_origin, discount FROM invoice_items
               WHERE tenant_id = $1 ORDER BY id`,
             [tenantId],
-          )) as PersistedBreakdownRow[];
+          )) as unknown as PersistedBreakdownRow[];
           expect(rows).toHaveLength(legacyItems.length);
           for (const row of rows) {
             expect(row.discount_origin).toBeNull();

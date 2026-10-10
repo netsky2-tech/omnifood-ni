@@ -156,7 +156,7 @@ export class ReconciliationListService {
         );
 
         return {
-          reconciliations: rows.map(ReconciliationListService.toDto),
+          reconciliations: rows.map((row) => ReconciliationListService.toDto(row)),
           pagination: {
             page,
             limit,

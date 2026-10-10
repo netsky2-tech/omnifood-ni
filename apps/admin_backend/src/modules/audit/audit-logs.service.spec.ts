@@ -84,7 +84,9 @@ describe('AuditLogsService', () => {
         if (entity === AuditIntegrityAlert) {
           return { find: alertFind };
         }
-        throw new Error(`unexpected repository request for ${String(entity)}`);
+        const label =
+          typeof entity === 'function' ? entity.name : JSON.stringify(entity);
+        throw new Error(`unexpected repository request for ${label}`);
       }),
     };
     const dataSource = {

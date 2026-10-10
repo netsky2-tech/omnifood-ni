@@ -99,8 +99,9 @@ import {
  * SQL string for SQL string — by its own unit spec
  * (src/migrations/1809640000000-AddQuantityToInvoiceItemModifiers.spec.ts).
  */
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+/* eslint-disable @typescript-eslint/no-require-imports -- fixture JSON cannot be imported statically (resolveJsonModule is off) and prettier's reflow pushes the call past a next-line directive */
 const posRecordPayload = require('../fixtures/sales/pos-modifier-payload.json') as SyncBatchRecordDto;
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -311,7 +312,7 @@ describe('POS modifier payload replay E2E — real PostgreSQL', () => {
                FROM invoice_item_modifiers m
               WHERE m.invoice_item_id = $1`,
             [fixtureItems[0].id],
-          )) as PersistedModifierRow[];
+          )) as unknown as PersistedModifierRow[];
           expect(rows).toHaveLength(1);
           expect(rows[0].name).toBe(fixtureModifiers[0].name);
           expect(Number(rows[0].extra_price)).toBe(
@@ -406,7 +407,7 @@ describe('POS modifier payload replay E2E — real PostgreSQL', () => {
                FROM invoice_item_modifiers
               WHERE invoice_item_id = $1`,
             [legacyItems[0].id],
-          )) as PersistedModifierRow[];
+          )) as unknown as PersistedModifierRow[];
           expect(rows).toHaveLength(1);
           expect(rows[0].name).toBe('Michelada Extra');
           expect(Number(rows[0].extra_price)).toBe(30.0);
@@ -477,7 +478,7 @@ describe('POS modifier payload replay E2E — real PostgreSQL', () => {
             `SELECT quantity FROM invoice_item_modifiers
               WHERE invoice_item_id = $1`,
             [zeroItems[0].id],
-          )) as PersistedModifierRow[];
+          )) as unknown as PersistedModifierRow[];
           expect(modifierRows).toHaveLength(0);
           const invoiceRows = (await dataSource.query(
             `SELECT id FROM invoices WHERE id = $1`,
