@@ -356,6 +356,6 @@ Al acceder a **Control de Caja y Turnos** desde el menú lateral:
 ## 12. Soporte Técnico Directo
 
 Si experimentás cualquier problema que no puedas resolver con esta guía o la *Guía de Contingencias*:
-* **Canal Directo de WhatsApp:** [Número de WhatsApp de Soporte]
+* **Canal Directo de WhatsApp:** [+505 8194 8526](https://wa.me/50581948526)
 * **Correo de Soporte:** `soporte@nhilospos.com`
 * **Horario de Asistencia:** Lunes a Sábado de 8:00 AM a 8:00 PM.

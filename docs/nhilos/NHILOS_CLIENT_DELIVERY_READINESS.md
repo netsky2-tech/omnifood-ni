@@ -1144,9 +1144,9 @@ Required:
 - provider legal identity defined accurately (founder as sole proprietorship / freelancer);
 - customer naming convention established (`NH-C0001`, `NH-T0001`, `NH-SO-0001`);
 - document IDs standardized;
-- direct founder support channels established (WhatsApp Business / direct email).
+- direct founder support channels established (WhatsApp Business [+505 8194 8526](https://wa.me/50581948526) / `soporte@nhilospos.com`).
 
-**Status:** IN PROGRESS (Naming, numbering, and legal persona models frozen; awaiting final contact routing confirmation).
+**Status:** PASS (naming, numbering, legal persona models frozen, and contact routing confirmed: WhatsApp Business +505 8194 8526 + `soporte@nhilospos.com`).
 
 ---
 
