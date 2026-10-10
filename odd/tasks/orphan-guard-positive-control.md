@@ -1,7 +1,7 @@
 # Feature: Orphan-guard positive control + payment.entity no-migration note (issue #829)
 
-- **Status:** IMPLEMENTED (focused spec green + mutation RED observed); full admin_backend unit run
-  pending — the host forbids a full suite while a subagent is alive.
+- **Status:** DELIVERED as PR #841 (candidate `120a8d99`), native review approved + acknowledged.
+- **Commits:** `120a8d99` (test work unit: spec + fixture + entity note + this document).
 - **Issue:** #829 (`status:approved`, `type:tests`) — advisories `R3-ORPHAN-POSITIVE-CONTROL` and
   `R3-PAYMENT-TYPE-NO-MIGRATION` from review `review-3beb46530ec87586` (PR #827).
 - **Branch:** `tests/orphan-guard-positive-control` from `main` (`900ff846`)
@@ -50,8 +50,13 @@
       --runInBand` → **17 passed** (16 existing + 1 new).
 - [x] `npx eslint` (no `--fix`) on the 3 touched files: clean, exit 0.
 - [x] `npm run test:no-only` OK.
-- [ ] `npm test` full unit suite green (blocked: subagent alive on this host, see AGENTS.md limits).
-- [ ] Work-unit commit + native review + PR `type:tests` green and merged.
+- [x] Full unit suite green once the `gentle-ai-worker` for #830 had finished (AGENTS.md forbids a
+      full suite while a subagent is alive): **330 suites / 3760 tests passed, 8 skipped** in 45s
+      with `maxWorkers: 2` pinned in `package.json`.
+      `test:db` / `test:e2e` / `verify-schema-build.sh` were NOT run locally and are stated as
+      unverified here: this candidate adds a spec, one fixture outside `src`, and a comment — no
+      entity, migration, or schema file. CI covers them with its Postgres service.
+- [x] Work-unit commit `120a8d99` + native review + PR #841 (`type:tests`). Merge pending CI green.
 
 ## Tooling incident found while verifying (worth its own follow-up)
 
@@ -81,9 +86,10 @@ evidence. All 167 were reverted; the working tree is now exactly
 - [x] **T6** `payment.entity.ts` no-migration comment.
 - [x] **T7** Reverted the `eslint --fix` tree pollution; re-verified focused spec + eslint(no fix)
       + prettier --check + test:no-only.
-- [ ] **T8** Full `npm test` when no subagent is running on this host.
-- [ ] **T9** Commit + native review + PR `type:tests` → merge (user's delivery call).
+- [x] **T8** Full unit suite (330/3760 green) after the #830 worker finished.
+- [x] **T9** Commit `120a8d99` + native review `review-8ac3b2311d19b07a` (medium tier, 183 lines,
+      lens `review-reliability`) → **APPROVED** (receipt `sha256:48133db4…`), acknowledged, authority
+      burned. One advisory, `route-transport-registry.spec.ts:100-107`, is **informational** per the
+      receipt: it opens no correction and reopens nothing for this candidate.
+      PR #841 → merge (user's delivery call).
 
-## Commits
-
-(to be recorded when the work unit lands)
