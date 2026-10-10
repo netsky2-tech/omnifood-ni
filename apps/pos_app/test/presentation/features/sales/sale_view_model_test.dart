@@ -27,6 +27,8 @@ import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/models/customer/customer.dart';
+import 'package:pos_app/data/models/sales/promotion_entity.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
 import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
@@ -1130,6 +1132,162 @@ void main() {
       },
     );
 
+    group('Manual discount cap (SOHO-P3 S1b)', () {
+      // Builds a fresh VM (autoLoad) AFTER seeding caps into the shared fake
+      // local config store, so the constructor's loadDiscountCaps() reads them.
+      Future<SaleViewModel> buildCapViewModel() async {
+        final vm = SaleViewModel(
+          mockSalesRepo,
+          mockInventoryRepo,
+          mockAuthRepo,
+          mockDb,
+          null,
+          true,
+          fakeTenantConfigService,
+          fakeKitchenOrderService,
+        );
+        await Future<void>.delayed(Duration.zero);
+        return vm;
+      }
+
+      Future<SaleViewModel> buildCapViewModelWithCart() async {
+        final vm = await buildCapViewModel();
+        vm.addToCart(
+          Product(
+            id: 'p-cap',
+            sku: 'SKU-CAP',
+            name: 'Prod Cap',
+            uom: 'unit',
+            sellPrice: 100,
+            stock: 10,
+            averageCost: 10,
+          ),
+        );
+        return vm;
+      }
+
+      test('no cap configured: manual discount behaviour preserved', () async {
+        final vm = await buildCapViewModelWithCart();
+
+        vm.applyManualDiscount(50.0);
+
+        expect(vm.manualDiscount, 50.0);
+        expect(vm.errorMessage, isNull);
+        expect(vm.maxDiscountAmountCap, isNull);
+        expect(vm.maxDiscountPercentCap, isNull);
+      });
+
+      test('amount cap rejects above and ALLOWS exactly at the boundary', () async {
+        await fakeLocalConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_amount', value: '40'),
+        );
+        final vm = await buildCapViewModelWithCart();
+        expect(vm.maxDiscountAmountCap, 40.0);
+
+        vm.applyManualDiscount(50.0);
+        expect(vm.manualDiscount, 0.0);
+        expect(vm.errorMessage, contains('40.00'));
+
+        vm.applyManualDiscount(40.0);
+        expect(vm.manualDiscount, 40.0);
+        expect(vm.errorMessage, isNull);
+      });
+
+      test('percent cap rejects above and allows exactly at the boundary', () async {
+        await fakeLocalConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_percent', value: '25'),
+        );
+        final vm = await buildCapViewModelWithCart();
+        expect(vm.maxDiscountPercentCap, 25.0);
+        // Percent base is the order's GROSS subtotal from the fiscal
+        // calculation: one C$100 line.
+        expect(vm.grossSubtotal, 100.0);
+
+        vm.applyManualDiscount(25.01);
+        expect(vm.manualDiscount, 0.0);
+        expect(vm.errorMessage, contains('25.00'));
+        expect(vm.errorMessage, contains('%'));
+
+        vm.applyManualDiscount(25.0);
+        expect(vm.manualDiscount, 25.0);
+        expect(vm.errorMessage, isNull);
+      });
+
+      test('with BOTH caps configured the stricter one binds', () async {
+        await fakeLocalConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_amount', value: '40'),
+        );
+        await fakeLocalConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_percent', value: '10'),
+        );
+        final vm = await buildCapViewModelWithCart();
+
+        // Effective cap: min(40, 10% x 100) = 10 (percent-bound).
+        vm.applyManualDiscount(10.0);
+        expect(vm.manualDiscount, 10.0);
+        expect(vm.errorMessage, isNull);
+
+        // 5 alone is under the amount cap (40) but 10 + 5 breaks the
+        // stricter percent cap -> rejected, naming the percent bound.
+        vm.applyManualDiscount(5.0);
+        expect(vm.manualDiscount, 10.0);
+        expect(vm.errorMessage, contains('10.00'));
+        expect(vm.errorMessage, contains('porcentaje'));
+      });
+
+      test('a cap of 0 forbids any positive manual discount', () async {
+        await fakeLocalConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_amount', value: '0'),
+        );
+        final vm = await buildCapViewModelWithCart();
+
+        vm.applyManualDiscount(1.0);
+
+        expect(vm.manualDiscount, 0.0);
+        expect(vm.errorMessage, contains('0.00'));
+      });
+
+      test('DD-3: two successive requests cannot together exceed the cap', () async {
+        await fakeLocalConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_amount', value: '30'),
+        );
+        final vm = await buildCapViewModelWithCart();
+
+        vm.applyManualDiscount(20.0);
+        expect(vm.manualDiscount, 20.0);
+
+        // 15 alone is under the 30 cap, but 20 + 15 = 35 is not.
+        vm.applyManualDiscount(15.0);
+        expect(vm.manualDiscount, 20.0);
+        expect(vm.errorMessage, isNotNull);
+      });
+
+      test('DD-2: a granted supervisor override does NOT unlock an over-cap discount', () async {
+        when(mockAuthRepo.getCurrentUser()).thenAnswer(
+          (_) async => const User(
+            id: 'u-1',
+            name: 'Cashier',
+            role: UserRole.cashier,
+            isActive: true,
+            tenantId: 'tenant-test',
+          ),
+        );
+        await fakeLocalConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_amount', value: '30'),
+        );
+        final cashierViewModel = await buildCapViewModelWithCart();
+
+        cashierViewModel.grantSupervisorOverride();
+        cashierViewModel.applyManualDiscount(35.0);
+
+        // The override authorizes WHO may discount; the cap is the owner's
+        // policy on HOW MUCH, so the rejection is the CAP, not access.
+        expect(cashierViewModel.errorMessage, isNot('Acceso denegado.'));
+        expect(cashierViewModel.errorMessage, contains('30.00'));
+        expect(cashierViewModel.manualDiscount, 0.0);
+      });
+    });
+
     group('Fiscal Hardening & Dynamic Regime Lifecycle', () {
       test(
         'Unconfigured tax regime allows browsing and cart building, but blocks sale finalization',
@@ -1821,6 +1979,219 @@ void main() {
       expect(holdVm.activeLoadedHoldTicket, isNull,
           reason: 're-parking after abandonment must create a NEW account, never resurrect it');
       expect(holdVm.holdTickets, isEmpty);
+    });
+  });
+
+  group('Manual vs promotion discount independence (SOHO-P3)', () {
+    const pManualA = Product(
+      id: 'p-manual-a',
+      sku: 'SKU-MA',
+      name: 'Producto Manual A',
+      uom: 'unit',
+      sellPrice: 100,
+      stock: 10,
+      averageCost: 10,
+    );
+    const pManualB = Product(
+      id: 'p-manual-b',
+      sku: 'SKU-MB',
+      name: 'Producto Manual B',
+      uom: 'unit',
+      sellPrice: 80,
+      stock: 10,
+      averageCost: 10,
+    );
+
+    PromotionEntity twoForOnePromo() => PromotionEntity(
+      id: 'promo-2x1-manual',
+      name: '2x1 Producto Manual A',
+      type: 'buyXGetYFree',
+      targetProductId: 'p-manual-a',
+      buyQuantity: 1,
+      getQuantity: 1,
+      priority: 10,
+      isActive: true,
+    );
+
+    test(
+      'manual discount survives adding another product to the cart',
+      () async {
+        await viewModel.loadPromotions();
+        viewModel.addToCart(pManualA);
+        viewModel.applyManualDiscount(50.0);
+        expect(viewModel.totalDiscounts, 50.0);
+
+        viewModel.addToCart(pManualB);
+        expect(
+          viewModel.manualDiscount,
+          50.0,
+          reason: 'the manual component must survive a cart mutation',
+        );
+        expect(viewModel.promoDiscounts, 0.0);
+        expect(
+          viewModel.totalDiscounts,
+          50.0,
+          reason: 'a cart mutation must never erase a manual discount',
+        );
+      },
+    );
+
+    test(
+      'manual discount survives removeFromCart and updateQuantity',
+      () async {
+        await viewModel.loadPromotions();
+        viewModel.addToCart(pManualA);
+        viewModel.addToCart(pManualB);
+        viewModel.applyManualDiscount(50.0);
+
+        viewModel.removeFromCart('p-manual-b');
+        expect(
+          viewModel.manualDiscount,
+          50.0,
+          reason: 'removeFromCart must never erase a manual discount',
+        );
+        expect(
+          viewModel.totalDiscounts,
+          50.0,
+          reason: 'removeFromCart must never erase a manual discount',
+        );
+
+        viewModel.updateQuantity('p-manual-a', 3);
+        expect(
+          viewModel.manualDiscount,
+          50.0,
+          reason: 'updateQuantity must never erase a manual discount',
+        );
+        expect(
+          viewModel.totalDiscounts,
+          50.0,
+          reason: 'updateQuantity must never erase a manual discount',
+        );
+      },
+    );
+
+    test(
+      'promotion and manual discounts coexist and are reported separately',
+      () async {
+        when(
+          mockPromoDao.getAllPromotions(),
+        ).thenAnswer((_) async => [twoForOnePromo()]);
+        await viewModel.loadPromotions();
+
+        viewModel.addToCart(pManualA);
+        viewModel.addToCart(pManualA);
+        expect(viewModel.promoDiscounts, 100.0);
+        expect(viewModel.totalDiscounts, 100.0);
+
+        viewModel.applyManualDiscount(25.0);
+        expect(
+          viewModel.promoDiscounts,
+          100.0,
+          reason:
+              'the manual discount must not overwrite the promotion component',
+        );
+        expect(
+          viewModel.manualDiscount,
+          25.0,
+          reason: 'the manual component must be reported separately',
+        );
+        expect(
+          viewModel.totalDiscounts,
+          125.0,
+          reason:
+              'manual and promotion discounts must sum in the fiscal aggregate',
+        );
+      },
+    );
+
+    test(
+      'clearCart clears both manual and promotion discount components',
+      () async {
+        when(
+          mockPromoDao.getAllPromotions(),
+        ).thenAnswer((_) async => [twoForOnePromo()]);
+        await viewModel.loadPromotions();
+
+        viewModel.addToCart(pManualA);
+        viewModel.addToCart(pManualA);
+        viewModel.applyManualDiscount(25.0);
+        expect(viewModel.totalDiscounts, 125.0);
+
+        viewModel.clearCart();
+        expect(viewModel.manualDiscount, 0.0);
+        expect(viewModel.promoDiscounts, 0.0);
+        expect(viewModel.totalDiscounts, 0.0);
+      },
+    );
+
+    test(
+      'loyalty redemption ceiling measures the residual after ALL discounts (DD-1 corrected)',
+      () async {
+        when(
+          mockPromoDao.getAllPromotions(),
+        ).thenAnswer((_) async => [twoForOnePromo()]);
+        await viewModel.loadPromotions();
+
+        viewModel.addToCart(pManualA);
+        viewModel.addToCart(pManualA); // 200 gross, 100 promo discount
+
+        viewModel.applyManualDiscount(15.0);
+        await viewModel.selectCustomer(
+          const Customer(
+            id: 'cust-loyal',
+            name: 'Cliente Leal',
+            pointsBalance: 1000,
+          ),
+        );
+
+        // orderTotal is only a CEILING on the redeemable amount, so it must
+        // be the residual the customer actually pays: 200 - 100 promo - 15
+        // manual = C$ 85.00.
+        final rejected = viewModel.applyLoyaltyPoints(900);
+        expect(
+          rejected.isValid,
+          isFalse,
+          reason:
+              'points cannot be redeemed against value already discounted away',
+        );
+        expect(
+          rejected.errorMessage,
+          'El descuento por puntos (C\$ 90.00) no puede exceder el total de la orden (C\$ 85.00).',
+        );
+        expect(viewModel.pointsToRedeem, 0.0);
+
+        // Exactly at the ceiling: accepted.
+        final atCeiling = viewModel.applyLoyaltyPoints(850);
+        expect(atCeiling.isValid, isTrue);
+        expect(atCeiling.discountAmount, 85.0);
+
+        // One cent above the ceiling: rejected.
+        viewModel.clearLoyaltyPoints();
+        final aboveCeiling = viewModel.applyLoyaltyPoints(850.1);
+        expect(aboveCeiling.isValid, isFalse);
+        expect(aboveCeiling.discountAmount, 0.0);
+      },
+    );
+
+    test('promotion AND manual discount both survive cart mutations', () async {
+      when(
+        mockPromoDao.getAllPromotions(),
+      ).thenAnswer((_) async => [twoForOnePromo()]);
+      await viewModel.loadPromotions();
+
+      viewModel.addToCart(pManualA);
+      viewModel.addToCart(pManualA); // 2x1 -> promo 100
+      viewModel.applyManualDiscount(25.0);
+
+      viewModel.addToCart(pManualB);
+      expect(viewModel.promoDiscounts, 100.0);
+      expect(viewModel.manualDiscount, 25.0);
+      expect(viewModel.totalDiscounts, 125.0);
+
+      viewModel.updateQuantity('p-manual-b', 3);
+      expect(viewModel.promoDiscounts, 100.0);
+      expect(viewModel.manualDiscount, 25.0);
+      expect(viewModel.totalDiscounts, 125.0);
     });
   });
 }

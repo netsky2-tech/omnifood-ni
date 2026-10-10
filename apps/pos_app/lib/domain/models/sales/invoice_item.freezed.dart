@@ -38,7 +38,14 @@ mixin _$InvoiceItem {
       throw _privateConstructorUsedError;
   String? get inventorySnapshotVersion => throw _privateConstructorUsedError;
   String? get originInvoiceItemId => throw _privateConstructorUsedError;
-  List<Modifier> get selectedModifiers => throw _privateConstructorUsedError;
+  List<Modifier> get selectedModifiers =>
+      throw _privateConstructorUsedError; // Optional per-line discount-origin breakdown over the line discount
+// (wire keys: promotion | manual | loyalty, positive amounts only).
+// Null means legacy/unknown and is NEVER fabricated as an empty map: the
+// two states are null and a populated map. Persistence + decode are this
+// unit's business; producing the breakdown and sending it on the wire is
+// the NEXT unit.
+  Map<String, double>? get discountOrigin => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -70,7 +77,8 @@ abstract class $InvoiceItemCopyWith<$Res> {
       SaleTimeInventorySnapshot? inventorySnapshot,
       String? inventorySnapshotVersion,
       String? originInvoiceItemId,
-      List<Modifier> selectedModifiers});
+      List<Modifier> selectedModifiers,
+      Map<String, double>? discountOrigin});
 }
 
 /// @nodoc
@@ -104,6 +112,7 @@ class _$InvoiceItemCopyWithImpl<$Res, $Val extends InvoiceItem>
     Object? inventorySnapshotVersion = freezed,
     Object? originInvoiceItemId = freezed,
     Object? selectedModifiers = null,
+    Object? discountOrigin = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -178,6 +187,10 @@ class _$InvoiceItemCopyWithImpl<$Res, $Val extends InvoiceItem>
           ? _value.selectedModifiers
           : selectedModifiers // ignore: cast_nullable_to_non_nullable
               as List<Modifier>,
+      discountOrigin: freezed == discountOrigin
+          ? _value.discountOrigin
+          : discountOrigin // ignore: cast_nullable_to_non_nullable
+              as Map<String, double>?,
     ) as $Val);
   }
 }
@@ -208,7 +221,8 @@ abstract class _$$InvoiceItemImplCopyWith<$Res>
       SaleTimeInventorySnapshot? inventorySnapshot,
       String? inventorySnapshotVersion,
       String? originInvoiceItemId,
-      List<Modifier> selectedModifiers});
+      List<Modifier> selectedModifiers,
+      Map<String, double>? discountOrigin});
 }
 
 /// @nodoc
@@ -240,6 +254,7 @@ class __$$InvoiceItemImplCopyWithImpl<$Res>
     Object? inventorySnapshotVersion = freezed,
     Object? originInvoiceItemId = freezed,
     Object? selectedModifiers = null,
+    Object? discountOrigin = freezed,
   }) {
     return _then(_$InvoiceItemImpl(
       id: null == id
@@ -314,6 +329,10 @@ class __$$InvoiceItemImplCopyWithImpl<$Res>
           ? _value._selectedModifiers
           : selectedModifiers // ignore: cast_nullable_to_non_nullable
               as List<Modifier>,
+      discountOrigin: freezed == discountOrigin
+          ? _value._discountOrigin
+          : discountOrigin // ignore: cast_nullable_to_non_nullable
+              as Map<String, double>?,
     ));
   }
 }
@@ -339,8 +358,10 @@ class _$InvoiceItemImpl implements _InvoiceItem {
       this.inventorySnapshot,
       this.inventorySnapshotVersion,
       this.originInvoiceItemId,
-      final List<Modifier> selectedModifiers = const []})
-      : _selectedModifiers = selectedModifiers;
+      final List<Modifier> selectedModifiers = const [],
+      final Map<String, double>? discountOrigin})
+      : _selectedModifiers = selectedModifiers,
+        _discountOrigin = discountOrigin;
 
   factory _$InvoiceItemImpl.fromJson(Map<String, dynamic> json) =>
       _$$InvoiceItemImplFromJson(json);
@@ -390,9 +411,31 @@ class _$InvoiceItemImpl implements _InvoiceItem {
     return EqualUnmodifiableListView(_selectedModifiers);
   }
 
+// Optional per-line discount-origin breakdown over the line discount
+// (wire keys: promotion | manual | loyalty, positive amounts only).
+// Null means legacy/unknown and is NEVER fabricated as an empty map: the
+// two states are null and a populated map. Persistence + decode are this
+// unit's business; producing the breakdown and sending it on the wire is
+// the NEXT unit.
+  final Map<String, double>? _discountOrigin;
+// Optional per-line discount-origin breakdown over the line discount
+// (wire keys: promotion | manual | loyalty, positive amounts only).
+// Null means legacy/unknown and is NEVER fabricated as an empty map: the
+// two states are null and a populated map. Persistence + decode are this
+// unit's business; producing the breakdown and sending it on the wire is
+// the NEXT unit.
+  @override
+  Map<String, double>? get discountOrigin {
+    final value = _discountOrigin;
+    if (value == null) return null;
+    if (_discountOrigin is EqualUnmodifiableMapView) return _discountOrigin;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(value);
+  }
+
   @override
   String toString() {
-    return 'InvoiceItem(id: $id, invoiceId: $invoiceId, productId: $productId, productName: $productName, quantity: $quantity, unitPrice: $unitPrice, originalTaxRate: $originalTaxRate, appliedTaxRate: $appliedTaxRate, taxAmount: $taxAmount, total: $total, discount: $discount, variantId: $variantId, notes: $notes, recipeVersionId: $recipeVersionId, inventorySnapshot: $inventorySnapshot, inventorySnapshotVersion: $inventorySnapshotVersion, originInvoiceItemId: $originInvoiceItemId, selectedModifiers: $selectedModifiers)';
+    return 'InvoiceItem(id: $id, invoiceId: $invoiceId, productId: $productId, productName: $productName, quantity: $quantity, unitPrice: $unitPrice, originalTaxRate: $originalTaxRate, appliedTaxRate: $appliedTaxRate, taxAmount: $taxAmount, total: $total, discount: $discount, variantId: $variantId, notes: $notes, recipeVersionId: $recipeVersionId, inventorySnapshot: $inventorySnapshot, inventorySnapshotVersion: $inventorySnapshotVersion, originInvoiceItemId: $originInvoiceItemId, selectedModifiers: $selectedModifiers, discountOrigin: $discountOrigin)';
   }
 
   @override
@@ -433,31 +476,35 @@ class _$InvoiceItemImpl implements _InvoiceItem {
             (identical(other.originInvoiceItemId, originInvoiceItemId) ||
                 other.originInvoiceItemId == originInvoiceItemId) &&
             const DeepCollectionEquality()
-                .equals(other._selectedModifiers, _selectedModifiers));
+                .equals(other._selectedModifiers, _selectedModifiers) &&
+            const DeepCollectionEquality()
+                .equals(other._discountOrigin, _discountOrigin));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      invoiceId,
-      productId,
-      productName,
-      quantity,
-      unitPrice,
-      originalTaxRate,
-      appliedTaxRate,
-      taxAmount,
-      total,
-      discount,
-      variantId,
-      notes,
-      recipeVersionId,
-      inventorySnapshot,
-      inventorySnapshotVersion,
-      originInvoiceItemId,
-      const DeepCollectionEquality().hash(_selectedModifiers));
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        invoiceId,
+        productId,
+        productName,
+        quantity,
+        unitPrice,
+        originalTaxRate,
+        appliedTaxRate,
+        taxAmount,
+        total,
+        discount,
+        variantId,
+        notes,
+        recipeVersionId,
+        inventorySnapshot,
+        inventorySnapshotVersion,
+        originInvoiceItemId,
+        const DeepCollectionEquality().hash(_selectedModifiers),
+        const DeepCollectionEquality().hash(_discountOrigin)
+      ]);
 
   @JsonKey(ignore: true)
   @override
@@ -492,7 +539,8 @@ abstract class _InvoiceItem implements InvoiceItem {
       final SaleTimeInventorySnapshot? inventorySnapshot,
       final String? inventorySnapshotVersion,
       final String? originInvoiceItemId,
-      final List<Modifier> selectedModifiers}) = _$InvoiceItemImpl;
+      final List<Modifier> selectedModifiers,
+      final Map<String, double>? discountOrigin}) = _$InvoiceItemImpl;
 
   factory _InvoiceItem.fromJson(Map<String, dynamic> json) =
       _$InvoiceItemImpl.fromJson;
@@ -533,6 +581,13 @@ abstract class _InvoiceItem implements InvoiceItem {
   String? get originInvoiceItemId;
   @override
   List<Modifier> get selectedModifiers;
+  @override // Optional per-line discount-origin breakdown over the line discount
+// (wire keys: promotion | manual | loyalty, positive amounts only).
+// Null means legacy/unknown and is NEVER fabricated as an empty map: the
+// two states are null and a populated map. Persistence + decode are this
+// unit's business; producing the breakdown and sending it on the wire is
+// the NEXT unit.
+  Map<String, double>? get discountOrigin;
   @override
   @JsonKey(ignore: true)
   _$$InvoiceItemImplCopyWith<_$InvoiceItemImpl> get copyWith =>

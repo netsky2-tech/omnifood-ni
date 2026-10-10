@@ -70,6 +70,12 @@ export interface SalesBookRow {
   taxableSubtotalNio: number;
   taxAmountNio: number;
   discountNio: number;
+  /** Per-origin discount attribution (S1c-3c, same rule as the dashboard): the four sum EXACTLY to `discountNio`. */
+  manualDiscountNio: number;
+  promotionDiscountNio: number;
+  loyaltyDiscountNio: number;
+  /** Legacy/unknown remainder (NULL/absent breakdown = legacy, never a fabricated zero; can be negative only on self-contradicting stored data). */
+  discountOriginUnattributedNio: number;
   totalNio: number;
   totalUsd: number;
   status: string;

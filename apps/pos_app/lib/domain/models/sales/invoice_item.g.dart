@@ -32,6 +32,9 @@ _$InvoiceItemImpl _$$InvoiceItemImplFromJson(Map<String, dynamic> json) =>
               ?.map((e) => Modifier.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
+      discountOrigin: (json['discountOrigin'] as Map<String, dynamic>?)?.map(
+        (k, e) => MapEntry(k, (e as num).toDouble()),
+      ),
     );
 
 Map<String, dynamic> _$$InvoiceItemImplToJson(_$InvoiceItemImpl instance) =>
@@ -54,4 +57,5 @@ Map<String, dynamic> _$$InvoiceItemImplToJson(_$InvoiceItemImpl instance) =>
       'inventorySnapshotVersion': instance.inventorySnapshotVersion,
       'originInvoiceItemId': instance.originInvoiceItemId,
       'selectedModifiers': instance.selectedModifiers,
+      'discountOrigin': instance.discountOrigin,
     };

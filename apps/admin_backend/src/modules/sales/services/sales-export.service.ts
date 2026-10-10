@@ -14,6 +14,7 @@ import * as ExcelJS from 'exceljs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import PDFDocument = require('pdfkit');
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
+import { salesRowDiscountOrigins } from '../../../core/reporting/sales-reporting-semantics';
 import { FiscalSetupService } from '../../onboarding/services/fiscal-setup.service';
 import { Customer } from '../../customers/entities/customer.entity';
 import { Invoice } from '../entities/invoice.entity';
@@ -273,6 +274,14 @@ export class SalesExportService {
       const totalTax = Number(inv.totalTax ?? 0);
       const totalUsd = Number(inv.totalUsd ?? 0);
 
+      // S1c-3c: per-origin discount attribution, computed in THIS SAME
+      // per-invoice loop that produced discountNio above, via the ONE
+      // extracted rule the dashboard's period fold also uses
+      // (salesRowDiscountOrigins) — so the per-row identity
+      // manual + promotion + loyalty + unattributed === discountNio holds by
+      // construction and the book can never disagree with the dashboard.
+      const discountOrigins = salesRowDiscountOrigins(inv);
+
       if (!isCanceled) {
         totalGrossNio = round2(totalGrossNio + totalNio);
         totalTaxNio = round2(totalTaxNio + totalTax);
@@ -296,6 +305,10 @@ export class SalesExportService {
         taxableSubtotalNio: round2(taxableSubtotalNio),
         taxAmountNio: round2(totalTax),
         discountNio: round2(discountNio),
+        manualDiscountNio: discountOrigins.manual,
+        promotionDiscountNio: discountOrigins.promotion,
+        loyaltyDiscountNio: discountOrigins.loyalty,
+        discountOriginUnattributedNio: discountOrigins.unattributed,
         totalNio: round2(totalNio),
         totalUsd: round2(totalUsd),
         status,
@@ -957,6 +970,10 @@ export class SalesExportService {
       `Subtotal ${gravadoLabel} (NIO)`,
       `${ivaLabel} (NIO)`,
       'Descuento (NIO)',
+      'Descuento Manual (NIO)',
+      'Descuento Promoción (NIO)',
+      'Descuento Lealtad (NIO)',
+      'Descuento Sin Origen (NIO)',
       'Total (NIO)',
       'Total (USD)',
       'Estado',
@@ -975,6 +992,10 @@ export class SalesExportService {
           r.taxableSubtotalNio.toFixed(2),
           r.taxAmountNio.toFixed(2),
           r.discountNio.toFixed(2),
+          r.manualDiscountNio.toFixed(2),
+          r.promotionDiscountNio.toFixed(2),
+          r.loyaltyDiscountNio.toFixed(2),
+          r.discountOriginUnattributedNio.toFixed(2),
           r.totalNio.toFixed(2),
           r.totalUsd.toFixed(2),
           escapeCsv(r.status),
@@ -1051,6 +1072,22 @@ export class SalesExportService {
       { header: `${gravadoLabel} (NIO)`, key: 'taxableSubtotalNio', width: 18 },
       { header: `${ivaLabel} (NIO)`, key: 'taxAmountNio', width: 16 },
       { header: 'Descuento (NIO)', key: 'discountNio', width: 16 },
+      { header: 'Descuento Manual (NIO)', key: 'manualDiscountNio', width: 18 },
+      {
+        header: 'Descuento Promoción (NIO)',
+        key: 'promotionDiscountNio',
+        width: 20,
+      },
+      {
+        header: 'Descuento Lealtad (NIO)',
+        key: 'loyaltyDiscountNio',
+        width: 18,
+      },
+      {
+        header: 'Descuento Sin Origen (NIO)',
+        key: 'discountOriginUnattributedNio',
+        width: 20,
+      },
       { header: 'Total (NIO)', key: 'totalNio', width: 16 },
       { header: 'Total (USD)', key: 'totalUsd', width: 16 },
       { header: 'Estado', key: 'status', width: 14 },
@@ -1073,6 +1110,10 @@ export class SalesExportService {
         taxableSubtotalNio: r.taxableSubtotalNio,
         taxAmountNio: r.taxAmountNio,
         discountNio: r.discountNio,
+        manualDiscountNio: r.manualDiscountNio,
+        promotionDiscountNio: r.promotionDiscountNio,
+        loyaltyDiscountNio: r.loyaltyDiscountNio,
+        discountOriginUnattributedNio: r.discountOriginUnattributedNio,
         totalNio: r.totalNio,
         totalUsd: r.totalUsd,
         status: r.status,

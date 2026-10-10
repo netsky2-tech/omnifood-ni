@@ -39,6 +39,20 @@ export interface SalesBookRowDto {
   taxableSubtotalNio: number;
   taxAmountNio: number;
   discountNio: number;
+  /** Σ of this invoice's line discounts attributed to a manual origin (S1c-3c, same rule as the dashboard). */
+  manualDiscountNio: number;
+  /** Σ of this invoice's line discounts attributed to a promotion origin (S1c-3c). */
+  promotionDiscountNio: number;
+  /** Σ of this invoice's line discounts attributed to a loyalty redemption origin (S1c-3c). */
+  loyaltyDiscountNio: number;
+  /**
+   * This invoice's line discounts with NO usable provenance: NULL/absent
+   * breakdowns (legacy/unknown — never a fabricated zero) plus any residual
+   * of a partial breakdown. Can be negative only when stored data
+   * contradicts itself. S1c-3c identity per row:
+   * manual + promotion + loyalty + unattributed === discountNio EXACTLY.
+   */
+  discountOriginUnattributedNio: number;
   totalNio: number;
   totalUsd: number;
   status: string;

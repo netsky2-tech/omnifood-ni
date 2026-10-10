@@ -17,6 +17,25 @@ import {
   CashMovementType,
 } from '../entities/cash-movement.entity';
 
+// Driver-like shape helper: Postgres `numeric` reaches Node as strings, so
+// the response mapper must coerce these into JSON numbers. Only the fields
+// each test cares about are spelled out; the mapper fills the rest.
+const driverShift = (over: Record<string, unknown> = {}) => ({
+  id: 'shift-1',
+  tenant_id: 'tenant-test-1',
+  terminal_id: 'term-main',
+  status: CashShiftStatus.OPEN,
+  initial_float_nio: '1000.0000',
+  initial_float_usd: '50.0000',
+  final_counted_nio: null,
+  final_counted_usd: null,
+  expected_cash_nio: '1150.5000',
+  expected_cash_usd: '57.5000',
+  difference_nio: null,
+  difference_usd: null,
+  ...over,
+});
+
 describe('CashShiftController', () => {
   let controller: CashShiftController;
   let service: jest.Mocked<CashShiftService>;
@@ -62,14 +81,8 @@ describe('CashShiftController', () => {
 
   describe('GET /sales/shifts (owner-dashboard list)', () => {
     it('lists shift sessions for the requesting tenant with default params', async () => {
-      const mockShifts = [
-        {
-          id: 'shift-1',
-          tenant_id: 'tenant-test-1',
-          terminal_id: 'term-main',
-          status: CashShiftStatus.CLOSED,
-        },
-      ] as CashShiftSession[];
+      const mockShifts = [driverShift({ status: CashShiftStatus.CLOSED })
+      ] as unknown as CashShiftSession[];
       service.listShifts.mockResolvedValue(mockShifts);
 
       const result = await controller.listShifts({ user: mockUser }, {});
@@ -78,7 +91,22 @@ describe('CashShiftController', () => {
         status: undefined,
         limit: undefined,
       });
-      expect(result).toEqual(mockShifts);
+      // The response boundary coerces the driver strings into JSON numbers.
+      expect(result[0]).toEqual({
+        ...mockShifts[0],
+        initial_float_nio: 1000,
+        initial_float_usd: 50,
+        expected_cash_nio: 1150.5,
+        expected_cash_usd: 57.5,
+        final_counted_nio: null,
+        final_counted_usd: null,
+        difference_nio: null,
+        difference_usd: null,
+      });
+      expect(typeof result[0].initial_float_nio).toBe('number');
+      expect(typeof result[0].expected_cash_nio).toBe('number');
+      expect(typeof result[0].expected_cash_usd).toBe('number');
+      expect(typeof result[0].difference_nio).toBe('object'); // null
     });
 
     it('forwards the status filter and limit to the service', async () => {
@@ -125,15 +153,8 @@ describe('CashShiftController', () => {
 
   describe('POST /sales/shifts/open', () => {
     it('opens a new cash shift successfully', async () => {
-      const mockShift: Partial<CashShiftSession> = {
-        id: 'shift-1',
-        tenant_id: 'tenant-test-1',
-        terminal_id: 'term-main',
-        status: CashShiftStatus.OPEN,
-        initial_float_nio: 1000.0,
-        initial_float_usd: 50.0,
-      };
-      service.openShift.mockResolvedValue(mockShift as CashShiftSession);
+      const mockShift = driverShift() as unknown as CashShiftSession;
+      service.openShift.mockResolvedValue(mockShift);
 
       const result = await controller.openShift(
         { user: mockUser },
@@ -153,21 +174,24 @@ describe('CashShiftController', () => {
         initialFloatNio: 1000.0,
         initialFloatUsd: 50.0,
       });
-      expect(result).toEqual(mockShift);
+      expect(result).toEqual({
+        ...mockShift,
+        initial_float_nio: 1000,
+        initial_float_usd: 50,
+        expected_cash_nio: 1150.5,
+        expected_cash_usd: 57.5,
+        final_counted_nio: null,
+        final_counted_usd: null,
+        difference_nio: null,
+        difference_usd: null,
+      });
     });
   });
 
   describe('GET /sales/shifts/active', () => {
     it('returns the active shift for the specified terminal', async () => {
-      const mockShift: Partial<CashShiftSession> = {
-        id: 'shift-1',
-        tenant_id: 'tenant-test-1',
-        terminal_id: 'term-main',
-        status: CashShiftStatus.OPEN,
-      };
-      service.getActiveShiftByTerminal.mockResolvedValue(
-        mockShift as CashShiftSession,
-      );
+      const mockShift = driverShift() as unknown as CashShiftSession;
+      service.getActiveShiftByTerminal.mockResolvedValue(mockShift);
 
       const result = await controller.getActiveShift(
         { user: mockUser },
@@ -178,24 +202,38 @@ describe('CashShiftController', () => {
         'tenant-test-1',
         'term-main',
       );
-      expect(result).toEqual(mockShift);
+      expect(result).toMatchObject({
+        id: 'shift-1',
+        initial_float_nio: 1000,
+        expected_cash_nio: 1150.5,
+        difference_nio: null,
+      });
+    });
+
+    it('keeps the established null response when no shift is active', async () => {
+      service.getActiveShiftByTerminal.mockResolvedValue(null);
+
+      const result = await controller.getActiveShift(
+        { user: mockUser },
+        'term-main',
+      );
+
+      expect(result).toBeNull();
     });
   });
 
   describe('POST /sales/shifts/:shiftId/movements', () => {
     it('records a cash in / out movement', async () => {
-      const mockMovement: Partial<CashMovement> = {
+      const mockMovement = {
         id: 'mov-1',
         shift_id: 'shift-1',
         tenant_id: 'tenant-test-1',
         type: CashMovementType.PETTY_CASH,
-        amount_nio: 150.0,
-        amount_usd: 0.0,
+        amount_nio: '150.0000',
+        amount_usd: '0.0000',
         reason: 'Compra de bolsas',
-      };
-      service.recordCashMovement.mockResolvedValue(
-        mockMovement as CashMovement,
-      );
+      } as unknown as CashMovement;
+      service.recordCashMovement.mockResolvedValue(mockMovement);
 
       const result = await controller.recordMovement(
         { user: mockUser },
@@ -222,7 +260,14 @@ describe('CashShiftController', () => {
           authorizedByUserId: 'supervisor-1',
         },
       );
-      expect(result).toEqual(mockMovement);
+      // The response boundary coerces the driver strings into JSON numbers.
+      expect(result).toEqual({
+        ...mockMovement,
+        amount_nio: 150,
+        amount_usd: 0,
+      });
+      expect(typeof result.amount_nio).toBe('number');
+      expect(typeof result.amount_usd).toBe('number');
     });
   });
 });

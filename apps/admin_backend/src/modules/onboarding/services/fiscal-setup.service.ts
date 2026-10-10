@@ -18,6 +18,8 @@ import {
   FiscalRegime,
   FiscalSetupDto,
   FiscalSetupResponse,
+  MAX_DISCOUNT_AMOUNT_MIN_MESSAGE,
+  MAX_DISCOUNT_PERCENT_RANGE_MESSAGE,
   readCheckoutFxModeOrNull,
   readTenantOperationModeOrNull,
 } from '../dto/fiscal-setup.dto';
@@ -48,6 +50,11 @@ export const FISCAL_PARAM_KEYS = {
   DGI_AUTHORIZATION_CODE: 'DGI_AUTHORIZATION_CODE',
   DGI_AUTHORIZATION_ISSUED_AT: 'DGI_AUTHORIZATION_ISSUED_AT',
   DGI_AUTHORIZATION_EXPIRES_AT: 'DGI_AUTHORIZATION_EXPIRES_AT',
+  // SOHO P3 (D-A): optional per-business MAXIMUM manual discount caps.
+  // Stored as jsonb numbers; a governing null (tombstone) or an absent key
+  // means NO CAP — the POS applies no manual-discount limit.
+  MAX_DISCOUNT_AMOUNT: 'MAX_DISCOUNT_AMOUNT',
+  MAX_DISCOUNT_PERCENT: 'MAX_DISCOUNT_PERCENT',
 } as const;
 
 export const DGI_NICARAGUA_TAX_RATES = {
@@ -71,6 +78,15 @@ export const DEFAULT_COMMERCIAL_FX_SPREAD = 36.5;
  */
 export const COMMERCIAL_FX_SPREAD_MIN = 10;
 export const COMMERCIAL_FX_SPREAD_MAX = 100;
+
+/**
+ * SOHO P3 (D-A): strict manual-discount cap ranges shared by the DTO
+ * boundary and this service guard. The DTO owns the HTTP wording; the
+ * service guard is defense-in-depth for directly-constructed DTOs.
+ * Amount: >= 0 (0 forbids manual discounts outright). Percent: > 0, <= 100.
+ */
+export const MAX_DISCOUNT_AMOUNT_MIN = 0;
+export const MAX_DISCOUNT_PERCENT_MAX = 100;
 
 export { FiscalRegime };
 
@@ -187,6 +203,7 @@ export class FiscalSetupService {
       operationMode,
       checkoutFxMode,
       ...this.dgiAuthorizationFields(paramMap),
+      ...this.discountCapFields(paramMap),
       configVersion,
     };
   }
@@ -227,6 +244,25 @@ export class FiscalSetupService {
       throw new BadRequestException(
         'commercialFxSpread must be between 10 and 100',
       );
+    }
+
+    // SOHO P3 (D-A): defense-in-depth for the discount caps, mirroring the
+    // FX spread guard — a directly-constructed DTO reaching this service
+    // must be rejected here too, before any mutation.
+    if (
+      dto.maxDiscountAmount !== undefined &&
+      dto.maxDiscountAmount !== null &&
+      dto.maxDiscountAmount < MAX_DISCOUNT_AMOUNT_MIN
+    ) {
+      throw new BadRequestException(MAX_DISCOUNT_AMOUNT_MIN_MESSAGE);
+    }
+    if (
+      dto.maxDiscountPercent !== undefined &&
+      dto.maxDiscountPercent !== null &&
+      (dto.maxDiscountPercent <= 0 ||
+        dto.maxDiscountPercent > MAX_DISCOUNT_PERCENT_MAX)
+    ) {
+      throw new BadRequestException(MAX_DISCOUNT_PERCENT_RANGE_MESSAGE);
     }
 
     // Defense-in-depth (FR-1): never silently persist a blank/invalid RUC as
@@ -346,6 +382,25 @@ export class FiscalSetupService {
           userId,
         );
 
+        // SOHO P3 (D-A): the discount caps ride the same upsert-or-clear
+        // channel — an absent field leaves the prior cap untouched; an
+        // explicit null writes a superseding tombstone (NO CAP). Values are
+        // numeric jsonb, so the numeric channel persists the number itself.
+        await this.upsertOrClearNumberParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.MAX_DISCOUNT_AMOUNT,
+          dto.maxDiscountAmount,
+          userId,
+        );
+        await this.upsertOrClearNumberParameter(
+          manager,
+          trimmedTenantId,
+          FISCAL_PARAM_KEYS.MAX_DISCOUNT_PERCENT,
+          dto.maxDiscountPercent,
+          userId,
+        );
+
         // 3. Record or Update FiscalConfigVersion
         let configVersion: FiscalConfigVersion | undefined;
         if (this.fiscalConfigVersionService) {
@@ -398,6 +453,7 @@ export class FiscalSetupService {
             postWriteMap.get(FISCAL_PARAM_KEYS.CHECKOUT_FX_MODE),
           ),
           ...this.dgiAuthorizationFields(postWriteMap),
+          ...this.discountCapFields(postWriteMap),
           configVersion,
           configuredAt,
         };
@@ -469,6 +525,61 @@ export class FiscalSetupService {
       tenantId,
       paramKey,
       trimmed === '' ? null : trimmed,
+      userId,
+    );
+  }
+
+  /**
+   * SOHO P3 (D-A): serializes the manual-discount caps for the GET/POST
+   * response. An absent, tombstoned (null) or corrupt (non-numeric) row
+   * reads as null — absence must look like absence (D-16), and a corrupt
+   * value must never fabricate a cap.
+   *
+   * ENFORCEMENT RULE the POS mirrors (canonical statement in
+   * FiscalConfigVersionService.getEffectiveFiscalPayload): a manual
+   * discount is ALLOWED only when it is less than or equal to EVERY
+   * configured cap — discount <= maxDiscountAmount AND discount <=
+   * (maxDiscountPercent / 100) x gross subtotal; the effective cap is the
+   * MINIMUM of the configured caps. A configured cap of 0 forbids any
+   * discount; when both are null (or absent), the discount is NOT limited.
+   */
+  private discountCapFields(paramMap: Map<string, unknown>): {
+    maxDiscountAmount: number | null;
+    maxDiscountPercent: number | null;
+  } {
+    const read = (key: string): number | null => {
+      const value = paramMap.get(key);
+      return typeof value === 'number' && Number.isFinite(value)
+        ? value
+        : null;
+    };
+    return {
+      maxDiscountAmount: read(FISCAL_PARAM_KEYS.MAX_DISCOUNT_AMOUNT),
+      maxDiscountPercent: read(FISCAL_PARAM_KEYS.MAX_DISCOUNT_PERCENT),
+    };
+  }
+
+  /**
+   * Upserts a numeric parameter, or clears it. SOHO P3 (D-A) numeric twin of
+   * upsertOrClearParameter: an absent field is a no-op (the prior cap stays
+   * untouched); an explicit null clears through a superseding null tombstone
+   * (append-only contract) — never by mutating the table.
+   */
+  private async upsertOrClearNumberParameter(
+    manager: EntityManager,
+    tenantId: string,
+    paramKey: string,
+    value: number | null | undefined,
+    userId?: string,
+  ): Promise<void> {
+    if (value === undefined) {
+      return;
+    }
+    await this.upsertParameter(
+      manager,
+      tenantId,
+      paramKey,
+      value === null ? null : value,
       userId,
     );
   }

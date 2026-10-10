@@ -1,4 +1,6 @@
 import { useState, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Edit2, Trash2 } from "lucide-react";
 import {
   usePaginatedProducts,
@@ -9,9 +11,11 @@ import {
 import {
   PRODUCT_TYPES,
   CREATE_TYPE_ANSWERS,
+  productFormSchema,
   type ProductType,
   type StoredProductType,
   type Product,
+  type ProductFormValues,
   type CreateProductInput,
 } from "./product-types";
 import { useCatalogValues } from "./use-catalog";
@@ -247,13 +251,32 @@ function ProductDialog({
     true,
   );
 
-  const [name, setName] = useState(product?.name ?? "");
-  const [uom, setUom] = useState(product?.uom ?? "");
+  // Unit B (form sweep): the app owns validation through the zod schema in
+  // product-types.ts (single source of operator feedback). The native HTML
+  // constraints this dialog used to rely on (name: required + maxLength;
+  // uom: required; sellPrice: step + min) only ran inside the browser's
+  // constraint validation: the balloon replaced the app's Spanish inline
+  // errors, and any submit not coming from the button (e.g. a programmatic
+  // requestSubmit()) bypassed the guard entirely.
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<ProductFormValues>({
+    resolver: zodResolver(productFormSchema),
+    defaultValues: {
+      name: product?.name ?? "",
+      uom: product?.uom ?? "",
+      sellPrice: product ? toFiniteNumber(product.sellPrice) : 0,
+    },
+  });
+  const name = watch("name");
+  const uom = watch("uom");
+  const sellPrice = watch("sellPrice");
+
   const [categoryCode, setCategoryCode] = useState(
     product?.category_code ?? "",
-  );
-  const [sellPrice, setSellPrice] = useState(
-    product ? toFiniteNumber(product.sellPrice) : 0,
   );
   const [isPerishable, setIsPerishable] = useState(
     product?.is_perishable ?? false,
@@ -299,6 +322,10 @@ function ProductDialog({
   };
 
   const isSubmittingRef = useRef(false);
+  // Validated values from the last resolver pass, kept so the destructive
+  // type-change confirmation can submit exactly what was validated without
+  // re-reading unvalidated inputs.
+  const validatedValuesRef = useRef<ProductFormValues | null>(null);
 
   // Leaving the recipe-bearing set orphans the recipe: it stops consuming
   // ingredients and stops moving stock. Require explicit confirmation before
@@ -309,7 +336,7 @@ function ProductDialog({
     isRecipeBearingType(product.product_type) &&
     !isRecipeBearingType(editType);
 
-  const runSubmit = async () => {
+  const runSubmit = async (values: ProductFormValues) => {
     if (isPending || isSubmittingRef.current) return;
     isSubmittingRef.current = true;
     setError(null);
@@ -319,18 +346,18 @@ function ProductDialog({
         await updateMutation.mutateAsync({
           id: product.id,
           input: {
-            name: name.trim(),
-            uom: uom.trim(),
+            name: values.name.trim(),
+            uom: values.uom.trim(),
             product_type: editType,
             category_code: categoryCode || undefined,
-            sellPrice,
+            sellPrice: values.sellPrice,
             is_perishable: isPerishable,
           },
         });
         toast({
           variant: "success",
           title: "Producto actualizado",
-          description: `"${name.trim()}" se actualizó exitosamente.`,
+          description: `"${values.name.trim()}" se actualizó exitosamente.`,
         });
       } else {
         // Handler-level refusal (issue #618): the disabled button is not the
@@ -338,11 +365,11 @@ function ProductDialog({
         // submit path. The type comes from the answer, never from the tab.
         if (!createTypeAnswer) return;
         const input: CreateProductInput = {
-          name: name.trim(),
-          uom: uom.trim(),
+          name: values.name.trim(),
+          uom: values.uom.trim(),
           product_type: createTypeAnswer,
           category_code: categoryCode || undefined,
-          sellPrice,
+          sellPrice: values.sellPrice,
           is_perishable: isPerishable,
         };
         await createMutation.mutateAsync(input);
@@ -350,7 +377,7 @@ function ProductDialog({
         toast({
           variant: "success",
           title: "Producto creado",
-          description: `"${name.trim()}" se guardó exitosamente en el catálogo.`,
+          description: `"${values.name.trim()}" se guardó exitosamente en el catálogo.`,
         });
       }
       onClose();
@@ -367,9 +394,13 @@ function ProductDialog({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Resolver-validated entry point: this only runs when the schema accepted
+  // every field, so the handler-level guards below keep their exact pre-sweep
+  // behavior (issue #618's unanswered-question refusal and the destructive
+  // type-change confirmation) with values the schema already vetted.
+  const onValid = (values: ProductFormValues) => {
     if (isPending || isSubmittingRef.current) return;
+    validatedValuesRef.current = values;
     // Issue #618: refuse creation while the question is unanswered, on any
     // submit path (click is already blocked by the disabled button; this is
     // the second layer, matching #617's discipline).
@@ -382,13 +413,15 @@ function ProductDialog({
     // click on "Guardar" or an Enter keypress must never apply the destructive
     // change. Only the explicit "Confirmar y guardar" action may submit it.
     if (isDestructiveTypeChange) return;
-    await runSubmit();
+    void runSubmit(values);
   };
 
   const confirmTypeChangeAndSubmit = async () => {
     if (isPending || isSubmittingRef.current) return;
+    const values = validatedValuesRef.current;
+    if (!values) return;
     setAwaitingTypeChangeConfirm(false);
-    await runSubmit();
+    await runSubmit(values);
   };
 
   return (
@@ -421,7 +454,17 @@ function ProductDialog({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+        {/* noValidate: the application's own zod validation (via the RHF
+            resolver) is the single source of operator feedback. Native HTML
+            constraint validation would otherwise block the submit event
+            before the resolver runs, replacing the design system's Spanish
+            inline errors with the browser's own validation bubble (browser
+            language and styling). */}
+        <form
+          onSubmit={handleSubmit(onValid)}
+          noValidate
+          className="space-y-4 pt-1"
+        >
           {!isEdit && (
             <fieldset className="space-y-2" disabled={isPending}>
               <legend className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -456,13 +499,14 @@ function ProductDialog({
             </label>
             <Input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={200}
+              {...register("name")}
               placeholder="Ej: Taza de Capuccino"
               disabled={isPending}
+              aria-invalid={Boolean(errors.name)}
             />
+            {errors.name && (
+              <p className="text-xs text-destructive">{errors.name.message}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -471,10 +515,9 @@ function ProductDialog({
                 Unidad de Medida *
               </label>
               <select
-                value={uom}
-                onChange={(e) => setUom(e.target.value)}
-                required
+                {...register("uom")}
                 disabled={isPending}
+                aria-invalid={Boolean(errors.uom)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <option value="">Seleccionar UOM</option>
@@ -484,6 +527,11 @@ function ProductDialog({
                   </option>
                 ))}
               </select>
+              {errors.uom && (
+                <p className="text-xs text-destructive">
+                  {errors.uom.message}
+                </p>
+              )}
             </div>
 
             <div>
@@ -542,13 +590,20 @@ function ProductDialog({
             </label>
             <Input
               type="number"
-              step="0.01"
-              min="0"
-              value={sellPrice}
-              onChange={(e) => setSellPrice(parseFloat(e.target.value) || 0)}
+              {...register("sellPrice", {
+                // Mirrors the old `parseFloat(...) || 0` state handling: an
+                // emptied input submits as 0, a typed value as its number.
+                setValueAs: (v) => (v === "" ? 0 : Number(v)),
+              })}
               placeholder="0.00"
               disabled={isPending}
+              aria-invalid={Boolean(errors.sellPrice)}
             />
+            {errors.sellPrice && (
+              <p className="text-xs text-destructive">
+                {errors.sellPrice.message}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2 pt-1">

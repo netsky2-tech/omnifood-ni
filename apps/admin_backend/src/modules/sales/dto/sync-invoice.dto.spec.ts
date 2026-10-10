@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { DiscountOrigin } from '../entities/discount-origin.enum';
 import { SyncInvoiceDto } from './sync-invoice.dto';
 
 describe('SyncInvoiceDto fiscal projection fields (#551 U3)', () => {
@@ -249,5 +250,286 @@ describe('SyncInvoiceDto fx-rate fiscal fields (D-6)', () => {
       expect(padded.dto.customerName).toBe('Juan Perez');
       expect(padded.dto.customerTaxId).toBe('J0310000001234');
     });
+  });
+});
+
+describe('SyncInvoiceDto per-line discountOrigin amounts breakdown (D-A2)', () => {
+  const baseItem = {
+    id: 'item-1',
+    productId: 'prod-1',
+    productName: 'Burger',
+    quantity: 1,
+    unitPrice: 10,
+    originalTaxRate: 0.15,
+    appliedTaxRate: 0.15,
+    taxAmount: 1.5,
+    total: 11.5,
+    discount: 1,
+  };
+
+  const basePayload = {
+    id: 'inv-1',
+    number: '001',
+    createdAt: new Date().toISOString(),
+    userId: 'user-1',
+    subtotal: 100,
+    totalTax: 15,
+    total: 115,
+    paymentStatus: 'PAID',
+    items: [baseItem],
+    payments: [],
+  };
+
+  const validate = (
+    payload: Record<string, unknown>,
+    options: Record<string, unknown> = {},
+  ) => {
+    const dto = plainToInstance(SyncInvoiceDto, payload);
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidUnknownValues: false,
+      ...options,
+    });
+    return { dto, errors };
+  };
+
+  const flatten = (
+    error: import('class-validator').ValidationError,
+  ): string[] => [error.property, ...(error.children ?? []).flatMap(flatten)];
+
+  it('accepts a per-line amounts breakdown and keeps it after whitelist stripping', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: { manual: 5, promotion: 10 } }],
+    });
+
+    expect(errors).toEqual([]);
+    // A line can be discounted by MORE THAN ONE origin at once (a promotion
+    // on the item plus a manual discount on the order); the breakdown keeps
+    // how much came from each.
+    expect(dto.items[0].discountOrigin).toEqual({ manual: 5, promotion: 10 });
+  });
+
+  it('accepts a partial breakdown: members are optional and only non-zero origins travel', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: { promotion: 10 } }],
+    });
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0].discountOrigin).toEqual({ promotion: 10 });
+  });
+
+  it('accepts every known origin as a breakdown key: the TS enum is the source of the keys', () => {
+    for (const origin of Object.values(DiscountOrigin)) {
+      const { errors } = validate({
+        ...basePayload,
+        items: [{ ...baseItem, discountOrigin: { [origin]: 1 } }],
+      });
+
+      expect(errors).toEqual([]);
+    }
+  });
+
+  it('accepts explicit null: the cloud must not fabricate origins (no backfill)', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: null }],
+    });
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0].discountOrigin).toBeNull();
+  });
+
+  it('rejects an unknown KEY inside the breakdown instead of silently storing it', () => {
+    const { errors } = validate(
+      {
+        ...basePayload,
+        items: [{ ...baseItem, discountOrigin: { bossDiscount: 5 } }],
+      },
+      // Mirrors the production ValidationPipe (main.ts): whitelist plus
+      // forbidNonWhitelisted. An unknown member must be REJECTED, not
+      // stripped into silent data loss.
+      { forbidNonWhitelisted: true },
+    );
+
+    const properties = errors.flatMap(flatten);
+    expect(properties).toContain('discountOrigin');
+    expect(properties).toContain('bossDiscount');
+  });
+
+  it('rejects a NEGATIVE amount', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: { manual: -3 } }],
+    });
+
+    expect(errors.flatMap(flatten)).toContain('discountOrigin');
+  });
+
+  it('rejects a ZERO amount: presence already implies a non-zero contribution, so the pipe must answer 400 before the database can answer 23514', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: { manual: 0 } }],
+    });
+
+    const properties = errors.flatMap(flatten);
+    expect(properties).toContain('discountOrigin');
+    expect(properties).toContain('manual');
+  });
+
+  it('rejects an EMPTY breakdown object: the legal states are exactly NULL and a populated breakdown', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: {} }],
+    });
+
+    expect(errors.flatMap(flatten)).toContain('discountOrigin');
+  });
+
+  it('rejects a non-numeric amount', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [{ ...baseItem, discountOrigin: { manual: '5' } }],
+    });
+
+    expect(errors.flatMap(flatten)).toContain('discountOrigin');
+  });
+
+  it('leaves the field optional so payloads whose items omit it still validate (backward-compat contract for every deployed terminal)', () => {
+    const { dto, errors } = validate(basePayload);
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0]).not.toHaveProperty('discountOrigin');
+  });
+});
+
+describe('CreateModifierDto modifier quantity (SOHO P3)', () => {
+  const baseModifier = {
+    name: 'Michelada Extra',
+    extraPrice: 30,
+  };
+
+  const baseItem = {
+    id: 'item-1',
+    productId: 'prod-1',
+    productName: 'Cerveza Preparada',
+    quantity: 1,
+    unitPrice: 50,
+    originalTaxRate: 0.15,
+    appliedTaxRate: 0.15,
+    taxAmount: 16.5,
+    total: 126.5,
+    discount: 0,
+    modifiers: [baseModifier],
+  };
+
+  const basePayload = {
+    id: 'inv-1',
+    number: '001',
+    createdAt: new Date().toISOString(),
+    userId: 'user-1',
+    subtotal: 110,
+    totalTax: 16.5,
+    total: 126.5,
+    paymentStatus: 'PAID',
+    items: [baseItem],
+    payments: [],
+  };
+
+  const validate = (payload: Record<string, unknown>) => {
+    const dto = plainToInstance(SyncInvoiceDto, payload);
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidUnknownValues: false,
+      // Mirrors the production ValidationPipe (main.ts): whitelist plus
+      // forbidNonWhitelisted. An unknown member must be REJECTED, not
+      // stripped into silent data loss.
+      forbidNonWhitelisted: true,
+    });
+    return { dto, errors };
+  };
+
+  const flatten = (
+    error: import('class-validator').ValidationError,
+  ): string[] => [error.property, ...(error.children ?? []).flatMap(flatten)];
+
+  // The nested array path (items → modifiers → element) is an
+  // implementation detail of class-validator's error tree; find the
+  // quantity error anywhere under it.
+  const findQuantityError = (
+    error: import('class-validator').ValidationError,
+  ): import('class-validator').ValidationError | undefined => {
+    if (error.property === 'quantity') return error;
+    for (const child of error.children ?? []) {
+      const found = findQuantityError(child);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const quantityErrors = (
+    errors: import('class-validator').ValidationError[],
+  ) =>
+    errors
+      .map(findQuantityError)
+      .filter(
+        (error): error is import('class-validator').ValidationError =>
+          error !== undefined,
+      );
+
+  it('accepts the POS wire shape {name, extraPrice, quantity} and keeps quantity after validation', () => {
+    const { dto, errors } = validate({
+      ...basePayload,
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: 2 }] },
+      ],
+    });
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0].modifiers?.[0].quantity).toBe(2);
+  });
+
+  it('leaves quantity OPTIONAL: older terminals omit it and must stay valid', () => {
+    const { dto, errors } = validate(basePayload);
+
+    expect(errors).toEqual([]);
+    expect(dto.items[0].modifiers?.[0].quantity).toBeUndefined();
+  });
+
+  it('rejects quantity 0 with the named min constraint', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: 0 }] },
+      ],
+    });
+
+    const quantityError = quantityErrors(errors);
+    expect(quantityError).toHaveLength(1);
+    expect(Object.keys(quantityError[0].constraints ?? {})).toContain('min');
+  });
+
+  it('rejects a NEGATIVE quantity with the named min constraint', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: -3 }] },
+      ],
+    });
+
+    const quantityError = quantityErrors(errors);
+    expect(quantityError).toHaveLength(1);
+    expect(Object.keys(quantityError[0].constraints ?? {})).toContain('min');
+  });
+
+  it('rejects a NON-INTEGER quantity (fractional units of an option are meaningless)', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: 1.5 }] },
+      ],
+    });
+
+    expect(errors.flatMap(flatten)).toContain('quantity');
   });
 });

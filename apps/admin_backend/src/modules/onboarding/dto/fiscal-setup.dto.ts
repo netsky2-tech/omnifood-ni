@@ -12,6 +12,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  IsPositive,
   Validate,
   ValidationArguments,
   ValidatorConstraint,
@@ -70,6 +71,17 @@ export const DGI_AUTHORIZATION_CODE_CHARSET_MESSAGE =
   'dgiAuthorizationCode must only contain letters, digits, hyphens and slashes';
 export const DGI_AUTHORIZATION_DATE_RANGE_MESSAGE =
   'dgiAuthorizationExpiresAt must be a date greater than or equal to dgiAuthorizationIssuedAt';
+
+/**
+ * SOHO P3 (D-A): manual-discount cap rejection messages, exported so specs
+ * pin the exact boundary wording. The amount cap accepts 0 (a zero cap
+ * forbids manual discounts outright); the percent cap is strictly positive
+ * and at most 100.
+ */
+export const MAX_DISCOUNT_AMOUNT_MIN_MESSAGE =
+  'maxDiscountAmount must be greater than or equal to 0';
+export const MAX_DISCOUNT_PERCENT_RANGE_MESSAGE =
+  'maxDiscountPercent must be greater than 0 and less than or equal to 100';
 
 /**
  * D-21 (#554): DGI authorization charset — letters, digits, hyphens and
@@ -215,6 +227,29 @@ export class FiscalSetupDto {
   )
   @Validate(DgiAuthorizationDateRangeConstraint)
   dgiAuthorizationExpiresAt?: string | null;
+
+  /**
+   * SOHO P3 (D-A): per-business MAXIMUM manual discount caps. OPTIONAL with
+   * the same contract as the DGI fields (D-16/D-21 spirit): absence asserts
+   * nothing and leaves the persisted parameter untouched; an explicit null
+   * (or an empty string, via the same clear transform the dates use) is the
+   * clear sentinel — NULL CONFIGURATION MEANS NO CAP. Nonsense is rejected
+   * at the boundary: a negative amount, and a percent that is <= 0 or > 100.
+   * The POS mirrors the enforcement rule documented in
+   * FiscalConfigVersionService.getEffectiveFiscalPayload.
+   */
+  @Transform(blankStringToNull)
+  @IsOptional()
+  @IsNumber({}, { message: 'maxDiscountAmount must be a number' })
+  @Min(0, { message: MAX_DISCOUNT_AMOUNT_MIN_MESSAGE })
+  maxDiscountAmount?: number | null;
+
+  @Transform(blankStringToNull)
+  @IsOptional()
+  @IsNumber({}, { message: 'maxDiscountPercent must be a number' })
+  @IsPositive({ message: MAX_DISCOUNT_PERCENT_RANGE_MESSAGE })
+  @Max(100, { message: MAX_DISCOUNT_PERCENT_RANGE_MESSAGE })
+  maxDiscountPercent?: number | null;
 }
 
 export interface FiscalSetupResponse {
@@ -233,6 +268,13 @@ export interface FiscalSetupResponse {
   dgiAuthorizationCode: string | null;
   dgiAuthorizationIssuedAt: string | null;
   dgiAuthorizationExpiresAt: string | null;
+  /**
+   * SOHO P3 (D-A): null = no cap configured (or tombstoned/cleared) — the
+   * POS applies NO manual-discount limit when null. Optional so builders
+   * predating P3 keep compiling (same precedent as FiscalConfigSnapshot).
+   */
+  maxDiscountAmount?: number | null;
+  maxDiscountPercent?: number | null;
   configVersion?: FiscalConfigVersion;
   configuredAt?: Date;
 }

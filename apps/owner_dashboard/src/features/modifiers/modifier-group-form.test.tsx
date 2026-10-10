@@ -429,6 +429,19 @@ describe("ModifierGroupForm", () => {
     expect(entera).toBeDefined();
     expect(typeof entera!.input.price_delta).toBe("number");
     expect(entera!.input.price_delta).toBe(0);
+
+    // Pin the payload's KEY SET, not only the price type. This is what makes
+    // the recorded contract in
+    // apps/admin_backend/test/fixtures/modifiers/browser-create-option-payload.json
+    // meaningful without coupling the two workspaces: if the form's payload
+    // shape drifts, it fails HERE, at the producer, instead of the backend
+    // replay silently testing an outdated artifact.
+    expect(Object.keys(entera!.input).sort()).toEqual([
+      "is_default",
+      "name",
+      "price_delta",
+      "sort_order",
+    ]);
   });
 
   it("maps a 409 conflict to the friendly Spanish message, never the raw body", async () => {

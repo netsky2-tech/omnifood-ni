@@ -19,6 +19,7 @@ import { UserRole } from '../../identity/entities/user.entity';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { InvoicesService } from '../services/invoices.service';
 import { CreateAdminCreditNoteDto } from '../dto/admin-credit-note.dto';
+import { serializeAdminInvoices } from '../dto/admin-invoice-response';
 
 interface AdminRequestUser {
   sub?: string;
@@ -90,7 +91,9 @@ export class AdminInvoicesController {
   @RequirePermissions(AppPermission.SALES_ISSUE_CREDIT_NOTE)
   async listCreditNotes(@Req() request: AdminRequest) {
     const tenantId = this.requireTenantId(request.user);
-    return this.invoicesService.findAll(tenantId);
+    return serializeAdminInvoices(
+      await this.invoicesService.findAll(tenantId),
+    );
   }
 
   /**
@@ -105,6 +108,8 @@ export class AdminInvoicesController {
   @RequirePermissions(AppPermission.SALES_ISSUE_CREDIT_NOTE)
   async listInvoices(@Req() request: AdminRequest) {
     const tenantId = this.requireTenantId(request.user);
-    return this.invoicesService.findAll(tenantId);
+    return serializeAdminInvoices(
+      await this.invoicesService.findAll(tenantId),
+    );
   }
 }

@@ -12,6 +12,7 @@ import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/data/daos/sales/cash_movement_dao.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
+import 'package:pos_app/domain/models/sales/promotion.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/services/config/business_mode_evaluator.dart';
@@ -154,6 +155,417 @@ void main() {
       child: const MaterialApp(home: SaleView()),
     );
   }
+
+  testWidgets(
+    'CartSummary reports the discount breakdown honestly and reconciles with TOTAL (SOHO-P3)',
+    (tester) async {
+      when(mockViewModel.cart).thenReturn([
+        const CartItem(
+          productId: 'p-1',
+          productName: 'Producto 1',
+          quantity: 1,
+          unitPrice: 155,
+          taxRate: 0.15,
+        ),
+      ]);
+      // Components: manual 30 + promo 15 + loyalty 10 = totalDiscounts 55.
+      // Gross row prints subtotal + totalDiscounts = 160.00; IVA 24.00;
+      // TOTAL must reconcile: 160 - 30 - 15 - 10 + 24 = 129.00.
+      when(mockViewModel.subtotal).thenReturn(105.0);
+      when(mockViewModel.totalDiscounts).thenReturn(55.0);
+      when(mockViewModel.manualDiscount).thenReturn(30.0);
+      when(mockViewModel.promoDiscounts).thenReturn(15.0);
+      when(mockViewModel.loyaltyDiscount).thenReturn(10.0);
+      when(mockViewModel.totalTax).thenReturn(24.0);
+      when(mockViewModel.total).thenReturn(129.0);
+      when(mockViewModel.grossSubtotal).thenReturn(160.0);
+      when(mockViewModel.companyTaxRegime).thenReturn(null);
+
+      // The default 800x600 test surface renders the cart panel ~335px wide;
+      // under the Ahem test font every glyph is fontSize wide, which overflows
+      // rows that fit easily with real fonts. Halve the text scale for layout.
+      tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Descuento manual'), findsOneWidget);
+      expect(find.text('-C\$ 30.00'), findsOneWidget);
+      expect(find.text('Promociones'), findsOneWidget);
+      expect(find.text('-C\$ 15.00'), findsOneWidget);
+      expect(find.text('Descuento por puntos'), findsOneWidget);
+      expect(find.text('-C\$ 10.00'), findsOneWidget);
+      // The aggregate row that misreported manual discounts as promotions is
+      // gone.
+      expect(find.text('Descuentos (Promos)'), findsNothing);
+
+      // Display reconciliation: the printed gross row (subtotal +
+      // totalDiscounts = 160.00) minus the three rendered discount rows plus
+      // the rendered IVA row must equal the printed TOTAL (129.00). Without
+      // the loyalty row this panel no longer adds up to TOTAL.
+      expect(find.text('C\$ 160.00'), findsOneWidget);
+      expect(find.text('C\$ 24.00'), findsOneWidget);
+      expect(find.text('C\$ 129.00'), findsOneWidget);
+      const renderedDiscounts = 30.0 + 15.0 + 10.0;
+      const expectedTotal = 160.0 - renderedDiscounts + 24.0;
+      expect(expectedTotal, 129.0);
+    },
+  );
+
+  testWidgets(
+    'CartSummary prints the TRUE gross and TOTAL 0 when the discount aggregate is clamped (SOHO-P3)',
+    (tester) async {
+      when(mockViewModel.cart).thenReturn([
+        const CartItem(
+          productId: 'p-1',
+          productName: 'Producto 1',
+          quantity: 1,
+          unitPrice: 155,
+          taxRate: 0.15,
+        ),
+      ]);
+      // Stale redemption after the cart shrank: the raw aggregate (205)
+      // exceeds the true gross (200); the fiscal calculator clamps it, so
+      // subtotal and total collapse to 0. The gross row must still print the
+      // TRUE gross, not subtotal + totalDiscounts (the lying 205.00).
+      when(mockViewModel.grossSubtotal).thenReturn(200.0);
+      when(mockViewModel.subtotal).thenReturn(0.0);
+      when(mockViewModel.totalDiscounts).thenReturn(205.0);
+      when(mockViewModel.manualDiscount).thenReturn(15.0);
+      when(mockViewModel.promoDiscounts).thenReturn(100.0);
+      when(mockViewModel.loyaltyDiscount).thenReturn(90.0);
+      when(mockViewModel.totalTax).thenReturn(0.0);
+      when(mockViewModel.total).thenReturn(0.0);
+      when(mockViewModel.companyTaxRegime).thenReturn(null);
+
+      tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Descuento manual'), findsOneWidget);
+      expect(find.text('-C\$ 15.00'), findsOneWidget);
+      expect(find.text('Promociones'), findsOneWidget);
+      expect(find.text('-C\$ 100.00'), findsOneWidget);
+      expect(find.text('Descuento por puntos'), findsOneWidget);
+      expect(find.text('-C\$ 90.00'), findsOneWidget);
+
+      // The gross row is the source of truth.
+      expect(find.text('C\$ 200.00'), findsOneWidget);
+      expect(find.text('C\$ 205.00'), findsNothing);
+
+      // TOTAL is clamped to 0, and the rendered rows expose the
+      // over-discount: 200 - (15 + 100 + 90) = -5, i.e. no positive amount
+      // can reconcile; the discount rows plus IVA (hidden, 0) reconcile
+      // against the true gross only through the clamp.
+      expect(find.text('C\$ 0.00'), findsOneWidget);
+      const overDiscount = 200.0 - (15.0 + 100.0 + 90.0);
+      expect(overDiscount <= 0, isTrue);
+    },
+  );
+
+  testWidgets(
+    'manual discount prompt shows the configured cap BEFORE typing (SOHO-P3 S1b)',
+    (tester) async {
+      when(mockViewModel.cart).thenReturn([
+        const CartItem(
+          productId: 'p-1',
+          productName: 'Producto 1',
+          quantity: 1,
+          unitPrice: 155,
+          taxRate: 0.15,
+        ),
+      ]);
+      // The view refreshes the caps (D-5 style freshness) before opening the
+      // prompt, then renders the effective limit next to the amount field.
+      when(mockViewModel.loadDiscountCaps()).thenAnswer((_) async {});
+      when(mockViewModel.manualDiscountLimitLabel)
+          .thenReturn('Límite de descuento manual: C\$ 40.00 (por monto)');
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('DESCUENTO MANUAL'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('manual_discount_limit_label')), findsOneWidget);
+      expect(find.textContaining('Límite de descuento manual'), findsOneWidget);
+      // The prompt still offers the existing flow (amount field + Aplicar).
+      expect(find.text('Monto de descuento'), findsOneWidget);
+      expect(find.text('Aplicar'), findsOneWidget);
+    },
+  );
+
+  group('manual discount prompt carries the cap verdict inline (device defect)', () {
+    // Device-reported defect (P3): the operator typed C$ 30 on a C$ 230 cart
+    // with caps C$ 50 / 10% configured; the refusal reached only the
+    // ScaffoldMessenger SnackBar behind the cart bottom sheet, so nothing
+    // appeared anywhere and the dialog closed. The prompt itself must now
+    // carry the verdict INLINE and stay open, evaluating the amount with the
+    // SAME rule the view model enforces (DiscountPolicyService + the view
+    // model's exposed caps/subtotal/accumulated discount).
+    const expectedRejection =
+        'Descuento no permitido: el límite manual es C\$ 23.00 (10% del subtotal, política del negocio por porcentaje).';
+
+    void stubCaps() {
+      when(mockViewModel.cart).thenReturn([
+        const CartItem(
+          productId: 'p-1',
+          productName: 'Producto 1',
+          quantity: 1,
+          unitPrice: 230,
+          taxRate: 0,
+        ),
+      ]);
+      when(mockViewModel.loadDiscountCaps()).thenAnswer((_) async {});
+      when(mockViewModel.maxDiscountAmountCap).thenReturn(50.0);
+      when(mockViewModel.maxDiscountPercentCap).thenReturn(10.0);
+      when(mockViewModel.grossSubtotal).thenReturn(230.0);
+      when(mockViewModel.manualDiscount).thenReturn(0.0);
+      when(mockViewModel.manualDiscountLimitLabel).thenReturn(
+        'Límite de descuento manual: C\$ 50.00 por monto · 10% del subtotal',
+      );
+    }
+
+    Future<void> openPromptAndType(WidgetTester tester, String amount) async {
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DESCUENTO MANUAL'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is TextField &&
+              widget.decoration?.labelText == 'Monto de descuento',
+        ),
+        amount,
+      );
+    }
+
+    testWidgets(
+      'over-cap amount is refused INLINE inside the dialog and the dialog stays open',
+      (tester) async {
+        stubCaps();
+        await openPromptAndType(tester, '30');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+
+        // The dialog did NOT close: the cashier can correct or cancel.
+        expect(find.text('Descuento manual'), findsOneWidget);
+        expect(find.text('Aplicar'), findsOneWidget);
+
+        // The verdict renders INLINE in the dialog (a descendant of the
+        // AlertDialog route — not a SnackBar on the scaffold behind the
+        // cart sheet) and names the effective limit and the binding cap.
+        final rejection = find.text(expectedRejection);
+        expect(rejection, findsOneWidget);
+        expect(
+          find.descendant(of: find.byType(AlertDialog), matching: rejection),
+          findsOneWidget,
+        );
+        expect(find.byType(SnackBar), findsNothing);
+
+        // The refusal is real: nothing reached the view model.
+        verifyNever(mockViewModel.applyManualDiscount(any));
+      },
+    );
+
+    testWidgets(
+      'amount WITHIN the cap closes the dialog and applies the discount',
+      (tester) async {
+        stubCaps();
+        await openPromptAndType(tester, '20');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Descuento manual'), findsNothing);
+        verify(mockViewModel.applyManualDiscount(20.0)).called(1);
+      },
+    );
+
+    testWidgets(
+      'boundary: an amount EQUAL to the effective cap is accepted and applied',
+      (tester) async {
+        // 10% of C$ 230.00 = C$ 23.00, the binding effective cap (below the
+        // C$ 50 amount cap). The rule allows <= the cap — the same ≤
+        // comparison the view model enforces, so the inline pre-check cannot
+        // refuse what the enforcement would accept.
+        stubCaps();
+        await openPromptAndType(tester, '23');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Descuento manual'), findsNothing);
+        verify(mockViewModel.applyManualDiscount(23.0)).called(1);
+      },
+    );
+
+    testWidgets(
+      'boundary: one cent ABOVE the effective cap is refused inline',
+      (tester) async {
+        stubCaps();
+        await openPromptAndType(tester, '23.01');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Descuento manual'), findsOneWidget);
+        expect(find.text(expectedRejection), findsOneWidget);
+        verifyNever(mockViewModel.applyManualDiscount(any));
+      },
+    );
+
+    testWidgets(
+      'ACCUMULATED base: an amount under the cap in isolation but over it SUMMED is refused inline (DD-3 anchor)',
+      (tester) async {
+        // The cashier already holds a C$ 20 manual discount; the effective
+        // cap is C$ 23 (10% of the C$ 230 gross, below the C$ 50 amount
+        // cap). Typing C$ 10 is under the cap IN ISOLATION but 20+10=30 is
+        // over it — the pre-check must feed the view model's accumulated
+        // discount (DD-3) exactly like the enforcement does, or this
+        // over-cap request would close the dialog and the view model's
+        // refusal would land on the SnackBar hidden behind the cart sheet:
+        // the device defect again, on the accumulated path. This test fails
+        // under the mutation `accumulatedManualDiscount: 0.0`.
+        // With a non-zero manual discount the cart panel renders the
+        // 'Descuento manual' row, which overflows under the Ahem test font
+        // at full scale — the same known artifact the CartSummary tests in
+        // this file mitigate with halved text scale.
+        tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        stubCaps();
+        when(mockViewModel.manualDiscount).thenReturn(20.0);
+        await openPromptAndType(tester, '10');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+
+        // The dialog did NOT close: the cashier can correct or cancel. The
+        // cart panel behind legitimately renders its own 'Descuento manual'
+        // row for the accumulated C$ 20, so assert on the DIALOG's own
+        // widgets, not on global text finders.
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Descuento manual'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Aplicar'),
+          ),
+          findsOneWidget,
+        );
+        // The verdict renders INLINE and names the effective limit.
+        expect(
+          find.byKey(const Key('manual_discount_inline_rejection')),
+          findsOneWidget,
+        );
+        expect(find.text(expectedRejection), findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+        // Nothing reached the view model.
+        verifyNever(mockViewModel.applyManualDiscount(any));
+      },
+    );
+
+    testWidgets(
+      'ACCUMULATED base: 20 + 3 = 23 exactly the cap closes the dialog and applies C\$ 3',
+      (tester) async {
+        // Same accumulated base; C$ 3 is acceptable ONLY under the summed
+        // reading (20+3=23 <= 23). The dialog must close and hand the
+        // amount to the view model — the enforcement still decides.
+        tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        stubCaps();
+        when(mockViewModel.manualDiscount).thenReturn(20.0);
+        await openPromptAndType(tester, '3');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+
+        // The dialog is GONE. (The cart row behind legitimately keeps the
+        // 'Descuento manual' label for the accumulated C$ 20, so absence is
+        // asserted on the dialog itself.)
+        expect(find.byType(AlertDialog), findsNothing);
+        verify(mockViewModel.applyManualDiscount(3.0)).called(1);
+      },
+    );
+
+    testWidgets(
+      'the inline refusal clears the moment the operator edits the amount',
+      (tester) async {
+        // Device-reported defect: after a refusal the inline message kept
+        // claiming the OLD amount was not permitted while the operator
+        // corrected it — a small lie on screen at the exact moment the
+        // operator is deciding. The refusal must clear on the text change
+        // itself (the same moment the claim stops being true), not wait for
+        // the next Aplicar.
+        stubCaps();
+        await openPromptAndType(tester, '30');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+        expect(find.text(expectedRejection), findsOneWidget);
+
+        // The cashier corrects 30 -> 20, which IS permitted. The stale
+        // refusal must be gone NOW, while the dialog stays open and the
+        // typed value is preserved.
+        await tester.enterText(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                widget.decoration?.labelText == 'Monto de descuento',
+          ),
+          '20',
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text(expectedRejection), findsNothing);
+        expect(find.byKey(const Key('manual_discount_inline_rejection')),
+            findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Aplicar'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'a refusal followed by a still-invalid Aplicar shows the refusal again',
+      (tester) async {
+        // Clearing on edit must not swallow a REAL new refusal: edit to
+        // another over-cap amount, press Aplicar, and the verdict must be
+        // shown again for the new amount.
+        stubCaps();
+        await openPromptAndType(tester, '30');
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+        expect(find.text(expectedRejection), findsOneWidget);
+
+        await tester.enterText(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is TextField &&
+                widget.decoration?.labelText == 'Monto de descuento',
+          ),
+          '40',
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(expectedRejection), findsNothing);
+
+        await tester.tap(find.text('Aplicar'));
+        await tester.pumpAndSettle();
+
+        expect(find.text(expectedRejection), findsOneWidget);
+        expect(find.byKey(const Key('manual_discount_inline_rejection')),
+            findsOneWidget);
+        verifyNever(mockViewModel.applyManualDiscount(any));
+      },
+    );
+  });
 
   testWidgets('presents supervisor override modal before close-box restricted action', (tester) async {
     when(mockAuthRepository.authorizeOverride(
@@ -531,4 +943,58 @@ void main() {
     verify(mockViewModel.openSession(0, balanceUsd: 0.0)).called(1);
   });
 
+  group('PromotionsManagerDialog is read-only (SOHO P3 S2)', () {
+    // Defect 2: the dialog used to render a SwitchListTile whose onChanged
+    // wrote ONLY the local SQLite row, and the next cloud delta silently
+    // reverted it. The cloud is authoritative, so the POS must not offer a
+    // write control. This test pins that the control is gone AND that the
+    // operator still learns the promotion state and where to change it.
+    testWidgets('shows promotion state without any write control', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      when(mockViewModel.allPromotions).thenReturn(const [
+        Promotion(
+          id: 'promo-active',
+          name: '2x1 Toña',
+          type: PromotionType.buyXGetYFree,
+          buyQuantity: 1,
+          getQuantity: 1,
+          isActive: true,
+        ),
+        Promotion(
+          id: 'promo-inactive',
+          name: '10% Café',
+          type: PromotionType.percentageDiscount,
+          discountValue: 10,
+          isActive: false,
+        ),
+      ]);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<SaleViewModel>.value(
+          value: mockViewModel,
+          child: const MaterialApp(
+            home: Scaffold(body: PromotionsManagerDialog()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The write affordance is gone; the cloud owns activation.
+      expect(find.byType(Switch), findsNothing);
+      expect(find.byType(SwitchListTile), findsNothing);
+
+      // The state is still visible and honestly labelled.
+      expect(find.text('2x1 Toña'), findsOneWidget);
+      expect(find.text('10% Café'), findsOneWidget);
+      expect(find.text('Activa'), findsOneWidget);
+      expect(find.text('Inactiva'), findsOneWidget);
+
+      // The operator is told where promotions are actually managed.
+      expect(find.textContaining('panel de negocio'), findsOneWidget);
+    });
+  });
 }

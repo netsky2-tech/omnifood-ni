@@ -147,6 +147,10 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       dgiAuthorizationCode: null,
       dgiAuthorizationIssuedAt: null,
       dgiAuthorizationExpiresAt: null,
+      // SOHO P3 (D-A): unconfigured discount caps read as null — absence
+      // must look like absence, never rebased to a default.
+      maxDiscountAmount: null,
+      maxDiscountPercent: null,
     };
 
     expect(result).toEqual(paramMap);
@@ -208,6 +212,8 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,
+        maxDiscountAmount: null,
+        maxDiscountPercent: null,
       });
     });
 
@@ -772,6 +778,269 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       expect(fetched.dgiAuthorizationCode).toBe('RES-SFC-145/2025');
       expect(fetched.dgiAuthorizationIssuedAt).toBe('2025-06-01');
       expect(fetched.dgiAuthorizationExpiresAt).toBe('2026-06-01');
+    });
+  });
+
+  // SOHO P3 (D-A): the manual-discount caps ride the same append-only
+  // SystemParametersConfig supersession as the DGI fields and the mode
+  // params. An absent field asserts nothing; an explicit null (or blank)
+  // clears through a superseding tombstone; nonsense values are rejected
+  // by the service guard before any mutation.
+  describe('configureFiscalSetup (manual discount caps, SOHO P3 D-A)', () => {
+    const capParamRow = (
+      paramKey: string,
+      paramValue: SystemParametersConfig['paramValue'],
+      version = 1,
+    ): SystemParametersConfig => ({
+      id: `${paramKey}-${version}`,
+      tenant_id: tenantId,
+      tenant: mockTenant,
+      paramKey,
+      paramValue,
+      version,
+      effectiveFrom: new Date('2026-01-01'),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: userId,
+      createdAt: new Date('2026-01-01'),
+    });
+
+    // Same active-view simulation as the DGI describe above: each
+    // upsertParameter call resolves the governing row for ITS OWN key over
+    // the initial rows plus everything saved during the transaction.
+    const configureActiveRows = (rows: SystemParametersConfig[]): void => {
+      mockManager.find.mockImplementation(
+        async (
+          _target: unknown,
+          criteria?: { where?: { paramKey?: string } },
+        ) => {
+          const savedRows = mockManager.save.mock.calls
+            .map((call) => call[1])
+            .filter(
+              (row): row is SystemParametersConfig & { paramKey: string } =>
+                typeof row === 'object' &&
+                row !== null &&
+                (row as { paramKey?: string }).paramKey !== undefined,
+            );
+          const all = [...rows, ...savedRows];
+          const candidates = criteria?.where?.paramKey
+            ? all.filter((row) => row.paramKey === criteria.where.paramKey)
+            : all;
+          const governing = new Map<string, SystemParametersConfig>();
+          for (const row of candidates) {
+            const current = governing.get(row.paramKey);
+            if (!current || row.version > current.version) {
+              governing.set(row.paramKey, row);
+            }
+          }
+          return [...governing.values()];
+        },
+      );
+    };
+
+    const savedRowsFor = (paramKey: string): unknown[] =>
+      mockManager.save.mock.calls
+        .map((call) => call[1])
+        .filter(
+          (row): row is SystemParametersConfig & { paramKey: string } =>
+            typeof row === 'object' &&
+            row !== null &&
+            (row as { paramKey?: string }).paramKey === paramKey,
+        );
+
+    const baseDto = (
+      extra: Partial<FiscalSetupDto> = {},
+    ): FiscalSetupDto => ({
+      regime: FiscalRegime.CUOTA_FIJA,
+      businessName: 'Cafetín Las Palmeras',
+      ruc: 'J0310000055555',
+      commercialFxSpread: 36.5,
+      pricesIncludeTax: true,
+      operationMode: TenantOperationMode.FOODPARK_QSR,
+      checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+      ...extra,
+    });
+
+    beforeEach(() => {
+      mockManager.findOne.mockResolvedValue({ ...mockTenant });
+      configureActiveRows([]);
+    });
+
+    it('persists MAX_DISCOUNT_AMOUNT and MAX_DISCOUNT_PERCENT rows when the fields are present', async () => {
+      await service.configureFiscalSetup(
+        tenantId,
+        baseDto({ maxDiscountAmount: 500, maxDiscountPercent: 15 }),
+        userId,
+      );
+
+      expect(savedRowsFor('MAX_DISCOUNT_AMOUNT')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'MAX_DISCOUNT_AMOUNT',
+            paramValue: 500,
+            version: 1,
+            isActive: true,
+          }),
+        ]),
+      );
+      expect(savedRowsFor('MAX_DISCOUNT_PERCENT')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'MAX_DISCOUNT_PERCENT',
+            paramValue: 15,
+            version: 1,
+            isActive: true,
+          }),
+        ]),
+      );
+    });
+
+    it('writes no cap rows when the fields are absent (prior caps stay untouched)', async () => {
+      await service.configureFiscalSetup(tenantId, baseDto(), userId);
+
+      expect(savedRowsFor('MAX_DISCOUNT_AMOUNT')).toHaveLength(0);
+      expect(savedRowsFor('MAX_DISCOUNT_PERCENT')).toHaveLength(0);
+    });
+
+    it('clears a persisted cap with a superseding null tombstone on explicit null (append-only)', async () => {
+      configureActiveRows([
+        capParamRow('MAX_DISCOUNT_AMOUNT', 500, 1),
+      ]);
+
+      const result = await service.configureFiscalSetup(
+        tenantId,
+        baseDto({ maxDiscountAmount: null }),
+        userId,
+      );
+
+      expect(savedRowsFor('MAX_DISCOUNT_AMOUNT')).toHaveLength(1);
+      expect(savedRowsFor('MAX_DISCOUNT_AMOUNT')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'MAX_DISCOUNT_AMOUNT',
+            paramValue: null,
+            version: 2,
+            isActive: true,
+            effectiveTo: null,
+          }),
+        ]),
+      );
+      // The tombstone resolves as absent: null in the response — no cap.
+      expect(result.maxDiscountAmount).toBeNull();
+    });
+
+    it('clears a persisted percent cap with a superseding null tombstone on explicit null (numeric twin)', async () => {
+      configureActiveRows([
+        capParamRow('MAX_DISCOUNT_PERCENT', 10, 1),
+      ]);
+
+      const result = await service.configureFiscalSetup(
+        tenantId,
+        baseDto({ maxDiscountPercent: null }),
+        userId,
+      );
+
+      expect(savedRowsFor('MAX_DISCOUNT_PERCENT')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'MAX_DISCOUNT_PERCENT',
+            paramValue: null,
+            version: 2,
+            isActive: true,
+            effectiveTo: null,
+          }),
+        ]),
+      );
+      // No cap: the tombstone reads back as absent.
+      expect(result.maxDiscountPercent).toBeNull();
+    });
+
+    it('clears a whitespace-only code through the same tombstone — trimming happens before the clear decision', async () => {
+      configureActiveRows([
+        capParamRow('DGI_AUTHORIZATION_CODE', 'DGI-OLD-002', 1),
+      ]);
+
+      await service.configureFiscalSetup(
+        tenantId,
+        baseDto({ dgiAuthorizationCode: '   ' }),
+        userId,
+      );
+
+      expect(savedRowsFor('DGI_AUTHORIZATION_CODE')).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            paramKey: 'DGI_AUTHORIZATION_CODE',
+            paramValue: null,
+            version: 2,
+          }),
+        ]),
+      );
+      // Never a stored whitespace value and never a sentinel string.
+      for (const row of savedRowsFor('DGI_AUTHORIZATION_CODE')) {
+        expect((row as { paramValue?: unknown }).paramValue).toBeNull();
+      }
+    });
+
+    it('skips the write when the submitted cap equals the governing row (idempotent)', async () => {
+      configureActiveRows([capParamRow('MAX_DISCOUNT_PERCENT', 15, 1)]);
+
+      await service.configureFiscalSetup(
+        tenantId,
+        baseDto({ maxDiscountPercent: 15 }),
+        userId,
+      );
+
+      expect(savedRowsFor('MAX_DISCOUNT_PERCENT')).toHaveLength(0);
+    });
+
+    it.each([
+      ['a negative amount', { maxDiscountAmount: -0.01 }],
+      ['a percent of 0', { maxDiscountPercent: 0 }],
+      ['a negative percent', { maxDiscountPercent: -1 }],
+      ['a percent above 100', { maxDiscountPercent: 100.5 }],
+    ])(
+      'rejects %s before any mutation (defense-in-depth guard)',
+      async (_label, extra) => {
+        await expect(
+          service.configureFiscalSetup(tenantId, baseDto(extra), userId),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(dataSource.transaction).not.toHaveBeenCalled();
+        expect(mockManager.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('returns the just-saved caps in the POST response', async () => {
+      const result = await service.configureFiscalSetup(
+        tenantId,
+        baseDto({ maxDiscountAmount: 500, maxDiscountPercent: 15 }),
+        userId,
+      );
+
+      expect(result.maxDiscountAmount).toBe(500);
+      expect(result.maxDiscountPercent).toBe(15);
+    });
+
+    it('reads the stored caps in the GET response and corrupt values as null', async () => {
+      configureActiveRows([
+        capParamRow('MAX_DISCOUNT_AMOUNT', 500),
+        capParamRow('MAX_DISCOUNT_PERCENT', 15),
+      ]);
+      tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
+      const configured = await service.getFiscalSetup(tenantId);
+      expect(configured.maxDiscountAmount).toBe(500);
+      expect(configured.maxDiscountPercent).toBe(15);
+
+      // Corrupt rows: non-numeric values read as null — absence must look
+      // like absence, never as a silently fabricated cap.
+      configureActiveRows([
+        capParamRow('MAX_DISCOUNT_AMOUNT', 'corrupt'),
+        capParamRow('MAX_DISCOUNT_PERCENT', true),
+      ]);
+      tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
+      const corrupted = await service.getFiscalSetup(tenantId);
+      expect(corrupted.maxDiscountAmount).toBeNull();
+      expect(corrupted.maxDiscountPercent).toBeNull();
     });
   });
 

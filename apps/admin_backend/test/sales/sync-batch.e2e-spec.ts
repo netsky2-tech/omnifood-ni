@@ -122,6 +122,43 @@ const buildCreditNoteRecord = (
   ...overrides,
 });
 
+const buildSaleRecord = (
+  sequence: number,
+  overrides: Partial<SyncBatchRecordRequest> = {},
+): SyncBatchRecordRequest => ({
+  idempotencyKey: `sales:terminal-1:sale-${sequence}`,
+  sourceDeviceId: 'terminal-1',
+  sourceSequence: sequence,
+  flowType: 'sales',
+  documentType: 'SALE',
+  invoice: {
+    id: `sale-${sequence}`,
+    number: `F-${sequence}`,
+    createdAt: new Date('2026-07-13T12:00:00.000Z').toISOString(),
+    userId: 'cashier-1',
+    subtotal: 10,
+    totalTax: 1.5,
+    total: 11.5,
+    paymentStatus: 'PAID',
+    items: [
+      {
+        id: `sale-item-${sequence}`,
+        productId: 'product-1',
+        productName: 'Product 1',
+        quantity: 1,
+        unitPrice: 10,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 1.5,
+        total: 11.5,
+        discount: 1,
+      },
+    ],
+    payments: [],
+  },
+  ...overrides,
+});
+
 describe('Sync batch route (e2e)', () => {
   let app: INestApplication<App>;
   let jwtService: JwtService;
@@ -443,5 +480,169 @@ describe('Sync batch route (e2e)', () => {
       .expect(201);
 
     expect(syncBatch).toHaveBeenCalledWith('tenant-other', [record]);
+  });
+
+  it('accepts a sales batch whose invoice items OMIT discount_origin: every deployed terminal omits it today (D-A2 backward-compat contract)', async () => {
+    const record = buildSaleRecord(1);
+    syncBatch.mockResolvedValue({
+      received: 1,
+      processed: 1,
+      duplicates: 0,
+      results: [
+        {
+          idempotencyKey: record.idempotencyKey,
+          terminalId: record.sourceDeviceId,
+          flowType: 'sales',
+          sourceSequence: record.sourceSequence,
+          status: 'ACCEPTED',
+          retryable: false,
+          code: 'APPLIED',
+        },
+      ],
+    });
+
+    await request(app.getHttpServer())
+      .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ records: [record] })
+      .expect(201);
+
+    expect(syncBatch).toHaveBeenCalledTimes(1);
+    const [, calledRecords] = syncBatch.mock.calls[0] as [
+      string,
+      Array<{ invoice: { items: Array<Record<string, unknown>> } }>,
+    ];
+    // Absence must reach the service untouched: the column stays NULL and
+    // nothing fabricates an origin for legacy/undecorated lines.
+    expect(calledRecords[0].invoice.items[0]).not.toHaveProperty(
+      'discountOrigin',
+    );
+  });
+
+  it('accepts and forwards a valid per-line discount_origin amounts breakdown to the sync service (D-A2)', async () => {
+    const record = buildSaleRecord(2);
+    const saleInvoice = record.invoice as Record<string, unknown>;
+    const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
+    record.invoice = {
+      ...saleInvoice,
+      // Mixed origins on one line are the whole point of the breakdown (D-A2):
+      // a promotion on the item plus a manual discount on the order.
+      items: [{ ...saleItem, discountOrigin: { manual: 5, promotion: 10 } }],
+    };
+    syncBatch.mockResolvedValue({
+      received: 1,
+      processed: 1,
+      duplicates: 0,
+      results: [
+        {
+          idempotencyKey: record.idempotencyKey,
+          terminalId: record.sourceDeviceId,
+          flowType: 'sales',
+          sourceSequence: record.sourceSequence,
+          status: 'ACCEPTED',
+          retryable: false,
+          code: 'APPLIED',
+        },
+      ],
+    });
+
+    await request(app.getHttpServer())
+      .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ records: [record] })
+      .expect(201);
+
+    expect(syncBatch).toHaveBeenCalledTimes(1);
+    const [, calledRecords] = syncBatch.mock.calls[0] as [
+      string,
+      Array<{ invoice: { items: Array<Record<string, unknown>> } }>,
+    ];
+    expect(calledRecords[0].invoice.items[0].discountOrigin).toEqual({
+      manual: 5,
+      promotion: 10,
+    });
+  });
+
+  it('rejects an unknown KEY inside the discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
+    const record = buildSaleRecord(3);
+    const saleInvoice = record.invoice as Record<string, unknown>;
+    const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
+    record.invoice = {
+      ...saleInvoice,
+      items: [{ ...saleItem, discountOrigin: { bossDiscount: 5 } }],
+    };
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ records: [record] })
+      .expect(400);
+
+    const body = response.body as ValidationErrorResponse;
+    expect(JSON.stringify(body.message)).toContain('discountOrigin');
+    expect(JSON.stringify(body.message)).toContain('bossDiscount');
+    expect(syncBatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a NEGATIVE amount inside the discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
+    const record = buildSaleRecord(4);
+    const saleInvoice = record.invoice as Record<string, unknown>;
+    const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
+    record.invoice = {
+      ...saleInvoice,
+      items: [{ ...saleItem, discountOrigin: { manual: -3 } }],
+    };
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ records: [record] })
+      .expect(400);
+
+    const body = response.body as ValidationErrorResponse;
+    expect(JSON.stringify(body.message)).toContain('discountOrigin');
+    expect(syncBatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a ZERO amount inside the discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
+    const record = buildSaleRecord(5);
+    const saleInvoice = record.invoice as Record<string, unknown>;
+    const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
+    record.invoice = {
+      ...saleInvoice,
+      items: [{ ...saleItem, discountOrigin: { manual: 0 } }],
+    };
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ records: [record] })
+      .expect(400);
+
+    const body = response.body as ValidationErrorResponse;
+    expect(JSON.stringify(body.message)).toContain('discountOrigin');
+    expect(JSON.stringify(body.message)).toContain('must be a positive number');
+    expect(syncBatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects an EMPTY discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
+    const record = buildSaleRecord(6);
+    const saleInvoice = record.invoice as Record<string, unknown>;
+    const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
+    record.invoice = {
+      ...saleInvoice,
+      items: [{ ...saleItem, discountOrigin: {} }],
+    };
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/sync/batch')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ records: [record] })
+      .expect(400);
+
+    const body = response.body as ValidationErrorResponse;
+    expect(JSON.stringify(body.message)).toContain('discountOrigin');
+    expect(JSON.stringify(body.message)).toContain('must be a non-empty object');
+    expect(syncBatch).not.toHaveBeenCalled();
   });
 });

@@ -11,6 +11,7 @@ import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { createHash, randomUUID } from 'crypto';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
 import { Payment } from '../entities/payment.entity';
 import { SyncInvoiceDto, CreateInvoiceItemDto } from '../dto/sync-invoice.dto';
 import {
@@ -279,12 +280,48 @@ export class InvoicesService {
 
       await this.invoiceRepoFor(manager).upsert(invoicePayload, ['id']);
       if (persistenceDto.items?.length) {
-        const itemPayloads = persistenceDto.items.map((item) => ({
-          ...item,
-          invoiceId: dto.id,
-          tenant_id: tenantId,
-        }));
+        // SOHO P3 (modifier quantity): the item payload carries a
+        // `modifiers` array the item upsert cannot write (no such column,
+        // and the @OneToMany cascade only applies to `save`, not `upsert`)
+        // — before this change the array was silently ignored and the
+        // modifier lines never landed in the cloud. Strip it from the item
+        // payload and persist the modifier lines EXPLICITLY, inside THIS
+        // SAME SERIALIZABLE transaction: a sale and its modifier rows must
+        // commit or roll back together.
+        const itemPayloads = persistenceDto.items.map(
+          ({ modifiers, ...item }) => ({
+            ...item,
+            invoiceId: dto.id,
+            tenant_id: tenantId,
+          }),
+        );
         await this.itemRepoFor(manager).upsert(itemPayloads, ['id']);
+
+        const itemIds = persistenceDto.items.map((item) => item.id);
+        const modifierRepo = manager.getRepository(InvoiceItemModifier);
+        // Deterministic mirror, not append: a re-sync of the same item id
+        // (legacy path without an idempotency receipt, or an operator
+        // retry) replaces the stored modifier lines with the payload's —
+        // so the table can never accumulate duplicates for one item. The
+        // DELETE is scoped to THIS invoice's item ids and runs inside the
+        // same transaction, so a rollback restores the previous state
+        // exactly.
+        await modifierRepo.delete({ invoiceItemId: In(itemIds) });
+        const modifierRows = persistenceDto.items.flatMap((item) =>
+          (item.modifiers ?? []).map((modifier) => ({
+            invoiceItemId: item.id,
+            name: modifier.name,
+            extraPrice: modifier.extraPrice,
+            // Absence persists as 1 — the honest default: a modifier line
+            // without a quantity IS one unit (the POS's own local default,
+            // invoice_item_modifier_entity.dart:30). 0/negative can never
+            // reach this code: the DTO rejects them with a named error.
+            quantity: modifier.quantity ?? 1,
+          })),
+        );
+        if (modifierRows.length) {
+          await modifierRepo.insert(modifierRows);
+        }
       }
       if (dto.payments?.length) {
         const paymentPayloads = dto.payments.map((payment) => ({
@@ -404,6 +441,11 @@ export class InvoicesService {
           appliedTaxRate: originItem.appliedTaxRate,
           taxAmount,
           total,
+          // discount is forced to 0 on a credit-note line: there is no
+          // discount amount here, so there is nothing to attribute and
+          // discount_origin stays NULL (copying the origin line's discount
+          // origin would attribute a discount to a line that has none —
+          // NULL, not a fabricated value, is the honest encoding).
           discount: 0,
           notes: dto.notes ?? null,
           originInvoiceItemId: requested.originInvoiceItemId,
@@ -2069,6 +2111,10 @@ export class InvoicesService {
         taxAmount: Number(item.taxAmount),
         total: Number(item.total),
         discount: Number(item.discount),
+        // D-A2: provenance is part of the payload identity. A replay that
+        // differs only in discount origin is a materially different payload
+        // and must conflict, not silently rewrite provenance.
+        discountOrigin: item.discountOrigin ?? null,
         variantId: item.variantId,
         notes: item.notes,
         recipeVersionId: item.recipeVersionId,
@@ -2595,6 +2641,10 @@ export class InvoicesService {
               taxAmount: Number(item.taxAmount),
               total: Number(item.total),
               discount: Number(item.discount),
+              // D-A2: keep the hash symmetric with the stored-side mapping in
+              // skipMatchingCreditNoteReplay; `?? null` makes legacy payloads
+              // (field absent) hash identically to their stored NULL rows.
+              discountOrigin: item.discountOrigin ?? null,
               variantId: item.variantId ?? null,
               notes: item.notes ?? null,
               recipeVersionId: item.recipeVersionId ?? null,

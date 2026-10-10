@@ -14,9 +14,15 @@ import { TenantInterceptor } from '../../core/database/rls.interceptor';
 import { UserRole } from '../identity/entities/user.entity';
 import { AuditSummaryService } from './audit-summary.service';
 import { AuditEventsService } from './audit-events.service';
+import { AuditLogsService } from './audit-logs.service';
 import { AuditExecutiveSummaryDto } from './audit-executive-summary.dto';
 import { AuditEventsResponseDto } from './audit-events.dto';
 import { AuditEventsQueryDto } from './audit-events-query.dto';
+import {
+  AuditIntegrityResponseDto,
+  AuditLedgerQueryDto,
+  AuditLedgerResponseDto,
+} from './audit-logs.dto';
 
 /**
  * Owner Dashboard V2 — audit/security executive summary read
@@ -42,6 +48,10 @@ export class AuditSummaryController {
     // Slice 6b: the event-list read model lives in its own service so the
     // summary service's contract (and constructor) stays untouched.
     private readonly auditEventsService: AuditEventsService,
+    // S4a: the POS forensic audit ledger read model (audit_logs store) and
+    // the nightly integrity alert surface live in their own service too —
+    // the change_log reads above are never repointed.
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   @Get('summary')
@@ -77,5 +87,47 @@ export class AuditSummaryController {
       query.severity,
       query.limit,
     );
+  }
+
+  /**
+   * S4a: page-capped projection of the POS forensic audit ledger
+   * (audit_logs — the hash-chained store the POS feeds via
+   * POST /identity/audit) onto the dashboard. The voids, credit notes,
+   * manual discounts and supervisor overrides recorded at the POS become
+   * visible here without duplicating rows into change_log or touching the
+   * hash chain. Same guard chain, roles and JWT-derived tenant as the
+   * routes above; query-param validation (page cap) lives in
+   * AuditLedgerQueryDto and the response never carries the metadata blob
+   * or the hash columns.
+   */
+  @Get('ledger')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getLedger(
+    @GetTenantId() tenantId: string,
+    @Query() query: AuditLedgerQueryDto,
+  ): Promise<AuditLedgerResponseDto> {
+    return this.auditLogsService.getLedger(tenantId, {
+      startDate: query.startDate,
+      endDate: query.endDate,
+      actorUserId: query.actorUserId,
+      targetType: query.targetType,
+      targetId: query.targetId,
+      action: query.action,
+      limitInput: query.limit,
+    });
+  }
+
+  /**
+   * S4a: read-only surface for the nightly hash-chain gap detection state
+   * (audit_integrity_alerts), so the `gap_detected` event the nightly cron
+   * emits is finally visible to a human. Same guard chain, roles and
+   * JWT-derived tenant as the routes above.
+   */
+  @Get('integrity')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getIntegrityAlerts(
+    @GetTenantId() tenantId: string,
+  ): Promise<AuditIntegrityResponseDto> {
+    return this.auditLogsService.getIntegrityAlerts(tenantId);
   }
 }

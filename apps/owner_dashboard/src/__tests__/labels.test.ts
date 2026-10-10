@@ -13,6 +13,8 @@ import {
   auditActionLabels,
   auditTargetTypeLabels,
   auditActorRefLabels,
+  auditLedgerActionLabels,
+  auditLedgerTargetTypeLabels,
   menuImportSkipReasonLabels,
   publicationStateLabels,
   normalizeMenuImportIssueMessage,
@@ -48,6 +50,8 @@ const families: Record<string, Record<string, string>> = {
   auditActionLabels,
   auditTargetTypeLabels,
   auditActorRefLabels,
+  auditLedgerActionLabels,
+  auditLedgerTargetTypeLabels,
   menuImportSkipReasonLabels,
   publicationStateLabels,
 };
@@ -148,6 +152,48 @@ describe("label families — key sets verified against source enums", () => {
       ].sort(),
     );
   });
+  it("auditLedgerActionLabels covers every POS ledger action code the backend can emit", () => {
+    // Exact key set of the POS/audit_logs writer codes in the single backend
+    // AuditRiskClassifier table (S4a block,
+    // apps/admin_backend/src/modules/audit/audit-risk-classifier.ts). An
+    // unmapped code would render as a raw SCREAMING_CASE token in the
+    // owner's bitacora — this guard is the map-level catch for that gap.
+    expect(Object.keys(auditLedgerActionLabels).sort()).toEqual(
+      [
+        "SALE_CREATED",
+        "SALE_VOIDED",
+        "CREDIT_NOTE_CREATED",
+        "SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT",
+        "SUPERVISOR_OVERRIDE_CLOSE_SESSION",
+        "SUPERVISOR_OVERRIDE_APPROVED",
+        "SUPERVISOR_OVERRIDE_REJECTED",
+        "DRAWER_OPENED_MANUALLY",
+        "REPRINT_REQUESTED",
+        "PRINT_PAYLOAD_CORRUPT",
+        "SALE_INVENTORY_REMEDIATED",
+        "USER_CREATED",
+        "USER_UPDATED",
+        "USER_DEACTIVATED",
+        "USER_PERMISSIONS_UPDATED",
+      ].sort(),
+    );
+  });
+
+  it("auditLedgerTargetTypeLabels covers every POS ledger entity type the backend can emit", () => {
+    // Exact `audit_logs.target_type` values written by the POS sales writers
+    // (invoice, credit_note) and the identity services (CASH_DRAWER,
+    // SUPERVISOR_OVERRIDE, USER).
+    expect(Object.keys(auditLedgerTargetTypeLabels).sort()).toEqual(
+      [
+        "invoice",
+        "credit_note",
+        "CASH_DRAWER",
+        "SUPERVISOR_OVERRIDE",
+        "USER",
+      ].sort(),
+    );
+  });
+
   it("menuImportSkipReasonLabels covers the documented skip reasons", () => {
     expect(Object.keys(menuImportSkipReasonLabels).sort()).toEqual(
       ["VERSION_ALREADY_EXISTS"].sort(),

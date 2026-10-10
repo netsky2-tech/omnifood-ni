@@ -39,6 +39,8 @@ const FRONTEND_FIELDS: Record<string, string[]> = {
   SalesBookRow: [
     "date", "invoiceNumber", "documentType", "customerName",
     "exemptSubtotalNio", "taxableSubtotalNio", "taxAmountNio", "discountNio",
+    "manualDiscountNio", "promotionDiscountNio", "loyaltyDiscountNio",
+    "discountOriginUnattributedNio",
     "totalNio", "totalUsd", "status", "isCanceled",
   ],
   ZReportsExport: [
@@ -90,6 +92,8 @@ const TYPE_MAP: Record<string, Record<string, string>> = {
     date: "string", invoiceNumber: "string", documentType: "string",
     customerName: "string", exemptSubtotalNio: "number",
     taxableSubtotalNio: "number", taxAmountNio: "number", discountNio: "number",
+    manualDiscountNio: "number", promotionDiscountNio: "number",
+    loyaltyDiscountNio: "number", discountOriginUnattributedNio: "number",
     totalNio: "number", totalUsd: "number", status: "string", isCanceled: "boolean",
   },
   ZReportsExport: {

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../../../core/localization/label_map.dart';
 import '../../../../../domain/models/audit_log.dart';
 import '../../../../../domain/repositories/audit_repository.dart';
 
@@ -37,7 +38,18 @@ class AuditLogViewModel extends ChangeNotifier {
       }
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
-        final matchAction = log.action.toLowerCase().contains(q);
+        // The search must match what the UI displays: the Bitacora renders
+        // the localized ledger label as the primary text, so the operator
+        // searches "Venta registrada" — while a forensic reviewer may still
+        // search the raw machine code. localize() passes unknown codes
+        // through unchanged, so for unlabeled codes both matches are the
+        // same string and the OR never stacks rows (per-row boolean).
+        final actionLabel = localize(
+          log.action,
+          kAuditLedgerActionLabels,
+        ).toLowerCase();
+        final matchAction = log.action.toLowerCase().contains(q) ||
+            actionLabel.contains(q);
         final matchUser = log.userId.toLowerCase().contains(q);
         final matchDevice = log.deviceId.toLowerCase().contains(q);
         final matchMeta = log.metadata?.toLowerCase().contains(q) ?? false;

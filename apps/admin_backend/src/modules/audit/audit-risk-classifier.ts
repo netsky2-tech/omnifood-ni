@@ -55,6 +55,52 @@ const ACTION_SEVERITY_TABLE: Readonly<Record<string, AuditSeverity>> = {
   UPDATE: 'INFO',
   // Availability removal: catalog analog of void activity requiring review.
   DEACTIVATE: 'WARNING',
+
+  // ------------------------------------------------------------------
+  // POS forensic ledger codes (S4a). Writers verified by call site in
+  // apps/pos_app/lib; every row's per-code repository evidence lives in
+  // audit-risk-classifier.spec.ts. Codes are persisted into audit_logs
+  // verbatim by POST /identity/audit (identity/audit.controller.ts) or
+  // written server-side by the identity services cited in the spec.
+  // ------------------------------------------------------------------
+  // Plain sale creation: expected every-invoice operation, awareness.
+  SALE_CREATED: 'INFO',
+  // Cancels an ALREADY-ISSUED fiscal invoice: money reversal on a
+  // numbered fiscal document (DGI DTI 09-2007 cancellation).
+  SALE_VOIDED: 'CRITICAL',
+  // Fiscal credit note against an original invoice: money returned on a
+  // numbered fiscal document.
+  CREDIT_NOTE_CREATED: 'CRITICAL',
+  // Privileged override applying a manual discount: control bypass on a
+  // money event.
+  SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT: 'CRITICAL',
+  // Privileged override of the session close / cash reconciliation flow.
+  SUPERVISOR_OVERRIDE_CLOSE_SESSION: 'CRITICAL',
+  // Supervised cash drawer open outside a sale: cash exposure follow-up.
+  DRAWER_OPENED_MANUALLY: 'WARNING',
+  // Fiscal receipt reissue: receipt-fraud follow-up, no money movement.
+  REPRINT_REQUESTED: 'WARNING',
+  // Emitted when the fail-safe control REFUSES to print a corrupt fiscal
+  // payload; the control worked, follow-up is re-print/verify.
+  PRINT_PAYLOAD_CORRUPT: 'WARNING',
+
+  // ------------------------------------------------------------------
+  // Backend audit_logs writer codes the same ledger surface renders
+  // (verified call sites cited in the spec; previously INFO fallback).
+  // ------------------------------------------------------------------
+  // A privileged override was actually granted: the privilege event.
+  SUPERVISOR_OVERRIDE_APPROVED: 'CRITICAL',
+  // A privileged override attempt was denied; probing follow-up signal.
+  SUPERVISOR_OVERRIDE_REJECTED: 'WARNING',
+  // Inventory/money correction applied to an issued invoice.
+  SALE_INVENTORY_REMEDIATED: 'WARNING',
+  // Routine staff lifecycle, awareness.
+  USER_CREATED: 'INFO',
+  USER_UPDATED: 'INFO',
+  // POS access revocation: security-relevant follow-up.
+  USER_DEACTIVATED: 'WARNING',
+  // Permission change: privilege-escalation vector.
+  USER_PERMISSIONS_UPDATED: 'CRITICAL',
 };
 
 /**

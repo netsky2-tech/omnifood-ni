@@ -563,4 +563,255 @@ void main() {
       expect(DateTime.parse(reconciledAtStr).toUtc(), localReconciled.toUtc());
     });
   });
+
+  group('SalesMapper - discountOrigin local persistence', () {
+    InvoiceItem itemWith(Map<String, double>? discountOrigin) => InvoiceItem(
+          id: 'item-1',
+          invoiceId: 'inv-1',
+          productId: 'prod-1',
+          productName: 'Burger',
+          quantity: 2,
+          unitPrice: 50,
+          originalTaxRate: 0.15,
+          appliedTaxRate: 0.15,
+          taxAmount: 15,
+          total: 115,
+          discountOrigin: discountOrigin,
+        );
+
+    test('toItemEntity encodes a breakdown to a JSON string', () {
+      final entity = SalesMapper.toItemEntity(itemWith({
+        'promotion': 10.0,
+        'manual': 5.0,
+      }));
+
+      expect(entity.discountOriginJson,
+          jsonEncode({'promotion': 10.0, 'manual': 5.0}));
+    });
+
+    test('toItemEntity keeps null as null (legacy rows are never fabricated)',
+        () {
+      final entity = SalesMapper.toItemEntity(itemWith(null));
+
+      expect(entity.discountOriginJson, isNull);
+    });
+
+    test('toItemDomain decodes the JSON string back to the map', () {
+      final entity = InvoiceItemEntity(
+        id: 'item-1',
+        invoiceId: 'inv-1',
+        productId: 'prod-1',
+        productName: 'Burger',
+        quantity: 2,
+        unitPrice: 50,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 15,
+        total: 115,
+        discountOriginJson: jsonEncode({'loyalty': 3.5}),
+      );
+
+      final domain = SalesMapper.toItemDomain(entity);
+
+      expect(domain.discountOrigin, {'loyalty': 3.5});
+    });
+
+    test('toItemDomain keeps a null JSON cell null, NOT an empty map', () {
+      final entity = InvoiceItemEntity(
+        id: 'item-1',
+        invoiceId: 'inv-1',
+        productId: 'prod-1',
+        productName: 'Burger',
+        quantity: 2,
+        unitPrice: 50,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 15,
+        total: 115,
+        discountOriginJson: null,
+      );
+
+      final domain = SalesMapper.toItemDomain(entity);
+
+      expect(domain.discountOrigin, isNull);
+      // Null is not an empty map: the two states must never blur.
+      expect(domain.discountOrigin, isNot(equals(<String, double>{})));
+    });
+
+    test('toItemDomain keeps only known keys with finite positive values', () {
+      InvoiceItemEntity entityWith(String json) => InvoiceItemEntity(
+            id: 'item-1',
+            invoiceId: 'inv-1',
+            productId: 'prod-1',
+            productName: 'Burger',
+            quantity: 2,
+            unitPrice: 50,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 15,
+            total: 115,
+            discountOriginJson: json,
+          );
+
+      // Unknown key dropped, zero dropped, non-numeric dropped.
+      expect(
+        SalesMapper.toItemDomain(entityWith(
+                '{"promotion":10.0,"mystery":7.0,"manual":0.0,"loyalty":"x"}'))
+            .discountOrigin,
+        {'promotion': 10.0},
+      );
+      // Negative and NaN are not > 0.
+      expect(
+        SalesMapper.toItemDomain(
+                entityWith('{"promotion":-3.0,"manual":5.0}'))
+            .discountOrigin,
+        {'manual': 5.0},
+      );
+      // Nothing valid remains -> null, never an empty map.
+      expect(
+        SalesMapper.toItemDomain(
+                entityWith('{"promotion":0.0,"manual":-1.0}'))
+            .discountOrigin,
+        isNull,
+      );
+    });
+
+    test('toItemDomain decodes corrupt JSON fail-safe to null', () {
+      final entity = InvoiceItemEntity(
+        id: 'item-1',
+        invoiceId: 'inv-1',
+        productId: 'prod-1',
+        productName: 'Burger',
+        quantity: 2,
+        unitPrice: 50,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: 15,
+        total: 115,
+        discountOriginJson: 'not-json{',
+      );
+
+      final domain = SalesMapper.toItemDomain(entity);
+
+      expect(domain.discountOrigin, isNull);
+    });
+  });
+
+  group('SalesMapper - discount-origin breakdown on the sync payload', () {
+    final baseInvoice = Invoice(
+      id: 'inv-1',
+      number: '001',
+      createdAt: DateTime(2026, 6, 23),
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+      isCanceled: false,
+      voidReason: null,
+      syncStatus: SyncStatus.pending,
+      paymentStatus: PaymentStatus.paid,
+      type: InvoiceType.regular,
+      customerId: null,
+    );
+
+    InvoiceItem itemWith(Map<String, double>? discountOrigin) => InvoiceItem(
+          id: 'item-1',
+          invoiceId: 'inv-1',
+          productId: 'prod-1',
+          productName: 'Burger',
+          quantity: 2,
+          unitPrice: 50,
+          originalTaxRate: 0.15,
+          appliedTaxRate: 0.15,
+          taxAmount: 15,
+          total: 115,
+          discount: 11.25,
+          discountOrigin: discountOrigin,
+        );
+
+    Map<String, dynamic> firstItem(Map<String, dynamic> payload) =>
+        (payload['items'] as List<dynamic>).first as Map<String, dynamic>;
+
+    test(
+        'toSyncJson emits the breakdown with exactly the wire keys, all > 0, '
+        'under {promotion, manual, loyalty}', () {
+      final payload = SalesMapper.toSyncJson(
+        baseInvoice,
+        [
+          itemWith({'promotion': 20.0, 'manual': 11.25}),
+        ],
+        [],
+      );
+
+      final breakdown = firstItem(payload)['discountOrigin'];
+      expect(breakdown, {'promotion': 20.0, 'manual': 11.25});
+      const allowedKeys = {'promotion', 'manual', 'loyalty'};
+      expect(allowedKeys.containsAll(breakdown.keys), isTrue,
+          reason: 'the emitted key set must be a subset of the wire keys');
+      for (final value in (breakdown as Map).values) {
+        expect(value, greaterThan(0),
+            reason: 'an unknown key or a zero makes the backend reject the '
+                'whole 500-record batch');
+      }
+    });
+
+    test(
+        'toSyncJson OMITS the key when the breakdown is null — a legacy sale '
+        'and a legacy credit-note replay stay byte-identical', () {
+      final legacyItem = itemWith(null);
+
+      final salePayload = SalesMapper.toSyncJson(baseInvoice, [legacyItem], []);
+      final creditNotePayload = SalesMapper.toSyncJson(
+        baseInvoice.copyWith(type: InvoiceType.creditNote),
+        [legacyItem],
+        [],
+      );
+
+      final saleJson = jsonEncode(salePayload);
+      final creditNoteJson = jsonEncode(creditNotePayload);
+      // Omitted, never emitted as null: the credit-note conflict hash covers
+      // this field and old terminals must keep hashing identically.
+      expect(saleJson, isNot(contains('"discountOrigin"')));
+      expect(creditNoteJson, isNot(contains('"discountOrigin"')));
+
+      // Byte-identical to the payload the mapper produced BEFORE this unit:
+      // the expected legacy item map, built literally without the key.
+      final expectedLegacyItem = <String, dynamic>{
+        'id': 'item-1',
+        'productId': 'prod-1',
+        'productName': 'Burger',
+        'quantity': 2.0,
+        'unitPrice': 50.0,
+        'originalTaxRate': 0.15,
+        'appliedTaxRate': 0.15,
+        'taxAmount': 15.0,
+        'total': 115.0,
+        'discount': 11.25,
+        'variantId': null,
+        'notes': null,
+        'recipeVersionId': null,
+        'originInvoiceItemId': null,
+        'modifiers': <Map<String, dynamic>>[],
+      };
+      expect(
+        jsonEncode(firstItem(salePayload)),
+        jsonEncode(expectedLegacyItem),
+      );
+      expect(
+        jsonEncode(firstItem(creditNotePayload)),
+        jsonEncode(expectedLegacyItem),
+      );
+    });
+
+    test('toSyncJson omits the key for an empty breakdown map', () {
+      final payload = SalesMapper.toSyncJson(
+        baseInvoice,
+        [itemWith(<String, double>{})],
+        [],
+      );
+
+      expect(jsonEncode(payload), isNot(contains('"discountOrigin"')));
+      expect(firstItem(payload).containsKey('discountOrigin'), isFalse);
+    });
+  });
 }

@@ -147,6 +147,13 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as bool);
 
   @override
+  _i10.VoidCopyPrintOutcome get lastVoidCopyPrintOutcome => (super.noSuchMethod(
+        Invocation.getter(#lastVoidCopyPrintOutcome),
+        returnValue: _i10.VoidCopyPrintOutcome.printed,
+        returnValueForMissingStub: _i10.VoidCopyPrintOutcome.printed,
+      ) as _i10.VoidCopyPrintOutcome);
+
+  @override
   bool get lastReprintPrintSucceeded => (super.noSuchMethod(
         Invocation.getter(#lastReprintPrintSucceeded),
         returnValue: false,
@@ -438,6 +445,13 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as double);
 
   @override
+  double get manualDiscount => (super.noSuchMethod(
+        Invocation.getter(#manualDiscount),
+        returnValue: 0.0,
+        returnValueForMissingStub: 0.0,
+      ) as double);
+
+  @override
   _i4.TipType get tipType => (super.noSuchMethod(
         Invocation.getter(#tipType),
         returnValue: _i4.TipType.suggestedTenPercent,
@@ -710,6 +724,16 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as _i17.Future<void>);
 
   @override
+  _i17.Future<void> loadDiscountCaps() => (super.noSuchMethod(
+        Invocation.method(
+          #loadDiscountCaps,
+          [],
+        ),
+        returnValue: _i17.Future<void>.value(),
+        returnValueForMissingStub: _i17.Future<void>.value(),
+      ) as _i17.Future<void>);
+
+  @override
   void setCompanyTaxRegime(_i18.TaxRegime? regime) => super.noSuchMethod(
         Invocation.method(
           #setCompanyTaxRegime,
@@ -737,6 +761,15 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
         returnValue: _i17.Future<void>.value(),
         returnValueForMissingStub: _i17.Future<void>.value(),
       ) as _i17.Future<void>);
+
+  @override
+  void clearCheckoutError() => super.noSuchMethod(
+        Invocation.method(
+          #clearCheckoutError,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
 
   @override
   void grantSupervisorOverride() => super.noSuchMethod(
@@ -855,23 +888,6 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
         Invocation.method(
           #loadPromotions,
           [],
-        ),
-        returnValue: _i17.Future<void>.value(),
-        returnValueForMissingStub: _i17.Future<void>.value(),
-      ) as _i17.Future<void>);
-
-  @override
-  _i17.Future<void> togglePromotion(
-    String? promoId,
-    bool? isActive,
-  ) =>
-      (super.noSuchMethod(
-        Invocation.method(
-          #togglePromotion,
-          [
-            promoId,
-            isActive,
-          ],
         ),
         returnValue: _i17.Future<void>.value(),
         returnValueForMissingStub: _i17.Future<void>.value(),

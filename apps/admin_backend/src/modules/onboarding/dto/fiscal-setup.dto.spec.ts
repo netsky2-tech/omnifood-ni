@@ -283,6 +283,104 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
     });
   });
 
+  // SOHO P3 D-A: the manual-discount caps are OPTIONAL numbers. Absence
+  // asserts nothing and must leave the persisted parameter untouched (same
+  // optionality contract as the DGI fields); an explicit null (or an empty
+  // string, via the same blankStringToNull transform the dates use) is the
+  // clear sentinel. Nonsense values are rejected at the boundary: a negative
+  // amount, and a percent that is <= 0 or > 100.
+  describe('manual discount caps (SOHO P3, D-A)', () => {
+    it('accepts a body without the cap fields (absence asserts nothing)', async () => {
+      const dto = await transformBody(validBody());
+      expect(dto.maxDiscountAmount).toBeUndefined();
+      expect(dto.maxDiscountPercent).toBeUndefined();
+    });
+
+    it('accepts valid caps', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        maxDiscountAmount: 500,
+        maxDiscountPercent: 15,
+      });
+      expect(dto.maxDiscountAmount).toBe(500);
+      expect(dto.maxDiscountPercent).toBe(15);
+    });
+
+    it('accepts an amount of 0 (a zero-amount cap forbids manual discounts outright)', async () => {
+      const dto = await transformBody({ ...validBody(), maxDiscountAmount: 0 });
+      expect(dto.maxDiscountAmount).toBe(0);
+    });
+
+    it('accepts a percent of 100 (the ceiling)', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        maxDiscountPercent: 100,
+      });
+      expect(dto.maxDiscountPercent).toBe(100);
+    });
+
+    it('accepts an explicit null as the clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        maxDiscountAmount: null,
+        maxDiscountPercent: null,
+      });
+      expect(dto.maxDiscountAmount).toBeNull();
+      expect(dto.maxDiscountPercent).toBeNull();
+    });
+
+    it('accepts an empty string and transforms it to the null clear sentinel', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        maxDiscountAmount: '',
+        maxDiscountPercent: '',
+      });
+      expect(dto.maxDiscountAmount).toBeNull();
+      expect(dto.maxDiscountPercent).toBeNull();
+    });
+
+    it.each([-0.01, -500])('rejects a negative maxDiscountAmount %s', async (amount) => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        maxDiscountAmount: amount,
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(
+        'maxDiscountAmount must be greater than or equal to 0',
+      );
+    });
+
+    it.each([-1, 0, 100.01, 1000])('rejects a maxDiscountPercent of %s', async (percent) => {
+      const error: BadRequestException = await transformBody({
+        ...validBody(),
+        maxDiscountPercent: percent,
+      }).catch((e) => e);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      const response = error.getResponse() as { message: string | string[] };
+      const messages = Array.isArray(response.message)
+        ? response.message
+        : [response.message];
+      expect(messages).toContain(
+        'maxDiscountPercent must be greater than 0 and less than or equal to 100',
+      );
+    });
+
+    it.each([
+      ['maxDiscountAmount', 'not-a-number'],
+      ['maxDiscountPercent', 'half'],
+    ])('rejects a non-numeric %s', async (_field, value) => {
+      await expect(
+        transformBody({ ...validBody(), [_field]: value }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('DGI authorization dates (D-21, #554)', () => {
     it('accepts a valid ISO-8601 issuedAt/expiresAt pair', async () => {
       const dto = await transformBody({

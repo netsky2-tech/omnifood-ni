@@ -201,6 +201,11 @@ export function DashboardPage() {
           summary={snapshot?.tipsSummary ?? null}
           totalDiscountsNio={snapshot?.totalDiscountsNio ?? null}
           preDiscountSalesNio={v2Report.data?.preDiscountSalesNio ?? null}
+          // P3: per-origin discount breakdown rides the same channel as the
+          // FR-DISC-02 denominator. The report's fields are wire-optional;
+          // when the backend did not send them the card renders no rows at
+          // all (absence is preserved, never read as C$0.00).
+          discountOriginBreakdown={v2Report.data ?? null}
         />
       </div>
 

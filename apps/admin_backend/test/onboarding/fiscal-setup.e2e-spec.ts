@@ -457,6 +457,11 @@ describe('FiscalSetup (Integration & E2E)', () => {
       dgiAuthorizationCode: null,
       dgiAuthorizationIssuedAt: null,
       dgiAuthorizationExpiresAt: null,
+      // SOHO P3 (D-A): the builder always spreads discountCapFields (after
+      // the DGI fields, before configVersion), so an unconfigured tenant
+      // carries explicit nulls — exact-shape assertion stays exact.
+      maxDiscountAmount: null,
+      maxDiscountPercent: null,
     });
   });
 

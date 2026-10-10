@@ -26,6 +26,21 @@ export default tseslint.config(
   },
   {
     rules: {
+      // The underscore prefix and the rest-sibling omission are deliberate,
+      // load-bearing shapes, not leftovers: `({ modifiers, ...item })` in
+      // invoices.service.ts strips the array the item upsert cannot write,
+      // and the fiscal-shape spec destructures `_amount` / `_percent` only to
+      // drop those keys from the simulated pre-change payload. Without these
+      // options the strict default flags all three as unused.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',

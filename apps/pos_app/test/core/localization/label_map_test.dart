@@ -77,6 +77,10 @@ void main() {
       expect(kAllLabelMaps['kForensicMovementTypeLabels'],
           same(kForensicMovementTypeLabels));
       expect(kAllLabelMaps['kSyncErrorLabels'], same(kSyncErrorLabels));
+      expect(kAllLabelMaps['kAuditLedgerActionLabels'],
+          same(kAuditLedgerActionLabels));
+      expect(kAllLabelMaps['kAuditMetadataKeyLabels'],
+          same(kAuditMetadataKeyLabels));
       expect(kAllLabelMaps['kActivationBackendVerdictLabels'],
           same(kActivationBackendVerdictLabels));
     });
@@ -189,6 +193,78 @@ void main() {
           'Aprobado con advertencia');
       expect(localize('NETWORK_ERROR', kActivationBackendVerdictLabels),
           'Error de red');
+    });
+
+    test('audit ledger action labels cover every POS writer code (dashboard copy)', () {
+      // Exhaustive against the POS's own audit writers: sales_repository_impl
+      // (log / prepareLog), durable_print_service, sale_view logForensic.
+      expect(kAuditLedgerActionLabels.keys.toList(), [
+        'SALE_CREATED',
+        'SALE_VOIDED',
+        'CREDIT_NOTE_CREATED',
+        'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT',
+        'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
+        'DRAWER_OPENED_MANUALLY',
+        'REPRINT_REQUESTED',
+        'PRINT_PAYLOAD_CORRUPT',
+      ]);
+      // Copy matches the owner dashboard's auditLedgerActionLabels.
+      expect(localize('SALE_CREATED', kAuditLedgerActionLabels),
+          'Venta registrada');
+      expect(localize('SALE_VOIDED', kAuditLedgerActionLabels),
+          'Anulación de factura');
+      expect(localize('CREDIT_NOTE_CREATED', kAuditLedgerActionLabels),
+          'Nota de crédito emitida');
+      expect(localize('SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT',
+          kAuditLedgerActionLabels), 'Descuento manual autorizado');
+      expect(localize('SUPERVISOR_OVERRIDE_CLOSE_SESSION',
+          kAuditLedgerActionLabels), 'Cierre de sesión autorizado');
+      expect(localize('DRAWER_OPENED_MANUALLY', kAuditLedgerActionLabels),
+          'Apertura manual de gaveta');
+      expect(localize('REPRINT_REQUESTED', kAuditLedgerActionLabels),
+          'Reimpresión solicitada');
+      expect(localize('PRINT_PAYLOAD_CORRUPT', kAuditLedgerActionLabels),
+          'Impresión detenida por datos corruptos');
+      // Dashboard-only codes never written by the POS pass through unchanged.
+      expect(localize('USER_CREATED', kAuditLedgerActionLabels), 'USER_CREATED');
+    });
+
+    test('audit metadata key labels cover every POS emit-site key', () {
+      // Exhaustive against the POS's own metadata emit sites:
+      // sales_repository_impl (log / prepareLog), durable_print_service,
+      // sale_view logForensic. Unverified keys are intentionally absent:
+      // the view humanises them instead of inventing a meaning.
+      expect(kAuditMetadataKeyLabels.keys.toList(), [
+        'invoice_id',
+        'number',
+        'total',
+        'reason_code',
+        'reason_detail',
+        'reprint_at',
+        'reason',
+        'original_id',
+        'new_id',
+        'refundReasonPolicy',
+        'authorizedByUserId',
+        'fulfillmentId',
+        'jobId',
+        'documentKind',
+        'userId',
+        'role',
+        'action',
+        'justification',
+      ]);
+      // Spot checks across every emitting action family.
+      expect(localize('invoice_id', kAuditMetadataKeyLabels), 'Factura (ID)');
+      expect(localize('number', kAuditMetadataKeyLabels),
+          'Número de factura');
+      expect(localize('reason_code', kAuditMetadataKeyLabels),
+          'Código del motivo');
+      expect(localize('refundReasonPolicy', kAuditMetadataKeyLabels),
+          'Política del motivo de devolución');
+      expect(localize('fulfillmentId', kAuditMetadataKeyLabels), 'Pedido (ID)');
+      expect(localize('justification', kAuditMetadataKeyLabels),
+          'Justificación');
     });
 
     test('cash movement types cover every code with a Spanish label (D-14)', () {

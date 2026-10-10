@@ -119,6 +119,12 @@ class InboundSyncResult {
   final int recipesCount;
   final int usersCount;
   final int alertsCount;
+
+  /// Promotions rows delivered by the `promotions` delta. The open checkout
+  /// uses this as a precise reload signal: the cloud is authoritative for
+  /// promotions, so any delivered row (new or re-delivered) must trigger a
+  /// promotion re-evaluation in the running checkout.
+  final int promotionsCount;
   final int? appliedFiscalRevision;
   final String? appliedFiscalFingerprint;
 
@@ -143,6 +149,7 @@ class InboundSyncResult {
     this.recipesCount = 0,
     this.usersCount = 0,
     this.alertsCount = 0,
+    this.promotionsCount = 0,
     this.appliedFiscalRevision,
     this.appliedFiscalFingerprint,
     this.authorityInsumosCount = 0,
@@ -4882,6 +4889,7 @@ class SyncService {
         final result = InboundSyncResult(
           productsCount: productEntities.length,
           catalogValuesCount: catalogEntities.length,
+          promotionsCount: promotionEntities.length,
           insumosCount: insumoEntities.length,
           recipesCount: recipeEntities.length,
           usersCount: userEntities.length,

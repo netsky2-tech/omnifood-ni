@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuditSummaryController } from './audit-summary.controller';
 import { AuditSummaryService } from './audit-summary.service';
 import { AuditEventsService } from './audit-events.service';
+import { AuditLogsService } from './audit-logs.service';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
@@ -52,6 +53,7 @@ describe('AuditSummaryController', () => {
   let app: INestApplication;
   let mockAuditSummaryService: { getExecutiveSummary: jest.Mock };
   let mockAuditEventsService: { getEvents: jest.Mock };
+  let mockAuditLogsService: { getLedger: jest.Mock; getIntegrityAlerts: jest.Mock };
 
   const summaryResponse = {
     criticalCount: 1,
@@ -72,6 +74,18 @@ describe('AuditSummaryController', () => {
     };
     mockAuditEventsService = {
       getEvents: jest.fn().mockResolvedValue({ events: [], generatedAt: '2026-09-01T12:00:00.000Z' }),
+    };
+    mockAuditLogsService = {
+      getLedger: jest.fn().mockResolvedValue({
+        entries: [],
+        limit: 50,
+        truncated: false,
+        generatedAt: '2026-09-01T12:00:00.000Z',
+      }),
+      getIntegrityAlerts: jest.fn().mockResolvedValue({
+        alerts: [],
+        generatedAt: '2026-09-01T12:00:00.000Z',
+      }),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -102,6 +116,10 @@ describe('AuditSummaryController', () => {
         {
           provide: AuditEventsService,
           useValue: mockAuditEventsService,
+        },
+        {
+          provide: AuditLogsService,
+          useValue: mockAuditLogsService,
         },
         {
           provide: ConfigService,
@@ -320,6 +338,170 @@ describe('AuditSummaryController', () => {
         .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
         .expect(400);
       expect(mockAuditEventsService.getEvents).not.toHaveBeenCalled();
+    });
+  });
+
+  // S4a: GET /operations/audit/ledger projects the POS forensic audit ledger
+  // (audit_logs, hash-chained via POST /identity/audit) into the owner
+  // dashboard — the second, correct source beside the change_log stream.
+  describe('GET /operations/audit/ledger', () => {
+    const ledgerResponse = {
+      entries: [
+        {
+          id: 'log-1',
+          occurredAt: '2026-09-01T11:58:00.000Z',
+          actorEmail: 'cashier@example.com',
+          actorUserId: 'user-uuid-1',
+          action: 'SALE_VOIDED',
+          severity: 'CRITICAL',
+          targetType: 'invoice',
+          targetId: 'inv-001',
+          deviceId: 'POS-1',
+          sequenceNo: 7,
+        },
+      ],
+      limit: 50,
+      truncated: false,
+      generatedAt: '2026-09-01T12:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      mockAuditLogsService.getLedger.mockClear();
+      mockAuditLogsService.getLedger.mockResolvedValue(ledgerResponse);
+    });
+
+    it('requires authentication', async () => {
+      await request(getHttpServer()).get('/operations/audit/ledger').expect(401);
+    });
+
+    it('returns 403 for CASHIER role', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/ledger')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
+        .expect(403);
+    });
+
+    it('returns the ledger for OWNER with tenant derived from the JWT', async () => {
+      const jwtService = app.get(JwtService);
+      const response = await request(getHttpServer())
+        .get('/operations/audit/ledger')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(200)
+        .expect('Content-Type', /json/);
+
+      expect(mockAuditLogsService.getLedger).toHaveBeenCalledWith('tenant-1', {
+        startDate: undefined,
+        endDate: undefined,
+        actorUserId: undefined,
+        targetType: undefined,
+        targetId: undefined,
+        action: undefined,
+        limitInput: undefined,
+      });
+      expect(response.body).toEqual(ledgerResponse);
+    });
+
+    it('returns the ledger for MANAGER', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/ledger')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+        .expect(200);
+    });
+
+    it('forwards every optional filter and the page cap', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/ledger')
+        .query({
+          startDate: '2026-08-01',
+          endDate: '2026-08-31',
+          actorUserId: 'user-uuid-2',
+          targetType: 'invoice',
+          targetId: 'inv-42',
+          action: 'SALE_VOIDED',
+          limit: '25',
+        })
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(200);
+
+      expect(mockAuditLogsService.getLedger).toHaveBeenLastCalledWith(
+        'tenant-1',
+        {
+          startDate: '2026-08-01',
+          endDate: '2026-08-31',
+          actorUserId: 'user-uuid-2',
+          targetType: 'invoice',
+          targetId: 'inv-42',
+          action: 'SALE_VOIDED',
+          limitInput: 25,
+        },
+      );
+    });
+
+    it('rejects a page cap above the documented maximum with 400', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/ledger')
+        .query({ limit: '250' })
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(400);
+      expect(mockAuditLogsService.getLedger).not.toHaveBeenCalled();
+    });
+  });
+
+  // S4a: GET /operations/audit/integrity surfaces the nightly gap detection
+  // state (audit_integrity_alerts) — read-only, same guard chain and roles.
+  describe('GET /operations/audit/integrity', () => {
+    const integrityResponse = {
+      alerts: [
+        {
+          id: 'alert-1',
+          deviceId: 'POS-1',
+          actorUserId: 'user-uuid-1',
+          gapStart: 41,
+          gapEnd: 44,
+          firstDetectedAt: '2026-09-01T08:00:00.000Z',
+          lastSeenAt: '2026-09-02T08:00:00.000Z',
+        },
+      ],
+      generatedAt: '2026-09-01T12:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      mockAuditLogsService.getIntegrityAlerts.mockClear();
+      mockAuditLogsService.getIntegrityAlerts.mockResolvedValue(
+        integrityResponse,
+      );
+    });
+
+    it('requires authentication', async () => {
+      await request(getHttpServer())
+        .get('/operations/audit/integrity')
+        .expect(401);
+    });
+
+    it('returns 403 for CASHIER role', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/integrity')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
+        .expect(403);
+    });
+
+    it('returns the integrity alert state for OWNER with tenant derived from the JWT', async () => {
+      const jwtService = app.get(JwtService);
+      const response = await request(getHttpServer())
+        .get('/operations/audit/integrity')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(200)
+        .expect('Content-Type', /json/);
+
+      expect(mockAuditLogsService.getIntegrityAlerts).toHaveBeenCalledWith(
+        'tenant-1',
+      );
+      expect(response.body).toEqual(integrityResponse);
     });
   });
 });

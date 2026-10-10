@@ -11,6 +11,7 @@ import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 
 describe('Slice 7B: Backend sale ACK, idempotency, and legacy classification', () => {
@@ -53,6 +54,10 @@ describe('Slice 7B: Backend sale ACK, idempotency, and legacy classification', (
       [InventorySyncReceipt, receiptRepoMock],
       [InventorySyncOutbox, { findOne: jest.fn(async () => null), delete: jest.fn() }],
       [InventoryMovement, { findOne: jest.fn(async ({ where }: any) => existingMovements.find((m) => m.tenant_id === where.tenant_id && m.saleCorrelationId === where.saleCorrelationId) ?? null), save: jest.fn(async (m: any) => (savedMovements.push(m), existingMovements.push(m), m)), create: jest.fn((d: any) => d) }],
+      // The sale path mirrors an item's modifier lines inside the same
+      // transaction (delete-then-insert). The mock must expose that repo or
+      // `getRepository` hands back `{}` and the whole record is rejected.
+      [InvoiceItemModifier, { delete: jest.fn(), insert: jest.fn() }],
     ]);
     mockTxManager = {
       query: jest.fn(async () => []),

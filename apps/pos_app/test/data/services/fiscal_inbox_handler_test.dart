@@ -7,6 +7,7 @@ import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/sales/tax_config_entity.dart';
 import 'package:pos_app/data/daos/fiscal_config_local_dao.dart';
 import 'package:pos_app/data/services/fiscal_inbox_handler.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 
 void main() {
   late AppDatabase database;
@@ -1740,6 +1741,178 @@ void main() {
         );
 
         expect(await database.localConfigDao.getConfigByKey('business_name'), isNull);
+      });
+    });
+
+    group('Manual discount cap projection (SOHO-P3 S1b)', () {
+      final cappedEnvelope = {
+        ...sampleEnvelope,
+        'maxDiscountAmount': 500,
+        'maxDiscountPercent': 15,
+      };
+
+      test('a valid number cap is projected into local_configs and satisfies completeness', () async {
+        final outcome = await handler.handleFiscalEnvelope(cappedEnvelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        final amount = await database.localConfigDao.getConfigByKey('max_discount_amount');
+        expect(amount?.value, '500');
+        final percent = await database.localConfigDao.getConfigByKey('max_discount_percent');
+        expect(percent?.value, '15');
+
+        expect(await handler.isProjectionComplete(cappedEnvelope, tenantId), isTrue);
+      });
+
+      test('null caps on a newer revision CLEAR previously projected caps (stale cap never survives)', () async {
+        await handler.handleFiscalEnvelope(cappedEnvelope);
+
+        final clearedEnvelope = {
+          ...cappedEnvelope,
+          'configVersion': {
+            'revision': 2,
+            'fingerprint':
+                'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+          },
+          'maxDiscountAmount': null,
+          'maxDiscountPercent': null,
+        };
+        final outcome = await handler.handleFiscalEnvelope(clearedEnvelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        expect(await database.localConfigDao.getConfigByKey('max_discount_amount'), isNull);
+        expect(await database.localConfigDao.getConfigByKey('max_discount_percent'), isNull);
+        expect(await handler.isProjectionComplete(clearedEnvelope, tenantId), isTrue);
+      });
+
+      test('absent caps on a newer revision CLEAR previously projected caps (snapshot completeness)', () async {
+        await handler.handleFiscalEnvelope(cappedEnvelope);
+
+        final clearedEnvelope = {
+          ...cappedEnvelope,
+          ...{
+            'configVersion': {
+              'revision': 2,
+              'fingerprint':
+                  'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+            },
+          },
+        }..remove('maxDiscountAmount')..remove('maxDiscountPercent');
+        final outcome = await handler.handleFiscalEnvelope(clearedEnvelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        expect(await database.localConfigDao.getConfigByKey('max_discount_amount'), isNull);
+        expect(await database.localConfigDao.getConfigByKey('max_discount_percent'), isNull);
+      });
+
+      test('corrupt or out-of-range cap values at the envelope boundary are REJECTED, never stored', () async {
+        final nonNumber = {...cappedEnvelope, 'maxDiscountAmount': 'not-a-number'};
+        await expectLater(
+          handler.handleFiscalEnvelope(nonNumber),
+          throwsArgumentError,
+        );
+
+        final negative = {...cappedEnvelope, 'maxDiscountAmount': -5};
+        await expectLater(
+          handler.handleFiscalEnvelope(negative),
+          throwsArgumentError,
+        );
+
+        final percentOver100 = {...cappedEnvelope, 'maxDiscountPercent': 150};
+        await expectLater(
+          handler.handleFiscalEnvelope(percentOver100),
+          throwsArgumentError,
+        );
+
+        final percentZero = {...cappedEnvelope, 'maxDiscountPercent': 0};
+        await expectLater(
+          handler.handleFiscalEnvelope(percentZero),
+          throwsArgumentError,
+        );
+
+        // Nothing was stored: the envelope never passed validation.
+        expect(await database.localConfigDao.getConfigByKey('max_discount_amount'), isNull);
+        expect(await database.localConfigDao.getConfigByKey('max_discount_percent'), isNull);
+      });
+
+      test('repair: corrupt cap value in a stored snapshot CLEARS the key instead of storing garbage', () async {
+        await handler.handleFiscalEnvelope(cappedEnvelope);
+        final stored = await database.fiscalConfigLocalDao.getByTenantId(tenantId);
+        expect(stored, isNotNull);
+
+        final decoded = jsonDecode(stored!.payload) as Map<String, dynamic>;
+        final corruptMap = {...decoded, 'maxDiscountAmount': 'garbage'};
+        final corruptEntity = FiscalConfigLocalEntity(
+          tenantId: stored.tenantId,
+          revision: stored.revision,
+          fingerprint: stored.fingerprint,
+          payload: jsonEncode(corruptMap),
+          appliedAt: stored.appliedAt,
+        );
+
+        // The stale cap key makes the projection incomplete; the repair must
+        // normalize the corrupt value to "no cap" (delete), never store it.
+        expect(await handler.isProjectionComplete(corruptMap, tenantId), isFalse);
+
+        final outcome = await handler.repairProjectionFromSnapshot(corruptEntity);
+        expect(outcome.isRepaired, isTrue);
+
+        expect(await database.localConfigDao.getConfigByKey('max_discount_amount'), isNull);
+        // The still-valid percent cap is untouched.
+        expect(
+          (await database.localConfigDao.getConfigByKey('max_discount_percent'))?.value,
+          '15',
+        );
+      });
+
+      test('completeness fails when a cap key is missing, wrong, or stale', () async {
+        await handler.handleFiscalEnvelope(cappedEnvelope);
+        expect(await handler.isProjectionComplete(cappedEnvelope, tenantId), isTrue);
+
+        // Wrong local value for the amount cap.
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_amount', value: '999'),
+        );
+        expect(await handler.isProjectionComplete(cappedEnvelope, tenantId), isFalse);
+
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_amount', value: '500'),
+        );
+        expect(await handler.isProjectionComplete(cappedEnvelope, tenantId), isTrue);
+
+        // Missing local key while the payload carries a valid cap.
+        await database.localConfigDao.deleteConfig('max_discount_percent');
+        expect(await handler.isProjectionComplete(cappedEnvelope, tenantId), isFalse);
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_percent', value: '15'),
+        );
+
+        // Stale key: the same snapshot cleared the caps (null) but the local
+        // keys survived -> NOT complete, so the repair path removes them.
+        final clearedSameRevision = {
+          ...cappedEnvelope,
+          'maxDiscountAmount': null,
+          'maxDiscountPercent': null,
+        };
+        expect(await handler.isProjectionComplete(clearedSameRevision, tenantId), isFalse);
+      });
+    });
+
+    group('Manual discount cap key contract (SOHO-P3 S1b)', () {
+      // The projection writes the caps under FiscalProjectionKeys while the
+      // checkout reads them back through TenantConfigService. Each side owns
+      // its own string literal, so renaming one side alone would silently
+      // produce "cap written but never read" — the cap would simply never
+      // apply, with no error anywhere. Pin the equality here so that
+      // divergence is a red test instead of a silent no-op.
+      test('projection keys equal the reader keys', () {
+        expect(
+          FiscalProjectionKeys.maxDiscountAmount,
+          TenantConfigService.maxDiscountAmountKey,
+        );
+        expect(
+          FiscalProjectionKeys.maxDiscountPercent,
+          TenantConfigService.maxDiscountPercentKey,
+        );
       });
     });
   });

@@ -148,6 +148,42 @@ export const fiscalSetupSchema = z.object({
     .optional(),
   dgiAuthorizationIssuedAt: z.string().optional(),
   dgiAuthorizationExpiresAt: z.string().optional(),
+  // SOHO P3 (D-A): per-business MAXIMUM manual discount caps. Same
+  // OPTIONAL-UNTIL-SET school as the mode fields: "" (or NaN from an emptied
+  // number input, what valueAsNumber yields) is the "sin tope" sentinel and
+  // normalizes to absence before the wire; a PRESENT value must satisfy the
+  // backend FiscalSetupDto ranges (amount >= 0; percent > 0 and <= 100).
+  // "Sin configurar = sin tope": absence never constrains the POS.
+  maxDiscountAmount: z.preprocess(
+    (raw) =>
+      raw === "" || (typeof raw === "number" && Number.isNaN(raw))
+        ? undefined
+        : raw,
+    z
+      .number({
+        invalid_type_error:
+          "El monto máximo de descuento debe ser un número",
+      })
+      .min(0, "El monto máximo de descuento debe ser mayor o igual a 0")
+      .nullish(),
+  ),
+  maxDiscountPercent: z.preprocess(
+    (raw) =>
+      raw === "" || (typeof raw === "number" && Number.isNaN(raw))
+        ? undefined
+        : raw,
+    z
+      .number({
+        invalid_type_error:
+          "El porcentaje máximo de descuento debe ser un número",
+      })
+      .positive("El porcentaje máximo de descuento debe ser mayor a 0")
+      .max(
+        100,
+        "El porcentaje máximo de descuento debe ser menor o igual a 100",
+      )
+      .nullish(),
+  ),
 })
 .superRefine((values, ctx) => {
   // D-21 (#554): the authorization dates are optional but PAIRED — if one is
@@ -296,6 +332,12 @@ export interface FiscalSetupResponse {
   dgiAuthorizationCode?: string | null;
   dgiAuthorizationIssuedAt?: string | null;
   dgiAuthorizationExpiresAt?: string | null;
+  /**
+   * SOHO P3 (D-A): null = sin tope configurado ("sin configurar = sin tope").
+   * Absent is tolerated for snapshots predating P3 and treated like null.
+   */
+  maxDiscountAmount?: number | null;
+  maxDiscountPercent?: number | null;
 }
 
 // --- Industry Templates ---

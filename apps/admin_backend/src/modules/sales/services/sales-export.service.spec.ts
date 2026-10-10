@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import * as ExcelJS from 'exceljs';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { SalesExportService } from './sales-export.service';
+import { computeSalesReportingTotals } from '../../../core/reporting/sales-reporting-semantics';
 import { FiscalSetupService } from '../../onboarding/services/fiscal-setup.service';
 import { Invoice } from '../entities/invoice.entity';
 import {
@@ -222,19 +223,230 @@ describe('SalesExportService', () => {
 
       // B2e U3 (D-3): the IVA percentage in the header is derived from the
       // tenant's fiscal config (15% Regimen General in the default mock).
+      // S1c-3c: the four per-origin discount columns sit right after
+      // 'Descuento (NIO)'. BEFORE: ..."Descuento (NIO)","Total (NIO)"...
+      // AFTER: ..."Descuento (NIO)","Descuento Manual (NIO)","Descuento
+      // Promoción (NIO)","Descuento Lealtad (NIO)","Descuento Sin Origen
+      // (NIO)","Total (NIO)"... — purely additive; no existing column moved
+      // or renamed.
       expect(csvResult.content).toContain(
-        '"Fecha","Numero Factura","Tipo Documento","Cliente","Subtotal Exento (NIO)","Subtotal Gravado 15% (NIO)","IVA 15% (NIO)","Descuento (NIO)","Total (NIO)","Total (USD)","Estado"',
+        '"Fecha","Numero Factura","Tipo Documento","Cliente","Subtotal Exento (NIO)","Subtotal Gravado 15% (NIO)","IVA 15% (NIO)","Descuento (NIO)","Descuento Manual (NIO)","Descuento Promoción (NIO)","Descuento Lealtad (NIO)","Descuento Sin Origen (NIO)","Total (NIO)","Total (USD)","Estado"',
       );
       expect(csvResult.content).toContain(
-        '"2026-08-26","001-001-01-00000001","FACTURA","CONSUMIDOR FINAL",0.00,1000.00,150.00,0.00,1150.00,31.51,"VALIDA"',
+        '"2026-08-26","001-001-01-00000001","FACTURA","CONSUMIDOR FINAL",0.00,1000.00,150.00,0.00,0.00,0.00,0.00,0.00,1150.00,31.51,"VALIDA"',
       );
       expect(csvResult.content).toContain(
-        '"2026-08-26","001-001-01-00000002","ANULADA","CONSUMIDOR FINAL",0.00,300.00,45.00,0.00,345.00,9.45,"ANULADA"',
+        '"2026-08-26","001-001-01-00000002","ANULADA","CONSUMIDOR FINAL",0.00,300.00,45.00,0.00,0.00,0.00,0.00,0.00,345.00,9.45,"ANULADA"',
       );
       // No internal customer id may leak into any exported column.
       expect(csvResult.content).not.toContain(
         '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
       );
+    });
+
+    // S1c-3c: per-origin discount columns in the DGI sales book export,
+    // attributed by the SAME helper the dashboard's period fold uses
+    // (salesRowDiscountOrigins) so the book and the dashboard cannot drift.
+    describe('per-origin discount columns (S1c-3c)', () => {
+      const originInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-origin',
+          tenant_id: tenantId,
+          number: '001-001-01-00000200',
+          type: 'regular',
+          subtotal: 1000,
+          totalTax: 150,
+          total: 1150,
+          totalUsd: 31.51,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T14:00:00.000Z'),
+          items: [
+            {
+              id: 'item-o1',
+              quantity: 1,
+              unitPrice: 500,
+              discount: 40,
+              discountOrigin: { manual: 40 },
+              originalTaxRate: 0.15,
+              appliedTaxRate: 0.15,
+              taxAmount: 75,
+              total: 575,
+            } as InvoiceItem,
+            {
+              id: 'item-o2',
+              quantity: 1,
+              unitPrice: 300,
+              discount: 70,
+              discountOrigin: { promotion: 45, manual: 25 },
+              originalTaxRate: 0.15,
+              appliedTaxRate: 0.15,
+              taxAmount: 45,
+              total: 345,
+            } as InvoiceItem,
+            {
+              id: 'item-o3',
+              quantity: 1,
+              unitPrice: 200,
+              discount: 15,
+              discountOrigin: { loyalty: 15 },
+              originalTaxRate: 0.15,
+              appliedTaxRate: 0.15,
+              taxAmount: 30,
+              total: 230,
+            } as InvoiceItem,
+          ],
+        },
+      ];
+
+      it('adds the four per-origin columns to the CSV header right after Descuento (NIO)', async () => {
+        mockInvoiceRepo.find.mockResolvedValue(originInvoices);
+
+        const csvResult = await service.exportSalesBook(tenantId, {
+          startDate: '2026-08-26',
+          endDate: '2026-08-26',
+          format: 'csv',
+        });
+
+        expect(csvResult.content).toContain(
+          '"Descuento (NIO)","Descuento Manual (NIO)","Descuento Promoción (NIO)","Descuento Lealtad (NIO)","Descuento Sin Origen (NIO)","Total (NIO)"',
+        );
+
+        // The XLSX column list carries the same four columns, in the same
+        // position (right after 'Descuento (NIO)').
+        const xlsxResult = await service.exportSalesBook(tenantId, {
+          startDate: '2026-08-26',
+          endDate: '2026-08-26',
+          format: 'xlsx',
+        });
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(xlsxResult.buffer as unknown as ExcelJS.Buffer);
+        const headerValues = workbook
+          .getWorksheet('Libro de Ventas DGI')
+          .getRow(1).values as unknown[];
+        const headers = headerValues.slice(1).map(String);
+        const discountIndex = headers.indexOf('Descuento (NIO)');
+        expect(headers.slice(discountIndex + 1, discountIndex + 5)).toEqual([
+          'Descuento Manual (NIO)',
+          'Descuento Promoción (NIO)',
+          'Descuento Lealtad (NIO)',
+          'Descuento Sin Origen (NIO)',
+        ]);
+      });
+
+      it('carries the four per-origin values in the CSV row, between Descuento and Total', async () => {
+        mockInvoiceRepo.find.mockResolvedValue(originInvoices);
+
+        const csvResult = await service.exportSalesBook(tenantId, {
+          startDate: '2026-08-26',
+          endDate: '2026-08-26',
+          format: 'csv',
+        });
+
+        // Worked row: 40 + 70 + 15 = 125 total discount; manual 40+25 = 65,
+        // promotion 45, loyalty 15, unattributed 0; 65+45+15+0 = 125.
+        // Taxable base = (500-40) + (300-70) + (200-15) = 875.
+        expect(csvResult.content).toContain(
+          '"2026-08-26","001-001-01-00000200","FACTURA","CONSUMIDOR FINAL",0.00,875.00,150.00,125.00,65.00,45.00,15.00,0.00,1150.00,31.51,"VALIDA"',
+        );
+      });
+
+      it('keeps the per-row identity manual + promotion + loyalty + unattributed === discountNio in the JSON export', async () => {
+        mockInvoiceRepo.find.mockResolvedValue(originInvoices);
+
+        const jsonResult = await service.exportSalesBook(tenantId, {
+          startDate: '2026-08-26',
+          endDate: '2026-08-26',
+          format: 'json',
+        });
+
+        const row = jsonResult.data.records[0];
+        expect(row.discountNio).toBe(125);
+        expect(row.manualDiscountNio).toBe(65);
+        expect(row.promotionDiscountNio).toBe(45);
+        expect(row.loyaltyDiscountNio).toBe(15);
+        expect(row.discountOriginUnattributedNio).toBe(0);
+        expect(
+          row.manualDiscountNio +
+            row.promotionDiscountNio +
+            row.loyaltyDiscountNio +
+            row.discountOriginUnattributedNio,
+        ).toBe(row.discountNio);
+      });
+
+      it('lands a legacy invoice (lines without breakdown) entirely in unattributed', async () => {
+        mockInvoiceRepo.find.mockResolvedValue([
+          {
+            id: 'inv-legacy-origin',
+            tenant_id: tenantId,
+            number: '001-001-01-00000201',
+            type: 'regular',
+            subtotal: 900,
+            totalTax: 135,
+            total: 1035,
+            totalUsd: 28.4,
+            isCanceled: false,
+            created_at: new Date('2026-08-26T15:00:00.000Z'),
+            items: [
+              {
+                id: 'item-l1',
+                quantity: 1,
+                unitPrice: 500,
+                discount: 30,
+                originalTaxRate: 0.15,
+                appliedTaxRate: 0.15,
+                taxAmount: 75,
+                total: 575,
+              } as InvoiceItem,
+              {
+                id: 'item-l2',
+                quantity: 1,
+                unitPrice: 400,
+                discount: 20,
+                discountOrigin: null,
+                originalTaxRate: 0.15,
+                appliedTaxRate: 0.15,
+                taxAmount: 60,
+                total: 460,
+              } as InvoiceItem,
+            ],
+          },
+        ]);
+
+        const jsonResult = await service.exportSalesBook(tenantId, {
+          startDate: '2026-08-26',
+          endDate: '2026-08-26',
+          format: 'json',
+        });
+
+        const row = jsonResult.data.records[0];
+        expect(row.discountNio).toBe(50);
+        expect(row.manualDiscountNio).toBe(0);
+        expect(row.promotionDiscountNio).toBe(0);
+        expect(row.loyaltyDiscountNio).toBe(0);
+        // Legacy rows are NEVER presented as fabricated origin zeros.
+        expect(row.discountOriginUnattributedNio).toBe(row.discountNio);
+      });
+
+      it('agrees EXACTLY with computeSalesReportingTotals for the same single-invoice window (cross-surface drift guard)', async () => {
+        mockInvoiceRepo.find.mockResolvedValue(originInvoices);
+
+        const jsonResult = await service.exportSalesBook(tenantId, {
+          startDate: '2026-08-26',
+          endDate: '2026-08-26',
+          format: 'json',
+        });
+
+        const totals = computeSalesReportingTotals(
+          originInvoices as never,
+        );
+        const row = jsonResult.data.records[0];
+        expect(row.manualDiscountNio).toBe(totals.manualDiscountNio);
+        expect(row.promotionDiscountNio).toBe(totals.promotionDiscountNio);
+        expect(row.loyaltyDiscountNio).toBe(totals.loyaltyDiscountNio);
+        expect(row.discountOriginUnattributedNio).toBe(
+          totals.discountOriginUnattributedNio,
+        );
+      });
     });
 
     it('uses the customerName snapshot when present, avoiding customerId fallback', async () => {

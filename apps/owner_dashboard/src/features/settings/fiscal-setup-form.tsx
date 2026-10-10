@@ -64,6 +64,9 @@ export function FiscalSetupForm() {
       dgiAuthorizationCode: "",
       dgiAuthorizationIssuedAt: "",
       dgiAuthorizationExpiresAt: "",
+      // SOHO P3 (D-A): "" is the "sin tope" sentinel — never prefill a cap.
+      maxDiscountAmount: "",
+      maxDiscountPercent: "",
     },
   });
 
@@ -97,6 +100,9 @@ export function FiscalSetupForm() {
         dgiAuthorizationCode: initialData.dgiAuthorizationCode ?? "",
         dgiAuthorizationIssuedAt: toDateInputValue(initialData.dgiAuthorizationIssuedAt),
         dgiAuthorizationExpiresAt: toDateInputValue(initialData.dgiAuthorizationExpiresAt),
+        // SOHO P3 (D-A): null / missing → "" (sin tope); a number → itself.
+        maxDiscountAmount: initialData.maxDiscountAmount ?? "",
+        maxDiscountPercent: initialData.maxDiscountPercent ?? "",
       });
     }
   }, [initialData, reset]);
@@ -107,6 +113,8 @@ export function FiscalSetupForm() {
       dgiAuthorizationExpiresAt,
       operationMode,
       checkoutFxMode,
+      maxDiscountAmount,
+      maxDiscountPercent,
       ...rest
     } = values;
     // BXW-007: the wire decision for each sentinel-bearing field compares
@@ -132,10 +140,28 @@ export function FiscalSetupForm() {
         : resolveCheckoutFxMode(initialData?.checkoutFxMode) !== null
           ? { checkoutFxMode: null }
           : {};
+    // SOHO P3 (D-A): the discount caps follow the same saved-snapshot
+    // contract — empty input over a stored number sends null (the tombstone
+    // that removes the cap: sin configurar = sin tope); empty input over a
+    // null/absent snapshot omits the key entirely; a number sends itself.
+    const maxDiscountAmountPayload =
+      maxDiscountAmount !== undefined && maxDiscountAmount !== null
+        ? { maxDiscountAmount }
+        : typeof initialData?.maxDiscountAmount === "number"
+          ? { maxDiscountAmount: null }
+          : {};
+    const maxDiscountPercentPayload =
+      maxDiscountPercent !== undefined && maxDiscountPercent !== null
+        ? { maxDiscountPercent }
+        : typeof initialData?.maxDiscountPercent === "number"
+          ? { maxDiscountPercent: null }
+          : {};
     updateMutation.mutate({
       ...rest,
       ...operationModePayload,
       ...checkoutFxModePayload,
+      ...maxDiscountAmountPayload,
+      ...maxDiscountPercentPayload,
       // D-21 (#554) backend contract: the code is ALWAYS sent — '' clears
       // the stored value through a null tombstone — while blank dates are
       // omitted, because an absent field leaves any prior value untouched.
@@ -224,7 +250,13 @@ export function FiscalSetupForm() {
           </AlertDescription>
         </Alert>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" data-testid="fiscal-setup-form">
+        {/* noValidate: the application's own zod validation (via the RHF
+            resolver) is the single source of operator feedback. Native HTML
+            constraint validation would otherwise block the submit event
+            before handleSubmit runs, replacing the design system's Spanish
+            inline errors with the browser's own validation bubble (browser
+            language and styling, e.g. English in an English browser). */}
+        <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-6" data-testid="fiscal-setup-form">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Nombre Comercial */}
             <div className="space-y-2">
@@ -371,6 +403,53 @@ export function FiscalSetupForm() {
                   checked={pricesIncludeTax}
                   onCheckedChange={(checked) => setValue("pricesIncludeTax", checked, { shouldDirty: true })}
                 />
+              </div>
+            </div>
+
+            {/* SOHO P3 (D-A): manual discount caps (optional). The POS
+                mirrors the enforcement rule: a manual discount is allowed
+                only when it is <= EVERY configured cap (the effective cap is
+                the minimum of the two); 0 forbids any discount; null = no
+                cap. */}
+            <div className="space-y-2 md:col-span-2 border rounded-lg p-4 bg-card">
+              <div className="space-y-0.5">
+                <Label>Tope de Descuento Manual</Label>
+                <p className="text-xs text-muted-foreground">
+                  Sin configurar = sin tope: el POS no limitará el descuento manual. Si define un monto y/o un porcentaje, AMBOS límites configurados aplican simultáneamente: el POS solo aceptará un descuento manual que no exceda NINGUNO de los dos topes (el monto en C$ y el porcentaje calculado sobre el subtotal bruto; en la práctica rige el tope más estricto de los dos). Un monto de 0 prohíbe TODO descuento manual. Deje el campo vacío y guarde para quitar un tope definido.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="maxDiscountAmount">Descuento Máximo por Monto (C$)</Label>
+                  <Input
+                    id="maxDiscountAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Sin tope"
+                    {...register("maxDiscountAmount", { valueAsNumber: true })}
+                    aria-invalid={Boolean(errors.maxDiscountAmount)}
+                  />
+                  {errors.maxDiscountAmount && (
+                    <p className="text-xs text-destructive">{errors.maxDiscountAmount.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="maxDiscountPercent">Descuento Máximo por Porcentaje (%)</Label>
+                  <Input
+                    id="maxDiscountPercent"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    placeholder="Sin tope"
+                    {...register("maxDiscountPercent", { valueAsNumber: true })}
+                    aria-invalid={Boolean(errors.maxDiscountPercent)}
+                  />
+                  {errors.maxDiscountPercent && (
+                    <p className="text-xs text-destructive">{errors.maxDiscountPercent.message}</p>
+                  )}
+                </div>
               </div>
             </div>
 

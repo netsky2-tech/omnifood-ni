@@ -158,6 +158,33 @@ export interface SalesDashboardReportDto {
   totalDiscountsNio: number;
 
   /**
+   * Per-origin discount attribution (S1c-3, additive). The four fields
+   * satisfy the reconciliation identity a consumer checks the dashboard
+   * against:
+   *
+   *   manualDiscountNio + promotionDiscountNio + loyaltyDiscountNio +
+   *   discountOriginUnattributedNio === totalDiscountsNio (EXACT, no
+   *   tolerance) — all four are computed over the same rows and rounding
+   *   discipline as `totalDiscountsNio`.
+   */
+  /** Σ line discounts attributed to a manual (hand-applied) origin. */
+  manualDiscountNio: number;
+  /** Σ line discounts attributed to a promotion origin. */
+  promotionDiscountNio: number;
+  /** Σ line discounts attributed to a loyalty redemption origin. */
+  loyaltyDiscountNio: number;
+  /**
+   * The "unknown/legacy" remainder of `totalDiscountsNio`: line discounts
+   * with a NULL/absent provenance breakdown (legacy rows — never backfilled,
+   * never presented as a fabricated origin zero) plus any residual of a
+   * partial breakdown. It can be NEGATIVE only when stored data contradicts
+   * itself (a breakdown whose members over-state the line's discount — the
+   * write path never produces this); the value is intentionally not clamped
+   * so the identity above stays exact.
+   */
+  discountOriginUnattributedNio: number;
+
+  /**
    * Voluntary-tip summary (PRD §21, Batch 7). Strictly separate from every
    * sales total (PRD §21.3). Consumers must honor tipCoverage: a period with
    * zero recorded tips is NOT evidence that tips are disabled (PRD §21.4).

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../domain/models/inventory/product.dart';
 import '../../domain/models/sales/invoice.dart';
 import '../../domain/models/sales/invoice_item.dart';
 import '../../domain/models/sales/payment.dart';
@@ -404,10 +405,29 @@ class ActivationControlledSaleRunner {
     ticketTotal = persistedInvoice.total;
     ticketSyncStatus = persistedInvoice.syncStatus;
     final persistedItems = await _database.invoiceItemDao.getItemsByInvoiceId(ticketId);
+    // SOHO P3: the rebuild is the EXACT production wire builder, so it must
+    // carry the persisted modifier rows too (one batched query, no N+1).
+    // Without this the verification sale's modifiers were rebuilt away and
+    // the envelope flattened every line to `modifiers: []`.
+    final persistedModifierRows = await _database.invoiceItemDao
+        .getModifierRowsByInvoiceId(ticketId);
+    final modifiersByItemId = <String, List<Modifier>>{};
+    for (final row in persistedModifierRows) {
+      (modifiersByItemId[row.invoiceItemId] ??= [])
+          .add(SalesMapper.toModifierDomain(row));
+    }
     final persistedPayments = await _database.paymentDao.getPaymentsByInvoiceId(ticketId);
     final persistedInvoicePayload = SalesMapper.toSyncJson(
       SalesMapper.toInvoiceDomain(persistedInvoice),
-      persistedItems.map(SalesMapper.toItemDomain).toList(growable: false),
+      persistedItems
+          .map(
+            (item) => SalesMapper.toItemDomain(
+              item,
+              modifiers: modifiersByItemId[item.id] ??
+                  const <Modifier>[],
+            ),
+          )
+          .toList(growable: false),
       persistedPayments.map(SalesMapper.toPaymentDomain).toList(growable: false),
     );
     // Issue #506: this record MUST be byte-identical to the record the

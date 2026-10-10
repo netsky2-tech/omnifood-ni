@@ -33,6 +33,41 @@ class _MockSalesHistoryViewModel extends ChangeNotifier implements SalesHistoryV
   @override
   void setSearchQuery(String query) {}
 
+  // S3b: members the redesigned list view reads at runtime. This fake
+  // exercises row rendering only, so they are honest no-ops.
+  @override
+  bool get hasLoadError => false;
+
+  @override
+  String? get loadErrorMessage => null;
+
+  @override
+  int get rowContextFailureCount => 0;
+
+  @override
+  List<Invoice> get visibleInvoices => filteredInvoices;
+
+  @override
+  bool get hasMoreVisibleInvoices => false;
+
+  @override
+  void revealMoreVisible() {}
+
+  @override
+  DateTime? get filterDateFrom => null;
+
+  @override
+  DateTime? get filterDateTo => null;
+
+  @override
+  void setDateRange(DateTime? from, DateTime? to) {}
+
+  @override
+  void clearDateRange() {}
+
+  @override
+  SalesHistoryTotals get filteredTotals => const SalesHistoryTotals.empty();
+
   @override
   Future<void> loadInvoices() async {}
 

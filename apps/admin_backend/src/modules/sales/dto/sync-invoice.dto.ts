@@ -4,8 +4,13 @@ import {
   IsNumber,
   IsBoolean,
   IsDateString,
+  IsNotEmptyObject,
+  IsObject,
   IsOptional,
   IsArray,
+  IsInt,
+  IsPositive,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -62,6 +67,33 @@ export class InventorySnapshotDto {
   bindings: InventorySnapshotBindingDto[];
 }
 
+/// D-A2 (amounts breakdown): WHY and HOW MUCH a line's discount exists —
+/// e.g. { manual: 5, promotion: 10 }. One line can be discounted by MORE
+/// THAN ONE origin at once, so members are optional and only non-zero
+/// origins travel. The keys mirror the DiscountOrigin enum, which is the
+/// source of the keys enforced by the database CHECK constraint
+/// chk_invoice_items_discount_origin_breakdown. Members are POSITIVE
+/// numbers on purpose: IsPositive (value > 0) mirrors the CHECK's
+/// `@.value <= 0` rejection exactly, so an operator mistake is a clean 400
+/// here instead of the same row surviving validation and dying at
+/// persistence with SQLSTATE 23514 (a 500).
+export class DiscountOriginBreakdownDto {
+  @IsNumber()
+  @IsPositive()
+  @IsOptional()
+  manual?: number;
+
+  @IsNumber()
+  @IsPositive()
+  @IsOptional()
+  promotion?: number;
+
+  @IsNumber()
+  @IsPositive()
+  @IsOptional()
+  loyalty?: number;
+}
+
 export class CreateInvoiceItemDto {
   @IsString()
   id: string;
@@ -92,6 +124,27 @@ export class CreateInvoiceItemDto {
 
   @IsNumber()
   discount: number;
+
+  @IsObject()
+  @IsNotEmptyObject()
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DiscountOriginBreakdownDto)
+  // D-A2 (amounts breakdown): WHY and HOW MUCH this line has a discount —
+  // e.g. {"manual": 5, "promotion": 10}. One line can be discounted by more
+  // than one origin at once, so this replaced the single categorical
+  // discountOrigin. OPTIONAL on purpose — every deployed terminal omits it
+  // today, and a payload that omits it must stay valid — forbidNonWhitelisted
+  // rejects the WHOLE batch on an unknown property, so the field must be
+  // whitelisted BEFORE any terminal starts sending it, and an unknown KEY
+  // inside the object is likewise rejected rather than silently stored or
+  // stripped. IsNotEmptyObject keeps the state space at exactly TWO legal
+  // values: NULL (absent — legacy/undiscounted lines; the backend never
+  // fabricates an origin and there is no backfill for historical rows) and a
+  // POPULATED breakdown with at least one origin. An empty object is neither
+  // "nothing recorded" nor a breakdown, so a PRESENT breakdown must name at
+  // least one origin. Absence (or null) persists as NULL.
+  discountOrigin?: DiscountOriginBreakdownDto | null;
 
   @IsString()
   @IsOptional()
@@ -151,6 +204,23 @@ export class CreateModifierDto {
 
   @IsNumber()
   extraPrice: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  // SOHO P3 (modifier quantity): how many units of this option the line
+  // includes. OPTIONAL on purpose — deployed terminals ALREADY send it
+  // (the POS wire map is {name, extraPrice, quantity}, sales_mapper.dart:
+  // 713-718) while older ones omit it, and with the production pipe config
+  // (whitelist + forbidNonWhitelisted) requiring it would 400-reject every
+  // legacy terminal's whole batch. Min(1) is the honest floor, not just
+  // non-zero: a modifier line without a quantity IS one unit — the POS's
+  // own local default (invoice_item_modifier_entity.dart:30) — so 0 or a
+  // negative is a payload corruption, rejected here with a named error
+  // (min / IsInt) instead of surviving validation and persisting as a 0.
+  // Absence persists as 1 (the database column default, migration
+  // 1809640000000), never as a fabricated business value.
+  quantity?: number;
 }
 
 export class CreatePaymentDto {

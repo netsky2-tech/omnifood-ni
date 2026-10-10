@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/localization/display_name_resolver.dart';
+import '../../../../core/localization/label_map.dart';
 import '../../../design_system/design_system.dart';
 import '../../../../domain/models/audit_log.dart';
 import '../../../../domain/repositories/auth_repository.dart';
@@ -198,8 +199,12 @@ class _AuditLogViewState extends State<AuditLogView> {
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            log.action,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                            localize(
+                                                log.action,
+                                                kAuditLedgerActionLabels),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13),
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
@@ -292,16 +297,23 @@ class _AuditLogViewState extends State<AuditLogView> {
   }
 
   void _showLogDetails(BuildContext context, dynamic log, _AuditBadgeInfo badge) {
+    // Metadata presentation: the labelled rows are PRIMARY; the raw JSON
+    // payload stays reachable as SECONDARY evidence behind the collapsed
+    // 'Ver crudo' toggle. The raw block is only built when expanded, so a
+    // quoted-English-keys dump never lands on the owner's screen unless
+    // they explicitly ask for it. (ValueNotifier keeps the dialog's
+    // pre-existing builder shape untouched.)
+    final ValueNotifier<bool> showRawMetadata = ValueNotifier<bool>(false);
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Row(
           children: [
             Icon(badge.icon, color: badge.color, size: 24),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                log.action,
+                localize(log.action, kAuditLedgerActionLabels),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -317,25 +329,17 @@ class _AuditLogViewState extends State<AuditLogView> {
               children: [
                 _DetailItem(label: 'Fecha y hora', value: _formatDate(log.timestamp)),
                 _DetailItem(label: 'Usuario', value: _userName(log.userId)),
+                // Forensic ledger: the machine code stays reachable as
+                // secondary evidence; the human-readable label above it is
+                // the primary text.
+                _DetailItem(label: 'Código', value: log.action),
                 // Device identity, not person identity: the operator rule
                 // (D-14) is about people, so the device id stays verbatim.
                 _DetailItem(label: 'Dispositivo', value: log.deviceId.toString()),
                 const SizedBox(height: 12),
                 const Text('METADATOS REGISTRADOS:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                 const SizedBox(height: 6),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Text(
-                    _formatMetadata(log.metadata),
-                    style: const TextStyle(fontFamily: 'Courier', fontSize: 11),
-                  ),
-                ),
+                ..._metadataSection(log.metadata, showRawMetadata),
               ],
             ),
           ),
@@ -349,6 +353,117 @@ class _AuditLogViewState extends State<AuditLogView> {
       ),
     );
   }
+
+  /// The metadata block of the detail dialog: labelled rows keyed by the
+  /// verified POS emit sites (kAuditMetadataKeyLabels) as the primary
+  /// presentation, with the raw JSON payload as a collapsed secondary
+  /// 'Ver crudo' affordance so the evidence stays reachable without being
+  /// machine output on the owner's screen. Unparseable metadata degrades
+  /// verbatim (the only honest rendering available).
+  List<Widget> _metadataSection(dynamic metadata, ValueNotifier<bool> showRaw) {
+    final decoration = BoxDecoration(
+      color: Colors.grey.shade100,
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: Colors.grey.shade300),
+    );
+    final rawTextStyle = const TextStyle(fontFamily: 'Courier', fontSize: 11);
+
+    final entries = _metadataEntries(metadata);
+    if (entries == null) {
+      return [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: decoration,
+          child: Text(
+            _formatMetadata(metadata),
+            style: rawTextStyle,
+          ),
+        ),
+      ];
+    }
+
+    return [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: decoration,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final entry in entries)
+              _DetailItem(
+                label: _metadataKeyLabel(entry.key),
+                value: entry.value,
+              ),
+          ],
+        ),
+      ),
+      ValueListenableBuilder<bool>(
+        valueListenable: showRaw,
+        builder: (context, showRawValue, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              key: const Key('audit_metadata_raw_toggle'),
+              onPressed: () => showRaw.value = !showRaw.value,
+              child: Text(
+                showRawValue ? 'Ocultar crudo' : 'Ver crudo',
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
+            if (showRawValue)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: decoration,
+                child: Text(
+                  _formatMetadata(metadata),
+                  style: rawTextStyle,
+                ),
+              ),
+          ],
+        ),
+      ),
+    ];
+  }
+
+  /// Parses the audit metadata into insertion-ordered key/value entries.
+  /// Returns null when the payload is empty, absent, or not a JSON object —
+  /// the caller then renders it verbatim instead of guessing a structure.
+  List<MapEntry<String, String>>? _metadataEntries(dynamic metadata) {
+    if (metadata == null) return null;
+    final raw = metadata.toString();
+    if (raw.trim().isEmpty) return null;
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is Map) {
+        return [
+          for (final entry in decoded.entries)
+            MapEntry(
+              entry.key.toString(),
+              entry.value is String
+                  ? entry.value as String
+                  : entry.value.toString(),
+            ),
+        ];
+      }
+    } catch (_) {
+      // Not JSON: fall through to the verbatim rendering.
+    }
+    return null;
+  }
+
+  /// Spanish label for a metadata key from the verified POS emit sites
+  /// ([kAuditMetadataKeyLabels]); unverified keys humanise honestly
+  /// (underscores to spaces) — never hidden, never given an invented
+  /// meaning.
+  String _metadataKeyLabel(String key) =>
+      kAuditMetadataKeyLabels.containsKey(key)
+      ? kAuditMetadataKeyLabels[key]!
+      : key.replaceAll('_', ' ');
 
   String _formatMetadata(dynamic metadata) {
     if (metadata == null || metadata.toString().isEmpty) return 'Sin metadatos';

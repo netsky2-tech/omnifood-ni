@@ -1,4 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Edit2, Trash2 } from "lucide-react";
 import {
   useCatalogValues,
@@ -8,8 +10,10 @@ import {
 } from "./use-catalog";
 import {
   CATALOG_TYPES,
+  catalogValueFormSchema,
   type CatalogType,
   type CatalogValue,
+  type CatalogValueFormValues,
   type CreateCatalogValueInput,
 } from "./types";
 import { Button } from "@/components/ui/button";
@@ -135,9 +139,31 @@ function CatalogDialog({
   const createMutation = useCreateCatalogValue(type);
   const updateMutation = useUpdateCatalogValue(type);
 
-  const [code, setCode] = useState(value?.code ?? "");
-  const [name, setName] = useState(value?.name ?? "");
-  const [sortOrder, setSortOrder] = useState(value?.sort_order ?? 0);
+  // Unit A (form sweep): the app owns validation through the zod schema
+  // below (single source of operator feedback). The native HTML constraints
+  // this dialog used to rely on (required/pattern/maxLength/min) only ran
+  // inside the browser's constraint validation: the balloon replaced the
+  // app's Spanish inline errors, and any submit not coming from the button
+  // (e.g. programmatic requestSubmit()) bypassed the guard entirely.
+  const schema = useMemo(() => catalogValueFormSchema(isEdit), [isEdit]);
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<CatalogValueFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      code: value?.code ?? "",
+      name: value?.name ?? "",
+      sortOrder: value?.sort_order ?? 0,
+    },
+  });
+
+  const code = watch("code");
+  const name = watch("name");
+  const sortOrder = watch("sortOrder");
+
   const [error, setError] = useState<string | null>(null);
 
   const isPending = createMutation.isPending || updateMutation.isPending;
@@ -159,8 +185,7 @@ function CatalogDialog({
 
   const isSubmittingRef = useRef(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const onSubmit = async (values: CatalogValueFormValues) => {
     if (isPending || isSubmittingRef.current) return;
     isSubmittingRef.current = true;
     setError(null);
@@ -169,24 +194,24 @@ function CatalogDialog({
       if (isEdit && value) {
         await updateMutation.mutateAsync({
           id: value.id,
-          input: { name: name.trim(), sort_order: sortOrder },
+          input: { name: values.name.trim(), sort_order: values.sortOrder },
         });
         toast({
           variant: "success",
           title: "Elemento actualizado",
-          description: `"${name.trim()}" se actualizó correctamente en el catálogo.`,
+          description: `"${values.name.trim()}" se actualizó correctamente en el catálogo.`,
         });
       } else {
         const input: CreateCatalogValueInput = {
-          code: code.trim(),
-          name: name.trim(),
-          sort_order: sortOrder,
+          code: values.code.trim(),
+          name: values.name.trim(),
+          sort_order: values.sortOrder,
         };
         await createMutation.mutateAsync(input);
         toast({
           variant: "success",
           title: "Elemento creado",
-          description: `"${name.trim()}" se guardó correctamente en el catálogo.`,
+          description: `"${values.name.trim()}" se guardó correctamente en el catálogo.`,
         });
       }
       onClose();
@@ -233,7 +258,17 @@ function CatalogDialog({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+        {/* noValidate: the application's own zod validation (via the RHF
+            resolver) is the single source of operator feedback. Native HTML
+            constraint validation would otherwise block the submit event
+            before handleSubmit runs, replacing the design system's Spanish
+            inline errors with the browser's own validation bubble (browser
+            language and styling). */}
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          noValidate
+          className="space-y-4 pt-1"
+        >
           {!isEdit && (
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -241,14 +276,16 @@ function CatalogDialog({
               </label>
               <Input
                 type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                required
-                pattern="^[A-Za-z0-9_-]+$"
-                maxLength={64}
+                {...register("code")}
                 placeholder="Ej: kg, LACTEOS"
                 disabled={isPending}
+                aria-invalid={Boolean(errors.code)}
               />
+              {errors.code && (
+                <p className="text-xs text-destructive">
+                  {errors.code.message}
+                </p>
+              )}
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Solo letras, números, guiones y guiones bajos
               </p>
@@ -261,13 +298,14 @@ function CatalogDialog({
             </label>
             <Input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              maxLength={120}
+              {...register("name")}
               placeholder="Ej: Kilogramo, Lácteos"
               disabled={isPending}
+              aria-invalid={Boolean(errors.name)}
             />
+            {errors.name && (
+              <p className="text-xs text-destructive">{errors.name.message}</p>
+            )}
           </div>
 
           <div>
@@ -276,11 +314,15 @@ function CatalogDialog({
             </label>
             <Input
               type="number"
-              value={sortOrder}
-              onChange={(e) => setSortOrder(Number(e.target.value))}
-              min={0}
+              {...register("sortOrder", { setValueAs: (v) => Number(v) })}
               disabled={isPending}
+              aria-invalid={Boolean(errors.sortOrder)}
             />
+            {errors.sortOrder && (
+              <p className="text-xs text-destructive">
+                {errors.sortOrder.message}
+              </p>
+            )}
           </div>
 
           <DialogFooter className="pt-3">

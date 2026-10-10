@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
 import '../../../domain/models/sales/cart_item.dart';
+import '../../../domain/services/config/discount_policy_service.dart';
 import '../../../domain/services/printer/kitchen_modifier_lines.dart';
 import '../../../domain/models/sales/hold_ticket.dart';
 import '../../../data/services/sync_service.dart';
@@ -1800,18 +1801,62 @@ class CartSummary extends StatelessWidget {
           children: [
             const Text('Subtotal'),
             Text(
-              'C\$ ${((viewModel.subtotal) + (viewModel.totalDiscounts)).toStringAsFixed(2)}',
+              // SOHO-P3: the TRUE gross from the fiscal calculator, not
+              // subtotal + totalDiscounts — that expression over-reports
+              // whenever the aggregate is clamped (e.g. a stale redemption
+              // after the cart shrinks).
+              'C\$ ${(viewModel.grossSubtotal).toStringAsFixed(2)}',
               style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
             ),
           ],
         ),
-        if (viewModel.totalDiscounts > 0)
+        // SOHO-P3: report the discount breakdown honestly. A manual discount
+        // is not a promotion; each component gets its own row and the rows
+        // still sum to the aggregate the fiscal path consumes.
+        if (viewModel.manualDiscount > 0)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Descuentos (Promos)', style: TextStyle(color: NhilosColors.success)),
+              const Text(
+                'Descuento manual',
+                style: TextStyle(color: NhilosColors.success),
+              ),
               Text(
-                '-C\$ ${(viewModel.totalDiscounts).toStringAsFixed(2)}',
+                '-C\$ ${(viewModel.manualDiscount).toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: NhilosColors.success,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        if (viewModel.promoDiscounts > 0)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Promociones',
+                style: TextStyle(color: NhilosColors.success),
+              ),
+              Text(
+                '-C\$ ${(viewModel.promoDiscounts).toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: NhilosColors.success,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        if (viewModel.loyaltyDiscount > 0)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Descuento por puntos',
+                style: TextStyle(color: NhilosColors.success),
+              ),
+              Text(
+                '-C\$ ${(viewModel.loyaltyDiscount).toStringAsFixed(2)}',
                 style: const TextStyle(
                   color: NhilosColors.success,
                   fontFeatures: [FontFeature.tabularFigures()],
@@ -2077,10 +2122,16 @@ class CartSummary extends StatelessWidget {
   }
 
   Future<void> _requestSupervisorOverrideForManualDiscount(BuildContext context) async {
+    final viewModel = context.read<SaleViewModel>();
+    // SOHO-P3 S1b: refresh the caps before every prompt (D-5 freshness
+    // precedent) so the operator sees the CURRENT configured limit and the
+    // enforcement gate evaluates against it.
+    await viewModel.loadDiscountCaps();
+    if (!context.mounted) return;
+
     final amount = await _promptManualDiscountAmount(context);
     if (!context.mounted || amount == null || amount <= 0) return;
 
-    final viewModel = context.read<SaleViewModel>();
     viewModel.applyManualDiscount(amount);
 
     if (viewModel.errorMessage != 'Acceso denegado.') {
@@ -2127,33 +2178,114 @@ class CartSummary extends StatelessWidget {
 
   Future<double?> _promptManualDiscountAmount(BuildContext context) async {
     final controller = TextEditingController();
+    final viewModel = context.read<SaleViewModel>();
+    // SOHO-P3 S1b: show the configured effective limit BEFORE typing so the
+    // cashier does not have to discover it by rejection.
+    final limitLabel = viewModel.manualDiscountLimitLabel;
     return showDialog<double>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Descuento manual'),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 380),
-          child: TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Monto de descuento'),
-            autofocus: true,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              double.tryParse(controller.text.trim()),
+      builder: (dialogContext) {
+        // Device-reported defect: the OLD path closed the dialog on Aplicar
+        // and let the view model's refusal surface only through
+        // _presentError's ScaffoldMessenger SnackBar, which renders on the
+        // scaffold BEHIND the cart modal bottom sheet — the operator saw
+        // nothing anywhere and reasonably believed the discount applied.
+        // The prompt now carries the verdict itself: it evaluates the typed
+        // amount with the SAME rule the view model enforces —
+        // DiscountPolicyService fed with the view model's exposed caps
+        // (maxDiscountAmountCap / maxDiscountPercentCap), gross subtotal and
+        // accumulated manual discount, so there is one rule and one
+        // implementation — and on refusal it keeps the dialog OPEN with the
+        // cause-naming message INLINE, where the cashier is looking. The
+        // view model's enforcement is untouched and still guards the apply
+        // path; this pre-check only decides whether the dialog may close.
+        String? inlineRejection;
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('Descuento manual'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (limitLabel != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        limitLabel,
+                        key: const Key('manual_discount_limit_label'),
+                        style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(dialogContext).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Monto de descuento'),
+                    autofocus: true,
+                    // Device-reported defect: after a refusal the inline
+                    // message kept claiming the OLD amount was not permitted
+                    // while the operator corrected it. The refusal clears on
+                    // the text change itself — the same moment the claim
+                    // stops being true — and reappears only if a new Aplicar
+                    // is refused again.
+                    onChanged: (_) {
+                      if (inlineRejection != null) {
+                        setDialogState(() => inlineRejection = null);
+                      }
+                    },
+                  ),
+                  if (inlineRejection != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        inlineRejection!,
+                        key: const Key('manual_discount_inline_rejection'),
+                        style:
+                            Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(dialogContext).colorScheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            child: const Text('Aplicar'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancelar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final amount = double.tryParse(controller.text.trim());
+                  if (amount != null && amount > 0) {
+                    final decision = const DiscountPolicyService()
+                        .evaluateManualDiscount(
+                      requestedAmount: amount,
+                      accumulatedManualDiscount: viewModel.manualDiscount,
+                      grossSubtotal: viewModel.grossSubtotal,
+                      maxDiscountAmount: viewModel.maxDiscountAmountCap,
+                      maxDiscountPercent: viewModel.maxDiscountPercentCap,
+                    );
+                    if (!decision.allowed) {
+                      // Refusal: keep the dialog open, show the cause.
+                      setDialogState(
+                        () => inlineRejection = decision.rejectionMessage,
+                      );
+                      return;
+                    }
+                  }
+                  Navigator.pop(dialogContext, amount);
+                },
+                child: const Text('Aplicar'),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -2327,7 +2459,7 @@ class PromotionsManagerDialog extends StatelessWidget {
           SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Control de Promociones',
+              'Promociones',
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -2346,39 +2478,66 @@ class PromotionsManagerDialog extends StatelessWidget {
                   ),
                 ),
               )
-            : ListView.separated(
-                itemCount: promotions.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final promo = promotions[index];
-                  return SwitchListTile(
-                    dense: true,
-                    isThreeLine: true,
-                    title: Text(
-                      promo.name,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: promo.isActive ? colorScheme.onSurface : Colors.grey,
-                      ),
+            : Column(
+                children: [
+                  Expanded(
+                    child: ListView.separated(
+                      itemCount: promotions.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final promo = promotions[index];
+                        // SOHO P3 S2 (defect 2): the cloud is authoritative
+                        // for promotions; the former SwitchListTile offered a
+                        // local-only write that the next delta silently
+                        // reverted. The surface is now strictly read-only.
+                        return ListTile(
+                          dense: true,
+                          isThreeLine: true,
+                          title: Text(
+                            promo.name,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: promo.isActive
+                                  ? colorScheme.onSurface
+                                  : Colors.grey,
+                            ),
+                          ),
+                          subtitle: Text(
+                            promo.type == PromotionType.buyXGetYFree
+                                ? '2x1 (Paga ${promo.buyQuantity} Lleva ${promo.buyQuantity + promo.getQuantity})'
+                                : (promo.type == PromotionType.percentageDiscount
+                                    ? '${promo.discountValue.toStringAsFixed(0)}% de descuento'
+                                    : 'Descuento C\$ ${promo.discountValue.toStringAsFixed(2)}'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: promo.isActive
+                                  ? Colors.deepOrange.shade800
+                                  : Colors.grey,
+                            ),
+                          ),
+                          trailing: Text(
+                            promo.isActive ? 'Activa' : 'Inactiva',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color:
+                                  promo.isActive ? Colors.green : Colors.grey,
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                    subtitle: Text(
-                      promo.type == PromotionType.buyXGetYFree
-                          ? '2x1 (Paga ${promo.buyQuantity} Lleva ${promo.buyQuantity + promo.getQuantity})'
-                          : (promo.type == PromotionType.percentageDiscount
-                              ? '${promo.discountValue.toStringAsFixed(0)}% de descuento'
-                              : 'Descuento C\$ ${promo.discountValue.toStringAsFixed(2)}'),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: promo.isActive ? Colors.deepOrange.shade800 : Colors.grey,
-                      ),
+                  ),
+                  const Divider(height: 1),
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Text(
+                      'Las promociones se activan y desactivan desde el panel de negocio (web).',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                      textAlign: TextAlign.center,
                     ),
-                    value: promo.isActive,
-                    activeColor: Colors.deepOrange,
-                    onChanged: (val) {
-                      viewModel.togglePromotion(promo.id, val);
-                    },
-                  );
-                },
+                  ),
+                ],
               ),
       ),
       actions: [

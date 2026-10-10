@@ -138,7 +138,7 @@ void main() {
   /// then settles the scheduled frames outside runAsync.
   Future<void> tapWithRealIo(
     WidgetTester tester,
-    Future action(),
+    Future<void> Function() action,
   ) async {
     await tester.runAsync(() async {
       await action();

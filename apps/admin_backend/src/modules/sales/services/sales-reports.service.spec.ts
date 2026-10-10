@@ -355,12 +355,97 @@ describe('SalesReportsService', () => {
       expect(result.totalTaxNio).toBe(450);
       expect(result.totalDiscountsNio).toBe(150);
 
+      // S1c-3 per-origin discount attribution (additive): this legacy fixture
+      // carries NO breakdown, so the entire discount total is unattributed —
+      // NULL provenance must never be presented as a fabricated origin zero.
+      expect(result.manualDiscountNio).toBe(0);
+      expect(result.promotionDiscountNio).toBe(0);
+      expect(result.loyaltyDiscountNio).toBe(0);
+      expect(result.discountOriginUnattributedNio).toBe(150);
+
       // Reporting period metadata (America/Managua, inclusive end date)
       expect(result.reportingPeriod).toEqual({
         timezone: 'America/Managua',
         localStartDate: '2026-08-26',
         localEndDate: '2026-08-27',
       });
+    });
+
+    it('exposes per-origin discount totals from the stored breakdowns and reconciles the owner identity (S1c-3)', async () => {
+      // Worked example (all NIO):
+      //   inv-mixed:  40 manual + (45 promotion + 25 manual) + 15 loyalty
+      //   inv-legacy: 30 with NO breakdown (legacy/unknown)
+      //   manual 65 + promotion 45 + loyalty 15 + unattributed 30 = 155
+      //   === totalDiscountsNio (40 + 70 + 15 + 30)
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-mixed',
+          tenant_id: tenantId,
+          number: '001-001-01-00000011',
+          subtotal: 1000,
+          totalTax: 150,
+          total: 1150,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T10:00:00.000Z'),
+          items: [
+            {
+              id: 'item-m1',
+              discount: 40,
+              discountOrigin: { manual: 40 },
+            },
+            {
+              id: 'item-m2',
+              discount: 70,
+              discountOrigin: { promotion: 45, manual: 25 },
+            },
+            {
+              id: 'item-m3',
+              discount: 15,
+              discountOrigin: { loyalty: 15 },
+            },
+          ] as unknown as InvoiceItem[],
+          payments: [],
+        },
+        {
+          id: 'inv-legacy',
+          tenant_id: tenantId,
+          number: '001-001-01-00000012',
+          subtotal: 500,
+          totalTax: 75,
+          total: 575,
+          isCanceled: false,
+          created_at: new Date('2026-08-26T12:00:00.000Z'),
+          items: [
+            {
+              id: 'item-legacy',
+              discount: 30,
+            },
+          ] as unknown as InvoiceItem[],
+          payments: [],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getDashboard(tenantId, {
+        startDate: '2026-08-26',
+        endDate: '2026-08-26',
+      });
+
+      expect(result.manualDiscountNio).toBe(65);
+      expect(result.promotionDiscountNio).toBe(45);
+      expect(result.loyaltyDiscountNio).toBe(15);
+      expect(result.discountOriginUnattributedNio).toBe(30);
+      expect(result.totalDiscountsNio).toBe(155);
+      expect(result.totalDiscounts).toBe(155);
+
+      // The owner-facing reconciliation identity, exact, no tolerance.
+      expect(
+        result.manualDiscountNio +
+          result.promotionDiscountNio +
+          result.loyaltyDiscountNio +
+          result.discountOriginUnattributedNio,
+      ).toBe(result.totalDiscountsNio);
     });
 
     it('aggregates the tips summary over the same completed rows without touching sales totals (PRD §21, Batch 7)', async () => {

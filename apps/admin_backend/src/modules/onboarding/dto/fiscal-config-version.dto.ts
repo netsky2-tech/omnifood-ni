@@ -25,6 +25,14 @@ export interface EffectiveFiscalPayload {
   dgiAuthorizationCode: string | null;
   dgiAuthorizationIssuedAt: string | null;
   dgiAuthorizationExpiresAt: string | null;
+  /**
+   * SOHO P3 (D-A): null = no cap configured — rides the fingerprint as null
+   * (D-4: the fingerprint covers null), so "no cap" and "never configured"
+   * are the same honest absence. The POS mirrors the enforcement rule
+   * documented in FiscalConfigVersionService.getEffectiveFiscalPayload.
+   */
+  maxDiscountAmount: number | null;
+  maxDiscountPercent: number | null;
 }
 
 export interface FiscalConfigSnapshot {
@@ -43,6 +51,9 @@ export interface FiscalConfigSnapshot {
   dgiAuthorizationCode?: string | null;
   dgiAuthorizationIssuedAt?: string | null;
   dgiAuthorizationExpiresAt?: string | null;
+  /** SOHO P3 (D-A): null = no cap configured (optional so existing builders keep compiling). */
+  maxDiscountAmount?: number | null;
+  maxDiscountPercent?: number | null;
   configVersion: FiscalConfigVersion;
   generatedAt: string;
 }

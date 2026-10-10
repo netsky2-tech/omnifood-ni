@@ -502,8 +502,10 @@ describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
       expect(call[0]).not.toHaveProperty("id");
     }
 
-    // The active (latest) attempt fails: the mapped error path renders (never
-    // a raw [object Object]) and the submit gate stays closed.
+    // The active (latest) attempt fails: the mapped error path renders the
+    // Spanish per-status copy — NEVER the raw class-validator English
+    // constraints, and never a raw [object Object] — and the submit gate
+    // stays closed.
     rejectCurrent({
       status: 400,
       responseBody: {
@@ -512,9 +514,12 @@ describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
     });
     await waitFor(() => {
       expect(screen.getByTestId("purchases-form-preview")).toHaveTextContent(
-        /No se pudo calcular|id should not be empty/i,
+        /No se pudo calcular|Solicitud inválida/i,
       );
     });
+    expect(screen.getByTestId("purchases-form-preview")).not.toHaveTextContent(
+      "id should not be empty",
+    );
     expect(screen.getByTestId("purchases-form-preview")).not.toHaveTextContent(
       "[object Object]",
     );

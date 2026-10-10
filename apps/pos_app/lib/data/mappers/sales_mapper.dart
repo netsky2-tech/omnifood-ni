@@ -411,6 +411,7 @@ class SalesMapper {
       inventorySnapshotVersion: entity.inventorySnapshotVersion,
       originInvoiceItemId: entity.originInvoiceItemId,
       selectedModifiers: modifiers,
+      discountOrigin: _discountOriginFromEntity(entity),
     );
   }
 
@@ -438,6 +439,9 @@ class SalesMapper {
         domain.inventorySnapshotVersion,
       ),
       originInvoiceItemId: domain.originInvoiceItemId,
+      discountOriginJson: domain.discountOrigin == null
+          ? null
+          : jsonEncode(domain.discountOrigin!),
     );
   }
 
@@ -455,6 +459,46 @@ class SalesMapper {
     );
     _snapshotVersion(snapshot, entity.inventorySnapshotVersion);
     return snapshot;
+  }
+
+  static const _discountOriginKeys = {'promotion', 'manual', 'loyalty'};
+
+  /// Fail-safe decode of the stored breakdown. The outbound payload is
+  /// rebuilt from these rows at upload time, so anything the backend would
+  /// reject (unknown key, non-positive or non-numeric amount, corrupt JSON)
+  /// must never survive a read: keep ONLY the three known keys with a finite
+  /// value > 0, ignore the rest, and return null when nothing valid remains.
+  /// Null and undefined both stay null — a breakdown is never fabricated.
+  static Map<String, double>? _discountOriginFromEntity(
+    InvoiceItemEntity entity,
+  ) {
+    final json = entity.discountOriginJson;
+    if (json == null) return null;
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is! Map) return null;
+      Map<String, double>? result;
+      for (final entry in decoded.entries) {
+        final key = entry.key;
+        if (key is! String || !_discountOriginKeys.contains(key)) continue;
+        final value = entry.value;
+        if (value is! num) continue;
+        final amount = value.toDouble();
+        if (!amount.isFinite || amount <= 0) continue;
+        (result ??= {})[key] = amount;
+      }
+      return result;
+    } catch (parseError, st) {
+      developer.log(
+        'Failed to parse discount-origin JSON for invoice item '
+        '(id=${entity.id}); falling back to null.',
+        name: 'SalesMapper',
+        level: 900, // WARNING
+        error: parseError,
+        stackTrace: st,
+      );
+      return null;
+    }
   }
 
   static String? _snapshotVersion(
@@ -483,6 +527,18 @@ class SalesMapper {
         )
         .toList();
   }
+
+  /// The exact inverse of [toItemModifierEntities]: rebuilds the domain
+  /// modifier of a persisted row. It lives here, beside its inverse, so the
+  /// push path and the activation-controlled rebuild CANNOT drift apart —
+  /// both wire builders must emit identical bytes for the same sale, and a
+  /// second copy of this conversion would be a silent way to break that.
+  static Modifier toModifierDomain(InvoiceItemModifierEntity row) => Modifier(
+        id: row.id,
+        name: row.name,
+        extraPrice: row.extraPrice,
+        quantity: row.quantity,
+      );
 
   // --- Payment ---
   static Payment toPaymentDomain(PaymentEntity entity) {
@@ -648,6 +704,14 @@ class SalesMapper {
               'taxAmount': item.taxAmount,
               'total': item.total,
               'discount': item.discount,
+              // SOHO P3: the per-line discount-origin breakdown (wire keys
+              // promotion | manual | loyalty, positive amounts only). Emitted
+              // ONLY when populated — omitted entirely, never emitted as
+              // null — so a legacy sale and a legacy credit-note replay stay
+              // byte-identical: the credit-note conflict hash covers this
+              // field and old terminals must keep hashing identically.
+              if (item.discountOrigin != null && item.discountOrigin!.isNotEmpty)
+                'discountOrigin': item.discountOrigin,
               'variantId': item.variantId,
               'notes': item.notes,
               'recipeVersionId': item.recipeVersionId,

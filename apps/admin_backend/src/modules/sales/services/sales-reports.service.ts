@@ -230,6 +230,16 @@ export class SalesReportsService {
       totalTaxNio: salesTotals.totalTaxNio,
       totalDiscountsNio: salesTotals.totalDiscountsNio,
 
+      // S1c-3 (additive): per-origin discount attribution computed by the
+      // shared semantics helper over the SAME completed-row set as every
+      // total above. The four fields reconcile exactly against
+      // totalDiscountsNio; discountOriginUnattributedNio carries the
+      // legacy/unknown remainder (never a fabricated zero).
+      manualDiscountNio: salesTotals.manualDiscountNio,
+      promotionDiscountNio: salesTotals.promotionDiscountNio,
+      loyaltyDiscountNio: salesTotals.loyaltyDiscountNio,
+      discountOriginUnattributedNio: salesTotals.discountOriginUnattributedNio,
+
       // Batch 7 (PRD §21): additive tip summary — never folded into any
       // sales total above.
       tipsSummary: {

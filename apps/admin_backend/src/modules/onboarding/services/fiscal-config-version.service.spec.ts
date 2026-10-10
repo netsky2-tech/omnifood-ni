@@ -176,6 +176,10 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,
+        // SOHO P3 (D-A): unconfigured discount caps read as null — they ride
+        // the fingerprinted payload as null, same school as D-4.
+        maxDiscountAmount: null,
+        maxDiscountPercent: null,
       });
 
       const fingerprint = service.computeCanonicalFingerprint(payload);
@@ -414,6 +418,142 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
     });
   });
 
+  // SOHO P3 (D-A): the manual-discount caps ride the fingerprinted effective
+  // payload so every material cap change is versioned and synced to the POS
+  // through the existing snapshot channel.
+  describe('manual discount caps exposure (SOHO P3, D-A)', () => {
+    const capRow = (
+      paramKey: string,
+      paramValue: SystemParametersConfig['paramValue'],
+    ): SystemParametersConfig => ({
+      id: `cap-${paramKey}`,
+      tenant_id: tenantId,
+      tenant: mockTenant,
+      paramKey,
+      paramValue,
+      version: 1,
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: 'user-1',
+      createdAt: new Date(),
+    });
+
+    it('reads unconfigured caps as null in the effective payload (absence must look like absence)', async () => {
+      const payload = await service.getEffectiveFiscalPayload(tenantId);
+      expect(payload.maxDiscountAmount).toBeNull();
+      expect(payload.maxDiscountPercent).toBeNull();
+    });
+
+    it('exposes the stored caps in the effective payload when configured', async () => {
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        capRow('MAX_DISCOUNT_AMOUNT', 500),
+        capRow('MAX_DISCOUNT_PERCENT', 15),
+      ]);
+
+      const payload = await service.getEffectiveFiscalPayload(tenantId);
+      expect(payload.maxDiscountAmount).toBe(500);
+      expect(payload.maxDiscountPercent).toBe(15);
+    });
+
+    it('reads corrupt stored caps as null (never fabricated)', async () => {
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        capRow('MAX_DISCOUNT_AMOUNT', 'corrupt'),
+        capRow('MAX_DISCOUNT_PERCENT', true),
+      ]);
+
+      const payload = await service.getEffectiveFiscalPayload(tenantId);
+      expect(payload.maxDiscountAmount).toBeNull();
+      expect(payload.maxDiscountPercent).toBeNull();
+    });
+
+    it('exposes the caps in the config snapshot for cloud sync', async () => {
+      sysParamRepo.find.mockResolvedValue([
+        ...mockParams,
+        capRow('MAX_DISCOUNT_AMOUNT', 500),
+        capRow('MAX_DISCOUNT_PERCENT', 15),
+      ]);
+      revisionRepo.findOne.mockResolvedValue(null);
+
+      const snapshot = await service.getFiscalConfigSnapshot(tenantId);
+      expect(snapshot.maxDiscountAmount).toBe(500);
+      expect(snapshot.maxDiscountPercent).toBe(15);
+    });
+
+    it('covers the caps in the fingerprint: configuring a cap changes it', async () => {
+      const baseline = await service.getEffectiveFiscalPayload(tenantId);
+      const baselineFingerprint = service.computeCanonicalFingerprint(baseline);
+
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        capRow('MAX_DISCOUNT_AMOUNT', 500),
+      ]);
+      const capped = await service.getEffectiveFiscalPayload(tenantId);
+      const cappedFingerprint = service.computeCanonicalFingerprint(capped);
+
+      expect(cappedFingerprint).not.toBe(baselineFingerprint);
+    });
+
+    // FINGERPRINT BLAST RADIUS (required finding): adding the two cap keys to
+    // the payload shape re-fingerprints EVERY tenant — including tenants with
+    // no discount configured — because the keys ride the payload as null
+    // (D-4: the fingerprint covers null). This test pins the wave: an
+    // unconfigured tenant's fingerprint changes exactly because of the shape
+    // change, producing one revision bump at the next material save.
+    it('re-fingerprints an UNCONFIGURED tenant when the payload shape gains the cap keys (documented wave, D-4)', async () => {
+      // Unconfigured tenant under the NEW payload shape: both caps null.
+      const newShape = await service.getEffectiveFiscalPayload(tenantId);
+      expect(newShape.maxDiscountAmount).toBeNull();
+      expect(newShape.maxDiscountPercent).toBeNull();
+
+      // Simulate the PRE-CHANGE payload shape by removing the cap keys.
+      const {
+        maxDiscountAmount: _amount,
+        maxDiscountPercent: _percent,
+        ...oldShape
+      } = newShape as unknown as Record<string, unknown>;
+      expect(Object.keys(oldShape)).not.toContain('maxDiscountAmount');
+
+      const newShapeFingerprint = service.computeCanonicalFingerprint(newShape);
+      const oldShapeFingerprint =
+        service.computeCanonicalFingerprint(
+          oldShape as unknown as EffectiveFiscalPayload,
+        );
+
+      // The shape change alone (no configuration change) alters the
+      // fingerprint — the documented re-fingerprint wave.
+      expect(newShapeFingerprint).not.toBe(oldShapeFingerprint);
+    });
+
+    it('records a strictly higher revision when a cap changes materially', async () => {
+      const baselinePayload = await service.getEffectiveFiscalPayload(tenantId);
+      const baselineFingerprint =
+        service.computeCanonicalFingerprint(baselinePayload);
+
+      const existingRevision: FiscalConfigRevision = {
+        id: 'rev-1-id',
+        tenant_id: tenantId,
+        revision: 1,
+        fingerprint: baselineFingerprint,
+        payload: baselinePayload as unknown as Record<string, unknown>,
+        created_at: new Date('2026-01-01'),
+      };
+      revisionRepo.findOne.mockResolvedValueOnce(existingRevision);
+      sysParamRepo.find.mockResolvedValueOnce([
+        ...mockParams,
+        capRow('MAX_DISCOUNT_PERCENT', 15),
+      ]);
+
+      const result = await service.recordRevisionChange(tenantId);
+
+      expect(result.revision).toBe(2);
+      expect(result.fingerprint).not.toBe(baselineFingerprint);
+      expect(revisionRepo.save).toHaveBeenCalled();
+    });
+  });
+
   describe('Revision Tracking & Monotonic Increment', () => {
     it('creates baseline revision 1 when no revision exists yet', async () => {
       revisionRepo.findOne.mockResolvedValueOnce(null);
@@ -462,6 +602,8 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         dgiAuthorizationCode: null,
         dgiAuthorizationIssuedAt: null,
         dgiAuthorizationExpiresAt: null,
+        maxDiscountAmount: null,
+        maxDiscountPercent: null,
       };
       const oldFingerprint = service.computeCanonicalFingerprint(oldPayload);
 

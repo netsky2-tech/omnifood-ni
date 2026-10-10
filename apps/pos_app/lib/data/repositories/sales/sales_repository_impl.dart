@@ -16,6 +16,7 @@ import 'package:pos_app/data/daos/sales/payment_dao.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/mappers/sales_mapper.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
@@ -30,6 +31,7 @@ import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
+import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities.dart';
 import 'package:pos_app/data/mappers/audit_mapper.dart';
@@ -214,6 +216,14 @@ class SalesRepositoryImpl implements SalesRepository {
       // stores null and reprints fail closed later.
       ..fiscalHeaderSnapshot = await _buildFiscalHeaderSnapshot();
     final itemEntities = resolvedItems.map(SalesMapper.toItemEntity).toList();
+    // SOHO P3: the cart's selected modifiers MUST be persisted — and in the
+    // SAME transaction as the sale, so a rollback takes both. Without this
+    // the modifiers existed only in memory: invoice_item_modifiers was
+    // never written and the wire payload rebuilt at push time carried
+    // `modifiers: []` forever.
+    final modifierEntities = resolvedItems
+        .expand(SalesMapper.toItemModifierEntities)
+        .toList(growable: false);
     final paymentEntities = payments.map(SalesMapper.toPaymentEntity).toList();
     final movementEntities = isFrozenSale
         ? _frozenMovements(resolvedItems, updatedInvoice)
@@ -225,7 +235,7 @@ class SalesRepositoryImpl implements SalesRepository {
         await transactionDao.executeFulfillmentSaleTransaction(
           invoiceEntity,
           itemEntities,
-          [],
+          modifierEntities,
           paymentEntities,
           movementEntities,
           null,
@@ -238,7 +248,7 @@ class SalesRepositoryImpl implements SalesRepository {
         await transactionDao.executeSaleWithDgiTransaction(
           invoiceEntity,
           itemEntities,
-          [],
+          modifierEntities,
           paymentEntities,
           movementEntities,
           null, // Audit log is written separately
@@ -519,12 +529,30 @@ class SalesRepositoryImpl implements SalesRepository {
 
     for (final invoice in effectiveInvoices) {
       final items = await itemDao.getItemsByInvoiceId(invoice.id);
+      // SOHO P3: the wire must carry what was ACTUALLY sold. Load every
+      // persisted modifier row of the invoice in ONE batched query (no N+1)
+      // and hand each line its rows through toItemDomain — its empty default
+      // is what used to flatten the sold modifiers to `[]` forever.
+      final modifierRows = await itemDao.getModifierRowsByInvoiceId(invoice.id);
+      final modifiersByItemId = <String, List<Modifier>>{};
+      for (final row in modifierRows) {
+        (modifiersByItemId[row.invoiceItemId] ??= [])
+            .add(SalesMapper.toModifierDomain(row));
+      }
       final payments = await paymentDao.getPaymentsByInvoiceId(invoice.id);
 
       aggregates.add(
         SalesMapper.toSyncJson(
           invoice,
-          items.map(SalesMapper.toItemDomain).toList(),
+          items
+              .map(
+                (item) => SalesMapper.toItemDomain(
+                  item,
+                  modifiers: modifiersByItemId[item.id] ??
+                      const <Modifier>[],
+                ),
+              )
+              .toList(),
           payments.map(SalesMapper.toPaymentDomain).toList(),
         ),
       );
@@ -730,9 +758,29 @@ class SalesRepositoryImpl implements SalesRepository {
       (key, value) => MapEntry(key, value is String ? value : ''),
     );
 
+    // SOHO P3: a fiscal document must be REPRODUCIBLE. Load every persisted
+    // modifier row of the invoice in ONE batched query (no N+1) and hand
+    // each line its rows through toItemDomain — its empty default is what
+    // silently dropped the extras the original printed. A sale persisted
+    // before modifier rows existed keeps the empty default: nothing was
+    // recorded, so nothing is printed (never fabricate, never backfill) —
+    // the fail-closed contract above stays limited to the fiscal header
+    // snapshot.
+    final modifierRows = await itemDao.getModifierRowsByInvoiceId(invoiceId);
+    final modifiersByItemId = <String, List<Modifier>>{};
+    for (final row in modifierRows) {
+      (modifiersByItemId[row.invoiceItemId] ??= [])
+          .add(SalesMapper.toModifierDomain(row));
+    }
     final items =
         (await itemDao.getItemsByInvoiceId(invoiceId))
-            .map(SalesMapper.toItemDomain)
+            .map(
+              (item) => SalesMapper.toItemDomain(
+                item,
+                modifiers: modifiersByItemId[item.id] ??
+                    const <Modifier>[],
+              ),
+            )
             .toList();
     final payments =
         (await paymentDao.getPaymentsByInvoiceId(invoiceId))

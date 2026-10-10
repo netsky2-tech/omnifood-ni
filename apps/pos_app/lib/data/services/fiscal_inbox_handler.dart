@@ -102,6 +102,16 @@ class FiscalProjectionKeys {
   static const String operationMode = 'operation_mode';
   static const String checkoutFxMode = 'checkout_fx_mode';
 
+  /// SOHO-P3 S1b: owner-configured manual discount caps mirrored from the
+  /// fiscal snapshot. FULL snapshot semantics, unlike the DGI/mode mirrors
+  /// above: the snapshot is complete, so `null`/absent means "no cap" and the
+  /// local key is DELETED — a stale cap must never survive a revision that
+  /// cleared it. A valid finite number sets the local value (amount >= 0,
+  /// where 0 forbids manual discounts entirely; percent in (0, 100]); a
+  /// corrupt value normalizes to "no cap" (delete), never stored.
+  static const String maxDiscountAmount = 'max_discount_amount';
+  static const String maxDiscountPercent = 'max_discount_percent';
+
   /// Comma-joined local key names the cloud currently asserts for the
   /// business profile (deterministic order, no spaces, matched by token).
   /// Written in the SAME fiscal projection transaction as the asserted
@@ -201,6 +211,27 @@ class FiscalInboxHandler {
       if (rawSpread is! num || rawSpread < 10 || rawSpread > 100) {
         throw ArgumentError(
             'Fiscal envelope commercialFxSpread must be a number between 10 and 100 if present');
+      }
+    }
+
+    // SOHO-P3 S1b: manual discount caps. Mirrors the commercialFxSpread
+    // boundary contract: a present, non-null cap must be a finite number in
+    // range (amount >= 0, where 0 forbids manual discounts entirely; percent
+    // in (0, 100]). Wire nonsense is REJECTED here, never stored; the
+    // projection body additionally normalizes any non-cap value to "no cap"
+    // for stored snapshots written before this validation existed.
+    if (rawEnvelope.containsKey('maxDiscountAmount') && rawEnvelope['maxDiscountAmount'] != null) {
+      final rawCap = rawEnvelope['maxDiscountAmount'];
+      if (rawCap is! num || !rawCap.isFinite || rawCap < 0) {
+        throw ArgumentError(
+            'Fiscal envelope maxDiscountAmount must be a finite number >= 0 or null if present');
+      }
+    }
+    if (rawEnvelope.containsKey('maxDiscountPercent') && rawEnvelope['maxDiscountPercent'] != null) {
+      final rawCap = rawEnvelope['maxDiscountPercent'];
+      if (rawCap is! num || !rawCap.isFinite || rawCap <= 0 || rawCap > 100) {
+        throw ArgumentError(
+            'Fiscal envelope maxDiscountPercent must be a finite number in (0, 100] or null if present');
       }
     }
 
@@ -623,6 +654,34 @@ class FiscalInboxHandler {
       keysToDelete.add(FiscalProjectionKeys.commercialExchangeRate);
     }
 
+    // SOHO-P3 S1b: manual discount caps. FULL snapshot mirrors (unlike the
+    // DGI/mode mirrors below): a valid finite number in range SETS the local
+    // key; null, absent, or a corrupt value CLEARS it, because the snapshot
+    // is complete and a missing cap means NO CAP. A stale cap must never
+    // survive a revision that cleared it. The envelope boundary already
+    // rejects wire nonsense; this normalization also protects repair replays
+    // of stored snapshots written before that validation existed.
+    final rawMaxDiscountAmount = rawEnvelope['maxDiscountAmount'];
+    if (_resolveManualDiscountCap(rawMaxDiscountAmount, allowZero: true) != null) {
+      projections.add(LocalConfigEntity(
+        key: FiscalProjectionKeys.maxDiscountAmount,
+        value: rawMaxDiscountAmount.toString(),
+        description: 'Projected manual discount amount cap from fiscal snapshot',
+      ));
+    } else {
+      keysToDelete.add(FiscalProjectionKeys.maxDiscountAmount);
+    }
+    final rawMaxDiscountPercent = rawEnvelope['maxDiscountPercent'];
+    if (_resolveManualDiscountCap(rawMaxDiscountPercent, allowZero: false, maxInclusive: 100) != null) {
+      projections.add(LocalConfigEntity(
+        key: FiscalProjectionKeys.maxDiscountPercent,
+        value: rawMaxDiscountPercent.toString(),
+        description: 'Projected manual discount percent cap from fiscal snapshot',
+      ));
+    } else {
+      keysToDelete.add(FiscalProjectionKeys.maxDiscountPercent);
+    }
+
     // D-21 (#554): optional DGI authorization mirrors. Written only when the
     // snapshot carries a non-blank value; never deleted when absent, so an
     // operator-entered local value (POS form master) is preserved.
@@ -842,6 +901,40 @@ class FiscalInboxHandler {
       fxMatches = localFx == null;
     }
 
+    // 7b. Manual discount caps (SOHO-P3 S1b): conditional REQUIRED mirrors
+    // with full snapshot semantics. A valid cap in the payload -> the local
+    // key must exist and match; null/absent or a corrupt payload value ->
+    // the local key MUST NOT exist (stale key check: a cleared cap must
+    // never survive its own clearing revision).
+    final rawMaxDiscountAmount = rawEnvelope['maxDiscountAmount'];
+    final amountCap =
+        _resolveManualDiscountCap(rawMaxDiscountAmount, allowZero: true);
+    final localAmountCap = await _database.localConfigDao
+        .getConfigByKey(FiscalProjectionKeys.maxDiscountAmount);
+    final bool amountCapMatches;
+    if (amountCap != null) {
+      amountCapMatches = localAmountCap != null &&
+          localAmountCap.value.trim() == rawMaxDiscountAmount.toString();
+    } else {
+      amountCapMatches = localAmountCap == null;
+    }
+
+    final rawMaxDiscountPercent = rawEnvelope['maxDiscountPercent'];
+    final percentCap = _resolveManualDiscountCap(
+      rawMaxDiscountPercent,
+      allowZero: false,
+      maxInclusive: 100,
+    );
+    final localPercentCap = await _database.localConfigDao
+        .getConfigByKey(FiscalProjectionKeys.maxDiscountPercent);
+    final bool percentCapMatches;
+    if (percentCap != null) {
+      percentCapMatches = localPercentCap != null &&
+          localPercentCap.value.trim() == rawMaxDiscountPercent.toString();
+    } else {
+      percentCapMatches = localPercentCap == null;
+    }
+
     // 8. Typed tax config is REQUIRED
     final rawTaxRate = rawEnvelope['taxRate'];
     if (rawTaxRate is! num || rawTaxRate < 0) {
@@ -874,6 +967,8 @@ class FiscalInboxHandler {
         pricesIncludeTaxMatches &&
         rucMatches &&
         fxMatches &&
+        amountCapMatches &&
+        percentCapMatches &&
         taxMatches;
 
     developer.log(
@@ -882,11 +977,33 @@ class FiscalInboxHandler {
       'fingerprint_match=$fingerprintMatches tenant_match=$tenantMatches '
       'business_match=$businessMatches tenant_name_match=$tenantNameMatches '
       'regime_match=$regimeMatches prices_include_tax_match=$pricesIncludeTaxMatches '
-      'ruc_match=$rucMatches fx_match=$fxMatches tax_match=$taxMatches',
+      'ruc_match=$rucMatches fx_match=$fxMatches '
+      'amount_cap_match=$amountCapMatches percent_cap_match=$percentCapMatches '
+      'tax_match=$taxMatches',
       name: 'FiscalInboxHandler',
     );
 
     return isComplete;
+  }
+
+  /// SOHO-P3 S1b: resolves a manual discount cap from a snapshot value.
+  /// Returns the value as a double when it is a valid cap (a finite number,
+  /// >= 0 when [allowZero] — 0 forbids manual discounts entirely — and in
+  /// (0, [maxInclusive]] when not), or null when the snapshot carries no cap
+  /// (absent, JSON null, non-numeric, non-finite, or out of range). Null
+  /// means the caller must treat the cap as CLEARED (delete the local key):
+  /// the snapshot is complete, so anything that is not a valid cap means no
+  /// cap, never "keep the previous value".
+  static double? _resolveManualDiscountCap(
+    dynamic raw, {
+    required bool allowZero,
+    double? maxInclusive,
+  }) {
+    if (raw == null || raw is! num || !raw.isFinite) return null;
+    final value = raw.toDouble();
+    if (allowZero ? value < 0 : value <= 0) return null;
+    if (maxInclusive != null && value > maxInclusive) return null;
+    return value;
   }
 
   TaxConfigEntity _buildTaxConfig({

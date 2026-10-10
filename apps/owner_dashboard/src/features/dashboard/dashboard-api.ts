@@ -67,6 +67,20 @@ export interface DashboardV2Report {
   averageTicketNetNio: number | null;
   totalTaxNio: number;
   totalDiscountsNio: number;
+  /**
+   * Per-origin discount breakdown (P3 operational surfaces). OPTIONAL and
+   * ABSENCE-PRESERVING on purpose: an older backend does not send these
+   * fields, and a missing field must never be read as C$0.00 — that would
+   * fabricate a fiscal fact for a tenant whose discounts are all legacy.
+   * Identity the owner reconciles against:
+   *   manual + promotion + loyalty + unattributed === totalDiscountsNio
+   * `discountOriginUnattributedNio` may be NEGATIVE only when stored data
+   * contradicts itself (partial breakdown residual).
+   */
+  manualDiscountNio?: number;
+  promotionDiscountNio?: number;
+  loyaltyDiscountNio?: number;
+  discountOriginUnattributedNio?: number;
   /** Batch 7 (PRD §21): null when the backend did not send a usable summary. */
   tipsSummary: TipsSummaryWire | null;
   reportingPeriod: ReportingPeriodWire | null;
@@ -83,6 +97,18 @@ function toNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = toFiniteNumber(value, Number.NaN);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Optional-number coercion for the per-origin discount breakdown (P3):
+ * absent/null/garbage stays ABSENT (undefined — the key is then omitted so
+ * downstream "is it reported?" checks see true absence, never a fabricated
+ * 0); a genuine 0 stays 0. Mirrors toNullableNumber discipline.
+ */
+function toOptionalNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  const parsed = toFiniteNumber(value, Number.NaN);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function normalizeReportingPeriod(raw: unknown): ReportingPeriodWire | null {
@@ -129,6 +155,10 @@ export function normalizeTipsSummary(raw: unknown): TipsSummaryWire | null {
 
 export function normalizeDashboardReport(raw: unknown): DashboardV2Report {
   const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
+  const manualDiscountNio = toOptionalNumber(r.manualDiscountNio);
+  const promotionDiscountNio = toOptionalNumber(r.promotionDiscountNio);
+  const loyaltyDiscountNio = toOptionalNumber(r.loyaltyDiscountNio);
+  const discountOriginUnattributedNio = toOptionalNumber(r.discountOriginUnattributedNio);
   return {
     grossSales: toFiniteNumber(r.grossSales),
     netTaxableSales: toFiniteNumber(r.netTaxableSales),
@@ -142,6 +172,15 @@ export function normalizeDashboardReport(raw: unknown): DashboardV2Report {
     averageTicketNetNio: toNullableNumber(r.averageTicketNetNio),
     totalTaxNio: toFiniteNumber(r.totalTaxNio),
     totalDiscountsNio: toFiniteNumber(r.totalDiscountsNio),
+    // P3: keys are added ONLY when the backend reported them — an older
+    // backend's payload stays truly absent, never collapsed to 0 (which
+    // would fabricate a fiscal fact about discount provenance).
+    ...(manualDiscountNio !== undefined ? { manualDiscountNio } : {}),
+    ...(promotionDiscountNio !== undefined ? { promotionDiscountNio } : {}),
+    ...(loyaltyDiscountNio !== undefined ? { loyaltyDiscountNio } : {}),
+    ...(discountOriginUnattributedNio !== undefined
+      ? { discountOriginUnattributedNio }
+      : {}),
     tipsSummary: normalizeTipsSummary(r.tipsSummary),
     reportingPeriod: normalizeReportingPeriod(r.reportingPeriod),
     startDate: typeof r.startDate === "string" ? r.startDate : undefined,

@@ -17,6 +17,13 @@ class TenantConfigService {
   static const String tableServiceEnabledKey = 'table_service_enabled';
   static const String autoPrintKitchenTicketKey = 'auto_print_kitchen_ticket';
 
+  /// SOHO-P3 S1b: owner-configured manual discount caps, projected from the
+  /// fiscal snapshot by [FiscalProjectionKeys.maxDiscountAmount] /
+  /// [maxDiscountPercent] (same wire contract as the backend: null = NO CAP,
+  /// amount may be 0 = forbid all manual discounts, percent in (0, 100]).
+  static const String maxDiscountAmountKey = 'max_discount_amount';
+  static const String maxDiscountPercentKey = 'max_discount_percent';
+
   final LocalConfigDao _configDao;
   final StreamController<TenantOperationMode> _modeStreamController =
       StreamController<TenantOperationMode>.broadcast();
@@ -155,6 +162,30 @@ class TenantConfigService {
         description: 'Tenant unique identifier',
       ),
     );
+  }
+
+  /// Reads the configured manual discount AMOUNT cap, or null when no cap is
+  /// configured. The projection only stores validated finite values, so a
+  /// null/unparseable/negative read degrades to "no cap" as defense-in-depth
+  /// instead of crashing the sale flow.
+  Future<double?> getMaxDiscountAmount() async {
+    return _parseDiscountCap(await _configDao.getConfigByKey(maxDiscountAmountKey));
+  }
+
+  /// Reads the configured manual discount PERCENT cap (0-100), or null when
+  /// no cap is configured. Same defense-in-depth contract as
+  /// [getMaxDiscountAmount].
+  Future<double?> getMaxDiscountPercent() async {
+    return _parseDiscountCap(await _configDao.getConfigByKey(maxDiscountPercentKey));
+  }
+
+  double? _parseDiscountCap(LocalConfigEntity? entity) {
+    if (entity == null) return null;
+    final raw = entity.value.trim();
+    if (raw.isEmpty) return null;
+    final parsed = double.tryParse(raw);
+    if (parsed == null || !parsed.isFinite || parsed < 0) return null;
+    return parsed;
   }
 
   Future<bool> isFoodParkQsr() async => (await getOperationMode()).isFoodParkQsr;

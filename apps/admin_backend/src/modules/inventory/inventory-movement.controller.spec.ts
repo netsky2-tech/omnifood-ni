@@ -233,10 +233,7 @@ describe('InventoryMovementController device transport routes', () => {
         limit: 50,
       };
 
-      await controller.listPurchases(
-        query as never,
-        'tenant-A',
-      );
+      await controller.listPurchases(query as never, 'tenant-A');
 
       expect(listPurchases).toHaveBeenCalledWith({
         tenantId: 'tenant-A',
@@ -247,14 +244,60 @@ describe('InventoryMovementController device transport routes', () => {
         limit: 50,
       });
     });
+
+    // Wire-shape boundary: the service returns raw PurchaseDocument rows whose
+    // five decimal columns reach Node as driver strings; the route must ship
+    // JSON numbers (see purchase-document-response.ts).
+    it('serializes the raw entity rows so every decimal ships as a number', async () => {
+      const makeDocument = (over: Record<string, unknown> = {}) =>
+        ({
+          id: 'pur-1',
+          tenant_id: 'tenant-A',
+          invoice_number: 'F-900',
+          quantity: '12.5000',
+          unit_cost: '350.2500',
+          currency: 'NIO',
+          bcn_rate: '1.0000',
+          unit_cost_nio: '350.2500',
+          projected_cpp_nio: '360.1250',
+          ...over,
+        }) as never;
+      const listPurchases = jest
+        .fn()
+        .mockResolvedValue([makeDocument(), makeDocument({ id: 'pur-2' })]);
+      (
+        controller as unknown as {
+          purchaseService: { listPurchases: unknown };
+        }
+      ).purchaseService = { listPurchases } as never;
+
+      const result = (await controller.listPurchases(
+        { startDate: '2026-01-01' } as never,
+        'tenant-A',
+      )) as Array<Record<string, unknown>>;
+
+      expect(result).toHaveLength(2);
+      for (const document of result) {
+        expect(document.quantity).toBe(12.5);
+        expect(document.unit_cost).toBe(350.25);
+        expect(document.bcn_rate).toBe(1);
+        expect(document.unit_cost_nio).toBe(350.25);
+        expect(document.projected_cpp_nio).toBe(360.125);
+        expect(typeof document.unit_cost_nio).toBe('number');
+      }
+    });
   });
 
   describe('purchase CPP preview (POST inventory/purchase — human transport)', () => {
     it('declares POST purchase as human with OWNER/MANAGER and never the device transport', () => {
       const handler = handlerOf('previewPurchase');
 
-      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(AuthGuard);
-      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(RolesGuard);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        AuthGuard,
+      );
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        RolesGuard,
+      );
       expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
         UserRole.OWNER,
         UserRole.MANAGER,
@@ -474,7 +517,14 @@ describe('InventoryMovementController device transport routes', () => {
     });
 
     it('delegates the manual purchase to recordPurchase with a server-generated id and the bound tenant', async () => {
-      const recordPurchase = jest.fn().mockResolvedValue({});
+      // The mock mirrors the real service return shape ({ purchaseDocument,
+      // insumo, preview }) because the route now serializes the exposed
+      // document at the response boundary.
+      const recordPurchase = jest.fn().mockResolvedValue({
+        purchaseDocument: { id: 'pur-1' },
+        insumo: {},
+        preview: {},
+      });
       (
         controller as unknown as {
           purchaseService: { recordPurchase: unknown };
@@ -510,6 +560,52 @@ describe('InventoryMovementController device transport routes', () => {
         unitCost: 50,
         currency: 'NIO',
       });
+    });
+
+    // Wire-shape boundary: the exposed purchaseDocument must ship decimals as
+    // JSON numbers, never raw driver strings.
+    it('serializes the exposed purchaseDocument so every decimal ships as a number', async () => {
+      const document = {
+        id: 'pur-1',
+        quantity: '12.5000',
+        unit_cost: '350.2500',
+        bcn_rate: '1.0000',
+        unit_cost_nio: '350.2500',
+        projected_cpp_nio: '360.1250',
+      };
+      const recordPurchase = jest
+        .fn()
+        .mockResolvedValue({
+          purchaseDocument: document,
+          insumo: {},
+          preview: {},
+        });
+      (
+        controller as unknown as {
+          purchaseService: { recordPurchase: unknown };
+        }
+      ).purchaseService = { recordPurchase } as never;
+
+      const result = (await controller.recordManualPurchase(
+        Object.assign(new ManualPurchaseDto(), {
+          insumoId: 'ins-1',
+          supplierId: 'sup-1',
+          invoiceNumber: 'F-900',
+          quantity: 2,
+          unitCost: 50,
+          currency: 'NIO',
+          invoiceDate: '2026-09-30',
+          entryTimestamp: '2026-09-30T10:00:00.000Z',
+        }),
+        'tenant-A',
+      )) as { purchaseDocument: Record<string, unknown> };
+
+      expect(result.purchaseDocument.quantity).toBe(12.5);
+      expect(result.purchaseDocument.unit_cost).toBe(350.25);
+      expect(result.purchaseDocument.bcn_rate).toBe(1);
+      expect(result.purchaseDocument.unit_cost_nio).toBe(350.25);
+      expect(result.purchaseDocument.projected_cpp_nio).toBe(360.125);
+      expect(typeof result.purchaseDocument.unit_cost_nio).toBe('number');
     });
 
     it('delegates supplier creation with the bound tenant, never a body tenant', async () => {
@@ -580,6 +676,64 @@ describe('InventoryMovementController device transport routes', () => {
         creditTerms: undefined,
         isActive: false,
       });
+    });
+  });
+
+  describe('purchase correction (POST purchases/:id/correction — human transport)', () => {
+    it('declares the correction route as human with OWNER/MANAGER and the authoritative-user guard', () => {
+      const handler = handlerOf('correctPurchase');
+
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        AuthGuard,
+      );
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        AuthoritativeCurrentUserGuard,
+      );
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+        UserRole.OWNER,
+        UserRole.MANAGER,
+      ]);
+    });
+
+    // Wire-shape boundary: the exposed correctionDocument must ship decimals
+    // as JSON numbers, never raw driver strings.
+    it('serializes the exposed correctionDocument so every decimal ships as a number', async () => {
+      const correctionDocument = {
+        id: 'corr-1',
+        quantity: '-2.0000',
+        unit_cost: '350.2500',
+        bcn_rate: '1.0000',
+        unit_cost_nio: '350.2500',
+        projected_cpp_nio: '0.0000',
+      };
+      const correctPurchase = jest.fn().mockResolvedValue({
+        correctionDocument,
+        movement: {},
+        insumo: {},
+      });
+      (
+        controller as unknown as {
+          purchaseService: { correctPurchase: unknown };
+        }
+      ).purchaseService = { correctPurchase } as never;
+
+      const result = (await controller.correctPurchase(
+        'pur-1',
+        { reason: 'Compra mal registrada' } as never,
+        'tenant-A',
+      )) as { correctionDocument: Record<string, unknown> };
+
+      expect(correctPurchase).toHaveBeenCalledWith({
+        tenantId: 'tenant-A',
+        purchaseDocumentId: 'pur-1',
+        reason: 'Compra mal registrada',
+      });
+      expect(result.correctionDocument.quantity).toBe(-2);
+      expect(result.correctionDocument.unit_cost).toBe(350.25);
+      expect(result.correctionDocument.bcn_rate).toBe(1);
+      expect(result.correctionDocument.unit_cost_nio).toBe(350.25);
+      expect(result.correctionDocument.projected_cpp_nio).toBe(0);
+      expect(typeof result.correctionDocument.projected_cpp_nio).toBe('number');
     });
   });
 

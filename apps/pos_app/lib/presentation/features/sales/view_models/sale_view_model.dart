@@ -40,11 +40,13 @@ import 'package:pos_app/domain/models/loyalty/reward_definition.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_ticket_snapshot.dart';
 import 'package:pos_app/domain/models/loyalty/customer_identification.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
+import 'package:pos_app/domain/services/config/discount_policy_service.dart';
 import '../../../../domain/services/config/printer_config_service.dart';
 import '../../../../domain/services/printer/printer_resolver.dart';
 import '../../../../domain/services/printer/thermal_logo_processor.dart';
 import 'dart:async';
 import '../../../../domain/services/sales/invoice_fiscal_calculator.dart';
+import '../../../../domain/services/sales/discount_origin_allocator.dart';
 import '../../../../domain/ports/printer_port.dart';
 import '../../../../domain/services/kitchen/kitchen_order_service.dart';
 import '../../../../data/services/sync_service.dart';
@@ -167,6 +169,7 @@ class SaleViewModel extends ChangeNotifier {
         if (event.productsCount > 0 || event.catalogValuesCount > 0) {
           loadProducts();
         }
+        _reloadPromotionsOnInboundSync(event);
       });
     }
     if (autoLoad) {
@@ -182,6 +185,7 @@ class SaleViewModel extends ChangeNotifier {
       _loadCurrentUserRole();
       loadExchangeRates();
       loadTenantConfig();
+      loadDiscountCaps();
     }
   }
 
@@ -229,6 +233,7 @@ class SaleViewModel extends ChangeNotifier {
         if (event.productsCount > 0 || event.catalogValuesCount > 0) {
           loadProducts();
         }
+        _reloadPromotionsOnInboundSync(event);
       });
     }
     if (autoLoad) {
@@ -243,6 +248,7 @@ class SaleViewModel extends ChangeNotifier {
       _loadCurrentUserRole();
       loadExchangeRates();
       loadTenantConfig();
+      loadDiscountCaps();
       loadCompanyTaxRegime();
     }
   }
@@ -314,8 +320,26 @@ class SaleViewModel extends ChangeNotifier {
   LoyaltyEvaluation? _currentEvaluation;
   LoyaltyEvaluation? get currentEvaluation => _currentEvaluation;
 
+  /// P3 defect #2: the terminal's local tenant binding, resolved from the
+  /// 'tenant_id' local config key — the SAME source the sync service uses
+  /// when it writes the loyalty rows. Empty when the terminal has no
+  /// binding, which fails closed (no programs, no rewards, no loyalty
+  /// surface); a tenant is never fabricated from the customer or elsewhere.
+  String _resolvedLocalTenantId = '';
+
   RewardDefinitionLocal? _selectedReward;
   RewardDefinitionLocal? get selectedReward => _selectedReward;
+
+  /// P3 defect #3: the cart discount granted by the SELECTED reward. The old
+  /// code recorded WHICH reward was chosen (for the points ledger at
+  /// checkout) but never turned its benefit into a discount — the cart's
+  /// loyalty money came only from the free-points path, whose only setter
+  /// (applyLoyaltyPoints) has no production caller. The discount is granted
+  /// ONCE, at selection time, against the residual the customer actually
+  /// pays (same apply-time ceiling contract as applyLoyaltyPoints →
+  /// validateRedemption), and is removed exactly by clearReward()/deselect.
+  double _selectedRewardDiscount = 0.0;
+  double get selectedRewardDiscount => _selectedRewardDiscount;
 
   /// Cached rewards from last evaluation for reward resolution
   List<RewardDefinitionLocal> _cachedRewards = [];
@@ -332,10 +356,28 @@ class SaleViewModel extends ChangeNotifier {
 
   /// Selects a loyalty reward for the current ticket.
   /// Must be called before PAID. Only one reward per ticket.
+  ///
+  /// P3 defect #3: selecting a reward must also GRANT its benefit to the
+  /// cart, not only record it for the ledger. A DISCOUNT_AMOUNT reward turns
+  /// `benefitConfigJson.amountNio` into the cart's loyaltyDiscount; anything
+  /// that cannot be granted safely is refused with an operator-visible
+  /// Spanish message and NO state mutation (money path: never fabricate a
+  /// discount, never exceed the residual the customer pays).
   void selectReward(String rewardId) {
     if (_rewardInteraction == null || _currentEvaluation == null) return;
+    RewardDefinitionLocal? reward;
+    try {
+      reward = _cachedRewards.firstWhere((r) => r.id == rewardId);
+    } catch (_) {
+      reward = null;
+    }
+    // Resolve the cart discount BEFORE committing the selection: a refusal
+    // must not leave a ledger selection that the cart never honored.
+    final cartDiscount = reward == null ? 0.0 : _resolveRewardCartDiscount(reward);
+    if (cartDiscount == null) return; // refused + messaged; nothing mutated
     _rewardInteraction!.selectReward(_currentEvaluation!, rewardId);
     _selectedReward = _resolveSelectedReward();
+    _selectedRewardDiscount = cartDiscount;
     notifyListeners();
   }
 
@@ -343,6 +385,7 @@ class SaleViewModel extends ChangeNotifier {
   void clearReward() {
     _rewardInteraction?.clearSelection();
     _selectedReward = null;
+    _selectedRewardDiscount = 0.0;
     notifyListeners();
   }
 
@@ -355,8 +398,18 @@ class SaleViewModel extends ChangeNotifier {
     }
 
     try {
-      final tenantId =
-          _selectedCustomer!.id; // tenant scoping comes from config
+      // P3 defect #2: the local tenant id MUST come from the terminal
+      // binding ('tenant_id' local config key — the same source the sync
+      // service uses when it WRITES the loyalty rows), not from the selected
+      // customer. LoyaltyProgramEntity.tenantId is a real indexed column;
+      // querying by the customer id always returned an empty catalog, so
+      // LoyaltyCompactWidget and RewardCtaWidget never rendered. Fail
+      // closed: an unbound terminal resolves to an empty tenant, the scoped
+      // lookups return nothing, and no tenant is ever fabricated.
+      final tenantConfig =
+          await _database.localConfigDao.getConfigByKey('tenant_id');
+      _resolvedLocalTenantId = tenantConfig?.value ?? '';
+      final tenantId = _resolvedLocalTenantId;
       final programs = await _database.loyaltyProgramDao.getActivePrograms(
         tenantId,
       );
@@ -466,7 +519,7 @@ class SaleViewModel extends ChangeNotifier {
         .toList();
 
     return LoyaltyTicketSnapshot(
-      tenantId: _selectedCustomer?.id ?? '',
+      tenantId: _resolvedLocalTenantId,
       branchId: '',
       terminalId: '',
       ticketId: '',
@@ -483,6 +536,89 @@ class SaleViewModel extends ChangeNotifier {
       return _cachedRewards.firstWhere((r) => r.id == rewardId);
     } catch (_) {
       return null;
+    }
+  }
+
+  // --- P3 defect #3: reward benefit → cart loyalty discount ---
+
+  /// The residual the customer actually pays after ALL already-granted
+  /// discounts. The SAME base applyLoyaltyPoints uses as its redemption
+  /// ceiling (raw subtotal minus promotions and manual), so both loyalty
+  /// paths enforce one identical money rule.
+  double _residualPayableAfterGrantedDiscounts() {
+    final rawSubtotal = _cart.fold(
+      0.0,
+      (sum, item) => sum + item.subtotal + item.modifiersTotal,
+    );
+    return rawSubtotal - _promotionDiscount - _manualDiscount;
+  }
+
+  static const _msgRewardDiscountExceedsOrder =
+      'El descuento por recompensa (C\$ {amount}) no puede exceder el total de la orden (C\$ {order}).';
+  static const _msgRewardBenefitUnreadable =
+      'No se pudo aplicar la recompensa: su configuración de beneficio no es válida. Pedile al dueño o a un encargado que la revise en el panel de negocio.';
+  static const _msgRewardNotApplicableToCart =
+      'La recompensa «{name}» aún no puede aplicarse al cobro en este terminal; se registrará en el programa de puntos pero el total no cambia. Avisá al encargado si esperabas un descuento.';
+
+  /// Reads the DISCOUNT_AMOUNT benefit (`{"amountNio": <num>}`) from the
+  /// reward's stored config. Returns null when the shape is absent, corrupt
+  /// or non-positive — the caller must then refuse; a fabricated amount is
+  /// never invented, and neither is a fabricated 0.
+  double? _parseDiscountBenefitAmount(RewardDefinitionLocal reward) {
+    try {
+      final decoded = jsonDecode(reward.benefitConfigJson);
+      if (decoded is! Map) return null;
+      final raw = decoded['amountNio'];
+      if (raw is num && raw > 0) return raw.toDouble();
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Resolves the cart discount a reward grants, with the operator-visible
+  /// outcome for everything that cannot be granted. Returns null ONLY for a
+  /// refusal (state must stay untouched); a returned value is the exact
+  /// discount to apply.
+  ///
+  /// CEILING DECISION: REFUSED, not clamped — the same contract the
+  /// free-points path enforces through LoyaltyService.validateRedemption
+  /// ('…no puede exceder el total de la orden…'). A clamp would silently
+  /// grant a different amount than the owner configured; a silent zero would
+  /// hide the failure. Refusal mutates NO state.
+  ///
+  /// FREE_PRODUCT (and other non-amount types) GAP: no line-level
+  /// application exists today and inventing one (zeroing/removing a line,
+  /// retro-fitting promotions) is out of scope, so the selection is still
+  /// recorded for the points ledger (unchanged REDEEM behavior) while the
+  /// operator SEES a directive message that the total does not change. No
+  /// silent no-op.
+  double? _resolveRewardCartDiscount(RewardDefinitionLocal reward) {
+    switch (reward.rewardType) {
+      case RewardType.discountAmount:
+        final benefit = _parseDiscountBenefitAmount(reward);
+        if (benefit == null) {
+          _errorMessage = _msgRewardBenefitUnreadable;
+          notifyListeners();
+          return null;
+        }
+        final residual = _residualPayableAfterGrantedDiscounts();
+        if (benefit > residual) {
+          _errorMessage = _msgRewardDiscountExceedsOrder
+              .replaceFirst('{amount}', benefit.toStringAsFixed(2))
+              .replaceFirst('{order}', residual.toStringAsFixed(2));
+          notifyListeners();
+          return null;
+        }
+        _errorMessage = null;
+        return benefit;
+      case RewardType.freeProduct:
+      case RewardType.discountPercentage:
+      case RewardType.freeShipping:
+        _errorMessage = _msgRewardNotApplicableToCart
+            .replaceFirst('{name}', reward.name);
+        notifyListeners();
+        return 0.0;
     }
   }
 
@@ -538,9 +674,17 @@ class SaleViewModel extends ChangeNotifier {
 
   double _pointsToRedeem = 0.0;
   double get pointsToRedeem => _pointsToRedeem;
+
+  /// P3 defect #3: the cart's loyalty money now has TWO sources — the
+  /// free-points path (unchanged; selectCustomer zeroes `_pointsToRedeem`,
+  /// so the production flows are mutually exclusive) and the selected
+  /// reward's DISCOUNT_AMOUNT benefit. Reward-less carts are unaffected:
+  /// `_selectedRewardDiscount` is 0.0 and this getter returns exactly what
+  /// it returned before.
   double get loyaltyDiscount =>
-      _loyaltyService.calculateDiscountFromPoints(_pointsToRedeem);
-  double get promoDiscounts => _totalDiscounts;
+      _loyaltyService.calculateDiscountFromPoints(_pointsToRedeem) +
+      _selectedRewardDiscount;
+  double get promoDiscounts => _promotionDiscount;
 
   RedemptionValidationResult applyLoyaltyPoints(double points) {
     if (_selectedCustomer == null) {
@@ -548,11 +692,12 @@ class SaleViewModel extends ChangeNotifier {
         'Debe seleccionar un cliente para redimir puntos.',
       );
     }
-    final rawSubtotal = _cart.fold(
-      0.0,
-      (sum, item) => sum + item.subtotal + item.modifiersTotal,
-    );
-    final currentSubtotal = rawSubtotal - _totalDiscounts;
+    // orderTotal acts ONLY as a ceiling on the redeemable amount, so it must
+    // be the residual the customer actually pays after ALL already-granted
+    // discounts. A larger ceiling would let points be redeemed against value
+    // the manual or promotion discount already gave away. The SAME residual
+    // rule caps the selected-reward discount (P3 defect #3).
+    final currentSubtotal = _residualPayableAfterGrantedDiscounts();
     final result = _loyaltyService.validateRedemption(
       customer: _selectedCustomer!,
       pointsToRedeem: points,
@@ -635,6 +780,46 @@ class SaleViewModel extends ChangeNotifier {
     } catch (_) {
       // Non-blocking fallback
     }
+  }
+
+  // SOHO-P3 S1b: owner-configured manual discount caps, projected from the
+  // fiscal snapshot into local_configs and read through the typed accessor
+  // layer. null = NO CAP (unconfigured or explicitly cleared) — same
+  // three-state contract as the wire: a cap of 0 forbids manual discounts
+  // entirely. Refreshed at construction and again before every prompt (see
+  // SaleView), so a synced cap change reaches a running terminal without a
+  // restart.
+  double? _maxDiscountAmountCap;
+  double? get maxDiscountAmountCap => _maxDiscountAmountCap;
+
+  double? _maxDiscountPercentCap;
+  double? get maxDiscountPercentCap => _maxDiscountPercentCap;
+
+  Future<void> loadDiscountCaps() async {
+    try {
+      _maxDiscountAmountCap = await _tenantConfigService.getMaxDiscountAmount();
+      _maxDiscountPercentCap =
+          await _tenantConfigService.getMaxDiscountPercent();
+      notifyListeners();
+    } catch (_) {
+      // Non-blocking fallback: keep the last known caps.
+    }
+  }
+
+  /// Operator-visible configured limit for the manual discount prompt, shown
+  /// BEFORE the cashier types an amount. Null when no cap is configured.
+  /// Both bounds are shown when both are configured; the effective (binding)
+  /// limit is the minimum and is stated verbatim in the rejection message.
+  String? get manualDiscountLimitLabel {
+    final amount = _maxDiscountAmountCap;
+    final percent = _maxDiscountPercentCap;
+    if (amount == null && percent == null) return null;
+    final parts = <String>[
+      if (amount != null) 'C\$ ${amount.toStringAsFixed(2)} por monto',
+      if (percent != null)
+        '${percent % 1 == 0 ? percent.toStringAsFixed(0) : percent.toString()}% del subtotal',
+    ];
+    return 'Límite de descuento manual: ${parts.join(' · ')}';
   }
 
   TaxRegime? _companyTaxRegime;
@@ -935,7 +1120,35 @@ class SaleViewModel extends ChangeNotifier {
       return;
     }
 
-    _totalDiscounts += discountAmount;
+    // SOHO-P3 S1b — DD-2: the supervisor override does NOT bypass the cap.
+    // The override authorizes WHO may discount; the cap is the owner's
+    // policy on HOW MUCH. If the owner wants a higher limit for supervisors,
+    // the owner raises the cap — so this gate runs for every role, after the
+    // authorization gate above.
+    //
+    // SOHO-P3 S1b — DD-3: the cap is evaluated against the RESULTING
+    // ACCUMULATED manual discount (`_manualDiscount + requestedAmount`), not
+    // against each request in isolation, so two successive requests under
+    // the cap cannot together exceed it. The percent base is the order's
+    // GROSS subtotal from the fiscal calculation (grossSubtotal), which does
+    // not depend on discounts, so there is no circular dependency.
+    final decision = const DiscountPolicyService().evaluateManualDiscount(
+      requestedAmount: discountAmount,
+      accumulatedManualDiscount: _manualDiscount,
+      grossSubtotal: grossSubtotal,
+      maxDiscountAmount: _maxDiscountAmountCap,
+      maxDiscountPercent: _maxDiscountPercentCap,
+    );
+    if (!decision.allowed) {
+      // Rejection mutates NO state: the accumulated discount and any prior
+      // state stay untouched; the operator learns the effective limit and
+      // which cap bound it through the standard error channel.
+      _errorMessage = decision.rejectionMessage;
+      notifyListeners();
+      return;
+    }
+
+    _manualDiscount += discountAmount;
     _errorMessage = null;
     notifyListeners();
   }
@@ -1030,8 +1243,65 @@ class SaleViewModel extends ChangeNotifier {
     return item.grossAmount;
   }
 
-  double _totalDiscounts = 0.0;
-  double get totalDiscounts => _totalDiscounts + loyaltyDiscount;
+  // SOHO-P3: manual and promotion discounts are INDEPENDENT accumulators.
+  // One shared accumulator let `_applyPromotions()` erase a manual discount
+  // (and vice versa) on every cart mutation. `totalDiscounts` stays the
+  // fiscal aggregate the calculator, mapper, receipt and sync already
+  // consume: promo + manual + loyalty.
+  double _promotionDiscount = 0.0;
+  /// SOHO P3: per-product promotion amounts from the LAST engine evaluation
+  /// for THIS cart (PromotionsEngineResult.itemDiscounts). The origin
+  /// allocator consumes it at checkout so promotion weight lands on the
+  /// lines of the product that earned it. A discarded value here would make
+  /// every promotion distribute by line gross alone; a RETAINED value would
+  /// leak one cart's weights into the next — same defect class S1a fixed:
+  /// a value that belongs to ONE cart must not survive into the next
+  /// (cleared in [clearCart]).
+  Map<String, double> _promotionItemDiscounts = const {};
+  double _manualDiscount = 0.0;
+  double get totalDiscounts =>
+      _promotionDiscount + _manualDiscount + loyaltyDiscount;
+  double get manualDiscount => _manualDiscount;
+
+  /// SOHO P3: converts the checkout fiscal snapshot's per-line discounts into
+  /// the wire per-line breakdown ({promotion?, manual?, loyalty?}, positive
+  /// amounts only) for the persisted [InvoiceItem] rows.
+  ///
+  /// Computed ONCE per checkout from THIS snapshot ([calc]) plus the cart's
+  /// retained origin totals; index-matched to the cart exactly like
+  /// `calc.lines`. Empty allocations become NULL — null means legacy/unknown
+  /// and is never fabricated as an empty map.
+  List<Map<String, double>?> _buildDiscountOriginBreakdowns(
+    FiscalCalculationResult calc,
+  ) {
+    final allocation = allocateDiscountOrigins(
+      lineGrosses: [for (final line in calc.lines) line.grossAmount],
+      lineDiscounts: [for (final line in calc.lines) line.discount],
+      lineProductIds: [for (final line in calc.lines) line.productId],
+      promotionDiscount: _promotionDiscount,
+      manualDiscount: _manualDiscount,
+      loyaltyDiscount: loyaltyDiscount,
+      promotionItemDiscounts: _promotionItemDiscounts,
+    );
+    return [
+      for (final lineAllocation in allocation)
+        _discountOriginToWire(lineAllocation),
+    ];
+  }
+
+  /// Converts one line's allocator output into the wire map. Keys are
+  /// iterated in [DiscountOrigin.values] order so the serialized order is
+  /// always promotion, manual, loyalty regardless of the allocator's
+  /// internal map order; an empty allocation maps to null.
+  Map<String, double>? _discountOriginToWire(
+    Map<DiscountOrigin, double> allocation,
+  ) {
+    if (allocation.isEmpty) return null;
+    return {
+      for (final origin in DiscountOrigin.values)
+        if (allocation.containsKey(origin)) origin.wire: allocation[origin]!,
+    };
+  }
 
   TipType _tipType = TipType.none;
   double _customTipPercentage = 0.0;
@@ -1109,17 +1379,34 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> togglePromotion(String promoId, bool isActive) async {
-    await _database.promotionDao.setPromotionActive(promoId, isActive);
-    await loadPromotions();
+  /// SOHO P3 S2 (defect 1): the open checkout must re-evaluate promotions
+  /// when a delta delivers rows. We use the precise `promotionsCount`
+  /// signal instead of reloading on every inbound sync:
+  /// [InboundSyncResult] already carries per-delta counts and the
+  /// promotions delta populates it at the source, so a promotions-only
+  /// delta is the only thing that pays for this reload (one local SQLite
+  /// read plus a re-evaluation). The cloud is authoritative: without this
+  /// reload, a promotion created or changed in the owner dashboard stayed
+  /// invisible until the view model was rebuilt.
+  void _reloadPromotionsOnInboundSync(InboundSyncResult event) {
+    if (event.promotionsCount > 0) {
+      loadPromotions();
+    }
   }
+
+  // SOHO P3 S2 (defect 2): `togglePromotion` was removed. The cloud is
+  // authoritative for promotions — a local-only write here was silently
+  // reverted by the next cloud delta, offering the operator a write control
+  // that never stuck. Activation/deactivation happens ONLY in the business
+  // panel (web); the POS renders promotion state read-only.
 
   void _applyPromotions() {
     final result = _promotionsEngine.evaluate(
       cart: _cart,
       promotions: _promotions,
     );
-    _totalDiscounts = result.totalDiscount;
+    _promotionDiscount = result.totalDiscount;
+    _promotionItemDiscounts = result.itemDiscounts;
   }
 
   Future<void> loadProducts() async {
@@ -1437,7 +1724,13 @@ class SaleViewModel extends ChangeNotifier {
   void clearCart() {
     _cart.clear();
     _isGlobalTaxExempt = false;
-    _totalDiscounts = 0.0;
+    _promotionDiscount = 0.0;
+    // D-7/S1a-class hygiene: the per-product promotion weights belong to ONE
+    // cart. clearCart runs after every successful checkout, so a retained
+    // map would smuggle the previous cart's promotion provenance into the
+    // next sale.
+    _promotionItemDiscounts = const {};
+    _manualDiscount = 0.0;
     _pointsToRedeem = 0.0;
     _activeLoadedHoldTicket = null;
     _lastPostPaidFeedback = null;
@@ -1633,6 +1926,12 @@ class SaleViewModel extends ChangeNotifier {
     }
 
     final calc = currentFiscalCalculation;
+    // SOHO P3: split the AUTHORITATIVE per-line discount back into the
+    // origin amounts that produced it, ONCE, from this exact fiscal
+    // snapshot. The breakdown must reach the persisted InvoiceItem (the
+    // outbound payload is rebuilt from LOCAL rows at upload time), not only
+    // an in-memory payload map.
+    final discountOriginBreakdowns = _buildDiscountOriginBreakdowns(calc);
     // Batch 7 Slice 2 (PRD §21 / §33.4 / AD-10): the tip snapshot is fixed
     // at checkout — NIO amount, USD conversion, effective percentage and
     // the eligible base — and never recomputed afterwards. A tip of 0 (or
@@ -1659,6 +1958,7 @@ class SaleViewModel extends ChangeNotifier {
           variantId: cartItem.variantId,
           notes: cartItem.notes,
           selectedModifiers: cartItem.selectedModifiers,
+          discountOrigin: discountOriginBreakdowns[i],
         ),
       );
     }

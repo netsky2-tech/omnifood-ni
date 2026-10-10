@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
@@ -14,14 +15,33 @@ class _FakeSalesHistoryViewModel extends ChangeNotifier implements SalesHistoryV
   final List<Invoice> _testInvoices;
   final List<InvoiceItem> _testItems;
   final Map<String, String> _userNames;
+  final String? _loadErrorMessage;
+  final int _rowContextFailureCount;
+  int _visibleCount;
 
   _FakeSalesHistoryViewModel(this._testInvoices, this._testItems,
-      {Map<String, String> userNames = const {}})
-      : _userNames = userNames;
+      {Map<String, String> userNames = const {},
+      String? loadErrorMessage,
+      int rowContextFailureCount = 0,
+      int? visibleLimit})
+      : _userNames = userNames,
+        _loadErrorMessage = loadErrorMessage,
+        _rowContextFailureCount = rowContextFailureCount,
+        _visibleCount = visibleLimit ?? SalesHistoryViewModel.pageSize;
 
   String _searchQuery = '';
   @override
   String get searchQuery => _searchQuery;
+
+  /// S3b: honest failure signal, mirrored from the real view model.
+  @override
+  bool get hasLoadError => _loadErrorMessage != null;
+
+  @override
+  String? get loadErrorMessage => _loadErrorMessage;
+
+  @override
+  int get rowContextFailureCount => _rowContextFailureCount;
 
   @override
   bool get isLoading => false;
@@ -31,8 +51,93 @@ class _FakeSalesHistoryViewModel extends ChangeNotifier implements SalesHistoryV
 
   @override
   List<Invoice> get filteredInvoices {
-    if (_searchQuery.isEmpty) return _testInvoices;
-    return _testInvoices.where((i) => i.number.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    Iterable<Invoice> result = _testInvoices;
+    if (_filterDateFrom != null || _filterDateTo != null) {
+      result = result.where(_isWithinDateRange);
+    }
+    if (_searchQuery.isNotEmpty) {
+      result = result.where(
+          (i) => i.number.toLowerCase().contains(_searchQuery.toLowerCase()));
+    }
+    return result.toList();
+  }
+
+  DateTime? _filterDateFrom;
+  DateTime? _filterDateTo;
+
+  bool _isWithinDateRange(Invoice invoice) {
+    final day = DateTime(invoice.createdAt.year, invoice.createdAt.month,
+        invoice.createdAt.day);
+    final from = _filterDateFrom;
+    if (from != null &&
+        day.isBefore(DateTime(from.year, from.month, from.day))) {
+      return false;
+    }
+    final to = _filterDateTo;
+    if (to != null && day.isAfter(DateTime(to.year, to.month, to.day))) {
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  DateTime? get filterDateFrom => _filterDateFrom;
+
+  @override
+  DateTime? get filterDateTo => _filterDateTo;
+
+  @override
+  void setDateRange(DateTime? from, DateTime? to) {
+    _filterDateFrom = from;
+    _filterDateTo = to;
+    _visibleCount = SalesHistoryViewModel.pageSize;
+    notifyListeners();
+  }
+
+  @override
+  void clearDateRange() => setDateRange(null, null);
+
+  /// S3b: mirrors the windowing contract — only [visibleInvoices] is what
+  /// the list renders; totals stay over the FULL filtered set.
+  @override
+  List<Invoice> get visibleInvoices =>
+      filteredInvoices.take(_visibleCount).toList(growable: false);
+
+  @override
+  bool get hasMoreVisibleInvoices => filteredInvoices.length > _visibleCount;
+
+  @override
+  void revealMoreVisible() {
+    _visibleCount += SalesHistoryViewModel.pageSize;
+    notifyListeners();
+  }
+
+  /// S3b: money excludes cancelled invoices (same fiscal rule as the real
+  /// view model) so the totals-row test observes the real contract.
+  @override
+  SalesHistoryTotals get filteredTotals {
+    var count = 0;
+    var cancelled = 0;
+    var subtotal = 0.0;
+    var tax = 0.0;
+    var total = 0.0;
+    for (final invoice in filteredInvoices) {
+      count++;
+      if (invoice.isCanceled) {
+        cancelled++;
+        continue;
+      }
+      subtotal += invoice.subtotal;
+      tax += invoice.totalTax;
+      total += invoice.total;
+    }
+    return SalesHistoryTotals(
+      invoiceCount: count,
+      cancelledCount: cancelled,
+      subtotalSum: subtotal,
+      taxSum: tax,
+      totalSum: total,
+    );
   }
 
   @override
@@ -270,6 +375,277 @@ void main() {
       expect(find.text('Factura: 001-001-01-00000001'), findsOneWidget);
       expect(find.text('IVA:'), findsOneWidget);
       expect(find.text('IVA (15%):'), findsNothing);
+    });
+  });
+
+  // S3b: honest operational surfaces — failed read vs genuine empty,
+  // filtered totals (cancelled NEVER in the money), the display window
+  // ("ver más"), and the date-range filter with an unfiltered default.
+  group('S3b honest surfaces', () {
+    testWidgets('a FAILED READ renders the honest error and never the empty state',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final vm = _FakeSalesHistoryViewModel(const [], const [],
+          loadErrorMessage: SalesHistoryViewModel.loadFailureMessage);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      // The defect under test: a failed invoice read must never look like
+      // a quiet day.
+      expect(
+        find.text(SalesHistoryViewModel.loadFailureMessage),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('sales_history_load_error_banner')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('sales_history_retry_button')),
+          findsOneWidget);
+      expect(find.text('Sin facturas encontradas'), findsNothing);
+      expect(
+        find.text('No hay facturas que coincidan con la búsqueda.'),
+        findsNothing,
+      );
+    });
+
+    testWidgets(
+        'the totals row renders and a CANCELLED invoice does not inflate the money',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      // sampleInvoices: inv-1 active (100.00 / 15.00 / 115.00) and inv-2
+      // cancelled (50.00 / 7.50 / 57.50).
+      final vm = _FakeSalesHistoryViewModel(sampleInvoices, sampleItems);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('sales_history_totals_row')),
+          findsOneWidget);
+      expect(find.text('Facturas: 2'), findsOneWidget);
+      expect(find.text('Subtotal: C\$ 100.00'), findsOneWidget);
+      expect(find.text('IVA: C\$ 15.00'), findsOneWidget);
+      expect(find.text('Total: C\$ 115.00'), findsOneWidget);
+      // The cancelled count is separate and explicitly labelled as NOT
+      // part of the money.
+      expect(find.text('Anuladas: 1 (excluidas del dinero)'), findsOneWidget);
+      // Neither the combined total (172.50) nor any other sum that would
+      // include the cancelled invoice may appear.
+      expect(find.textContaining('172.50'), findsNothing);
+      expect(find.textContaining('22.50'), findsNothing);
+    });
+
+    testWidgets(
+        'the "ver más" affordance appears past the display window and reveals more',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 7000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final invoices = List.generate(
+        60,
+        (i) => Invoice(
+          id: 'inv-$i',
+          number: '00-00-00-${(i + 1).toString().padLeft(8, '0')}',
+          createdAt: DateTime(2026, 8, 27, 10, i % 60),
+          userId: 'c1',
+          subtotal: 10,
+          totalTax: 0,
+          total: 10,
+          isCanceled: false,
+        ),
+      );
+      final vm = _FakeSalesHistoryViewModel(invoices, const []);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      // Windowed: only the first 50 rows are rendered.
+      expect(find.text('00-00-00-00000050'), findsOneWidget);
+      expect(find.text('00-00-00-00000051'), findsNothing);
+      expect(find.byKey(const Key('sales_history_reveal_more_button')),
+          findsOneWidget);
+      // Totals are over the FULL filtered set, never the window.
+      expect(find.text('Facturas: 60'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('sales_history_reveal_more_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('00-00-00-00000051'), findsOneWidget);
+      expect(find.text('00-00-00-00000060'), findsOneWidget);
+      expect(find.byKey(const Key('sales_history_reveal_more_button')),
+          findsNothing);
+    });
+
+    testWidgets(
+        'a degraded row-context read surfaces an honest count, not silence',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final vm = _FakeSalesHistoryViewModel(
+        sampleInvoices,
+        sampleItems,
+        rowContextFailureCount: 2,
+      );
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('sales_history_row_context_notice')),
+          findsOneWidget);
+      expect(
+        find.text(
+            '2 filas no pudieron mostrar su detalle (artículos y forma de pago).'),
+        findsOneWidget,
+      );
+      // The rows themselves are still rendered — degraded, not hidden.
+      expect(find.text('001-001-01-00000001'), findsOneWidget);
+    });
+
+    testWidgets(
+        'the date control applies a range and the default stays UNFILTERED',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = today.subtract(const Duration(days: 1));
+      final todayInvoice = Invoice(
+        id: 'inv-today',
+        number: '00-00-00-00001111',
+        createdAt: today.add(const Duration(hours: 10)),
+        userId: 'c1',
+        subtotal: 10,
+        totalTax: 0,
+        total: 10,
+        isCanceled: false,
+      );
+      final yesterdayInvoice = Invoice(
+        id: 'inv-yesterday',
+        number: '00-00-00-00002222',
+        createdAt: yesterday.add(const Duration(hours: 10)),
+        userId: 'c1',
+        subtotal: 10,
+        totalTax: 0,
+        total: 10,
+        isCanceled: false,
+      );
+      final vm = _FakeSalesHistoryViewModel(
+          [todayInvoice, yesterdayInvoice], const []);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      // Default on open: NO filter — the operator still sees everything.
+      expect(find.text('Sin filtro de fecha'), findsOneWidget);
+      expect(find.text('00-00-00-00001111'), findsOneWidget);
+      expect(find.text('00-00-00-00002222'), findsOneWidget);
+
+      await tester.tap(
+          find.byKey(const Key('sales_history_date_filter_today')));
+      await tester.pumpAndSettle();
+
+      // The active range is shown and the list narrows to the fiscal day.
+      final label = DateFormat('dd/MM/yyyy').format(today);
+      expect(find.text('Filtro: $label'), findsOneWidget);
+      expect(find.text('00-00-00-00001111'), findsOneWidget);
+      expect(find.text('00-00-00-00002222'), findsNothing);
+
+      await tester.tap(
+          find.byKey(const Key('sales_history_date_filter_clear')));
+      await tester.pumpAndSettle();
+
+      // Clearing restores the unfiltered view.
+      expect(find.text('Sin filtro de fecha'), findsOneWidget);
+      expect(find.text('00-00-00-00002222'), findsOneWidget);
+    });
+  });
+
+  // Honesty fix (device-reported defect): tapping a legitimate date
+  // filter that matches zero invoices used to swallow the ENTIRE header —
+  // the operator lost the active-filter label, the clear action and the
+  // totals, and could not un-trap themselves. The header must always
+  // render on a successful read; the empty state replaces only the list.
+  group('S3b filtered-to-empty keeps the header', () {
+    testWidgets(
+        'an ACTIVE DATE FILTER with an EMPTY result keeps the header reachable and does not blame a search',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      // The history is NOT empty, but every invoice is a year old: the
+      // "Hoy" preset legitimately matches zero invoices.
+      final pastInvoice = Invoice(
+        id: 'inv-past',
+        number: '00-00-00-00003333',
+        createdAt: DateTime.now().subtract(const Duration(days: 365)),
+        userId: 'c1',
+        subtotal: 10,
+        totalTax: 0,
+        total: 10,
+        isCanceled: false,
+      );
+      final vm = _FakeSalesHistoryViewModel([pastInvoice], const []);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      await tester
+          .tap(find.byKey(const Key('sales_history_date_filter_today')));
+      await tester.pumpAndSettle();
+
+      // The header SURVIVES the empty result: filter label, clear action
+      // and totals row all stay visible.
+      expect(find.byKey(const Key('sales_history_date_filter_label')),
+          findsOneWidget);
+      expect(find.byKey(const Key('sales_history_date_filter_clear')),
+          findsOneWidget);
+      expect(
+          find.byKey(const Key('sales_history_totals_row')), findsOneWidget);
+      expect(find.text('Facturas: 0'), findsOneWidget);
+      expect(find.text('Total: C\$ 0.00'), findsOneWidget);
+      expect(find.text('Anuladas: 0 (excluidas del dinero)'), findsOneWidget);
+      // The copy must not claim a SEARCH mismatch when the cause is the
+      // date filter.
+      expect(find.text('No hay facturas que coincidan con la búsqueda.'),
+          findsNothing);
+
+      // The operator is not trapped: the clear action still works.
+      await tester
+          .tap(find.byKey(const Key('sales_history_date_filter_clear')));
+      await tester.pumpAndSettle();
+      expect(find.text('Sin filtro de fecha'), findsOneWidget);
+      expect(find.text('00-00-00-00003333'), findsOneWidget);
+    });
+
+    testWidgets(
+        'with NO filter and a genuinely EMPTY history the copy says so honestly',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final vm = _FakeSalesHistoryViewModel(const [], const []);
+      await tester.pumpWidget(buildTestWidget(vm));
+      await tester.pumpAndSettle();
+
+      // The header still renders (nothing was filtered away).
+      expect(find.byKey(const Key('sales_history_date_filter_label')),
+          findsOneWidget);
+      expect(find.text('Sin filtro de fecha'), findsOneWidget);
+      expect(
+          find.byKey(const Key('sales_history_totals_row')), findsOneWidget);
+      expect(find.text('Facturas: 0'), findsOneWidget);
+      // The honest cause: no sales recorded YET — not a filter/search blame.
+      expect(find.text('Aún no hay ventas registradas'), findsOneWidget);
+      expect(find.text('No hay facturas que coincidan con la búsqueda.'),
+          findsNothing);
     });
   });
 }

@@ -1,7 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTenantId } from "@/lib/tenant";
 import { fetchAuditSummary } from "@/features/dashboard/dashboard-api";
-import { fetchAuditEvents } from "./audit-api";
+import { fetchUsers } from "@/features/users/users-api";
+import {
+  fetchAuditEvents,
+  fetchAuditIntegrity,
+  fetchAuditLedger,
+} from "./audit-api";
 import type { AuditSeverity } from "./types";
 
 /**
@@ -17,12 +22,17 @@ export interface AuditEventFilters {
   severity?: AuditSeverity;
 }
 
-export function useAuditEvents(filters: AuditEventFilters, limit: number) {
+export function useAuditEvents(
+  filters: AuditEventFilters,
+  limit: number,
+  enabled = true,
+) {
   const tenantId = useTenantId();
   return useQuery({
     queryKey: ["audit", tenantId, "events", filters, limit],
     queryFn: ({ signal }) => fetchAuditEvents({ ...filters, limit }, { signal }),
     staleTime: 60 * 1000,
+    enabled,
   });
 }
 
@@ -31,11 +41,74 @@ export function useAuditEvents(filters: AuditEventFilters, limit: number) {
  * dashboard client — the same GET /operations/audit/summary the attention
  * band reads; never a duplicated call surface.
  */
-export function useAuditSummary(startDate?: string, endDate?: string) {
+export function useAuditSummary(
+  startDate?: string,
+  endDate?: string,
+  enabled = true,
+) {
   const tenantId = useTenantId();
   return useQuery({
     queryKey: ["audit", tenantId, "summary", startDate, endDate],
     queryFn: ({ signal }) => fetchAuditSummary(startDate ?? "", endDate ?? "", { signal }),
     staleTime: 60 * 1000,
+    enabled,
+  });
+}
+
+/**
+ * S4b — POS counter ledger (GET /operations/audit/ledger). A separate read
+ * model from the change_log event stream above: both stay available, the
+ * view picks which source to show. Only fetched while the ledger view is
+ * active, so the platform view never pays for it.
+ */
+export interface AuditLedgerFilters {
+  startDate?: string;
+  endDate?: string;
+  actorUserId?: string;
+  targetType?: string;
+}
+
+export function useAuditLedger(
+  filters: AuditLedgerFilters,
+  limit: number,
+  enabled = true,
+) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ["audit", tenantId, "ledger", filters, limit],
+    queryFn: ({ signal }) => fetchAuditLedger({ ...filters, limit }, { signal }),
+    staleTime: 60 * 1000,
+    enabled,
+  });
+}
+
+/**
+ * S4b — nightly integrity report (GET /operations/audit/integrity). Only
+ * fetched while the ledger view is active: a sequence gap is a POS-chain
+ * signal, and the view must distinguish "no alerts" from "could not load".
+ */
+export function useAuditIntegrity(enabled = true) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ["audit", tenantId, "integrity"],
+    queryFn: ({ signal }) => fetchAuditIntegrity({ signal }),
+    staleTime: 60 * 1000,
+    enabled,
+  });
+}
+
+/**
+ * S4b — actor filter options for the ledger. Reuses the same users read the
+ * settings module uses (shared query key + cache); disabled on the platform
+ * view so the existing page surface is untouched. A failed read degrades to
+ * "actor filter unavailable", never to a fabricated list.
+ */
+export function useAuditActors(enabled: boolean) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ["users", tenantId],
+    queryFn: ({ signal }) => fetchUsers({ signal }),
+    staleTime: 60 * 1000,
+    enabled,
   });
 }

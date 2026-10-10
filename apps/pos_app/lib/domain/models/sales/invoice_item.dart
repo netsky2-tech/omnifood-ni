@@ -26,6 +26,13 @@ class InvoiceItem with _$InvoiceItem {
     String? inventorySnapshotVersion,
     String? originInvoiceItemId,
     @Default([]) List<Modifier> selectedModifiers,
+    // Optional per-line discount-origin breakdown over the line discount
+    // (wire keys: promotion | manual | loyalty, positive amounts only).
+    // Null means legacy/unknown and is NEVER fabricated as an empty map: the
+    // two states are null and a populated map. Persistence + decode are this
+    // unit's business; producing the breakdown and sending it on the wire is
+    // the NEXT unit.
+    Map<String, double>? discountOrigin,
   }) = _InvoiceItem;
 
   factory InvoiceItem.fromJson(Map<String, dynamic> json) =>
