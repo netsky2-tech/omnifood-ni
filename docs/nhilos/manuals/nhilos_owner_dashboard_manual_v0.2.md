@@ -242,7 +242,7 @@ Hoy **no existe la ruta `Ajustes > Dispositivos` en el backoffice**: el panel po
 ## 11. Canales de Asistencia y Preguntas Frecuentes
 
 * **Correo de Soporte Técnico:** `soporte@nhilospos.com` — canal oficial de escrito de NHILOS.
-* **WhatsApp de Asistencia para Propietarios:** el canal de WhatsApp Business de soporte se habilita en la puesta en marcha de tu sucursal; pedí tu alta por el correo de soporte.
+* **WhatsApp de Asistencia para Propietarios:** [+505 8194 8526](https://wa.me/50581948526) — WhatsApp Business de soporte NHILOS, atención de Lunes a Sábado de 8:00 AM a 8:00 PM.
 * **Horario de Atención:** Lunes a Sábado de 8:00 AM a 8:00 PM.
 * **Documentación de referencia incluida:**
   * Guía de inicio rápido: [`nhilos_quick_start_guide_v0.1.md`](./nhilos_quick_start_guide_v0.1.md)

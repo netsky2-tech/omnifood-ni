@@ -62,5 +62,5 @@ Presioná el botón verde **"Cobrar"** en la parte inferior del ticket y elegí 
 ---
 
 ### 7. ¿Necesitás Ayuda Inmediata?
-* **Soporte Directo NHILOS (WhatsApp):** [Número de WhatsApp de Soporte]
+* **Soporte Directo NHILOS (WhatsApp):** [+505 8194 8526](https://wa.me/50581948526)
 * **Supervisor en Local:** Acudí al Encargado / Supervisor de turno para autorizaciones de anulación.

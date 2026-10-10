@@ -103,6 +103,6 @@
 ---
 
 ### Canales de Asistencia Inmediata
-* **Soporte Técnico Directo (WhatsApp):** [Número de Soporte Fundador]
+* **Soporte Técnico Directo (WhatsApp):** [+505 8194 8526](https://wa.me/50581948526)
 * **Correo de Escalamiento:** `soporte@nhilospos.com`
 * **Horario de Atención:** Lunes a Sábado de 8:00 AM a 8:00 PM.
