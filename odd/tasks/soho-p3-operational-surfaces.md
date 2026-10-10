@@ -842,3 +842,33 @@ El panel, ventana de hoy: `manual 20 | promoción 35 | lealtad 0 | sin origen 0 
 ### Estado del rig al terminar (S23)
 
 APK `1.1.0+11021` de la rama instalado y apuntando a `http://127.0.0.1:3000/api` (necesita `adb reverse` vivo). Backend `:3000` con el `dist` de la rama y el espejo migrado (`180962`/`180963`/`180964`). Contraseña del dueño restaurada byte a byte. El bump de versión del `pubspec` **revertido**: la rama queda limpia para el PR.
+
+---
+
+## 18. Hallazgos de campo de la prueba integrada (S23) y sus arreglos
+
+### 18.1 · La lealtad no era alcanzable en el mostrador — ARREGLADO
+
+**Lo que mostró el aparato:** con un cliente de 1.500 puntos seleccionado, el carrito **no mostraba ninguna superficie de lealtad** (captura en `~/.cache/s23/pantalla_punto5.png`).
+
+**La causa, eslabón por eslabón:** `main.dart` construía el VM con el constructor **posicional plano**, cuya lista de inicialización **hard-codea** `_evaluationService = null` y `_rewardInteraction = null`. De ahí: `_reEvaluateLoyalty` sale temprano (`sale_view_model.dart:357`) → `currentEvaluation` siempre null → `LoyaltyCompactWidget` y `RewardCtaWidget` devuelven `SizedBox.shrink()` → no hay tarjeta ni CTA; y `selectReward` es no-op (`:342`). Los puntos **sí se acumulan** (la ruta del DAO en `:1947,1975` es independiente de la evaluación), o sea que **el cliente juntaba puntos que no podía gastar**.
+
+**Y el repo ya tenía la pieza:** existe `SaleViewModel.withLoyalty(...)`, documentado como *"Use this when the caller needs full loyalty evaluation + reward interaction"*. Producción usaba el constructor equivocado. Es la **misma clase que el M11** (`24668ca0`) para la cadena de identificación, cuyo arreglo y comentario están a pocas líneas.
+
+**El arreglo:** la construcción de producción se **extrajó** a `buildSaleViewModel()` (`sale_view_model_wiring.dart`), una función **importable por tests** que usa `withLoyalty` con **una sola** `LoyaltyEvaluationService` compartida entre el VM y el servicio de interacción; `main.dart` la llama. El porqué está escrito en el archivo: **un defecto de cableado sólo se puede fijar con un test que recorra el MISMO camino que producción** — el test que replicaba la construcción a mano seguía pasando mientras el mostrador estaba roto.
+
+**Verificación:** RED primero (el test de producción observó la evaluación null), GREEN 17/17 en la suite de cableado y 53/53 en la del view model, analyze limpio. Mutación propia: quitar los dos servicios del cableado → el test **vivo** falla con `Expected: not null / Actual: <null>`, restaurado byte-idéntico.
+
+**Reportado, no tocado:** `applyLoyaltyPoints` no tiene llamador en producción (muerto en runtime, vivo en tests); `withLoyalty` además llama `loadCompanyTaxRegime`, medido inobservable (idempotente, ya lo llama `checkActiveSession`, traga errores y todo consumidor lo carga si falta).
+
+**No probado:** el render en el aparato con el arreglo (necesita APK nuevo) y el arranque real de `main()`.
+
+### 18.2 · La sugerencia de monto del cobro miente — HALLAZGO ABIERTO
+
+**Lo que mostró el aparato:** total **C$202.50**; la sugerencia dice **C$ 203**, pero al tocarla el campo queda en **202.50**.
+
+**Causa exacta:** `multi_currency_checkout_dialog.dart:1197` formatea la etiqueta con `toStringAsFixed(0)` (redondea a córdobas enteros) mientras el `onPressed` aplica `toStringAsFixed(2)` (el valor exacto). La primera sugerencia es **el total exacto** (`currency_checkout_calculator.dart:124`), así que es la única que puede llevar centavos; las demás (300, 400, 500, 1000) son enteras.
+
+**Impacto:** camino del dinero. El operador lee 203, el sistema registra 202.50, y el **vuelto se calcula sobre 202.50**. Es la misma clase que el resto del bloque: la pantalla dice una cosa y el sistema hace otra.
+
+**Forma del arreglo (chico, PR propio):** que la etiqueta muestre **exactamente** lo que el tap aplica (formatear con la precisión del valor), o bien que etiqueta y valor aplicado sean ambos el monto redondeado — es una decisión de producto entre "exacto" y "redondeado", pero **tienen que coincidir**. Al arreglarlo, ojo con el `Set` de `getSuggestedDenominations`: si el exacto y un redondeado colisionan, se oculta una sugerencia.
