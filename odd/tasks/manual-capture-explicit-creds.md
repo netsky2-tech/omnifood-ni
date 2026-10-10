@@ -158,9 +158,42 @@ variants failed as `TypeError`, not `LiveApiConfigError`, proving the function d
 
 (`npx vitest run src/__tests__/live-api-base.test.ts --no-file-parallelism`.)
 
-## Residual credential sightings (outside delegated surfaces, reported not fixed)
+## Residual credential sightings
 
-`grep -rln "C0ntr4sen4" .` (repo root, excluding node_modules) still matches:
-- `scripts/capture_dashboard.cjs` — repo-root capture script; needs its own decision.
-- `odd/tasks/*.md` (this doc + other features' docs) — expected: prose quoting the old default.
+`grep -rln "C0ntr4sen4" .` (repo root, excluding node_modules) now matches only `odd/tasks/*.md` — prose
+quoting the old default, kept on purpose as the record of what was removed and why.
+`scripts/capture_dashboard.cjs`, the second holder, was deleted in this branch (see the section above).
+
+## Hardening round (advisories from the first native review)
+
+The first candidate was APPROVED with 5 informational advisories. Three were about the tenant guard and
+two of those were real defects, so they became code here instead of a follow-up issue.
+
+| Advisory | Was | Now |
+| --- | --- | --- |
+| `manual-screenshots.live.spec.ts:78` | `new URL(BASE)` on a malformed value threw a raw `TypeError` | `resolveLiveWebTarget()` throws `LiveApiConfigError` naming the variable and the expected host, never the value |
+| `manual-screenshots.live.spec.ts:83` | compared the **first hostname label**, so `soho.evil.com` and `soho.localhost.evil.com` passed | the hostname must be **exactly** `soho.localhost`; any other host is a deliberate source edit |
+| `live-api-base.test.ts:209` | the no-leak assertion was indirect | kept for `requiredLiveEnv`, and the host tests add a direct one: embedded credentials are rejected and the message omits the secret |
+
+The guard moved out of the spec into `src/lib/live-api-base.ts` as `resolveLiveWebTarget(name, fallback,
+expectedTenantLabel)` so it is unit-covered like the rest of the contract — 11 cases: fallback, blank,
+accepted override, lookalike host, suffix-spoofed host, wrong tenant, unparseable, scheme-less,
+non-http protocol, embedded credentials, derived label.
+
+**Test-first:** RED observed as `resolveLiveWebTarget is not a function` across the new 11
+(`Tests 11 failed | 36 passed (47)`), then the implementation, then GREEN 47/47 in that file.
+
+Post-hardening checks: focused 47/47 · full unit serial **101 files / 1486 passed / 4 skipped** ·
+`npm run typecheck` clean · `npx oxlint` on the three touched files clean · `--list` unchanged (live
+15 tests / 2 files, static 48 / 6).
+
+Observed live, each with `playwright test --list -c playwright.live.config.ts` and a hostile
+`MANUAL_E2E_BASE_URL` — all aborted at collection with `LiveApiConfigError`:
+
+| Value | Outcome |
+| --- | --- |
+| `http://soho-test-fixture.localhost:5174` | rejected: hostname must be exactly `soho.localhost` |
+| `http://soho.evil.com:5174` | rejected — the case the old label check accepted |
+| `soho.localhost:5174` (no scheme) | rejected: the protocol must be http or https |
+| `http://admin:s3cret@soho.localhost:5174` | rejected: embedded credentials — and the message did not echo the secret |
 

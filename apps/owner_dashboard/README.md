@@ -30,7 +30,7 @@ modifier groups) only exists in `soho`. Environment variables:
 | Variable | Role |
 | --- | --- |
 | `NHILOS_MANUAL_CAPTURE` | Opt-in gate, must be `1` (own gate, not `NHILOS_LIVE_E2E`) |
-| `MANUAL_E2E_BASE_URL` | Optional web origin; default `http://soho.localhost:5174` |
+| `MANUAL_E2E_BASE_URL` | Optional web origin; default `http://soho.localhost:5174`. The hostname must be **exactly** `soho.localhost` (any port) or the run aborts before navigation — `soho.evil.com` and `soho.localhost.evil.com` carry the tenant label but name another machine, so the check is not a label prefix. Redirecting the suite elsewhere means editing `EXPECTED_TENANT_LABEL` in the spec deliberately |
 | `MANUAL_E2E_EMAIL` | Optional login email; default `admin@soho.com` |
 | `MANUAL_E2E_PASS` | **Required** — the tenant credential, read from the environment only; unset/blank fails before the first navigation |
 

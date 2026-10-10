@@ -1,7 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { requiredLiveEnv, resolveLiveEnv } from "../src/lib/live-api-base";
+import {
+  requiredLiveEnv,
+  resolveLiveEnv,
+  resolveLiveWebTarget,
+} from "../src/lib/live-api-base";
 
 /**
  * MANUAL SCREENSHOT CAPTURE for the owner-dashboard operation manual.
@@ -58,7 +62,28 @@ const CAPTURE = process.env.NHILOS_MANUAL_CAPTURE === "1";
 // starts (below), NOT at module scope: module scope also executes during
 // `playwright test --list`, and listing must keep working without the
 // credential. The requirement still lands before the first navigation.
-const BASE = resolveLiveEnv("MANUAL_E2E_BASE_URL", "http://soho.localhost:5174");
+// Tenant binding, resolved at module scope BEFORE any navigation, through the
+// unit-tested helper (`src/lib/live-api-base.ts` -> `resolveLiveWebTarget`).
+//
+// Why it exists: this spec navigates with its own absolute BASE
+// (MANUAL_E2E_BASE_URL) on every page.goto, so `NHILOS_LIVE_BASE` — the variable
+// playwright.live.config.ts uses for baseURL — silently does nothing here. An
+// operator who sets only the canonical variable would capture against whichever
+// tenant the host actually names while believing they overrode it, and a wrong
+// tenant yields captures taken under the wrong identity (the walkthrough data
+// above only exists in `soho`).
+//
+// Why the hostname is compared EXACTLY rather than by first label:
+// `soho.evil.com` and `soho.localhost.evil.com` both start with the expected
+// label, and a label check would accept them and capture against an unrelated
+// deployment. Pointing this suite at any other host is a deliberate edit to the
+// constant below, never an environment tweak.
+const EXPECTED_TENANT_LABEL = "soho";
+const BASE = resolveLiveWebTarget(
+  "MANUAL_E2E_BASE_URL",
+  `http://${EXPECTED_TENANT_LABEL}.localhost:5174`,
+  EXPECTED_TENANT_LABEL,
+).origin;
 const EMAIL = resolveLiveEnv("MANUAL_E2E_EMAIL", "admin@soho.com");
 let PASSWORD = "";
 test.beforeAll(() => {
@@ -66,26 +91,6 @@ test.beforeAll(() => {
     PASSWORD = requiredLiveEnv("MANUAL_E2E_PASS");
   }
 });
-
-// Tenant binding guard, evaluated at module scope BEFORE any navigation.
-// This spec navigates with its own absolute BASE (MANUAL_E2E_BASE_URL) on
-// every page.goto, so NHILOS_LIVE_BASE — the variable playwright.live.config.ts
-// uses for baseURL — silently does nothing here. An operator who sets only
-// the canonical variable would capture against whichever tenant the host
-// actually names, while believing they overrode it; a wrong tenant yields
-// captures taken under the wrong identity (the walkthrough data above only
-// exists in `soho`).
-const EXPECTED_TENANT_LABEL = "soho";
-const BASE_TENANT_LABEL = new URL(BASE).hostname.split(".")[0];
-if (BASE_TENANT_LABEL !== EXPECTED_TENANT_LABEL) {
-  throw new Error(
-    `manual-capture spec targets tenant "${EXPECTED_TENANT_LABEL}" but ` +
-      `MANUAL_E2E_BASE_URL points at "${BASE_TENANT_LABEL}" ` +
-      `(${BASE}). Point MANUAL_E2E_BASE_URL at ` +
-      `${EXPECTED_TENANT_LABEL}.localhost:<port> or update the spec's ` +
-      "expected tenant deliberately.",
-  );
-}
 
 // Walkthrough data (section 6 narrative): one plausibly-named group with two
 // options carrying real price deltas, attached to a category that really has

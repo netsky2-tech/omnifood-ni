@@ -9,6 +9,7 @@ import {
   resolveLiveApiOrigin,
   resolveLiveEnv,
   resolveLiveWebBase,
+  resolveLiveWebTarget,
 } from "@/lib/live-api-base";
 
 const LIVE_API_ENV = "NHILOS_LIVE_API" as const;
@@ -227,5 +228,85 @@ describe("resolveLiveApiOrigin", () => {
   it("returns the origin of an overridden base", () => {
     vi.stubEnv(LIVE_API_ENV, "http://127.0.0.1:3301/api");
     expect(resolveLiveApiOrigin()).toBe("http://127.0.0.1:3301");
+  });
+});
+
+describe("resolveLiveWebTarget (issue #839 tenant binding, verified behavior)", () => {
+  const NAME = "MANUAL_E2E_BASE_URL";
+  const FALLBACK = "http://soho.localhost:5174";
+  const TENANT = "soho";
+
+  const target = () => resolveLiveWebTarget(NAME, FALLBACK, TENANT);
+
+  it("uses the fallback and reports its tenant when the variable is unset", () => {
+    expect(target()).toEqual({
+      origin: "http://soho.localhost:5174",
+      hostname: "soho.localhost",
+      tenantLabel: "soho",
+    });
+  });
+
+  it("treats a blank value as unset instead of navigating to an empty origin", () => {
+    vi.stubEnv(NAME, "   ");
+    expect(target().origin).toBe("http://soho.localhost:5174");
+  });
+
+  it("accepts an explicit value that matches the expected tenant host", () => {
+    vi.stubEnv(NAME, "http://soho.localhost:3000");
+    expect(target().origin).toBe("http://soho.localhost:3000");
+  });
+
+  it("rejects a host that only LOOKS like the tenant (soho.evil.com)", () => {
+    // First-label matching alone would let this through, and the capture would
+    // run against an unrelated deployment while believing it was local.
+    vi.stubEnv(NAME, "http://soho.evil.com:5174");
+    expect(target).toThrow(LiveApiConfigError);
+    expect(target).toThrow(/MANUAL_E2E_BASE_URL/);
+  });
+
+  it("rejects a suffix-spoofed localhost host (soho.localhost.evil.com)", () => {
+    vi.stubEnv(NAME, "http://soho.localhost.evil.com:5174");
+    expect(target).toThrow(LiveApiConfigError);
+  });
+
+  it("rejects another tenant host rather than silently capturing there", () => {
+    vi.stubEnv(NAME, "http://soho-test-fixture.localhost:5174");
+    expect(target).toThrow(/soho\.localhost/);
+  });
+
+  it("rejects an unparseable value with LiveApiConfigError, not a raw TypeError", () => {
+    vi.stubEnv(NAME, "not a url");
+    expect(target).toThrow(LiveApiConfigError);
+  });
+
+  it("rejects a scheme-less host:port value", () => {
+    vi.stubEnv(NAME, "soho.localhost:5174");
+    expect(target).toThrow(LiveApiConfigError);
+  });
+
+  it("rejects a non-http protocol", () => {
+    vi.stubEnv(NAME, "file:///etc/passwd");
+    expect(target).toThrow(LiveApiConfigError);
+  });
+
+  it("rejects embedded credentials and never echoes them", () => {
+    vi.stubEnv(NAME, "http://owner:s3cret-marker@soho.localhost:5174");
+    let caught: unknown;
+    try {
+      target();
+      expect.unreachable("expected LiveApiConfigError");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(LiveApiConfigError);
+    const message = (caught as Error).message;
+    expect(message).toContain(NAME);
+    expect(message).not.toContain("s3cret-marker");
+    expect(message).not.toContain("owner:s3cret-marker");
+  });
+
+  it("reports the tenant label derived from an accepted hostname", () => {
+    vi.stubEnv(NAME, "https://soho.localhost");
+    expect(target().tenantLabel).toBe("soho");
   });
 });

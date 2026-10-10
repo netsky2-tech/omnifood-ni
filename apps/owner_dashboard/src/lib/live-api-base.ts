@@ -41,6 +41,75 @@ const API_PREFIX = "/api";
 /** Canonical API base for local live suites: this worktree's shadow stack. */
 export const LIVE_API_BASE_DEFAULT = "http://127.0.0.1:3300/api";
 
+/** A validated live web target: where to drive the browser and which tenant it names. */
+export interface LiveWebTarget {
+  /** Origin only (scheme + host + port), no path, never embedded credentials. */
+  origin: string;
+  hostname: string;
+  /** First hostname label, which is how the dashboard resolves the tenant. */
+  tenantLabel: string;
+}
+
+/**
+ * Resolve and validate a live-suite **web origin** that is bound to a tenant.
+ *
+ * `resolveLiveEnv` alone is not enough for these: the dashboard derives the
+ * tenant from the first hostname label (`src/lib/auth.ts`), so a value like
+ * `http://soho.evil.com:5174` or `http://soho.localhost.evil.com` keeps the
+ * expected label, passes a label comparison, and captures against an unrelated
+ * deployment. A relative value (`soho.localhost:5174`) is not an origin at all
+ * and used to surface as a raw `TypeError` from `new URL()`.
+ *
+ * Contract (issue #839):
+ * - blank/unset falls back to `fallback`;
+ * - the value must be an absolute http(s) URL with no path, query, fragment or
+ *   embedded credentials;
+ * - the hostname must be EXACTLY `<expectedTenantLabel>.localhost`;
+ * - every failure names the variable and the expected hostname, never the
+ *   value, because the message can land in CI logs.
+ */
+export function resolveLiveWebTarget(
+  name: string,
+  fallback: string,
+  expectedTenantLabel: string,
+): LiveWebTarget {
+  const expectedHostname = `${expectedTenantLabel}.localhost`;
+  const raw = envValue(process.env[name]);
+  const value = raw ?? fallback;
+
+  const fail = (reason: string): never => {
+    throw new LiveApiConfigError(
+      `Invalid ${name}: ${reason}. Expected the tenant host ` +
+        `"${expectedHostname}" as an absolute http(s) origin, e.g. ` +
+        `${fallback}. The configured value is not echoed.`,
+    );
+  };
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return fail("an absolute http(s) URL is required");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return fail("the protocol must be http or https");
+  }
+  if (url.username.length > 0 || url.password.length > 0) {
+    return fail("embedded credentials are not allowed");
+  }
+  if (url.pathname !== "/" || url.search.length > 0 || url.hash.length > 0) {
+    return fail("an origin is required, without path, query or fragment");
+  }
+  if (url.hostname !== expectedHostname) {
+    return fail(
+      `the hostname must be exactly "${expectedHostname}" — this suite is ` +
+        "tenant-bound, and a label that merely starts with the expected one " +
+        "is not the same tenant",
+    );
+  }
+  return { origin: url.origin, hostname: url.hostname, tenantLabel: expectedTenantLabel };
+}
+
 /** Canonical web origin for local live Playwright runs (tenant hostname + :5174). */
 export const LIVE_WEB_BASE_DEFAULT = "http://soho-test-fixture.localhost:5174";
 
