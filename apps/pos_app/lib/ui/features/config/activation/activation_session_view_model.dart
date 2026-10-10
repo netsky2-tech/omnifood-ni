@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/localization/label_map.dart';
 import '../../../../data/models/activation/activation_attempt_local_entity.dart';
 import '../../../../data/services/activation_controlled_sale_runner.dart';
 import '../../../../data/services/activation_pre_offline_runner.dart';
@@ -134,17 +135,36 @@ class ActivationSessionViewModel extends ChangeNotifier {
           'Reinicie el proceso desde el dashboard.',
         );
       } else {
-        // NHILOS §39.4: never expose raw backend error text to the operator.
-        // Unknown codes get a generic message; the raw text stays in logs.
-        // ignore: avoid_print
-        print('[FriendlyError] Unmapped raw error: $e');
-        friendly.add(
-          'Ocurrió un error inesperado durante la activación. '
-          'Revise la conexión e intente de nuevo.',
-        );
+        // The runner's blockers name themselves (`CODE: detail`). The label
+        // map is the single source of human copy, so a mapped blocker is
+        // never swallowed into a generic message. Swallowing them is exactly
+        // how the FX and printer blockers used to reach the operator as
+        // "check your connection" (round-2 F-10a/F-10b).
+        final code = _leadingBlockerCode(e);
+        final mapped = code == null ? null : kActivationBlockerLabels[code];
+        if (mapped != null) {
+          friendly.add(mapped);
+        } else {
+          // NHILOS §39.4: never expose raw backend error text to the operator.
+          // The raw text stays in logs. An unknown code must NOT claim a
+          // connectivity problem: that is a false diagnosis (F-10a).
+          // ignore: avoid_print
+          print('[FriendlyError] Unmapped raw error: $e');
+          friendly.add(
+            'Ocurrió un error inesperado durante la activación. '
+            'Reintente la fase; si el problema persiste, contacte soporte.',
+          );
+        }
       }
     }
     return friendly.join('\n');
+  }
+
+  /// Leading `SNAKE_CASE` blocker code of a raw runner error (`CODE: detail`),
+  /// or null when the raw text does not start with one.
+  static String? _leadingBlockerCode(String raw) {
+    final match = RegExp(r'^\s*([A-Z][A-Z0-9_]{3,})\s*:').firstMatch(raw);
+    return match?.group(1);
   }
 
   /// Result of the pre-offline checks phase, exactly as the service

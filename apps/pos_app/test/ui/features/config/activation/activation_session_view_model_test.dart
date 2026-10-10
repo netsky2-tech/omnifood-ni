@@ -593,4 +593,41 @@ void main() {
           reason: 'no number may be fabricated when the MAX is unreadable');
     });
   });
+
+  group('friendlyError maps runner blockers (round-2 F-10a/F-10b)', () {
+    test('a missing FX rate names the exact screen instead of blaming the '
+        'connection', () {
+      final message = ActivationSessionViewModel.friendlyError([
+        'EXCHANGE_RATE_NOT_CONFIGURED: No se puede emitir la venta de '
+            'verificación: la tasa oficial BCN no está configurada en este '
+            'terminal.',
+      ]);
+      expect(message, contains('Perfil del Negocio'));
+      expect(message, isNot(contains('Revise la conexión')),
+          reason: 'the real blocker is configuration, never connectivity');
+      expect(message, isNot(contains('EXCHANGE_RATE_NOT_CONFIGURED')),
+          reason: 'the machine code never reaches the operator copy');
+    });
+
+    test('an unavailable printer is mapped and never blames the connection',
+        () {
+      final message = ActivationSessionViewModel.friendlyError([
+        'PRINTER_AVAILABLE_FAILED: La impresora no está lista '
+            '(estado: offline)',
+        'TEST_PRINT_FAILED: No se pudo realizar la impresión de prueba',
+      ]);
+      expect(message, contains('Hardware e Impresora'));
+      expect(message, isNot(contains('Revise la conexión')));
+    });
+
+    test('an unknown blocker keeps generic copy without a false connectivity '
+        'diagnosis', () {
+      final message = ActivationSessionViewModel.friendlyError([
+        'SOME_UNKNOWN_BLOCKER_XYZ: detail',
+      ]);
+      expect(message, contains('inesperado'));
+      expect(message, isNot(contains('Revise la conexión')));
+      expect(message, isNot(contains('SOME_UNKNOWN_BLOCKER_XYZ')));
+    });
+  });
 }
