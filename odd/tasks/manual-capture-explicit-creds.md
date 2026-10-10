@@ -122,7 +122,7 @@ host). The user chose **delete it in this PR**. The documented single path is no
   `Total: 0 tests in 0 files`). Fix: the credential is required in `test.beforeAll`, gated on
   `NHILOS_MANUAL_CAPTURE` — evaluated when the run actually starts and before the first navigation,
   listing stays credential-free, and ordinary live runs (gate off, tests skipped) are unaffected.
-- The "message never contains the value" unit test stubs `MANUAL_E2E_PASS = "s3cret-marker"` and
+- The "message never contains the value" unit test stubs a recognizable marker into `MANUAL_E2E_PASS` and
   requires a DIFFERENT variable (`MANUAL_E2E_EMAIL`): a populated value means the happy path succeeds,
   so there is no error to inspect for that variable; the marker-in-env setup still catches any
   implementation that echoes values or dumps env.
@@ -195,5 +195,5 @@ Observed live, each with `playwright test --list -c playwright.live.config.ts` a
 | `http://soho-test-fixture.localhost:5174` | rejected: hostname must be exactly `soho.localhost` |
 | `http://soho.evil.com:5174` | rejected — the case the old label check accepted |
 | `soho.localhost:5174` (no scheme) | rejected: the protocol must be http or https |
-| `http://admin:s3cret@soho.localhost:5174` | rejected: embedded credentials — and the message did not echo the secret |
+| a URL carrying embedded credentials before the host | rejected: embedded credentials — and the message did not echo them |
 
