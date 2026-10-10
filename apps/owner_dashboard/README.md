@@ -1,5 +1,24 @@
 # React + TypeScript + Vite
 
+## Test suites
+
+Suite-layout rule (issue #830): `.live.test.ts` is the only runner-significant
+suffix in `src/__tests__` — a `*.live.test.ts` file needs the real backend on
+`127.0.0.1:3300` and runs **only** via `npm run test:integration`.
+
+| Suite kind | Files | Command | Needs a server? |
+| --- | --- | --- | --- |
+| Unit | `src/__tests__/*` except the live suites | `npm test` | No |
+| Contract (mocked fetch, e.g. `w1-api.contract.test.ts`, `w5-api.contract.test.ts`) | `src/__tests__/*.contract.test.ts` and friends | `npm test` | No |
+| Live (needs the real backend on `127.0.0.1:3300`: `w1.live.test.ts`, `w4-fiscal.live.test.ts`, `modifiers.live.test.ts`) | `src/__tests__/*.live.test.ts` | `npm run test:integration` | Yes — NestJS shadow stack on :3300 |
+| Playwright static (browser, mocked API) | `e2e/*.spec.ts`, `*.live.spec.ts` ignored by `testIgnore` | `npm run test:e2e` | No |
+| Playwright live (browser + real backend) | `e2e/*.live.spec.ts` | `npm run test:e2e:live` (screenshots: `npm run test:e2e:capture`) | Yes — :3300 + dev server on :5174 |
+
+**No network suite runs in `npm test`**: the default unit run excludes every
+`*.live.test.ts` file (see `vitest.config.ts`), and the guard
+`src/__tests__/suite-layout.test.ts` fails if a live suite is added without
+joining the live runner.
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

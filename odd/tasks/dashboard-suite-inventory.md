@@ -1,6 +1,8 @@
 # Feature: Dashboard suite inventory — contract/api vs live (issue #830)
 
-- **Status:** IMPLEMENTING (unit 1 delegated to `gentle-ai-worker`; inventory verified twice)
+- **Status:** IMPLEMENTED — verified by the orchestrator; native review + PR pending.
+- **Routing:** implementation delegated to `gentle-ai-worker` (task `mv1o076l-2-lh8z`) with narrow
+  edit surfaces; the orchestrator re-verified everything (the worker's GREEN was not the record).
 - **Inventory sources:** `gentle-ai-explore` task `mv1nsxtu-1-ety0` (per-file runner + network
   evidence) cross-checked by the orchestrator against `vitest.config.ts:20-27`,
   `vitest.integration.config.ts:26-29` and a repo-wide grep of `resolveLiveApiBase`/`fetch`.
@@ -51,8 +53,10 @@ CI red or, worse, silently passes against whatever happens to be listening.
       excluded from it unnecessarily.
 - [ ] The contract/live distinction is readable from the filename or the config header, not from
       tribal knowledge.
-- [ ] A deterministic guard fails if a new live-needing suite is not registered in the live
-      runner (and vice versa).
+- [x] Deterministic guard (`suite-layout.test.ts`, 6 assertions): a live-named file that is not
+      registered fails, a registered entry that is not live-named fails, a network suite without the
+      marker fails, a server-free file hidden from the unit run fails, the retired suffix fails, and
+      the static Playwright config collecting live specs fails.
 - [ ] `npm test` green and `npm run test:integration` green (42/42) after the change.
 - [ ] `npm run typecheck` + `npm run lint` green.
 - [ ] PR `type:tests` green, merged, issue #830 closed.
@@ -86,18 +90,47 @@ CI red or, worse, silently passes against whatever happens to be listening.
       | --- | --- | --- |
       | `w1.integration.test.ts` | `w1.live.test.ts` | live, name now says so |
       | `w4-e2e-fiscal.test.ts` | `w4-fiscal.live.test.ts` | live, and `e2e` was misleading (it is not Playwright) |
-      | `modifiers-live.integration.test.ts` | `modifiers-live.test.ts` | live, suffix retired |
+      | `modifiers-live.integration.test.ts` | `modifiers.live.test.ts` | live, suffix retired |
       | `w1-api.integration.test.ts` | `w1-api.contract.test.ts` | mocked fetch → contract |
       | `w5-api.integration.test.ts` | `w5-api.contract.test.ts` | mocked fetch → contract |
       `.live.test.ts` matches the Playwright convention already in use (`*.live.spec.ts`).
-- [ ] **T4** Apply the rename table + both config lists + `src/lib/live-api-base.ts` header path
-      reference. Historical `odd/tasks/*.md` mentions are **evidence**: they are not rewritten; the
+- [x] **T4** Applied. **One correction to the T3 table, made deliberately:** the table said
+      `modifiers-live.test.ts`, and the worker implemented exactly that — which forced the guard to
+      accept a second live shape (`/(^|[.\-_])live\.test\.ts$/`). A rule with an exception is the
+      thing this issue exists to remove, so the file was renamed again to
+      **`modifiers.live.test.ts`** and the matcher tightened to `endsWith(".live.test.ts")`.
+      Also fixed the two stale self-references the rename left (`modifiers.live.test.ts:24` run
+      line, `:52` "plain fetch, w1.live.test.ts style").
+- [x] **T4b** Boundary extended to the browser runner (finding 5 of the inventory):
+      `playwright.config.ts` had no `testIgnore`, so `npm run test:e2e` *collected*
+      `*.live.spec.ts` and was saved only by their env-gated `test.skip` — tribal, not structural.
+      It now declares `testIgnore: "**/*.live.spec.ts"`, and the guard has a 6th assertion for it
+      (RED observed first: 1 failed | 5 passed → GREEN 6/6). Historical `odd/tasks/*.md` mentions are **evidence**: they are not rewritten; the
       rename table above is the mapping.
-- [ ] **T5** Guard test (test-first, RED observed) that keeps live suites out of the unit run.
-- [ ] **T6** Suite map documented in the config headers + dashboard docs.
-- [ ] **T7** Checks: `npm test`, `npm run test:integration` vs the `:3300` stack, typecheck, lint,
-      `playwright test --list` for both configs.
-- [ ] **T8** Work-unit commit + native review + PR `type:tests` → merge (user's delivery call).
+- [x] **T5** Guard `src/__tests__/suite-layout.test.ts` (6 assertions, reads the configs as text,
+      strips comments so paths inside prose are never counted as entries, derives the live set from
+      filenames instead of hardcoding it). **RED observed by the worker before the rename** — 5/5
+      failing, with the defect in the messages: `w1.integration.test.ts is not a .live.test.ts
+      path`, `w4-e2e-fiscal.test.ts calls resolveLiveApiBase( and fetch( but is not named
+      *.live.test.ts`, retired-suffix list `[modifiers-live.integration, w1-api.integration,
+      w1.integration, w5-api.integration]`. GREEN after: **6/6**.
+- [x] **T6** Map documented: `README.md` → "## Test suites" table (unit / contract / live /
+      playwright-static / playwright-live with commands and server requirement) + the rule stated in
+      the headers of `vitest.config.ts`, `vitest.integration.config.ts` and `playwright.config.ts`
+      + `src/lib/live-api-base.ts` header now points at `src/__tests__/*.live.test.ts`.
+- [x] **T7** Orchestrator verification (no subagent alive during these runs, per the WSL2 cap):
+      - `npx vitest run --no-file-parallelism` → **101 files, 1470 passed, 4 skipped**
+        (was 100/1464: +1 file = the guard, +6 tests).
+      - `npx vitest run -c vitest.integration.config.ts` → **3 files, 42/42** against the `:3300`
+        stack (login probe HTTP 201 before the run; the stack is main's, this branch is
+        test-config only).
+      - `npm run typecheck` (`tsc -b`) → first **RED**: `suite-layout.test.ts(31,3): error TS2322:
+        Type '(string | undefined)[]' is not assignable to type 'string[]'` (`noUncheckedIndexedAccess`
+        on `m[1]`; vitest's GREEN never typechecks — the exact trap recorded in memory). Fixed with
+        a `flatMap` type guard → clean.
+      - `npm run lint` (oxlint) clean; `npx oxlint` on the 5 touched files → 0 findings.
+      - `playwright test --list` static → **48 tests / 6 files** (live specs no longer collected);
+        `-c playwright.live.config.ts` → **15 tests / 2 files**.
 
 ## Evidence
 

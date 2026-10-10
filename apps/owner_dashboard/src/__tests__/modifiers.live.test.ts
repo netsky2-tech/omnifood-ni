@@ -21,7 +21,7 @@
  *      (`E2E-API Grupos <RUN>`) so it is independent of them.
  *
  * Run (from apps/owner_dashboard):
- *   npx vitest run -c vitest.integration.config.ts src/__tests__/modifiers-live.integration.test.ts
+ *   npx vitest run -c vitest.integration.config.ts src/__tests__/modifiers.live.test.ts
  *
  * Override the API base with NHILOS_LIVE_API when the backend lives
  * elsewhere (never hardcode port 3000 — other worktrees own it). Either the
@@ -49,7 +49,7 @@ const RUN = Date.now().toString().slice(-6);
 const GROUP_NAME = `E2E-API Grupos ${RUN}`;
 
 // ---------------------------------------------------------------------------
-// Helpers (plain fetch, w1.integration.test.ts style)
+// Helpers (plain fetch, w1.live.test.ts style)
 // ---------------------------------------------------------------------------
 
 interface LoginResponse {

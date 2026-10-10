@@ -1,7 +1,7 @@
 /**
  * Environment resolution for the LIVE test suites of the owner dashboard
- * (`src/__tests__/*.integration.test.ts`, `src/__tests__/w4-e2e-fiscal.test.ts`,
- * `e2e/*.live.spec.ts`, `playwright.live.config.ts`).
+ * (`src/__tests__/*.live.test.ts`, `e2e/*.live.spec.ts`,
+ * `playwright.live.config.ts`).
  *
  * Contract:
  * - **Blank means unset.** A live suite variable that is *present but empty*
