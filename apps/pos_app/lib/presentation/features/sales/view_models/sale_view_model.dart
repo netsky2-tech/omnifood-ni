@@ -1087,8 +1087,24 @@ class SaleViewModel extends ChangeNotifier {
   /// enforces inside the view model as defense-in-depth). Cashier/waiter
   /// never see the control, so a denied tap cannot be part of the flow.
   bool get canIssueCreditNote =>
-      _currentUserRole == UserRole.owner ||
-      _currentUserRole == UserRole.manager;
+      (_currentUserRole == UserRole.owner ||
+          _currentUserRole == UserRole.manager) &&
+      isCreditNoteAvailableForRegime;
+
+  /// Owner decision 2026-10-10: the credit note is **regime-conditional**.
+  ///
+  /// DT 09-2007 TERCERO 3.4 requires a credit note for a return on a day
+  /// after the invoice — but the disposición governs computerized invoicing
+  /// and its 1.9 frames the IVA break-out of the General regime; whether it
+  /// binds a CUOTA_FIJA business that does not collect IVA stayed an open
+  /// legal question (#535 Q4c). A CUOTA_FIJA business cancels the ticket
+  /// inside the shift (the void path, already same-day only) and records an
+  /// out-of-date administrative refund as a petty-cash expense, which never
+  /// touches a closed fiscal document.
+  ///
+  /// Fails closed: an unresolved regime is NOT a licence to issue.
+  bool get isCreditNoteAvailableForRegime =>
+      _companyTaxRegime?.isRegimenGeneral ?? false;
 
   bool _isSupervisorOverrideActive = false;
   bool get isSupervisorOverrideActive => _isSupervisorOverrideActive;
@@ -2636,6 +2652,19 @@ class SaleViewModel extends ChangeNotifier {
     final role = currentUser?.role;
     if (role == UserRole.cashier || role == UserRole.waiter) {
       _errorMessage = 'Acceso denegado.';
+      notifyListeners();
+      return null;
+    }
+
+    // Defense-in-depth behind the UI's visibility gate (the button is not
+    // rendered when this is false): a CUOTA_FIJA terminal must never write a
+    // credit note. The copy names the two paths that DO exist for it.
+    if (!isCreditNoteAvailableForRegime) {
+      _errorMessage =
+          'La nota de crédito no está disponible para este régimen fiscal. '
+          'Para anular, usá ANULAR FACTURA dentro del turno; si hay que '
+          'reintegrar dinero de días anteriores, registralo como egreso de '
+          'caja menor (Gasto Menor).';
       notifyListeners();
       return null;
     }

@@ -522,6 +522,10 @@ void main() {
       // nothing and stays honestly false (asserted below).
       when(mockSalesRepo.getInvoiceById(any)).thenAnswer((_) async => null);
 
+      // Round-2 P6: the credit note is regime-conditional, so this test
+      // exercises the regime where it exists.
+      viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
+
       const refundLines = [
         CreditNoteRefundLine(originInvoiceItemId: 'line-1', quantity: 0.5),
       ];
@@ -553,6 +557,57 @@ void main() {
     },
   );
 
+  group('round-2 P6: the credit note is regime-conditional', () {
+    test('a CUOTA_FIJA terminal never makes it available', () {
+      viewModel.setCompanyTaxRegime(TaxRegime.cuotaFija);
+      expect(viewModel.isCreditNoteAvailableForRegime, isFalse);
+    });
+
+    test('an unresolved regime fails closed', () {
+      viewModel.setCompanyTaxRegime(null);
+      expect(
+        viewModel.isCreditNoteAvailableForRegime,
+        isFalse,
+        reason: 'an unknown regime is not a licence to issue a document that '
+            'DT 09-2007 may not authorise for this business',
+      );
+    });
+
+    test('a REGIMEN_GENERAL terminal keeps it', () {
+      viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
+      expect(viewModel.isCreditNoteAvailableForRegime, isTrue);
+    });
+
+    test('processReturn refuses on CUOTA_FIJA and names the paths that exist',
+        () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'owner-1',
+          name: 'Owner',
+          role: UserRole.owner,
+          isActive: true,
+        ),
+      );
+      viewModel.setCompanyTaxRegime(TaxRegime.cuotaFija);
+
+      final registered = await viewModel.processReturn('F001-000123', 'Error');
+
+      expect(registered, isNull);
+      expect(viewModel.errorMessage, contains('régimen fiscal'));
+      expect(viewModel.errorMessage, contains('ANULAR FACTURA'));
+      expect(viewModel.errorMessage, contains('caja menor'));
+      verifyNever(mockSalesRepo.createCreditNote(
+        originalInvoiceId: anyNamed('originalInvoiceId'),
+        reason: anyNamed('reason'),
+        authorizedByUserId: anyNamed('authorizedByUserId'),
+        authorizedByRole: anyNamed('authorizedByRole'),
+        refundReasonPolicy: anyNamed('refundReasonPolicy'),
+        lines: anyNamed('lines'),
+        terminalId: anyNamed('terminalId'),
+      ));
+    });
+  });
+
   test('processReturn reports failure when the invoice is not found', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(
@@ -565,6 +620,9 @@ void main() {
     when(mockSalesRepo.getInvoiceByNumber('F001-000404')).thenAnswer(
       (_) async => null,
     );
+    // Round-2 P6: this test is about the missing-invoice gate, so it needs a
+    // regime where the credit note exists at all.
+    viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
 
     final registered = await viewModel.processReturn('F001-000404', 'Error');
 
@@ -729,6 +787,11 @@ void main() {
       mockPaymentDao = MockPaymentDao();
       when(mockDb.invoiceItemDao).thenReturn(mockItemDao);
       when(mockDb.paymentDao).thenReturn(mockPaymentDao);
+      // Round-2 P6: the credit note is regime-conditional, and these tests
+      // cover REGIMEN_GENERAL — the only regime where the note exists.
+      fakeLocalConfigDao.saveConfig(
+        LocalConfigEntity(key: 'tax_regime', value: 'REGIMEN_GENERAL'),
+      );
     });
 
     test(
