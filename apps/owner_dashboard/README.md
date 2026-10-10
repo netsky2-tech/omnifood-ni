@@ -14,6 +14,26 @@ suffix in `src/__tests__` — a `*.live.test.ts` file needs the real backend on
 | Playwright static (browser, mocked API) | `e2e/*.spec.ts`, `*.live.spec.ts` ignored by `testIgnore` | `npm run test:e2e` | No |
 | Playwright live (browser + real backend) | `e2e/*.live.spec.ts` | `npm run test:e2e:live` (screenshots: `npm run test:e2e:capture`) | Yes — :3300 + dev server on :5174 |
 
+### Manual capture (`e2e/manual-screenshots.live.spec.ts`, issue #839)
+
+The operation-manual screenshots are captured with:
+
+```bash
+npm run test:e2e:capture
+```
+
+This path runs against the REAL `soho` tenant — **not** the
+`soho-test-fixture` tenant used by the automated live suites: the walkthrough
+data it navigates by (`CAFÉ CALIENTE`, `Americano 12oz`, exactly 3 active
+modifier groups) only exists in `soho`. Environment variables:
+
+| Variable | Role |
+| --- | --- |
+| `NHILOS_MANUAL_CAPTURE` | Opt-in gate, must be `1` (own gate, not `NHILOS_LIVE_E2E`) |
+| `MANUAL_E2E_BASE_URL` | Optional web origin; default `http://soho.localhost:5174`. The hostname must be **exactly** `soho.localhost` (any port) or the run aborts before navigation — `soho.evil.com` and `soho.localhost.evil.com` carry the tenant label but name another machine, so the check is not a label prefix. Redirecting the suite elsewhere means editing `EXPECTED_TENANT_LABEL` in the spec deliberately |
+| `MANUAL_E2E_EMAIL` | Optional login email; default `admin@soho.com` |
+| `MANUAL_E2E_PASS` | **Required** — the tenant credential, read from the environment only; unset/blank fails before the first navigation |
+
 **No network suite runs in `npm test`**: the default unit run excludes every
 `*.live.test.ts` file (see `vitest.config.ts`), and the guard
 `src/__tests__/suite-layout.test.ts` fails if a live suite is added without

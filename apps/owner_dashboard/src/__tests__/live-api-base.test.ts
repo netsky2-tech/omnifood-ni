@@ -4,10 +4,12 @@ import {
   LIVE_WEB_BASE_DEFAULT,
   LiveApiConfigError,
   envValue,
+  requiredLiveEnv,
   resolveLiveApiBase,
   resolveLiveApiOrigin,
   resolveLiveEnv,
   resolveLiveWebBase,
+  resolveLiveWebTarget,
 } from "@/lib/live-api-base";
 
 const LIVE_API_ENV = "NHILOS_LIVE_API" as const;
@@ -167,6 +169,56 @@ describe("absolute-URL guard (review advisory R3-URL-CONSTRUCT-THROWS)", () => {
   });
 });
 
+describe("requiredLiveEnv (issue #839: credentials never carry a committed default)", () => {
+  it("returns the trimmed value of a populated variable", () => {
+    vi.stubEnv("MANUAL_E2E_PASS", "  real-password-123 ");
+    expect(requiredLiveEnv("MANUAL_E2E_PASS")).toBe("real-password-123");
+  });
+
+  it("throws naming the variable when it is unset", () => {
+    vi.stubEnv("MANUAL_E2E_PASS", undefined);
+    let caught: unknown;
+    try {
+      requiredLiveEnv("MANUAL_E2E_PASS");
+      expect.unreachable("expected LiveApiConfigError");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(LiveApiConfigError);
+    expect((caught as Error).message).toContain("MANUAL_E2E_PASS");
+  });
+
+  it("throws when the variable is present but empty", () => {
+    vi.stubEnv("MANUAL_E2E_PASS", "");
+    expect(() => requiredLiveEnv("MANUAL_E2E_PASS")).toThrow(LiveApiConfigError);
+    expect(() => requiredLiveEnv("MANUAL_E2E_PASS")).toThrow(/MANUAL_E2E_PASS/);
+  });
+
+  it("throws when the variable is whitespace only", () => {
+    vi.stubEnv("MANUAL_E2E_PASS", "   \t ");
+    expect(() => requiredLiveEnv("MANUAL_E2E_PASS")).toThrow(LiveApiConfigError);
+    expect(() => requiredLiveEnv("MANUAL_E2E_PASS")).toThrow(/MANUAL_E2E_PASS/);
+  });
+
+  it("never echoes the value in the thrown message", () => {
+    // The marker sits in the environment while a DIFFERENT required variable
+    // fails: a broken implementation that echoed values (or dumped env) would
+    // leak it. The message names only the failing variable.
+    vi.stubEnv("MANUAL_E2E_PASS", "marker-not-a-credential");
+    let caught: unknown;
+    try {
+      requiredLiveEnv("MANUAL_E2E_EMAIL");
+      expect.unreachable("expected LiveApiConfigError");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(LiveApiConfigError);
+    const message = (caught as Error).message;
+    expect(message).toContain("MANUAL_E2E_EMAIL");
+    expect(message).not.toContain("marker-not-a-credential");
+  });
+});
+
 describe("resolveLiveApiOrigin", () => {
   it("returns the origin of the canonical default (dev-server env must not duplicate the port)", () => {
     vi.stubEnv(LIVE_API_ENV, undefined);
@@ -176,5 +228,93 @@ describe("resolveLiveApiOrigin", () => {
   it("returns the origin of an overridden base", () => {
     vi.stubEnv(LIVE_API_ENV, "http://127.0.0.1:3301/api");
     expect(resolveLiveApiOrigin()).toBe("http://127.0.0.1:3301");
+  });
+});
+
+describe("resolveLiveWebTarget (issue #839 tenant binding, verified behavior)", () => {
+  const NAME = "MANUAL_E2E_BASE_URL";
+  const FALLBACK = "http://soho.localhost:5174";
+  const TENANT = "soho";
+
+  const target = () => resolveLiveWebTarget(NAME, FALLBACK, TENANT);
+
+  it("uses the fallback and reports its tenant when the variable is unset", () => {
+    expect(target()).toEqual({
+      origin: "http://soho.localhost:5174",
+      hostname: "soho.localhost",
+      tenantLabel: "soho",
+    });
+  });
+
+  it("treats a blank value as unset instead of navigating to an empty origin", () => {
+    vi.stubEnv(NAME, "   ");
+    expect(target().origin).toBe("http://soho.localhost:5174");
+  });
+
+  it("accepts an explicit value that matches the expected tenant host", () => {
+    vi.stubEnv(NAME, "http://soho.localhost:3000");
+    expect(target().origin).toBe("http://soho.localhost:3000");
+  });
+
+  it("rejects a host that only LOOKS like the tenant (soho.evil.com)", () => {
+    // First-label matching alone would let this through, and the capture would
+    // run against an unrelated deployment while believing it was local.
+    vi.stubEnv(NAME, "http://soho.evil.com:5174");
+    expect(target).toThrow(LiveApiConfigError);
+    expect(target).toThrow(/MANUAL_E2E_BASE_URL/);
+  });
+
+  it("rejects a suffix-spoofed localhost host (soho.localhost.evil.com)", () => {
+    vi.stubEnv(NAME, "http://soho.localhost.evil.com:5174");
+    expect(target).toThrow(LiveApiConfigError);
+  });
+
+  it("rejects another tenant host rather than silently capturing there", () => {
+    vi.stubEnv(NAME, "http://soho-test-fixture.localhost:5174");
+    expect(target).toThrow(/soho\.localhost/);
+  });
+
+  it("rejects an unparseable value with LiveApiConfigError, not a raw TypeError", () => {
+    vi.stubEnv(NAME, "not a url");
+    expect(target).toThrow(LiveApiConfigError);
+  });
+
+  it("rejects a scheme-less host:port value", () => {
+    vi.stubEnv(NAME, "soho.localhost:5174");
+    expect(target).toThrow(LiveApiConfigError);
+  });
+
+  it("rejects a non-http protocol", () => {
+    vi.stubEnv(NAME, "file:///etc/passwd");
+    expect(target).toThrow(LiveApiConfigError);
+  });
+
+  it("rejects embedded credentials and never echoes them", () => {
+    // Assembled through the URL API instead of written as a source literal: a
+    // secret scanner matches the shape itself, and it is right to — this repo
+    // has no business carrying anything that looks like a live credential, even
+    // as a test fixture. Behaviour is identical: userinfo before the host.
+    const PASS = "placeholder-not-a-credential";
+    const withUserinfo = new URL(FALLBACK);
+    withUserinfo.username = "owner";
+    withUserinfo.password = PASS;
+    vi.stubEnv(NAME, withUserinfo.href);
+    let caught: unknown;
+    try {
+      target();
+      expect.unreachable("expected LiveApiConfigError");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(LiveApiConfigError);
+    const message = (caught as Error).message;
+    expect(message).toContain(NAME);
+    expect(message).not.toContain(PASS);
+    expect(message).not.toContain(withUserinfo.href);
+  });
+
+  it("reports the tenant label derived from an accepted hostname", () => {
+    vi.stubEnv(NAME, "https://soho.localhost");
+    expect(target().tenantLabel).toBe("soho");
   });
 });
