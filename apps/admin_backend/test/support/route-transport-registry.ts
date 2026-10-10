@@ -290,7 +290,10 @@ export function findUnregisteredSourceControllers(
   );
   const findings: UnregisteredSourceController[] = [];
   for (const sourceClass of scanSourceControllerClasses(srcDir)) {
-    if (served.has(sourceClass.controller) && declared.has(sourceClass.controller))
+    if (
+      served.has(sourceClass.controller) &&
+      declared.has(sourceClass.controller)
+    )
       continue;
     findings.push({
       ...sourceClass,
@@ -459,6 +462,13 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
     transport: 'public',
     reason:
       'device sync token exchange (POS DeviceSyncExchangePort); authenticated by the renewal credential in the body, no human session',
+  },
+  // B17-02 (issue #832): owner-facing terminal credential revocation under a
+  // human session JWT with OWNER + device_sync:revoke; not the device transport.
+  {
+    controller: 'DeviceSyncRevocationController',
+    transport: 'human',
+    reason: 'Owner-facing terminal credential revocation (B17-02, issue #832)',
   },
   // OTA release discovery (PR #767): the POS updater asks for the latest
   // manifest possibly before any credential exists, so no session guard can

@@ -528,6 +528,10 @@ export class DeviceSyncCredentialService {
       throw new BadRequestException('Authorized tenant context is required');
     }
 
+    if (!reason?.trim()) {
+      throw new BadRequestException('Revocation reason is required');
+    }
+
     return await this.dataSource.transaction(async (manager) => {
       // 1. Enforce PostgreSQL RLS tenant context inside transaction before repository queries
       await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
@@ -545,6 +549,14 @@ export class DeviceSyncCredentialService {
         throw new NotFoundException(
           `Credential '${credentialId}' not found for tenant`,
         );
+      }
+
+      if (credential.status === DeviceSyncCredentialStatus.REVOKED) {
+        throw new ConflictException('Credential is already revoked');
+      }
+
+      if (credential.status === DeviceSyncCredentialStatus.RETIRED) {
+        throw new ConflictException('Retired credential cannot be revoked');
       }
 
       credential.status = DeviceSyncCredentialStatus.REVOKED;

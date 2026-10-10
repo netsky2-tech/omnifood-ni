@@ -716,6 +716,82 @@ describe('DeviceSyncCredentialService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it.each([undefined, '', '   ', '\t\n'])(
+      'rejects revocation when reason is empty or whitespace (%p)',
+      async (badReason) => {
+        await expect(
+          service.revokeCredential('tenant-100', 'cred-uuid-1', badReason),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+          service.revokeCredential('tenant-100', 'cred-uuid-1', badReason),
+        ).rejects.toThrow('Revocation reason is required');
+
+        // No transaction, lookup, save, or event may occur for an invalid reason
+        expect(dataSource.transaction).not.toHaveBeenCalled();
+        expect(credentialRepo.findOne).not.toHaveBeenCalled();
+        expect(credentialRepo.save).not.toHaveBeenCalled();
+        expect(eventRepo.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects revocation with ConflictException when credential is already REVOKED, without saving or emitting an event', async () => {
+      const revokedCred = {
+        id: 'cred-uuid-1',
+        tenantId: 'tenant-100',
+        status: DeviceSyncCredentialStatus.REVOKED,
+        revokedAt: new Date('2026-09-02T09:00:00.000Z'),
+        revocationReason: 'Device decommissioned',
+      };
+      credentialRepo.findOne.mockResolvedValue(revokedCred);
+
+      await expect(
+        service.revokeCredential(
+          'tenant-100',
+          'cred-uuid-1',
+          'Duplicate revoke request',
+        ),
+      ).rejects.toThrow(ConflictException);
+      await expect(
+        service.revokeCredential(
+          'tenant-100',
+          'cred-uuid-1',
+          'Duplicate revoke request',
+        ),
+      ).rejects.toThrow('Credential is already revoked');
+
+      expect(credentialRepo.save).not.toHaveBeenCalled();
+      expect(eventRepo.create).not.toHaveBeenCalled();
+      expect(eventRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects revocation with ConflictException when credential is RETIRED', async () => {
+      const retiredCred = {
+        id: 'cred-uuid-1',
+        tenantId: 'tenant-100',
+        status: DeviceSyncCredentialStatus.RETIRED,
+        rotatedAt: new Date('2026-09-02T09:00:00.000Z'),
+      };
+      credentialRepo.findOne.mockResolvedValue(retiredCred);
+
+      await expect(
+        service.revokeCredential(
+          'tenant-100',
+          'cred-uuid-1',
+          'Revoke after retirement',
+        ),
+      ).rejects.toThrow(ConflictException);
+      await expect(
+        service.revokeCredential(
+          'tenant-100',
+          'cred-uuid-1',
+          'Revoke after retirement',
+        ),
+      ).rejects.toThrow('Retired credential cannot be revoked');
+
+      expect(credentialRepo.save).not.toHaveBeenCalled();
+      expect(eventRepo.save).not.toHaveBeenCalled();
+    });
+
     it('requires tenant context and sets RLS before lookup when retiring credential', async () => {
       const cred = {
         id: 'cred-uuid-1',
