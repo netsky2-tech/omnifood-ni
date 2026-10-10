@@ -2,7 +2,8 @@
 
 - **Branch / Worktree:** `feat/fleet-terminal-registry` @ `/home/octavio_morales/omnifood-ni-fleet-terminal` (off `main` 2b462961)
 - **Authority:** Issue #832, `docs/plans/identity/batch_17_fleet_terminal_registry_and_owner_revocation.md`, DEC-17.1 (derived read model), DEC-17.2 (OWNER-only revoke), DEC-17.3 (battery dropped).
-- **Status:** In Progress — B17-01
+- **Commit Evidence:** `595e41b23dc43897236df3bc4bf3b256c890366f` (`feat(identity): implement tenant terminal read model (B17-01)`)
+- **Status:** COMPLETED — B17-01
 
 ## Context & Objectives
 
