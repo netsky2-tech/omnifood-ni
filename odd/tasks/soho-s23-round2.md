@@ -38,45 +38,73 @@ Cada uno con ruta, esperado y slot de evidencia. **El usuario maneja la UI; el a
 - **El dato que falta desde §17.1 (lo más importante de este ítem):** con **dos** capuccinos, ¿qué muestra la fila "Promociones"? El motor calcula **C$150** (2x1 125 + 10% 25) pero en el aparato se leyó **C$125**. **Captura de la fila con dos unidades.**
 - **Hallazgo abierto (§17.2):** `comboPackage` es un no-op silencioso en el motor. Confirmar con un combo configurado, o dejarlo declarado.
 
-### 3 · Historial del día con su total
+### 3 · Historial del día con su total — **CERRADO documentando la brecha (2026-10-10)**
 - **Ruta:** ventas del día → abrir el detalle de una venta **con extras y descuento**.
-- **Esperado (hoy NO se cumple, §17.4):** el detalle debería ser espejo del carrito. Lo que hay: **los extras no aparecen** (`toItemDomain` sin modifiers en `sales_history_view_model.dart:342`), **no hay filas de descuento/promoción/propina**, y la cifra por línea es el **total fiscal con impuesto** al lado del precio unitario del carrito.
-- **Evidencia:** captura del detalle + captura del carrito de la misma venta, lado a lado. El ítem se cierra **documentando la brecha**, o se arregla y se re-valida.
+- **Resultado medido (la brecha se confirmó tal cual):** el detalle **no es espejo del carrito**.
+  - **Factura 41** → `Cappuccino 12oz` · `1 x C$ 125.00` · trailing `C$ 13.75`; Subtotal `13.75`; TOTAL `13.75`. **Faltan:** el extra `Leche: Entera` y **los C$ 111.25 de descuento** (`loyalty 80` + `promotion 31.25`).
+  - **Factura 36** → `Cappuccino 12oz` · `2 x C$ 125.00` · trailing `C$ 40.00`; Subtotal `40.00`; TOTAL `40.00`. **Faltan:** los extras (`Extra shot` C$15 ×4 = C$60 + `Leche: Entera`) y **los C$ 270 de descuento** (`manual 40 + loyalty 80 + promotion 150`); el `2 × 125 = 250` contra `40.00` queda irreconciliable en pantalla.
+- **Causa (ya identificada en §17.4):** `sales_history_view_model.dart:342` arma los ítems con `toItemDomain` **sin modifiers**; el detalle (`sales_history_view.dart:681-724`) pinta `productName` + `"qty x unitPrice"` + `trailing total` y un resumen con **sólo Subtotal / IVA / TOTAL** (sin filas de descuento, promoción ni propina). Nota: para este tenant `CUOTA_FIJA` el IVA es 0, así que la inflación fiscal por línea del hallazgo original no se reproduce; sí el salto unit-price vs total.
+- **Evidencia:** capturas `/tmp/s23-shots/item3-fac41-detalle.png` y `/tmp/s23-shots/item3-fac36-detalle.png` + la verdad en nube de la consulta.
+- **Cierre:** se documenta la brecha (arreglarla toca el POS → APK nuevo), para el batch de fixes con D-2 y D-3.
 
-### 4 · Bitácora del dueño con lo que se hizo en el mostrador
-- **Ruta:** en el POS, hacer una **anulación** (y un descuento) → en el panel web, abrir la bitácora.
-- **Esperado:** el registro aparece con **actor, entidad y acción**, y la cadena sigue encadenada por hash sin huecos.
-- **Evidencia:** captura del panel + la cadena de auditoría del terminal en la nube (en §17 se verificó 26→27→28→29 sin huecos).
+### 4 · Bitácora del dueño con lo que se hizo en el mostrador — **CERRADO (2026-10-10), con 4 hallazgos**
+- **Ruta:** en el POS, hacer una **anulación** → en el panel web, **Administración → Auditoría → chip "Bitácora del mostrador (POS)"**.
+- **Lo que SÍ funcionó:** factura 40 anulada (`is_canceled=t`, motivo `ERROR_DE_CAPTURA`); `audit_logs` S23TEST **seq 38 `SALE_VOIDED`** (13:26:19), actor Maxwell Orozco; encadenamiento 37→38 exacto (`prev_hash`), secuencia **1..38 sin huecos**, 0 alertas de integridad. El panel muestra la fila (la vista por defecto "Registro de la plataforma" sólo trae `change_log` de administración; hay que tocar el chip del mostrador).
+- **F-4a (panel web):** la columna **entidad sale "—"**. `audit_logs.target_type`/`target_id` son NULL en todas las filas del POS; la entidad vive sólo en `metadata.invoice_id`, y `/operations/audit/ledger` excluye el metadata a propósito. El dueño no ve QUÉ se anuló.
+- **F-4b (POS, serio):** el listado local de auditoría **oculta los eventos de las últimas ~6 h** (UTC−6). `_buildAuditEntity` (`audit_repository_impl.dart:113`) guarda el timestamp en **UTC con 'Z'** y `getLocalLogs` (`:601-604`) compara con límites **locales sin 'Z'** como texto (`audit_log_dao.dart`) → `'19:26…Z' > '13:35…'` descarta la fila. Verificado: la anulación de hoy no aparece en el POS; la del 02/10 sí.
+- **F-4c (POS, UX del diálogo):** `Código: SALE_VOIDED` crudo, **uuid pelado** en `Factura (ID)`, `CLIENTE_DESISTE` duplicado y crudo en Motivo/Código del motivo, toggle `Ver crudo`.
+- **F-4d (secundario):** device `pos-local-082cc471…` con `sequence_no` 1/2/3 duplicados en la nube (posible doble entrega en un terminal viejo).
+- **Fecha:** el `timestamp` es el de la **anulación**, no el de la factura (13 creada 21:22:20, anulada 21:23:22).
+- **Evidencia:** capturas del panel + consultas a `audit_logs`/`invoices` + log del backend (`POST /api/identity/audit`).
 
-### 5 · QR/transferencia con su efecto en el Corte Z — **bloqueado, se cierra declarando**
-- **Estado real:** el pago QR/transferencia **no existe como método en el POS del piloto**. El bloque §7 lo admite explícitamente: *"Conciliación de QR/transferencia **o declaración explícita de su ausencia**"*.
-- **Qué hacer en esta ronda:** (a) la **declaración explícita** de que el piloto no lo ofrece (la firma el usuario, es decisión de producto); (b) validar en su lugar el camino que **sí** existe y sí es dinero: la **conciliación de vouchers de tarjeta** y su efecto en el Corte Z. F-1 (la ruta 404) y F-3 (el user id vacío) ya están arreglados y verificados en código, pero **el circuito completo nunca se vio en el aparato con los dos fixes**.
-- **Evidencia:** captura del Corte Z tras conciliar + `POST /api/sales/payment-reconciliations/sync` respondiendo 2xx en `logcat` (no 404 ni 400).
+### 5 · QR/transferencia con su efecto en el Corte Z — **CERRADO (2026-10-10)**
+- **Estado real (CORREGIDO 2026-10-10 tras explorar el código y la base):** el plan partía de que QR/transferencia no existía; **es falso**. El POS ofrece el método **"QR / Transfer"** (`multi_currency_checkout_dialog.dart:1101` + `_buildQrPanel()` en `:1450`) con campo "Referencia de Transferencia (Opcional)" que se persiste en `invoice_payments.voucher_code` (`:264`), y ya hay una venta `method='qr'` real (factura 20, C$40, `CONCILIADO`). **Decisión del dueño: QR no se usa, pero Transferencia SÍ, y la referencia de la transacción es el mecanismo de seguimiento.** → La "declaración explícita de ausencia" **no aplica** y se elimina: en su lugar se **valida el camino de transferencia** en el aparato.
+- **Qué se hizo:** (a) **transferencia validada** — factura 43 (C$93.75, `method='qr'`, **`voucher_code='REF-RONDA2'`**, `CONCILIADO`): la referencia de la transacción es el mecanismo de seguimiento y el QR no entra en el gate de vouchers; (b) **conciliación de tarjeta F-1/F-3 validada en campo** — factura 42 con voucher `PENDIENTE` → el Corte Z **bloquea** ("Existen 1 vouchers…") → conciliada con `445566` → `CONCILIADO` + `reconciled_by_user_id` = Maxwell Orozco, y `POST /api/sales/payment-reconciliations/sync` **2xx desde el aparato**; (c) **Corte Z-0009** cerró tras conciliar: arqueo NIO 500/2541.25/2540 → **varianza −1.25**, tarjeta y transferencia fuera del efectivo, y el turno quedó `CLOSED`/`z_report_sequence=9` en la nube.
+- **Hallazgos:** **F-5a** copy "Existen 1 vouchers"; **F-5b** el Corte Z imprime **"Cajero: Operador no disponible"** aunque el turno tiene `cashier_name='Maxwell Orozco'`; **F-5c** el push de la conciliación sale en el ciclo de sync de ~5 min (13:58 → 14:00:45); **F-5d** la nube conserva 3 vouchers `PENDIENTE` viejos (facturas 3, 4 anuladas y 11) mientras el POS local contaba 0.
+- **Evidencia:** `/tmp/s23-shots/item5-bloqueo-cortez.png`, `item5-conciliado.png`, `item5-transferencia.png`, `item5-caja-cerrada.png` + `invoice_payments`/`cash_shift_sessions` + log del backend.
 
-### 6 · Comanda impresa — **bloqueado por hardware**
+### 6 · Comanda impresa — **DECLARADO: hueco de hardware + defecto F-6 (2026-10-10)**
 - **Estado real:** el driver de la impresora es explícitamente lo **no** probado (§16/§17), y el S23 no es un Sunmi (el adapter cae al fallback). Lo que sí está cubierto es el **texto** de la comanda (aserción sobre el nombre del extra en el camino de impresión).
-- **Qué hacer:** declarar el hueco de hardware y no contar este ítem como cerrado. Necesita una impresora real (o la tablet del cliente en la próxima visita).
+- **Declaración (no se cierra):** la comanda **impresa** no puede darse por validada en el piloto. Requiere impresora real (o la tablet del cliente en la próxima visita); sin fecha comprometida.
+- **F-6 (honestidad, medido):** con el driver **"Simulador"** seleccionado, la pantalla dice **"Impresora Conectada y Lista — El cabezal térmico está disponible y cuenta con papel"** (verde). Falso: `PrinterDriverType.mock` → `MockPrinterAdapter` (`printer_resolver.dart:22`), que siempre devuelve `PrinterStatus.ready` (`mock_printer_adapter.dart:14,43`) y `_buildStatusCard` lo traduce a ese copy físico. El propio código ya sabe que el mock "reports false successes" (por eso `escPosNetwork` va a `UnavailablePrinterAdapter`, `:25-31`); falta el mismo criterio para el driver `mock`. Viola NHILOS §0.1 (nunca certeza falsa).
+- **Evidencia:** `/tmp/s23-shots/item6-hardware.png`.
 
-### 7 · Lealtad — **re-verificar el arreglo en el aparato (el circuito que quedó abierto)**
-- **Ruta:** cliente con puntos (hay uno de prueba en el rig) → seleccionar en el carrito → la **tarjeta de lealtad** y el **CTA de recompensa** deben aparecer → elegir una recompensa de descuento → aplicar → cobrar.
-- **Esperado:** el carrito **cambia**: el beneficio entra como descuento y la línea lo atribuye a `loyalty`. El tope **se rechaza con mensaje**, no se recorta.
-- **Por qué este ítem existe:** §18.1 lo dice textual — *"No probado: el render en el aparato con el arreglo (necesita APK nuevo)"*. Los tres defectos se descubrieron **en el aparato**, pero el arreglo sólo se verificó en tests. Es el circuito que cierra la tesis del bloque.
-- **Evidencia:** capturas de la tarjeta + el carrito antes/después + `discount_origin` con `loyalty` en la nube.
-- **Brecha declarada que se vuelve a medir:** una recompensa `FREE_PRODUCT` registra la selección y cobra los puntos, pero **el carrito aplica 0**. El operador ve un mensaje. Sigue necesitando diseño.
+### 7 · Lealtad — **CERRADO (2026-10-10, S23 `R5CWB2LQJDJ`)**
+- **Fixture aplicado:** la recompensa `Café de prueba` se editó en el panel (`/loyalty`) bajando `cost_units` 800 → **500** (beneficio `{"amountNio":80}` intacto); el delta `loyaltyprograms` bajó al POS sin reiniciar. Saldo real previo **704** (la nube tenía las 4 transacciones correctas pero la proyección stale, ver D-1).
+- **Escenario A (aplicar) — PASS.** **Factura 41** (13:04:45): `Cappuccino 12oz ×1`, `unit_price 125.00`, `discount 111.25`, `discount_origin = {"loyalty": 80, "promotion": 31.25}`, `total 13.75`. Identidad: `125 − 31.25 − 80 = 13.75`. El CTA **"Aplicar Café de prueba"** apareció con el costo corregido y el carrito cambió con la línea atribuida a `loyalty`.
+- **Ledger de puntos:** `redeem −500` (origin POS) + `earn +1` (POS) a las 13:04:45.9x → el canje se registró y los puntos se cobraron.
+- **Escenario B (tope) — PASS funcional + defecto UX (D-3).** Con carrito de C$40 el descuento de C$80 **no se aplica** (se rechaza, no se recorta). Pero el rechazo es **invisible**: la alerta roja se renderiza debajo del carrito y fuera de la vista; el operador tiene que minimizar el carrito para verla.
+- **Defectos abiertos (batch de fixes):**
+  - **D-1 (nube):** `customer_loyalty_account_projection.balance_units` **stale** en 1500 con `recomputed_at = 2026-10-09 18:53:11`, **reproducido** tras el segundo redeem/earn. El push del POS por `POST /loyalty/point-transactions/sync` no recomputa la proyección (y `balance_after` queda en 0.00).
+  - **D-2 (POS):** `clearCart()` (`sale_view_model.dart:1753`) no resetea `_selectedCustomer`; vaciar el carrito a mano deja el cliente puesto para la venta siguiente.
+  - **D-3 (POS/UX):** el mensaje de rechazo del tope de recompensa queda fuera de la vista del carrito.
+- **Brecha declarada que sigue:** una recompensa `FREE_PRODUCT` registra la selección y cobra los puntos, pero **el carrito aplica 0** (mensaje directivo, sin no-op silencioso). La única recompensa del rig es `DISCOUNT_AMOUNT`, así que no se pudo ejercitar.
 
-### 8 · Fase 8.3 — la nota de crédito revierte totales y respeta la cadena fiscal
+### 8 · Fase 8.3 — la nota de crédito revierte totales y respeta la cadena fiscal — **CERRADO (2026-10-10), con 5 hallazgos**
 - **Ruta:** venta → anular con nota de crédito (gate owner/manager) → verificar totales y numeración.
 - **Esperado:** los totales revierten y la cadena fiscal se respeta.
-- **Por qué se puede correr ahora:** el ítem quedó sin ejecutar por la decisión de **no hacer más ventas de prueba en el equipo entregado** — y el S23 **no es** el equipo entregado. Sigue en pie la decisión DEC-1 sobre la numeración (el POS usa la serie de ventas y la nube no ve las NC del piloto): el ítem se corre y se documenta **con esa salvedad explícita**.
+- **Resultado medido:** factura 41 → **EMITIR NOTA DE CRÉDITO** (gate owner/manager) → NC **factura 44** (`type='creditNote'`, `RETURN: Cappuccino 12oz`, **TOTAL −13.75**, `related_invoice_id`=41). Numeración de la **serie de ventas** (44) → **DEC-1 confirmado**; `shiftId=null` honesto (caja cerrada). El segundo intento **se bloquea** (`_assertRefundWithinOriginalQuantity`) → **sin reembolso duplicado**. Auditoría: `CREDIT_NOTE_CREATED` = **seq 41**, y la nube **no** ve el documento (DEC-1).
+- **F-8a:** la factura **original no cambia de estado**; en la lista la 40 (anulada) muestra badge **ANULADA** pero la **41 (acreditada) no muestra nada** y la 44 (NC) tampoco tiene etiqueta. El detalle de la 41 sigue ofreciendo NC y **ANULAR FACTURA**.
+- **F-8b:** el rechazo del duplicado muestra una **excepción cruda en inglés** al operador: *"Error al procesar devolución. Bad state: Credit note cumulative refund exceeds original line quantity"*.
+- **F-8c:** el detalle de la NC repite el §17.4: **Subtotal −125.00 vs TOTAL −13.75** (descuento invisible).
+- **F-8d (fiscal):** el encabezado del día queda **Subtotal C$5414.75 / Total C$5526.00 con IVA 0** → no reconcilia; la diferencia es **C$111.25** = el descuento de la NC. Causa: la NC guarda `subtotal` **bruto** y la factura original **neto**. Rompe la identidad del resumen diario.
+- **F-8e:** la nube recibe el **evento** `CREDIT_NOTE_CREATED` pero no el **documento**.
+- **Evidencia:** `item8-nc.png`, `item8-historial-nc.png`, `item8-historial-totales.png` + `invoices`/`audit_logs` en la nube.
 
 ### 9 · Los arreglos de esta sesión, en el aparato
-- **§18.2 la etiqueta del cobro:** cuenta con **centavos** (C$ 202.50) → el chip debe decir `C$ 202.50` (antes `C$ 203`) y el campo quedar con el mismo número. **Lo más rápido de verificar y lo más caro si se equivoca: es camino de dinero.**
-- **§18.3 el tenant de lealtad:** ya cubierto por el ítem 7 (si la tarjeta aparece, el tenant se resolvió).
-- **Los `noValidate` del dashboard:** se verifican **en el navegador**, no en el aparato (formularios web). Cierre separado, sin device.
+- **§18.3 el tenant de lealtad — CUBIERTO por el ítem 7 ✅** (la tarjeta de lealtad apareció: el tenant se resolvió desde el binding del terminal).
+- **Los `noValidate` del dashboard — VERIFICADO 7/7 ✅ (2026-10-10, navegador en `:5173`).** Campos obligatorios vacíos + Enter en cada formulario → aparece el error propio de la app en español y **ningún** globito nativo del navegador; el submit válido sigue funcionando. Formularios: Login · Perfil del Negocio (`fiscal-setup-form`) · Promoción · Grupo de modificadores · Programa/Recompensa de lealtad · Perfil de lealtad del cliente · Revocar dispositivo.
+- **§18.2 la etiqueta del cobro — NO capturada en esta sesión.** El APK de la ronda **sí** incluye el arreglo (su base `006d45f6` ya trae #854), y los cobros de la ronda con centavos fueron exactos en base (factura 41 = C$13.75; 42/43 = C$93.75, con el `discount` y el `discount_origin` cerrando al centavo), pero el **texto del chip** del cobro no se capturó como evidencia. Queda pendiente de captura; requiere un terminal con la activación completa (ver T6).
 
 ### 10 · T5 y T6 de la ronda anterior (`soho-s23-device-validation.md`)
-- **T5 (#79) copia ANULADO con gate y resultado honesto:** auto-print **apagado** → anular → el mensaje **no** debe decir "no se pudo imprimir". Auto-print **prendido sin impresora** → debe decir anulación OK **+ motivo** del fallo de impresión. **Invariante:** la anulación fiscal queda hecha en los dos casos.
-- **T6 (#78) `pos_build` real en el handshake:** terminal nuevo apuntando al backend local → linking code → activación → primera venta → claim. **Esperado:** `onboarding_activation_attempts.pos_build = 1.1.0+11025` (el versionCode real del APK de esta ronda), no NULL ni `1.0.0+1`; y **write-once** (un segundo claim no lo pisa).
+- **T5 (#79) copia ANULADO con gate y resultado honesto — PASS en las dos rutas (2026-10-10):**
+  - **Ruta A (auto-print OFF):** factura **39** → mensaje *"Factura anulada. Comprobante ANULADO no impreso: la impresión automática está desactivada."* → **no** dice "no se pudo imprimir"; `is_canceled=t` (`TICKET_DUPLICADO`) y audit **seq 42**.
+  - **Ruta B (auto-print ON, driver Q80/iPos sin hardware):** factura **42** → rama `failed` con motivo (*"No se pudo imprimir el comprobante ANULADO…"*), **no** un falso "se imprimió"; `is_canceled=t` y audit **seq 43**. (Predicción previa del agente —que el fallback simularía éxito— **refutada**: el camino de impresión es honesto; lo que miente es la *tarjeta de estado*, ver F-6.)
+  - **Nota de diseño (correcta, no defecto):** anular una factura de **día anterior** se rechaza categóricamente con *"La anulación de días anteriores se realiza por el flujo administrativo."* (`void_decision.dart:46`, `deniedCrossDay`), para todo actor.
+- **T6 (#78) `pos_build` real en el handshake — BLOQUEADO en el S23 (no verificado en aparato):** la vinculación y la creación del intento funcionaron, pero la **Fase 2 · venta de verificación** falla porque el terminal nuevo no tiene las claves locales `commercial_exchange_rate` / `bcn_official_exchange_rate` (`activation_controlled_sale_runner.dart:301-313`) y todavía no tiene credencial de sync (círculo). Hallazgos **F-10a** (el banner dice "Revise la conexión" para fallos que no son de conexión), **F-10b** (3 códigos sin mapear en `FriendlyError`), **F-10c** (el mensaje manda a "Perfil del Negocio", donde **no existe** campo de tasa BCN), **F-10d** (un terminal recién instalado no puede completar la activación) y **F-10e** (la activación incluye checks de impresora). El intento quedó `CREATED` con `pos_build=NULL`.
+  - **Corrección al valor esperado:** no es `1.1.0+11025` sino **`1.1.0+13025`** (el `ohacPosBuild` real del APK; `11025` es el de `pubspec` antes del split ABI).
+  - **Write-once:** verificado **por código** (`activation.service.ts:224-226`: escribe sólo si `attempt.posBuild` está vacío), **pendiente por aparato**.
+- **Evidencia:** `item10-t5-rutaA.png`, `item10-t5-rutaB.png`, `t6-fresh.png`, `t6-claimed.png`, `t6-fase2.png` + `device_linking_codes` / `onboarding_activation_attempts` + logcat del POS.
 
 ---
 
