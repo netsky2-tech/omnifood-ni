@@ -5,7 +5,8 @@
 - **Commit Evidence B17-01:** `595e41b23dc43897236df3bc4bf3b256c890366f` (`feat(identity): implement tenant terminal read model (B17-01)`)
 - **Commit Evidence B17-02:** `763a8e4a274dbd356c9a35d8e75db7b5c1ae55b7` (`feat(identity): implement owner device sync revocation endpoint (B17-02)`)
 - **Commit Evidence B17-03:** `a4bc709405b6305a2e5842c1c6827027c9b0cf34` (`feat(dashboard): implement fleet devices read panel and live suite (B17-03)`)
-- **Status:** COMPLETED — B17-01, B17-02 & B17-03 | IN PROGRESS — B17-04
+- **Commit Evidence B17-04:** `4ab810ce76632c028ad7d722d5ddbf972ba20fa0` (`feat(dashboard): implement sanitized device revocation modal and permission delegation (B17-04)`)
+- **Status:** COMPLETED — B17-01, B17-02, B17-03 & B17-04
 
 ## Batch B17-04: Owner Revocation Action Modal & Form Sanitization (Issue #832)
 
