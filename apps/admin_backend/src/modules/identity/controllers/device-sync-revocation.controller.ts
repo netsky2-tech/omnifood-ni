@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -20,6 +21,7 @@ import { UserRole } from '../entities/user.entity';
 import { AppPermission } from '../security/permissions.enum';
 import { DeviceSyncCredentialService } from '../services/device-sync-credential.service';
 import { RevokeDeviceCredentialDto } from '../dto/revoke-device-credential.dto';
+import { TenantTerminalDto } from '../dto/tenant-terminal.dto';
 
 /**
  * Human revocation surface for device sync credentials (B17-02, issue #832).
@@ -36,14 +38,27 @@ import { RevokeDeviceCredentialDto } from '../dto/revoke-device-credential.dto';
   RolesGuard,
   PermissionsGuard,
 )
-@Roles(UserRole.OWNER)
-@RequirePermissions(AppPermission.DEVICE_SYNC_REVOKE)
 export class DeviceSyncRevocationController {
   constructor(
     private readonly deviceSyncCredentialService: DeviceSyncCredentialService,
   ) {}
 
+  /**
+   * OWNER/MANAGER terminal registry view for the device sync backoffice
+   * (B17-03, Task 1). Read-only listing: it intentionally does not require
+   * the DEVICE_SYNC_REVOKE permission, which stays scoped to revocation.
+   */
+  @Get('terminals')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async listTerminals(
+    @GetTenantId() tenantId: string,
+  ): Promise<TenantTerminalDto[]> {
+    return this.deviceSyncCredentialService.listTenantTerminals(tenantId);
+  }
+
   @Post('credentials/:id/revoke')
+  @Roles(UserRole.OWNER)
+  @RequirePermissions(AppPermission.DEVICE_SYNC_REVOKE)
   @HttpCode(HttpStatus.OK)
   async revoke(
     @GetTenantId() tenantId: string,

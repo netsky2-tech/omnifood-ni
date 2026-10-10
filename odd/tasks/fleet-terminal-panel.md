@@ -4,7 +4,58 @@
 - **Authority:** Issue #832, `docs/plans/identity/batch_17_fleet_terminal_registry_and_owner_revocation.md`, DEC-17.1 (derived read model), DEC-17.2 (OWNER-only revoke), DEC-17.3 (battery dropped).
 - **Commit Evidence B17-01:** `595e41b23dc43897236df3bc4bf3b256c890366f` (`feat(identity): implement tenant terminal read model (B17-01)`)
 - **Commit Evidence B17-02:** `763a8e4a274dbd356c9a35d8e75db7b5c1ae55b7` (`feat(identity): implement owner device sync revocation endpoint (B17-02)`)
-- **Status:** COMPLETED — B17-01 & B17-02
+- **Status:** COMPLETED — B17-01 & B17-02 | IN PROGRESS — B17-03
+
+## Batch B17-03: Dashboard Dispositivos Read Panel & E2E Integration (Issue #832)
+
+- **Authority:** Issue #832, `docs/plans/identity/batch_17_fleet_terminal_registry_and_owner_revocation.md` §4 (B17-03), NHILoS Backoffice Experience Standard v1.0, Module Audit Template v2.1.
+- **Goal:** Replace manual §10's "no existe la ruta" claim with a production-grade, accessible, and live-tested `/devices` panel in Owner Dashboard, displaying terminal identity, credential lifecycle, freshness badges, and metadata.
+
+### B17-03 Tasks
+
+- [x] **T1 (B17-03): Backend `GET /identity/device-sync/terminals` endpoint**
+  - Add `@Get('terminals')` to `DeviceSyncRevocationController` (accessible to `OWNER` and `MANAGER`).
+  - Move `@Roles(OWNER)` and `@RequirePermissions(DEVICE_SYNC_REVOKE)` to the POST revoke method.
+  - Add unit tests in `device-sync-revocation.controller.spec.ts` for GET terminals.
+
+- [x] **T2 (B17-03): Dashboard API client, types & hook (`features/devices`)**
+  - Create `types.ts`, `devices-api.ts`, and `use-devices.ts` under `apps/owner_dashboard/src/features/devices/`.
+  - Wire safe normalization for `TenantTerminalDto` payload.
+
+- [x] **T3 (B17-03): Dashboard UI component & navigation (`/devices`)**
+  - Build `devices-page.tsx` adhering to NHILoS v1.0 (Luxury +1: typography, badge hierarchy, empty/skeleton/error states).
+  - Register route `/devices` in `router.tsx`, `sidebar.tsx` (Administración group), and `rbac.ts` (`["OWNER", "MANAGER"]`).
+
+- [x] **T4 (B17-03): Unit & Accessibility specs (`devices-page.spec.tsx`)**
+  - Test loading, populated, empty, and error states with mocked API.
+  - Verify accessibility compliance (ARIA roles, table structure, contrast).
+
+- [x] **T5 (B17-03): Real Live Integration suite (`devices.live.test.ts`)**
+  - Implement `src/__tests__/devices.live.test.ts` testing live backend (:3300) auth matrix (OWNER/MANAGER 200, CASHIER 403).
+  - Register in `vitest.integration.config.ts` and exclude in `vitest.config.ts`, satisfying `suite-layout.test.ts`.
+
+- [x] **T6 (B17-03): Verification, work-unit commit, and closeout**
+  - Run full tests, lint, tsc, and commit work unit.
+  - Verified by `gentle-ai-verify`: 29 tests in backend (including route transport registry) and 28 tests in dashboard (including suite-layout guard).
+
+---
+
+## Evidence Log — B17-03
+
+- **Backend:**
+  - `apps/admin_backend/src/modules/identity/controllers/device-sync-revocation.controller.ts`: exposed `GET /identity/device-sync/terminals` for `OWNER` and `MANAGER`.
+  - `device-sync-revocation.controller.spec.ts`: 12/12 PASS (role metadata, delegation, exception forwarding).
+  - `route-transport-registry.spec.ts`: 17/17 PASS.
+  - `tsc --noEmit` clean, ESLint clean.
+- **Owner Dashboard:**
+  - Feature `features/devices/`: `types.ts`, `devices-api.ts`, `devices-api.spec.ts` (14/14 PASS), `use-devices.ts`, `index.ts`.
+  - Component `DevicesPage` (`devices-page.tsx`): luxury NHILoS standard v1.0, KPIs, table with credential and freshness status badges, empty/skeleton/error states.
+  - Route & Navigation: `/devices` registered in `router.tsx` (lazyWithRetry, ProtectedRoute), `sidebar.tsx` under Administración (`OWNER`, `MANAGER`), and `rbac.ts`.
+  - Unit & A11y tests: `src/__tests__/devices-page.spec.tsx` (8/8 PASS).
+  - Live Integration spec: `src/__tests__/devices.live.test.ts` registered in `vitest.integration.config.ts` and `vitest.config.ts`.
+  - Suite-layout guard: `src/__tests__/suite-layout.test.ts` (6/6 PASS).
+  - `tsc --noEmit` clean, `oxlint` clean.
+
 
 ## Batch B17-02: Owner-facing Revocation Endpoint, Permission, and Audit Trail (Issue #832)
 
