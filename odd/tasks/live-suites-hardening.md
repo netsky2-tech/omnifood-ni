@@ -2,7 +2,7 @@
 
 - **Status:** REVIEWED ×2 — `f2e5f8c9` approved by `review-bd2c8471dd9fffc1`; unit 2
   (`d8a17901`, branch scope) approved by `review-a3a6dda7260ed188`; both receipts acknowledged.
-  Push + PR authorized by the user; merge only with CI green.
+  Push + PR authorized by the user; **PR #833 CI green**, merge is the user's call.
 - **Issue:** #828 (`status:approved`, `type:bug`) — backflow of review `review-3beb46530ec87586` (PR #827)
 - **Branch:** `fix/live-suites-base-url` from `main` (`dc9842fe`)
 - **Worktree:** `/home/octavio_morales/omnifood-ni-live-suites-hardening` (isolated — never write on `main`)
@@ -66,7 +66,8 @@
 - [x] Empty-env regression proven by an executed run: old pattern resolved
       `NHILOS_LIVE_API=` → `""` → login URL `"/identity/login"` (the confusing failure);
       with the helper, `NHILOS_LIVE_API= npm run test:integration` → **42/42**.
-- [ ] Issue #828 → PR (`type:bug`) green; native review on the work-unit candidate.
+- [x] Issue #828 → **PR #833** (`type:bug`) **green** (lint-and-test / Cloudflare Pages /
+      GitGuardian) + two native reviews APPROVED and acknowledged. Merge: user's decision.
 
 ## Tasks
 
@@ -96,8 +97,10 @@
 - [x] **T7c** Native ordinary review `review-bd2c8471dd9fffc1` → **APPROVED** and acknowledged
       (authority burned, `gentle-ai.review-acknowledged/v1`). Two non-blocking advisories
       recorded below.
-- [ ] **T7d** Unit 2 commit + its own native review, then push + PR `type:bug` linked to #828
-      (user authorized push + PR; merge only with CI green).
+- [x] **T7d** Pushed `fix/live-suites-base-url` and opened **PR #833** (`type:bug`,
+      `Closes #828`). CI **green**: Owner Dashboard CI `lint-and-test` (1m59s, run 38008649318),
+      Cloudflare Pages, GitGuardian. Merge pending the user's go (the review receipts never
+      authorize delivery).
 
 ## Unit 2 — both review advisories fixed (user decision: fix now)
 
