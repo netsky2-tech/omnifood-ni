@@ -33,6 +33,8 @@ import {
   hashDeviceRenewalSecret,
 } from '../security/device-renewal-secret-verifier';
 import { isDeviceSyncAccessTokenPayload } from '../security/jwt-token.types';
+import { deriveSyncFreshness } from '../../sales/sync-health/freshness-derivation';
+import { resolveFreshnessThresholdMinutes } from '../../sales/sync-health/freshness.config';
 
 describe('DeviceSyncCredentialService', () => {
   let service: DeviceSyncCredentialService;
@@ -1033,6 +1035,223 @@ describe('DeviceSyncCredentialService', () => {
         expect(mockManager.query).not.toHaveBeenCalled();
         expect(attemptRepo.findOne).not.toHaveBeenCalled();
       }
+    });
+  });
+
+  describe('listTenantTerminals', () => {
+    const TENANT_ID = 'tenant-100';
+
+    /**
+     * Mirrors the SQL dispatch used by the sync-health spec: the shared
+     * evidence SQL constants are matched by their distinctive column aliases.
+     */
+    const setQueryResponses = (responses: {
+      receipts?: unknown[];
+      rejectedAbove?: unknown[];
+      outbox?: unknown[];
+    }) => {
+      mockManager.query.mockImplementation(async (sql: string) => {
+        if (sql.includes('set_config')) return [];
+        if (sql.includes('rejectedAboveWatermark')) {
+          return responses.rejectedAbove ?? [];
+        }
+        if (sql.includes('inventory_sync_outbox')) {
+          return responses.outbox ?? [];
+        }
+        if (sql.includes('acceptedMax')) return responses.receipts ?? [];
+        throw new Error(`Unexpected SQL: ${sql}`);
+      });
+    };
+
+    const attemptFor = (terminalId: string, posBuild?: string | null) =>
+      ({
+        id: `attempt-${terminalId}`,
+        tenantId: TENANT_ID,
+        status: ActivationAttemptStatus.PASS,
+        candidateTerminalId: terminalId,
+        trustedTerminalId: terminalId,
+        posBuild: posBuild ?? null,
+      }) as unknown as ActivationAttempt;
+
+    const baseCredential = (overrides: Record<string, unknown> = {}) => ({
+      id: 'cred-uuid-1',
+      tenantId: TENANT_ID,
+      activationAttemptId: 'attempt-pos-01',
+      version: 1,
+      status: DeviceSyncCredentialStatus.ACTIVE,
+      issuedAt: new Date('2026-09-01T10:00:00.000Z'),
+      expiresAt: new Date('2026-10-01T10:00:00.000Z'),
+      revokedAt: null,
+      revocationReason: null,
+      activationAttempt: attemptFor('pos-01', '1.2.3'),
+      ...overrides,
+    });
+
+    it('rejects a blank tenantId with BadRequestException and never opens a transaction', async () => {
+      for (const blank of ['', '   ', undefined as unknown as string]) {
+        await expect(service.listTenantTerminals(blank)).rejects.toThrow(
+          BadRequestException,
+        );
+      }
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('binds the tenant context inside the transaction before any read', async () => {
+      setQueryResponses({});
+      credentialRepo.find.mockResolvedValue([]);
+
+      await service.listTenantTerminals(TENANT_ID);
+
+      expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+      expect(mockManager.query).toHaveBeenCalledWith(
+        "SELECT set_config('app.tenant_id', $1, true)",
+        [TENANT_ID],
+      );
+      expect(credentialRepo.find).toHaveBeenCalledWith({
+        where: { tenantId: TENANT_ID },
+        relations: ['activationAttempt'],
+        order: { version: 'DESC', createdAt: 'DESC' },
+      });
+    });
+
+    it('returns an empty array when the tenant has no credentials', async () => {
+      setQueryResponses({});
+      credentialRepo.find.mockResolvedValue([]);
+
+      const result = await service.listTenantTerminals(TENANT_ID);
+
+      expect(result).toEqual([]);
+    });
+
+    it('returns an ACTIVE terminal with freshness evidence matching deriveSyncFreshness', async () => {
+      // Recent watermark (1 minute ago, inside the default 5-minute
+      // threshold) so the derivation resolves COMPLETE regardless of when
+      // the suite runs.
+      const lastReceiptAt = new Date(Date.now() - 60_000);
+      setQueryResponses({
+        receipts: [
+          {
+            deviceId: 'pos-01',
+            flowType: 'sales',
+            acceptedMax: '42',
+            acceptedMin: '1',
+            acceptedCount: '42',
+            lastAcceptedAt: lastReceiptAt,
+          },
+        ],
+      });
+      const credential = baseCredential();
+      credentialRepo.find.mockResolvedValue([credential]);
+
+      const result = await service.listTenantTerminals(TENANT_ID);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        terminalId: 'pos-01',
+        label: 'pos-01',
+        credentialId: 'cred-uuid-1',
+        credentialVersion: 1,
+        status: DeviceSyncCredentialStatus.ACTIVE,
+        issuedAt: new Date('2026-09-01T10:00:00.000Z'),
+        expiresAt: new Date('2026-10-01T10:00:00.000Z'),
+        revokedAt: null,
+        revocationReason: null,
+        posBuild: '1.2.3',
+        freshnessState: 'COMPLETE',
+        acceptedThroughSequence: 42,
+        lastReceiptAt: lastReceiptAt.toISOString(),
+        hasDeclaredGaps: false,
+        hasInventoryPending: false,
+        inventoryPendingCount: 0,
+      });
+
+      // Cross-check against the pure derivation used by SyncHealthService.
+      const derivation = deriveSyncFreshness({
+        terminals: [
+          {
+            terminalId: 'pos-01',
+            label: 'pos-01',
+            acceptedThroughSequence: 42,
+            lastReceiptAt: lastReceiptAt.toISOString(),
+            gapEvidence: null,
+          },
+        ],
+        thresholdMinutes: resolveFreshnessThresholdMinutes(),
+        now: new Date().toISOString(),
+      });
+      expect(result[0].freshnessState).toBe(derivation.perTerminal[0].state);
+    });
+
+    it('returns a REVOKED terminal with revocation metadata, freshnessState null, and historical watermark fallbacks', async () => {
+      setQueryResponses({
+        receipts: [
+          {
+            deviceId: 'pos-01',
+            flowType: 'sales',
+            acceptedMax: '5',
+            acceptedMin: '1',
+            acceptedCount: '5',
+            lastAcceptedAt: new Date('2026-08-01T11:58:00.000Z'),
+          },
+        ],
+      });
+      credentialRepo.find.mockResolvedValue([
+        baseCredential({
+          status: DeviceSyncCredentialStatus.REVOKED,
+          revokedAt: new Date('2026-09-02T09:00:00.000Z'),
+          revocationReason: 'Device decommissioned',
+        }),
+      ]);
+
+      const result = await service.listTenantTerminals(TENANT_ID);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        terminalId: 'pos-01',
+        status: DeviceSyncCredentialStatus.REVOKED,
+        revocationReason: 'Device decommissioned',
+        revokedAt: new Date('2026-09-02T09:00:00.000Z'),
+        freshnessState: null,
+        // Historical fallback from receipt streams (not freshness derivation).
+        acceptedThroughSequence: 5,
+        lastReceiptAt: '2026-08-01T11:58:00.000Z',
+        hasDeclaredGaps: false,
+        hasInventoryPending: false,
+        inventoryPendingCount: 0,
+      });
+    });
+
+    it('picks the latest credential version when a terminal has several credential rows', async () => {
+      setQueryResponses({});
+      credentialRepo.find.mockResolvedValue([
+        baseCredential({
+          id: 'cred-v1',
+          version: 1,
+          status: DeviceSyncCredentialStatus.ACTIVE,
+          issuedAt: new Date('2026-08-01T10:00:00.000Z'),
+          activationAttempt: attemptFor('pos-01'),
+        }),
+        baseCredential({
+          id: 'cred-v2',
+          version: 2,
+          status: DeviceSyncCredentialStatus.REVOKED,
+          issuedAt: new Date('2026-09-01T10:00:00.000Z'),
+          revokedAt: new Date('2026-09-02T09:00:00.000Z'),
+          revocationReason: 'Re-provisioned device',
+          activationAttempt: attemptFor('pos-01'),
+        }),
+      ]);
+
+      const result = await service.listTenantTerminals(TENANT_ID);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        terminalId: 'pos-01',
+        credentialId: 'cred-v2',
+        credentialVersion: 2,
+        status: DeviceSyncCredentialStatus.REVOKED,
+        revocationReason: 'Re-provisioned device',
+      });
     });
   });
 });
