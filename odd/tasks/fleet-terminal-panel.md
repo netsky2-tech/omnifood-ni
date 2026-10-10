@@ -7,7 +7,8 @@
 - **Commit Evidence B17-03:** `a4bc709405b6305a2e5842c1c6827027c9b0cf34` (`feat(dashboard): implement fleet devices read panel and live suite (B17-03)`)
 - **Commit Evidence B17-04:** `4ab810ce76632c028ad7d722d5ddbf972ba20fa0` (`feat(dashboard): implement sanitized device revocation modal and permission delegation (B17-04)`)
 - **Commit Evidence B17-06:** `22ac4e9858fc92c2da1c07022db2e67303c7ea51` (`docs(manual): complete section 10 fleet terminal monitoring (B17-06)`)
-- **Status:** COMPLETED — B17-01, B17-02, B17-03, B17-04 & B17-06 (Issue #832 Complete)
+- **Pull Request:** [PR #858](https://github.com/netsky2-tech/omnifood-ni/pull/858) (`type:feature`, `Closes #832`)
+- **Status:** DELIVERED & PENDING REVIEW (PR #858)
 
 ## Batch B17-06: Manual §10 Completion & Issue #832 Closeout
 
