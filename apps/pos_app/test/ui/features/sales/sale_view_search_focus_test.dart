@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
+import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/services/sync_service.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/cashier_session.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
+import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/services/config/business_mode_evaluator.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/sales/sale_view.dart';
@@ -184,4 +189,111 @@ void main() {
     final controller = tester.widget<TextField>(searchField).controller;
     expect(controller!.text, isEmpty, reason: 'the field clears after submit');
   });
+
+  group('filteredProducts predicate (the search contract, not just the setter)',
+      () {
+    // Real catalog shape: Nicaraguan products whose names carry accents.
+    const catalog = [
+      Product(
+        id: 'p1',
+        name: 'Café de Olla',
+        uom: 'pza',
+        stock: 10,
+        averageCost: 8,
+        sellPrice: 25,
+        // The sku deliberately does NOT spell the product ('cafe' must not
+        // reach «Café de Olla» through an ASCII sku side door): the accent
+        // test is about the NAME predicate.
+        sku: 'BEB-114',
+        barcode: '7501234567890',
+      ),
+      Product(
+        id: 'p2',
+        name: 'Panadería La Espiga',
+        uom: 'pza',
+        stock: 5,
+        averageCost: 2,
+        sellPrice: 8,
+      ),
+      Product(
+        id: 'p3',
+        name: 'Coca Cola 600ml',
+        uom: 'pza',
+        stock: 24,
+        averageCost: 12,
+        sellPrice: 18,
+      ),
+    ];
+
+    // Builds the REAL SaleViewModel (autoLoad: false, driven explicitly) so
+    // the predicate's OUTPUT is asserted, unlike the widget tests above whose
+    // MockSaleViewModel stubs filteredProducts and could never catch a
+    // defective predicate.
+    Future<SaleViewModel> buildViewModel() async {
+      final viewModel = SaleViewModel(
+        _FakeSalesRepository(),
+        _FakeInventoryRepository(catalog),
+        MockAuthRepository(),
+        _FakeAppDatabase(),
+        null,
+        false, // autoLoad: false — loadProducts() is called explicitly below.
+      );
+      await viewModel.loadProducts();
+      return viewModel;
+    }
+
+    test('empty query returns the full catalog, order preserved', () async {
+      final viewModel = await buildViewModel();
+      viewModel.setSearchQuery('');
+      expect(
+        viewModel.filteredProducts.map((p) => p.name).toList(),
+        ['Café de Olla', 'Panadería La Espiga', 'Coca Cola 600ml'],
+      );
+    });
+
+    test('search is case-insensitive and partial ("CAF" and "caf" hit «Café»)',
+        () async {
+      final viewModel = await buildViewModel();
+      viewModel.setSearchQuery('CAF');
+      expect(
+        viewModel.filteredProducts.map((p) => p.name),
+        ['Café de Olla'],
+      );
+      viewModel.setSearchQuery('caf');
+      expect(
+        viewModel.filteredProducts.map((p) => p.name),
+        ['Café de Olla'],
+      );
+    });
+
+    test('search is accent-insensitive ("cafe" hits «Café de Olla»)', () async {
+      final viewModel = await buildViewModel();
+      viewModel.setSearchQuery('cafe');
+      expect(
+        viewModel.filteredProducts.map((p) => p.name),
+        ['Café de Olla'],
+        reason:
+            "an operator typing 'cafe' without the accent must still find "
+            '«Café de Olla» — the same accent-fold the admin backend applies',
+      );
+    });
+  });
+}
+
+class _FakeSalesRepository extends Fake implements SalesRepository {}
+
+class _FakeLocalConfigDao extends Fake implements LocalConfigDao {}
+
+class _FakeAppDatabase extends Fake implements AppDatabase {
+  @override
+  LocalConfigDao get localConfigDao => _FakeLocalConfigDao();
+}
+
+class _FakeInventoryRepository extends Fake implements InventoryRepository {
+  _FakeInventoryRepository(this.products);
+
+  final List<Product> products;
+
+  @override
+  Future<List<Product>> getActiveProducts() async => products;
 }

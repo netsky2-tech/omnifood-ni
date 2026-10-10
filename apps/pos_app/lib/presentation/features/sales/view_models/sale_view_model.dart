@@ -1425,15 +1425,44 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Accent-fold table for text search. It is the EXACT mirror of the admin
+  /// backend's `normalizeSearchTerm` / `translate(lower(col), …)` character
+  /// table (apps/admin_backend/src/modules/inventory/product.service.ts,
+  /// ACCENT_SEARCH_FROM / ACCENT_SEARCH_TO): the two apps must agree on what
+  /// a search matches, so any change to one table MUST change both.
+  static const String _accentSearchFrom = 'áàäâãéèëêíìïîóòöôõúùüûñç';
+  static const String _accentSearchTo = 'aaaaaeeeeiiiiooooouuuunc';
+
+  /// Lowercases [term] and folds the accented characters in
+  /// [_accentSearchFrom] to their ASCII counterparts, so an operator typing
+  /// 'cafe' finds «Café de Olla» exactly like the backend search does.
+  static String _foldSearchTerm(String term) {
+    final lowered = term.toLowerCase();
+    final buffer = StringBuffer();
+    for (final rune in lowered.runes) {
+      final ch = String.fromCharCode(rune);
+      final index = _accentSearchFrom.indexOf(ch);
+      buffer.write(index >= 0 ? _accentSearchTo[index] : ch);
+    }
+    return buffer.toString();
+  }
+
+  /// Null-safe folded contains. skus and barcodes are folded too: they are
+  /// usually ASCII (so folding is a no-op for them) and folding every side
+  /// keeps ONE contains predicate instead of diverging match semantics per
+  /// field — an accented character in a sku still matches its ASCII typing.
+  static bool _foldContains(String? source, String foldedQuery) =>
+      source != null && _foldSearchTerm(source).contains(foldedQuery);
+
   List<Product> get filteredProducts {
     if (_searchQuery.isEmpty) return _products;
-    final q = _searchQuery.toLowerCase();
+    final q = _foldSearchTerm(_searchQuery);
     return _products
         .where(
           (p) =>
-              p.name.toLowerCase().contains(q) ||
-              (p.sku?.toLowerCase().contains(q) ?? false) ||
-              (p.barcode?.toLowerCase().contains(q) ?? false),
+              _foldContains(p.name, q) ||
+              _foldContains(p.sku, q) ||
+              _foldContains(p.barcode, q),
         )
         .toList();
   }
