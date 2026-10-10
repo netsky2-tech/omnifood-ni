@@ -23,8 +23,10 @@ describe('Permissions Matrix & Resolution (Slice 10.1)', () => {
       expect(AppPermission.CASH_REOPEN_SHIFT).toBe('cash:reopen_shift');
       expect(AppPermission.INVENTORY_RECIPE_EDIT).toBe('inventory:recipe_edit');
       expect(AppPermission.REPORTS_VIEW_FISCAL).toBe('reports:view_fiscal');
+      expect(AppPermission.DEVICE_SYNC_REVOKE).toBe('device_sync:revoke');
 
       expect(APP_PERMISSIONS.SALES_VOID_INVOICE).toBe('sales:void_invoice');
+      expect(APP_PERMISSIONS.DEVICE_SYNC_REVOKE).toBe('device_sync:revoke');
     });
   });
 
@@ -47,6 +49,8 @@ describe('Permissions Matrix & Resolution (Slice 10.1)', () => {
         AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
       );
       expect(ownerPerms).toContain(AppPermission.ONBOARDING_ACTIVATION_MANAGE);
+      expect(ownerPerms).toContain(AppPermission.INVENTORY_REMEDIATION_EXECUTE);
+      expect(ownerPerms).toContain(AppPermission.DEVICE_SYNC_REVOKE);
       expect(ownerPerms.length).toBeGreaterThanOrEqual(14);
     });
 
@@ -60,6 +64,22 @@ describe('Permissions Matrix & Resolution (Slice 10.1)', () => {
       expect(managerPerms).toContain(AppPermission.CASH_REOPEN_SHIFT);
       expect(managerPerms).toContain(AppPermission.REPORTS_VIEW_FISCAL);
       expect(managerPerms).not.toContain(AppPermission.INVENTORY_RECIPE_EDIT);
+      expect(managerPerms).not.toContain(AppPermission.DEVICE_SYNC_REVOKE);
+    });
+
+    it('grants DEVICE_SYNC_REVOKE to OWNER only (not MANAGER, CASHIER, or WAITER)', () => {
+      expect(DEFAULT_ROLE_PERMISSIONS[UserRole.OWNER]).toContain(
+        AppPermission.DEVICE_SYNC_REVOKE,
+      );
+      expect(DEFAULT_ROLE_PERMISSIONS[UserRole.MANAGER]).not.toContain(
+        AppPermission.DEVICE_SYNC_REVOKE,
+      );
+      expect(DEFAULT_ROLE_PERMISSIONS[UserRole.CASHIER]).not.toContain(
+        AppPermission.DEVICE_SYNC_REVOKE,
+      );
+      expect(DEFAULT_ROLE_PERMISSIONS[UserRole.WAITER]).not.toContain(
+        AppPermission.DEVICE_SYNC_REVOKE,
+      );
     });
 
     it('denies all critical permissions by default to CASHIER and WAITER', () => {

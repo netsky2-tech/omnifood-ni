@@ -26,6 +26,7 @@ export enum AppPermission {
   ONBOARDING_ACTIVATION_MANAGE = 'onboarding:activation:manage',
   ONBOARDING_SUPPORT_ASSIST = 'onboarding:support:assist',
   INVENTORY_REMEDIATION_EXECUTE = 'inventory.remediation.execute',
+  DEVICE_SYNC_REVOKE = 'device_sync:revoke',
 }
 
 export type Permission = `${AppPermission}` | AppPermission;
@@ -57,6 +58,7 @@ export const APP_PERMISSIONS = {
   ONBOARDING_ACTIVATION_MANAGE: AppPermission.ONBOARDING_ACTIVATION_MANAGE,
   ONBOARDING_SUPPORT_ASSIST: AppPermission.ONBOARDING_SUPPORT_ASSIST,
   INVENTORY_REMEDIATION_EXECUTE: AppPermission.INVENTORY_REMEDIATION_EXECUTE,
+  DEVICE_SYNC_REVOKE: AppPermission.DEVICE_SYNC_REVOKE,
 } as const;
 
 export const ALL_APP_PERMISSIONS = Object.values(AppPermission);
@@ -92,6 +94,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
     AppPermission.ONBOARDING_ACTIVATION_MANAGE,
     AppPermission.INVENTORY_REMEDIATION_EXECUTE,
+    AppPermission.DEVICE_SYNC_REVOKE,
   ],
   [UserRole.MANAGER]: [
     AppPermission.SALES_VOID_INVOICE,

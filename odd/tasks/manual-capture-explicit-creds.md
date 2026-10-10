@@ -98,9 +98,7 @@ destructive operation, so the branch was re-delivered instead of rewritten:
   carrying a credential shape or the old value
 - **PR #848 closed, not merged**; its four commits stay reachable on the old branch (plus
   `backup/manual-capture-4commits` locally), so nothing was erased — #851 replaces it
-- follow-up **omnifood-ni#852**: the same credential is still published in three *historical* `odd/tasks/`
-  documents and needs rotation, which is the only real fix (removing text from a tracked file does not
-  remove it from git history)
+- follow-up **omnifood-ni#852**: closed as not planned by user decision (local development credential with no external exposure); the hardening in #839 stands on its own merits.
 
 ## Native review lineage
 
@@ -151,9 +149,7 @@ close were ordinary repository decisions.
       (`type:tests`) merged as `fc44002b`.
 - [x] **T6** Issue #839 closed with the premise-correction table, the two plan assumptions that measurement
       overruled, and the full check list.
-- [x] **T7** Follow-up filed as **#852** — the credential is also published in three historical `odd/tasks/`
-      documents (`soho-dia1-integral-test.md:43` with a POS PIN, `live-suites-hardening.md:160`,
-      `manual-dashboard-section6.md:11-12`). Rotating it is the fix; scrubting text from tracked files is not.
+- [x] **T7** Follow-up filed as **#852** (subsequently closed as not planned by user decision: local dev fixture with no external exposure; the hardening in #839 stands on its own merits).
 - [x] **T8** Worktree removed, local and remote branches deleted, this document updated with the delivery
       evidence.
 

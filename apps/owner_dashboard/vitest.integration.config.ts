@@ -35,6 +35,7 @@ export default defineConfig({
       "src/__tests__/w1.live.test.ts",
       "src/__tests__/w4-fiscal.live.test.ts",
       "src/__tests__/modifiers.live.test.ts",
+      "src/__tests__/devices.live.test.ts",
     ],
     testTimeout: 15_000,
   },

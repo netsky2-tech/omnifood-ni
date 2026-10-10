@@ -45,7 +45,23 @@ import {
   DEVICE_SYNC_TOKEN_TYPE,
   DeviceSyncJwtClaims,
 } from '../security/jwt-token.types';
-import { bindTenantContext } from '../../../core/database/tenant-transaction';
+import {
+  bindTenantContext,
+  runInTenantTransaction,
+} from '../../../core/database/tenant-transaction';
+import {
+  AboveWatermarkRow,
+  buildTerminalEvidence,
+  latestCredentialByDevice,
+  OUTBOX_PENDING_ABOVE_WATERMARK_SQL,
+  RECEIPT_STREAMS_SQL,
+  REJECTED_ABOVE_WATERMARK_SQL,
+  ReceiptStreamRow,
+  toNumber,
+} from '../../sales/sync-health/terminal-sync-evidence';
+import { deriveSyncFreshness } from '../../sales/sync-health/freshness-derivation';
+import { resolveFreshnessThresholdMinutes } from '../../sales/sync-health/freshness.config';
+import { TenantTerminalDto } from '../dto/tenant-terminal.dto';
 
 export interface ProvisionCredentialResult {
   readonly credential: DeviceSyncCredential;
@@ -378,6 +394,130 @@ export class DeviceSyncCredentialService {
     });
   }
 
+  async listTenantTerminals(tenantId: string): Promise<TenantTerminalDto[]> {
+    const trimmedTenantId = tenantId?.trim();
+    if (!trimmedTenantId) {
+      throw new BadRequestException('Authorized tenant context is required');
+    }
+
+    return await runInTenantTransaction(
+      this.dataSource,
+      trimmedTenantId,
+      async (manager) => {
+        const credentials = await manager
+          .getRepository(DeviceSyncCredential)
+          .find({
+            where: { tenantId: trimmedTenantId },
+            relations: ['activationAttempt'],
+            order: { version: 'DESC', createdAt: 'DESC' },
+          });
+
+        const receiptStreams = await manager.query<ReceiptStreamRow[]>(
+          RECEIPT_STREAMS_SQL,
+          [trimmedTenantId],
+        );
+        const rejectedAbove = await manager.query<AboveWatermarkRow[]>(
+          REJECTED_ABOVE_WATERMARK_SQL,
+          [trimmedTenantId],
+        );
+        const outboxPending = await manager.query<AboveWatermarkRow[]>(
+          OUTBOX_PENDING_ABOVE_WATERMARK_SQL,
+          [trimmedTenantId],
+        );
+
+        const evidence = buildTerminalEvidence({
+          credentials,
+          receiptStreams,
+          rejectedAbove,
+          outboxPending,
+        });
+
+        const derivation = deriveSyncFreshness({
+          terminals: evidence,
+          thresholdMinutes: resolveFreshnessThresholdMinutes(),
+          now: new Date().toISOString(),
+        });
+        const freshnessByTerminal = new Map(
+          derivation.perTerminal.map((terminal) => [
+            terminal.terminalId,
+            terminal,
+          ]),
+        );
+
+        // Historical watermark fallbacks for terminals excluded from the
+        // freshness derivation (REVOKED/RETIRED): their persisted receipt
+        // streams still carry the last known accepted cursor.
+        const historicalByDevice = new Map<
+          string,
+          {
+            acceptedThroughSequence: number | null;
+            lastReceiptAt: string | null;
+          }
+        >();
+        for (const stream of receiptStreams) {
+          const acceptedMax = toNumber(stream.acceptedMax);
+          const lastAcceptedAt = stream.lastAcceptedAt
+            ? new Date(stream.lastAcceptedAt).toISOString()
+            : null;
+          const existing = historicalByDevice.get(stream.deviceId);
+          historicalByDevice.set(stream.deviceId, {
+            acceptedThroughSequence:
+              existing?.acceptedThroughSequence !== null &&
+              existing?.acceptedThroughSequence !== undefined &&
+              acceptedMax !== null
+                ? Math.max(existing.acceptedThroughSequence, acceptedMax)
+                : (acceptedMax ?? existing?.acceptedThroughSequence ?? null),
+            lastReceiptAt:
+              existing?.lastReceiptAt && lastAcceptedAt
+                ? existing.lastReceiptAt > lastAcceptedAt
+                  ? existing.lastReceiptAt
+                  : lastAcceptedAt
+                : (lastAcceptedAt ?? existing?.lastReceiptAt ?? null),
+          });
+        }
+
+        return latestCredentialByDevice(credentials).map(
+          (terminal): TenantTerminalDto => {
+            const credential = terminal.credential;
+            const freshness = freshnessByTerminal.get(terminal.deviceId);
+            const historical = historicalByDevice.get(terminal.deviceId);
+            return {
+              terminalId: terminal.deviceId,
+              // AG-03: no display-name registry exists; the canonical id is the label.
+              label: terminal.deviceId,
+              credentialId: credential.id,
+              credentialVersion: credential.version,
+              status: credential.status,
+              issuedAt: credential.issuedAt,
+              expiresAt: credential.expiresAt,
+              revokedAt: credential.revokedAt ?? null,
+              revocationReason: credential.revocationReason ?? null,
+              posBuild: credential.activationAttempt?.posBuild ?? null,
+              ...(freshness
+                ? {
+                    freshnessState: freshness.state,
+                    acceptedThroughSequence: freshness.acceptedThroughSequence,
+                    lastReceiptAt: freshness.lastReceiptAt,
+                    hasDeclaredGaps: freshness.hasDeclaredGaps,
+                    hasInventoryPending: freshness.hasInventoryPending ?? false,
+                    inventoryPendingCount: freshness.inventoryPendingCount ?? 0,
+                  }
+                : {
+                    freshnessState: null,
+                    acceptedThroughSequence:
+                      historical?.acceptedThroughSequence ?? null,
+                    lastReceiptAt: historical?.lastReceiptAt ?? null,
+                    hasDeclaredGaps: false,
+                    hasInventoryPending: false,
+                    inventoryPendingCount: 0,
+                  }),
+            };
+          },
+        );
+      },
+    );
+  }
+
   async revokeCredential(
     tenantId: string,
     credentialId: string,
@@ -386,6 +526,10 @@ export class DeviceSyncCredentialService {
     const trimmedTenantId = tenantId?.trim();
     if (!trimmedTenantId) {
       throw new BadRequestException('Authorized tenant context is required');
+    }
+
+    if (!reason?.trim()) {
+      throw new BadRequestException('Revocation reason is required');
     }
 
     return await this.dataSource.transaction(async (manager) => {
@@ -405,6 +549,14 @@ export class DeviceSyncCredentialService {
         throw new NotFoundException(
           `Credential '${credentialId}' not found for tenant`,
         );
+      }
+
+      if (credential.status === DeviceSyncCredentialStatus.REVOKED) {
+        throw new ConflictException('Credential is already revoked');
+      }
+
+      if (credential.status === DeviceSyncCredentialStatus.RETIRED) {
+        throw new ConflictException('Retired credential cannot be revoked');
       }
 
       credential.status = DeviceSyncCredentialStatus.REVOKED;

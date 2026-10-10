@@ -42,6 +42,8 @@ export type AppAction =
  * - /menu-qr: OWNER, MANAGER
  * - /kardex: OWNER, MANAGER (kardex regularization approval, mirrors backend
  *   RegularizationController pending/approve route roles)
+ * - /devices: OWNER, MANAGER (B17-03 terminal fleet oversight, mirrors backend
+ *   device-sync terminal listing route roles)
  */
 export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/": ["OWNER", "MANAGER"],
@@ -61,6 +63,7 @@ export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/settings": ["OWNER", "MANAGER"],
   "/menu-qr": ["OWNER", "MANAGER"],
   "/kardex": ["OWNER", "MANAGER"],
+  "/devices": ["OWNER", "MANAGER"],
 };
 
 export const ACTION_ROLE_PERMISSIONS: Record<AppAction, UserRole[]> = {
