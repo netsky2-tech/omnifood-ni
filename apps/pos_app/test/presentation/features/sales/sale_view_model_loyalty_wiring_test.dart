@@ -27,6 +27,8 @@ import 'package:pos_app/data/models/loyalty/loyalty_program_entity.dart';
 import 'package:pos_app/data/models/loyalty/loyalty_reward_entity.dart';
 import 'package:pos_app/domain/models/customer/customer.dart';
 import 'package:pos_app/domain/models/sales/payment.dart';
+import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_evaluation.dart';
 import 'package:pos_app/domain/models/loyalty/loyalty_program.dart';
 import 'package:pos_app/domain/models/loyalty/reward_definition.dart';
@@ -1115,6 +1117,311 @@ void main() {
       vm.selectReward(rewardId);
       expect(vm.selectedReward, isNull);
     });
+  });
+
+  // P3 defect #3 fixture: a DISCOUNT_AMOUNT reward whose benefit is the
+  // owner-configured amount in `benefitConfigJson` (`{"amountNio": 80}`).
+  const discountRewardId = 'rw-descuento-80';
+
+  RewardDefinitionLocal discountRewardLocal({String benefitJson = '{"amountNio":80}'}) =>
+      RewardDefinitionLocal(
+        id: discountRewardId,
+        tenantId: tenantId,
+        loyaltyProgramId: programId,
+        name: 'C\$80 de descuento',
+        rewardType: RewardType.discountAmount,
+        costUnits: 5,
+        benefitConfigJson: benefitJson,
+        status: RewardStatus.active,
+        configVersion: 1,
+        presentationOrder: 2,
+      );
+
+  LoyaltyRewardEntity discountRewardEntity({String benefitJson = '{"amountNio":80}'}) =>
+      LoyaltyRewardEntity(
+        id: discountRewardId,
+        tenantId: tenantId,
+        loyaltyProgramId: programId,
+        name: 'C\$80 de descuento',
+        rewardType: 'discountAmount',
+        costUnits: 5,
+        benefitConfigJson: benefitJson,
+        status: 'ACTIVE',
+        presentationOrder: 2,
+        configVersion: 1,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      );
+
+  // P3 defect #3: the reward CTA renders and the confirmation dialog opens,
+  // but pressing Apply changed NOTHING in the cart: selectReward only stored
+  // the selection for the points ledger, and the cart's loyaltyDiscount was
+  // computed ONLY from the free-points path (applyLoyaltyPoints has no
+  // production caller). These tests pin the missing money path: the selected
+  // reward's benefit MUST become the cart's loyalty discount, flow into
+  // totalDiscounts and the invoice total, be refused (never clamped) when it
+  // exceeds the residual the customer actually pays, disappear exactly on
+  // deselect, and leave reward-less carts byte-for-byte unchanged.
+  group('reward produces the cart loyalty discount (P3 defect #3)', () {
+    const testProduct = Product(
+      id: 'prod-1',
+      name: 'Smash Burger',
+      uom: 'UN',
+      stock: 100,
+      averageCost: 60.0,
+      sellPrice: 120.0,
+      category: 'Food',
+    );
+
+    /// Arranges a cart with ONE C\$120 item, a real tenant-scoped catalog
+    /// containing the DISCOUNT_AMOUNT reward, and an eligible evaluation —
+    /// WITHOUT a selection stub, so the state mirrors production: no reward
+    /// is selected until the operator taps Apply.
+    Future<void> arrangeCartWithDiscountReward({
+      String benefitJson = '{"amountNio":80}',
+    }) async {
+      when(
+        mockProgramDao.getActivePrograms(tenantId),
+      ).thenAnswer((_) async => [testProgramEntity]);
+      when(
+        mockRewardDao.getActiveRewards(tenantId),
+      ).thenAnswer((_) async => [discountRewardEntity(benefitJson: benefitJson)]);
+
+      final evaluation = LoyaltyEvaluation(
+        customerId: customerId,
+        ticketId: '',
+        programs: [
+          ProgramEvaluation(
+            programId: programId,
+            programName: 'Smash Burger Club',
+            programType: LoyaltyProgramType.productStamps,
+            balanceUnits: 10,
+            eligibleRewards: [
+              discountRewardLocal(benefitJson: benefitJson).toEligibleReward(),
+            ],
+          ),
+        ],
+      );
+      when(
+        mockEvaluationService.evaluate(
+          snapshot: anyNamed('snapshot'),
+          programs: anyNamed('programs'),
+          rewards: anyNamed('rewards'),
+          balanceMap: anyNamed('balanceMap'),
+        ),
+      ).thenReturn(evaluation);
+
+      viewModel.addToCart(testProduct);
+      await viewModel.selectCustomer(testCustomer);
+    }
+
+    test(
+      'CORE: selecting a DISCOUNT_AMOUNT reward turns its benefit into the '
+      'cart loyaltyDiscount, totalDiscounts and the invoice total',
+      () async {
+        await arrangeCartWithDiscountReward();
+
+        final totalBefore = viewModel.total;
+        final discountsBefore = viewModel.totalDiscounts;
+        expect(discountsBefore, 0.0);
+
+        when(mockRewardInteraction.selectedRewardId).thenReturn(discountRewardId);
+        viewModel.selectReward(discountRewardId);
+
+        expect(viewModel.selectedReward, isNotNull);
+        expect(viewModel.selectedReward!.id, discountRewardId);
+        expect(viewModel.loyaltyDiscount, 80.0);
+        expect(viewModel.totalDiscounts, 80.0);
+        expect(viewModel.total, totalBefore - 80.0);
+      },
+    );
+
+    test(
+      'ORIGIN: the checkout per-line breakdown attributes the reward money '
+      'to the loyalty origin (the three-origin case)',
+      () async {
+        await arrangeCartWithDiscountReward();
+
+        when(mockRewardInteraction.selectedRewardId).thenReturn(discountRewardId);
+        viewModel.selectReward(discountRewardId);
+        expect(viewModel.loyaltyDiscount, 80.0);
+
+        when(mockAuthRepo.getCurrentUser()).thenAnswer(
+          (_) async => const User(
+            id: 'user-1',
+            name: 'Cashier',
+            role: UserRole.cashier,
+            isActive: true,
+          ),
+        );
+        when(
+          mockSalesRepo.saveSale(
+            invoice: anyNamed('invoice'),
+            items: anyNamed('items'),
+            payments: anyNamed('payments'),
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          mockPointTxDao.recordPointTransactionAndUpdateBalance(
+              any, any, any, any),
+        ).thenAnswer((_) async {});
+
+        final totalAtCheckout = viewModel.total;
+        await viewModel.processSale(
+          [PaymentMethod.cash],
+          customPayments: [
+            Payment(
+              id: 'pay-1',
+              invoiceId: '',
+              method: PaymentMethod.cash,
+              amount: totalAtCheckout,
+            ),
+          ],
+        );
+
+        final result = verify(
+          mockSalesRepo.saveSale(
+            invoice: captureAnyNamed('invoice'),
+            items: captureAnyNamed('items'),
+            payments: anyNamed('payments'),
+          ),
+        );
+        result.called(1);
+        final savedInvoice = result.captured[0] as Invoice;
+        final savedItems = result.captured[1] as List<InvoiceItem>;
+
+        // The invoice total carries the reward discount…
+        expect(savedInvoice.total, closeTo(totalAtCheckout, 0.001));
+        // …and the single line's breakdown attributes ALL of it to the
+        // loyalty origin (no promotion, no manual discount in this cart).
+        expect(savedItems, isNotEmpty);
+        final origin = savedItems.first.discountOrigin;
+        expect(origin, isNotNull);
+        expect(origin!['loyalty'], closeTo(80.0, 0.001));
+      },
+    );
+
+    test(
+      'CEILING (REFUSED): a reward whose amount exceeds the residual the '
+      'customer pays is refused with the existing Spanish message — never '
+      'clamped, never silently applied',
+      () async {
+        await arrangeCartWithDiscountReward(benefitJson: '{"amountNio":500}');
+
+        final totalBefore = viewModel.total;
+        when(mockRewardInteraction.selectedRewardId).thenReturn(discountRewardId);
+
+        viewModel.selectReward(discountRewardId);
+
+        // Operator-visible outcome: the SAME refusal contract the free-points
+        // path enforces through validateRedemption.
+        expect(viewModel.errorMessage, isNotNull);
+        expect(
+          viewModel.errorMessage,
+          contains('no puede exceder el total de la orden'),
+        );
+        expect(viewModel.errorMessage, contains('500.00'));
+        expect(viewModel.errorMessage, contains('120.00'));
+        // No money moved.
+        expect(viewModel.loyaltyDiscount, 0.0);
+        expect(viewModel.totalDiscounts, 0.0);
+        expect(viewModel.total, totalBefore);
+        // The selection was never committed (ledger stays untouched too).
+        expect(viewModel.selectedReward, isNull);
+        verifyNever(mockRewardInteraction.selectReward(any, any));
+      },
+    );
+
+    test(
+      'CEILING (corrupt benefit): a DISCOUNT_AMOUNT reward whose '
+      'benefitConfigJson has no readable amountNio is refused — never '
+      'applied as a fabricated 0 or an invented amount',
+      () async {
+        await arrangeCartWithDiscountReward(benefitJson: '{}');
+
+        when(mockRewardInteraction.selectedRewardId).thenReturn(discountRewardId);
+        viewModel.selectReward(discountRewardId);
+
+        expect(viewModel.errorMessage, isNotNull);
+        expect(viewModel.loyaltyDiscount, 0.0);
+        expect(viewModel.totalDiscounts, 0.0);
+        expect(viewModel.selectedReward, isNull);
+      },
+    );
+
+    test(
+      'DESELECT: clearReward removes the reward discount and restores the '
+      'exact pre-selection totals',
+      () async {
+        await arrangeCartWithDiscountReward();
+
+        final totalBefore = viewModel.total;
+        final discountsBefore = viewModel.totalDiscounts;
+
+        when(mockRewardInteraction.selectedRewardId).thenReturn(discountRewardId);
+        viewModel.selectReward(discountRewardId);
+        expect(viewModel.loyaltyDiscount, 80.0);
+
+        viewModel.clearReward();
+
+        expect(viewModel.loyaltyDiscount, 0.0);
+        expect(viewModel.totalDiscounts, discountsBefore);
+        expect(viewModel.total, totalBefore);
+        expect(viewModel.selectedReward, isNull);
+      },
+    );
+
+    test(
+      'FREE_PRODUCT: the selection is still recorded for the points ledger '
+      '(unchanged REDEEM path) but the cart applies NO discount and the '
+      'operator SEES that it cannot be applied — no silent no-op',
+      () async {
+        when(
+          mockProgramDao.getActivePrograms(tenantId),
+        ).thenAnswer((_) async => [testProgramEntity]);
+        when(
+          mockRewardDao.getActiveRewards(tenantId),
+        ).thenAnswer((_) async => [testRewardEntity]);
+        final evaluation = LoyaltyEvaluation(
+          customerId: customerId,
+          ticketId: '',
+          programs: [
+            ProgramEvaluation(
+              programId: programId,
+              programName: 'Smash Burger Club',
+              programType: LoyaltyProgramType.productStamps,
+              balanceUnits: 10,
+              eligibleRewards: [testReward.toEligibleReward()],
+            ),
+          ],
+        );
+        when(
+          mockEvaluationService.evaluate(
+            snapshot: anyNamed('snapshot'),
+            programs: anyNamed('programs'),
+            rewards: anyNamed('rewards'),
+            balanceMap: anyNamed('balanceMap'),
+          ),
+        ).thenReturn(evaluation);
+
+        viewModel.addToCart(testProduct);
+        await viewModel.selectCustomer(testCustomer);
+
+        final totalBefore = viewModel.total;
+        when(mockRewardInteraction.selectedRewardId).thenReturn(rewardId);
+        viewModel.selectReward(rewardId);
+
+        // Ledger path unchanged: the reward is selected (REDEEM costUnits).
+        expect(viewModel.selectedReward, isNotNull);
+        expect(viewModel.selectedReward!.id, rewardId);
+        // But no line-level application was invented…
+        expect(viewModel.loyaltyDiscount, 0.0);
+        expect(viewModel.totalDiscounts, 0.0);
+        expect(viewModel.total, totalBefore);
+        // …and the operator can see the failure.
+        expect(viewModel.errorMessage, isNotNull);
+      },
+    );
   });
 
   // P3 defect #2: the view model resolved the local tenant id from the

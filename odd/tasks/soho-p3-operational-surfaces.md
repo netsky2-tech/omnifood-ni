@@ -886,3 +886,17 @@ APK `1.1.0+11021` de la rama instalado y apuntando a `http://127.0.0.1:3000/api`
 **Mutación propia:** volver a resolverlo con el id del cliente → el mismo `Expected: not null / Actual: <null>`, restaurada byte-idéntica.
 
 **Verificación:** 21/21 en la suite de cableado (4 tests nuevos: el core, **el alcance respetado** —con el programa bajo OTRO tenant la evaluación queda vacía, para que nadie "arregle" dejando de filtrar—, el tenant del snapshot y el fallo cerrado) y 53/53 en la del view model. El fixture del test se re-clavó de `'cust-1'` a `'tenant-1'`, así que todos los stubs preexistentes ahora prueban que la conflación cliente/tenant desapareció.
+
+### 18.4 · La lealtad, tercera capa: la recompensa elegida no descontaba — ARREGLADO
+
+**Lo que mostró el aparato:** el CTA ya aparecía y el modal abría ("¿Desea aplicar Café de prueba por 800 puntos?"), pero al aplicar **el carrito no cambiaba**: subtotal 290, manual −40, promociones −150, y ninguna fila de lealtad.
+
+**La causa:** `selectReward` sólo **registraba** la selección; el descuento del carrito salía **exclusivamente** de `_pointsToRedeem` (`loyaltyDiscount`, `:564`) — la ruta de puntos libres, cuyo único setter desde la UI (`applyLoyaltyPoints`) **no tiene llamadores** — y `_selectedReward` se leía **sólo** al cerrar la venta, para mandar `costUnits` al libro de puntos. O sea: la recompensa entraba al libro y **nunca al carrito**.
+
+**El arreglo:** `selectReward` **otorga** el beneficio (`benefitConfigJson.amountNio`) como descuento de lealtad, que entra en `totalDiscounts` y por lo tanto **el reparto por origen lo atribuye a `loyalty`** — el caso de los tres orígenes que justificó todo el diseño. **El techo se RECHAZA, no se recorta** (el mismo contrato que la ruta de puntos, con mensaje en español) y un rechazo **no muta estado alguno**; un beneficio corrupto también se rechaza, nunca se fabrica un monto.
+
+**`FREE_PRODUCT` NO se inventó:** la selección se registra (el libro queda igual) pero el carrito aplica 0 y el operador ve un mensaje directo. Queda como **brecha con su propia tarea de diseño** — el dashboard permite configurarla y el libro cobra sus puntos sin beneficio en el carrito.
+
+**Evidencia:** RED `Expected: <80.0> Actual: <0.0>`; el test de ORIGEN afirma `discountOrigin == {'loyalty': 80}`; 27/27 en la suite de cableado y 107/107 en las 8 suites contiguas. Mutación propia (que la recompensa otorgue 0) falla **3 tests**, restaurada byte-idéntica.
+
+**Nota de patrón, para el registro:** la lealtad necesitó **tres arreglos en capas** (constructor, tenant, beneficio) y cada uno apareció sólo al probar en el aparato. Es exactamente la tesis del bloque: *la superficie existe en código con tests, y aun así nunca se operó*. Un test de cableado, uno de alcance y uno de dinero — los tres hacían falta.

@@ -330,6 +330,17 @@ class SaleViewModel extends ChangeNotifier {
   RewardDefinitionLocal? _selectedReward;
   RewardDefinitionLocal? get selectedReward => _selectedReward;
 
+  /// P3 defect #3: the cart discount granted by the SELECTED reward. The old
+  /// code recorded WHICH reward was chosen (for the points ledger at
+  /// checkout) but never turned its benefit into a discount — the cart's
+  /// loyalty money came only from the free-points path, whose only setter
+  /// (applyLoyaltyPoints) has no production caller. The discount is granted
+  /// ONCE, at selection time, against the residual the customer actually
+  /// pays (same apply-time ceiling contract as applyLoyaltyPoints →
+  /// validateRedemption), and is removed exactly by clearReward()/deselect.
+  double _selectedRewardDiscount = 0.0;
+  double get selectedRewardDiscount => _selectedRewardDiscount;
+
   /// Cached rewards from last evaluation for reward resolution
   List<RewardDefinitionLocal> _cachedRewards = [];
 
@@ -345,10 +356,28 @@ class SaleViewModel extends ChangeNotifier {
 
   /// Selects a loyalty reward for the current ticket.
   /// Must be called before PAID. Only one reward per ticket.
+  ///
+  /// P3 defect #3: selecting a reward must also GRANT its benefit to the
+  /// cart, not only record it for the ledger. A DISCOUNT_AMOUNT reward turns
+  /// `benefitConfigJson.amountNio` into the cart's loyaltyDiscount; anything
+  /// that cannot be granted safely is refused with an operator-visible
+  /// Spanish message and NO state mutation (money path: never fabricate a
+  /// discount, never exceed the residual the customer pays).
   void selectReward(String rewardId) {
     if (_rewardInteraction == null || _currentEvaluation == null) return;
+    RewardDefinitionLocal? reward;
+    try {
+      reward = _cachedRewards.firstWhere((r) => r.id == rewardId);
+    } catch (_) {
+      reward = null;
+    }
+    // Resolve the cart discount BEFORE committing the selection: a refusal
+    // must not leave a ledger selection that the cart never honored.
+    final cartDiscount = reward == null ? 0.0 : _resolveRewardCartDiscount(reward);
+    if (cartDiscount == null) return; // refused + messaged; nothing mutated
     _rewardInteraction!.selectReward(_currentEvaluation!, rewardId);
     _selectedReward = _resolveSelectedReward();
+    _selectedRewardDiscount = cartDiscount;
     notifyListeners();
   }
 
@@ -356,6 +385,7 @@ class SaleViewModel extends ChangeNotifier {
   void clearReward() {
     _rewardInteraction?.clearSelection();
     _selectedReward = null;
+    _selectedRewardDiscount = 0.0;
     notifyListeners();
   }
 
@@ -509,6 +539,89 @@ class SaleViewModel extends ChangeNotifier {
     }
   }
 
+  // --- P3 defect #3: reward benefit → cart loyalty discount ---
+
+  /// The residual the customer actually pays after ALL already-granted
+  /// discounts. The SAME base applyLoyaltyPoints uses as its redemption
+  /// ceiling (raw subtotal minus promotions and manual), so both loyalty
+  /// paths enforce one identical money rule.
+  double _residualPayableAfterGrantedDiscounts() {
+    final rawSubtotal = _cart.fold(
+      0.0,
+      (sum, item) => sum + item.subtotal + item.modifiersTotal,
+    );
+    return rawSubtotal - _promotionDiscount - _manualDiscount;
+  }
+
+  static const _msgRewardDiscountExceedsOrder =
+      'El descuento por recompensa (C\$ {amount}) no puede exceder el total de la orden (C\$ {order}).';
+  static const _msgRewardBenefitUnreadable =
+      'No se pudo aplicar la recompensa: su configuración de beneficio no es válida. Pedile al dueño o a un encargado que la revise en el panel de negocio.';
+  static const _msgRewardNotApplicableToCart =
+      'La recompensa «{name}» aún no puede aplicarse al cobro en este terminal; se registrará en el programa de puntos pero el total no cambia. Avisá al encargado si esperabas un descuento.';
+
+  /// Reads the DISCOUNT_AMOUNT benefit (`{"amountNio": <num>}`) from the
+  /// reward's stored config. Returns null when the shape is absent, corrupt
+  /// or non-positive — the caller must then refuse; a fabricated amount is
+  /// never invented, and neither is a fabricated 0.
+  double? _parseDiscountBenefitAmount(RewardDefinitionLocal reward) {
+    try {
+      final decoded = jsonDecode(reward.benefitConfigJson);
+      if (decoded is! Map) return null;
+      final raw = decoded['amountNio'];
+      if (raw is num && raw > 0) return raw.toDouble();
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Resolves the cart discount a reward grants, with the operator-visible
+  /// outcome for everything that cannot be granted. Returns null ONLY for a
+  /// refusal (state must stay untouched); a returned value is the exact
+  /// discount to apply.
+  ///
+  /// CEILING DECISION: REFUSED, not clamped — the same contract the
+  /// free-points path enforces through LoyaltyService.validateRedemption
+  /// ('…no puede exceder el total de la orden…'). A clamp would silently
+  /// grant a different amount than the owner configured; a silent zero would
+  /// hide the failure. Refusal mutates NO state.
+  ///
+  /// FREE_PRODUCT (and other non-amount types) GAP: no line-level
+  /// application exists today and inventing one (zeroing/removing a line,
+  /// retro-fitting promotions) is out of scope, so the selection is still
+  /// recorded for the points ledger (unchanged REDEEM behavior) while the
+  /// operator SEES a directive message that the total does not change. No
+  /// silent no-op.
+  double? _resolveRewardCartDiscount(RewardDefinitionLocal reward) {
+    switch (reward.rewardType) {
+      case RewardType.discountAmount:
+        final benefit = _parseDiscountBenefitAmount(reward);
+        if (benefit == null) {
+          _errorMessage = _msgRewardBenefitUnreadable;
+          notifyListeners();
+          return null;
+        }
+        final residual = _residualPayableAfterGrantedDiscounts();
+        if (benefit > residual) {
+          _errorMessage = _msgRewardDiscountExceedsOrder
+              .replaceFirst('{amount}', benefit.toStringAsFixed(2))
+              .replaceFirst('{order}', residual.toStringAsFixed(2));
+          notifyListeners();
+          return null;
+        }
+        _errorMessage = null;
+        return benefit;
+      case RewardType.freeProduct:
+      case RewardType.discountPercentage:
+      case RewardType.freeShipping:
+        _errorMessage = _msgRewardNotApplicableToCart
+            .replaceFirst('{name}', reward.name);
+        notifyListeners();
+        return 0.0;
+    }
+  }
+
   TenantConfig? _tenantConfig;
   TenantConfig? get tenantConfig => _tenantConfig;
   TenantOperationMode get operationMode =>
@@ -561,8 +674,16 @@ class SaleViewModel extends ChangeNotifier {
 
   double _pointsToRedeem = 0.0;
   double get pointsToRedeem => _pointsToRedeem;
+
+  /// P3 defect #3: the cart's loyalty money now has TWO sources — the
+  /// free-points path (unchanged; selectCustomer zeroes `_pointsToRedeem`,
+  /// so the production flows are mutually exclusive) and the selected
+  /// reward's DISCOUNT_AMOUNT benefit. Reward-less carts are unaffected:
+  /// `_selectedRewardDiscount` is 0.0 and this getter returns exactly what
+  /// it returned before.
   double get loyaltyDiscount =>
-      _loyaltyService.calculateDiscountFromPoints(_pointsToRedeem);
+      _loyaltyService.calculateDiscountFromPoints(_pointsToRedeem) +
+      _selectedRewardDiscount;
   double get promoDiscounts => _promotionDiscount;
 
   RedemptionValidationResult applyLoyaltyPoints(double points) {
@@ -571,15 +692,12 @@ class SaleViewModel extends ChangeNotifier {
         'Debe seleccionar un cliente para redimir puntos.',
       );
     }
-    final rawSubtotal = _cart.fold(
-      0.0,
-      (sum, item) => sum + item.subtotal + item.modifiersTotal,
-    );
     // orderTotal acts ONLY as a ceiling on the redeemable amount, so it must
     // be the residual the customer actually pays after ALL already-granted
     // discounts. A larger ceiling would let points be redeemed against value
-    // the manual or promotion discount already gave away.
-    final currentSubtotal = rawSubtotal - _promotionDiscount - _manualDiscount;
+    // the manual or promotion discount already gave away. The SAME residual
+    // rule caps the selected-reward discount (P3 defect #3).
+    final currentSubtotal = _residualPayableAfterGrantedDiscounts();
     final result = _loyaltyService.validateRedemption(
       customer: _selectedCustomer!,
       pointsToRedeem: points,
