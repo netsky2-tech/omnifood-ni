@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Package, Percent, MinusCircle, Tag } from 'lucide-react';
@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { EntitySearchSelect } from '@/components/ui/entity-search-select';
 import {
   promotionFormSchema,
   dateInputValueToEpochMs,
@@ -25,6 +26,10 @@ import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/pr
 import { DAYS_OF_WEEK, cn } from '@/lib/utils';
 import { useCreatePromotion, useUpdatePromotion } from '@/hooks/use-promotions';
 import { useCatalogValues } from '@/features/catalog/use-catalog';
+import {
+  useProductSearch,
+  useProductById,
+} from '@/features/catalog/use-product-search';
 import { toast } from '@/hooks/use-toast';
 import { DialogFooter } from '@/components/ui/dialog';
 import { getApiErrorMessage } from '@/lib/api-error';
@@ -46,6 +51,23 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   // was deactivated still renders its own value — with an active-only list
   // the select would silently fall back to '' (global) on save.
   const { data: catalogCategories } = useCatalogValues('SALES_PRODUCT_CATEGORY', true);
+
+  // §17.6: the product target is a governed selector, never a free-text
+  // identifier. The hook owns the ?search= contract; the form only holds
+  // the operator's search text. Inactive products stay out of the list by
+  // default (includeInactive: false) — a promotion aimed at a deactivated
+  // product is a mistake the selector should not invite, and unlike the
+  // category picker there is no silent ''-fallback here: the stored value
+  // still renders via useProductById's label and travels unchanged.
+  const [productSearch, setProductSearch] = useState('');
+  const {
+    data: productSearchData,
+    isLoading: isProductSearchLoading,
+    isError: isProductSearchError,
+    refetch: refetchProducts,
+  } = useProductSearch(productSearch);
+  const storedProductId = initialData?.target_product_id || undefined;
+  const { data: storedProduct } = useProductById(storedProductId);
 
   const form = useForm<PromotionFormData>({
     resolver: zodResolver(promotionFormSchema),
@@ -74,6 +96,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   const watchedType = form.watch('type');
   const watchedDays = form.watch('days_of_week');
   const watchedCategoryId = form.watch('target_category_id');
+  const watchedProductId = form.watch('target_product_id');
 
   useEffect(() => {
     if (initialData) {
@@ -228,11 +251,27 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="target_product_id">Producto Objetivo (opcional)</Label>
-            <Input
-              id="target_product_id"
-              placeholder="ID del producto"
-              {...form.register('target_product_id')}
+            <EntitySearchSelect
+              inputId="target-product-search"
+              label="Producto Objetivo (opcional)"
+              value={watchedProductId ?? ''}
+              onChange={(id) =>
+                form.setValue('target_product_id', id, { shouldValidate: true })
+              }
+              options={(productSearchData?.data ?? []).map((product) => ({
+                id: product.id,
+                label: product.name,
+              }))}
+              search={productSearch}
+              onSearchChange={setProductSearch}
+              isLoading={isProductSearchLoading}
+              isError={isProductSearchError}
+              onRetry={() => void refetchProducts()}
+              emptyMessage="No hay productos todavía. Cree productos en el catálogo."
+              selectedLabel={storedProduct?.name}
+              total={productSearchData?.total}
+              onVerTodos={() => setProductSearch('')}
+              placeholder="Ej: Café, Pan"
             />
           </div>
           <div>

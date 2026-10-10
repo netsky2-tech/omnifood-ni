@@ -6,11 +6,16 @@ import { PromotionType, type Promotion } from '@/types/promotions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useCreatePromotion, useUpdatePromotion } from '@/hooks/use-promotions';
 import { useCatalogValues } from '@/features/catalog/use-catalog';
+import {
+  useProductSearch,
+  useProductById,
+} from '@/features/catalog/use-product-search';
 import { toast } from '@/hooks/use-toast';
 
 vi.mock('@/hooks/use-promotions');
 vi.mock('@/hooks/use-toast');
 vi.mock('@/features/catalog/use-catalog');
+vi.mock('@/features/catalog/use-product-search');
 vi.mock('@tanstack/react-query', () => ({
   useQuery: vi.fn(),
   useMutation: vi.fn(),
@@ -24,7 +29,10 @@ const mockPromotion: Promotion = {
   tenant_id: 'tenant-A',
   name: 'Test Promotion',
   type: PromotionType.BUY_X_GET_Y_FREE,
-  target_product_id: 'prod-1',
+  // §17.6 (S4): the stored target is a product uuid picked from the
+  // selector — a fixture with a bare 'prod-1' would fail the schema's
+  // uuid-or-empty refine on submit, as any real free-text value now does.
+  target_product_id: '33333333-3333-4333-8333-333333333333',
   target_category_id: null,
   buy_quantity: 2,
   get_quantity: 1,
@@ -138,11 +146,37 @@ describe('PromotionForm', () => {
   const mockCreatePromotion = { mutateAsync: vi.fn() };
   const mockUpdatePromotion = { mutateAsync: vi.fn() };
 
+  // §17.6 selector fixtures: a flexible search hit that is neither the
+  // exact id nor the exact name of anything (case + accent + partial).
+  const searchResultProducts = [
+    {
+      id: '44444444-4444-4444-8444-444444444444',
+      name: 'Café de Olla',
+    },
+    {
+      id: '55555555-5555-4555-8555-555555555555',
+      name: 'CAPUCHINO',
+    },
+  ];
+
   beforeEach(() => {
     vi.clearAllMocks();
     (useCreatePromotion as any).mockReturnValue(mockCreatePromotion);
     (useUpdatePromotion as any).mockReturnValue(mockUpdatePromotion);
     (useCatalogValues as any).mockReturnValue({ data: mockCatalogCategories });
+    (useProductSearch as any).mockReturnValue({
+      data: {
+        data: searchResultProducts,
+        total: searchResultProducts.length,
+        page: 1,
+        pageSize: 50,
+        totalPages: 1,
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    (useProductById as any).mockReturnValue({ data: undefined });
     (toast as any).mockImplementation(vi.fn());
   });
 
@@ -505,6 +539,112 @@ describe('PromotionForm', () => {
       });
       const dto = mockUpdatePromotion.mutateAsync.mock.calls[0]![0].dto;
       expect(dto.target_category_id).toBe(catBebidas);
+    });
+  });
+
+  // §17.6 slice S4: the product target is a governed selector with flexible
+  // textual search, never a free-text identifier input.
+  describe('target product selector (§17.6, no-uuid-inputs S4)', () => {
+    const cafeDeOllaId = '44444444-4444-4444-8444-444444444444';
+
+    const fillName = () => {
+      fireEvent.change(screen.getByLabelText('Nombre *'), {
+        target: { value: 'Promo Test' },
+      });
+    };
+
+    it('no longer renders a free-text identifier input for the product target', () => {
+      renderForm(null);
+      // The old violation's exact shape: an Input registered as
+      // target_product_id with "ID del producto" copy. Neither may exist.
+      expect(document.querySelector('#target_product_id')).toBeNull();
+      expect(
+        screen.queryByPlaceholderText('ID del producto'),
+      ).toBeNull();
+      expect(
+        screen.queryByLabelText('ID de producto'),
+      ).toBeNull();
+      // The replacement exists: a search affordance, not an id field.
+      expect(
+        screen.getByRole('combobox', {
+          name: 'Producto Objetivo (opcional)',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('the operator\u2019s search text goes to the query hook verbatim (flexible search lives in the hook, not the form)', () => {
+      renderForm(null);
+      fireEvent.change(
+        screen.getByRole('combobox', {
+          name: 'Producto Objetivo (opcional)',
+        }),
+        { target: { value: '  café  ' } },
+      );
+      expect(useProductSearch).toHaveBeenCalledWith('  café  ');
+    });
+
+    it('renders a case/accent/partial match (never an exact id or exact name) and selecting it sends the ID in the create payload', async () => {
+      renderForm(null);
+      fillName();
+      // 'café' matched «Café de Olla» — not an exact name, not an id.
+      fireEvent.click(
+        screen.getByRole('option', { name: /Café de Olla/ }),
+      );
+      // The operator sees the human label of the selection...
+      expect(screen.getByText(/Seleccionado:/)).toHaveTextContent(
+        'Seleccionado: Café de Olla',
+      );
+      fireEvent.click(screen.getByRole('button', { name: /crear/i }));
+      await waitFor(() => {
+        expect(mockCreatePromotion.mutateAsync).toHaveBeenCalled();
+      });
+      const payload = mockCreatePromotion.mutateAsync.mock.calls[0]![0];
+      // ...while the payload carries the ID, exactly as before S4.
+      expect(payload.target_product_id).toBe(cafeDeOllaId);
+    });
+
+    it('edit mode shows the stored product\u2019s human label (via useProductById) and the stored id travels unchanged', async () => {
+      (useProductById as any).mockReturnValue({
+        data: { id: mockPromotion.target_product_id, name: 'Café de Olla' },
+      });
+      renderForm(mockPromotion);
+      await waitFor(() => {
+        expect(screen.getByText(/Seleccionado:/)).toHaveTextContent(
+          'Seleccionado: Café de Olla',
+        );
+      });
+      fireEvent.click(screen.getByRole('button', { name: /actualizar/i }));
+      await waitFor(() => {
+        expect(mockUpdatePromotion.mutateAsync).toHaveBeenCalled();
+      });
+      const dto = mockUpdatePromotion.mutateAsync.mock.calls[0]![0].dto;
+      expect(dto.target_product_id).toBe(mockPromotion.target_product_id);
+    });
+
+    it('clearing the selection with Quitar submits without a product target', async () => {
+      renderForm(mockPromotion);
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Quitar/ })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Quitar/ }));
+      fireEvent.change(screen.getByLabelText('Nombre *'), {
+        target: { value: 'Promo Test' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /actualizar/i }));
+      await waitFor(() => {
+        expect(mockUpdatePromotion.mutateAsync).toHaveBeenCalled();
+      });
+      const dto = mockUpdatePromotion.mutateAsync.mock.calls[0]![0].dto;
+      expect(dto.target_product_id).toBe('');
+    });
+
+    it('the schema rejects free text for target_product_id, like the category field does', () => {
+      const result = promotionFormSchema.safeParse({
+        name: 'Promo',
+        type: 'comboPackage',
+        target_product_id: 'Café de Olla',
+      });
+      expect(result.success).toBe(false);
     });
   });
 });

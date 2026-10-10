@@ -46,15 +46,9 @@ interface UuidInputException {
  * it must name the ODD slice that removes it.
  */
 const UUID_INPUT_EXCEPTIONS: UuidInputException[] = [
-  {
-    file: "features/promotions/PromotionForm.tsx",
-    field: "target_product_id",
-    reason:
-      "Confirmado por el usuario como el caso originador de la regla. El dashboard aún no tiene superficie de query de productos (hook + endpoint) que alimente el selector con búsqueda textual; el reemplazo llega con el selector reutilizable (S2) y la superficie de consulta (S3).",
-    acceptedOn: "2026-10-10",
-    removalCondition:
-      "odd/tasks/no-uuid-inputs.md slice S4 — PromotionForm usa el selector con búsqueda textual para target_product_id; la promoción se crea y se activa de punta a punta.",
-  },
+  // S4 closed the promotions entry (2026-10-10): PromotionForm's
+  // target_product_id is now EntitySearchSelect + useProductSearch, and the
+  // S4 pins in PromotionForm.test.tsx keep the replacement in place.
   {
     file: "features/recipes/RecipeForm.tsx",
     field: "referenceVersionId",
@@ -155,7 +149,14 @@ function isIdentifierToken(raw: string): boolean {
 function identifierTokensInTag(tag: string): string[] {
   const tokens: string[] = [];
   for (const name of ["id", "name", "value"]) {
-    const v = attrValue(tag, name);
+    // Quoted `id` literals can name the datum ("product_id"). A brace-bound
+    // expression on `id` is an HTML element-id passthrough (useId(), a
+    // forwardRef prop like inputId) — an element identity, never the datum —
+    // so it is exempt. `name`/`value` KEEP brace capture: a controlled
+    // binding (`value={productId}`) is exactly how a form binds an
+    // identifier datum without register().
+    const v =
+      name === "id" ? quotedCopyValue(tag, name) : attrValue(tag, name);
     if (v) tokens.push(v);
   }
   for (const m of tag.matchAll(/register\(\s*['"]([^'"]+)['"]/g)) {
@@ -388,5 +389,19 @@ describe("no-uuid-inputs guard (§17.6): no free-text input for a foreign key", 
     const constantIdSample =
       '<Input id={URL_INPUT_ID} type="text" inputMode="url" placeholder="https://ejemplo.com/menu" value={url} onChange={(e) => setUrl(e.target.value)} />';
     expect(scanSource("features/demo/UrlForm.tsx", constantIdSample)).toEqual([]);
+  });
+
+  it("treats a brace-bound id expression as an element-id passthrough, while a quoted id literal stays a signal", () => {
+    // The reusable selector (S2) binds the HTML element id from a prop:
+    // that is the input's DOM identity, not a datum. It must not be flagged.
+    const passthroughSample =
+      '<Input id={inputId} type="text" value={search} onChange={(e) => onSearchChange(e.target.value)} />';
+    expect(scanSource("components/ui/Selector.tsx", passthroughSample)).toEqual([]);
+    // A quoted id literal stays a datum signal — the S1 pin is intact.
+    const quotedSample =
+      '<Input id="product_id" placeholder="Producto" />';
+    const violations = scanSource("features/demo/DemoForm.tsx", quotedSample);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.field).toBe("product_id");
   });
 });
