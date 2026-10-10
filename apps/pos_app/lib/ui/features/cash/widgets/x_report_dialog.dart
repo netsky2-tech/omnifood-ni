@@ -5,6 +5,30 @@ import '../../../../data/models/sales/cashier_session_entity.dart';
 import '../../../../data/models/sales/cash_movement_entity.dart';
 import '../../../design_system/nhilos_tokens.dart';
 
+/// Round-2 P6b: manual cash movements split into ingresos and egresos.
+///
+/// `CASH_IN` is the only ingreso; a petty-cash expense, a safe drop and a
+/// cash-out all leave the drawer. The owner decision of 2026-10-10 routes a
+/// CUOTA_FIJA out-of-date administrative refund through a petty-cash expense,
+/// so that movement MUST reduce the expected cash — never add to it.
+({double inNio, double inUsd, double outNio, double outUsd})
+    splitMovementTotals(List<CashMovementEntity> movements) {
+  double inNio = 0.0;
+  double inUsd = 0.0;
+  double outNio = 0.0;
+  double outUsd = 0.0;
+  for (final m in movements) {
+    if (m.type == 'CASH_IN') {
+      inNio += m.amountNio;
+      inUsd += m.amountUsd;
+    } else {
+      outNio += m.amountNio;
+      outUsd += m.amountUsd;
+    }
+  }
+  return (inNio: inNio, inUsd: inUsd, outNio: outNio, outUsd: outUsd);
+}
+
 class XReportDialog extends StatelessWidget {
   final CashierSessionEntity shift;
   final List<CashMovementEntity> movements;
@@ -57,20 +81,12 @@ class XReportDialog extends StatelessWidget {
     final nowStr = DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now());
     final openedStr = DateFormat('dd/MM/yyyy HH:mm:ss').format(openedDate);
 
-    double totalInNio = 0.0;
-    double totalInUsd = 0.0;
-    double totalOutNio = 0.0;
-    double totalOutUsd = 0.0;
-
-    for (final m in movements) {
-      if (m.type == 'CASH_IN') {
-        totalInNio += m.amountNio;
-        totalInUsd += m.amountUsd;
-      } else {
-        totalOutNio += m.amountNio;
-        totalOutUsd += m.amountUsd;
-      }
-    }
+    final (
+      inNio: totalInNio,
+      inUsd: totalInUsd,
+      outNio: totalOutNio,
+      outUsd: totalOutUsd,
+    ) = splitMovementTotals(movements);
 
     return AlertDialog(
       shape: const RoundedRectangleBorder(
