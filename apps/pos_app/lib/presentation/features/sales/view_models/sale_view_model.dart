@@ -320,6 +320,13 @@ class SaleViewModel extends ChangeNotifier {
   LoyaltyEvaluation? _currentEvaluation;
   LoyaltyEvaluation? get currentEvaluation => _currentEvaluation;
 
+  /// P3 defect #2: the terminal's local tenant binding, resolved from the
+  /// 'tenant_id' local config key — the SAME source the sync service uses
+  /// when it writes the loyalty rows. Empty when the terminal has no
+  /// binding, which fails closed (no programs, no rewards, no loyalty
+  /// surface); a tenant is never fabricated from the customer or elsewhere.
+  String _resolvedLocalTenantId = '';
+
   RewardDefinitionLocal? _selectedReward;
   RewardDefinitionLocal? get selectedReward => _selectedReward;
 
@@ -361,8 +368,18 @@ class SaleViewModel extends ChangeNotifier {
     }
 
     try {
-      final tenantId =
-          _selectedCustomer!.id; // tenant scoping comes from config
+      // P3 defect #2: the local tenant id MUST come from the terminal
+      // binding ('tenant_id' local config key — the same source the sync
+      // service uses when it WRITES the loyalty rows), not from the selected
+      // customer. LoyaltyProgramEntity.tenantId is a real indexed column;
+      // querying by the customer id always returned an empty catalog, so
+      // LoyaltyCompactWidget and RewardCtaWidget never rendered. Fail
+      // closed: an unbound terminal resolves to an empty tenant, the scoped
+      // lookups return nothing, and no tenant is ever fabricated.
+      final tenantConfig =
+          await _database.localConfigDao.getConfigByKey('tenant_id');
+      _resolvedLocalTenantId = tenantConfig?.value ?? '';
+      final tenantId = _resolvedLocalTenantId;
       final programs = await _database.loyaltyProgramDao.getActivePrograms(
         tenantId,
       );
@@ -472,7 +489,7 @@ class SaleViewModel extends ChangeNotifier {
         .toList();
 
     return LoyaltyTicketSnapshot(
-      tenantId: _selectedCustomer?.id ?? '',
+      tenantId: _resolvedLocalTenantId,
       branchId: '',
       terminalId: '',
       ticketId: '',

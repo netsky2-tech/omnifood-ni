@@ -16,6 +16,10 @@ import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
 import 'package:pos_app/data/daos/sales/hold_ticket_dao.dart';
 import 'package:pos_app/data/daos/sales/promotion_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
+import 'package:pos_app/data/daos/inventory/recipe_dao.dart';
+import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
+import 'package:pos_app/data/models/inventory/product_entity.dart';
 import 'package:pos_app/data/daos/kitchen/kitchen_order_dao.dart';
 import 'package:pos_app/data/daos/sales/tax_config_dao.dart';
 import 'package:pos_app/data/models/sales/tax_config_entity.dart';
@@ -52,10 +56,19 @@ class FakeLocalConfigDao extends Mock implements LocalConfigDao {
   // #67/T2a: the sale path fails closed without BOTH recorded FX rates, so
   // the fixture seeds them. Every other key still resolves to null, exactly
   // as before (the terminal-binding lookup included).
-  final Map<String, String> _configs = {
-    'commercial_exchange_rate': '36.50',
-    'bcn_official_exchange_rate': '36.6241',
-  };
+  //
+  // P3 defect #2: the DAO also serves the terminal's LOCAL TENANT BINDING
+  // ('tenant_id' key) — the same source the sync service uses when it writes
+  // loyalty rows. [tenantId] defaults to a REAL binding; pass null to simulate
+  // a terminal that was never bound (the fail-closed case).
+  FakeLocalConfigDao({String? tenantId = 'tenant-1'})
+      : _configs = {
+          'commercial_exchange_rate': '36.50',
+          'bcn_official_exchange_rate': '36.6241',
+          'tenant_id': ?tenantId,
+        };
+
+  final Map<String, String> _configs;
 
   @override
   Future<String?> getConfigValue(String? key) async => _configs[key];
@@ -78,6 +91,27 @@ class FakeKitchenOrderDao extends Mock implements KitchenOrderDao {}
 class FakeTaxConfigDao extends Mock implements TaxConfigDao {
   @override
   Future<List<TaxConfigEntity>> getAllTaxConfigs() async => [];
+}
+
+// P3 defect #2 fixture: the terminal now carries a 'tenant_id' binding, so
+// CheckoutInventoryPreparationService.prepare() no longer falls back to the
+// legacy (unbound) inventory path — it takes the SALE_TIME_V1 path, which
+// reads the product DAO and the authority projection. An empty projection is
+// a valid authority (nothing cross-references), so these fakes return just
+// that; the sale-time snapshot freezes the same lines it always did.
+class FakeProductDao extends Mock implements ProductDao {
+  @override
+  Future<ProductEntity?> findProductById(String id) async => null;
+}
+
+class FakeAuthorityProjectionDao extends Mock
+    implements AuthorityProjectionDao {
+  @override
+  Future<List<AuthorityRecipeVersionEntity>> findActivePublishedVersions(
+    String tenantId,
+    String productId,
+    String saleTime,
+  ) async => [];
 }
 
 class FakeKitchenOrderService extends KitchenOrderService {
@@ -153,9 +187,16 @@ void main() {
 
   late SaleViewModel viewModel;
 
-  // Test fixtures
-  const tenantId =
-      'cust-1'; // Must match testCustomer.id (_reEvaluateLoyalty uses _selectedCustomer.id)
+  // Fixtures
+  //
+  // P3 defect #2: the REAL local tenant id, as bound on the terminal via the
+  // 'tenant_id' local config key — the same source the sync service uses when
+  // it WRITES the loyalty rows. It is deliberately DIFFERENT from the customer
+  // id: before the fix the view model queried the loyalty DAOs with
+  // _selectedCustomer.id, which never matches the stored tenant_id column
+  // (LoyaltyProgramEntity.tenantId is indexed) and always yielded an empty
+  // catalog — so LoyaltyCompactWidget and RewardCtaWidget rendered nothing.
+  const tenantId = 'tenant-1';
   const customerId = 'cust-1';
   const programId = 'prog-smash';
   const rewardId = 'rw-smash-burger';
@@ -249,6 +290,10 @@ void main() {
     when(mockDb.localConfigDao).thenReturn(FakeLocalConfigDao());
     when(mockDb.kitchenOrderDao).thenReturn(FakeKitchenOrderDao());
     when(mockDb.taxConfigDao).thenReturn(FakeTaxConfigDao());
+
+    // SALE_TIME_V1 checkout path on a bound terminal: empty catalog projection.
+    when(mockDb.productDao).thenReturn(FakeProductDao());
+    when(mockDb.authorityProjectionDao).thenReturn(FakeAuthorityProjectionDao());
 
     fakeKitchenOrderService = FakeKitchenOrderService(mockDb);
     fakeTenantConfigService = FakeTenantConfigService(mockDb.localConfigDao);
@@ -991,12 +1036,14 @@ void main() {
     );
 
     void arrangeLoyaltyCatalog() {
-      // _reEvaluateLoyalty scopes DAO lookups by the selected customer id.
+      // _reEvaluateLoyalty must scope DAO lookups by the LOCAL TENANT BINDING
+      // ('tenant_id' config key), NOT by the selected customer id — the
+      // loyalty rows are written under the tenant, never under the customer.
       when(
-        mockProgramDao.getActivePrograms(customerId),
+        mockProgramDao.getActivePrograms(tenantId),
       ).thenAnswer((_) async => [testProgramEntity]);
       when(
-        mockRewardDao.getActiveRewards(customerId),
+        mockRewardDao.getActiveRewards(tenantId),
       ).thenAnswer((_) async => [testRewardEntity]);
     }
 
@@ -1067,6 +1114,162 @@ void main() {
       // And selectReward is a silent no-op.
       vm.selectReward(rewardId);
       expect(vm.selectedReward, isNull);
+    });
+  });
+
+  // P3 defect #2: the view model resolved the local tenant id from the
+  // CUSTOMER (`final tenantId = _selectedCustomer!.id`), then queried the
+  // loyalty DAOs with it — but the local loyalty tables store a REAL indexed
+  // tenant_id column, written by the sync service under the terminal's
+  // 'tenant_id' local config binding. Querying by customer id always yielded
+  // an empty catalog, so no loyalty surface ever rendered. These tests pin
+  // the correct source (the config binding) and keep the scoping HONOURED.
+  group('loyalty tenant scoping (P3 defect #2: tenant from config, not customer)',
+      () {
+    LoyaltyEvaluation eligibleEvaluation() => LoyaltyEvaluation(
+          customerId: customerId,
+          ticketId: '',
+          programs: [
+            ProgramEvaluation(
+              programId: programId,
+              programName: 'Smash Burger Club',
+              programType: LoyaltyProgramType.productStamps,
+              balanceUnits: 6,
+              eligibleRewards: [testReward.toEligibleReward()],
+            ),
+          ],
+        );
+
+    void arrangeRealTenantCatalog() {
+      when(
+        mockProgramDao.getActivePrograms(tenantId),
+      ).thenAnswer((_) async => [testProgramEntity]);
+      when(
+        mockRewardDao.getActiveRewards(tenantId),
+      ).thenAnswer((_) async => [testRewardEntity]);
+      when(
+        mockEvaluationService.evaluate(
+          snapshot: anyNamed('snapshot'),
+          programs: anyNamed('programs'),
+          rewards: anyNamed('rewards'),
+          balanceMap: anyNamed('balanceMap'),
+        ),
+      ).thenReturn(eligibleEvaluation());
+    }
+
+    test(
+        'CORE: with a program+reward stored under the REAL tenant id and a '
+        'customer selected, the evaluation is non-null and the reward is '
+        'eligible', () async {
+      arrangeRealTenantCatalog();
+
+      await viewModel.selectCustomer(testCustomer);
+
+      // The loyalty DAOs were queried with the resolved tenant binding…
+      verify(mockProgramDao.getActivePrograms(tenantId)).called(1);
+      verify(mockRewardDao.getActiveRewards(tenantId)).called(1);
+      // …and the surface LoyaltyCompactWidget/RewardCtaWidget read is live.
+      expect(viewModel.currentEvaluation, isNotNull);
+      expect(viewModel.currentEvaluation!.hasAnyEligibleReward, isTrue);
+      expect(viewModel.currentEvaluation!.nextReward, isNotNull);
+      expect(viewModel.currentEvaluation!.nextReward!.rewardId, rewardId);
+    });
+
+    test(
+        'SCOPING HONOURED: a program stored under a DIFFERENT tenant id never '
+        'reaches the evaluation (a "fix" that stops filtering by tenant '
+        'fails here)', () async {
+      const otherTenantId = 'tenant-other';
+      // The foreign-tenant catalog EXISTS in the local DB…
+      when(mockProgramDao.getActivePrograms(otherTenantId))
+          .thenAnswer((_) async => [testProgramEntity]);
+      when(mockRewardDao.getActiveRewards(otherTenantId))
+          .thenAnswer((_) async => [testRewardEntity]);
+      // …but this terminal's tenant has NO stored catalog.
+      when(mockProgramDao.getActivePrograms(tenantId))
+          .thenAnswer((_) async => []);
+      when(mockRewardDao.getActiveRewards(tenantId))
+          .thenAnswer((_) async => []);
+
+      await viewModel.selectCustomer(testCustomer);
+
+      // The foreign rows were never fetched: the query is scoped, not removed.
+      verifyNever(mockProgramDao.getActivePrograms(otherTenantId));
+      verifyNever(mockRewardDao.getActiveRewards(otherTenantId));
+      expect(viewModel.currentEvaluation, isNotNull);
+      expect(viewModel.currentEvaluation!.programs, isEmpty);
+      expect(viewModel.currentEvaluation!.hasAnyEligibleReward, isFalse);
+    });
+
+    test(
+        'SNAPSHOT: the ticket snapshot carries the resolved tenant id, not '
+        'the customer id (the second call site, _buildTicketSnapshot)',
+        () async {
+      arrangeRealTenantCatalog();
+
+      await viewModel.selectCustomer(testCustomer);
+
+      final result = verify(mockEvaluationService.evaluate(
+        snapshot: captureAnyNamed('snapshot'),
+        programs: anyNamed('programs'),
+        rewards: anyNamed('rewards'),
+        balanceMap: anyNamed('balanceMap'),
+      ));
+      result.called(1);
+      final snapshot = result.captured.last as LoyaltyTicketSnapshot;
+      // tenant-1 ≠ cust-1: distinct fixture values prove the snapshot's
+      // tenantId comes from the tenant binding and customerId from the
+      // customer — they are no longer conflated.
+      expect(snapshot.tenantId, tenantId);
+      expect(snapshot.customerId, customerId);
+      expect(snapshot.tenantId, isNot(customerId));
+    });
+
+    test(
+        'FAIL CLOSED: with no tenant binding on the terminal, the evaluation '
+        'stays empty — no tenant is fabricated', () async {
+      // A terminal that was never activated has no 'tenant_id' binding.
+      final localDaoNoBinding = FakeLocalConfigDao(tenantId: null);
+      final dbNoBinding = MockAppDatabase();
+      when(dbNoBinding.customerDao).thenReturn(mockCustomerDao);
+      when(dbNoBinding.customerPointTransactionDao).thenReturn(mockPointTxDao);
+      when(dbNoBinding.loyaltyProgramDao).thenReturn(mockProgramDao);
+      when(dbNoBinding.loyaltyRewardDao).thenReturn(mockRewardDao);
+      when(dbNoBinding.cashierSessionDao).thenReturn(mockSessionDao);
+      when(dbNoBinding.holdTicketDao).thenReturn(mockHoldDao);
+      when(dbNoBinding.promotionDao).thenReturn(mockPromoDao);
+      when(dbNoBinding.localConfigDao).thenReturn(localDaoNoBinding);
+      when(dbNoBinding.kitchenOrderDao).thenReturn(FakeKitchenOrderDao());
+      when(dbNoBinding.taxConfigDao).thenReturn(FakeTaxConfigDao());
+
+      final vmNoBinding = SaleViewModel.withLoyalty(
+        mockSalesRepo,
+        mockInventoryRepo,
+        mockAuthRepo,
+        dbNoBinding,
+        autoLoad: false,
+        tenantConfigService: FakeTenantConfigService(localDaoNoBinding),
+        kitchenOrderService: fakeKitchenOrderService,
+        identificationService: mockIdentificationService,
+        rewardInteractionService: mockRewardInteraction,
+        evaluationService: mockEvaluationService,
+      );
+
+      // The DAO holds nothing under an empty tenant id — even if it were
+      // (incorrectly) queried with one, no catalog could appear.
+      when(mockProgramDao.getActivePrograms('')).thenAnswer((_) async => []);
+      when(mockRewardDao.getActiveRewards('')).thenAnswer((_) async => []);
+
+      await vmNoBinding.selectCustomer(testCustomer);
+
+      // Fail closed: the lookup ran without fabricating a tenant, the
+      // evaluation has no programs, and — because this is a legitimate
+      // unbound-terminal state, not a fault — no loyalty error is recorded.
+      verify(mockProgramDao.getActivePrograms('')).called(1);
+      expect(vmNoBinding.lastLoyaltyError, isNull);
+      expect(vmNoBinding.currentEvaluation, isNotNull);
+      expect(vmNoBinding.currentEvaluation!.programs, isEmpty);
+      expect(vmNoBinding.currentEvaluation!.hasAnyEligibleReward, isFalse);
     });
   });
 }

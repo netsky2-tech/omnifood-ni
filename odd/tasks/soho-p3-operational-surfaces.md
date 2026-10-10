@@ -872,3 +872,17 @@ APK `1.1.0+11021` de la rama instalado y apuntando a `http://127.0.0.1:3000/api`
 **Impacto:** camino del dinero. El operador lee 203, el sistema registra 202.50, y el **vuelto se calcula sobre 202.50**. Es la misma clase que el resto del bloque: la pantalla dice una cosa y el sistema hace otra.
 
 **Forma del arreglo (chico, PR propio):** que la etiqueta muestre **exactamente** lo que el tap aplica (formatear con la precisión del valor), o bien que etiqueta y valor aplicado sean ambos el monto redondeado — es una decisión de producto entre "exacto" y "redondeado", pero **tienen que coincidir**. Al arreglarlo, ojo con el `Set` de `getSuggestedDenominations`: si el exacto y un redondeado colisionan, se oculta una sugerencia.
+
+### 18.3 · La lealtad, segunda capa: el tenant resuelto desde el cliente — ARREGLADO
+
+**Lo que mostró el aparato** (segunda captura, `~/.cache/s23/pantalla_lealtad2.png`): **con el APK que ya incluía el arreglo de cableado**, el cliente de 1.500 puntos seleccionado seguía sin mostrar tarjeta ni CTA, con la nube sincronizada. O sea: el arreglo del constructor era **necesario pero no suficiente**.
+
+**La causa:** `_reEvaluateLoyalty` resolvía el tenant local con `_selectedCustomer!.id` y lo pasaba a `loyaltyProgramDao.getActivePrograms` / `getActiveRewards`. La tabla local guarda un `tenant_id` **real e indexado** (lo escribe el sync con la clave `tenant_id` de `local_configs`), así que la consulta devolvía **siempre vacío** → sin programas → sin evaluación → sin superficie. Y `_buildTicketSnapshot` metía el id del cliente en el `tenantId` del snapshot: la misma confusión, un segundo sitio.
+
+**El arreglo:** los dos sitios resuelven el tenant desde `localConfigDao.getConfigByKey('tenant_id')` — **la misma fuente con la que el sync escribe las filas** — y **fallan cerrado** si no hay binding (tenant vacío → sin programas → sin superficie). No se fabrica un tenant y **no** se copió el `'tenant-1'` de relleno del sync: una terminal sin binding es un estado legítimo, no una excusa para inventar alcance.
+
+**La evidencia más linda del RED:** el mock capturó literalmente `MockLoyaltyProgramDao.getActivePrograms('cust-1')` — el id del cliente viajando como tenant.
+
+**Mutación propia:** volver a resolverlo con el id del cliente → el mismo `Expected: not null / Actual: <null>`, restaurada byte-idéntica.
+
+**Verificación:** 21/21 en la suite de cableado (4 tests nuevos: el core, **el alcance respetado** —con el programa bajo OTRO tenant la evaluación queda vacía, para que nadie "arregle" dejando de filtrar—, el tenant del snapshot y el fallo cerrado) y 53/53 en la del view model. El fixture del test se re-clavó de `'cust-1'` a `'tenant-1'`, así que todos los stubs preexistentes ahora prueban que la conflación cliente/tenant desapareció.
