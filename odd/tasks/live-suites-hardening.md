@@ -1,7 +1,8 @@
 # Feature: Live-suite hardening — NHILOS_LIVE_API fallback + canonical :3300 (issue #828)
 
-- **Status:** REVIEWED — commit `f2e5f8c9` approved by native review `review-bd2c8471dd9fffc1`
-  (lens `review-reliability`, tier medium, 2 informational advisories); push/PR pending the user's decision
+- **Status:** REVIEWED ×2 — `f2e5f8c9` approved by `review-bd2c8471dd9fffc1`; unit 2
+  (`d8a17901`, branch scope) approved by `review-a3a6dda7260ed188`; both receipts acknowledged.
+  Push + PR authorized by the user; merge only with CI green.
 - **Issue:** #828 (`status:approved`, `type:bug`) — backflow of review `review-3beb46530ec87586` (PR #827)
 - **Branch:** `fix/live-suites-base-url` from `main` (`dc9842fe`)
 - **Worktree:** `/home/octavio_morales/omnifood-ni-live-suites-hardening` (isolated — never write on `main`)
@@ -119,10 +120,25 @@ Test-first again. RED with the pre-fix helper exported as a bare skeleton:
 - Contract updated in the module header and in the `modifiers-live.integration` header
   (origin alone is now documented as valid).
 
+Native review of unit 2: `review-a3a6dda7260ed188` (tier medium, lens `review-reliability`,
+534 changed lines frozen, correction budget 200) → **APPROVED** and acknowledged; it left 2 more
+informational advisories, recorded below, with no correction offered.
+
 Checks after unit 2: `live-api-base.test.ts` **31/31**; integration unset / blank /
 origin-only → **42/42** each; full default unit suite `--no-file-parallelism` →
 **100 files, 1464 passed, 4 skipped**; `npm run typecheck` clean; `npm run lint` clean (0 hits
 in the touched files); `playwright test --list -c playwright.live.config.ts` → 15 tests / 2 files.
+
+## Unit 2 review advisories (`review-a3a6dda7260ed188`, non-blocking)
+
+- **R3-001** (`src/lib/live-api-base.ts:112-114`, WARNING): `resolveLiveApiOrigin()` re-parses the
+  string that `resolveLiveApiBase()` just produced. Accepted deliberately: the value has to be
+  parsed to extract an origin, and re-validating the public function's output keeps the two
+  exports independent of call order. If it ever shows up in a hot path, cache the `URL`.
+- **R3-002** (`src/lib/live-api-base.ts:65-66`, SUGGESTION): `resolveLiveEnv()` applies only the
+  blank/trim rule — no URL validation — which is correct for non-URL variables
+  (`NHILOS_LIVE_EMAIL`, `MANUAL_E2E_PASS`) and is why `NHILOS_LIVE_API` has its own resolver.
+  Kept as-is; documented here so the next reader does not "simplify" the two into one.
 
 ## Native review advisories (non-blocking, candidate approved)
 
@@ -143,6 +159,9 @@ in the touched files); `playwright test --list -c playwright.live.config.ts` →
 
 ## Commits
 
+- `d8a17901` — `fix(dashboard): fail fast on a malformed live API base and normalize /api`
+  (unit 2: both advisories from `review-bd2c8471dd9fffc1`, test-first RED 11 → GREEN 31/31).
+  Native review `review-a3a6dda7260ed188` APPROVED + acknowledged.
 - `f2e5f8c9` — `fix(dashboard): make live-suite env fallback immune to blank NHILOS_LIVE_API`
   (work unit: helper + 18-case unit spec + wiring in 4 live suites + 2 Playwright files +
   vitest/playwright live configs + this ODD doc). Native review `review-bd2c8471dd9fffc1`
