@@ -75,6 +75,57 @@ describe('route transport registry (AppModule route table)', () => {
     expect(orphans).toEqual([]);
   });
 
+  it('reports a source-declared controller that no module serves (positive control, #829)', () => {
+    // Why this test exists: the rule above asserts ZERO orphans, so it proves
+    // nothing if the detector itself stops finding anything. A broken source
+    // walk (path change, filter regression, early return) would keep
+    // `expect(orphans).toEqual([])` green forever and silently retire the
+    // guard. This is the control: point the detector at a directory that DOES
+    // hold an unregistered @Controller and require it to report that class.
+    const fixtureDir = resolve(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      'test',
+      'fixtures',
+      'orphan-guard',
+    );
+
+    const reported = findUnregisteredSourceControllers(
+      fixtureDir,
+      routes,
+      TRANSPORT_DECLARATIONS,
+    );
+    expect(reported).toEqual([
+      {
+        controller: 'OrphanFixtureController',
+        file: 'orphan-fixture.controller.ts',
+        served: false,
+        declared: false,
+      },
+    ]);
+
+    // Two-sided control: a detector that reported EVERY source class would also
+    // satisfy the assertion above, so the same fixture must disappear once the
+    // class is both served and declared.
+    const servedAndDeclared = findUnregisteredSourceControllers(
+      fixtureDir,
+      [
+        {
+          controller: 'OrphanFixtureController',
+          controllerPath: 'orphan-fixture',
+          httpMethod: 'GET',
+          handlerPath: '',
+          route: '/orphan-fixture',
+          guards: ['AuthGuard'],
+        },
+      ],
+      [{ controller: 'OrphanFixtureController', transport: 'human' }],
+    );
+    expect(servedAndDeclared).toEqual([]);
+  });
+
   it('classifies every route and matches declared transports to the guards actually present', () => {
     const findings = verifyRouteTransportRegistry(
       routes,
