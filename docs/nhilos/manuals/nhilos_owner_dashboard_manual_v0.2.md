@@ -7,7 +7,7 @@
 **Aplica a:** Propietarios (Owners), administradores y gerentes de SOHO Café (`NH-T0001`)  
 **Acceso Web:** Portal Backoffice en la Nube  
 
-> **Cambios v0.2:** sección 6 reescrita paso a paso con capturas actualizadas; correcciones de renderizado, terminología y alineación de §3–§4 con la UI real; captura del dashboard con filtro «Este mes», imágenes nuevas para §7 (Inventario y Recetas) y §9 (Usuarios), y ruta real de Usuarios. Cierre de follow-ups: §10 reformulada con lo disponible hoy y su hoja de ruta (la ruta `Ajustes > Dispositivos` no existe en el backoffice) y §11 sin marcadores de posición, solo canales verificables y guías incluidas.
+> **Cambios v0.2:** sección 6 reescrita paso a paso con capturas actualizadas; correcciones de renderizado, terminología y alineación de §3–§4 con la UI real; captura del dashboard con filtro «Este mes», imágenes nuevas para §7 (Inventario y Recetas) y §9 (Usuarios), y ruta real de Usuarios. Cierre de follow-ups: §10 documenta el panel de monitoreo de flota en `Administración > Dispositivos` (/devices) con revocación autogestionada y frescura en tiempo real; y §11 sin marcadores de posición, solo canales verificables y guías incluidas.
 
 ---
 
@@ -227,15 +227,31 @@ En la sección **Administración > Usuarios** del menú lateral (título «Gesti
 
 ---
 
-## 10. Monitoreo de Terminales de Flota (en desarrollo)
+## 10. Monitoreo de Terminales de Flota
 
-Hoy **no existe la ruta `Ajustes > Dispositivos` en el backoffice**: el panel por terminal todavía no está construido, por lo que esta sección se documenta sin captura y con lo que realmente está disponible hoy:
+El panel de gestión de terminales está disponible en el menú lateral bajo **Administración > Dispositivos** (ruta directa `/devices`), accesible para los roles de **Dueño (Owner)** y **Gerente (Manager)**:
 
-* **Vinculación de terminal:** cada equipo MIRAY Q80 queda vinculado a su sucursal al instalar la app POS (la app lo confirma con «Terminal vinculada»); si el terminal registrado no corresponde al dispositivo, la app lo informa y bloquea el uso.
-* **Revocación desde el servidor:** la plataforma puede revocar un dispositivo de forma remota — la app lo muestra como «Dispositivo revocado por el servidor. Requiere reactivación.» —. El botón de revocación autogestionada en el backoffice aún no existe: por ahora este bloqueo lo ejecuta el equipo de NHILOS cuando lo solicitás por el canal de soporte (§11).
-* **Frescura de sincronización:** los módulos Fiscal, Caja, Kardex y Auditoría muestran el indicador de estado («Sincronización al día» / «Sincronización demorada») para saber si el backoffice está recibiendo información del POS.
+1. **Panel Resumen Ejecutivo (KPIs):**
+   * **Total de Terminales:** Cantidad de dispositivos físicos asociados a tu comercio.
+   * **Activas:** Terminales en operación regular que pueden procesar cobros y sincronizar transacciones.
+   * **Revocadas:** Terminales cuya credencial ha sido invalidada y tienen el acceso bloqueado.
+   * **En Sincronía:** Terminales cuyos recibos de venta e inventario están confirmados al día dentro de la ventana de tolerancia.
 
-**Hoja de ruta:** detalle por terminal en el backoffice (versión de la app, batería, dirección IP y última sincronización) y revocación desde el propio panel. Esta sección se ampliará con capturas cuando el módulo exista.
+2. **Detalle y Estado de Terminales:**
+   * **Identificador y Etiqueta:** Muestra el ID canónico de la terminal física (ej. `Q802024120001`) y el nombre amigable configurado en la sucursal (ej. *Caja Principal*).
+   * **Estado de Credencial:** Badges explícitos con etiqueta y punto de color (*Activo* en verde, *Pendiente* en ámbar, *Revocado* en rojo y *Retirado* en gris).
+   * **Frescura de Sincronización:** Indica en tiempo real si la terminal está *En sincronía*, *Desactualizada*, *Parcial* o *Sin sincronizar* (para equipos revocados fuera de la rotación comercial).
+   * **Última Sincronización y Secuencia:** Fecha y hora exacta de la última confirmación de recibo (`es-NI`) y marca de agua del último correlativo de ticket recibido (`#42`), o *Nunca* si el dispositivo aún no ha transmitido ventas.
+   * **Versión de la App (POS):** Build reportado por la aplicación en el dispositivo físico (ej. `1.2.3`).
+   * **Credencial y Vigencia:** Muestra las fechas de emisión y vencimiento de la clave criptográfica de enlace.
+
+3. **Revocación Autogestionada de Terminales:**
+   * Si una terminal se extravía, sufre un robo o presenta sospecha de compromiso físico, un usuario con permisos autorizados (`device_sync:revoke`, concedido por defecto al Dueño y delegable a administradores designados) puede revocarla de inmediato.
+   * Al pulsar **Revocar** en la fila del dispositivo, se despliega un diálogo de confirmación con advertencia de impacto operativo: *la terminal quedará desconectada y no podrá cobrar hasta ser reactivada por soporte o re-vinculación*.
+   * **Doble verificación de seguridad:** El formulario exige ingresar un motivo justificado (para la bitácora inmutable de auditoría) y tipear la palabra clave `REVOCAR` para habilitar el botón de confirmación.
+
+4. **Botón de Actualización Manual:**
+   * Podés pulsar el botón **Actualizar** en la esquina superior derecha para revalidar el estado de sincronización de todas las terminales en cualquier momento sin necesidad de recargar la página completa.
 
 ---
 

@@ -6,7 +6,18 @@
 - **Commit Evidence B17-02:** `763a8e4a274dbd356c9a35d8e75db7b5c1ae55b7` (`feat(identity): implement owner device sync revocation endpoint (B17-02)`)
 - **Commit Evidence B17-03:** `a4bc709405b6305a2e5842c1c6827027c9b0cf34` (`feat(dashboard): implement fleet devices read panel and live suite (B17-03)`)
 - **Commit Evidence B17-04:** `4ab810ce76632c028ad7d722d5ddbf972ba20fa0` (`feat(dashboard): implement sanitized device revocation modal and permission delegation (B17-04)`)
-- **Status:** COMPLETED — B17-01, B17-02, B17-03 & B17-04
+- **Status:** COMPLETED — B17-01, B17-02, B17-03, B17-04 & B17-06 (Issue #832 Complete)
+
+## Batch B17-06: Manual §10 Completion & Issue #832 Closeout
+
+- Rewrote `docs/nhilos/manuals/nhilos_owner_dashboard_manual_v0.2.md` §10:
+  - Documented live `/devices` panel under `Administración > Dispositivos`.
+  - Documented real-time freshness badges, sequence numbers, and credential states.
+  - Documented self-service revocation with operational warnings, mandatory audit reason, and "REVOCAR" confirmation.
+  - Removed battery promise per DEC-17.3.
+- Updated `docs/plans/identity/batch_17_fleet_terminal_registry_and_owner_revocation.md` status.
+- Reconciled stale #852 note in `odd/tasks/manual-capture-explicit-creds.md`.
+
 
 ## Batch B17-04: Owner Revocation Action Modal & Form Sanitization (Issue #832)
 

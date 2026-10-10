@@ -199,8 +199,11 @@ keep them non-parallel with anything else touching `identity` or the settings ar
 (one revoke + one blocked POS run recorded in `odd/tasks/fleet-terminal-panel.md`, then manual §10 text).
 Claims from this document are not evidence; each batch must link its own run output.
 
-## 8. One next action
+## 8. Status and deliveries
 
-~~Answer DEC-17.1 and DEC-17.2~~ — both answered on 2026-10-10 (derived read model; OWNER only). The next
-action is now **B17-01**: implement the tenant-scoped terminal read model behind a service method plus its
-RLS isolation spec, with no migration and no HTTP route. DEC-17.4 (last-seen IP) can stay open until B17-05.
+- **B17-01**: Delivered — `TenantTerminalDto` and `DeviceSyncCredentialService.listTenantTerminals` implemented with strict PostgreSQL RLS and sync-health cross-check.
+- **B17-02**: Delivered — `POST /identity/device-sync/credentials/:id/revoke` with `AppPermission.DEVICE_SYNC_REVOKE` permission, duplicate `ConflictException` rejection, and `SyncTransportGuard` fail-closed proof.
+- **B17-03**: Delivered — `GET /identity/device-sync/terminals` for OWNER and MANAGER, `features/devices` module in Owner Dashboard, `DevicesPage` (`/devices`, Luxury +1 NHILoS standard v1.0), and real live integration suite `devices.live.test.ts`.
+- **B17-04**: Delivered — Dynamic permission delegation (OWNER default, delegable to any role via `device_sync:revoke`), `RevokeDeviceModal` with sanitized form (`noValidate`, Zod schema, keyword confirmation "REVOCAR", Spanish literal error messages, destructive warning alert).
+- **B17-05**: Telemetry (app version / last-seen IP) — deferred cross-app per DEC-17.3/DEC-17.4.
+- **B17-06**: Delivered — Manual §10 rewritten with delivered fleet monitoring panel and self-service revocation, battery removed per DEC-17.3. Closes #832.
