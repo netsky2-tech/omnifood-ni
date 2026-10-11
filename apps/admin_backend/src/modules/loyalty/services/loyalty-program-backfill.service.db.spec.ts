@@ -610,6 +610,75 @@ describe('LoyaltyProgramBackfillService (db)', () => {
 
       const ambiguousNullRows = await countNullProgramRows(ambiguousTenant);
       expect(ambiguousNullRows).toBe(1);
+      const noneNullRows = await countNullProgramRows(noneTenant);
+      expect(noneNullRows).toBe(1);
+    });
+
+    it('exposes per-customer unassigned row counts in the report', async () => {
+      // Two customers: one with 3 NULL rows, one with 1. The operator needs
+      // the per-customer impact before committing, not just the aggregate.
+      const tenantId = `tenant-preview-counts-${randomUUID()}`;
+      const heavyCustomer = randomUUID();
+      const lightCustomer = randomUUID();
+      await harness.setupTenant({
+        tenantId,
+        activeProgramCount: 1,
+        customers: [
+          {
+            customerId: heavyCustomer,
+            txs: [
+              { units: 10, points: 10 },
+              { units: 20, points: 20 },
+              { units: 30, points: 30 },
+            ],
+          },
+          { customerId: lightCustomer, txs: [{ units: 5, points: 5 }] },
+        ],
+      });
+
+      const report = await harness.service.previewBackfill(tenantId, 200);
+
+      expect(report.customers).toEqual([
+        { customerId: heavyCustomer, unassignedRowCount: 3 },
+        { customerId: lightCustomer, unassignedRowCount: 1 },
+      ]);
+      // Entries stay aligned with the scan bound and the aggregate.
+      expect(report.customersScanned).toBe(report.customers.length);
+      const totalRows = report.customers.reduce(
+        (sum, entry) => sum + entry.unassignedRowCount,
+        0,
+      );
+      expect(totalRows).toBe(4);
+      expect(await countNullProgramRows(tenantId)).toBe(4);
+    });
+
+    it('commitBackfill also reports the scanned customers with their counts', async () => {
+      const tenantId = `tenant-commit-counts-${randomUUID()}`;
+      const customerId = randomUUID();
+      await harness.setupTenant({
+        tenantId,
+        activeProgramCount: 1,
+        customers: [
+          {
+            customerId,
+            txs: [
+              { units: 10, points: 10 },
+              { units: 15, points: 15 },
+            ],
+          },
+        ],
+      });
+
+      const report = await harness.service.commitBackfill(
+        tenantId,
+        200,
+        actorUserId,
+      );
+
+      expect(report.customers).toEqual([
+        { customerId, unassignedRowCount: 2 },
+      ]);
+      expect(report.transactionsAttributed).toBe(2);
     });
   });
 });

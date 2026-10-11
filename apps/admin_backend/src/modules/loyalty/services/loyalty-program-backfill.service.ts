@@ -20,8 +20,21 @@ export interface BackfillUnassignedUnresolvedEntry {
   outcome: 'none' | 'PROGRAM_UNRESOLVED';
 }
 
+export interface BackfillUnassignedCustomerEntry {
+  customerId: string;
+  /** NULL-program rows counted for this customer at scan time. */
+  unassignedRowCount: number;
+}
+
 export interface BackfillUnassignedReport {
   customersScanned: number;
+  /**
+   * Per-customer impact, bounded by the batch, so the operator can judge the
+   * plan before committing. Counts are scan-time; on commit, the aggregate
+   * `transactionsAttributed` stays the authority for what was actually
+   * written (a concurrent race could change rows between scan and UPDATE).
+   */
+  customers: BackfillUnassignedCustomerEntry[];
   transactionsAttributed: number;
   customersAttributed: number;
   unresolved: BackfillUnassignedUnresolvedEntry[];
@@ -91,6 +104,10 @@ export class LoyaltyProgramBackfillService {
 
     return {
       customersScanned: scanned.length,
+      customers: scanned.map((row) => ({
+        customerId: row.customer_id,
+        unassignedRowCount: Number(row.tx_count ?? 0),
+      })),
       transactionsAttributed: 0,
       customersAttributed: 0,
       unresolved,
@@ -168,6 +185,10 @@ export class LoyaltyProgramBackfillService {
 
     return {
       customersScanned: scanned.length,
+      customers: scanned.map((row) => ({
+        customerId: row.customer_id,
+        unassignedRowCount: Number(row.tx_count ?? 0),
+      })),
       transactionsAttributed,
       customersAttributed,
       unresolved,
