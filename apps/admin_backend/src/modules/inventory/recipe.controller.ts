@@ -77,6 +77,44 @@ export class RecipeController {
     };
   }
 
+  /**
+   * Round-2 §17.6 slice S3: the governed surface behind the SUB_RECIPE
+   * "Versión de Referencia" selector. Before this route the form asked the
+   * operator to TYPE a version UUID (the last entry in the no-uuid-inputs
+   * exception ledger); a selector over an unfetchable entity would have been
+   * fake. Selected columns only.
+   */
+  @Get('products/:productId/versions')
+  async listProductVersions(
+    @Param('productId') productId: string,
+    @GetTenantId() tenantId?: string,
+  ): Promise<
+    Array<{
+      id: string;
+      version_number: number;
+      is_active: boolean;
+      version_note: string | null;
+      fecha_inicio_vigencia: Date | null;
+      fecha_fin_vigencia: Date | null;
+      published_at: Date | null;
+    }>
+  > {
+    const normalizedTenantId = this.requireTenant(tenantId);
+    const versions = await this.recipeService.listProductVersions(
+      normalizedTenantId,
+      productId,
+    );
+    return versions.map((version) => ({
+      id: version.id,
+      version_number: version.version_number,
+      is_active: version.is_active,
+      version_note: version.version_note ?? null,
+      fecha_inicio_vigencia: version.fecha_inicio_vigencia ?? null,
+      fecha_fin_vigencia: version.fecha_fin_vigencia ?? null,
+      published_at: version.published_at ?? null,
+    }));
+  }
+
   @Get('products/:productId/active')
   async getActiveRecipe(
     @Param('productId') productId: string,

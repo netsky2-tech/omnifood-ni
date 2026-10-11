@@ -911,4 +911,45 @@ describe('RecipeService', () => {
       );
     });
   });
+
+  describe('listProductVersions (round-2 §17.6 slice S3)', () => {
+    it('lists every version of the product inside the tenant transaction, newest first, selected columns only',
+      async () => {
+        recipeVersionRepo.find.mockResolvedValueOnce([
+          { id: 'v3', version_number: 3, is_active: true },
+          { id: 'v2', version_number: 2, is_active: false },
+          { id: 'v1', version_number: 1, is_active: false },
+        ]);
+
+        const versions = await service.listProductVersions(
+          'tenant-A',
+          'product-1',
+        );
+
+        expect(versions.map((v) => v.id)).toEqual(['v3', 'v2', 'v1']);
+        expect(recipeVersionRepo.find).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { tenant_id: 'tenant-A', product_id: 'product-1' },
+            order: { version_number: 'DESC' },
+            select: expect.objectContaining({
+              id: true,
+              version_number: true,
+              is_active: true,
+            }),
+          }),
+        );
+      },
+    );
+
+    it('returns an empty list for a product with no versions', async () => {
+      recipeVersionRepo.find.mockResolvedValueOnce([]);
+
+      const versions = await service.listProductVersions(
+        'tenant-A',
+        'product-404',
+      );
+
+      expect(versions).toEqual([]);
+    });
+  });
 });

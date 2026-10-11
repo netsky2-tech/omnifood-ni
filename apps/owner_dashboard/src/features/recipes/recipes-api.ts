@@ -31,6 +31,29 @@ export function fetchRecipeSnapshot(recipeVersionId: string, opts?: ApiClientMet
   return api.get<RecipeSnapshot>(`/recipes/${recipeVersionId}/snapshot`, opts);
 }
 
+/** Round-2 §17.6 S3: one product's recipe versions for the SUB_RECIPE
+ * reference selector. Selected columns only — identity, number, vigencia
+ * and note. */
+export interface RecipeVersionOption {
+  id: string;
+  version_number: number;
+  is_active: boolean;
+  version_note: string | null;
+  fecha_inicio_vigencia: string | null;
+  fecha_fin_vigencia: string | null;
+  published_at: string | null;
+}
+
+export function fetchRecipeVersions(
+  productId: string,
+  opts?: ApiClientMethodOptions,
+) {
+  return api.get<RecipeVersionOption[]>(
+    `/recipes/products/${productId}/versions`,
+    opts,
+  );
+}
+
 export function createRecipeVersion(
   productId: string,
   input: CreateRecipeVersionInput,
