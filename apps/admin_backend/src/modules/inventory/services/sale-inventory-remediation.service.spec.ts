@@ -243,17 +243,89 @@ describe('SaleInventoryRemediationService (Slice 10)', () => {
     expect(kardexSaves[0][1].quantity).toBe(-1);
     expect(kardexSaves[1][1].quantity).toBe(-2);
 
-    // Verify Audit log created
+    // Verify Audit log created — the stream sequence is allocated (never the
+    // DB default 0, which collides on the writer's second row for the same
+    // actor under uq_audit_stream_sequence_active).
     const auditSaves = mockManager.create.mock.calls.filter(
       (c: any[]) => c[0] === AuditLog,
     );
     expect(auditSaves).toHaveLength(1);
     expect(auditSaves[0][1].action).toBe('SALE_INVENTORY_REMEDIATED');
+    expect(auditSaves[0][1].sequence_no).toBe(1);
+    expect(mockManager.findOne).toHaveBeenCalledWith(
+      AuditLog,
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenant_id: tenantId,
+          device_id: 'BACKOFFICE',
+          user_id: actor.userId,
+        }),
+        order: { sequence_no: 'DESC' },
+      }),
+    );
 
     // Verify SERIALIZABLE transaction used
     expect(dataSource.transaction).toHaveBeenCalledWith(
       'SERIALIZABLE',
       expect.any(Function),
     );
+  });
+
+  it('continues the audit stream: a prior ACTIVE log makes the next row sequence+1', async () => {
+    const dto = {
+      idempotencyKey: 'idemp-seq-8',
+      invoiceId: '11111111-1111-4111-8111-111111111111',
+      recipeVersionId: '22222222-2222-4222-8222-222222222222',
+      reason: 'Valid remediation',
+    };
+
+    mockReceiptRepo.findOne.mockResolvedValue(null);
+    // The service's first findOne calls are the idempotency/concurrency
+    // receipt lookups; only the AuditLog lookup finds a prior stream row.
+    mockManager.findOne.mockImplementation((entityClass: unknown) =>
+      entityClass === AuditLog
+        ? Promise.resolve({ sequence_no: 7 })
+        : Promise.resolve(null),
+    );
+
+    let qbCallCount = 0;
+    mockManager.createQueryBuilder.mockImplementation(() => {
+      qbCallCount++;
+      return {
+        setLock: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockImplementation(async () => {
+          if (qbCallCount === 1)
+            return {
+              id: dto.invoiceId,
+              tenant_id: tenantId,
+              inventoryOutcome: 'APPLIED_INVENTORY_PENDING',
+              items: [{ quantity: 1 }],
+            };
+          if (qbCallCount === 2) return null; // sync receipt query
+          if (qbCallCount === 3)
+            return {
+              id: dto.recipeVersionId,
+              tenant_id: tenantId,
+              is_active: true,
+            };
+          if (qbCallCount === 4)
+            return { id: 'insumo-1', stock: 10, existenciaActual: 10 };
+          return null;
+        }),
+      };
+    });
+    mockManager.find.mockResolvedValueOnce([
+      { insumo_id: 'insumo-1', quantity: 0.5 },
+    ]);
+
+    await service.remediateSaleInventory(tenantId, dto, actor);
+
+    const auditSaves = mockManager.create.mock.calls.filter(
+      (c: any[]) => c[0] === AuditLog,
+    );
+    expect(auditSaves[0][1].sequence_no).toBe(8);
   });
 });

@@ -257,9 +257,26 @@ export class SaleInventoryRemediationService {
         ordinal++;
       }
 
+      // The audit stream sequence is allocated like `audit-trail.service`
+      // does: uq_audit_stream_sequence_active rejects a SECOND row with the
+      // sequence default in the same (tenant, BACKOFFICE, actor) stream.
+      const lastAuditLog = await manager.findOne(AuditLog, {
+        where: {
+          tenant_id: tenantId,
+          device_id: 'BACKOFFICE',
+          user_id: actor.userId,
+          forensic_status: 'ACTIVE',
+        },
+        order: { sequence_no: 'DESC' },
+      });
+      const auditSequenceNo = lastAuditLog
+        ? Number(lastAuditLog.sequence_no) + 1
+        : 1;
+
       const auditLog = manager.create(AuditLog, {
         id: auditEventId,
         tenant_id: tenantId,
+        sequence_no: auditSequenceNo,
         user_id: actor.userId,
         device_id: 'BACKOFFICE',
         action: 'SALE_INVENTORY_REMEDIATED',

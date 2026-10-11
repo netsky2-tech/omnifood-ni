@@ -196,6 +196,7 @@ describe('LoyaltyController', () => {
     it('wires the preview route to the backfill service with the tenant and batch size', async () => {
       programBackfillService.previewBackfill.mockResolvedValueOnce({
         customersScanned: 0,
+        customers: [],
         transactionsAttributed: 0,
         customersAttributed: 0,
         unresolved: [],
@@ -214,6 +215,7 @@ describe('LoyaltyController', () => {
     it('wires the commit route to the backfill service with tenant, batch size and actor', async () => {
       programBackfillService.commitBackfill.mockResolvedValueOnce({
         customersScanned: 0,
+        customers: [],
         transactionsAttributed: 0,
         customersAttributed: 0,
         unresolved: [],

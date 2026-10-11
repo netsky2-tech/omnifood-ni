@@ -72,13 +72,13 @@ void main() {
     bool includeFiscalConfig = true,
     bool omitCategoryId = false,
     bool clearCategoryId = false,
-  }) =>
-      TerminalPrimingPayload.fromJson(
-        <String, dynamic>{
-          'status': 'success',
-          'serverTime': '2026-09-21T10:00:00.000Z',
-          'currentVersion': 7,
-          'deltas': <String, dynamic>{
+    int? highestSequenceNumber,
+  }) {
+    final json = <String, dynamic>{
+      'status': 'success',
+      'serverTime': '2026-09-21T10:00:00.000Z',
+      'currentVersion': 7,
+      'deltas': <String, dynamic>{
             'products': products ??
               [
                 {
@@ -115,9 +115,16 @@ void main() {
             'fiscalConfig': includeFiscalConfig
                 ? (fiscalConfig ?? fiscalEnvelope())
                 : null,
-          },
-        },
-      );
+      },
+    };
+    // Assigned outside the literal: the newer analyzer suggests the Dart
+    // 3.8+ null-aware element marker for a collection-if, while the CI
+    // runner's Dart SDK cannot parse that marker yet.
+    if (highestSequenceNumber != null) {
+      json['highestSequenceNumber'] = highestSequenceNumber;
+    }
+    return TerminalPrimingPayload.fromJson(json);
+  }
 
   setUp(() async {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
@@ -184,6 +191,29 @@ void main() {
   });
 
   group('L1-10b — ActivationPrimingService.primeTerminal', () {
+    test('records the tenant-wide cloud highest sequence for the D-6 seed '
+        '(replacement/reinstall handoff to the controlled sale runner)',
+        () async {
+      // The runner seeds a fresh terminal's fiscal series at
+      // `dgi_cloud_highest_sequence + 1`; priming is the step that writes
+      // that key from the payload's highestSequenceNumber. Without this
+      // write a replacement terminal restarts at 1 and collides with
+      // already-issued folios.
+      primingPort.payload = payload(
+        includeFiscalConfig: false,
+        highestSequenceNumber: 42,
+      );
+
+      await service.primeTerminal();
+
+      final stored = await database.localConfigDao
+          .getConfigByKey('dgi_cloud_highest_sequence');
+      expect(stored, isNotNull,
+          reason: 'the replacement chain breaks silently when priming fails '
+              'to record the cloud highest sequence');
+      expect(stored!.value, '42');
+    });
+
     test(
         'applies products and catalog values and the fiscal projection through the real DAOs',
         () async {

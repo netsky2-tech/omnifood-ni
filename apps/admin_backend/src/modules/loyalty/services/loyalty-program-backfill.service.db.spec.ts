@@ -93,7 +93,9 @@ async function createTestHarness() {
   )`);
 
   // Pre-migration-shape audit_logs (uuid id, hash-chain columns defaulted) —
-  // mirrors the production columns the AuditLog entity maps to.
+  // mirrors the production columns the AuditLog entity maps to, INCLUDING the
+  // partial unique stream index: without it this suite silently accepted two
+  // sequence-0 rows in one stream that production's index would reject.
   await bootstrap.query(`CREATE TABLE "${schema}".audit_logs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id text NOT NULL,
@@ -112,6 +114,9 @@ async function createTestHarness() {
     forensic_status varchar(32) NOT NULL DEFAULT 'ACTIVE',
     hash_version varchar
   )`);
+  await bootstrap.query(`CREATE UNIQUE INDEX "uq_audit_stream_sequence_active"
+    ON "${schema}".audit_logs (tenant_id, device_id, user_id, sequence_no)
+    WHERE forensic_status = 'ACTIVE'`);
 
   await bootstrap.query(`CREATE TABLE "${schema}".users (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id text,
@@ -517,6 +522,40 @@ describe('LoyaltyProgramBackfillService (db)', () => {
       });
     });
 
+    it('advances the audit stream sequence: a second commit by the same actor does not collide', async () => {
+      // uq_audit_stream_sequence_active is unique on
+      // (tenant_id, device_id, user_id, sequence_no) where ACTIVE; rows
+      // written with the sequence default (0) collide on the SECOND commit
+      // by the same owner actor. The writer must allocate the next sequence
+      // like audit-trail.service does.
+      const tenantId = `tenant-audit-seq-${randomUUID()}`;
+      const customerId = randomUUID();
+      await harness.setupTenant({
+        tenantId,
+        activeProgramCount: 1,
+        customers: [{ customerId, txs: [{ units: 10, points: 10 }] }],
+      });
+
+      await harness.service.commitBackfill(tenantId, 200, actorUserId);
+
+      // Second commit attributes 0 rows but still writes its audit row; it
+      // must not violate the stream's unique index.
+      const second = await harness.service.commitBackfill(
+        tenantId,
+        200,
+        actorUserId,
+      );
+      expect(second.dryRun).toBe(false);
+
+      const rows = await harness.auditRepo.find({
+        where: { tenant_id: tenantId },
+      });
+      const sequences = rows
+        .map((row) => Number(row.sequence_no))
+        .sort((a, b) => a - b);
+      expect(sequences).toEqual([1, 2]);
+    });
+
     it('fails closed without writing anything when the actor user id is missing', async () => {
       const tenantId = `tenant-no-actor-${randomUUID()}`;
       const customerId = randomUUID();
@@ -610,6 +649,84 @@ describe('LoyaltyProgramBackfillService (db)', () => {
 
       const ambiguousNullRows = await countNullProgramRows(ambiguousTenant);
       expect(ambiguousNullRows).toBe(1);
+      const noneNullRows = await countNullProgramRows(noneTenant);
+      expect(noneNullRows).toBe(1);
+    });
+
+    it('exposes per-customer unassigned row counts in the report', async () => {
+      // Two customers: one with 3 NULL rows, one with 1. The operator needs
+      // the per-customer impact before committing, not just the aggregate.
+      const tenantId = `tenant-preview-counts-${randomUUID()}`;
+      const heavyCustomer = randomUUID();
+      const lightCustomer = randomUUID();
+      await harness.setupTenant({
+        tenantId,
+        activeProgramCount: 1,
+        customers: [
+          {
+            customerId: heavyCustomer,
+            txs: [
+              { units: 10, points: 10 },
+              { units: 20, points: 20 },
+              { units: 30, points: 30 },
+            ],
+          },
+          { customerId: lightCustomer, txs: [{ units: 5, points: 5 }] },
+        ],
+      });
+
+      const report = await harness.service.previewBackfill(tenantId, 200);
+
+      // The scan orders by customer_id ASC; UUIDs are random, so derive the
+      // expected order from the IDs themselves.
+      const expectedOrder = [heavyCustomer, lightCustomer].sort();
+      expect(report.customers).toEqual([
+        {
+          customerId: expectedOrder[0],
+          unassignedRowCount: expectedOrder[0] === heavyCustomer ? 3 : 1,
+        },
+        {
+          customerId: expectedOrder[1],
+          unassignedRowCount: expectedOrder[1] === heavyCustomer ? 3 : 1,
+        },
+      ]);
+      // Entries stay aligned with the scan bound and the aggregate.
+      expect(report.customersScanned).toBe(report.customers.length);
+      const totalRows = report.customers.reduce(
+        (sum, entry) => sum + entry.unassignedRowCount,
+        0,
+      );
+      expect(totalRows).toBe(4);
+      expect(await countNullProgramRows(tenantId)).toBe(4);
+    });
+
+    it('commitBackfill also reports the scanned customers with their counts', async () => {
+      const tenantId = `tenant-commit-counts-${randomUUID()}`;
+      const customerId = randomUUID();
+      await harness.setupTenant({
+        tenantId,
+        activeProgramCount: 1,
+        customers: [
+          {
+            customerId,
+            txs: [
+              { units: 10, points: 10 },
+              { units: 15, points: 15 },
+            ],
+          },
+        ],
+      });
+
+      const report = await harness.service.commitBackfill(
+        tenantId,
+        200,
+        actorUserId,
+      );
+
+      expect(report.customers).toEqual([
+        { customerId, unassignedRowCount: 2 },
+      ]);
+      expect(report.transactionsAttributed).toBe(2);
     });
   });
 });

@@ -1,5 +1,5 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import {
@@ -20,8 +20,21 @@ export interface BackfillUnassignedUnresolvedEntry {
   outcome: 'none' | 'PROGRAM_UNRESOLVED';
 }
 
+export interface BackfillUnassignedCustomerEntry {
+  customerId: string;
+  /** NULL-program rows counted for this customer at scan time. */
+  unassignedRowCount: number;
+}
+
 export interface BackfillUnassignedReport {
   customersScanned: number;
+  /**
+   * Per-customer impact, bounded by the batch, so the operator can judge the
+   * plan before committing. Counts are scan-time; on commit, the aggregate
+   * `transactionsAttributed` stays the authority for what was actually
+   * written (a concurrent race could change rows between scan and UPDATE).
+   */
+  customers: BackfillUnassignedCustomerEntry[];
   transactionsAttributed: number;
   customersAttributed: number;
   unresolved: BackfillUnassignedUnresolvedEntry[];
@@ -91,6 +104,10 @@ export class LoyaltyProgramBackfillService {
 
     return {
       customersScanned: scanned.length,
+      customers: scanned.map((row) => ({
+        customerId: row.customer_id,
+        unassignedRowCount: Number(row.tx_count ?? 0),
+      })),
       transactionsAttributed: 0,
       customersAttributed: 0,
       unresolved,
@@ -168,6 +185,10 @@ export class LoyaltyProgramBackfillService {
 
     return {
       customersScanned: scanned.length,
+      customers: scanned.map((row) => ({
+        customerId: row.customer_id,
+        unassignedRowCount: Number(row.tx_count ?? 0),
+      })),
       transactionsAttributed,
       customersAttributed,
       unresolved,
@@ -234,25 +255,48 @@ export class LoyaltyProgramBackfillService {
 
   /**
    * ONE audit row for the whole commit (same minimal shape as the inventory
-   * remediation precedent; sequence/hash columns carry DB defaults).
+   * remediation precedent; hash columns carry DB defaults). The stream
+   * sequence is allocated like `audit-trail.service` does — the partial
+   * unique index uq_audit_stream_sequence_active rejects a SECOND row with
+   * the sequence default in the same (tenant, BACKOFFICE, actor) stream.
    */
   private async writeAuditLog(
     tenantId: string,
     actorUserId: string,
     metadata: Record<string, unknown>,
   ): Promise<void> {
-    await runInTenantTransaction(this.dataSource, tenantId, (manager) => {
-      const auditLog = manager.create(AuditLog, {
+    await runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      this.writeAuditLogWithManager(manager, tenantId, actorUserId, metadata),
+    );
+  }
+
+  private async writeAuditLogWithManager(
+    manager: EntityManager,
+    tenantId: string,
+    actorUserId: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    const lastLog = await manager.findOne(AuditLog, {
+      where: {
         tenant_id: tenantId,
-        user_id: actorUserId,
         device_id: 'BACKOFFICE',
-        action: 'LOYALTY_PROGRAM_BACKFILL_COMMITTED',
-        target_type: 'loyalty_program',
-        target_id: null,
-        metadata,
-        timestamp: new Date(),
-      });
-      return manager.save(AuditLog, auditLog);
+        user_id: actorUserId,
+        forensic_status: 'ACTIVE',
+      },
+      order: { sequence_no: 'DESC' },
     });
+    const sequenceNo = lastLog ? Number(lastLog.sequence_no) + 1 : 1;
+    const auditLog = manager.create(AuditLog, {
+      tenant_id: tenantId,
+      user_id: actorUserId,
+      device_id: 'BACKOFFICE',
+      sequence_no: sequenceNo,
+      action: 'LOYALTY_PROGRAM_BACKFILL_COMMITTED',
+      target_type: 'loyalty_program',
+      target_id: null,
+      metadata,
+      timestamp: new Date(),
+    });
+    await manager.save(AuditLog, auditLog);
   }
 }
