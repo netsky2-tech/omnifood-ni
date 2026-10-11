@@ -555,6 +555,51 @@ void main() {
         ); // Once from selectCustomer, once from addToCart
       },
     );
+
+    test('round-2 D-2: emptying the cart clears the customer context',
+        () async {
+      await viewModel.selectCustomer(testCustomer);
+      expect(viewModel.selectedCustomer, isNotNull);
+
+      viewModel.addToCart(
+        const Product(
+          id: 'prod-1',
+          name: 'Smash Burger',
+          uom: 'UN',
+          stock: 100,
+          averageCost: 60.0,
+          sellPrice: 120.0,
+          category: 'Food',
+        ),
+      );
+      expect(viewModel.cart, hasLength(1));
+
+      // The reported field flow: the operator takes the last unit to zero.
+      // That path never calls clearCart(), so the customer used to survive
+      // into the next sale and could redeem for somebody who had left.
+      viewModel.updateQuantity('prod-1', 0);
+      expect(viewModel.cart, isEmpty);
+      expect(viewModel.selectedCustomer, isNull,
+          reason: 'an empty cart must not carry the previous customer');
+      expect(viewModel.currentEvaluation, isNull);
+
+      // The same invariant holds when the last line is removed outright.
+      await viewModel.selectCustomer(testCustomer);
+      viewModel.addToCart(
+        const Product(
+          id: 'prod-1',
+          name: 'Smash Burger',
+          uom: 'UN',
+          stock: 100,
+          averageCost: 60.0,
+          sellPrice: 120.0,
+          category: 'Food',
+        ),
+      );
+      viewModel.removeFromCart('prod-1');
+      expect(viewModel.cart, isEmpty);
+      expect(viewModel.selectedCustomer, isNull);
+    });
   });
 
   group('processSale uses selectedRewardId for REDEEM', () {
