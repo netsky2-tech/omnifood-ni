@@ -79,8 +79,7 @@ void main() {
           'status': 'success',
           'serverTime': '2026-09-21T10:00:00.000Z',
           'currentVersion': 7,
-          if (highestSequenceNumber != null)
-            'highestSequenceNumber': highestSequenceNumber,
+          'highestSequenceNumber': ?highestSequenceNumber,
           'deltas': <String, dynamic>{
             'products': products ??
               [
