@@ -1,5 +1,5 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { LoyaltyLedgerService } from './loyalty-ledger.service';
 import {
@@ -255,25 +255,48 @@ export class LoyaltyProgramBackfillService {
 
   /**
    * ONE audit row for the whole commit (same minimal shape as the inventory
-   * remediation precedent; sequence/hash columns carry DB defaults).
+   * remediation precedent; hash columns carry DB defaults). The stream
+   * sequence is allocated like `audit-trail.service` does — the partial
+   * unique index uq_audit_stream_sequence_active rejects a SECOND row with
+   * the sequence default in the same (tenant, BACKOFFICE, actor) stream.
    */
   private async writeAuditLog(
     tenantId: string,
     actorUserId: string,
     metadata: Record<string, unknown>,
   ): Promise<void> {
-    await runInTenantTransaction(this.dataSource, tenantId, (manager) => {
-      const auditLog = manager.create(AuditLog, {
+    await runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      this.writeAuditLogWithManager(manager, tenantId, actorUserId, metadata),
+    );
+  }
+
+  private async writeAuditLogWithManager(
+    manager: EntityManager,
+    tenantId: string,
+    actorUserId: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    const lastLog = await manager.findOne(AuditLog, {
+      where: {
         tenant_id: tenantId,
-        user_id: actorUserId,
         device_id: 'BACKOFFICE',
-        action: 'LOYALTY_PROGRAM_BACKFILL_COMMITTED',
-        target_type: 'loyalty_program',
-        target_id: null,
-        metadata,
-        timestamp: new Date(),
-      });
-      return manager.save(AuditLog, auditLog);
+        user_id: actorUserId,
+        forensic_status: 'ACTIVE',
+      },
+      order: { sequence_no: 'DESC' },
     });
+    const sequenceNo = lastLog ? Number(lastLog.sequence_no) + 1 : 1;
+    const auditLog = manager.create(AuditLog, {
+      tenant_id: tenantId,
+      user_id: actorUserId,
+      device_id: 'BACKOFFICE',
+      sequence_no: sequenceNo,
+      action: 'LOYALTY_PROGRAM_BACKFILL_COMMITTED',
+      target_type: 'loyalty_program',
+      target_id: null,
+      metadata,
+      timestamp: new Date(),
+    });
+    await manager.save(AuditLog, auditLog);
   }
 }
