@@ -59,9 +59,16 @@ const Map<String, String> kActivationBlockerLabels = <String, String>{
   'TERMINAL_PRIMING_PAYLOAD_MALFORMED':
       'La respuesta de preparación de la terminal no es utilizable. Verifique la conexión e intente de nuevo.',
   'PRINTER_AVAILABLE_FAILED':
-      'La impresora no está lista. Revise su estado en Configuración.',
+      'La impresora no está lista. Revise su estado en Configuración → Hardware e Impresora.',
   'TEST_PRINT_FAILED':
-      'La impresión de prueba falló. Verifique la impresora y el papel.',
+      'La impresión de prueba falló. Verifique la impresora y el papel en Configuración → Hardware e Impresora.',
+  // Round-2 F-10d: the verification sale fails closed when the terminal has
+  // no FX rates yet (a freshly installed terminal never receives them before
+  // activation). The copy names the exact screen that owns the two fields.
+  'EXCHANGE_RATE_NOT_CONFIGURED':
+      'Falta la tasa de cambio en este terminal. Pedile al dueño o a un encargado que la cargue en Configuración → Perfil del Negocio y reintente la fase.',
+  'EXCHANGE_RATE_UNVERIFIABLE':
+      'La tasa de cambio de este terminal no pudo verificarse. Pedile al dueño o a un encargado que la revise en Configuración → Perfil del Negocio y reintente la fase.',
   'SQLITE_DURABILITY_FAILED':
       'La base de datos local falló la prueba de durabilidad. Reinicie la aplicación.',
   'AUTHORIZED_USER_LOCAL_FAILED':

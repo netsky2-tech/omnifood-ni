@@ -82,7 +82,15 @@ void main() {
 
       expect(closed, isFalse);
       expect(viewModel.hasActiveShift, isTrue);
-      expect(viewModel.errorMessage, contains('pendientes de conciliar'));
+      // Round-2 F-5a: a single pending voucher reads "Existe 1 voucher ...
+      // pendiente", never "Existen 1 vouchers ... pendientes".
+      expect(viewModel.errorMessage, contains('Existe 1 voucher de tarjeta'));
+      expect(
+        viewModel.errorMessage,
+        isNot(contains('Existen 1')),
+        reason: 'one voucher must not be pluralized',
+      );
+      expect(viewModel.errorMessage, contains('pendiente de conciliar'));
       expect(viewModel.errorMessage, contains('Corte Z Fiscal'));
     });
 

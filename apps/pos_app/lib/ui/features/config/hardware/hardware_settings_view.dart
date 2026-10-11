@@ -495,6 +495,21 @@ class HardwareSettingsView extends StatelessWidget {
         break;
     }
 
+    // Round-2 F-6: the mock adapter reports `ready` unconditionally (it is an
+    // in-memory test double), and this card turned that into a PHYSICAL claim
+    // — "the thermal head is available and has paper" — on a terminal with no
+    // printer at all. The simulator is a legitimate mode, but the DRIVER
+    // decides the copy, never the status the double reports.
+    if (viewModel.config.driverType == PrinterDriverType.mock) {
+      statusColor = Colors.blueGrey;
+      statusTitle = 'Modo Simulador (sin impresora física)';
+      statusDescription =
+          'Este terminal no tiene una impresora configurada: los comprobantes '
+          'no se imprimen. Elegí Sunmi V2s o Q80 / iPos cuando la impresora '
+          'esté conectada.';
+      statusIcon = Icons.info;
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

@@ -82,7 +82,8 @@ Future<void> showCloseShiftFlow(
       builder: (ctx) => AlertDialog(
         title: const Text('Bloqueo de Corte Z Fiscal'),
         content: Text(
-          'Existen ${vm.pendingVouchersCount} vouchers de datáfono en estado PENDIENTE.\n\nPor disposición de control fiscal y auditoría, debe conciliar o autorizar el override de todos los vouchers antes de emitir el Reporte Z.',
+          // Round-2 F-5a: one voucher is not "Existen 1 vouchers".
+          '${vm.pendingVouchersCount == 1 ? 'Existe 1 voucher' : 'Existen ${vm.pendingVouchersCount} vouchers'} de datáfono en estado PENDIENTE.\n\nPor disposición de control fiscal y auditoría, debe conciliar o autorizar el override de todos los vouchers antes de emitir el Reporte Z.',
         ),
         actions: [
           TextButton(

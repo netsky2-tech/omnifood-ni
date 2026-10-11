@@ -499,8 +499,9 @@ class CashShiftViewModel extends ChangeNotifier {
         final pendingCount = (await paymentDao!.countPendingCardPayments()) ?? 0;
         _pendingVouchersCount = pendingCount;
         if (pendingCount > 0) {
+          // Round-2 F-5a: one voucher is not "Existen 1 vouchers".
           _errorMessage =
-              'Existen $pendingCount vouchers de tarjeta pendientes de conciliar. Debe conciliar todos los vouchers antes de emitir el Corte Z Fiscal.';
+              '${pendingCount == 1 ? 'Existe 1 voucher de tarjeta pendiente' : 'Existen $pendingCount vouchers de tarjeta pendientes'} de conciliar. Debe conciliar todos los vouchers antes de emitir el Corte Z Fiscal.';
           _isLoading = false;
           notifyListeners();
           return false;
