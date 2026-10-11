@@ -97,7 +97,23 @@ class ActivationSessionViewModel extends ChangeNotifier {
   static String friendlyError(List<String> rawErrors) {
     final friendly = <String>[];
     for (final e in rawErrors) {
-      if (e.contains('Delivery unacknowledged') ||
+      if (e.contains('Delivery rejected')) {
+        // Deterministic, non-retryable server rejection (F-10f): NEVER a
+        // connectivity problem. Branch internally on the raw code but never
+        // leak envelope UUIDs or snake_case codes to the operator (NHILOS §39.4).
+        if (e.contains('CRITICAL_SEQUENCE_PAYLOAD_MISMATCH')) {
+          friendly.add(
+            'El servidor rechazó un evento de activación: el terminal ya reportó '
+            'esa secuencia con un contenido distinto. No reintente; pida '
+            'asistencia al administrador.',
+          );
+        } else {
+          friendly.add(
+            'El servidor rechazó un evento de activación (no es un problema de '
+            'conexión). Reintentar no lo corrige; contacte al administrador.',
+          );
+        }
+      } else if (e.contains('Delivery unacknowledged') ||
           e.contains('delivery unacknowledged')) {
         friendly.add(
           'No se pudo confirmar la entrega de un evento de activación al servidor. '

@@ -78,6 +78,30 @@ abstract class ActivationSyncPort {
   });
 }
 
+/// Thrown by [DioActivationSyncPort] when the SERVER answered with a
+/// deterministic, non-retryable rejection of an activation delivery, as
+/// opposed to a transport failure (which keeps reporting `false`).
+///
+/// This carries the backend's machine error code (e.g.
+/// `CRITICAL_SEQUENCE_PAYLOAD_MISMATCH`) so callers can distinguish "the WAN
+/// dropped, retry later" from "the server refused this delivery, retrying
+/// cannot fix it" (F-10f).
+class ActivationDeliveryRejection implements Exception {
+  /// Stable machine-readable rejection code from the backend
+  /// (e.g. `CRITICAL_SEQUENCE_PAYLOAD_MISMATCH`, fallback `RECORD_REJECTED`
+  /// for a record-level rejection without a code, `SERVER_REJECTED` for a
+  /// non-2xx response whose body carries no parsable code).
+  final String code;
+
+  /// Optional human/log detail (e.g. the record status or HTTP status line).
+  final String? detail;
+
+  const ActivationDeliveryRejection({required this.code, this.detail});
+
+  @override
+  String toString() => 'ActivationDeliveryRejection($code)';
+}
+
 class FinalizeActivationResult {
   final bool isSuccess;
   final String status; // PASS, PASS_WITH_WARNING, FAIL, NETWORK_ERROR
