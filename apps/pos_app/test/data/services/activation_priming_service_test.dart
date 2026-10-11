@@ -73,14 +73,12 @@ void main() {
     bool omitCategoryId = false,
     bool clearCategoryId = false,
     int? highestSequenceNumber,
-  }) =>
-      TerminalPrimingPayload.fromJson(
-        <String, dynamic>{
-          'status': 'success',
-          'serverTime': '2026-09-21T10:00:00.000Z',
-          'currentVersion': 7,
-          'highestSequenceNumber': ?highestSequenceNumber,
-          'deltas': <String, dynamic>{
+  }) {
+    final json = <String, dynamic>{
+      'status': 'success',
+      'serverTime': '2026-09-21T10:00:00.000Z',
+      'currentVersion': 7,
+      'deltas': <String, dynamic>{
             'products': products ??
               [
                 {
@@ -117,9 +115,16 @@ void main() {
             'fiscalConfig': includeFiscalConfig
                 ? (fiscalConfig ?? fiscalEnvelope())
                 : null,
-          },
-        },
-      );
+      },
+    };
+    // Assigned outside the literal: the newer analyzer suggests the Dart
+    // 3.8+ null-aware element marker for a collection-if, while the CI
+    // runner's Dart SDK cannot parse that marker yet.
+    if (highestSequenceNumber != null) {
+      json['highestSequenceNumber'] = highestSequenceNumber;
+    }
+    return TerminalPrimingPayload.fromJson(json);
+  }
 
   setUp(() async {
     database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
