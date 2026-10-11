@@ -21,10 +21,19 @@ class FakeActivationSyncPort extends ActivationSyncPort
   String? finalizeFailureCode;
   int finalizeWarningsCount = 0;
 
+  /// When non-null, [sendVerificationSale] throws [ActivationDeliveryRejection]
+  /// with this code: a deterministic, non-retryable server rejection (F-10f),
+  /// as opposed to [simulateNetworkFailure]'s transport-style `false`.
+  String? rejectVerificationSaleWithCode;
+
   /// Check codes whose sendCheck must report a failed (unacknowledged) delivery.
   /// Unlike [simulateNetworkFailure] this leaves other deliveries intact so a
   /// single bad replay can be isolated.
   final Set<String> failCheckCodes = {};
+
+  /// Check codes whose sendCheck must throw a typed server rejection (F-10f),
+  /// mapped checkCode → rejection code. Deterministic, non-retryable.
+  final Map<String, String> rejectCheckCodes = {};
 
   /// Chronological log of every port call, for ordering assertions.
   final List<String> callLog = [];
@@ -47,6 +56,11 @@ class FakeActivationSyncPort extends ActivationSyncPort
     String? terminalId,
   }) async {
     if (simulateNetworkFailure) return false;
+    final checkRejectionCode = rejectCheckCodes[checkCode];
+    if (checkRejectionCode != null) {
+      callLog.add('sendCheck:$checkCode');
+      throw ActivationDeliveryRejection(code: checkRejectionCode);
+    }
     if (failCheckCodes.contains(checkCode)) return false;
     callLog.add('sendCheck:$checkCode');
     sentChecks.add({
@@ -83,6 +97,11 @@ class FakeActivationSyncPort extends ActivationSyncPort
     required Map<String, dynamic> salePayload,
   }) async {
     if (simulateNetworkFailure) return false;
+    final rejectionCode = rejectVerificationSaleWithCode;
+    if (rejectionCode != null) {
+      callLog.add('sendVerificationSale');
+      throw ActivationDeliveryRejection(code: rejectionCode);
+    }
     callLog.add('sendVerificationSale');
     sentSales.add({
       'attemptId': attemptId,
@@ -275,6 +294,38 @@ void main() {
       // Envelopes must still be PENDING in SQLite
       final pendingAfter = await database.activationOutboxDao.getPendingEnvelopes(tenantId);
       expect(pendingAfter.length, equals(3));
+    });
+
+    test('a deterministic server rejection reports Delivery rejected with the '
+        'code, keeps the envelope PENDING and the attempt resumable (F-10f)',
+        () async {
+      await seedEvidenceComplete();
+      syncPort.rejectVerificationSaleWithCode = 'CRITICAL_SEQUENCE_PAYLOAD_MISMATCH';
+
+      final result = await syncRunner.syncActivationEvidence(
+        const ActivationReconnectSyncParams(tenantId: tenantId, attemptId: attemptId),
+      );
+
+      expect(result.isSuccess, isFalse);
+      expect(result.attemptStatus, equals('SYNC_VERIFICATION_PENDING'));
+
+      final joinedErrors = result.errors.join('\n');
+      expect(joinedErrors, contains('Delivery rejected for envelope'));
+      expect(joinedErrors, contains('CRITICAL_SEQUENCE_PAYLOAD_MISMATCH'));
+      expect(joinedErrors, isNot(contains('Delivery unacknowledged')),
+          reason: 'a deterministic rejection must NOT also surface the '
+              'connectivity-style unacknowledged copy');
+
+      // The rejected envelope stays PENDING exactly as with a transport
+      // failure; the envelopes delivered before it stay SYNCED.
+      final pendingAfter =
+          await database.activationOutboxDao.getPendingEnvelopes(tenantId);
+      expect(pendingAfter.length, equals(1));
+      expect(pendingAfter.single.id, equals('env-sale-1'));
+      expect(pendingAfter.single.eventType, equals('VERIFICATION_SALE'));
+
+      // Never finalized on a rejected delivery.
+      expect(syncPort.callLog, isNot(contains('finalizeActivation')));
     });
 
     test('POS waits for cloud authoritative finalizer verdict: adopts PASS -> ACTIVATED', () async {
@@ -525,6 +576,29 @@ void main() {
       expect(replayedSqlite.single['evidenceType'], isNull);
       expect(replayedSqlite.single['evidenceRef'], isNull);
       expect(replayedSqlite.single['occurredAt'], isNull);
+    });
+
+    test('a F-10f typed rejection during replay fails closed without throwing: no outbox drain, no finalize, rejection error reported', () async {
+      await seedAttemptWithEvidence();
+      syncPort.rejectCheckCodes['SQLITE_DURABILITY'] = 'CRITICAL_SEQUENCE_PAYLOAD_MISMATCH';
+
+      final result = await syncRunner.syncActivationEvidence(
+        const ActivationReconnectSyncParams(tenantId: tenantId, attemptId: attemptId),
+      );
+
+      // The typed rejection must be caught by the runner (fail-closed result),
+      // never escape syncActivationEvidence as an unhandled exception.
+      expect(result.isSuccess, isFalse);
+      expect(result.attemptStatus, equals('SYNC_VERIFICATION_PENDING'));
+      expect(
+        result.errors,
+        contains(
+          "Delivery rejected for persisted check 'SQLITE_DURABILITY': CRITICAL_SEQUENCE_PAYLOAD_MISMATCH",
+        ),
+      );
+      // Fail closed: outbox never drained, finalize never reached.
+      expect(syncPort.sentSales, isEmpty);
+      expect(syncPort.finalizeCalls, isEmpty);
     });
 
     test('a failing replay fails closed: no outbox drain, no finalize, resumable state', () async {

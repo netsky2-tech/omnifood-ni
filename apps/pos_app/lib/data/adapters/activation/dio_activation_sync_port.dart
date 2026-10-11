@@ -71,7 +71,15 @@ class DioActivationSyncPort implements ActivationSyncPort {
         options: Options(headers: {'x-device-terminal-id': resolvedTerminalId}),
       );
       return _isSuccess(response.statusCode);
-    } on DioException {
+    } on DioException catch (e) {
+      // Server answered (non-2xx): a deterministic rejection, NOT a transport
+      // failure — retrying cannot fix it. Surface it typed (F-10f).
+      if (e.response != null) {
+        throw ActivationDeliveryRejection(
+          code: _errorCodeFromResponse(e.response) ?? 'SERVER_REJECTED',
+          detail: 'HTTP ${e.response?.statusCode}',
+        );
+      }
       return false;
     }
   }
@@ -102,6 +110,13 @@ class DioActivationSyncPort implements ActivationSyncPort {
       print('[FirstSaleClaim] DioException: type=${e.type} status=${e.response?.statusCode}');
       // ignore: avoid_print
       print('[FirstSaleClaim] responseBody=${e.response?.data}');
+      // Server answered (non-2xx): deterministic rejection (F-10f).
+      if (e.response != null) {
+        throw ActivationDeliveryRejection(
+          code: _errorCodeFromResponse(e.response) ?? 'SERVER_REJECTED',
+          detail: 'HTTP ${e.response?.statusCode}',
+        );
+      }
       return false;
     }
   }
@@ -134,23 +149,34 @@ class DioActivationSyncPort implements ActivationSyncPort {
       // Backend syncBatch returns HTTP 201 even when individual records are
       // REJECTED (e.g. unique constraint violation). Inspect the results array:
       // if any record was rejected, the verification sale was NOT persisted.
+      // A record-level rejection is a deterministic, non-retryable rejection,
+      // so it is THROWN typed (F-10f) instead of conflated with `false`.
       final data = response.data;
       if (data is Map) {
         final results = data['results'] as List<dynamic>?;
         if (results != null && results.isNotEmpty) {
-          final anyRejected = results.any((r) {
+          Map<dynamic, dynamic>? firstRejected;
+          for (final r in results) {
             if (r is Map) {
               final status = r['status'] as String?;
-              return status == 'REJECTED' ||
+              if (status == 'REJECTED' ||
                   status == 'IDEMPOTENCY_MISMATCH' ||
-                  status == 'BLOCKED_BY_PRIOR_FAILURE';
+                  status == 'BLOCKED_BY_PRIOR_FAILURE') {
+                firstRejected = r;
+                break;
+              }
             }
-            return false;
-          });
-          if (anyRejected) {
+          }
+          if (firstRejected != null) {
             // ignore: avoid_print
             print('[VerifSale] Record was REJECTED by backend syncBatch');
-            return false;
+            final recordCode =
+                (firstRejected['code'] as String?)?.trim() ?? '';
+            throw ActivationDeliveryRejection(
+              code:
+                  recordCode.isEmpty ? 'RECORD_REJECTED' : recordCode,
+              detail: firstRejected['status'] as String?,
+            );
           }
         }
       }
@@ -159,8 +185,27 @@ class DioActivationSyncPort implements ActivationSyncPort {
     } on DioException catch (e) {
       // ignore: avoid_print
       print('[VerifSale] DioException: status=${e.response?.statusCode} body=${e.response?.data}');
+      // Server answered (non-2xx): deterministic rejection, NOT a transport
+      // failure (F-10f). No response → genuine transport failure → false.
+      if (e.response != null) {
+        throw ActivationDeliveryRejection(
+          code: _errorCodeFromResponse(e.response) ?? 'SERVER_REJECTED',
+          detail: 'HTTP ${e.response?.statusCode}',
+        );
+      }
       return false;
     }
+  }
+
+  /// Best-effort extraction of the backend's machine error code from a
+  /// response body (commonly under `code` or `error`).
+  String? _errorCodeFromResponse(Response<dynamic>? response) {
+    final data = response?.data;
+    if (data is Map) {
+      final code = data['code'] ?? data['error'];
+      if (code is String && code.trim().isNotEmpty) return code.trim();
+    }
+    return null;
   }
 
   @override

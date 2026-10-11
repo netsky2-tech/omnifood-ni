@@ -1,11 +1,14 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { ROLES_KEY } from '../../../core/decorators/roles.decorator';
 import { LoyaltyController } from './loyalty.controller';
 import { LoyaltyService } from '../services/loyalty.service';
 import { TicketPaidHandler } from '../services/ticket-paid.handler';
 import { LegacyClassificationService } from '../services/legacy-classification.service';
+import { LoyaltyProgramBackfillService } from '../services/loyalty-program-backfill.service';
 import { LoyaltyProfitAwareService } from '../services/loyalty-profit-aware.service';
 import { RedemptionService } from '../services/redemption.service';
 import { LoyaltyLedgerService } from '../services/loyalty-ledger.service';
+import { UserRole } from '../../identity/entities/user.entity';
 import {
   LoyaltyProgram,
   LoyaltyProgramStatus,
@@ -35,10 +38,18 @@ function createMockProgram(
 describe('LoyaltyController', () => {
   let controller: LoyaltyController;
   let loyaltyService: jest.Mocked<Pick<LoyaltyService, 'findAllPrograms'>>;
+  let programBackfillService: jest.Mocked<
+    Pick<LoyaltyProgramBackfillService, 'previewBackfill' | 'commitBackfill'>
+  >;
 
   beforeEach(() => {
     loyaltyService = {
       findAllPrograms: jest.fn(),
+    };
+
+    programBackfillService = {
+      previewBackfill: jest.fn(),
+      commitBackfill: jest.fn(),
     };
 
     const ticketPaidHandler = {} as unknown as TicketPaidHandler;
@@ -55,6 +66,7 @@ describe('LoyaltyController', () => {
       profitAwareService,
       redemptionService,
       ledgerService,
+      programBackfillService as unknown as LoyaltyProgramBackfillService,
     );
   });
 
@@ -175,6 +187,83 @@ describe('LoyaltyController', () => {
       );
 
       expect(loyaltyService.findAllPrograms).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('backfill-unassigned routes (B1b)', () => {
+    const tenantId = 'tenant-uuid-1';
+
+    it('wires the preview route to the backfill service with the tenant and batch size', async () => {
+      programBackfillService.previewBackfill.mockResolvedValueOnce({
+        customersScanned: 0,
+        transactionsAttributed: 0,
+        customersAttributed: 0,
+        unresolved: [],
+        dryRun: true,
+      });
+
+      await controller.previewBackfillUnassigned({ batchSize: 50 }, tenantId);
+
+      expect(programBackfillService.previewBackfill).toHaveBeenCalledTimes(1);
+      expect(programBackfillService.previewBackfill).toHaveBeenCalledWith(
+        tenantId,
+        50,
+      );
+    });
+
+    it('wires the commit route to the backfill service with tenant, batch size and actor', async () => {
+      programBackfillService.commitBackfill.mockResolvedValueOnce({
+        customersScanned: 0,
+        transactionsAttributed: 0,
+        customersAttributed: 0,
+        unresolved: [],
+        dryRun: false,
+      });
+
+      await controller.commitBackfillUnassigned(
+        { batchSize: 25 },
+        tenantId,
+        'actor-1',
+      );
+
+      expect(programBackfillService.commitBackfill).toHaveBeenCalledTimes(1);
+      expect(programBackfillService.commitBackfill).toHaveBeenCalledWith(
+        tenantId,
+        25,
+        'actor-1',
+      );
+    });
+
+    it('rejects preview without tenant context before hitting the service', async () => {
+      await expect(
+        controller.previewBackfillUnassigned({ batchSize: 50 }, undefined),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(programBackfillService.previewBackfill).not.toHaveBeenCalled();
+    });
+
+    it('rejects commit without tenant context before hitting the service', async () => {
+      await expect(
+        controller.commitBackfillUnassigned(
+          { batchSize: 50 },
+          undefined,
+          'actor-1',
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(programBackfillService.commitBackfill).not.toHaveBeenCalled();
+    });
+
+    it('restricts both backfill routes to OWNER', () => {
+      const previewRoles = Reflect.getMetadata(
+        ROLES_KEY,
+        LoyaltyController.prototype.previewBackfillUnassigned,
+      );
+      const commitRoles = Reflect.getMetadata(
+        ROLES_KEY,
+        LoyaltyController.prototype.commitBackfillUnassigned,
+      );
+
+      expect(previewRoles).toEqual([UserRole.OWNER]);
+      expect(commitRoles).toEqual([UserRole.OWNER]);
     });
   });
 });

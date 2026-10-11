@@ -594,6 +594,50 @@ void main() {
     });
   });
 
+  group('friendlyError distinguishes deterministic server rejections (F-10f)', () {
+    test('a sequence payload mismatch rejection gets the dedicated Spanish '
+        'message naming the conflict, without leaking codes or UUIDs', () {
+      final message = ActivationSessionViewModel.friendlyError([
+        "Delivery rejected for envelope 'env-uuid-1' (VERIFICATION_SALE): "
+            'CRITICAL_SEQUENCE_PAYLOAD_MISMATCH',
+      ]);
+      expect(message, contains('El servidor rechazó un evento de activación'));
+      expect(message,
+          contains('el terminal ya reportó esa secuencia con un contenido distinto'));
+      expect(message, contains('No reintente; pida asistencia al administrador.'));
+      expect(message, isNot(contains('CRITICAL_SEQUENCE_PAYLOAD_MISMATCH')),
+          reason: 'raw snake_case codes never reach the operator (NHILOS §39.4)');
+      expect(message, isNot(contains('env-uuid-1')),
+          reason: 'envelope UUIDs never reach the operator (NHILOS §39.4)');
+    });
+
+    test('any other delivery rejection gets the generic rejection message and '
+        'never a connectivity claim', () {
+      final message = ActivationSessionViewModel.friendlyError([
+        "Delivery rejected for envelope 'env-uuid-2' (ACTIVATION_CHECK): "
+            'SOME_OTHER_REJECTION_CODE',
+      ]);
+      expect(message, contains('El servidor rechazó un evento de activación'));
+      expect(message, contains('no es un problema de conexión'));
+      expect(message, contains('contacte al administrador.'));
+      expect(message, isNot(contains('SOME_OTHER_REJECTION_CODE')));
+      expect(message, isNot(contains('Verifique su conexión e intente de nuevo')),
+          reason: 'a deterministic rejection must not be presented as a '
+              'connectivity problem');
+    });
+
+    test('the plain Delivery unacknowledged copy is unchanged', () {
+      final message = ActivationSessionViewModel.friendlyError([
+        "Delivery unacknowledged for envelope 'env-uuid-3' (VERIFICATION_SALE)",
+      ]);
+      expect(
+        message,
+        'No se pudo confirmar la entrega de un evento de activación al servidor. '
+            'Verifique su conexión e intente de nuevo.',
+      );
+    });
+  });
+
   group('friendlyError maps runner blockers (round-2 F-10a/F-10b)', () {
     test('a missing FX rate names the exact screen instead of blaming the '
         'connection', () {

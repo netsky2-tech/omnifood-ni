@@ -352,12 +352,12 @@ void main() {
       );
       expect(
         blockersText.data,
-        'La impresora no está lista. Revise su estado en Configuración. — '
+        'La impresora no está lista. Revise su estado en Configuración → Hardware e Impresora. — '
         'Printer is not ready',
       );
       expect(
         find.text(
-          'La impresora no está lista. Revise su estado en Configuración. — '
+          'La impresora no está lista. Revise su estado en Configuración → Hardware e Impresora. — '
           'Printer is not ready',
         ),
         findsOneWidget,
@@ -442,7 +442,7 @@ void main() {
       expect(find.byKey(const Key('pre_offline_blockers')), findsOneWidget);
       expect(
         find.text(
-          'La impresora no está lista. Revise su estado en Configuración. — '
+          'La impresora no está lista. Revise su estado en Configuración → Hardware e Impresora. — '
           'Printer is not ready',
         ),
         findsOneWidget,

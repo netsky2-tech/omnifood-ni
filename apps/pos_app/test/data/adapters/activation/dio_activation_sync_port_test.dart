@@ -90,6 +90,231 @@ void main() {
     expect(verification.body, _verificationSaleRecord());
   });
 
+  group('F-10f — deterministic delivery rejection contract', () {
+    late HttpServer server;
+    late DioActivationSyncPort port;
+    int responseStatus = 201;
+    Object? responseBody;
+
+    setUp(() async {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        await utf8.decoder.bind(request).join();
+        request.response.headers.contentType = ContentType.json;
+        request.response.statusCode = responseStatus;
+        final body = responseBody;
+        if (body is String) {
+          request.response.write(body);
+        } else {
+          request.response.write(jsonEncode(body));
+        }
+        await request.response.close();
+      });
+      port = DioActivationSyncPort(
+        Dio(BaseOptions(
+          baseUrl: 'http://${server.address.address}:${server.port}/',
+        )),
+      );
+    });
+
+    tearDown(() async => server.close(force: true));
+
+    test('(i) 201 with a syncBatch record IDEMPOTENCY_MISMATCH throws '
+        'ActivationDeliveryRejection carrying the record code', () async {
+      responseStatus = 201;
+      responseBody = <String, dynamic>{
+        'results': <dynamic>[
+          <String, dynamic>{
+            'status': 'IDEMPOTENCY_MISMATCH',
+            'code': 'CRITICAL_SEQUENCE_PAYLOAD_MISMATCH',
+            'retryable': false,
+          },
+        ],
+      };
+
+      await expectLater(
+        port.sendVerificationSale(
+          attemptId: 'attempt-1',
+          salePayload: _verificationSaleRecord(),
+        ),
+        throwsA(
+          isA<ActivationDeliveryRejection>().having(
+            (e) => e.code,
+            'code',
+            'CRITICAL_SEQUENCE_PAYLOAD_MISMATCH',
+          ),
+        ),
+      );
+    });
+
+    test('(i-b) a rejected record WITHOUT a code falls back to RECORD_REJECTED',
+        () async {
+      responseStatus = 201;
+      responseBody = <String, dynamic>{
+        'results': <dynamic>[
+          <String, dynamic>{'status': 'BLOCKED_BY_PRIOR_FAILURE'},
+        ],
+      };
+
+      await expectLater(
+        port.sendVerificationSale(
+          attemptId: 'attempt-1',
+          salePayload: _verificationSaleRecord(),
+        ),
+        throwsA(
+          isA<ActivationDeliveryRejection>().having(
+            (e) => e.code,
+            'code',
+            'RECORD_REJECTED',
+          ),
+        ),
+      );
+    });
+
+    test('(ii) DioException WITH a 409 response whose body has a code throws '
+        'ActivationDeliveryRejection with that code', () async {
+      responseStatus = 409;
+      responseBody = <String, dynamic>{
+        'code': 'ATTEMPT_ALREADY_FINALIZED',
+        'message': 'attempt already finalized',
+      };
+
+      await expectLater(
+        port.sendVerificationSale(
+          attemptId: 'attempt-1',
+          salePayload: _verificationSaleRecord(),
+        ),
+        throwsA(
+          isA<ActivationDeliveryRejection>().having(
+            (e) => e.code,
+            'code',
+            'ATTEMPT_ALREADY_FINALIZED',
+          ),
+        ),
+      );
+    });
+
+    test('(ii-b) a non-2xx response whose body carries no parsable code falls '
+        'back to SERVER_REJECTED', () async {
+      responseStatus = 500;
+      responseBody = <String, dynamic>{'message': 'boom'};
+
+      await expectLater(
+        port.sendVerificationSale(
+          attemptId: 'attempt-1',
+          salePayload: _verificationSaleRecord(),
+        ),
+        throwsA(
+          isA<ActivationDeliveryRejection>().having(
+            (e) => e.code,
+            'code',
+            'SERVER_REJECTED',
+          ),
+        ),
+      );
+    });
+
+    test('(iii) a DioException WITHOUT a response (connection error) still '
+        'returns false', () async {
+      final deadPort = DioActivationSyncPort(
+        Dio(BaseOptions(
+          baseUrl: 'http://127.0.0.1:1/',
+          connectTimeout: const Duration(milliseconds: 500),
+        )),
+      );
+
+      expect(
+        await deadPort.sendVerificationSale(
+          attemptId: 'attempt-1',
+          salePayload: _verificationSaleRecord(),
+        ),
+        isFalse,
+      );
+    });
+
+    test('sendCheck discriminates: server answered (409) → rejection with the '
+        'body code', () async {
+      responseStatus = 409;
+      responseBody = <String, dynamic>{'code': 'CHECK_REJECTED_BY_BACKEND'};
+
+      await expectLater(
+        port.sendCheck(
+          attemptId: 'attempt-1',
+          checkCode: 'OFFLINE_SALE_PAID',
+          status: 'PASS',
+          tenantId: 'tenant-1',
+          terminalId: 'terminal-1',
+        ),
+        throwsA(
+          isA<ActivationDeliveryRejection>().having(
+            (e) => e.code,
+            'code',
+            'CHECK_REJECTED_BY_BACKEND',
+          ),
+        ),
+      );
+    });
+
+    test('sendCheck keeps returning false for a connection error (no response)',
+        () async {
+      final deadPort = DioActivationSyncPort(
+        Dio(BaseOptions(
+          baseUrl: 'http://127.0.0.1:1/',
+          connectTimeout: const Duration(milliseconds: 500),
+        )),
+      );
+
+      expect(
+        await deadPort.sendCheck(
+          attemptId: 'attempt-1',
+          checkCode: 'OFFLINE_SALE_PAID',
+          status: 'PASS',
+          tenantId: 'tenant-1',
+          terminalId: 'terminal-1',
+        ),
+        isFalse,
+      );
+    });
+
+    test('sendFirstSaleClaim discriminates: server answered (409) → rejection '
+        'with the body code', () async {
+      responseStatus = 409;
+      responseBody = <String, dynamic>{'code': 'CLAIM_CONFLICT'};
+
+      await expectLater(
+        port.sendFirstSaleClaim(
+          attemptId: 'attempt-1',
+          claimPayload: _firstSaleClaim(),
+        ),
+        throwsA(
+          isA<ActivationDeliveryRejection>().having(
+            (e) => e.code,
+            'code',
+            'CLAIM_CONFLICT',
+          ),
+        ),
+      );
+    });
+
+    test('sendFirstSaleClaim keeps returning false for a connection error '
+        '(no response)', () async {
+      final deadPort = DioActivationSyncPort(
+        Dio(BaseOptions(
+          baseUrl: 'http://127.0.0.1:1/',
+          connectTimeout: const Duration(milliseconds: 500),
+        )),
+      );
+
+      expect(
+        await deadPort.sendFirstSaleClaim(
+          attemptId: 'attempt-1',
+          claimPayload: _firstSaleClaim(),
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('DioActivationSyncPort.fetchActiveAttempt payload contract', () {
     late HttpServer server;
     late DioActivationSyncPort port;

@@ -111,17 +111,30 @@ class ActivationReconnectSyncRunner {
       final Map<String, dynamic>? details = check.detailsSanitizedJson == null
           ? null
           : Map<String, dynamic>.from(jsonDecode(check.detailsSanitizedJson!) as Map);
-      final delivered = await _syncPort.sendCheck(
-        attemptId: trimmedAttemptId,
-        checkCode: check.checkCode,
-        status: check.status,
-        evidenceType: check.evidenceType,
-        evidenceRef: check.evidenceRef,
-        occurredAt: check.occurredAt,
-        details: details,
-        tenantId: trimmedTenantId,
-        terminalId: attempt.candidateTerminalId,
-      );
+      final bool delivered;
+      try {
+        delivered = await _syncPort.sendCheck(
+          attemptId: trimmedAttemptId,
+          checkCode: check.checkCode,
+          status: check.status,
+          evidenceType: check.evidenceType,
+          evidenceRef: check.evidenceRef,
+          occurredAt: check.occurredAt,
+          details: details,
+          tenantId: trimmedTenantId,
+          terminalId: attempt.candidateTerminalId,
+        );
+      } on ActivationDeliveryRejection catch (e) {
+        // F-10f: a deterministic server rejection during replay must fail
+        // closed through the result, never escape the runner as an exception.
+        replayFailed = true;
+        // ignore: avoid_print
+        print('[ReconnectSync] CHECK REPLAY REJECTED: ${check.checkCode} code=${e.code}');
+        errors.add(
+          "Delivery rejected for persisted check '${check.checkCode}': ${e.code}",
+        );
+        continue;
+      }
       if (!delivered) {
         replayFailed = true;
         // ignore: avoid_print
@@ -174,6 +187,11 @@ class ActivationReconnectSyncRunner {
 
     for (final env in attemptEnvelopes) {
       bool delivered = false;
+      // F-10f: when the server deterministically rejected this envelope, the
+      // `Delivery unacknowledged` connectivity-style error below must NOT be
+      // added on top of the rejection error — it would render a false claim
+      // about the connection in the UI.
+      bool rejectedByServer = false;
       try {
         final Map<String, dynamic> payload = jsonDecode(env.payloadJson) as Map<String, dynamic>;
 
@@ -214,6 +232,15 @@ class ActivationReconnectSyncRunner {
             delivered = true;
             break;
         }
+      } on ActivationDeliveryRejection catch (e) {
+        // Deterministic, non-retryable server rejection (F-10f): never
+        // presented as a connectivity problem. Envelope stays PENDING.
+        delivered = false;
+        syncFailed = true;
+        rejectedByServer = true;
+        errors.add(
+          "Delivery rejected for envelope '${env.id}' (${env.eventType}): ${e.code}",
+        );
       } catch (e) {
         delivered = false;
         errors.add("Error delivering envelope '${env.id}': $e");
@@ -233,7 +260,7 @@ class ActivationReconnectSyncRunner {
         );
         await _database.activationOutboxDao.updateEnvelope(updatedEnv);
         syncedCount++;
-      } else {
+      } else if (!rejectedByServer) {
         syncFailed = true;
         errors.add("Delivery unacknowledged for envelope '${env.id}' (${env.eventType})");
       }
