@@ -1,6 +1,6 @@
 # S25 follow-up batch — F-10g decision, B1b refinements, build-script hygiene
 
-- **Status:** EN CURSO.
+- **Status:** CERRADO — T1–T4 implementadas en `fix/s25-followup-batch`; PR abierto para revisión del dueño.
 - **Branch:** `fix/s25-followup-batch`, from `main` = `5bbd769c`.
 - **Owner decisions (2026-10-12):**
   - **F-10g: INHERIT the tenant fiscal counter.** The verification sale is a real fiscal document; a dedicated series for it is DGI-disputable. The D-6 machinery already implements inheritance (priming records tenant-wide MAX; the runner seeds a fresh terminal at cloudHighest+1 and refuses a lagging cursor). Remaining work: document the decision for support and verify chain coverage; add tests only for real gaps.
@@ -43,3 +43,7 @@
 
 | Task | Commit | Evidence |
 |---|---|---|
+| T1 | `30abeae3` | RED (compile: `customers` missing) → GREEN: DB spec 12/12, controller spec 14/14, `tsc --noEmit` clean. `customers[]` bounded by the batch in both preview and commit; aggregates stay the write authority. |
+| T2 | `f48e79a2` (see `git log`) | RED real: the backfill DB-spec schema gained the production partial unique index, exposing that the suite had silently accepted two sequence-0 rows production rejects (`duplicate key` on the second commit). GREEN: backfill DB 13/13, remediation unit 7/7, remediation controller 3/3, `tsc` clean. Both writers allocate the next stream sequence like `audit-trail.service`. |
+| T3 | (docs + test commit) | Owner decision recorded in `docs/operations/replacement-terminal-fiscal-sequence-decision.md` (support flow for `FISCAL_SEQUENCE_RECOVERY_REQUIRED`). New test: priming writes `dgi_cloud_highest_sequence` from the payload (13/13, was uncovered). `flutter analyze` clean. |
+| T4 | (script commit) | Stale-artifact guard: the out-dir is cleaned up front; verified by planting 4 stale files (removed) plus an unrelated file (kept); `bash -n` clean; `--plan` mode unaffected. |
