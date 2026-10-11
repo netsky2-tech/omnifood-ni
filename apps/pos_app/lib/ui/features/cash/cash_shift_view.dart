@@ -147,7 +147,9 @@ class _CashShiftViewState extends State<CashShiftView> {
                         shift: vm.lastClosedShift!,
                         // D-14: person names, resolved from the id→name map
                         // built once per view load.
-                        cashierName: _userName(vm.lastClosedShift!.userId),
+                        cashierName:
+                            vm.lastClosedShift!.cashierName ??
+                            _userName(vm.lastClosedShift!.userId),
                         supervisorName: vm.lastClosedShift!.supervisorId == null
                             ? null
                             : _userName(vm.lastClosedShift!.supervisorId),
@@ -377,7 +379,8 @@ class _CashShiftViewState extends State<CashShiftView> {
                         shift: shift,
                         movements: vm.movements,
                         // D-14: person name, resolved from the id→name map.
-                        cashierName: _userName(shift.userId),
+                        cashierName:
+                            shift.cashierName ?? _userName(shift.userId),
                         // D-9: the X must report the same expectation the
                         // blind count and the Z close use.
                         effectiveExpectedNio: vm.effectiveExpectedNio,

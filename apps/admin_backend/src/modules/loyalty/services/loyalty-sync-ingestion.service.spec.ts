@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { LoyaltySyncIngestionService } from './loyalty-sync-ingestion.service';
 import type { AppendLoyaltyTxDto } from './loyalty-ledger.service';
+import type { LoyaltyProgramResolution } from './loyalty-sync-ingestion.service';
 
 interface RecordedCall {
   dto: AppendLoyaltyTxDto;
@@ -30,10 +31,21 @@ function posRecord(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function buildService(
+  ledger: unknown,
+  resolution: LoyaltyProgramResolution = { programId: null, outcome: 'none' },
+) {
+  // Round-2 D-1: the constructor now takes the DataSource for the tenant-bound
+  // program resolution; the unit tests stub the resolution directly.
+  const service = new LoyaltySyncIngestionService(ledger as never, {} as never);
+  jest.spyOn(service, 'resolveLoyaltyProgramId').mockResolvedValue(resolution);
+  return service;
+}
+
 describe('LoyaltySyncIngestionService', () => {
   it('maps a POS point transaction onto the ledger contract with tenant scoping', async () => {
     const ledger = ledgerRecord();
-    const service = new LoyaltySyncIngestionService(ledger as never);
+    const service = buildService(ledger);
 
     const result = await service.ingestPointTransactions('tenant-1', [
       posRecord(),
@@ -65,7 +77,7 @@ describe('LoyaltySyncIngestionService', () => {
   it('accepts an idempotent replay (duplicate idempotency key) without failing the batch', async () => {
     const existing = { id: 'existing-tx-1', units: 12 };
     const ledger = ledgerRecord(existing);
-    const service = new LoyaltySyncIngestionService(ledger as never);
+    const service = buildService(ledger);
 
     const record = posRecord();
     const first = await service.ingestPointTransactions('tenant-1', [record]);
@@ -83,7 +95,7 @@ describe('LoyaltySyncIngestionService', () => {
         "Integrity conflict: idempotency key 'k1' already used with different payload",
       ),
     );
-    const service = new LoyaltySyncIngestionService(ledger as never);
+    const service = buildService(ledger);
 
     const result = await service.ingestPointTransactions('tenant-1', [
       posRecord({ idempotencyKey: 'k1' }),
@@ -103,7 +115,7 @@ describe('LoyaltySyncIngestionService', () => {
 
   it('scopes every record to the caller tenant and defaults origin to POS', async () => {
     const ledger = ledgerRecord();
-    const service = new LoyaltySyncIngestionService(ledger as never);
+    const service = buildService(ledger);
 
     await service.ingestPointTransactions('tenant-9', [
       posRecord({ origin: undefined }),
@@ -114,5 +126,78 @@ describe('LoyaltySyncIngestionService', () => {
       true,
     );
     expect(ledger.calls[0].dto.origin).toBe('POS');
+  });
+
+  // Round-2 D-1: the POS pushes redeem/earn rows without a program; the
+  // projection used to freeze at its last cloud-written value because every
+  // such row took the program-less H2 path.
+  describe('program resolution for program-less POS records (round-2 D-1)', () => {
+    it('joins the record to the resolved program so the ledger maintains the projection', async () => {
+      const ledger = ledgerRecord();
+      const service = buildService(ledger, {
+        programId: '399fcd4a-af1d-469a-b105-031f6dceb8d7',
+        outcome: 'resolved',
+      });
+
+      const result = await service.ingestPointTransactions('tenant-1', [
+        posRecord(),
+      ]);
+
+      expect(result.processed).toBe(1);
+      expect(result.failed).toBe(0);
+      expect(ledger.calls[0].dto.loyaltyProgramId).toBe(
+        '399fcd4a-af1d-469a-b105-031f6dceb8d7',
+      );
+    });
+
+    it('an explicit program on the record wins over the resolution', async () => {
+      const ledger = ledgerRecord();
+      const service = buildService(ledger, {
+        programId: 'resolved-anyway',
+        outcome: 'resolved',
+      });
+
+      await service.ingestPointTransactions('tenant-1', [
+        posRecord({ loyaltyProgramId: 'program-from-pos' }),
+      ]);
+
+      expect(ledger.calls[0].dto.loyaltyProgramId).toBe('program-from-pos');
+    });
+
+    it('zero ACTIVE programs keeps the legacy H2 path (program-less, accepted)', async () => {
+      const ledger = ledgerRecord();
+      const service = buildService(ledger, {
+        programId: null,
+        outcome: 'none',
+      });
+
+      const result = await service.ingestPointTransactions('tenant-1', [
+        posRecord(),
+      ]);
+
+      expect(result.processed).toBe(1);
+      expect(result.failed).toBe(0);
+      expect(ledger.calls[0].dto.loyaltyProgramId).toBeUndefined();
+    });
+
+    it('an ambiguous tenant FAILS the record instead of deepening the drift', async () => {
+      const ledger = ledgerRecord();
+      const service = buildService(ledger, {
+        programId: null,
+        outcome: 'ambiguous',
+      });
+
+      const result = await service.ingestPointTransactions('tenant-1', [
+        posRecord(),
+      ]);
+
+      expect(result.processed).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.results[0]).toMatchObject({
+        status: 'FAILED',
+        code: 'PROGRAM_UNRESOLVED',
+      });
+      expect(ledger.calls).toHaveLength(0);
+    });
   });
 });

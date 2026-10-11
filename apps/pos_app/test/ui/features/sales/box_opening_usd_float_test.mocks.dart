@@ -175,6 +175,13 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as bool);
 
   @override
+  double get selectedRewardDiscount => (super.noSuchMethod(
+        Invocation.getter(#selectedRewardDiscount),
+        returnValue: 0.0,
+        returnValueForMissingStub: 0.0,
+      ) as double);
+
+  @override
   _i11.TenantOperationMode get operationMode => (super.noSuchMethod(
         Invocation.getter(#operationMode),
         returnValue: _i11.TenantOperationMode.foodparkQsr,
@@ -370,6 +377,13 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
   @override
   bool get canIssueCreditNote => (super.noSuchMethod(
         Invocation.getter(#canIssueCreditNote),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
+  bool get isCreditNoteAvailableForRegime => (super.noSuchMethod(
+        Invocation.getter(#isCreditNoteAvailableForRegime),
         returnValue: false,
         returnValueForMissingStub: false,
       ) as bool);
@@ -1388,6 +1402,16 @@ class MockCashShiftViewModel extends _i1.Mock
         returnValue: false,
         returnValueForMissingStub: false,
       ) as bool);
+
+  @override
+  _i17.Future<String?> resolveActingUserId() => (super.noSuchMethod(
+        Invocation.method(
+          #resolveActingUserId,
+          [],
+        ),
+        returnValue: _i17.Future<String?>.value(),
+        returnValueForMissingStub: _i17.Future<String?>.value(),
+      ) as _i17.Future<String?>);
 
   @override
   void setUserRole(_i25.UserRole? role) => super.noSuchMethod(

@@ -1070,9 +1070,14 @@ class SalesRepositoryImpl implements SalesRepository {
       number: creditNoteNumber,
       createdAt: now.millisecondsSinceEpoch,
       userId: original.userId,
+      // Round-2 F-8d: the ORIGINAL sale stores its subtotal NET of the
+      // discounts (the rig's invoice 41: subtotal 13.75 for a C$125 order
+      // with a C$111.25 discount). The note used to store the GROSS
+      // negated (−125), which left the day summary unreconcilable. The note
+      // now reverses the NET: subtotal + totalTax == total by construction.
       subtotal: -selectedItems.fold<double>(
         0,
-        (sum, item) => sum + (item.unitPrice * item.quantity),
+        (sum, item) => sum + item.total - item.taxAmount,
       ),
       totalTax: -selectedItems.fold<double>(
         0,
@@ -1114,6 +1119,12 @@ class SalesRepositoryImpl implements SalesRepository {
             productName: 'RETURN: ${i.productName}',
             quantity: -i.quantity,
             unitPrice: i.unitPrice,
+            // Round-2 F-8d: the line carries the REVERSAL of the discount the
+            // original line received, so the note preserves the evidence of
+            // what was given away. No discount_origin: the wire contract is
+            // positive-amounts-only and the origins stay on the original
+            // document — the note reverses their net effect.
+            discount: -i.discount,
             originalTaxRate: i.originalTaxRate,
             appliedTaxRate: i.appliedTaxRate,
             taxAmount: -i.taxAmount,

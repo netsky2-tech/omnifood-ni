@@ -2821,6 +2821,47 @@ final migration66_67 = Migration(66, 67, (database) async {
   }
 });
 
+/// Round-2 F-5b: the cashier's display name is SNAPSHOTTED on the shift at
+/// open time, so the Z/X reports render the name as it was at the counter
+/// instead of depending on a users-table lookup that silently failed on the
+/// re-provisioned S23 ("Operador no disponible" on a shift whose cloud row
+/// had the real cashier). Nullable on purpose: shifts opened before this
+/// migration keep null (no backfill — the data was never recorded) and the
+/// reports fall back to the existing id resolver.
+final migration67_68 = Migration(67, 68, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='cashier_sessions'",
+  );
+  if (tables.isEmpty) return;
+  final columns = await database.rawQuery('PRAGMA table_info(cashier_sessions)');
+  final names = columns.map((row) => row['name'] as String).toSet();
+  if (!names.contains('cashier_name')) {
+    await database.execute(
+      'ALTER TABLE cashier_sessions ADD COLUMN cashier_name TEXT',
+    );
+  }
+});
+
+/// Round-2 F-8d: credit notes used to store the GROSS negated as their
+/// subtotal while regular sales store the subtotal NET of the discounts, so
+/// the day summary (which sums both) never reconciled once a discounted
+/// invoice was credited. The note's honest subtotal is the NET it reverses:
+/// `subtotal = total - total_tax` by the same identity the sale path keeps.
+/// Regular invoices are untouched (their subtotal is already net), and the
+/// update is idempotent by construction.
+final migration68_69 = Migration(68, 69, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='invoices'",
+  );
+  if (tables.isEmpty) return;
+  await database.execute('''
+    UPDATE invoices
+    SET subtotal = total - total_tax
+    WHERE type = 'creditNote'
+      AND subtotal <> total - total_tax
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2879,6 +2920,8 @@ final allMigrations = [
   migration64_65,
   migration65_66,
   migration66_67,
+  migration67_68,
+  migration68_69,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

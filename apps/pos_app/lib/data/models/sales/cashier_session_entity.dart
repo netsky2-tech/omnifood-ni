@@ -6,6 +6,15 @@ class CashierSessionEntity {
   final String id;
   @ColumnInfo(name: 'user_id')
   final String userId;
+
+  /// Round-2 F-5b: the opener's display name, snapshotted when the shift is
+  /// OPENED. The Z/X reports render this snapshot — the name as it was at the
+  /// counter — instead of a lookup that can silently fail on a re-provisioned
+  /// terminal (the S23 round printed "Operador no disponible" on a shift whose
+  /// cloud row had the real cashier). Nullable: shifts opened before the
+  /// migration keep null and fall back to the existing resolver.
+  @ColumnInfo(name: 'cashier_name')
+  final String? cashierName;
   @ColumnInfo(name: 'terminal_id')
   final String terminalId;
   @ColumnInfo(name: 'opened_at')
@@ -49,6 +58,7 @@ class CashierSessionEntity {
   CashierSessionEntity({
     required this.id,
     required this.userId,
+    this.cashierName,
     this.terminalId = 'default-terminal',
     required this.openedAt,
     this.tipoModelo = 'CAJA_CENTRAL',

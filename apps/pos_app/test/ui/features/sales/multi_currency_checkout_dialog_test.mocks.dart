@@ -146,6 +146,12 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as bool);
 
   @override
+  double get selectedRewardDiscount => (super.noSuchMethod(
+        Invocation.getter(#selectedRewardDiscount),
+        returnValue: 0.0,
+      ) as double);
+
+  @override
   _i9.TenantOperationMode get operationMode => (super.noSuchMethod(
         Invocation.getter(#operationMode),
         returnValue: _i9.TenantOperationMode.foodparkQsr,
@@ -307,6 +313,12 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
   @override
   bool get canIssueCreditNote => (super.noSuchMethod(
         Invocation.getter(#canIssueCreditNote),
+        returnValue: false,
+      ) as bool);
+
+  @override
+  bool get isCreditNoteAvailableForRegime => (super.noSuchMethod(
+        Invocation.getter(#isCreditNoteAvailableForRegime),
         returnValue: false,
       ) as bool);
 
