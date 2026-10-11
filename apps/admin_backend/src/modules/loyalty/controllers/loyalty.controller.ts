@@ -21,8 +21,13 @@ import {
   LoyaltyTicketSnapshotDto,
   ClassifyLegacyDto,
 } from '../dto/loyalty-ticket.dto';
+import {
+  BackfillUnassignedDto,
+  BACKFILL_UNASSIGNED_DEFAULT_BATCH_SIZE,
+} from '../dto/backfill-unassigned.dto';
 import { TicketPaidHandler } from '../services/ticket-paid.handler';
 import { LegacyClassificationService } from '../services/legacy-classification.service';
+import { LoyaltyProgramBackfillService } from '../services/loyalty-program-backfill.service';
 import { RedemptionService } from '../services/redemption.service';
 import { LoyaltyLedgerService } from '../services/loyalty-ledger.service';
 import {
@@ -70,6 +75,7 @@ export class LoyaltyController {
     private readonly profitAwareService: LoyaltyProfitAwareService,
     private readonly redemptionService: RedemptionService,
     private readonly ledgerService: LoyaltyLedgerService,
+    private readonly programBackfillService: LoyaltyProgramBackfillService,
   ) {}
 
   private requireTenant(tenantId?: string): string {
@@ -320,6 +326,37 @@ export class LoyaltyController {
         dto.batchSize,
       );
     return result;
+  }
+
+  // --- Unassigned Point Transactions Backfill (B1b) ---
+  // Repairs pre-fix rows with `loyalty_program_id NULL` by attributing them
+  // to the customer's resolved program (see LoyaltyProgramBackfillService).
+  // Preview/commit split (no dryRun flag), mirroring the menu-import flow.
+
+  @Post('point-transactions/backfill-unassigned/preview')
+  @Roles(UserRole.OWNER)
+  async previewBackfillUnassigned(
+    @Body() dto: BackfillUnassignedDto,
+    @GetTenantId() tenantId?: string,
+  ) {
+    return this.programBackfillService.previewBackfill(
+      this.requireTenant(tenantId),
+      dto?.batchSize ?? BACKFILL_UNASSIGNED_DEFAULT_BATCH_SIZE,
+    );
+  }
+
+  @Post('point-transactions/backfill-unassigned/commit')
+  @Roles(UserRole.OWNER)
+  async commitBackfillUnassigned(
+    @Body() dto: BackfillUnassignedDto,
+    @GetTenantId() tenantId?: string,
+    @CurrentUser('sub') actorUserId?: string,
+  ) {
+    return this.programBackfillService.commitBackfill(
+      this.requireTenant(tenantId),
+      dto?.batchSize ?? BACKFILL_UNASSIGNED_DEFAULT_BATCH_SIZE,
+      actorUserId,
+    );
   }
 
   // --- Redemptions (LV1.3 / LV1.7) ---

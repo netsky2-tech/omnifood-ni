@@ -17,6 +17,7 @@ import { INVENTORY_COST_QUERY_PORT } from './domain/inventory-cost-query.port';
 import { LoyaltyController } from './controllers/loyalty.controller';
 import { LoyaltySyncController } from './controllers/loyalty-sync.controller';
 import { LoyaltySyncIngestionService } from './services/loyalty-sync-ingestion.service';
+import { LoyaltyProgramBackfillService } from './services/loyalty-program-backfill.service';
 import { IdentityModule } from '../identity/identity.module';
 import { DeviceSyncModule } from '../identity/device-sync.module';
 
@@ -38,6 +39,7 @@ import { DeviceSyncModule } from '../identity/device-sync.module';
     LoyaltyService,
     LoyaltyLedgerService,
     LoyaltySyncIngestionService,
+    LoyaltyProgramBackfillService,
     LegacyClassificationService,
     TicketPaidHandler,
     RedemptionService,
