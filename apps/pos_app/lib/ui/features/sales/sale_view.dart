@@ -647,7 +647,7 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
           builder: (_, scrollController) {
             return Column(
               children: [
-                const _CartSheetErrorBanner(),
+                _CartSheetErrorBanner(viewModel: _viewModel),
                 Container(
                   width: 40,
                   height: 4,
@@ -1005,11 +1005,16 @@ class RecallTicketsDialog extends StatelessWidget {
 /// Watches the view model and hands the operator-facing refusal to the
 /// presentational banner (round-2 D-3).
 class _CartSheetErrorBanner extends StatelessWidget {
-  const _CartSheetErrorBanner();
+  const _CartSheetErrorBanner({required this.viewModel});
+
+  final SaleViewModel viewModel;
 
   @override
-  Widget build(BuildContext context) =>
-      CartSheetErrorBanner(message: context.watch<SaleViewModel>().errorMessage);
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: viewModel,
+    builder: (context, _) =>
+        CartSheetErrorBanner(message: viewModel.errorMessage),
+  );
 }
 
 /// Round-2 D-3: the mobile cart is a modal bottom sheet, so a
@@ -2374,6 +2379,12 @@ class CartSummary extends StatelessWidget {
     if (confirmed == true && context.mounted) {
       // Apply the reward via the view model
       viewModel.selectReward(nextReward.rewardId);
+      // Round-2 D-3b: selectReward REFUSES (cap, unreadable benefit) without
+      // mutating anything and leaves the refusal in errorMessage — the cart
+      // sheet's own banner renders it while the sheet is open. Announcing
+      // "aplicada" here, unconditionally, was a false success on top of a
+      // refusal; only claim success when the VM agrees.
+      if (viewModel.errorMessage != null) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Recompensa "${nextReward.name}" aplicada'),
