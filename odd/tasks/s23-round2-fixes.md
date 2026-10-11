@@ -30,13 +30,19 @@
 - **Qué:** con `PrinterDriverType.mock` la tarjeta dice *"Impresora Conectada y Lista — El cabezal térmico está disponible y cuenta con papel."* (`MockPrinterAdapter` siempre devuelve `ready`).
 - **Esperado:** estado/copy propio del simulador ("Modo simulador: no hay impresora física"), sin afirmar hardware. El camino de **impresión** ya es honesto y no se toca.
 
-### P6 · F-8a — la factura acreditada muestra su estado
-- **Qué:** tras emitir la NC la factura original no cambia de estado: el detalle sigue ofreciendo NC y ANULAR.
-- **Esperado:** marca de "acreditada" (badge en la lista + el detalle sin las acciones) y la NC identificada como tal.
+### P6 · F-8a — la NC queda condicionada al régimen fiscal
+- **Qué:** tras emitir la NC la factura original no cambia de estado: el detalle sigue ofreciendo NC y ANULAR. Y `canIssueCreditNote` (`sale_view_model.dart:1089`) era **sólo por rol**: un tenant CUOTA_FIJA veía y podía emitir NC.
+- **Decisión del dueño (2026-10-10):** la NC queda **condicionada al régimen** — en **CUOTA_FIJA se oculta** (el cajero no debe ver botones ni accesos a Nota de Crédito; las cancelaciones van por anulación dentro del turno, que `void_decision.dart` ya limita al mismo día); en **REGIMEN_GENERAL permanece visible** y condicionada a facturas previas. Fundamento: DT 09-2007 regula sistemas computarizados y su 1.9 enmarca el IVA del Régimen General; si obliga a un CUOTA_FIJA que no recauda IVA es pregunta legal abierta (#535 Q4c).
+- **Esperado:** el botón NC no existe para CUOTA_FIJA (**falla cerrado**: un régimen no resuelto tampoco habilita); para REGIMEN_GENERAL hay marca de "acreditada" (badge en la lista + el detalle sin las acciones) y la NC queda identificada, con la **asociación del número de factura original** y el **IVA 15%** que pide la DT 09-2007.
+
+### P6b · (nueva) el reembolso administrativo fuera de fecha en CUOTA_FIJA
+- **Qué:** la decisión manda el caso excepcional (reintegrar dinero días después por un reclamo administrativo) por **egreso / salida de caja menor por reembolso administrativo**, sin alterar documentos fiscales cerrados.
+- **Estado:** el camino **ya existe** — diálogo **Registrar Movimiento** (`cash_movement_dialog.dart`) con los tipos `PETTY_CASH` ("Gasto Menor") y `CASH_OUT` ("Egreso Efectivo") y **motivo/justificación obligatorio**; el Corte X ya muestra "(-) Egresos / Retiros".
+- **Esperado:** verificarlo end-to-end (registro con motivo + efecto en Corte X/Z + sync) y fijar el tipo/copy correcto para un reembolso administrativo. Sin documento fiscal nuevo.
 
 ### P7 · F-8b — el rechazo del duplicado en español
 - **Qué:** el segundo intento de NC muestra `Error al procesar devolución. Bad state: Credit note cumulative refund exceeds original line quantity`.
-- **Esperado:** mensaje en español, sin `Bad state:`, que explique que ya se devolvió todo lo de esa factura.
+- **Esperado:** mensaje en español, sin `Bad state:`, que explique que ya se devolvió todo lo de esa factura. Aplica donde la NC existe (REGIMEN_GENERAL).
 
 ### P8 · F-4b — el listado local de auditoría no oculta 6 h
 - **Qué:** `_buildAuditEntity` guarda el timestamp en **UTC con `Z`** y `getLocalLogs` (`audit_repository_impl.dart:601-604`) compara con límites **locales sin `Z`** como texto → se descartan las filas recientes.
