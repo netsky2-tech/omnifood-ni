@@ -206,6 +206,37 @@ export class RecipeService {
     );
   }
 
+  /**
+   * Round-2 §17.6 slice S3: every version of one product, newest first, for
+   * the SUB_RECIPE "Versión de Referencia" selector. Recipe versions are
+   * historical references (rows are never deleted), so the selector lists
+   * ALL of them — an unpublished or deactivated version is still a legitimate
+   * reference for a sub-recipe that was built against it. Selected columns
+   * only: the selector needs identity, version number, vigencia and the
+   * note, never the full recipe body.
+   */
+  async listProductVersions(
+    tenantId: string,
+    productId: string,
+  ): Promise<RecipeVersion[]> {
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      manager.getRepository(RecipeVersion).find({
+        where: { tenant_id: tenantId, product_id: productId },
+        order: { version_number: 'DESC' },
+        select: {
+          id: true,
+          product_id: true,
+          version_number: true,
+          is_active: true,
+          version_note: true,
+          fecha_inicio_vigencia: true,
+          fecha_fin_vigencia: true,
+          published_at: true,
+        },
+      }),
+    );
+  }
+
   async publishDraftVersion(
     tenantId: string,
     recipeVersionId: string,

@@ -3,6 +3,7 @@ import { useTenantId } from '@/lib/tenant';
 import {
   fetchActiveRecipe,
   fetchRecipeSnapshot,
+  fetchRecipeVersions,
   createRecipeVersion,
   fetchInsumos,
   createInsumo,
@@ -34,6 +35,19 @@ export function useRecipeSnapshot(recipeVersionId: string, enabled = true) {
     queryKey: ['recipes', tenantId, 'snapshot', recipeVersionId],
     queryFn: ({ signal }) => fetchRecipeSnapshot(recipeVersionId, { signal }),
     enabled: enabled && !!recipeVersionId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Round-2 §17.6 S3: the version list behind the reference selector. Recipe
+ * versions are historical references (never deleted), so a short staleTime
+ * is enough — the list only grows when a version is created/published. */
+export function useRecipeVersions(productId: string, enabled = true) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ['recipes', tenantId, 'versions', productId],
+    queryFn: ({ signal }) => fetchRecipeVersions(productId, { signal }),
+    enabled: enabled && !!productId,
     staleTime: 5 * 60 * 1000,
   });
 }

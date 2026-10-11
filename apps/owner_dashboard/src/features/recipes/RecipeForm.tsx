@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Plus, Trash2, Package, AlertCircle, Info } from 'lucide-react';
-import { useCreateRecipeVersion } from './use-recipes';
+import { useCreateRecipeVersion, useRecipeVersions } from './use-recipes';
+import { EntitySearchSelect } from '@/components/ui/entity-search-select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -491,14 +492,21 @@ export function RecipeForm({
 
                     {component.ingredientType === 'SUB_RECIPE' && component.ingredientId && (
                       <div>
-                        <Label htmlFor={`referenceVersionId-${component.tempId}`}>Versión de Referencia</Label>
-                        <Input
-                          id={`referenceVersionId-${component.tempId}`}
-                          type="text"
-                          value={component.referenceVersionId ?? ''}
-                          onChange={(e) => updateComponent(component.tempId, 'referenceVersionId', e.target.value || null)}
-                          placeholder="UUID de versión (opcional)"
-                          className="mt-1"
+                        {/* Round-2 §17.6 slice S5: the last free-text UUID input
+                        in the tree. The versions come from the governed
+                        surface (GET /recipes/products/:id/versions) through
+                        the same selector contract as every other form. */}
+                        <ReferenceVersionSelect
+                          inputId={`referenceVersionId-${component.tempId}`}
+                          productId={component.ingredientId}
+                          value={component.referenceVersionId ?? null}
+                          onChange={(versionId) =>
+                            updateComponent(
+                              component.tempId,
+                              'referenceVersionId',
+                              versionId === '' ? null : versionId,
+                            )
+                          }
                         />
                       </div>
                     )}
@@ -527,5 +535,62 @@ export function RecipeForm({
         </Button>
       </div>
     </form>
+  );
+}
+/**
+ * Round-2 §17.6 slice S5: the governed selector for a SUB_RECIPE component's
+ * reference recipe version. Lives as its own component because the versions
+ * query hangs off the ingredient's product id and hooks cannot live in the
+ * parent's `.map()`.
+ *
+ * The first option is always "Sin versión de referencia" (an explicit null,
+ * the contract RecipeForm already stores when the field is cleared); the
+ * versions themselves are historical references — an unpublished or
+ * deactivated version is still a legitimate reference for a sub-recipe that
+ * was built against it, so all of them render, newest first.
+ */
+function ReferenceVersionSelect({
+  inputId,
+  productId,
+  value,
+  onChange,
+}: {
+  inputId: string;
+  productId: string;
+  value: string | null;
+  onChange: (versionId: string) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const { data, isLoading, isError, refetch } = useRecipeVersions(productId);
+
+  const options = [
+    { id: '', label: 'Sin versión de referencia' },
+    ...(data ?? []).map((version) => ({
+      id: version.id,
+      label: `Versión ${version.version_number}${
+        version.is_active ? ' · vigente' : ' · histórica'
+      }${version.version_note ? ` · ${version.version_note}` : ''}`,
+    })),
+  ].filter((option) =>
+    // The versions surface returns the full list (rows are never deleted),
+    // so the §17.6 textual search filters here across the composed columns.
+    option.label.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
+  return (
+    <EntitySearchSelect
+      inputId={inputId}
+      label="Versión de Referencia"
+      value={value ?? ''}
+      onChange={onChange}
+      options={options}
+      search={search}
+      onSearchChange={setSearch}
+      isLoading={isLoading}
+      isError={isError}
+      onRetry={() => void refetch()}
+      emptyMessage="Este producto no tiene versiones de receta todavía."
+      placeholder="Buscar por número, nota o vigencia..."
+    />
   );
 }
