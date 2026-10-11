@@ -2842,6 +2842,26 @@ final migration67_68 = Migration(67, 68, (database) async {
   }
 });
 
+/// Round-2 F-8d: credit notes used to store the GROSS negated as their
+/// subtotal while regular sales store the subtotal NET of the discounts, so
+/// the day summary (which sums both) never reconciled once a discounted
+/// invoice was credited. The note's honest subtotal is the NET it reverses:
+/// `subtotal = total - total_tax` by the same identity the sale path keeps.
+/// Regular invoices are untouched (their subtotal is already net), and the
+/// update is idempotent by construction.
+final migration68_69 = Migration(68, 69, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='invoices'",
+  );
+  if (tables.isEmpty) return;
+  await database.execute('''
+    UPDATE invoices
+    SET subtotal = total - total_tax
+    WHERE type = 'creditNote'
+      AND subtotal <> total - total_tax
+  ''');
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2901,6 +2921,7 @@ final allMigrations = [
   migration65_66,
   migration66_67,
   migration67_68,
+  migration68_69,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

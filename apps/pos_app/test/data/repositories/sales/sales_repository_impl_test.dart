@@ -1596,12 +1596,138 @@ void main() {
         expect(creditLines.single.quantity, -1);
         expect(creditLines.single.originInvoiceItemId, 'origin-line-1');
         expect(creditLines.single.total, -57.5);
+        // Round-2 F-8d: the note stores the subtotal NET of the discounts,
+        // like every regular sale. This und discounted-free line makes net ==
+        // gross.
+        expect(creditNote.subtotal, -50);
+        expect(creditNote.totalTax, -7.5);
+        expect(creditNote.total, -57.5);
+        expect(creditLines.single.discount, 0);
         expect(movements, isEmpty);
         // H5/H8: the returned id identifies the committed credit note.
         expect(creditNoteId, creditNote.id);
         verifyNever(mockReverseInventoryUseCase.execute(any, any));
         verifyNever(
           mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+        );
+      },
+    );
+
+    test(
+      // Round-2 F-8d, the exact rig case (S23 invoice 41 -> note 44): a
+      // DISCOUNTED line. The note used to store the gross negated as its
+      // subtotal (-125), which left the day summary unreconcilable; it now
+      // stores the net it reverses and the line carries the discount's
+      // reversal.
+      'stores a discounted-line credit note net, with the discount reversal',
+      () async {
+        final original = InvoiceEntity(
+          id: 'inv-credit-discounted',
+          number: 'F001-000041',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'cashier-1',
+          subtotal: 13.75,
+          totalTax: 0,
+          total: 13.75,
+          syncStatus: 'synced',
+          paymentStatus: 'paid',
+          type: 'regular',
+        );
+        final originalItems = [
+          InvoiceItemEntity(
+            id: 'origin-line-41',
+            invoiceId: original.id,
+            productId: 'cappuccino-12',
+            productName: 'Cappuccino 12oz',
+            quantity: 1,
+            unitPrice: 125,
+            originalTaxRate: 0,
+            appliedTaxRate: 0,
+            taxAmount: 0,
+            discount: 111.25,
+            total: 13.75,
+          ),
+        ];
+
+        when(
+          mockInvoiceDao.getInvoiceById(original.id),
+        ).thenAnswer((_) async => original);
+        when(
+          mockItemDao.getItemsByInvoiceId(original.id),
+        ).thenAnswer((_) async => originalItems);
+        when(
+          mockTransactionDao.getCreditNotesByRelatedId(original.id),
+        ).thenAnswer((_) async => []);
+        when(
+          mockNumberingService.getNextNumber(),
+        ).thenAnswer((_) async => 'NC-002');
+        when(
+          mockTransactionDao.getNextInvoiceSourceSequence('pos-cashier-1'),
+        ).thenAnswer((_) async => 8);
+        when(
+          mockAuditRepository.prepareLog(any, metadata: anyNamed('metadata')),
+        ).thenAnswer((_) async => null);
+        when(
+          mockTransactionDao.executeSaleTransaction(
+            any,
+            any,
+            any,
+            any,
+            any,
+            any,
+            any,
+          ),
+        ).thenAnswer((_) async {});
+        when(
+          mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+        ).thenAnswer((_) async {});
+        when(mockNumberingService.incrementNumber()).thenAnswer((_) async {});
+
+        await repository.createCreditNote(
+          originalInvoiceId: original.id,
+          reason: 'Devolucion de prueba ronda S23',
+          authorizedByUserId: 'owner-1',
+          authorizedByRole: UserRole.owner,
+          refundReasonPolicy: RefundReasonPolicy.financialOnly,
+          lines: const [
+            CreditNoteRefundLine(
+              originInvoiceItemId: 'origin-line-41',
+              quantity: 1,
+            ),
+          ],
+        );
+
+        final captured = verify(
+          mockTransactionDao.executeSaleTransaction(
+            captureAny,
+            captureAny,
+            any,
+            any,
+            captureAny,
+            any,
+            any,
+          ),
+        ).captured;
+        final creditNote = captured[0] as InvoiceEntity;
+        final creditLines = captured[1] as List<InvoiceItemEntity>;
+
+        expect(creditNote.total, -13.75);
+        expect(creditNote.totalTax, 0);
+        expect(
+          creditNote.subtotal,
+          -13.75,
+          reason: 'the note reverses the NET the customer actually paid; '
+              'storing -125 is what left the day summary unreconcilable',
+        );
+        expect(creditNote.subtotal + creditNote.totalTax, creditNote.total,
+            reason: 'the stored identity the day summary adds up');
+        expect(creditLines.single.discount, -111.25,
+            reason: 'the line preserves the reversal of what was given away');
+        expect(
+          creditLines.single.discountOriginJson,
+          isNull,
+          reason: 'the origins stay on the original document; the wire '
+              'contract is positive-amounts-only',
         );
       },
     );
