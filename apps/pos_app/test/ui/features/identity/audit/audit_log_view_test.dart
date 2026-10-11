@@ -213,12 +213,24 @@ void main() {
       await tester.pumpAndSettle();
 
       // Every POS-written key gets its Spanish label, and the values render
-      // verbatim.
-      expect(find.textContaining('Factura (ID)'), findsOneWidget);
+      // verbatim — except the machine identifier, which round-2 F-4c showed
+      // told the operator nothing (it stays in the raw payload below) — and
+      // the machine CODES, which are humanised.
+      expect(
+        find.textContaining('Factura (ID)'),
+        findsNothing,
+        reason: 'the bare invoice uuid is forensic evidence, not operator copy',
+      );
       expect(find.textContaining('Número de factura'), findsOneWidget);
       expect(find.textContaining('Total:'), findsOneWidget);
       expect(find.text('250.00'), findsOneWidget);
       expect(find.textContaining('Código del motivo'), findsOneWidget);
+      expect(find.text('Cliente desiste'), findsOneWidget);
+      expect(
+        find.text('CLIENTE_DESISTE'),
+        findsNothing,
+        reason: 'the raw reason code must not reach the operator',
+      );
       expect(find.textContaining('Anulación de factura'), findsWidgets);
 
       // Unknown keys degrade honestly: humanised (underscores to spaces),
