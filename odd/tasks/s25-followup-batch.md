@@ -1,6 +1,6 @@
 # S25 follow-up batch — F-10g decision, B1b refinements, build-script hygiene
 
-- **Status:** CERRADO — T1–T4 implementadas en `fix/s25-followup-batch`; PR abierto para revisión del dueño.
+- **Status:** CERRADO — T1–T4 implementadas; **PR #870** abierto con ambos CI en verde, esperando review del dueño.
 - **Branch:** `fix/s25-followup-batch`, from `main` = `5bbd769c`.
 - **Owner decisions (2026-10-12):**
   - **F-10g: INHERIT the tenant fiscal counter.** The verification sale is a real fiscal document; a dedicated series for it is DGI-disputable. The D-6 machinery already implements inheritance (priming records tenant-wide MAX; the runner seeds a fresh terminal at cloudHighest+1 and refuses a lagging cursor). Remaining work: document the decision for support and verify chain coverage; add tests only for real gaps.
@@ -47,3 +47,4 @@
 | T2 | `29d701e6` | RED real: the backfill DB-spec schema gained the production partial unique index, exposing that the suite had silently accepted two sequence-0 rows production rejects (`duplicate key` on the second commit). GREEN: backfill DB 13/13, remediation unit 7/7, remediation controller 3/3, `tsc` clean. Both writers allocate the next stream sequence like `audit-trail.service`. |
 | T3 | `e39061ff` + `5ae5d6d7` | Owner decision recorded in `docs/operations/replacement-terminal-fiscal-sequence-decision.md` (support flow for `FISCAL_SEQUENCE_RECOVERY_REQUIRED`). New test: priming writes `dgi_cloud_highest_sequence` from the payload (13/13, was uncovered). `flutter analyze` clean. |
 | T4 | `11ce1c00` | Stale-artifact guard: the out-dir is cleaned up front; verified by planting 4 stale files (removed) plus an unrelated file (kept); `bash -n` clean; `--plan` mode unaffected. |
+| CI fix | `0ce07ed9` | First CI run failed: the null-aware map element marker (Dart 3.8+) does not parse on the CI runner's older SDK, while the collection-if trips the newer local analyzer's `use_null_aware_elements` info (fatal). Fixed by assigning the optional key outside the literal — clean on both SDKs. Final runs: Admin Backend CI ✅, POS App CI ✅ (38178922255 / 38178922212). |
