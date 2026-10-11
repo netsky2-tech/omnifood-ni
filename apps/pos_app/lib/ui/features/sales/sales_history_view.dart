@@ -10,6 +10,62 @@ import '../../../domain/usecases/sales/void_decision.dart';
 import '../../../core/localization/label_map.dart';
 import '../../design_system/design_system.dart';
 
+/// Round-2 §17.4: the invoice detail's summary amounts, rebuilt from the
+/// persisted lines.
+///
+/// The stored `subtotal` is already net of the discounts, so trusting it is
+/// exactly what kept them invisible: the operator saw a total that could not
+/// be reconciled with the line prices. `base` is the GROSS so the identity
+/// `base - promotion - manual - loyalty + tip == invoice.total` holds.
+///
+/// A credit note reverses a document whose discounts are not re-declared per
+/// line, so its base is the NET it reverses (never the gross it never
+/// charged).
+({double base, double promotion, double manual, double loyalty, double tip})
+    buildInvoiceDetailSummary(Invoice invoice, List<InvoiceItem> items) {
+  double originTotal(String origin) => items.fold<double>(
+        0,
+        (sum, item) => sum + (item.discountOrigin?[origin] ?? 0),
+      );
+  final gross = items.fold<double>(
+    0,
+    (sum, item) =>
+        sum +
+        item.unitPrice * item.quantity +
+        item.selectedModifiers.fold<double>(
+              0,
+              (mSum, m) => mSum + m.extraPrice * m.quantity,
+            ) *
+            item.quantity,
+  );
+  return (
+    base: invoice.type == InvoiceType.creditNote
+        ? items.fold<double>(0, (sum, item) => sum + item.total)
+        : gross,
+    promotion: originTotal('promotion'),
+    manual: originTotal('manual'),
+    loyalty: originTotal('loyalty'),
+    tip: invoice.tipAmountNio ?? 0,
+  );
+}
+
+/// One label/amount row of the invoice detail summary (round-2 §17.4).
+/// Negative amounts render with a leading minus, the way the cart shows a
+/// discount, so the detail reads like the cart it mirrors.
+Widget _detailSummaryRow(String label, double amount, {Color? color}) {
+  final sign = amount < 0 ? '-' : '';
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label),
+      Text(
+        '${sign}C\$ ${amount.abs().toStringAsFixed(2)}',
+        style: TextStyle(color: color),
+      ),
+    ],
+  );
+}
+
 class SalesHistoryView extends StatefulWidget {
   const SalesHistoryView({super.key});
 
@@ -683,9 +739,26 @@ class InvoiceDetailsPanel extends StatelessWidget {
                   itemCount: items.length,
                   itemBuilder: (context, index) {
                     final item = items[index];
+                    final extras = item.selectedModifiers;
                     return ListTile(
                       title: Text(item.productName),
-                      subtitle: Text('${item.quantity.toInt()} x C\$ ${item.unitPrice.toStringAsFixed(2)}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${item.quantity.toInt()} x C\$ ${item.unitPrice.toStringAsFixed(2)}',
+                          ),
+                          // Round-2 §17.4: the extras the cart charged were
+                          // invisible here even though the receipt path
+                          // already prints them. The detail mirrors the cart.
+                          for (final extra in extras)
+                            Text(
+                              '• ${extra.name}'
+                              '${extra.extraPrice > 0 ? '  C\$ ${extra.extraPrice.toStringAsFixed(2)}' : ''}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                        ],
+                      ),
                       trailing: Text('C\$ ${item.total.toStringAsFixed(2)}'),
                     );
                   },
@@ -696,31 +769,54 @@ class InvoiceDetailsPanel extends StatelessWidget {
           
           const Divider(height: 32),
           
-          // Summary
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Subtotal:'),
-              Text('C\$ ${invoice.subtotal.toStringAsFixed(2)}'),
-            ],
-          ),
-          // D-3: under CUOTA_FIJA the tenant does not collect IVA — the row is
-          // omitted instead of showing a label that contradicts the receipts.
-          if (context.watch<SaleViewModel>().companyTaxRegime?.isCuotaFija != true)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('IVA:'),
-                Text('C\$ ${invoice.totalTax.toStringAsFixed(2)}'),
-              ],
-            ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('TOTAL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-              Text('C\$ ${invoice.total.toStringAsFixed(2)}', 
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: colorScheme.primary)),
-            ],
+          // Round-2 §17.4: the summary mirrors the cart. The base is the GROSS
+          // rebuilt from the persisted lines, because the stored subtotal is
+          // already net of the discounts — trusting it is what kept them
+          // invisible.
+          FutureBuilder<List<InvoiceItem>>(
+            future: viewModel.getInvoiceItems(invoice.id),
+            builder: (context, snapshot) {
+              final items = snapshot.data ?? const <InvoiceItem>[];
+              final totals = buildInvoiceDetailSummary(invoice, items);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _detailSummaryRow('Subtotal:', totals.base),
+                  if (totals.promotion > 0)
+                    _detailSummaryRow('Promociones:', -totals.promotion,
+                        color: Colors.green.shade700),
+                  if (totals.manual > 0)
+                    _detailSummaryRow('Descuento manual:', -totals.manual,
+                        color: Colors.green.shade700),
+                  if (totals.loyalty > 0)
+                    _detailSummaryRow('Lealtad:', -totals.loyalty,
+                        color: Colors.green.shade700),
+                  // D-3: under CUOTA_FIJA the tenant does not collect IVA — the
+                  // row is omitted instead of contradicting the receipts.
+                  if (context
+                          .watch<SaleViewModel>()
+                          .companyTaxRegime
+                          ?.isCuotaFija !=
+                      true)
+                    _detailSummaryRow('IVA:', invoice.totalTax),
+                  if (totals.tip > 0) _detailSummaryRow('Propina:', totals.tip),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('TOTAL:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 20)),
+                      Text('C\$ ${invoice.total.toStringAsFixed(2)}',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              color: colorScheme.primary)),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
           
           const SizedBox(height: 24),

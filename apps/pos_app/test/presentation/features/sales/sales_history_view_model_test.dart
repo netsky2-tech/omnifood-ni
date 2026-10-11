@@ -3,6 +3,7 @@ import 'package:pos_app/core/localization/display_name_resolver.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_item_entity.dart';
+import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart';
 import 'package:pos_app/data/models/sales/payment_entity.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sales_history_view_model.dart';
@@ -458,6 +459,60 @@ void main() {
         );
       },
     );
+  });
+
+  group('SalesHistoryViewModel - detail mirror (round-2 §17.4)', () {
+    test('getInvoiceItems carries the line modifiers the cart charged',
+        () async {
+      await insertSale(
+        database,
+        id: 'inv-mod',
+        number: '001-000001',
+        createdAt: DateTime(2026, 10, 10),
+      );
+      await database.salesTransactionDao.insertInvoiceItemModifiers([
+        InvoiceItemModifierEntity(
+          id: 'mod-1',
+          invoiceItemId: 'inv-mod-item-1',
+          name: 'Leche: Entera',
+          extraPrice: 0,
+          quantity: 1,
+        ),
+        InvoiceItemModifierEntity(
+          id: 'mod-2',
+          invoiceItemId: 'inv-mod-item-1',
+          name: 'Extra shot',
+          extraPrice: 15,
+          quantity: 2,
+        ),
+      ]);
+
+      final items = await viewModel.getInvoiceItems('inv-mod');
+
+      expect(items, hasLength(1));
+      final extras = items.single.selectedModifiers;
+      expect(
+        extras.map((m) => m.name).toList(),
+        <String>['Leche: Entera', 'Extra shot'],
+        reason: 'the detail mirrors the cart, in the modifiers insertion '
+            'order the receipt path also uses',
+      );
+      expect(extras.last.extraPrice, 15);
+      expect(extras.last.quantity, 2);
+    });
+
+    test('a line with no modifiers stays empty, never fabricated', () async {
+      await insertSale(
+        database,
+        id: 'inv-nomod',
+        number: '001-000002',
+        createdAt: DateTime(2026, 10, 10),
+      );
+
+      final items = await viewModel.getInvoiceItems('inv-nomod');
+
+      expect(items.single.selectedModifiers, isEmpty);
+    });
   });
 }
 

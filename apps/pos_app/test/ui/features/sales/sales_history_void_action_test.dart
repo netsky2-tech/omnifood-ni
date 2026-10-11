@@ -28,6 +28,7 @@ import 'package:pos_app/presentation/features/sales/view_models/sales_history_vi
 import 'package:pos_app/ui/features/sales/sales_history_view.dart';
 import 'package:provider/provider.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/domain/models/kitchen/kitchen_order.dart';
 
@@ -91,6 +92,9 @@ void main() {
     when(mockPromoDao.getActivePromotions()).thenAnswer((_) async => []);
     when(mockPromoDao.getAllPromotions()).thenAnswer((_) async => []);
     when(mockItemDao.getItemsByInvoiceId(any)).thenAnswer((_) async => []);
+    // Round-2 §17.4: the detail now also loads the line modifiers.
+    when(mockItemDao.getModifierRowsByInvoiceId('inv-ui-1'))
+        .thenAnswer((_) async => <InvoiceItemModifierEntity>[]);
     when(mockPaymentDao.getPaymentsByInvoiceId(any))
         .thenAnswer((_) async => []);
   });
