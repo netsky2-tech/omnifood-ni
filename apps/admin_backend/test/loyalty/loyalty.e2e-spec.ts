@@ -15,6 +15,7 @@ import { LoyaltyController } from '../../src/modules/loyalty/controllers/loyalty
 import { LoyaltyService } from '../../src/modules/loyalty/services/loyalty.service';
 import { TicketPaidHandler } from '../../src/modules/loyalty/services/ticket-paid.handler';
 import { LegacyClassificationService } from '../../src/modules/loyalty/services/legacy-classification.service';
+import { LoyaltyProgramBackfillService } from '../../src/modules/loyalty/services/loyalty-program-backfill.service';
 import { LoyaltyProfitAwareService } from '../../src/modules/loyalty/services/loyalty-profit-aware.service';
 import { RedemptionService } from '../../src/modules/loyalty/services/redemption.service';
 import { LoyaltyLedgerService } from '../../src/modules/loyalty/services/loyalty-ledger.service';
@@ -227,6 +228,13 @@ describe('Loyalty API (E2E / Integration)', () => {
         {
           provide: TicketPaidHandler,
           useValue: { handle: jest.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: LoyaltyProgramBackfillService,
+          useValue: {
+            previewBackfill: jest.fn(),
+            commitBackfill: jest.fn(),
+          },
         },
         {
           provide: LegacyClassificationService,
