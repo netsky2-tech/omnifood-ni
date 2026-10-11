@@ -200,6 +200,10 @@ export const auditLedgerActionLabels: Record<string, string> = {
  * `localize`.
  */
 export const auditLedgerTargetTypeLabels: Record<string, string> = {
+  // Round-2 F-4a's derivation (audit-target-derivation.ts) writes the type
+  // UPPERCASE at ingestion; the pre-existing lowercase key stays for rows
+  // written by other paths.
+  INVOICE: "Factura",
   invoice: "Factura",
   credit_note: "Nota de crédito",
   CASH_DRAWER: "Caja / gaveta",

@@ -186,6 +186,7 @@ describe("label families — key sets verified against source enums", () => {
     expect(Object.keys(auditLedgerTargetTypeLabels).sort()).toEqual(
       [
         "invoice",
+        "INVOICE", // round-2 F-4a: the ingestion derivation writes it uppercase
         "credit_note",
         "CASH_DRAWER",
         "SUPERVISOR_OVERRIDE",
