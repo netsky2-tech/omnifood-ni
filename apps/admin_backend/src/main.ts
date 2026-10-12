@@ -38,9 +38,11 @@ async function bootstrap() {
   // Request logging
   const logger = new Logger('HTTP');
   app.use((req: Request, _res: Response, next: NextFunction) => {
-    logger.log(
-      `${req.method} ${req.url} from ${req.socket.remoteAddress ?? 'unknown'}`,
-    );
+    // req.ip is the trust-proxy-resolved address — the same one the per-IP
+    // rate limiting and audit keys derive from. Logging the socket peer
+    // instead logs Railway's internal mesh (a different 100.64.0.x per
+    // request), which made production diagnosis misleading (issue #894).
+    logger.log(`${req.method} ${req.url} from ${req.ip ?? 'unknown'}`);
     next();
   });
 
