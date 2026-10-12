@@ -1,0 +1,44 @@
+name: dependency-audit
+
+# Batch 2 S6 (OWASP API8/A06): weekly supply-chain audit. Fails on high or
+# critical advisories so known-vulnerable dependencies cannot sit in the
+# tree unnoticed; moderate/low findings are reported but do not block.
+# The frontend SPA has no server runtime, so the backend audit runs with
+# --omit=dev (production dependency graph only) to keep the signal on
+# deployable risk.
+
+on:
+  schedule:
+    # Mondays 06:20 UTC — off the busy CI hours.
+    - cron: '20 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/admin_backend/package-lock.json
+      - name: Audit backend production dependencies
+        working-directory: apps/admin_backend
+        run: npm audit --omit=dev --audit-level=high
+
+  dashboard-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/owner_dashboard/package-lock.json
+      - name: Audit dashboard dependencies
+        working-directory: apps/owner_dashboard
+        run: npm audit --omit=dev --audit-level=high
