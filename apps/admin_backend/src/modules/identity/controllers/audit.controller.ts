@@ -66,8 +66,12 @@ export class AuditController {
   // Human transport: manual backoffice drawer-open entry. The POS has no
   // HTTP caller for this route (its drawer-opens stream rides the forensic
   // audit push below), so the strict identity JWT stays the gate.
+  // Security audit remediation S5: writing audit records is an OWNER/MANAGER
+  // backoffice action, not any-authenticated-user (the registry comment
+  // always claimed this role set — now the guards enforce it).
   @Post('drawer-opens')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
   async recordDrawerOpen(
     @GetTenantId() tenantId: string,
     @Body() dto: RecordManualDrawerOpenDto,

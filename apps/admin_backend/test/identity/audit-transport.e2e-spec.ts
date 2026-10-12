@@ -72,11 +72,16 @@ describe('AuditController transport (D-18 part 2)', () => {
     }
   });
 
-  it('keeps POST drawer-opens on the human transport (no POS HTTP caller; manual backoffice entry)', () => {
+  it('keeps POST drawer-opens on the human transport and gates it to OWNER/MANAGER (audit remediation S5)', () => {
     const handler = handlerOf('recordDrawerOpen');
     const guards = Reflect.getMetadata(GUARDS_METADATA, handler) ?? [];
     expect(guards).toContain(AuthGuard);
+    expect(guards).toContain(RolesGuard);
     expect(guards).not.toContain(SyncTransportGuard);
+    expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+      'OWNER',
+      'MANAGER',
+    ]);
   });
 
   it('classifies the enumerated AuditController routes with the registry and passes the contract', () => {
