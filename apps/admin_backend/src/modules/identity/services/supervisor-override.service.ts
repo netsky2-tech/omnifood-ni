@@ -3,7 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
   ForbiddenException,
-  NotFoundException,
+  HttpException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -28,8 +28,36 @@ import {
   IdentityJwtConfig,
 } from '../config/identity-jwt.config';
 
+// S4 (security-hardening-batch2): uniform failure response for supervisor
+// override verification. Unknown supervisor and wrong credential return the
+// same 401 status and generic message so the endpoint cannot be used to
+// enumerate supervisors or enabled methods; the structured reason stays in
+// the SUPERVISOR_OVERRIDE_REJECTED audit rows.
+const OVERRIDE_UNAUTHORIZED_MESSAGE = 'No se pudo autorizar la anulación';
+
+// S4(a): failed verification attempts are counted per tenant + requesting
+// user + terminal with a fixed 15-minute window. The counter is in-memory
+// on purpose: food-park POS devices share one egress IP (so per-IP limits
+// are wrong) and the offline-first ethos rules out new infrastructure such
+// as Redis. Losing the counter on a backend restart only relaxes the
+// throttle for at most one window; the audit trail is unaffected.
+const OVERRIDE_MAX_FAILED_ATTEMPTS = 5;
+const OVERRIDE_ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
+
+interface OverrideAttemptEntry {
+  count: number;
+  windowStart: number;
+}
+
 @Injectable()
 export class SupervisorOverrideService {
+  // Fixed-window failed-attempt counters, keyed by tenant + requesting
+  // user + terminal (see overrideAttemptKey). Bounded by the number of
+  // distinct requesting identities seen since process start.
+  private readonly failedOverrideAttempts = new Map<
+    string,
+    OverrideAttemptEntry
+  >();
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -51,6 +79,11 @@ export class SupervisorOverrideService {
     tenantId: string,
     requestingUserId: string,
   ): Promise<SupervisorOverrideResponseDto> {
+    // S4(a): a requesting identity that has exhausted its failed-attempt
+    // window is throttled before any verification work or DB access.
+    const attemptKey = this.overrideAttemptKey(tenantId, requestingUserId, dto);
+    this.assertOverrideAttemptsAvailable(attemptKey);
+
     // Issue #512 T3 slice 9 rework: one tenant-bound transaction for the
     // read unit. `users` itself has no RLS yet, but it is read through the
     // same bound manager because the dependent security_profiles findOne is
@@ -90,6 +123,7 @@ export class SupervisorOverrideService {
     );
 
     if (!supervisor) {
+      this.recordFailedOverrideAttempt(attemptKey);
       await this.logOverrideAudit(
         'SUPERVISOR_OVERRIDE_REJECTED',
         dto.supervisorId,
@@ -98,7 +132,8 @@ export class SupervisorOverrideService {
         dto.method,
         { reason: 'Supervisor not found or inactive', ...dto.context },
       );
-      throw new NotFoundException('Supervisor no encontrado o inactivo');
+      // S4(b): uniform 401 — do not reveal whether the supervisor exists.
+      throw new UnauthorizedException(OVERRIDE_UNAUTHORIZED_MESSAGE);
     }
 
     const effectivePermissions = resolveEffectivePermissions(
@@ -107,6 +142,7 @@ export class SupervisorOverrideService {
     );
 
     if (!hasPermission(effectivePermissions, dto.permissionRequired)) {
+      this.recordFailedOverrideAttempt(attemptKey);
       await this.logOverrideAudit(
         'SUPERVISOR_OVERRIDE_REJECTED',
         supervisor.id,
@@ -126,6 +162,7 @@ export class SupervisorOverrideService {
 
     if (dto.method === 'PIN') {
       if (!profile || !profile.is_pin_enabled || !profile.pin_hash) {
+        this.recordFailedOverrideAttempt(attemptKey);
         await this.logOverrideAudit(
           'SUPERVISOR_OVERRIDE_REJECTED',
           supervisor.id,
@@ -137,13 +174,14 @@ export class SupervisorOverrideService {
             ...dto.context,
           },
         );
-        throw new UnauthorizedException(
-          'Método PIN no habilitado para este supervisor',
-        );
+        // S4(b): uniform 401 — the response must not reveal which methods
+        // are enabled on the supervisor's security profile.
+        throw new UnauthorizedException(OVERRIDE_UNAUTHORIZED_MESSAGE);
       }
 
       const pinMatches = await bcrypt.compare(dto.credential, profile.pin_hash);
       if (!pinMatches) {
+        this.recordFailedOverrideAttempt(attemptKey);
         await this.logOverrideAudit(
           'SUPERVISOR_OVERRIDE_REJECTED',
           supervisor.id,
@@ -152,10 +190,12 @@ export class SupervisorOverrideService {
           dto.method,
           { reason: 'Invalid PIN provided', ...dto.context },
         );
-        throw new UnauthorizedException('PIN de supervisor incorrecto');
+        // S4(b): uniform 401, same message as an unknown supervisor.
+        throw new UnauthorizedException(OVERRIDE_UNAUTHORIZED_MESSAGE);
       }
     } else if (dto.method === 'TOTP') {
       if (!profile || !profile.is_totp_enabled || !profile.totp_secret_seed) {
+        this.recordFailedOverrideAttempt(attemptKey);
         await this.logOverrideAudit(
           'SUPERVISOR_OVERRIDE_REJECTED',
           supervisor.id,
@@ -167,9 +207,8 @@ export class SupervisorOverrideService {
             ...dto.context,
           },
         );
-        throw new UnauthorizedException(
-          'Método TOTP no habilitado para este supervisor',
-        );
+        // S4(b): uniform 401 — no enumeration of enabled methods.
+        throw new UnauthorizedException(OVERRIDE_UNAUTHORIZED_MESSAGE);
       }
 
       const totpValid = verifyTotp(dto.credential, profile.totp_secret_seed, {
@@ -178,6 +217,7 @@ export class SupervisorOverrideService {
       });
 
       if (!totpValid) {
+        this.recordFailedOverrideAttempt(attemptKey);
         await this.logOverrideAudit(
           'SUPERVISOR_OVERRIDE_REJECTED',
           supervisor.id,
@@ -186,9 +226,8 @@ export class SupervisorOverrideService {
           dto.method,
           { reason: 'Invalid TOTP token provided', ...dto.context },
         );
-        throw new UnauthorizedException(
-          'Código TOTP de supervisor incorrecto o expirado',
-        );
+        // S4(b): uniform 401, same message as an unknown supervisor.
+        throw new UnauthorizedException(OVERRIDE_UNAUTHORIZED_MESSAGE);
       }
     }
 
@@ -223,6 +262,10 @@ export class SupervisorOverrideService {
         ...dto.context,
       },
     );
+
+    // S4(a): a successful verification clears the requesting identity's
+    // failed-attempt window.
+    this.clearFailedOverrideAttempts(attemptKey);
 
     return {
       authorized: true,
@@ -266,5 +309,59 @@ export class SupervisorOverrideService {
     await runInTenantTransaction(this.dataSource, tenantId, (manager) =>
       manager.getRepository(AuditLog).save(log),
     );
+  }
+
+  // S4(a): the fixed-window counter is keyed by tenant + requesting user
+  // + terminal (context.terminalId, falling back to the local POS default),
+  // so one cashier exhausting the window never locks out another.
+  private overrideAttemptKey(
+    tenantId: string,
+    requestingUserId: string,
+    dto: SupervisorOverrideRequestDto,
+  ): string {
+    const terminalId =
+      (dto.context?.terminalId as string | undefined) || 'POS_LOCAL';
+    return `${tenantId}:${requestingUserId}:${terminalId}`;
+  }
+
+  private assertOverrideAttemptsAvailable(key: string): void {
+    const entry = this.failedOverrideAttempts.get(key);
+    if (!entry) {
+      return;
+    }
+
+    const elapsedMs = Date.now() - entry.windowStart;
+    if (elapsedMs >= OVERRIDE_ATTEMPT_WINDOW_MS) {
+      this.failedOverrideAttempts.delete(key);
+      return;
+    }
+
+    if (entry.count >= OVERRIDE_MAX_FAILED_ATTEMPTS) {
+      const retryAfterSeconds = Math.ceil(
+        (OVERRIDE_ATTEMPT_WINDOW_MS - elapsedMs) / 1000,
+      );
+      throw new HttpException(
+        {
+          statusCode: 429,
+          message: `Demasiados intentos fallidos de autorización. Intente nuevamente en ${retryAfterSeconds} segundos.`,
+          retryAfterSeconds,
+        },
+        429,
+      );
+    }
+  }
+
+  private recordFailedOverrideAttempt(key: string): void {
+    const now = Date.now();
+    const entry = this.failedOverrideAttempts.get(key);
+    if (!entry || now - entry.windowStart >= OVERRIDE_ATTEMPT_WINDOW_MS) {
+      this.failedOverrideAttempts.set(key, { count: 1, windowStart: now });
+    } else {
+      entry.count += 1;
+    }
+  }
+
+  private clearFailedOverrideAttempts(key: string): void {
+    this.failedOverrideAttempts.delete(key);
   }
 }
