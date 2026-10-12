@@ -29,3 +29,4 @@
 
 | Task | Commit | Evidence |
 |---|---|---|
+| Release | `a112ee2c` | Bump `1.1.0+20030` → build split-per-ABI: arm64 **22030** (`6ecdfb95…`), armeabi-v7a **21030** (`2dfb68d9…`), x86_64 **24030** (`c68e6c68…`). Release key `CN=NHilos Upload` (`d44db6eb…`), SHA256SUMS OK, manifiesto limpio (el guard anti-stale de T4 funcionó: 3 artefactos exactos). **Publicado** a `pilot` con `min_from=1`, no mandatory, notas de changelog — catálogo remoto (Railway) **y** local. Endpoint verificado en vivo: a 21030 sirve 22030 con digest coincidente; a 22030 → 204. |
