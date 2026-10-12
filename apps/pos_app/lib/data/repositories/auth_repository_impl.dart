@@ -7,6 +7,7 @@ import '../daos/user_dao.dart';
 import '../daos/security_profile_dao.dart';
 import '../models/security_profile_entity.dart';
 import '../models/user_entity.dart';
+import '../network/unconfigured_backend_interceptor.dart';
 import '../services/local_auth_service.dart';
 import '../mappers/user_mapper.dart';
 import 'tenant_capability_cache.dart';
@@ -237,6 +238,18 @@ class AuthRepositoryImpl implements AuthRepository {
       debugPrint('[AuthRepository] Online login successful for ${user.email}');
       return user;
     } on DioException catch (e) {
+      // Unconfigured: not a network failure, but still "cannot reach a
+      // server": surface the honest copy, then degrade to local auth.
+      final isUnconfigured = e is UnconfiguredBackendException;
+      if (isUnconfigured) {
+        _lastAuthError =
+            'Esta terminal no tiene un servidor configurado. '
+            'El inicio de sesión en línea no está disponible.';
+        debugPrint(
+          '[AuthRepository] Online login on an unconfigured transport: '
+          'surfacing the no-server condition, not a network error.',
+        );
+      }
       final isUnauthorized =
           e.response?.statusCode == 401 || e.response?.statusCode == 403;
       if (isUnauthorized) {
@@ -248,7 +261,7 @@ class AuthRepositoryImpl implements AuthRepository {
         return null;
       }
 
-      final isFallbackAllowed =
+      final isFallbackAllowed = isUnconfigured ||
           e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
@@ -381,6 +394,16 @@ class AuthRepositoryImpl implements AuthRepository {
       final status = e.response?.statusCode;
       debugPrint('[LinkClaim] DioException: type=${e.type}, status=$status, '
           'message=${e.message}, url=${e.requestOptions.uri}');
+      if (e is UnconfiguredBackendException) {
+        // No socket was ever opened: there is no server URL to connect to,
+        // so a network check cannot fix this. Reuse the honest condition
+        // already shipped on the server configuration screen.
+        throw const LinkingClaimException(
+          'Esta terminal no tiene un servidor configurado. Las ventas '
+          'siguen funcionando sin conexión, pero la sincronización no '
+          'está disponible.',
+        );
+      }
       if (status == 401 || status == 403) {
         // Backend collapses unknown/expired/claimed/revoked codes into one
         // 401: surface a single generic failure, never enumerate.

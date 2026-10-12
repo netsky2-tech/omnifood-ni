@@ -44,6 +44,8 @@ void main() {
     registerFallbackValue(File(''));
     registerFallbackValue(Uri.parse('https://example.com'));
     registerFallbackValue(RequestOptions());
+    // T5: the resolver stubs match on the `buildTimeApiUrl` named argument.
+    registerFallbackValue('');
   });
 
   setUp(() {
@@ -88,8 +90,11 @@ void main() {
   OtaUpdateCoordinator createCoordinator({
     TargetAbi? Function()? resolveAbi,
     String? configuredUrl = 'https://api.test',
+    String buildTimeApiUrl = '',
   }) {
-    when(() => mockApiUrlService.resolve()).thenAnswer(
+    when(() => mockApiUrlService.resolve(
+          buildTimeApiUrl: any(named: 'buildTimeApiUrl'),
+        )).thenAnswer(
       (_) async => configuredUrl != null
           ? ApiBaseUrlResolution.persisted(configuredUrl)
           : const ApiBaseUrlResolution.unconfigured(),
@@ -104,6 +109,18 @@ void main() {
       getStorageDirectory: () async => tempDir,
       getPackageInfo: () async => testPackageInfo(),
       resolveAbi: resolveAbi ?? () => TargetAbi.arm64v8a,
+      buildTimeApiUrl: buildTimeApiUrl,
+    );
+  }
+
+  void stubDefineResolve(String url) {
+    when(() => mockApiUrlService.resolve(buildTimeApiUrl: url))
+        .thenAnswer((_) async => ApiBaseUrlResolution.buildDefine(url));
+  }
+
+  void stubDio204() {
+    when(() => mockDio.get(any(), options: any(named: 'options'))).thenAnswer(
+      (_) async => Response(requestOptions: RequestOptions(), statusCode: 204),
     );
   }
 
@@ -182,6 +199,123 @@ void main() {
       final available = coordinator.state as OtaUpdateAvailable;
       expect(available.canInstallNow, isFalse);
       expect((available.fiscalVerdict as FiscalGateBlocked).summary, contains('caja'));
+    });
+  });
+
+  group('OtaUpdateCoordinator — build-time API_URL define (T5, V13)', () {
+    test(
+        'discovery resolves the URL WITH the build-time define (V13 '
+        'regression: define-only pilot build must discover)', () async {
+      // Coordinator first: its catch-all resolver stub (configuredUrl: null
+      // → unconfigured) must be registered BEFORE the specific define stub
+      // below, because mocktail's last-registered matching stub wins.
+      final coordinator = createCoordinator(
+        configuredUrl: null,
+        buildTimeApiUrl: 'https://pilot.example/api',
+      );
+
+      // Nothing persisted in local_configs; only the define can configure
+      // the transport — exactly the founder's pilot APK.
+      when(() => mockApiUrlService.resolve(
+            buildTimeApiUrl: 'https://pilot.example/api',
+          )).thenAnswer(
+        (_) async =>
+            ApiBaseUrlResolution.buildDefine('https://pilot.example/api'),
+      );
+      when(() => mockDio.get(any(), options: any(named: 'options')))
+          .thenAnswer(
+        (_) async =>
+            Response(requestOptions: RequestOptions(), statusCode: 204),
+      );
+      // R4-Q5: discovery now persists the define URL; keep the stub quiet.
+      when(() => mockApiUrlService.save(any())).thenAnswer((_) async {});
+
+      final outcome = await coordinator.discoverSilently();
+
+      // The define must be the value actually handed to the resolver.
+      verify(() => mockApiUrlService.resolve(
+            buildTimeApiUrl: 'https://pilot.example/api',
+          )).called(1);
+      expect(outcome, isNot(isA<OtaDiscoveryUnconfigured>()),
+          reason: 'a define-only build must NOT resolve unconfigured');
+      expect(outcome, isA<OtaDiscoveryUpToDate>());
+    });
+
+    test(
+        'a coordinator built WITHOUT the parameter behaves exactly as '
+        'before (backward compatible)', () async {
+      when(() => mockDio.get(any(), options: any(named: 'options')))
+          .thenAnswer(
+        (_) async =>
+            Response(requestOptions: RequestOptions(), statusCode: 204),
+      );
+
+      final coordinator = createCoordinator(); // no buildTimeApiUrl passed
+
+      final outcome = await coordinator.discoverSilently();
+
+      // Empty define, exactly the pre-T5 contract; the persisted URL wins.
+      verify(() => mockApiUrlService.resolve(buildTimeApiUrl: '')).called(1);
+      expect(outcome, isA<OtaDiscoveryUpToDate>());
+      final captured = verify(() => mockDio.get(captureAny(),
+              options: any(named: 'options')))
+          .captured
+          .single as String;
+      expect(captured, startsWith('https://api.test/v1/releases/latest'));
+    });
+
+    test(
+        'empty define + nothing persisted still yields '
+        'OtaDiscoveryUnconfigured', () async {
+      final coordinator = createCoordinator(configuredUrl: null);
+
+      final outcome = await coordinator.discoverSilently();
+
+      expect(outcome, isA<OtaDiscoveryUnconfigured>());
+      verifyNever(() => mockDio.get(any(), options: any(named: 'options')));
+    });
+    // R4-Q5-OTA-CONFIG-LOSS: a define-only URL must reach persisted config,
+    // because the OTA artifact carries no define of its own.
+    test('promotes a build-define URL to persisted config once', () async {
+      final url = 'https://pilot.example/api';
+      final coordinator =
+          createCoordinator(configuredUrl: null, buildTimeApiUrl: url);
+      stubDefineResolve(url);
+      when(() => mockApiUrlService.save(any())).thenAnswer((_) async {});
+      stubDio204();
+      final outcome = await coordinator.discoverSilently();
+      verify(() => mockApiUrlService.save(url)).called(1);
+      expect(outcome, isA<OtaDiscoveryUpToDate>());
+    });
+
+    test('does not re-save an already persisted URL', () async {
+      stubDio204();
+      await createCoordinator().discoverSilently(); // persistedConfig source
+      verifyNever(() => mockApiUrlService.save(any()));
+    });
+
+    test('never persists the development default URL', () async {
+      final coordinator = createCoordinator(configuredUrl: null);
+      when(() => mockApiUrlService.resolve(buildTimeApiUrl: '')).thenAnswer(
+        (_) async => const ApiBaseUrlResolution.developmentDefault(
+            'http://127.0.0.1:3000/api'),
+      );
+      stubDio204();
+      final outcome = await coordinator.discoverSilently();
+      verifyNever(() => mockApiUrlService.save(any()));
+      expect(outcome, isA<OtaDiscoveryUpToDate>());
+    });
+
+    test('discovery still completes when persisting the URL throws', () async {
+      final url = 'https://pilot.example/api';
+      final coordinator =
+          createCoordinator(configuredUrl: null, buildTimeApiUrl: url);
+      stubDefineResolve(url);
+      when(() => mockApiUrlService.save(any()))
+          .thenThrow(const ApiBaseUrlValidationException('invalid url'));
+      stubDio204();
+      expect(
+          await coordinator.discoverSilently(), isA<OtaDiscoveryUpToDate>());
     });
   });
 

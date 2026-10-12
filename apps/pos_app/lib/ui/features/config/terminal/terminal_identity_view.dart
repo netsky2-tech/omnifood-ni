@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pos_app/data/services/api_base_url_service.dart';
+import 'package:pos_app/domain/services/update/ota_discovery_service.dart';
 import 'package:provider/provider.dart';
 
 import 'terminal_identity_view_model.dart';
@@ -65,7 +66,13 @@ class TerminalIdentityView extends StatelessWidget {
                 const _ServerConfigCard(),
                 if (viewModel.otaCoordinator != null) ...[
                   const SizedBox(height: 16),
-                  OtaUpdateCard(coordinator: viewModel.otaCoordinator!),
+                  OtaUpdateCard(
+                    coordinator: viewModel.otaCoordinator!,
+                    // T3b: same app-root discovery service instance. The
+                    // card rebuilds when a silent offer arrives via its own
+                    // ChangeNotifier notification.
+                    discoveryService: context.watch<OtaDiscoveryService>(),
+                  ),
                 ],
                 const SizedBox(height: 24),
                 _buildBackOfficeNotice(context),

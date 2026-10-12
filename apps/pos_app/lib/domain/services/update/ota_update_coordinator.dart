@@ -79,6 +79,92 @@ class OtaFailed extends OtaUpdateState {
   final String? reasonCode;
 }
 
+/// Result of one discovery pass, returned as a VALUE rather than applied to
+/// the interactive state machine.
+///
+/// T2 (OTA automatic discovery) design decision: `checkForUpdate()` and the
+/// silent scheduler share one private `_discover()` that performs the exact
+/// same I/O (channel, abi, currentVersionCode, `GET /v1/releases/latest`,
+/// 204 handling) and returns one of these outcomes. `checkForUpdate()` maps
+/// them onto `_setState` exactly as before; `discoverSilently()` returns them
+/// untouched. This is what makes AC3 hold: no silent path ever reaches
+/// `_setState`/`notifyListeners`, so a background tick can never clobber an
+/// in-flight `OtaDownloading` or surface an `OtaFailed` on a network blip.
+sealed class OtaDiscoveryOutcome {
+  const OtaDiscoveryOutcome();
+}
+
+/// The running process could not identify its own ABI (no I/O was made).
+class OtaDiscoveryUnknownAbi extends OtaDiscoveryOutcome {
+  const OtaDiscoveryUnknownAbi();
+}
+
+/// No backend URL is configured (no I/O was made).
+class OtaDiscoveryUnconfigured extends OtaDiscoveryOutcome {
+  const OtaDiscoveryUnconfigured();
+}
+
+/// The installed package info could not be read.
+class OtaDiscoveryPackageInfoError extends OtaDiscoveryOutcome {
+  const OtaDiscoveryPackageInfoError(this.error);
+  final Object error;
+}
+
+/// The installed versionCode is not a positive integer.
+class OtaDiscoveryInvalidInstalledVersion extends OtaDiscoveryOutcome {
+  const OtaDiscoveryInvalidInstalledVersion(this.installedVersionCode);
+  final int installedVersionCode;
+}
+
+/// Transient network failure (offline, 5xx, timeout). The caller decides
+/// whether to back off; it must never surface this as an operator error.
+class OtaDiscoveryNetworkError extends OtaDiscoveryOutcome {
+  const OtaDiscoveryNetworkError(this.error);
+  final Object error;
+}
+
+/// The normal "up to date" answer: a 204, or a 200 without a usable body.
+class OtaDiscoveryUpToDate extends OtaDiscoveryOutcome {
+  const OtaDiscoveryUpToDate(this.installedVersionCode);
+  final int installedVersionCode;
+}
+
+/// The server sent a manifest that failed strict parsing (malformed offer).
+class OtaDiscoveryInvalidOffer extends OtaDiscoveryOutcome {
+  const OtaDiscoveryInvalidOffer(this.rejection);
+  final ReleaseManifestRejection rejection;
+}
+
+/// A well-formed manifest that must NOT be installed on this terminal
+/// (ABI mismatch, downgrade offered, unsupported upgrade path).
+class OtaDiscoveryRejected extends OtaDiscoveryOutcome {
+  const OtaDiscoveryRejected(this.reason, this.detail);
+  final UpgradeRejectionReason reason;
+  final String detail;
+}
+
+/// A valid, applicable update offer. [fiscalVerdict] is evaluated here so the
+/// silent offer surface can carry installability without a second gate read.
+/// [installedVersionCode] is the version the terminal is actually running,
+/// parsed from `PackageInfo.buildNumber` in the same discovery pass that
+/// produced this offer — NOT the offered version ([manifest.versionCode]).
+/// T3 (offer suppression) and the rollout gate recorded as DEC-7
+/// (odd/tasks/go-live-decisions.md) both depend on knowing which version a
+/// terminal actually runs; a field named `installedVersionCode` that carried
+/// the offered value would produce a wrong promotion decision, and on this
+/// platform there is no rollback (fact F8: Android `versionCode` is
+/// monotonic forever).
+class OtaDiscoveryOffered extends OtaDiscoveryOutcome {
+  const OtaDiscoveryOffered({
+    required this.manifest,
+    required this.fiscalVerdict,
+    required this.installedVersionCode,
+  });
+  final ReleaseManifest manifest;
+  final FiscalSafetyVerdict fiscalVerdict;
+  final int installedVersionCode;
+}
+
 /// Orchestrates discovery, verification, and dispatch of software updates.
 ///
 /// Ties together:
@@ -98,6 +184,7 @@ class OtaUpdateCoordinator extends ChangeNotifier {
     required Future<Directory> Function() getStorageDirectory,
     Future<PackageInfo> Function()? getPackageInfo,
     TargetAbi? Function()? resolveAbi,
+    String buildTimeApiUrl = '',
   })  : _apiBaseUrlService = apiBaseUrlService,
         _releaseDownloader = releaseDownloader,
         _releaseInstaller = releaseInstaller,
@@ -105,7 +192,8 @@ class OtaUpdateCoordinator extends ChangeNotifier {
         _dio = dio,
         _getStorageDirectory = getStorageDirectory,
         _getPackageInfo = getPackageInfo ?? PackageInfo.fromPlatform,
-        _resolveAbi = resolveAbi ?? (() => parseTargetAbi(Platform.version));
+        _resolveAbi = resolveAbi ?? (() => parseTargetAbi(Platform.version)),
+        _buildTimeApiUrl = buildTimeApiUrl;
 
   final ApiBaseUrlService _apiBaseUrlService;
   final ReleaseDownloader _releaseDownloader;
@@ -115,6 +203,11 @@ class OtaUpdateCoordinator extends ChangeNotifier {
   final Future<Directory> Function() _getStorageDirectory;
   final Future<PackageInfo> Function() _getPackageInfo;
   final TargetAbi? Function() _resolveAbi;
+
+  /// Compile-time `--dart-define=API_URL=...` value, threaded in from the
+  /// app-root DI factory (T1's seam). Empty when the build omitted the
+  /// define, which preserves the pre-T5 resolution contract exactly.
+  final String _buildTimeApiUrl;
 
   OtaUpdateState _state = const OtaInitial();
   OtaUpdateState get state => _state;
@@ -129,42 +222,70 @@ class OtaUpdateCoordinator extends ChangeNotifier {
   /// Offline-first contract:
   /// - If the backend URL is unconfigured, discovery quietly returns.
   /// - If network is unavailable or backend is offline, state remains safe.
+  ///
+  /// The observable contract is unchanged from before T2: every branch of
+  /// this method still ends in exactly one `_setState` (the 46 existing
+  /// coordinator/card tests prove it). The I/O itself lives in [_discover].
   Future<void> checkForUpdate({String channel = 'pilot'}) async {
     _setState(const OtaChecking());
+    _applyOutcome(await _discover(channel: channel));
+  }
 
+  /// Silent discovery entry point for the background scheduler (T2, AC3).
+  ///
+  /// Performs the same discovery I/O as [checkForUpdate] — same URL, same
+  /// query params (`channel`, `abi`, `currentVersionCode`; the backend
+  /// `ValidationPipe` uses `forbidNonWhitelisted`, so nothing else may be
+  /// sent), same `validateStatus` accepting 200 and 204 — but NEVER touches
+  /// `_setState` or `notifyListeners`, on any branch. The outcome is returned
+  /// as a value for the caller's own (separate) offer surface.
+  Future<OtaDiscoveryOutcome> discoverSilently({String channel = 'pilot'}) {
+    return _discover(channel: channel);
+  }
+
+  /// The single shared discovery implementation: all I/O, no state mutation.
+  Future<OtaDiscoveryOutcome> _discover({required String channel}) async {
     final abi = _resolveAbi();
     if (abi == null) {
-      _setState(const OtaFailed(
-        message: 'No se pudo identificar la arquitectura del terminal.',
-        reasonCode: 'ABI_UNKNOWN',
-      ));
-      return;
+      return const OtaDiscoveryUnknownAbi();
     }
 
-    final urlResolution = await _apiBaseUrlService.resolve();
+    // T5 (V13): pass the compile-time `API_URL` define so OTA resolves with
+    // the same tier 2 the rest of the app uses. The published OTA artifact
+    // carries no `--dart-define` (scripts/publish_pos_release.sh), so a
+    // define-only terminal lost its URL after its first successful upgrade:
+    // the replacing APK had no tier-2 source and never discovered again
+    // (no Android rollback, fact F8). R4-Q5-OTA-CONFIG-LOSS fix: the URL is
+    // promoted to persisted config on first discovery, below.
+    final urlResolution = await _apiBaseUrlService
+        .resolve(buildTimeApiUrl: _buildTimeApiUrl);
     if (!urlResolution.isConfigured || urlResolution.url == null) {
-      _setState(const OtaInitial());
-      return;
+      return const OtaDiscoveryUnconfigured();
+    }
+
+    // R4-Q5-OTA-CONFIG-LOSS: persist a define-resolved URL so it survives
+    // an OTA upgrade (the delivered artifact carries no define). Failure to
+    // persist must not abort the update check already in progress.
+    if (urlResolution.source == ApiBaseUrlSource.buildDefine) {
+      try {
+        await _apiBaseUrlService.save(urlResolution.url!);
+      } catch (e) {
+        debugPrint(
+            'OtaUpdateCoordinator: could not persist build-define API URL '
+            'across OTA upgrades: $e');
+      }
     }
 
     final int installedVersionCode;
     try {
       final info = await _getPackageInfo();
       installedVersionCode = int.tryParse(info.buildNumber) ?? 0;
-    } catch (_) {
-      _setState(const OtaFailed(
-        message: 'No se pudo leer la versión instalada de la aplicación.',
-        reasonCode: 'PACKAGE_INFO_ERROR',
-      ));
-      return;
+    } catch (e) {
+      return OtaDiscoveryPackageInfoError(e);
     }
 
     if (installedVersionCode <= 0) {
-      _setState(const OtaFailed(
-        message: 'El código de versión instalado no es válido.',
-        reasonCode: 'INVALID_INSTALLED_VERSION',
-      ));
-      return;
+      return OtaDiscoveryInvalidInstalledVersion(installedVersionCode);
     }
 
     final discoveryUrl =
@@ -180,26 +301,17 @@ class OtaUpdateCoordinator extends ChangeNotifier {
         ),
       );
     } catch (e) {
-      _setState(OtaFailed(
-        message: 'Error al consultar actualizaciones en el servidor.',
-        reasonCode: e.toString(),
-      ));
-      return;
+      return OtaDiscoveryNetworkError(e);
     }
 
     if (response.statusCode == 204 || response.data == null) {
-      _setState(OtaUpToDate(installedVersionCode));
-      return;
+      return OtaDiscoveryUpToDate(installedVersionCode);
     }
 
     final parseResult = ReleaseManifest.tryParse(response.data);
     if (parseResult is! ReleaseManifestAccepted) {
-      final rejection = parseResult as ReleaseManifestRejection;
-      _setState(OtaFailed(
-        message: 'El servidor envió una oferta de versión inválida.',
-        reasonCode: rejection.reason.name,
-      ));
-      return;
+      return OtaDiscoveryInvalidOffer(
+          parseResult as ReleaseManifestRejection);
     }
 
     final manifest = parseResult.manifest;
@@ -209,16 +321,60 @@ class OtaUpdateCoordinator extends ChangeNotifier {
       installedVersionCode: installedVersionCode,
     );
 
-    switch (upgradeDecision) {
-      case UpToDate():
+    return switch (upgradeDecision) {
+      UpToDate() => OtaDiscoveryUpToDate(installedVersionCode),
+      UpgradeRejected(:final reason, :final detail) =>
+        OtaDiscoveryRejected(reason, detail),
+      // The fiscal gate (Rule R7) is evaluated in the shared discovery path
+      // so both surfaces carry the verdict; the gate still only ever BLOCKS
+      // an install, and the silent path never installs (AC7).
+      UpgradeOffered() => OtaDiscoveryOffered(
+          manifest: manifest,
+          fiscalVerdict: await _fiscalSafetyGate.evaluateSafety(),
+          installedVersionCode: installedVersionCode,
+        ),
+    };
+  }
+
+  /// Maps a discovery outcome onto the interactive state machine — the ONLY
+  /// place `_discover` results reach `_setState`.
+  void _applyOutcome(OtaDiscoveryOutcome outcome) {
+    switch (outcome) {
+      case OtaDiscoveryUnknownAbi():
+        _setState(const OtaFailed(
+          message: 'No se pudo identificar la arquitectura del terminal.',
+          reasonCode: 'ABI_UNKNOWN',
+        ));
+      case OtaDiscoveryUnconfigured():
+        _setState(const OtaInitial());
+      case OtaDiscoveryPackageInfoError():
+        _setState(const OtaFailed(
+          message: 'No se pudo leer la versión instalada de la aplicación.',
+          reasonCode: 'PACKAGE_INFO_ERROR',
+        ));
+      case OtaDiscoveryInvalidInstalledVersion():
+        _setState(const OtaFailed(
+          message: 'El código de versión instalado no es válido.',
+          reasonCode: 'INVALID_INSTALLED_VERSION',
+        ));
+      case OtaDiscoveryNetworkError(:final error):
+        _setState(OtaFailed(
+          message: 'Error al consultar actualizaciones en el servidor.',
+          reasonCode: error.toString(),
+        ));
+      case OtaDiscoveryUpToDate(:final installedVersionCode):
         _setState(OtaUpToDate(installedVersionCode));
-      case UpgradeRejected(:final reason, :final detail):
+      case OtaDiscoveryInvalidOffer(:final rejection):
+        _setState(OtaFailed(
+          message: 'El servidor envió una oferta de versión inválida.',
+          reasonCode: rejection.reason.name,
+        ));
+      case OtaDiscoveryRejected(:final detail, :final reason):
         _setState(OtaFailed(
           message: detail,
           reasonCode: reason.name,
         ));
-      case UpgradeOffered():
-        final fiscalVerdict = await _fiscalSafetyGate.evaluateSafety();
+      case OtaDiscoveryOffered(:final manifest, :final fiscalVerdict):
         _setState(OtaUpdateAvailable(
           manifest: manifest,
           fiscalVerdict: fiscalVerdict,

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/network/unconfigured_backend_interceptor.dart';
 import 'package:pos_app/data/services/api_base_url_service.dart';
 import 'package:pos_app/main.dart';
 
@@ -357,7 +358,8 @@ void main() {
     });
 
     test(
-        'unconfigured release transport falls back to the development URL while reporting unconfigured',
+        'unconfigured release transport reports no URL; a release build must '
+        'not silently use the localhost default',
         () async {
       final configDao = _InMemoryLocalConfigDao();
 
@@ -369,9 +371,23 @@ void main() {
 
       expect(startup.resolution.source, ApiBaseUrlSource.unconfigured);
       expect(startup.resolution.isConfigured, isFalse);
+      // Supersedes the earlier assertion that transportBaseUrl fell back to
+      // the development default: odd/tasks/api-url-runtime-provisioning.md
+      // :73-78 requires a release build to surface an explicit unconfigured
+      // state instead of pretending localhost is a backend, and the
+      // ApiBaseUrlSource.unconfigured contract (api_base_url_service.dart)
+      // says it must never be silently replaced by the localhost default.
       expect(
         startup.transportBaseUrl,
-        ApiBaseUrlService.developmentDefaultUrl,
+        isNull,
+        reason: 'no Dio client may be pointed at any URL when unconfigured',
+      );
+      final clients = PosDioClients(baseUrl: startup.transportBaseUrl);
+      await expectLater(
+        clients.app.get<void>('/v1/health'),
+        throwsA(isA<UnconfiguredBackendException>()),
+        reason: 'an unconfigured transport must fail locally, typed, '
+            'before any socket is opened',
       );
     });
   });
