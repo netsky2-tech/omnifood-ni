@@ -1,7 +1,5 @@
 import { type QueryRunner } from 'typeorm';
-import {
-  EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000,
-} from './1809750000000-EnforceLoyaltyLedgerV1ShapeResidualConstraints';
+import { EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000 } from './1809750000000-EnforceLoyaltyLedgerV1ShapeResidualConstraints';
 
 /**
  * Unit acceptance for the residual §9.3 shape clauses (owner option A, T4
@@ -17,7 +15,6 @@ import {
  */
 
 const CHECK_NAME = 'ck_loyalty_tx_v1_shape_residual';
-const TABLE = 'customer_point_transactions';
 
 const isResidualScan = (sql: string): boolean =>
   sql.includes(`pre-detection scan`) && sql.includes('occurrences');
@@ -48,7 +45,8 @@ describe('EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000', () => {
   let migration: EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000;
 
   beforeEach(() => {
-    migration = new EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000();
+    migration =
+      new EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000();
   });
 
   describe('up()', () => {
@@ -79,11 +77,17 @@ describe('EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000', () => {
       // Shipped-contract clause set: sign per declared type, non-zero
       // reversal delta (NULL allowed), declared-row key. No
       // version/snapshot clause and no occurred_at clause.
-      expect(add).toContain("transaction_type <> 'earn' OR (units IS NOT NULL AND units > 0)");
-      expect(add).toContain("transaction_type <> 'redeem' OR (units IS NOT NULL AND units < 0)");
+      expect(add).toContain(
+        "transaction_type <> 'earn' OR (units IS NOT NULL AND units > 0)",
+      );
+      expect(add).toContain(
+        "transaction_type <> 'redeem' OR (units IS NOT NULL AND units < 0)",
+      );
       expect(add).toContain('actor_user_id IS NOT NULL');
       expect(add).toContain('idempotency_key IS NOT NULL');
-      expect(add).toContain('transaction_type <> \'reversal\' OR units IS DISTINCT FROM 0');
+      expect(add).toContain(
+        "transaction_type <> 'reversal' OR units IS DISTINCT FROM 0",
+      );
       expect(add).not.toContain('program_version');
       expect(add).not.toContain('commercial_snapshot');
       expect(add).not.toContain('occurred_at');
@@ -130,7 +134,9 @@ describe('EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000', () => {
         (call) => call[0] as string,
       );
       expect(queries.some(isAddConstraint)).toBe(false);
-      expect(queries.some((sql) => sql.includes('UPDATE') || sql.includes('DELETE'))).toBe(false);
+      expect(
+        queries.some((sql) => sql.includes('UPDATE') || sql.includes('DELETE')),
+      ).toBe(false);
     });
   });
 
