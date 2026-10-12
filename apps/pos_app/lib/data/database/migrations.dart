@@ -144,6 +144,11 @@ final inventoryMovementAppendOnlyCallback = Callback(
     await _createTopologyPersistenceTriggers(database);
     await _createTopologyPersistenceTriggers(database);
     await _ensureHumanAuthorizationLocalIndexesAndTriggers(database);
+    // T2a/T2b parity: a fresh install ends with the exact same customer_code
+    // and Loyalty ledger identities a migrated database gets through
+    // migration69_70 + migration70_71.
+    await ensureCustomerCodeSchema(database);
+    await ensureLoyaltyLedgerIdentitySchema(database);
   },
   onOpen: (database) async {
     await _createInventoryMovementAppendOnlyTriggers(database);
@@ -2862,6 +2867,348 @@ final migration68_69 = Migration(68, 69, (database) async {
   ''');
 });
 
+/// Name of the device-global, case-insensitive unique index on
+/// `customers.customer_code` (tracker T2a). Declared once so the migration
+/// and the fresh-install callback produce the identical definition.
+const customerCodeUniqueIndexName =
+    'idx_customers_customer_code_unique_nocase';
+
+/// Ensures `customers.customer_code` exists and carries the device-global,
+/// case-insensitive unique index. Declared once and reused by both the
+/// 69->70 migration and the fresh-install [Callback] so a fresh Floor
+/// `onCreate` install and a migrated database end with the exact same
+/// schema (tracker T2a parity requirement). The index is partial: non-null
+/// codes must be unique (case-insensitively), while legacy and unclassified
+/// rows keep NULL and multiple NULLs remain allowed.
+Future<void> ensureCustomerCodeSchema(sqflite.DatabaseExecutor database) async {
+  await _addColumnIfMissing(
+    database,
+    'customers',
+    'customer_code',
+    'customer_code TEXT',
+  );
+  final table = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='customers'",
+  );
+  if (table.isEmpty) return;
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS $customerCodeUniqueIndexName
+    ON customers (customer_code COLLATE NOCASE)
+    WHERE customer_code IS NOT NULL
+  ''');
+}
+
+// --- T2b: database-enforced Loyalty ledger identity constraints (SQLite half) ---
+
+/// Local ledger table carrying the V1 Loyalty identities (tracker T2b).
+const loyaltyLedgerTableName = 'customer_point_transactions';
+
+/// The four V1 identity indexes, named identically to the PostgreSQL
+/// constraints so failure reports stay traceable across engines.
+const loyaltyTxIdempotencyIndexName = 'uq_loyalty_tx_idempotency';
+const loyaltyTxEarnIndexName = 'uq_loyalty_earn_ticket_program';
+const loyaltyTxRedeemIndexName = 'uq_loyalty_redeem_ticket';
+const loyaltyTxReversalIndexName = 'uq_loyalty_reversal_original';
+
+/// Trigger names enforcing the V1 key semantics on every write.
+const loyaltyTxTypeSemanticsInsertTriggerName =
+    'trg_customer_point_transactions_type_semantics_insert';
+const loyaltyTxTypeSemanticsUpdateTriggerName =
+    'trg_customer_point_transactions_type_semantics_update';
+
+/// One V1 ledger identity: the partial unique index name, its key columns and
+/// the row predicate selecting the rows it covers. Declared once so the
+/// 70->71 migration, the fresh-install callback and the drift guard all work
+/// from a single authored definition.
+class _LoyaltyLedgerIdentity {
+  const _LoyaltyLedgerIdentity(this.indexName, this.keyColumns, this.predicate);
+
+  final String indexName;
+  final List<String> keyColumns;
+  final String predicate;
+}
+
+/// Device-global adaptation of the arch §9.3 identities: the POS database is
+/// device-bound and `customer_point_transactions` has no `tenant_id` (same
+/// decision that scoped `customers.customer_code` locally in T2a), so the
+/// tenant component of each PostgreSQL identity is carried by the device
+/// itself. Predicates are case-insensitive because the SQLite textual forms
+/// of `transaction_type` are the spec's uppercase 'EARN'/'REDEEM'/'REVERSAL'
+/// while inbound cloud rows may carry the backend's lowercase enum forms.
+/// Each type-scoped identity covers only rows that DECLARE that type; a row
+/// whose `transaction_type` is NULL carries no V1 identity claim and is
+/// covered by none of them (only the idempotency identity applies to it, and
+/// only when it carries a key). No predicate references `legacy_imported`: it
+/// grants no exemption, matching the PostgreSQL semantics landed in 5709931.
+const _loyaltyLedgerIdentities = <_LoyaltyLedgerIdentity>[
+  _LoyaltyLedgerIdentity(
+    loyaltyTxIdempotencyIndexName,
+    ['idempotency_key'],
+    'idempotency_key IS NOT NULL',
+  ),
+  _LoyaltyLedgerIdentity(
+    loyaltyTxEarnIndexName,
+    ['ticket_id', 'loyalty_program_id'],
+    "LOWER(transaction_type) = 'earn'",
+  ),
+  _LoyaltyLedgerIdentity(
+    loyaltyTxRedeemIndexName,
+    ['ticket_id'],
+    "LOWER(transaction_type) = 'redeem'",
+  ),
+  _LoyaltyLedgerIdentity(
+    loyaltyTxReversalIndexName,
+    ['reversal_of_transaction_id'],
+    "LOWER(transaction_type) = 'reversal'",
+  ),
+];
+
+/// One §9.3 key-semantics rule with the WHERE clause selecting its offenders.
+/// There is deliberately NO rule for `transaction_type IS NULL`: a NULL type
+/// makes no V1 identity claim (legacy/transitional namespace), so it is
+/// permitted on insert and update — this is what keeps the pre-V1 POS
+/// earn/redeem write path, which persists `transaction_type` NULL, alive
+/// after this upgrade.
+class _LoyaltyShapeRule {
+  const _LoyaltyShapeRule(this.kind, this.predicate, this.ruleText);
+
+  final String kind;
+  final String predicate;
+  final String ruleText;
+}
+
+const _loyaltyLedgerShapeRules = <_LoyaltyShapeRule>[
+  _LoyaltyShapeRule(
+    'earn',
+    "LOWER(transaction_type) = 'earn' AND "
+        '(ticket_id IS NULL OR loyalty_program_id IS NULL)',
+    'EARN requires non-null ticket_id and loyalty_program_id',
+  ),
+  _LoyaltyShapeRule(
+    'redeem',
+    "LOWER(transaction_type) = 'redeem' AND ticket_id IS NULL",
+    'REDEEM requires non-null ticket_id',
+  ),
+  _LoyaltyShapeRule(
+    'reversal',
+    "LOWER(transaction_type) = 'reversal' AND "
+        'reversal_of_transaction_id IS NULL',
+    'REVERSAL requires non-null reversal_of_transaction_id',
+  ),
+];
+
+String _loyaltyIdentityIndexSql(_LoyaltyLedgerIdentity identity) =>
+    'CREATE UNIQUE INDEX IF NOT EXISTS ${identity.indexName} '
+    'ON $loyaltyLedgerTableName (${identity.keyColumns.join(', ')}) '
+    'WHERE ${identity.predicate}';
+
+String _loyaltyTypeSemanticsTriggerSql(String triggerName, String event) =>
+    '''
+    CREATE TRIGGER IF NOT EXISTS $triggerName
+    BEFORE $event ON $loyaltyLedgerTableName
+    FOR EACH ROW
+    WHEN (
+      (LOWER(NEW.transaction_type) = 'earn'
+          AND (NEW.ticket_id IS NULL OR NEW.loyalty_program_id IS NULL))
+      OR (LOWER(NEW.transaction_type) = 'redeem' AND NEW.ticket_id IS NULL)
+      OR (LOWER(NEW.transaction_type) = 'reversal'
+          AND NEW.reversal_of_transaction_id IS NULL)
+    )
+    BEGIN
+      SELECT RAISE(ABORT,
+        '${_loyaltyTypeSemanticsViolationMessage('row')}');
+    END
+  ''';
+
+/// Readable rule text of the V1 key-semantics guard; [subject] reads "row"
+/// inside the triggers.
+String _loyaltyTypeSemanticsViolationMessage(String subject) =>
+    'LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION: $loyaltyLedgerTableName $subject '
+    'violates the loyalty V1 key semantics (declared EARN needs ticket_id AND '
+    'loyalty_program_id; declared REDEEM needs ticket_id; declared REVERSAL '
+    'needs reversal_of_transaction_id; NULL transaction_type is the '
+    'legacy/transitional namespace and stays permitted)';
+
+/// Fails closed when any existing DECLARED-type row violates the §9.3 key
+/// semantics, reporting one line per violated rule with counts and sample row
+/// ids. Rows with NULL `transaction_type` are not violations: they make no V1
+/// identity claim (see [_loyaltyLedgerShapeRules]).
+Future<void> _assertLoyaltyTypeSemanticsHold(
+  sqflite.DatabaseExecutor database,
+) async {
+  final violations = <String>[];
+  for (final rule in _loyaltyLedgerShapeRules) {
+    final rows = await database.rawQuery('''
+      SELECT COUNT(*) AS occurrences,
+             (SELECT GROUP_CONCAT(id) FROM (
+                SELECT id FROM $loyaltyLedgerTableName
+                 WHERE ${rule.predicate}
+                 ORDER BY id LIMIT 10
+              )) AS sample_ids
+        FROM $loyaltyLedgerTableName
+       WHERE ${rule.predicate}
+    ''');
+    final occurrences = rows.single['occurrences'] as int;
+    if (occurrences == 0) continue;
+    violations.add(
+      '${rule.kind}: $occurrences row(s) — ${rule.ruleText}; '
+      'sample row ids: ${rows.single['sample_ids']}',
+    );
+  }
+  if (violations.isEmpty) return;
+  throw StateError(
+    '${_loyaltyTypeSemanticsViolationMessage('rows')}. ${violations.length} '
+    'violated rule kind(s); offending rows are: ${violations.join('; ')}. '
+    'Resolve these rows (complete their identity keys or re-classify them) '
+    'before retrying; every declared row is covered — legacy_imported grants '
+    'no exemption — and this migration will not delete, rewrite, or skip '
+    'them.',
+  );
+}
+
+/// Fails closed when pre-existing rows would violate one identity. SQLite
+/// unique indexes treat NULL key parts as distinct exactly like PostgreSQL,
+/// so NULL keyed rows are excluded from the scan; the shape guard makes NULL
+/// identity keys impossible for EARN/REDEEM/REVERSAL rows once enforcement is
+/// live. The scan never mutates rows.
+Future<void> _assertNoLoyaltyIdentityConflicts(
+  sqflite.DatabaseExecutor database,
+  _LoyaltyLedgerIdentity identity,
+) async {
+  final keyList = identity.keyColumns.join(', ');
+  final nullGuards =
+      identity.keyColumns.map((column) => '$column IS NOT NULL').join(' AND ');
+  final rows = await database.rawQuery('''
+    WITH per_key AS (
+      SELECT id, $keyList,
+             COUNT(*) OVER (PARTITION BY $keyList) AS group_size
+        FROM $loyaltyLedgerTableName
+       WHERE ${identity.predicate} AND $nullGuards
+    )
+    SELECT
+      (SELECT COUNT(*) FROM per_key WHERE group_size > 1) AS occurrences,
+      (SELECT COUNT(*) FROM (
+         SELECT DISTINCT $keyList FROM per_key WHERE group_size > 1
+       )) AS offender_count,
+      (SELECT GROUP_CONCAT(id) FROM (
+         SELECT id FROM per_key WHERE group_size > 1 ORDER BY id LIMIT 10
+       )) AS sample_ids
+  ''');
+  final occurrences = rows.single['occurrences'] as int;
+  if (occurrences == 0) return;
+  throw StateError(
+    'LOYALTY_LEDGER_DUPLICATE_IDENTITY: cannot create ${identity.indexName} on '
+    '$loyaltyLedgerTableName. ${rows.single['offender_count']} conflicting key '
+    'group(s), $occurrences row(s) in conflict; sample row ids: '
+    '${rows.single['sample_ids']}. Resolve these duplicate ledger rows '
+    '(deduplicate or re-key them) before retrying; every row is covered by '
+    'this identity — legacy_imported grants no exemption — and this migration '
+    'will not delete, rewrite, or skip them.',
+  );
+}
+
+/// Mirrors the PostgreSQL drift guard from 5709931: index names are
+/// schema-unique in SQLite too, so a same-named index on another relation —
+/// or on this table with any other definition — would make `IF NOT EXISTS`
+/// silently no-op and leave the ledger without the identity.
+Future<void> _assertLoyaltyIndexDefinitionMatches(
+  sqflite.DatabaseExecutor database,
+  _LoyaltyLedgerIdentity identity,
+) async {
+  final rows = await database.rawQuery(
+    "SELECT tbl_name, sql FROM sqlite_master WHERE type='index' AND name=?",
+    [identity.indexName],
+  );
+  if (rows.isEmpty) return;
+  String normalize(String sql) =>
+      sql.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+  final found = rows.first;
+  final foundTable = found['tbl_name'] as String;
+  final foundSql = (found['sql'] as String?) ?? '';
+  if (foundTable == loyaltyLedgerTableName &&
+      normalize(foundSql) == normalize(_loyaltyIdentityIndexSql(identity))) {
+    return;
+  }
+  final where = foundTable == loyaltyLedgerTableName
+      ? 'on $loyaltyLedgerTableName with a different definition'
+      : "on relation '$foundTable'";
+  throw StateError(
+    'LOYALTY_LEDGER_INDEX_DRIFT: an index named ${identity.indexName} already '
+    'exists $where; CREATE UNIQUE INDEX IF NOT EXISTS would silently no-op '
+    'over it and leave $loyaltyLedgerTableName without this identity; drop or '
+    'rename the drifted index first.',
+  );
+}
+
+/// Ensures the V1 Loyalty ledger identities on `customer_point_transactions`
+/// (tracker T2b, arch §5.3/§9.3): the four partial unique indexes plus a
+/// trigger-based guard enforcing the §9.3 key semantics. Declared once and
+/// reused by both the 70->71 migration and the fresh-install [Callback] so a
+/// fresh Floor `onCreate` install and a migrated database end with the exact
+/// same definitions (same parity pattern as `ensureCustomerCodeSchema`).
+///
+/// Shape-guard scoping (T2b production regression fix): the guard applies
+/// ONLY to rows that DECLARE a V1 ledger type (`earn`, `redeem`, or
+/// `reversal`). A row whose `transaction_type` is NULL is the
+/// legacy/transitional namespace, not a V1 identity claim, so there is
+/// nothing for it to evade and it stays permitted on insert and update; the
+/// fail-closed upgrade scan likewise ignores it. This is not an evasion hole
+/// for V1: V1 writers MUST set `transaction_type` (a V1 ledger movement is
+/// defined by its declared type), and the identities themselves are partial
+/// on the declared type, so a NULL-typed row is by definition outside the V1
+/// namespace, carries no V1 identity semantics, and is consumed only as
+/// legacy ledger history. A V1 row cannot dodge its key requirements without
+/// renouncing its own type. `legacy_imported` grants no exemption anywhere.
+///
+/// Mechanism choice, per the T2b contract: SQLite cannot
+/// `ALTER TABLE ADD CONSTRAINT`, and a CHECK would require the 12-step table
+/// rebuild, which copies (rewrites) every ledger row — forbidden by the
+/// fail-closed "never delete or rewrite ledger rows" rule — and would diverge
+/// from the Floor-generated `onCreate` table (entities cannot declare
+/// CHECKs), breaking fresh/migrated parity. The shape rule is therefore
+/// enforced by BEFORE INSERT/UPDATE triggers; the tradeoff is that a trigger
+/// lives outside the table DDL (it can be dropped independently and does not
+/// show in `PRAGMA table_info`), which the drift-guarded indexes and this
+/// single shared definition compensate for. Triggers are dropped and
+/// recreated so a drifted same-named trigger is normalized on re-runs.
+///
+/// Fail-closed upgrade: before any DDL, existing rows that would violate an
+/// identity or the key semantics abort with a readable report naming the
+/// violated rule, offending counts and sample row ids. Ledger rows are never
+/// deleted, rewritten, or skipped.
+Future<void> ensureLoyaltyLedgerIdentitySchema(
+  sqflite.DatabaseExecutor database,
+) async {
+  final table = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+    [loyaltyLedgerTableName],
+  );
+  if (table.isEmpty) return;
+  await _assertLoyaltyTypeSemanticsHold(database);
+  for (final identity in _loyaltyLedgerIdentities) {
+    await _assertNoLoyaltyIdentityConflicts(database, identity);
+    await _assertLoyaltyIndexDefinitionMatches(database, identity);
+    await database.execute(_loyaltyIdentityIndexSql(identity));
+  }
+  for (final entry in {
+    loyaltyTxTypeSemanticsInsertTriggerName: 'INSERT',
+    loyaltyTxTypeSemanticsUpdateTriggerName: 'UPDATE',
+  }.entries) {
+    await database.execute('DROP TRIGGER IF EXISTS ${entry.key}');
+    await database.execute(
+      _loyaltyTypeSemanticsTriggerSql(entry.key, entry.value),
+    );
+  }
+}
+
+final migration69_70 = Migration(69, 70, (database) async {
+  await ensureCustomerCodeSchema(database);
+});
+
+final migration70_71 = Migration(70, 71, (database) async {
+  await ensureLoyaltyLedgerIdentitySchema(database);
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -2922,6 +3269,8 @@ final allMigrations = [
   migration66_67,
   migration67_68,
   migration68_69,
+  migration69_70,
+  migration70_71,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open
