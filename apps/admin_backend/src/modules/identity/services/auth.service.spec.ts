@@ -8,7 +8,7 @@ import {
 import { DataSource, type EntityManager } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService, DUMMY_PASSWORD_HASH } from './auth.service';
-import { AuthAuditService } from './auth-audit.service';
+import { AuthAuditService, LoginAuditReason } from './auth-audit.service';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { User, UserRole } from '../entities/user.entity';
 import {
@@ -84,6 +84,11 @@ type TransactionCallback = (manager: EntityManager) => unknown;
 
 describe('AuthService', () => {
   let service: AuthService;
+  let mockAuthAudit: {
+    recordLoginSuccess: jest.Mock;
+    recordRefreshSuccess: jest.Mock;
+    recordAuthFailure: jest.Mock;
+  };
   let mockUserRepository: {
     createQueryBuilder: jest.Mock;
     findOne: jest.Mock;
@@ -118,6 +123,11 @@ describe('AuthService', () => {
     ]);
 
   beforeEach(async () => {
+    mockAuthAudit = {
+      recordLoginSuccess: jest.fn(async () => undefined),
+      recordRefreshSuccess: jest.fn(async () => undefined),
+      recordAuthFailure: jest.fn(async () => undefined),
+    };
     mockUserRepository = {
       createQueryBuilder: jest.fn(),
       findOne: jest.fn(),
@@ -147,11 +157,7 @@ describe('AuthService', () => {
         AuthService,
         {
           provide: AuthAuditService,
-          useValue: {
-            recordLoginSuccess: jest.fn(async () => undefined),
-            recordRefreshSuccess: jest.fn(async () => undefined),
-            recordAuthFailure: jest.fn(async () => undefined),
-          },
+          useValue: mockAuthAudit,
         },
         {
           provide: getRepositoryToken(User),
@@ -1266,6 +1272,37 @@ describe('AuthService', () => {
     );
     expect(mockUserRepository.findOne).toHaveBeenCalled();
     expect(compare).not.toHaveBeenCalled();
+    expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    expect(mockUserRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('writes an anchored REFRESH_FAILURE when the refresh session is rejected (audit remediation S4, finding 4-1)', async () => {
+    useRealJwtVerification();
+    useResolvedTenant();
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'inactive-user',
+      email: 'inactive@omnifood.ni',
+      tenant_id: 'tenant-1',
+      role: UserRole.CASHIER,
+      is_active: false,
+      hashed_refresh_token: 'stored-refresh',
+    });
+
+    const refreshToken = await createRefreshJwt('inactive-user');
+
+    await expect(
+      service.refreshTokens('inactive-user', refreshToken, 'mi-negocio'),
+    ).rejects.toThrow('Acceso denegado');
+
+    expect(mockAuthAudit.recordAuthFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'REFRESH_FAILURE',
+        tenantId: 'tenant-1',
+        userId: 'inactive-user',
+        reason: LoginAuditReason.INACTIVE_USER,
+      }),
+    );
+    // The generic rejection contract (issue #556) is untouched.
     expect(mockJwtService.signAsync).not.toHaveBeenCalled();
     expect(mockUserRepository.update).not.toHaveBeenCalled();
   });

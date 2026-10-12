@@ -407,6 +407,8 @@ export class AuthService {
       refreshToken,
       tenantSlug,
     ).catch(async (error: unknown) => {
+      // Slug resolution or the transaction itself failed: no tenant anchor
+      // survived, so this stays an app-log event.
       await this.authAudit.recordAuthFailure({
         action: 'REFRESH_FAILURE',
         tenantId: null,
@@ -416,7 +418,17 @@ export class AuthService {
       throw error;
     });
 
-    if (!outcome) {
+    if (!outcome.tokens) {
+      // Security audit remediation S4 (verification finding 4-1): anchored
+      // REFRESH_FAILURE rows are written AFTER the transaction closed, so
+      // the audit insert never waits on the pessimistic user-row lock.
+      // Unknown users (deleted rows) fail the FK and drop to the app log.
+      await this.authAudit.recordAuthFailure({
+        action: 'REFRESH_FAILURE',
+        tenantId: outcome.tenantId,
+        userId,
+        reason: outcome.failureReason ?? LoginAuditReason.INVALID_REFRESH,
+      });
       throw new UnauthorizedException('Acceso denegado');
     }
     // Security audit remediation S4: successful refresh exchanges join the
@@ -430,10 +442,13 @@ export class AuthService {
     refreshPayload: JwtRefreshPayload,
     refreshToken: string,
     tenantSlug: string,
-  ) {
+  ): Promise<
+    | { tenantId: string; tokens: Awaited<ReturnType<AuthService['getTokens']>>; failureReason?: undefined }
+    | { tenantId: string; tokens: null; failureReason: string }
+  > {
     const resolvedTenantId =
       await this.resolveTenantIdBySlugForRefresh(tenantSlug);
-    return runInTenantTransaction(
+    const outcome = await runInTenantTransaction(
       this.dataSource,
       resolvedTenantId,
       (manager) =>
@@ -445,6 +460,7 @@ export class AuthService {
           resolvedTenantId,
         ),
     );
+    return { tenantId: resolvedTenantId, ...outcome };
   }
 
   private async resolveTenantIdBySlugForRefresh(
@@ -481,10 +497,10 @@ export class AuthService {
     refreshPayload: JwtRefreshPayload,
     refreshToken: string,
     expectedTenantId: string,
-  ): Promise<{
-    tokens: Awaited<ReturnType<AuthService['getTokens']>>;
-    tenantId: string;
-  } | null> {
+  ): Promise<
+    | { tokens: Awaited<ReturnType<AuthService['getTokens']>>; failureReason?: undefined }
+    | { tokens: null; failureReason: string }
+  > {
     const repository = manager.getRepository(User);
     const user = await repository.findOne({
       where: { id: userId, tenant_id: expectedTenantId },
@@ -508,7 +524,12 @@ export class AuthService {
       !user.hashed_refresh_token ||
       user.refresh_token_revoked_at
     ) {
-      return null;
+      const failureReason = !user
+        ? LoginAuditReason.UNKNOWN_USER
+        : !user.is_active
+          ? LoginAuditReason.INACTIVE_USER
+          : LoginAuditReason.INVALID_REFRESH;
+      return { tokens: null, failureReason };
     }
 
     const isCurrentFamily =
@@ -540,16 +561,21 @@ export class AuthService {
         familyId,
         repository,
       );
-      return { tokens, tenantId: expectedTenantId };
+      return { tokens };
     }
 
     if (
       typeof user.refresh_token_family_id === 'string' &&
       refreshPayload.refresh_token_family_id === user.refresh_token_family_id
     ) {
+      // Reuse detection: same family, different verifier. The family is
+      // revoked below and the attempt is audited by the caller (outside this
+      // transaction, so the audit write never waits on the row lock held
+      // here).
       await this.revokeRefreshSessionForUser(manager, user.id, new Date());
+      return { tokens: null, failureReason: LoginAuditReason.REUSED_REFRESH };
     }
-    return null;
+    return { tokens: null, failureReason: LoginAuditReason.INVALID_REFRESH };
   }
 
   async updateRefreshToken(
