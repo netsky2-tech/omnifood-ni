@@ -78,9 +78,7 @@ const RESIDUAL_RULES: readonly ResidualRule[] = [
   },
 ];
 
-export class EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000
-  implements MigrationInterface
-{
+export class EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000 implements MigrationInterface {
   name = 'EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000';
 
   /** Fails closed when existing rows would violate the residual clauses. */
@@ -95,10 +93,13 @@ export class EnforceLoyaltyLedgerV1ShapeResidualConstraints1809750000000
                     WHERE ${rule.predicate}
                     ORDER BY id
                     LIMIT 10
-                 )) AS sample_ids
+                 ) AS offending) AS sample_ids
            FROM ${TABLE}
           WHERE ${rule.predicate}`,
-      )) as Array<{ occurrences: string | number; sample_ids: string[] | null }>;
+      )) as Array<{
+        occurrences: string | number;
+        sample_ids: string[] | null;
+      }>;
       const occurrences = Number(rows[0].occurrences);
       if (occurrences === 0) {
         continue;
