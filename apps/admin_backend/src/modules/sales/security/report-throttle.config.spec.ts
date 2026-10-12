@@ -47,7 +47,7 @@ describe('tenantReportTracker', () => {
         asRequest({
           devicePrincipal: { tenantId: 'tenant-device' },
           user: { tenant_id: 'tenant-user' },
-        } as TrackerRequest),
+        }),
       ),
     ).toBe('tenant-device');
   });
@@ -57,7 +57,7 @@ describe('tenantReportTracker', () => {
       tenantReportTracker(
         asRequest({
           user: { tenant_id: 'tenant-user' },
-        } as TrackerRequest),
+        }),
       ),
     ).toBe('tenant-user');
   });

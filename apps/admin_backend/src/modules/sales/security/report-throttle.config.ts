@@ -55,8 +55,7 @@ export function reportThrottlers(): ThrottlerOptions[] {
       name: TENANT_REPORT_THROTTLER_NAME,
       ttl: REPORT_THROTTLE_TTL_MS,
       limit: REPORTS_PER_TENANT_LIMIT,
-      getTracker: (req: RequestWithPrincipalOrUser) =>
-        tenantReportTracker(req),
+      getTracker: (req: RequestWithPrincipalOrUser) => tenantReportTracker(req),
     },
   ];
 }
