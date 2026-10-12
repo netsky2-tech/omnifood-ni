@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
+import { getOptionsToken, getStorageToken } from '@nestjs/throttler';
 import { ReportsController } from '../../src/modules/sales/controllers/reports.controller';
 import { SalesReportsService } from '../../src/modules/sales/services/sales-reports.service';
 import { FiscalReportsService } from '../../src/modules/sales/services/fiscal-reports.service';
@@ -448,6 +449,11 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
         RolesGuard,
         AuthGuard,
         AuthoritativeCurrentUserGuard,
+        // T5 (issue #886): the heavy report routes now carry a method-level
+        // ThrottlerGuard, so the harness must provide the throttler module
+        // options and storage the guard resolves.
+        { provide: getOptionsToken(), useValue: { throttlers: [] } },
+        { provide: getStorageToken(), useValue: new Map() },
         {
           provide: CurrentUserAuthorizationService,
           useValue: { authorize: jest.fn((token: unknown) => token) },
