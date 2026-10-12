@@ -66,6 +66,20 @@ import { Invoice } from '../../../src/modules/sales/entities/invoice.entity';
 import { InvoiceItem } from '../../../src/modules/sales/entities/invoice-item.entity';
 import { Payment } from '../../../src/modules/sales/entities/payment.entity';
 import { InvoiceItemModifier } from '../../../src/modules/sales/entities/invoice-item-modifier.entity';
+// T6: SalesModule now imports LoyaltyModule for the LOYALTY_LEDGER dispatch,
+// so the loyalty module graph's forFeature entities must be registered here
+// (same migration-built tables, no mocks).
+import { Customer } from '../../../src/modules/customers/entities/customer.entity';
+import { CustomerPointTransaction } from '../../../src/modules/customers/entities/customer-point-transaction.entity';
+import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../../../src/modules/loyalty/entities/loyalty-program.entity';
+import { RewardDefinition, RewardStatus, RewardType } from '../../../src/modules/loyalty/entities/reward-definition.entity';
+import { CustomerLoyaltyAccountProjection } from '../../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
+import { ForensicAlert } from '../../../src/modules/inventory/entities/forensic-alert.entity';
+import { Promotion } from '../../../src/modules/promotions/entities/promotion.entity';
+import { ModifierGroup } from '../../../src/modules/modifiers/entities/modifier-group.entity';
+import { ModifierOption } from '../../../src/modules/modifiers/entities/modifier-option.entity';
+import { CategoryModifierGroup } from '../../../src/modules/modifiers/entities/category-modifier-group.entity';
+import { ProductModifierGroup } from '../../../src/modules/modifiers/entities/product-modifier-group.entity';
 import {
   provisionDeviceSyncCredential,
   signDeviceSyncAccessToken,
@@ -154,6 +168,10 @@ const ENTITIES = [
   Insumo, Product, ProductInventoryMappingVersion, Recipe, RecipeVersion,
   RecipeDetail, Supplier, Warehouse, UomConversion, Batch,
   Invoice, InvoiceItem, Payment, InvoiceItemModifier, CatalogValue,
+  Customer, CustomerPointTransaction, LoyaltyProgram, RewardDefinition,
+  CustomerLoyaltyAccountProjection,
+  ForensicAlert, Promotion, ModifierGroup, ModifierOption,
+  CategoryModifierGroup, ProductModifierGroup,
 ];
 
 describe('T1 sync-boundary baseline: real Nest HTTP sync surface (release probes)', () => {
@@ -164,6 +182,7 @@ describe('T1 sync-boundary baseline: real Nest HTTP sync surface (release probes
   let fixture: Awaited<ReturnType<typeof createMigrationBuiltSchemaFixture>>;
   let deviceToken: string;
   let provisioned: ProvisionedDeviceSyncCredential;
+  let seededProgramId: string;
 
   const tenantId = randomUUID();
   const deviceId = 'terminal-loyalty-1';
@@ -200,6 +219,39 @@ describe('T1 sync-boundary baseline: real Nest HTTP sync surface (release probes
       deviceId,
       schema: fixture.schema,
     });
+
+    // T7/T6 fixture (same fixture-fix class as the slug seeding): the stream
+    // and the ledger transport carry REAL tenant configuration — the re-triage
+    // deliberately rejected a fabricated platform-default program — so the
+    // probe seeds one ACTIVE program with its reward through the entity
+    // repositories (production rows, migration-built schema). B2 then asserts
+    // the §13.5 tagged records match these rows; B3's EARN references the
+    // program because §9.3's fail-closed identity (ck_loyalty_tx_type_semantics)
+    // rejects a program-less EARN by design (the no-exemption owner decision).
+    const program = await adminSource.getRepository(LoyaltyProgram).save(
+      adminSource.getRepository(LoyaltyProgram).create({
+        tenant_id: tenantId,
+        name: 'Sync Probe Program',
+        program_type: LoyaltyProgramType.SPEND_POINTS,
+        status: LoyaltyProgramStatus.ACTIVE,
+        earning_rule: { spendNioPerUnit: 100 },
+        eligibility_rule: { minSpendNio: 0 },
+        config_version: 1,
+      }),
+    );
+    seededProgramId = program.id;
+    await adminSource.getRepository(RewardDefinition).save(
+      adminSource.getRepository(RewardDefinition).create({
+        tenant_id: tenantId,
+        loyalty_program_id: seededProgramId,
+        name: 'Sync Probe Reward',
+        reward_type: RewardType.DISCOUNT_AMOUNT,
+        cost_units: 500,
+        benefit_config: { discountNio: 50 },
+        status: RewardStatus.ACTIVE,
+        config_version: 1,
+      }),
+    );
 
     // Real Nest application boundary: production sync modules, real
     // ValidationPipe, real guards. NO MOCKS anywhere in the module graph.
@@ -265,6 +317,19 @@ describe('T1 sync-boundary baseline: real Nest HTTP sync surface (release probes
           await manager.query("SELECT set_config('app.tenant_id', $1, true)", [
             provisioned.tenantId,
           ]);
+          // Seeded loyalty rows before the tenant (tenant FKs, no cascade).
+          await manager.query(
+            `DELETE FROM ${fixture.schema}.loyalty_rewards WHERE tenant_id = $1`,
+            [tenantId],
+          );
+          await manager.query(
+            `DELETE FROM ${fixture.schema}.loyalty_programs WHERE tenant_id = $1`,
+            [tenantId],
+          );
+          await manager.query(
+            `DELETE FROM ${fixture.schema}.customer_point_transactions WHERE tenant_id = $1`,
+            [tenantId],
+          );
           await manager.query(
             `DELETE FROM ${fixture.schema}.device_sync_credentials WHERE id = $1`,
             [provisioned.credentialId],
@@ -362,7 +427,7 @@ describe('T1 sync-boundary baseline: real Nest HTTP sync surface (release probes
           idempotency_key: `loyalty:earn:${randomUUID()}`,
           transaction: {
             tenantId,
-            loyaltyProgramId: null,
+            loyaltyProgramId: seededProgramId,
             customerId: randomUUID(),
             ticketId: 'TICKET-B3-0001',
             transactionType: 'EARN',
@@ -394,6 +459,11 @@ describe('T1 sync-boundary baseline: real Nest HTTP sync surface (release probes
     expect(res.body.results?.[0]).toMatchObject({
       idempotencyKey: loyaltyRecord.idempotencyKey,
     });
+    if (!['ACCEPTED', 'DUPLICATE'].includes(res.body.results?.[0]?.status)) {
+      process.stdout.write(
+        `[B3] dispatch rejected: ${JSON.stringify(res.body.results?.[0])}\n`,
+      );
+    }
     expect(['ACCEPTED', 'DUPLICATE']).toContain(res.body.results?.[0]?.status);
   });
 });
