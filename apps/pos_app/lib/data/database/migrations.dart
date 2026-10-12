@@ -2995,6 +2995,42 @@ const _loyaltyLedgerShapeRules = <_LoyaltyShapeRule>[
         'reversal_of_transaction_id IS NULL',
     'REVERSAL requires non-null reversal_of_transaction_id',
   ),
+  // --- Residual §9.3 shape clauses (follow-up #4, owner option A: enforce
+  // the shipped-contract subset; the version/snapshot clauses stay deferred
+  // because T4 legitimately writes reward-less REDEEM and snapshot-less
+  // EARN rows) ---
+  _LoyaltyShapeRule(
+    'earn_units',
+    "LOWER(transaction_type) = 'earn' AND (units IS NULL OR units <= 0)",
+    'declared EARN requires units > 0',
+  ),
+  _LoyaltyShapeRule(
+    'redeem_units',
+    "LOWER(transaction_type) = 'redeem' AND (units IS NULL OR units >= 0)",
+    'declared REDEEM requires units < 0',
+  ),
+  _LoyaltyShapeRule(
+    'adjust_units',
+    "LOWER(transaction_type) = 'adjust' AND (units IS NULL OR units = 0)",
+    'declared ADJUST requires non-zero units',
+  ),
+  // A REVERSAL of a pre-V1 legacy row mirrors NULL units (the original had
+  // no units); what it must never do is claim a zero delta.
+  _LoyaltyShapeRule(
+    'reversal_units',
+    "LOWER(transaction_type) = 'reversal' AND units = 0",
+    'declared REVERSAL requires non-zero units (NULL mirrors a legacy original)',
+  ),
+  _LoyaltyShapeRule(
+    'declared_key',
+    'transaction_type IS NOT NULL AND idempotency_key IS NULL',
+    'a declared row requires a non-null idempotency_key',
+  ),
+  _LoyaltyShapeRule(
+    'origin_domain',
+    "origin IS NOT NULL AND LOWER(origin) NOT IN ('pos', 'cloud')",
+    'origin, when present, is POS or CLOUD',
+  ),
 ];
 
 String _loyaltyIdentityIndexSql(_LoyaltyLedgerIdentity identity) =>
@@ -3013,6 +3049,16 @@ String _loyaltyTypeSemanticsTriggerSql(String triggerName, String event) =>
       OR (LOWER(NEW.transaction_type) = 'redeem' AND NEW.ticket_id IS NULL)
       OR (LOWER(NEW.transaction_type) = 'reversal'
           AND NEW.reversal_of_transaction_id IS NULL)
+      OR (LOWER(NEW.transaction_type) = 'earn'
+          AND (NEW.units IS NULL OR NEW.units <= 0))
+      OR (LOWER(NEW.transaction_type) = 'redeem'
+          AND (NEW.units IS NULL OR NEW.units >= 0))
+      OR (LOWER(NEW.transaction_type) = 'adjust'
+          AND (NEW.units IS NULL OR NEW.units = 0))
+      OR (LOWER(NEW.transaction_type) = 'reversal' AND NEW.units = 0)
+      OR (NEW.transaction_type IS NOT NULL AND NEW.idempotency_key IS NULL)
+      OR (NEW.origin IS NOT NULL
+          AND LOWER(NEW.origin) NOT IN ('pos', 'cloud'))
     )
     BEGIN
       SELECT RAISE(ABORT,
@@ -3024,10 +3070,13 @@ String _loyaltyTypeSemanticsTriggerSql(String triggerName, String event) =>
 /// inside the triggers.
 String _loyaltyTypeSemanticsViolationMessage(String subject) =>
     'LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION: $loyaltyLedgerTableName $subject '
-    'violates the loyalty V1 key semantics (declared EARN needs ticket_id AND '
-    'loyalty_program_id; declared REDEEM needs ticket_id; declared REVERSAL '
-    'needs reversal_of_transaction_id; NULL transaction_type is the '
-    'legacy/transitional namespace and stays permitted)';
+    'violates the loyalty V1 key semantics (declared EARN needs ticket_id, '
+    'loyalty_program_id and units > 0; declared REDEEM needs ticket_id and '
+    'units < 0; declared ADJUST needs non-zero units; declared REVERSAL needs '
+    'reversal_of_transaction_id and non-zero units; every declared row needs '
+    'an idempotency_key; origin, when present, is POS or CLOUD; NULL '
+    'transaction_type is the legacy/transitional namespace and stays '
+    'permitted)';
 
 /// Fails closed when any existing DECLARED-type row violates the §9.3 key
 /// semantics, reporting one line per violated rule with counts and sample row

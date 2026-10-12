@@ -207,11 +207,14 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
     );
     // V1-complete ledger rows: since the ledger identity batch, the table
     // carries ck_loyalty_tx_type_semantics (every row must DECLARE a type
-    // with its §9.3 key parts) and the four partial unique identities. An
-    // EARN with a per-tenant ticket satisfies both engines' contracts.
+    // with its §9.3 key parts), the four partial unique identities and —
+    // since 1809750000000 — the residual §9.3 shape clauses (declared EARN
+    // requires units > 0 and a non-null idempotency_key). An EARN with a
+    // per-tenant ticket, positive units and a per-tenant uuid key satisfies all
+    // engines' contracts.
     await admin.query(
-      `INSERT INTO customer_point_transactions (id, tenant_id, customer_id, transaction_type, ticket_id, loyalty_program_id, units)
-       VALUES ($1, $2, $3, 'earn', $7, $8, 10), ($4, $5, $6, 'earn', $7, $9, 10)`,
+      `INSERT INTO customer_point_transactions (id, tenant_id, customer_id, transaction_type, ticket_id, loyalty_program_id, units, idempotency_key)
+       VALUES ($1, $2, $3, 'earn', $7, $8, 10, $9), ($4, $5, $6, 'earn', $7, $10, 10, $11)`,
       [
         pointTransactionAId,
         tenantAId,
@@ -222,6 +225,8 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
         `rls-ticket-${tenantAId.slice(0, 8)}`,
         programAId,
         programBId,
+        pointTransactionAId,
+        pointTransactionBId,
       ],
     );
     await admin.query(
@@ -447,8 +452,8 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
 
       const insertedPointTransaction = returningRows(
         await runner.query(
-          `INSERT INTO customer_point_transactions (tenant_id, customer_id, transaction_type, ticket_id, loyalty_program_id, units)
-           VALUES ($1, $2, 'earn', gen_random_uuid()::text, (SELECT id FROM loyalty_programs WHERE tenant_id = $1 LIMIT 1), 10)
+          `INSERT INTO customer_point_transactions (tenant_id, customer_id, transaction_type, ticket_id, loyalty_program_id, units, idempotency_key)
+           VALUES ($1, $2, 'earn', gen_random_uuid()::text, (SELECT id FROM loyalty_programs WHERE tenant_id = $1 LIMIT 1), 10, gen_random_uuid()::text)
            RETURNING id, tenant_id`,
           [tenantCId, insertedCustomerId],
         ),
@@ -635,8 +640,8 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
 
       const throwawayPointTransaction = returningRows(
         await runner.query(
-          `INSERT INTO customer_point_transactions (tenant_id, customer_id, transaction_type, ticket_id, loyalty_program_id, units)
-           VALUES ($1, $2, 'earn', gen_random_uuid()::text, (SELECT id FROM loyalty_programs WHERE tenant_id = $1 LIMIT 1), 10)
+          `INSERT INTO customer_point_transactions (tenant_id, customer_id, transaction_type, ticket_id, loyalty_program_id, units, idempotency_key)
+           VALUES ($1, $2, 'earn', gen_random_uuid()::text, (SELECT id FROM loyalty_programs WHERE tenant_id = $1 LIMIT 1), 10, gen_random_uuid()::text)
            RETURNING id`,
           [tenantAId, customerAId],
         ),

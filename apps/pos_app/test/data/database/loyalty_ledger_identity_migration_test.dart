@@ -35,7 +35,9 @@ void main() {
             loyalty_program_id TEXT,
             transaction_type TEXT,
             reversal_of_transaction_id TEXT,
-            idempotency_key TEXT
+            idempotency_key TEXT,
+            units INTEGER,
+            origin TEXT
           )
         ''');
         if (seed != null) {
@@ -53,6 +55,8 @@ void main() {
     String? programId,
     String? reversalOf,
     String? idempotencyKey,
+    int? units,
+    String? origin,
   }) async {
     await db.insert('customer_point_transactions', {
       'id': id,
@@ -62,6 +66,8 @@ void main() {
       'loyalty_program_id': programId,
       'reversal_of_transaction_id': reversalOf,
       'idempotency_key': idempotencyKey,
+      'units': units,
+      'origin': origin,
     });
   }
 
@@ -106,17 +112,37 @@ void main() {
       await migration70_71.migrate(db);
 
       await insertRow(db,
-          id: 'a1', type: 'earn', ticketId: 'tkt-1', programId: 'prog-1');
+          id: 'a1',
+          type: 'earn',
+          ticketId: 'tkt-1',
+          programId: 'prog-1',
+          idempotencyKey: 'ka1',
+          units: 10);
       await expectLater(
         insertRow(db,
-            id: 'a2', type: 'earn', ticketId: 'tkt-1', programId: 'prog-1'),
+            id: 'a2',
+            type: 'earn',
+            ticketId: 'tkt-1',
+            programId: 'prog-1',
+            idempotencyKey: 'ka2',
+            units: 10),
         throwsA(anything),
       );
       // A different ticket or program is a different earn — allowed.
       await insertRow(db,
-          id: 'a3', type: 'earn', ticketId: 'tkt-2', programId: 'prog-1');
+          id: 'a3',
+          type: 'earn',
+          ticketId: 'tkt-2',
+          programId: 'prog-1',
+          idempotencyKey: 'ka3',
+          units: 10);
       await insertRow(db,
-          id: 'a4', type: 'earn', ticketId: 'tkt-1', programId: 'prog-2');
+          id: 'a4',
+          type: 'earn',
+          ticketId: 'tkt-1',
+          programId: 'prog-2',
+          idempotencyKey: 'ka4',
+          units: 10);
 
       await db.close();
     });
@@ -127,10 +153,20 @@ void main() {
       await migration70_71.migrate(db);
 
       await insertRow(db,
-          id: 'a1', type: 'earn', ticketId: 'tkt-1', programId: 'prog-1');
+          id: 'a1',
+          type: 'earn',
+          ticketId: 'tkt-1',
+          programId: 'prog-1',
+          idempotencyKey: 'kc1',
+          units: 10);
       await expectLater(
         insertRow(db,
-            id: 'a2', type: 'EARN', ticketId: 'tkt-1', programId: 'prog-1'),
+            id: 'a2',
+            type: 'EARN',
+            ticketId: 'tkt-1',
+            programId: 'prog-1',
+            idempotencyKey: 'ka2',
+            units: 10),
         throwsA(anything),
       );
 
@@ -141,9 +177,17 @@ void main() {
       final db = await openAt70();
       await migration70_71.migrate(db);
 
-      await insertRow(db, id: 'r1', type: 'redeem', ticketId: 'tkt-1');
+      await insertRow(db, id: 'r1',
+          type: 'redeem',
+          ticketId: 'tkt-1',
+          idempotencyKey: 'kr1',
+          units: -50);
       await expectLater(
-        insertRow(db, id: 'r2', type: 'redeem', ticketId: 'tkt-1'),
+        insertRow(db, id: 'r2',
+            type: 'redeem',
+            ticketId: 'tkt-1',
+            idempotencyKey: 'kr2',
+            units: -60),
         throwsA(anything),
       );
 
@@ -155,9 +199,9 @@ void main() {
       final db = await openAt70();
       await migration70_71.migrate(db);
 
-      await insertRow(db, id: 'v1', type: 'reversal', reversalOf: 'orig-1');
+      await insertRow(db, id: 'v1', type: 'reversal', reversalOf: 'orig-1', idempotencyKey: 'kv1');
       await expectLater(
-        insertRow(db, id: 'v2', type: 'reversal', reversalOf: 'orig-1'),
+        insertRow(db, id: 'v2', type: 'reversal', reversalOf: 'orig-1', idempotencyKey: 'kv2'),
         throwsA(anything),
       );
 
@@ -227,7 +271,12 @@ void main() {
       await migration70_71.migrate(db);
 
       await insertRow(db,
-          id: 'u1', type: 'earn', ticketId: 'tkt-1', programId: 'prog-1');
+          id: 'u1',
+          type: 'earn',
+          ticketId: 'tkt-1',
+          programId: 'prog-1',
+          idempotencyKey: 'ku1',
+          units: 10);
       await expectLater(
         db.update(
           'customer_point_transactions',
@@ -253,6 +302,8 @@ void main() {
           'transaction_type': 'earn',
           'ticket_id': 'tkt-1',
           'loyalty_program_id': 'prog-1',
+          'idempotency_key': 'kd-1',
+          'units': 10,
         });
         await seedDb.insert('customer_point_transactions', {
           'id': 'dup-2',
@@ -260,6 +311,8 @@ void main() {
           'transaction_type': 'earn',
           'ticket_id': 'tkt-1',
           'loyalty_program_id': 'prog-1',
+          'idempotency_key': 'kd-2',
+          'units': 10,
         });
       });
 
@@ -339,6 +392,183 @@ void main() {
       await db.close();
     });
 
+    group('residual §9.3 shape rules (follow-up #4, option A)', () {
+      test('declared EARN requires units > 0', () async {
+        final db = await openAt70();
+        await migration70_71.migrate(db);
+
+        await insertRow(db,
+            id: 'ru1',
+            type: 'earn',
+            ticketId: 'tkt-1',
+            programId: 'prog-1',
+            idempotencyKey: 'k1',
+            units: 20);
+        await expectLater(
+          insertRow(db,
+              id: 'ru2',
+              type: 'earn',
+              ticketId: 'tkt-2',
+              programId: 'prog-1',
+              idempotencyKey: 'k2',
+              units: 0),
+          throwsA(predicate((e) => e
+              .toString()
+              .contains('LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION'))),
+        );
+        await expectLater(
+          insertRow(db,
+              id: 'ru3',
+              type: 'earn',
+              ticketId: 'tkt-3',
+              programId: 'prog-1',
+              idempotencyKey: 'k3',
+              units: -5),
+          throwsA(predicate((e) => e
+              .toString()
+              .contains('LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION'))),
+        );
+        await expectLater(
+          insertRow(db,
+              id: 'ru4',
+              type: 'earn',
+              ticketId: 'tkt-4',
+              programId: 'prog-1',
+              idempotencyKey: 'k4'),
+          throwsA(predicate((e) => e
+              .toString()
+              .contains('LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION'))),
+        );
+
+        await db.close();
+      });
+
+      test('declared REDEEM requires units < 0', () async {
+        final db = await openAt70();
+        await migration70_71.migrate(db);
+
+        await insertRow(db,
+            id: 'rv1',
+            type: 'redeem',
+            ticketId: 'tkt-1',
+            idempotencyKey: 'k1',
+            units: -50);
+        await expectLater(
+          insertRow(db,
+              id: 'rv2',
+              type: 'redeem',
+              ticketId: 'tkt-2',
+              idempotencyKey: 'k2',
+              units: 30),
+          throwsA(predicate((e) => e
+              .toString()
+              .contains('LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION'))),
+        );
+
+        await db.close();
+      });
+
+      test('REVERSAL may mirror a legacy row (NULL units) but never a zero '
+          'delta', () async {
+        final db = await openAt70();
+        await migration70_71.migrate(db);
+
+        // units NULL is the legacy-mirror case (reversing a pre-V1 row).
+        await insertRow(db,
+            id: 'rx1',
+            type: 'reversal',
+            reversalOf: 'orig-1',
+            idempotencyKey: 'k1');
+        await expectLater(
+          insertRow(db,
+              id: 'rx2',
+              type: 'reversal',
+              reversalOf: 'orig-2',
+              idempotencyKey: 'k2',
+              units: 0),
+          throwsA(predicate((e) => e
+              .toString()
+              .contains('LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION'))),
+        );
+
+        await db.close();
+      });
+
+      test('a declared row must carry an idempotency key', () async {
+        final db = await openAt70();
+        await migration70_71.migrate(db);
+
+        await expectLater(
+          insertRow(db,
+              id: 'rk1',
+              type: 'earn',
+              ticketId: 'tkt-1',
+              programId: 'prog-1',
+              units: 10),
+          throwsA(predicate((e) => e
+              .toString()
+              .contains('LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION'))),
+        );
+        // legacy rows keep needing nothing
+        await insertRow(db, id: 'rk2', ticketId: 'tkt-2');
+
+        await db.close();
+      });
+
+      test('origin, when present, is the POS/CLOUD domain', () async {
+        final db = await openAt70();
+        await migration70_71.migrate(db);
+
+        await insertRow(db,
+            id: 'ro1',
+            type: 'earn',
+            ticketId: 'tkt-1',
+            programId: 'prog-1',
+            idempotencyKey: 'k1',
+            units: 10,
+            origin: 'POS');
+        await expectLater(
+          insertRow(db,
+              id: 'ro2',
+              type: 'earn',
+              ticketId: 'tkt-2',
+              programId: 'prog-1',
+              idempotencyKey: 'k2',
+              units: 10,
+              origin: 'IMPORT_SCRIPT'),
+          throwsA(predicate((e) => e
+              .toString()
+              .contains('LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION'))),
+        );
+
+        await db.close();
+      });
+
+      test('fail-closed upgrade: pre-existing residual violations abort the '
+          'migration with counts and sample ids', () async {
+        final db = await openAt70(
+          seed: (db) async {
+            await insertRow(db,
+                id: 'bad-1',
+                type: 'earn',
+                ticketId: 'tkt-1',
+                programId: 'prog-1',
+                idempotencyKey: 'k1',
+                units: 0);
+          },
+        );
+
+        await expectLater(
+          migration70_71.migrate(db),
+          throwsA(predicate((e) =>
+              e.toString().contains('LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION') &&
+              e.toString().contains('bad-1'))),
+        );
+
+        await db.close();
+      });
+    });
+
     test('parity: the fresh-install ensure helper produces the same schema '
         'as the migrated path', () async {
       final migrated = await openAt70();
@@ -360,10 +590,20 @@ void main() {
 
       // Behavioral parity: the fresh path rejects the same duplicates.
       await insertRow(fresh,
-          id: 'p1', type: 'earn', ticketId: 'tkt-1', programId: 'prog-1');
+          id: 'p1',
+          type: 'earn',
+          ticketId: 'tkt-1',
+          programId: 'prog-1',
+          idempotencyKey: 'kp1',
+          units: 10);
       await expectLater(
         insertRow(fresh,
-            id: 'p2', type: 'earn', ticketId: 'tkt-1', programId: 'prog-1'),
+            id: 'p2',
+            type: 'earn',
+            ticketId: 'tkt-1',
+            programId: 'prog-1',
+            idempotencyKey: 'kp2',
+            units: 10),
         throwsA(anything),
       );
 
