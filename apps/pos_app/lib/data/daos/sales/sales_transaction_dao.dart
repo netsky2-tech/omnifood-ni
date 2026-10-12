@@ -440,12 +440,13 @@ abstract class SalesTransactionDao {
     AuditLogEntity? auditLog,
     bool shouldFail,
 
-    /// B1a-2 (D-15): compensating loyalty reversal, inserted and applied to
-    /// the customer balance INSIDE this same unit so a points failure rolls
-    /// back the void exactly like a stock failure does. Null → no-op (the
-    /// invoice has no customer or no point transactions). Both parameters
-    /// must be null together or non-null together.
-    CustomerPointTransactionEntity? loyaltyReversal,
+    /// T5/B5 (arch §4.3): compensating per-movement loyalty reversals,
+    /// inserted and applied to the customer balance INSIDE this same unit so
+    /// a points failure rolls back the void exactly like a stock failure
+    /// does. Empty → no-op (the invoice has no customer or no point
+    /// transactions). The timestamp must be non-null exactly when the list
+    /// is non-empty.
+    List<CustomerPointTransactionEntity> loyaltyReversals,
     int? loyaltyReversalUpdatedAt,
   ) async {
     // 1. Reversal movements + insumo stock updates. K2 (#524): the same
@@ -502,18 +503,26 @@ abstract class SalesTransactionDao {
     // 2. Cancel the invoice (UPDATE only — never DELETE; DGI compliance).
     await updateInvoice(canceledInvoice);
 
-    // 2b. Loyalty reversal (D-15): atomic with the cancellation. A points
-    // failure must roll back the void like a stock failure does.
-    if (loyaltyReversal != null && loyaltyReversalUpdatedAt != null) {
-      await insertPointTransaction(loyaltyReversal);
+    // 2b. Loyalty reversals (T5/B5, arch §4.3): atomic with the
+    // cancellation. A points failure must roll back the void like a stock
+    // failure does. Each original movement gets its own REVERSAL row
+    // (append-only, linked by reversal_of_transaction_id); the customer
+    // balance takes the NET delta of the batch in ONE relative update, so a
+    // concurrent adjustment cannot be lost.
+    if (loyaltyReversals.isNotEmpty && loyaltyReversalUpdatedAt != null) {
+      var netDelta = 0.0;
+      for (final reversal in loyaltyReversals) {
+        await insertPointTransaction(reversal);
+        netDelta += reversal.points;
+      }
       await applyCustomerPointsDelta(
-        loyaltyReversal.customerId,
-        loyaltyReversal.points,
+        loyaltyReversals.first.customerId,
+        netDelta,
         loyaltyReversalUpdatedAt,
       );
-    } else if (loyaltyReversal != null || loyaltyReversalUpdatedAt != null) {
+    } else if (loyaltyReversals.isNotEmpty || loyaltyReversalUpdatedAt != null) {
       throw StateError(
-        'Loyalty reversal requires both the transaction and its timestamp.',
+        'Loyalty reversals require rows and their timestamp together.',
       );
     }
 

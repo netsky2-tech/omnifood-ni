@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/core/clock/monotonic_clock.dart';
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/models/customer/customer_entity.dart';
 import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
@@ -232,7 +233,20 @@ void main() {
     );
 
     // Loyalty ledger rows for the ticket through the real DAO: one EARN
-    // (+345 units) and one REDEEM (-50 units), arch §2.3 signs.
+    // (+345 units) and one REDEEM (-50 units), arch §2.3 signs. The customer
+    // row is part of the production state (a loyalty sale always carries its
+    // customer locally — the same fixture-fix class as the program/reward
+    // seeding): the void's compensating balance update is relative to the
+    // customer's CURRENT local balance.
+    await db.customerDao.saveCustomer(
+      CustomerEntity(
+        id: customerId,
+        name: 'Cliente Void Probe',
+        pointsBalance: 294.5,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
     await db.customerPointTransactionDao.insertTransactions([
       CustomerPointTransactionEntity(
         id: earnId,
