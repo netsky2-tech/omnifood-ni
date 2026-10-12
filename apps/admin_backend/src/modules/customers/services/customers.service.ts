@@ -9,7 +9,9 @@ import {
   LoyaltyTransactionOrigin,
 } from '../entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../../loyalty/entities/customer-loyalty-account-projection.entity';
-import { recomputeCustomerPointsBalance } from '../../loyalty/services/loyalty-ledger.service';
+import {
+  recomputeCustomerPointsBalance,
+} from '../../loyalty/services/loyalty-ledger.service';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import { CustomerQueryDto } from '../dto/customer-query.dto';

@@ -128,8 +128,12 @@ describe('CardReconciliationSummaryService', () => {
     // Single-pass conditional aggregation: the WHERE clause no longer pins
     // reconciliation_status; both PENDIENTE and MANUAL_OVERRIDE aggregates
     // come from the same query.
-    expect(sql).toContain("p.reconciliation_status = 'PENDIENTE' THEN");
-    expect(sql).toContain("p.reconciliation_status = 'MANUAL_OVERRIDE' THEN");
+    expect(sql).toContain(
+      "p.reconciliation_status = 'PENDIENTE' THEN",
+    );
+    expect(sql).toContain(
+      "p.reconciliation_status = 'MANUAL_OVERRIDE' THEN",
+    );
     expect(sql).toContain('AS "manualOverrideCount"');
     expect(sql).toContain('AS "manualOverrideAmountNio"');
     // The WHERE scope must be tenant + lifecycle + method only: no status

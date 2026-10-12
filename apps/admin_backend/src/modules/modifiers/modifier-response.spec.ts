@@ -46,9 +46,7 @@ describe('serializeModifierOption', () => {
   });
 
   it('preserves decimal precision instead of truncating it', () => {
-    const result = serializeModifierOption(
-      makeOption({ price_delta: '15.25' }),
-    );
+    const result = serializeModifierOption(makeOption({ price_delta: '15.25' }));
 
     expect(result.price_delta).toBe(15.25);
     // The value must survive the numeric methods consumers call on it.
@@ -120,19 +118,18 @@ describe('serializeModifierGroup', () => {
       is_active: true,
       created_at: new Date('2026-01-01T00:00:00.000Z'),
       updated_at: new Date('2026-01-01T00:00:00.000Z'),
-      options: optionOverrides.map(
-        (over) =>
-          ({
-            id: 'opt-1',
-            tenant_id: 'tenant-A',
-            group_id: 'group-1',
-            name: 'Entera',
-            price_delta: '0.00',
-            is_default: false,
-            sort_order: 0,
-            is_active: true,
-            ...over,
-          }) as unknown as ModifierOption,
+      options: optionOverrides.map((over) =>
+        ({
+          id: 'opt-1',
+          tenant_id: 'tenant-A',
+          group_id: 'group-1',
+          name: 'Entera',
+          price_delta: '0.00',
+          is_default: false,
+          sort_order: 0,
+          is_active: true,
+          ...over,
+        }) as unknown as ModifierOption,
       ),
     }) as unknown as ModifierGroup & { options: ModifierOption[] };
 
@@ -142,9 +139,9 @@ describe('serializeModifierGroup', () => {
     );
 
     expect(result.options).toHaveLength(2);
-    expect(typeof result.options[0].price_delta).toBe('number');
-    expect(result.options[0].price_delta).toBe(0);
-    expect(result.options[1].price_delta).toBe(5.25);
+    expect(typeof result.options[0]!.price_delta).toBe('number');
+    expect(result.options[0]!.price_delta).toBe(0);
+    expect(result.options[1]!.price_delta).toBe(5.25);
   });
 
   it('passes group-level integer fields through untouched', () => {
@@ -163,7 +160,7 @@ describe('serializeModifierGroup', () => {
     const group = makeGroup([{ price_delta: '0.00' }]);
     serializeModifierGroup(group);
 
-    expect(group.options[0].price_delta).toBe('0.00');
+    expect(group.options[0]!.price_delta).toBe('0.00');
   });
 
   it('maps a group list with serializeModifierGroups', () => {
@@ -173,8 +170,8 @@ describe('serializeModifierGroup', () => {
     ]);
 
     expect(result).toHaveLength(2);
-    expect(typeof result[0].options[0].price_delta).toBe('number');
-    expect(typeof result[1].options[0].price_delta).toBe('number');
+    expect(typeof result[0]!.options[0]!.price_delta).toBe('number');
+    expect(typeof result[1]!.options[0]!.price_delta).toBe('number');
   });
 });
 
@@ -213,9 +210,9 @@ describe('serializeEffectiveGroups', () => {
     ]);
 
     expect(result).toHaveLength(1);
-    expect(typeof result[0].options[0].price_delta).toBe('number');
-    expect(result[0].options[0].price_delta).toBe(0);
-    expect(result[0].options[1].price_delta).toBe(-1.5);
+    expect(typeof result[0]!.options[0]!.price_delta).toBe('number');
+    expect(result[0]!.options[0]!.price_delta).toBe(0);
+    expect(result[0]!.options[1]!.price_delta).toBe(-1.5);
   });
 
   it('keeps the deterministic resolution fields untouched', () => {
@@ -223,11 +220,11 @@ describe('serializeEffectiveGroups', () => {
       makeEffectiveGroup([makeEffectiveOption()]),
     ]);
 
-    expect(result[0].group_id).toBe('group-1');
-    expect(result[0].source).toBe('category');
-    expect(result[0].min_selected).toBe(1);
-    expect(result[0].max_selected).toBe(3);
-    expect(result[0].allow_quantities).toBe(true);
+    expect(result[0]!.group_id).toBe('group-1');
+    expect(result[0]!.source).toBe('category');
+    expect(result[0]!.min_selected).toBe(1);
+    expect(result[0]!.max_selected).toBe(3);
+    expect(result[0]!.allow_quantities).toBe(true);
   });
 
   it('passes an empty resolution through as an empty array', () => {

@@ -85,28 +85,22 @@ describe('bindTenantContext — widened executor shapes', () => {
   it.each([
     ['EntityManager', asManager],
     ['QueryRunner', asQueryRunner],
-  ])(
-    'rejects a blank tenant id without issuing SQL through %s',
-    async (_, cast) => {
-      await expect(bindTenantContext(cast(), '')).rejects.toThrow(
-        TenantContextRequiredError,
-      );
-      expect(executor.query).not.toHaveBeenCalled();
-    },
-  );
+  ])('rejects a blank tenant id without issuing SQL through %s', async (_, cast) => {
+    await expect(bindTenantContext(cast(), '')).rejects.toThrow(
+      TenantContextRequiredError,
+    );
+    expect(executor.query).not.toHaveBeenCalled();
+  });
 
   it.each([
     ['EntityManager', asManager],
     ['QueryRunner', asQueryRunner],
-  ])(
-    'rejects a whitespace-only tenant id without issuing SQL through %s',
-    async (_, cast) => {
-      await expect(bindTenantContext(cast(), '  \t  ')).rejects.toThrow(
-        TenantContextRequiredError,
-      );
-      expect(executor.query).not.toHaveBeenCalled();
-    },
-  );
+  ])('rejects a whitespace-only tenant id without issuing SQL through %s', async (_, cast) => {
+    await expect(bindTenantContext(cast(), '  \t  ')).rejects.toThrow(
+      TenantContextRequiredError,
+    );
+    expect(executor.query).not.toHaveBeenCalled();
+  });
 
   it('binds a valid tenant id through a QueryRunner with the same parameterised SQL as through a manager', async () => {
     await bindTenantContext(asQueryRunner(), 'tenant-a');

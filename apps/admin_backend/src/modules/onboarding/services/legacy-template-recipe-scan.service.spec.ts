@@ -57,7 +57,7 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
       fecha_fin_vigencia: null,
       pos_document_id: null,
       created_at: new Date(),
-    };
+    } as unknown as RecipeVersion;
   }
 
   beforeEach(() => {
@@ -138,11 +138,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
   });
 
   it('runs the scan inside ONE tenant-bound transaction, binds app.tenant_id before the first protected read, and resolves protected repositories from the manager', async () => {
-    const activeRv = makeRecipeVersion(
-      'legacy-rv-1',
-      'Capuchino 8oz',
-      RecipeOrigin.INDUSTRY_TEMPLATE,
-    );
+    const activeRv = makeRecipeVersion('legacy-rv-1', 'Capuchino 8oz',
+      RecipeOrigin.INDUSTRY_TEMPLATE);
     recipeVersionRepo.find = jest.fn().mockResolvedValue([activeRv]);
     sessionRepo.findOne = jest.fn().mockResolvedValue(null);
     invoiceItemRepo.count = jest.fn().mockResolvedValue(0);
@@ -181,11 +178,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
   });
 
   it('propagates a tenant-context binding failure without any writes', async () => {
-    const activeRv = makeRecipeVersion(
-      'legacy-rv-1',
-      'Capuchino 8oz',
-      RecipeOrigin.INDUSTRY_TEMPLATE,
-    );
+    const activeRv = makeRecipeVersion('legacy-rv-1', 'Capuchino 8oz',
+      RecipeOrigin.INDUSTRY_TEMPLATE);
     recipeVersionRepo.find = jest.fn().mockResolvedValue([activeRv]);
     manager.query.mockRejectedValue(new Error('set_config failed'));
 
@@ -210,11 +204,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
   });
 
   it('safely migrates unused template recipe on non-operational tenant to DRAFT with MOVE_TO_DRAFT receipt', async () => {
-    const activeRv = makeRecipeVersion(
-      'legacy-rv-1',
-      'Capuchino 8oz',
-      RecipeOrigin.INDUSTRY_TEMPLATE,
-    );
+    const activeRv = makeRecipeVersion('legacy-rv-1', 'Capuchino 8oz',
+      RecipeOrigin.INDUSTRY_TEMPLATE);
 
     recipeVersionRepo.find = jest.fn().mockResolvedValue([activeRv]);
     sessionRepo.findOne = jest.fn().mockResolvedValue({
@@ -238,12 +229,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
   });
 
   it('never silently mutates an active recipe on an operational tenant, issuing KEEP_PUBLISHED receipt', async () => {
-    const activeRv = makeRecipeVersion(
-      'legacy-rv-2',
-      'Capuchino 8oz',
-      RecipeOrigin.INDUSTRY_TEMPLATE,
-      'tenant-operational',
-    );
+    const activeRv = makeRecipeVersion('legacy-rv-2', 'Capuchino 8oz',
+      RecipeOrigin.INDUSTRY_TEMPLATE, 'tenant-operational');
 
     recipeVersionRepo.find = jest.fn().mockResolvedValue([activeRv]);
     sessionRepo.findOne = jest.fn().mockResolvedValue({
@@ -264,11 +251,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
   });
 
   it('marks unknown provenance as UNKNOWN_PROVENANCE without mutating', async () => {
-    const customRv = makeRecipeVersion(
-      'custom-rv-3',
-      'Plato Personalizado Secreto',
-      RecipeOrigin.MANUAL,
-    );
+    const customRv = makeRecipeVersion('custom-rv-3', 'Plato Personalizado Secreto',
+      RecipeOrigin.MANUAL);
 
     recipeVersionRepo.find = jest.fn().mockResolvedValue([customRv]);
     sessionRepo.findOne = jest.fn().mockResolvedValue(null);
@@ -284,11 +268,8 @@ describe('LegacyTemplateRecipeScanService (TDD / ONB1.3G)', () => {
   });
 
   it('honors explicit user decision to MOVE_TO_DRAFT even on operational tenant', async () => {
-    const activeRv = makeRecipeVersion(
-      'legacy-rv-op',
-      'Capuchino 8oz',
-      RecipeOrigin.INDUSTRY_TEMPLATE,
-    );
+    const activeRv = makeRecipeVersion('legacy-rv-op', 'Capuchino 8oz',
+      RecipeOrigin.INDUSTRY_TEMPLATE);
 
     recipeVersionRepo.find = jest.fn().mockResolvedValue([activeRv]);
     sessionRepo.findOne = jest.fn().mockResolvedValue({

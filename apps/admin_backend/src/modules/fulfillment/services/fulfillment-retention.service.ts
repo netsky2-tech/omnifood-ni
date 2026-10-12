@@ -42,7 +42,8 @@ export class FulfillmentRetentionService {
       const parsedLines =
         rawLines != null
           ? (rawLines as
-              Record<string, unknown> | Array<Record<string, unknown>>)
+              | Record<string, unknown>
+              | Array<Record<string, unknown>>)
           : undefined;
 
       const record = repo.create({

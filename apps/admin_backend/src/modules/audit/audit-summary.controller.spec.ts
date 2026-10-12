@@ -53,10 +53,7 @@ describe('AuditSummaryController', () => {
   let app: INestApplication;
   let mockAuditSummaryService: { getExecutiveSummary: jest.Mock };
   let mockAuditEventsService: { getEvents: jest.Mock };
-  let mockAuditLogsService: {
-    getLedger: jest.Mock;
-    getIntegrityAlerts: jest.Mock;
-  };
+  let mockAuditLogsService: { getLedger: jest.Mock; getIntegrityAlerts: jest.Mock };
 
   const summaryResponse = {
     criticalCount: 1,
@@ -76,10 +73,7 @@ describe('AuditSummaryController', () => {
       getExecutiveSummary: jest.fn().mockResolvedValue(summaryResponse),
     };
     mockAuditEventsService = {
-      getEvents: jest.fn().mockResolvedValue({
-        events: [],
-        generatedAt: '2026-09-01T12:00:00.000Z',
-      }),
+      getEvents: jest.fn().mockResolvedValue({ events: [], generatedAt: '2026-09-01T12:00:00.000Z' }),
     };
     mockAuditLogsService = {
       getLedger: jest.fn().mockResolvedValue({
@@ -263,19 +257,14 @@ describe('AuditSummaryController', () => {
     });
 
     it('requires authentication', async () => {
-      await request(getHttpServer())
-        .get('/operations/audit/events')
-        .expect(401);
+      await request(getHttpServer()).get('/operations/audit/events').expect(401);
     });
 
     it('returns 403 for CASHIER role', async () => {
       const jwtService = app.get(JwtService);
       await request(getHttpServer())
         .get('/operations/audit/events')
-        .set(
-          'Authorization',
-          `Bearer ${signToken(jwtService, UserRole.CASHIER)}`,
-        )
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
         .expect(403);
     });
 
@@ -283,10 +272,7 @@ describe('AuditSummaryController', () => {
       const jwtService = app.get(JwtService);
       await request(getHttpServer())
         .get('/operations/audit/events')
-        .set(
-          'Authorization',
-          `Bearer ${signToken(jwtService, UserRole.WAITER)}`,
-        )
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.WAITER)}`)
         .expect(403);
     });
 
@@ -312,10 +298,7 @@ describe('AuditSummaryController', () => {
       const jwtService = app.get(JwtService);
       await request(getHttpServer())
         .get('/operations/audit/events')
-        .set(
-          'Authorization',
-          `Bearer ${signToken(jwtService, UserRole.MANAGER)}`,
-        )
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
         .expect(200);
     });
 
@@ -332,13 +315,9 @@ describe('AuditSummaryController', () => {
         .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
         .expect(200);
 
-      expect(mockAuditEventsService.getEvents).toHaveBeenLastCalledWith(
-        'tenant-1',
-        '2026-08-01',
-        '2026-08-31',
-        'WARNING',
-        25,
-      );
+      expect(
+        mockAuditEventsService.getEvents,
+      ).toHaveBeenLastCalledWith('tenant-1', '2026-08-01', '2026-08-31', 'WARNING', 25);
     });
 
     it('rejects a severity outside the single classifier taxonomy with 400', async () => {
@@ -392,19 +371,14 @@ describe('AuditSummaryController', () => {
     });
 
     it('requires authentication', async () => {
-      await request(getHttpServer())
-        .get('/operations/audit/ledger')
-        .expect(401);
+      await request(getHttpServer()).get('/operations/audit/ledger').expect(401);
     });
 
     it('returns 403 for CASHIER role', async () => {
       const jwtService = app.get(JwtService);
       await request(getHttpServer())
         .get('/operations/audit/ledger')
-        .set(
-          'Authorization',
-          `Bearer ${signToken(jwtService, UserRole.CASHIER)}`,
-        )
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
         .expect(403);
     });
 
@@ -432,10 +406,7 @@ describe('AuditSummaryController', () => {
       const jwtService = app.get(JwtService);
       await request(getHttpServer())
         .get('/operations/audit/ledger')
-        .set(
-          'Authorization',
-          `Bearer ${signToken(jwtService, UserRole.MANAGER)}`,
-        )
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
         .expect(200);
     });
 
@@ -515,10 +486,7 @@ describe('AuditSummaryController', () => {
       const jwtService = app.get(JwtService);
       await request(getHttpServer())
         .get('/operations/audit/integrity')
-        .set(
-          'Authorization',
-          `Bearer ${signToken(jwtService, UserRole.CASHIER)}`,
-        )
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
         .expect(403);
     });
 

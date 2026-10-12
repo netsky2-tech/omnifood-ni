@@ -329,15 +329,15 @@ describe('InvoicesService', () => {
       >;
       const blank = calls.find(([payload]) => payload.id === 'inv-snap-blank');
       expect(blank).toBeDefined();
-      expect(blank[0].customerName).toBeNull();
-      expect(blank[0].customerTaxId).toBeNull();
+      expect(blank![0].customerName).toBeNull();
+      expect(blank![0].customerTaxId).toBeNull();
 
       const padded = calls.find(
         ([payload]) => payload.id === 'inv-snap-padded',
       );
       expect(padded).toBeDefined();
-      expect(padded[0].customerName).toBe('Juan Perez');
-      expect(padded[0].customerTaxId).toBe('J0310000001234');
+      expect(padded![0].customerName).toBe('Juan Perez');
+      expect(padded![0].customerTaxId).toBe('J0310000001234');
     });
 
     it('persists the fx-rate fiscal snapshot as sent, not the column defaults (D-6)', async () => {

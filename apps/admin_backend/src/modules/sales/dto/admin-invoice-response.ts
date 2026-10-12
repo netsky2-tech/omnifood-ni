@@ -139,7 +139,9 @@ export function serializeAdminInvoicePayment(
   };
 }
 
-export function serializeAdminInvoice(invoice: Invoice): AdminInvoiceResponse {
+export function serializeAdminInvoice(
+  invoice: Invoice,
+): AdminInvoiceResponse {
   return {
     ...invoice,
     subtotal: toFiniteNumber(invoice.subtotal),

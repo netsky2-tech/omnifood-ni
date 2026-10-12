@@ -81,8 +81,7 @@ describe('CashShiftController', () => {
 
   describe('GET /sales/shifts (owner-dashboard list)', () => {
     it('lists shift sessions for the requesting tenant with default params', async () => {
-      const mockShifts = [
-        driverShift({ status: CashShiftStatus.CLOSED }),
+      const mockShifts = [driverShift({ status: CashShiftStatus.CLOSED })
       ] as unknown as CashShiftSession[];
       service.listShifts.mockResolvedValue(mockShifts);
 

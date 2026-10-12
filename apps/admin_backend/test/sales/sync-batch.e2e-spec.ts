@@ -521,7 +521,7 @@ describe('Sync batch route (e2e)', () => {
 
   it('accepts and forwards a valid per-line discount_origin amounts breakdown to the sync service (D-A2)', async () => {
     const record = buildSaleRecord(2);
-    const saleInvoice = record.invoice;
+    const saleInvoice = record.invoice as Record<string, unknown>;
     const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
     record.invoice = {
       ...saleInvoice,
@@ -565,7 +565,7 @@ describe('Sync batch route (e2e)', () => {
 
   it('rejects an unknown KEY inside the discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
     const record = buildSaleRecord(3);
-    const saleInvoice = record.invoice;
+    const saleInvoice = record.invoice as Record<string, unknown>;
     const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
     record.invoice = {
       ...saleInvoice,
@@ -586,7 +586,7 @@ describe('Sync batch route (e2e)', () => {
 
   it('rejects a NEGATIVE amount inside the discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
     const record = buildSaleRecord(4);
-    const saleInvoice = record.invoice;
+    const saleInvoice = record.invoice as Record<string, unknown>;
     const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
     record.invoice = {
       ...saleInvoice,
@@ -606,7 +606,7 @@ describe('Sync batch route (e2e)', () => {
 
   it('rejects a ZERO amount inside the discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
     const record = buildSaleRecord(5);
-    const saleInvoice = record.invoice;
+    const saleInvoice = record.invoice as Record<string, unknown>;
     const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
     record.invoice = {
       ...saleInvoice,
@@ -627,7 +627,7 @@ describe('Sync batch route (e2e)', () => {
 
   it('rejects an EMPTY discount_origin breakdown and refuses the WHOLE batch before the sync service runs', async () => {
     const record = buildSaleRecord(6);
-    const saleInvoice = record.invoice;
+    const saleInvoice = record.invoice as Record<string, unknown>;
     const saleItem = (saleInvoice.items as Array<Record<string, unknown>>)[0];
     record.invoice = {
       ...saleInvoice,
@@ -642,9 +642,7 @@ describe('Sync batch route (e2e)', () => {
 
     const body = response.body as ValidationErrorResponse;
     expect(JSON.stringify(body.message)).toContain('discountOrigin');
-    expect(JSON.stringify(body.message)).toContain(
-      'must be a non-empty object',
-    );
+    expect(JSON.stringify(body.message)).toContain('must be a non-empty object');
     expect(syncBatch).not.toHaveBeenCalled();
   });
 });

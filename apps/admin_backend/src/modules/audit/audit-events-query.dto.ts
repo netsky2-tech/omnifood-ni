@@ -23,7 +23,7 @@ export class AuditEventsQueryDto {
 
   /** Severity filter from the single AuditRiskClassifier taxonomy. */
   @IsOptional()
-  @IsIn(AUDIT_SEVERITIES)
+  @IsIn(AUDIT_SEVERITIES as unknown as string[])
   severity?: AuditSeverity;
 
   /** Page cap: default 50, max 100. */

@@ -37,7 +37,9 @@ describe('CreateAppReleases1809540000000', () => {
       'CONSTRAINT uq_app_releases_channel_abi_version_code UNIQUE (channel, abi, version_code)',
     );
     expect(sql).toContain('CREATE INDEX idx_app_releases_lookup');
-    expect(sql).toContain('ON app_releases (channel, abi, version_code DESC)');
+    expect(sql).toContain(
+      'ON app_releases (channel, abi, version_code DESC)',
+    );
   });
 
   it('drops the table in down()', async () => {

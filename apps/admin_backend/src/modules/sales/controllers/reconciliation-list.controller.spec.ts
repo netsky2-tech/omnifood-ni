@@ -155,7 +155,10 @@ describe('ReconciliationListController', () => {
       Reflect.getMetadata(GUARDS_METADATA, ReconciliationListController),
     ).toEqual([AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard]);
     expect(
-      Reflect.getMetadata(INTERCEPTORS_METADATA, ReconciliationListController),
+      Reflect.getMetadata(
+        INTERCEPTORS_METADATA,
+        ReconciliationListController,
+      ),
     ).toEqual([TenantInterceptor]);
   });
 
@@ -212,7 +215,9 @@ describe('ReconciliationListController', () => {
 
   it('passes filters through: status, method, pagination and date range', async () => {
     const jwtService = app.get(JwtService);
-    mockReconciliationListService.getReconciliationList.mockClear();
+    (
+      mockReconciliationListService.getReconciliationList as jest.Mock
+    ).mockClear();
 
     await request(getHttpServer())
       .get(

@@ -170,14 +170,13 @@ describe('RebindHumanAuthorizationTenantColumns1809100000000', () => {
 
     // Policy counts per table: append-only tables carry select+insert; the
     // mutable ones add update. All five tables in this unit are policy-carrying.
-    const expectedCommands: Record<(typeof REBOUND_TABLES)[number], string[]> =
-      {
-        human_auth_policy_epochs: ['insert', 'select'],
-        human_auth_terminal_ack_history: ['insert', 'select'],
-        human_auth_terminal_ack_floor: ['insert', 'select', 'update'],
-        human_auth_recovery_tokens: ['insert', 'select', 'update'],
-        human_auth_recovery_events: ['insert', 'select'],
-      };
+    const expectedCommands: Record<(typeof REBOUND_TABLES)[number], string[]> = {
+      human_auth_policy_epochs: ['insert', 'select'],
+      human_auth_terminal_ack_history: ['insert', 'select'],
+      human_auth_terminal_ack_floor: ['insert', 'select', 'update'],
+      human_auth_recovery_tokens: ['insert', 'select', 'update'],
+      human_auth_recovery_events: ['insert', 'select'],
+    };
 
     for (const table of REBOUND_TABLES) {
       const rows = POLICY_ROWS.filter((row) => row.table === table);

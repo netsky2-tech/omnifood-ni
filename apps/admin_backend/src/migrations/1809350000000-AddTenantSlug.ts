@@ -77,6 +77,8 @@ export class AddTenantSlug1809350000000 implements MigrationInterface {
 
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX IF EXISTS uq_tenants_slug`);
-    await queryRunner.query(`ALTER TABLE tenants DROP COLUMN IF EXISTS slug`);
+    await queryRunner.query(
+      `ALTER TABLE tenants DROP COLUMN IF EXISTS slug`,
+    );
   }
 }

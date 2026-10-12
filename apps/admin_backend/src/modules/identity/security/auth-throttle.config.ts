@@ -40,13 +40,10 @@ export const DEVICE_SYNC_TOKEN_PER_IP_LIMIT = 15;
  * tracker is always defined.
  */
 export function accountTracker(req: Record<string, any>): string {
-  const body = (req?.body ?? {}) as Record<string, unknown>;
-  const email =
-    typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  const body: Record<string, unknown> = req?.body ?? {};
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const tenantSlug =
-    typeof body.tenantSlug === 'string'
-      ? body.tenantSlug.trim().toLowerCase()
-      : '';
+    typeof body.tenantSlug === 'string' ? body.tenantSlug.trim().toLowerCase() : '';
 
   if (!email) {
     const ip = typeof req?.ip === 'string' ? req.ip : 'unknown';
@@ -67,7 +64,7 @@ export function authThrottlers(): ThrottlerOptions[] {
       name: ACCOUNT_THROTTLER_NAME,
       ttl: THROTTLE_TTL_MS,
       limit: LOGIN_PER_ACCOUNT_LIMIT,
-      getTracker: (req: Record<string, any>) => accountTracker(req),
+      getTracker: (req) => accountTracker(req as Record<string, any>),
     },
   ];
 }

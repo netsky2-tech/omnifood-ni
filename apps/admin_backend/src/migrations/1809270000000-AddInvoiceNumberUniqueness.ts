@@ -62,7 +62,9 @@ const MAX_OFFENDERS_LISTED = 10;
 const quoteIdentifier = (identifier: string): string =>
   `"${identifier.replace(/"/g, '""')}"`;
 
-export class AddInvoiceNumberUniqueness1809270000000 implements MigrationInterface {
+export class AddInvoiceNumberUniqueness1809270000000
+  implements MigrationInterface
+{
   name = 'AddInvoiceNumberUniqueness1809270000000';
 
   /** Whether the table is FORCE ROW LEVEL SECURITY (owner subject to RLS too). */
@@ -132,7 +134,9 @@ export class AddInvoiceNumberUniqueness1809270000000 implements MigrationInterfa
     const tableId = quoteIdentifier(TABLE);
 
     if (forcedRls) {
-      await runner.query(`ALTER TABLE ${tableId} NO FORCE ROW LEVEL SECURITY`);
+      await runner.query(
+        `ALTER TABLE ${tableId} NO FORCE ROW LEVEL SECURITY`,
+      );
     }
 
     try {

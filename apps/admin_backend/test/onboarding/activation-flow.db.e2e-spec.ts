@@ -992,7 +992,9 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(finalizeRes.status).toBe(201);
     expect(finalizeRes.body.status).toBe(ActivationAttemptStatus.FAIL);
-    expect(finalizeRes.body.failureCode).toBe('CHECK_FAILED_SALE_RECEIPT_PATH');
+    expect(finalizeRes.body.failureCode).toBe(
+      'CHECK_FAILED_SALE_RECEIPT_PATH',
+    );
 
     // FAIL attempt with valid readiness reverts to SALE_READY (not ACTIVATED)
     const sessionFail = await dataSource

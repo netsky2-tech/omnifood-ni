@@ -22,11 +22,13 @@ export const LoginAuditReason = {
   INVALID_REFRESH: 'invalid_refresh',
   REUSED_REFRESH: 'reused_refresh_token',
 } as const;
-export type LoginAuditReason =
-  (typeof LoginAuditReason)[keyof typeof LoginAuditReason];
+export type LoginAuditReason = (typeof LoginAuditReason)[keyof typeof LoginAuditReason];
 
 export type AuthAuditAction =
-  'LOGIN_SUCCESS' | 'LOGIN_FAILURE' | 'REFRESH_SUCCESS' | 'REFRESH_FAILURE';
+  | 'LOGIN_SUCCESS'
+  | 'LOGIN_FAILURE'
+  | 'REFRESH_SUCCESS'
+  | 'REFRESH_FAILURE';
 
 interface AuthFailureInput {
   action: Extract<AuthAuditAction, 'LOGIN_FAILURE' | 'REFRESH_FAILURE'>;

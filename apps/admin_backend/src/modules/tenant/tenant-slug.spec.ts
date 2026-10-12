@@ -35,7 +35,9 @@ describe('normalizeTenantSlug', () => {
     const wordySlug = normalizeTenantSlug(wordy);
     expect(wordySlug.length).toBeLessThanOrEqual(TENANT_SLUG_MAX_LENGTH);
     expect(wordySlug.endsWith('-')).toBe(false);
-    expect(wordySlug).toBe('uno-dos-tres-cuatro-cinco-seis-siete-ocho-nueve');
+    expect(wordySlug).toBe(
+      'uno-dos-tres-cuatro-cinco-seis-siete-ocho-nueve',
+    );
   });
 
   it('hard-truncates at 50 chars when no dash boundary exists', () => {

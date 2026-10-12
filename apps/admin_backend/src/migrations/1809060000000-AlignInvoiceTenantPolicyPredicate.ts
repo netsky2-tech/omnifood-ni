@@ -34,11 +34,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  */
 const TABLE = 'invoices';
 
-const TARGET_PREDICATE =
-  "tenant_id = current_setting('app.tenant_id', true)::uuid";
+const TARGET_PREDICATE = "tenant_id = current_setting('app.tenant_id', true)::uuid";
 
-const PREVIOUS_PREDICATE =
-  "tenant_id::text = current_setting('app.tenant_id', true)";
+const PREVIOUS_PREDICATE = "tenant_id::text = current_setting('app.tenant_id', true)";
 
 const quoteIdentifier = (identifier: string): string =>
   `"${identifier.replace(/"/g, '""')}"`;

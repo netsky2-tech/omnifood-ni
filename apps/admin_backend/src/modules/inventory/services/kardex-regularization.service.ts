@@ -82,7 +82,9 @@ export class KardexRegularizationService {
       const movements = await manager
         .getRepository(InventoryMovement)
         .find({ where: { id: In(movementIds), tenant_id: tenant } });
-      const movementById = new Map(movements.map((m) => [m.id, m] as const));
+      const movementById = new Map(
+        movements.map((m) => [m.id, m] as const),
+      );
 
       const insumoIds = [...new Set(rows.map((row) => row.insumoId))];
       const insumos = await manager.getRepository(Insumo).find({

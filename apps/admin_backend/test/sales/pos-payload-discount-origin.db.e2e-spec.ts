@@ -68,8 +68,7 @@ import {
  * not enable `resolveJsonModule` (same as the modifier fixture spec).
  */
 /* eslint-disable @typescript-eslint/no-require-imports -- fixture JSON cannot be imported statically (resolveJsonModule is off) and prettier's reflow pushes the call past a next-line directive */
-const posRecordPayload =
-  require('../fixtures/sales/pos-discount-origin-payload.json') as SyncBatchRecordDto;
+const posRecordPayload = require('../fixtures/sales/pos-discount-origin-payload.json') as SyncBatchRecordDto;
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 function getRequiredEnv(name: string): string {
@@ -146,11 +145,11 @@ async function withIsolatedSchema(
 
     // THE ARMING PROOF, part 1: a schema created only by synchronize has
     // NO discount-origin CHECK — proving nothing about it.
-    const checkRowsBeforeArming = await dataSource.query(
+    const checkRowsBeforeArming = (await dataSource.query(
       `SELECT conname FROM pg_constraint
         WHERE conname = $1 AND conrelid = 'invoice_items'::regclass`,
       [CHECK_NAME],
-    );
+    )) as Array<{ conname: string }>;
 
     // THE ARMING: apply the REAL migration class to the throwaway schema
     // (the column synchronize built is already jsonb, so up() takes its
@@ -162,12 +161,12 @@ async function withIsolatedSchema(
     await new ReplaceDiscountOriginWithBreakdown1809630000000().up(queryRunner);
     await queryRunner.query(`SET search_path TO public`);
 
-    const checkRowsAfterArming = await dataSource.query(
+    const checkRowsAfterArming = (await dataSource.query(
       `SELECT conname, pg_get_constraintdef(oid) AS definition
          FROM pg_constraint
         WHERE conname = $1 AND conrelid = 'invoice_items'::regclass`,
       [CHECK_NAME],
-    );
+    )) as Array<{ conname: string; definition: string }>;
 
     const tenantId = randomUUID();
     await dataSource.getRepository(Tenant).save(
@@ -289,12 +288,13 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
             role: UserRole.OWNER,
             tenant_id: tenantId,
           });
-          const fixtureItems = (
-            posRecordPayload.invoice as unknown as Record<string, unknown>
-          ).items as Array<Record<string, unknown>>;
+          const fixtureItems =
+            (posRecordPayload.invoice as unknown as Record<string, unknown>).items as Array<
+              Record<string, unknown>
+            >;
           const beerItem = fixtureItems.find(
             (item) => item.discountOrigin !== undefined,
-          );
+          ) as Record<string, unknown>;
 
           // The record is the byte-captured artifact the runner persisted —
           // not rebuilt, not normalized here.
@@ -328,7 +328,9 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
           expect(rows[0].discount_origin).toEqual(beerItem.discountOrigin);
           expect(Number(rows[0].discount)).toBe(beerItem.discount as number);
 
-          const otherItem = fixtureItems.find((item) => item !== beerItem);
+          const otherItem = fixtureItems.find(
+            (item) => item !== beerItem,
+          ) as Record<string, unknown>;
           const otherRows = (await dataSource.query(
             `SELECT discount_origin, discount FROM invoice_items
               WHERE id = $1 AND tenant_id = $2`,
@@ -361,13 +363,17 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
           // members inside ARRAY[...] with per-element ::text casts, so the
           // three origin names are asserted individually.
           expect(checkDefAfterArming).not.toBeNull();
-          expect(checkDefAfterArming.conname).toBe(CHECK_NAME);
-          expect(checkDefAfterArming.definition).toContain('discount_origin');
-          expect(checkDefAfterArming.definition).toContain('manual');
-          expect(checkDefAfterArming.definition).toContain('promotion');
-          expect(checkDefAfterArming.definition).toContain('loyalty');
-          expect(checkDefAfterArming.definition).toContain("<> '{}'::jsonb");
-          expect(checkDefAfterArming.definition).toContain('jsonb_path_exists');
+          expect(checkDefAfterArming!.conname).toBe(CHECK_NAME);
+          expect(checkDefAfterArming!.definition).toContain('discount_origin');
+          expect(checkDefAfterArming!.definition).toContain('manual');
+          expect(checkDefAfterArming!.definition).toContain('promotion');
+          expect(checkDefAfterArming!.definition).toContain('loyalty');
+          expect(checkDefAfterArming!.definition).toContain(
+            "<> '{}'::jsonb",
+          );
+          expect(checkDefAfterArming!.definition).toContain(
+            'jsonb_path_exists',
+          );
         },
       );
     },
@@ -417,11 +423,8 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
         .insert(violation)
         .then(
           () => null,
-          (insertError: {
-            code?: string;
-            constraint?: string;
-            message?: string;
-          }) => insertError,
+          (insertError: { code?: string; constraint?: string; message?: string }) =>
+            insertError,
         );
 
       // THE CHECK produced the rejection — not a TypeScript guard: the row
@@ -429,7 +432,9 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
       // check-violation SQLSTATE naming the migration's constraint.
       expect(error).not.toBeNull();
       expect(error!.code).toBe('23514');
-      expect(error!.constraint ?? String(error!.message)).toContain(CHECK_NAME);
+      expect(
+        error!.constraint ?? String(error!.message),
+      ).toContain(CHECK_NAME);
     }
 
     it(
@@ -447,16 +452,19 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
               .set('Authorization', `Bearer ${token}`)
               .send({ records: [posRecordPayload] })
               .expect(201);
-            const fixtureItems = (
-              posRecordPayload.invoice as unknown as Record<string, unknown>
-            ).items as Array<Record<string, unknown>>;
+            const fixtureItems =
+              (posRecordPayload.invoice as unknown as Record<string, unknown>)
+                .items as Array<Record<string, unknown>>;
             const beerItem = fixtureItems.find(
               (item) => item.discountOrigin !== undefined,
-            );
+            ) as Record<string, unknown>;
 
-            await expectCheckViolation(dataSource, beerItem, tenantId, {
-              bossDiscount: 5,
-            });
+            await expectCheckViolation(
+              dataSource,
+              beerItem,
+              tenantId,
+              { bossDiscount: 5 },
+            );
           },
         );
       },
@@ -478,12 +486,12 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
               .set('Authorization', `Bearer ${token}`)
               .send({ records: [posRecordPayload] })
               .expect(201);
-            const fixtureItems = (
-              posRecordPayload.invoice as unknown as Record<string, unknown>
-            ).items as Array<Record<string, unknown>>;
+            const fixtureItems =
+              (posRecordPayload.invoice as unknown as Record<string, unknown>)
+                .items as Array<Record<string, unknown>>;
             const beerItem = fixtureItems.find(
               (item) => item.discountOrigin !== undefined,
-            );
+            ) as Record<string, unknown>;
 
             await expectCheckViolation(dataSource, beerItem, tenantId, {
               manual: 0,
@@ -509,12 +517,12 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
               .set('Authorization', `Bearer ${token}`)
               .send({ records: [posRecordPayload] })
               .expect(201);
-            const fixtureItems = (
-              posRecordPayload.invoice as unknown as Record<string, unknown>
-            ).items as Array<Record<string, unknown>>;
+            const fixtureItems =
+              (posRecordPayload.invoice as unknown as Record<string, unknown>)
+                .items as Array<Record<string, unknown>>;
             const beerItem = fixtureItems.find(
               (item) => item.discountOrigin !== undefined,
-            );
+            ) as Record<string, unknown>;
 
             await expectCheckViolation(dataSource, beerItem, tenantId, {
               manual: -3,
@@ -590,7 +598,9 @@ describe('POS discount-origin payload replay E2E — real PostgreSQL', () => {
             expect(row.discount_origin).toBeNull();
           }
           for (const [index, item] of legacyItems.entries()) {
-            expect(Number(rows[index].discount)).toBe(item.discount as number);
+            expect(Number(rows[index].discount)).toBe(
+              item.discount as number,
+            );
           }
         },
       );

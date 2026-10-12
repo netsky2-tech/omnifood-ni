@@ -222,7 +222,11 @@ export class LoyaltyLedgerService {
     // early return above intentionally skips this recompute: the original
     // append already recomputed the balance within its committed
     // transaction, so replays stay read-only and cannot double-count.
-    await this.recomputeCustomerBalance(dto.tenantId, dto.customerId, manager);
+    await this.recomputeCustomerBalance(
+      dto.tenantId,
+      dto.customerId,
+      manager,
+    );
 
     return savedTx;
   }

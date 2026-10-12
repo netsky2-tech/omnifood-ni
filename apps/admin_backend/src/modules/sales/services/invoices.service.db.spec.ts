@@ -254,12 +254,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             ($1, 'Tenant A', $3, now(), now()),
             ($2, 'Tenant B', $4, now(), now());
         `,
-          [
-            tenantAId,
-            tenantBId,
-            normalizeTenantSlug('Tenant A'),
-            normalizeTenantSlug('Tenant B'),
-          ],
+          [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
         );
         await dataSource.query(
           `
@@ -426,12 +421,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
              ($1, 'Tenant A', $3, now(), now()),
              ($2, 'Tenant B', $4, now(), now())`,
-          [
-            tenantAId,
-            tenantBId,
-            normalizeTenantSlug('Tenant A'),
-            normalizeTenantSlug('Tenant B'),
-          ],
+          [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
         );
         await dataSource.query(
           `INSERT INTO invoices (
@@ -655,12 +645,7 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
              ($1, 'Tenant A', $3, now(), now()),
              ($2, 'Tenant B', $4, now(), now())`,
-          [
-            tenantAId,
-            tenantBId,
-            normalizeTenantSlug('Tenant A'),
-            normalizeTenantSlug('Tenant B'),
-          ],
+          [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
         );
         await dataSource.query(
           `INSERT INTO invoices (
@@ -1321,198 +1306,204 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
     TEST_TIMEOUT_MS,
   );
 
-  it('persists the per-line discount_origin amounts breakdown exactly as synced and lets PostgreSQL reject an unknown key or a bad amount (D-A2)', async () => {
-    const fixture = await createMigrationBuiltSchemaFixture();
-    const schema = fixture.schema;
-    process.stdout.write(
-      `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
-    );
-    const tenantId = randomUUID();
-    const absentInvoiceId = randomUUID();
-    const valuedInvoiceId = randomUUID();
-    const absentItemId = randomUUID();
-    const valuedItemId = randomUUID();
-    let dataSource: DataSource | null = null;
-
-    try {
-      // Superuser connection: this test exercises the persistence contract
-      // (what the sync path writes and what the database accepts), not an
-      // RLS read path. The schema is built exclusively by the real
-      // migration set, so the discount_origin jsonb column and its CHECK
-      // constraint are the ones production would have — not an
-      // entity-derived copy.
-      dataSource = new DataSource({
-        type: 'postgres',
-        ...postgresConnection,
-        schema,
-        entities: [
-          Tenant,
-          Invoice,
-          InvoiceItem,
-          InvoiceItemModifier,
-          Payment,
-          InventorySyncReceipt,
-          InventorySyncOutbox,
-        ],
-        extra: {
-          allowExitOnIdle: true,
-          options: `-c search_path=${schema},public -c statement_timeout=15000`,
-        },
-      });
-      await dataSource.initialize();
-
-      await dataSource.getRepository(Tenant).save(
-        dataSource.getRepository(Tenant).create({
-          id: tenantId,
-          name: 'Tenant Discount Origin',
-          slug: normalizeTenantSlug('Tenant Discount Origin'),
-        }),
+  it(
+    'persists the per-line discount_origin amounts breakdown exactly as synced and lets PostgreSQL reject an unknown key or a bad amount (D-A2)',
+    async () => {
+      const fixture = await createMigrationBuiltSchemaFixture();
+      const schema = fixture.schema;
+      process.stdout.write(
+        `[timing] migration-built setup = ${fixture.setupDurationMs} ms (migrations alone: ${fixture.migrationDurationMs} ms)\n`,
       );
+      const tenantId = randomUUID();
+      const absentInvoiceId = randomUUID();
+      const valuedInvoiceId = randomUUID();
+      const absentItemId = randomUUID();
+      const valuedItemId = randomUUID();
+      let dataSource: DataSource | null = null;
 
-      const service = new InvoicesService(
-        dataSource,
-        dataSource.getRepository(Invoice),
-        dataSource.getRepository(InvoiceItem),
-        dataSource.getRepository(Payment),
-        createMockAuthorizingUserRepository(),
-        {} as never,
-        dataSource.getRepository(InventorySyncReceipt),
-        dataSource.getRepository(InventorySyncOutbox),
-        { findActiveVersion: jest.fn(), getSnapshot: jest.fn() } as never,
-        { explode: jest.fn() } as never,
-      );
-
-      // BACKWARD COMPATIBILITY (the point of this slice): a payload whose
-      // invoice items OMIT discount_origin — every deployed terminal today
-      // — must still be accepted, persisting NULL. No origin is fabricated.
-      await service.syncInvoices(tenantId, [
-        {
-          id: absentInvoiceId,
-          number: 'A-DO-001',
-          createdAt: new Date().toISOString(),
-          userId: 'd0000000-0000-4000-8000-00000000000d',
-          subtotal: 10,
-          totalTax: 1.5,
-          total: 11.5,
-          paymentStatus: 'PAID',
-          type: 'regular',
-          items: [
-            {
-              id: absentItemId,
-              productId: 'a1000000-0000-4000-8000-0000000000b1',
-              productName: 'Burger',
-              quantity: 1,
-              unitPrice: 10,
-              originalTaxRate: 0.15,
-              appliedTaxRate: 0.15,
-              taxAmount: 1.5,
-              total: 11.5,
-              discount: 2,
-            },
+      try {
+        // Superuser connection: this test exercises the persistence contract
+        // (what the sync path writes and what the database accepts), not an
+        // RLS read path. The schema is built exclusively by the real
+        // migration set, so the discount_origin jsonb column and its CHECK
+        // constraint are the ones production would have — not an
+        // entity-derived copy.
+        dataSource = new DataSource({
+          type: 'postgres',
+          ...postgresConnection,
+          schema,
+          entities: [
+            Tenant,
+            Invoice,
+            InvoiceItem,
+            InvoiceItemModifier,
+            Payment,
+            InventorySyncReceipt,
+            InventorySyncOutbox,
           ],
-          payments: [],
-        },
-      ]);
+          extra: {
+            allowExitOnIdle: true,
+            options: `-c search_path=${schema},public -c statement_timeout=15000`,
+          },
+        });
+        await dataSource.initialize();
 
-      // A payload that INCLUDES discount_origin must persist the breakdown
-      // EXACTLY: mixed origins on one line are the whole point (a promotion
-      // on the item plus a manual discount on the order).
-      await service.syncInvoices(tenantId, [
-        {
-          id: valuedInvoiceId,
-          number: 'A-DO-002',
-          createdAt: new Date().toISOString(),
-          userId: 'd0000000-0000-4000-8000-00000000000d',
-          subtotal: 10,
-          totalTax: 1.5,
-          total: 11.5,
-          paymentStatus: 'PAID',
-          type: 'regular',
-          items: [
-            {
-              id: valuedItemId,
-              productId: 'a1000000-0000-4000-8000-0000000000b1',
-              productName: 'Burger',
-              quantity: 1,
-              unitPrice: 10,
-              originalTaxRate: 0.15,
-              appliedTaxRate: 0.15,
-              taxAmount: 1.5,
-              total: 11.5,
-              discount: 2,
-              discountOrigin: { manual: 5, promotion: 10 },
-            },
-          ],
-          payments: [],
-        },
-      ]);
+        await dataSource.getRepository(Tenant).save(
+          dataSource.getRepository(Tenant).create({
+            id: tenantId,
+            name: 'Tenant Discount Origin',
+            slug: normalizeTenantSlug('Tenant Discount Origin'),
+          }),
+        );
 
-      const rows = await dataSource.query(
-        `SELECT id::text,
+        const service = new InvoicesService(
+          dataSource,
+          dataSource.getRepository(Invoice),
+          dataSource.getRepository(InvoiceItem),
+          dataSource.getRepository(Payment),
+          createMockAuthorizingUserRepository(),
+          {} as never,
+          dataSource.getRepository(InventorySyncReceipt),
+          dataSource.getRepository(InventorySyncOutbox),
+          { findActiveVersion: jest.fn(), getSnapshot: jest.fn() } as never,
+          { explode: jest.fn() } as never,
+        );
+
+        // BACKWARD COMPATIBILITY (the point of this slice): a payload whose
+        // invoice items OMIT discount_origin — every deployed terminal today
+        // — must still be accepted, persisting NULL. No origin is fabricated.
+        await service.syncInvoices(tenantId, [
+          {
+            id: absentInvoiceId,
+            number: 'A-DO-001',
+            createdAt: new Date().toISOString(),
+            userId: 'd0000000-0000-4000-8000-00000000000d',
+            subtotal: 10,
+            totalTax: 1.5,
+            total: 11.5,
+            paymentStatus: 'PAID',
+            type: 'regular',
+            items: [
+              {
+                id: absentItemId,
+                productId: 'a1000000-0000-4000-8000-0000000000b1',
+                productName: 'Burger',
+                quantity: 1,
+                unitPrice: 10,
+                originalTaxRate: 0.15,
+                appliedTaxRate: 0.15,
+                taxAmount: 1.5,
+                total: 11.5,
+                discount: 2,
+              },
+            ],
+            payments: [],
+          },
+        ]);
+
+        // A payload that INCLUDES discount_origin must persist the breakdown
+        // EXACTLY: mixed origins on one line are the whole point (a promotion
+        // on the item plus a manual discount on the order).
+        await service.syncInvoices(tenantId, [
+          {
+            id: valuedInvoiceId,
+            number: 'A-DO-002',
+            createdAt: new Date().toISOString(),
+            userId: 'd0000000-0000-4000-8000-00000000000d',
+            subtotal: 10,
+            totalTax: 1.5,
+            total: 11.5,
+            paymentStatus: 'PAID',
+            type: 'regular',
+            items: [
+              {
+                id: valuedItemId,
+                productId: 'a1000000-0000-4000-8000-0000000000b1',
+                productName: 'Burger',
+                quantity: 1,
+                unitPrice: 10,
+                originalTaxRate: 0.15,
+                appliedTaxRate: 0.15,
+                taxAmount: 1.5,
+                total: 11.5,
+                discount: 2,
+                discountOrigin: { manual: 5, promotion: 10 },
+              },
+            ],
+            payments: [],
+          },
+        ]);
+
+        const rows = (await dataSource.query(
+          `SELECT id::text,
                   discount_origin::text AS origin_text,
                   discount_origin = '{"manual":5,"promotion":10}'::jsonb
                     AS is_exact
              FROM invoice_items
             WHERE tenant_id = $1
             ORDER BY id::text`,
-        [tenantId],
-      );
-      expect(rows).toHaveLength(2);
-      const absentRow = rows.find((row) => row.id === absentItemId);
-      const valuedRow = rows.find((row) => row.id === valuedItemId);
-      expect(absentRow?.origin_text).toBeNull();
-      expect(valuedRow?.is_exact).toBe(true);
+          [tenantId],
+        )) as Array<{
+          id: string;
+          origin_text: string | null;
+          is_exact: boolean;
+        }>;
+        expect(rows).toHaveLength(2);
+        const absentRow = rows.find((row) => row.id === absentItemId);
+        const valuedRow = rows.find((row) => row.id === valuedItemId);
+        expect(absentRow?.origin_text).toBeNull();
+        expect(valuedRow?.is_exact).toBe(true);
 
-      // The categorical enum column must be GONE: replaced (not paired)
-      // by the jsonb amounts breakdown — a single categorical origin per
-      // line cannot express a line discounted by more than one origin.
-      const enumType = await dataSource.query(
-        `SELECT count(*)::int AS n
+        // The categorical enum column must be GONE: replaced (not paired)
+        // by the jsonb amounts breakdown — a single categorical origin per
+        // line cannot express a line discounted by more than one origin.
+        const enumType = (await dataSource.query(
+          `SELECT count(*)::int AS n
              FROM pg_type t
              JOIN pg_namespace n ON n.oid = t.typnamespace
             WHERE n.nspname = current_schema()
               AND t.typname = 'invoice_items_discount_origin_enum'`,
-      );
-      expect(enumType[0].n).toBe(0);
-      const columnType = await dataSource.query(
-        `SELECT data_type AS type
+        )) as Array<{ n: number }>;
+        expect(enumType[0].n).toBe(0);
+        const columnType = (await dataSource.query(
+          `SELECT data_type AS type
              FROM information_schema.columns
             WHERE table_schema = current_schema()
               AND table_name = 'invoice_items'
               AND column_name = 'discount_origin'`,
-      );
-      expect(columnType[0].type).toBe('jsonb');
+        )) as Array<{ type: string }>;
+        expect(columnType[0].type).toBe('jsonb');
 
-      // The DB-level whitelist lives in the schema-conventional chk_ check
-      // constraint (same convention as
-      // chk_invoice_items_credit_note_origin): keys must be a subset of the
-      // known origins and values must be positive numbers.
-      const checkConstraint = await dataSource.query(
-        `SELECT count(*)::int AS n
+        // The DB-level whitelist lives in the schema-conventional chk_ check
+        // constraint (same convention as
+        // chk_invoice_items_credit_note_origin): keys must be a subset of the
+        // known origins and values must be positive numbers.
+        const checkConstraint = (await dataSource.query(
+          `SELECT count(*)::int AS n
              FROM pg_constraint c
             WHERE c.conrelid = 'invoice_items'::regclass
               AND c.conname = 'chk_invoice_items_discount_origin_breakdown'
               AND c.contype = 'c'`,
-      );
-      expect(checkConstraint[0].n).toBe(1);
+        )) as Array<{ n: number }>;
+        expect(checkConstraint[0].n).toBe(1);
 
-      // NEGATIVE proof: the DATABASE itself rejects an unknown KEY, a
-      // NEGATIVE amount, and a non-numeric amount — nothing can silently
-      // store them, not even a writer that bypasses the DTO validation.
-      // The CHECK violation surfaces as SQLSTATE 23514
-      // (check_violation), the jsonb replacement of the enum's 22P02.
-      const rejected: Array<[string, Record<string, unknown>]> = [
-        ['unknown key', { 'boss-discount': 5 }],
-        ['negative amount', { manual: -3 }],
-        ['zero amount', { manual: 0 }],
-        ['non-numeric amount', { manual: '5' }],
-        ['empty object', {}],
-      ];
-      for (const [, breakdown] of rejected) {
-        let violationCode: string | undefined;
-        try {
-          await dataSource.query(
-            `INSERT INTO invoice_items (
+        // NEGATIVE proof: the DATABASE itself rejects an unknown KEY, a
+        // NEGATIVE amount, and a non-numeric amount — nothing can silently
+        // store them, not even a writer that bypasses the DTO validation.
+        // The CHECK violation surfaces as SQLSTATE 23514
+        // (check_violation), the jsonb replacement of the enum's 22P02.
+        const rejected: Array<[string, Record<string, unknown>]> = [
+          ['unknown key', { 'boss-discount': 5 }],
+          ['negative amount', { manual: -3 }],
+          ['zero amount', { manual: 0 }],
+          ['non-numeric amount', { manual: '5' }],
+          ['empty object', {}],
+        ];
+        for (const [, breakdown] of rejected) {
+          let violationCode: string | undefined;
+          try {
+            await dataSource.query(
+              `INSERT INTO invoice_items (
                  id, tenant_id, invoice_id, product_id, product_name, quantity,
                  unit_price, original_tax_rate, applied_tax_rate, tax_amount,
                  total, discount, discount_origin
@@ -1520,217 +1511,223 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
                  $1, $2, $3, 'a1000000-0000-4000-8000-0000000000b1', 'Burger',
                  1.0000, 10.00, 0.1500, 0.1500, 1.5000, 11.50, 0.00, $4
                )`,
-            [
-              randomUUID(),
-              tenantId,
-              absentInvoiceId,
-              JSON.stringify(breakdown),
-            ],
-          );
-        } catch (error) {
-          violationCode = (error as { code?: string }).code;
+              [
+                randomUUID(),
+                tenantId,
+                absentInvoiceId,
+                JSON.stringify(breakdown),
+              ],
+            );
+          } catch (error) {
+            violationCode = (error as { code?: string }).code;
+          }
+          expect(violationCode).toBe('23514');
         }
-        expect(violationCode).toBe('23514');
+        await expect(
+          dataSource.getRepository(InvoiceItem).countBy({
+            tenant_id: tenantId,
+          }),
+        ).resolves.toBe(2);
+      } finally {
+        try {
+          if (dataSource?.isInitialized) {
+            await dataSource.destroy();
+          }
+          await fixture.close();
+        } catch {
+          // Best-effort cleanup.
+        }
       }
-      await expect(
-        dataSource.getRepository(InvoiceItem).countBy({
-          tenant_id: tenantId,
-        }),
-      ).resolves.toBe(2);
-    } finally {
+    },
+    240000,
+  );
+
+  it(
+    'keeps credit-note replay provenance identity for the discount_origin breakdown: identical payload idempotent, changed provenance conflicts (D-A2)',
+    async () => {
+      const fixture = await createMigrationBuiltSchemaFixture();
+      const schema = fixture.schema;
+      const tenantId = randomUUID();
+      const saleInvoiceId = randomUUID();
+      const saleItemId = randomUUID();
+      const creditNoteId = randomUUID();
+      const creditItemId = randomUUID();
+      let dataSource: DataSource | null = null;
+
       try {
-        if (dataSource?.isInitialized) {
-          await dataSource.destroy();
-        }
-        await fixture.close();
-      } catch {
-        // Best-effort cleanup.
-      }
-    }
-  }, 240000);
+        // Superuser connection, same rationale as the breakdown persistence
+        // test above: the persistence contract is under test, not an RLS read
+        // path, and the schema is built exclusively by the real migrations.
+        dataSource = new DataSource({
+          type: 'postgres',
+          ...postgresConnection,
+          schema,
+          entities: [
+            Tenant,
+            Invoice,
+            InvoiceItem,
+            InvoiceItemModifier,
+            Payment,
+            InventorySyncReceipt,
+            InventorySyncOutbox,
+          ],
+          extra: {
+            allowExitOnIdle: true,
+            options: `-c search_path=${schema},public -c statement_timeout=15000`,
+          },
+        });
+        await dataSource.initialize();
 
-  it('keeps credit-note replay provenance identity for the discount_origin breakdown: identical payload idempotent, changed provenance conflicts (D-A2)', async () => {
-    const fixture = await createMigrationBuiltSchemaFixture();
-    const schema = fixture.schema;
-    const tenantId = randomUUID();
-    const saleInvoiceId = randomUUID();
-    const saleItemId = randomUUID();
-    const creditNoteId = randomUUID();
-    const creditItemId = randomUUID();
-    let dataSource: DataSource | null = null;
+        await dataSource.getRepository(Tenant).save(
+          dataSource.getRepository(Tenant).create({
+            id: tenantId,
+            name: 'Tenant Credit Replay Breakdown',
+            slug: normalizeTenantSlug('Tenant Credit Replay Breakdown'),
+          }),
+        );
 
-    try {
-      // Superuser connection, same rationale as the breakdown persistence
-      // test above: the persistence contract is under test, not an RLS read
-      // path, and the schema is built exclusively by the real migrations.
-      dataSource = new DataSource({
-        type: 'postgres',
-        ...postgresConnection,
-        schema,
-        entities: [
-          Tenant,
-          Invoice,
-          InvoiceItem,
-          InvoiceItemModifier,
-          Payment,
-          InventorySyncReceipt,
-          InventorySyncOutbox,
-        ],
-        extra: {
-          allowExitOnIdle: true,
-          options: `-c search_path=${schema},public -c statement_timeout=15000`,
-        },
-      });
-      await dataSource.initialize();
+        const service = new InvoicesService(
+          dataSource,
+          dataSource.getRepository(Invoice),
+          dataSource.getRepository(InvoiceItem),
+          dataSource.getRepository(Payment),
+          createMockAuthorizingUserRepository(),
+          {} as never,
+          dataSource.getRepository(InventorySyncReceipt),
+          dataSource.getRepository(InventorySyncOutbox),
+          { findActiveVersion: jest.fn(), getSnapshot: jest.fn() } as never,
+          { explode: jest.fn() } as never,
+        );
 
-      await dataSource.getRepository(Tenant).save(
-        dataSource.getRepository(Tenant).create({
-          id: tenantId,
-          name: 'Tenant Credit Replay Breakdown',
-          slug: normalizeTenantSlug('Tenant Credit Replay Breakdown'),
-        }),
-      );
+        // Origin regular sale the credit note points at.
+        await service.syncInvoices(tenantId, [
+          {
+            id: saleInvoiceId,
+            number: 'A-CRB-001',
+            createdAt: new Date().toISOString(),
+            userId: 'd0000000-0000-4000-8000-00000000000d',
+            subtotal: 10,
+            totalTax: 1.5,
+            total: 11.5,
+            paymentStatus: 'PAID',
+            type: 'regular',
+            items: [
+              {
+                id: saleItemId,
+                productId: 'a1000000-0000-4000-8000-0000000000b1',
+                productName: 'Burger',
+                quantity: 2,
+                unitPrice: 10,
+                originalTaxRate: 0.15,
+                appliedTaxRate: 0.15,
+                taxAmount: 1.5,
+                total: 11.5,
+                discount: 0,
+              },
+            ],
+            payments: [],
+          },
+        ]);
 
-      const service = new InvoicesService(
-        dataSource,
-        dataSource.getRepository(Invoice),
-        dataSource.getRepository(InvoiceItem),
-        dataSource.getRepository(Payment),
-        createMockAuthorizingUserRepository(),
-        {} as never,
-        dataSource.getRepository(InventorySyncReceipt),
-        dataSource.getRepository(InventorySyncOutbox),
-        { findActiveVersion: jest.fn(), getSnapshot: jest.fn() } as never,
-        { explode: jest.fn() } as never,
-      );
-
-      // Origin regular sale the credit note points at.
-      await service.syncInvoices(tenantId, [
-        {
-          id: saleInvoiceId,
-          number: 'A-CRB-001',
+        const creditNoteDto: SyncInvoiceDto = {
+          id: creditNoteId,
+          number: 'CN-CRB-001',
           createdAt: new Date().toISOString(),
           userId: 'd0000000-0000-4000-8000-00000000000d',
-          subtotal: 10,
-          totalTax: 1.5,
-          total: 11.5,
-          paymentStatus: 'PAID',
-          type: 'regular',
+          subtotal: -10,
+          totalTax: -1.5,
+          total: -11.5,
+          paymentStatus: 'REFUNDED',
+          type: 'creditNote',
+          originInvoiceId: saleInvoiceId,
+          refundReasonCode: 'DAMAGED_RETURN',
+          refundReasonPolicy: 'WASTE_NO_RESTOCK',
+          authorizedByUserId: 'manager-db',
+          authorizedByRole: 'manager',
           items: [
             {
-              id: saleItemId,
+              id: creditItemId,
               productId: 'a1000000-0000-4000-8000-0000000000b1',
               productName: 'Burger',
-              quantity: 2,
+              quantity: -1,
               unitPrice: 10,
               originalTaxRate: 0.15,
               appliedTaxRate: 0.15,
-              taxAmount: 1.5,
-              total: 11.5,
+              taxAmount: -1.5,
+              total: -11.5,
               discount: 0,
+              originInvoiceItemId: saleItemId,
+              // What the device sent travels with the credit note (the sync
+              // path persists what arrived); it becomes part of the replay
+              // payload identity below.
+              discountOrigin: { manual: 5 },
             },
           ],
           payments: [],
-        },
-      ]);
+        };
 
-      const creditNoteDto: SyncInvoiceDto = {
-        id: creditNoteId,
-        number: 'CN-CRB-001',
-        createdAt: new Date().toISOString(),
-        userId: 'd0000000-0000-4000-8000-00000000000d',
-        subtotal: -10,
-        totalTax: -1.5,
-        total: -11.5,
-        paymentStatus: 'REFUNDED',
-        type: 'creditNote',
-        originInvoiceId: saleInvoiceId,
-        refundReasonCode: 'DAMAGED_RETURN',
-        refundReasonPolicy: 'WASTE_NO_RESTOCK',
-        authorizedByUserId: 'manager-db',
-        authorizedByRole: 'manager',
-        items: [
-          {
-            id: creditItemId,
-            productId: 'a1000000-0000-4000-8000-0000000000b1',
-            productName: 'Burger',
-            quantity: -1,
-            unitPrice: 10,
-            originalTaxRate: 0.15,
-            appliedTaxRate: 0.15,
-            taxAmount: -1.5,
-            total: -11.5,
-            discount: 0,
-            originInvoiceItemId: saleItemId,
-            // What the device sent travels with the credit note (the sync
-            // path persists what arrived); it becomes part of the replay
-            // payload identity below.
-            discountOrigin: { manual: 5 },
-          },
-        ],
-        payments: [],
-      };
+        await service.syncInvoices(tenantId, [creditNoteDto], undefined, {
+          allowCreditNotes: true,
+        });
 
-      await service.syncInvoices(tenantId, [creditNoteDto], undefined, {
-        allowCreditNotes: true,
-      });
-
-      // The sync path persists what arrived — the breakdown lands as sent.
-      const storedOrigin = await dataSource.query(
-        `SELECT discount_origin::text AS origin
+        // The sync path persists what arrived — the breakdown lands as sent.
+        const storedOrigin = (await dataSource.query(
+          `SELECT discount_origin::text AS origin
              FROM invoice_items
             WHERE id = $1 AND tenant_id = $2`,
-        [creditItemId, tenantId],
-      );
-      expect(storedOrigin[0]?.origin).toBe('{"manual": 5}');
+          [creditItemId, tenantId],
+        )) as Array<{ origin: string | null }>;
+        expect(storedOrigin[0]?.origin).toBe('{"manual": 5}');
 
-      // IDENTICAL replay is idempotent: the credit note is recognized, not
-      // rewritten, and no second row appears.
-      await service.syncInvoices(tenantId, [creditNoteDto], undefined, {
-        allowCreditNotes: true,
-      });
-      await expect(
-        dataSource.getRepository(Invoice).countBy({
-          id: creditNoteId,
-          tenant_id: tenantId,
-        }),
-      ).resolves.toBe(1);
-      await expect(
-        dataSource.getRepository(InvoiceItem).countBy({
-          id: creditItemId,
-          tenant_id: tenantId,
-        }),
-      ).resolves.toBe(1);
-
-      // CHANGED provenance is a materially different payload: it must
-      // conflict, not silently rewrite the stored breakdown.
-      const rewritten = {
-        ...creditNoteDto,
-        items: creditNoteDto.items.map((item) => ({
-          ...item,
-          discountOrigin: { manual: 5, promotion: 10 },
-        })),
-      };
-      await expect(
-        service.syncInvoices(tenantId, [rewritten], undefined, {
+        // IDENTICAL replay is idempotent: the credit note is recognized, not
+        // rewritten, and no second row appears.
+        await service.syncInvoices(tenantId, [creditNoteDto], undefined, {
           allowCreditNotes: true,
-        }),
-      ).rejects.toThrow('conflicts with an existing credit-note invoice');
-      await expect(
-        dataSource.getRepository(InvoiceItem).countBy({
-          id: creditItemId,
-          tenant_id: tenantId,
-        }),
-      ).resolves.toBe(1);
-    } finally {
-      try {
-        if (dataSource?.isInitialized) {
-          await dataSource.destroy();
+        });
+        await expect(
+          dataSource.getRepository(Invoice).countBy({
+            id: creditNoteId,
+            tenant_id: tenantId,
+          }),
+        ).resolves.toBe(1);
+        await expect(
+          dataSource.getRepository(InvoiceItem).countBy({
+            id: creditItemId,
+            tenant_id: tenantId,
+          }),
+        ).resolves.toBe(1);
+
+        // CHANGED provenance is a materially different payload: it must
+        // conflict, not silently rewrite the stored breakdown.
+        const rewritten = {
+          ...creditNoteDto,
+          items: creditNoteDto.items.map((item) => ({
+            ...item,
+            discountOrigin: { manual: 5, promotion: 10 },
+          })),
+        };
+        await expect(
+          service.syncInvoices(tenantId, [rewritten], undefined, {
+            allowCreditNotes: true,
+          }),
+        ).rejects.toThrow('conflicts with an existing credit-note invoice');
+        await expect(
+          dataSource.getRepository(InvoiceItem).countBy({
+            id: creditItemId,
+            tenant_id: tenantId,
+          }),
+        ).resolves.toBe(1);
+      } finally {
+        try {
+          if (dataSource?.isInitialized) {
+            await dataSource.destroy();
+          }
+          await fixture.close();
+        } catch {
+          // Best-effort cleanup.
         }
-        await fixture.close();
-      } catch {
-        // Best-effort cleanup.
       }
-    }
-  }, 240000);
+    },
+    240000,
+  );
 });

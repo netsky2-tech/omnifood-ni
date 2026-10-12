@@ -6,10 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
-import {
-  User,
-  UserRole,
-} from '../../src/modules/identity/entities/user.entity';
+import { User, UserRole } from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import {
   OnboardingFeatureRolloutService,
@@ -68,18 +65,8 @@ describe('ONB1.10E: Feature Rollout & Cutover Sequence Verification (PostgreSQL 
     const cashierUserId = randomUUID();
 
     await dataSource.getRepository(Tenant).save([
-      {
-        id: tenantAId,
-        name: 'Tenant Rollout A',
-        slug: normalizeTenantSlug('Tenant Rollout A'),
-        is_active: true,
-      },
-      {
-        id: tenantBId,
-        name: 'Tenant Rollout B',
-        slug: normalizeTenantSlug('Tenant Rollout B'),
-        is_active: true,
-      },
+      { id: tenantAId, name: 'Tenant Rollout A', slug: normalizeTenantSlug('Tenant Rollout A'), is_active: true },
+      { id: tenantBId, name: 'Tenant Rollout B', slug: normalizeTenantSlug('Tenant Rollout B'), is_active: true },
     ]);
 
     await dataSource.getRepository(User).save([
@@ -114,23 +101,15 @@ describe('ONB1.10E: Feature Rollout & Cutover Sequence Verification (PostgreSQL 
         RolesGuard,
         PermissionsGuard,
         { provide: DataSource, useValue: dataSource },
-        {
-          provide: 'TenantRepository',
-          useValue: dataSource.getRepository(Tenant),
-        },
+        { provide: 'TenantRepository', useValue: dataSource.getRepository(Tenant) },
         { provide: 'UserRepository', useValue: dataSource.getRepository(User) },
-        {
-          provide: 'SecurityProfileRepository',
-          useValue: dataSource.getRepository(SecurityProfile),
-        },
+        { provide: 'SecurityProfileRepository', useValue: dataSource.getRepository(SecurityProfile) },
         OnboardingFeatureRolloutService,
       ],
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true }),
-    );
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
     await app.init();
 
     jwtService = moduleFixture.get<JwtService>(JwtService);
@@ -186,9 +165,7 @@ describe('ONB1.10E: Feature Rollout & Cutover Sequence Verification (PostgreSQL 
       .set('Authorization', `Bearer ${ownerTokenA}`)
       .send({ stage: 6 });
     expect(s6Res.status).toBe(200);
-    expect(s6Res.body.flags[OnboardingFeatureFlag.REQUIRED_CONFIG_V1]).toBe(
-      true,
-    );
+    expect(s6Res.body.flags[OnboardingFeatureFlag.REQUIRED_CONFIG_V1]).toBe(true);
     expect(s6Res.body.flags[OnboardingFeatureFlag.ACTIVATION_V1]).toBe(false);
 
     // Stage 10: founder tenant pilot (all flags enabled)
@@ -203,12 +180,8 @@ describe('ONB1.10E: Feature Rollout & Cutover Sequence Verification (PostgreSQL 
   });
 
   it('preserves multi-tenant isolation: Tenant B remains unconfigured when Tenant A advances', async () => {
-    expect(
-      rolloutService.isEnabled(tenantBId, OnboardingFeatureFlag.ACTIVATION_V1),
-    ).toBe(false);
-    expect(
-      rolloutService.isEnabled(tenantAId, OnboardingFeatureFlag.ACTIVATION_V1),
-    ).toBe(true);
+    expect(rolloutService.isEnabled(tenantBId, OnboardingFeatureFlag.ACTIVATION_V1)).toBe(false);
+    expect(rolloutService.isEnabled(tenantAId, OnboardingFeatureFlag.ACTIVATION_V1)).toBe(true);
   });
 
   it('rejects invalid cutover stage payload (< 1 or > 10)', async () => {

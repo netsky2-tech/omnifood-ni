@@ -1,6 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
-import { Test, TestingModule } from '@nestjs/testing';
-import { ActivationController } from './activation.controller';
+import { Test, TestingModule } from '@nestjs/testing';import { ActivationController } from './activation.controller';
 import { ActivationService } from '../services/activation.service';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { PermissionsGuard } from '../../identity/guards/permissions.guard';
@@ -138,12 +137,7 @@ describe('ActivationController', () => {
       documentType: 'SALE',
       invoiceId: 'invoice-1',
       terminalId,
-      invoice: {
-        id: 'invoice-1',
-        paymentStatus: 'paid',
-        items: [],
-        payments: [],
-      },
+      invoice: { id: 'invoice-1', paymentStatus: 'paid', items: [], payments: [] },
     };
 
     await controller.syncVerificationSale(req, 'att-1', dto as any);
@@ -158,10 +152,7 @@ describe('ActivationController', () => {
   it('rejects a missing or forged x-device-terminal-id for verification sync', async () => {
     await expect(
       controller.syncVerificationSale(
-        {
-          user: { tenant_id: tenantId, terminal_id: terminalId },
-          headers: {},
-        } as any,
+        { user: { tenant_id: tenantId, terminal_id: terminalId }, headers: {} } as any,
         'att-1',
         {} as any,
       ),
@@ -230,10 +221,9 @@ describe('ActivationController', () => {
     });
 
     expect(result).toBeDefined();
-    expect(activationService.reconcileFollowUpConvergence).toHaveBeenCalledWith(
-      tenantId,
-      'att-1',
-    );
+    expect(
+      activationService.reconcileFollowUpConvergence,
+    ).toHaveBeenCalledWith(tenantId, 'att-1');
   });
 
   it('delegates POST /onboarding/activation/attempts/:id/support-override', async () => {

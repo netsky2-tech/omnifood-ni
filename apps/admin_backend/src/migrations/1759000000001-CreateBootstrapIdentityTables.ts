@@ -42,7 +42,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * migration in this repository creates an extension, and `gen_random_uuid()` is
  * built into PostgreSQL 13+.
  */
-export class CreateBootstrapIdentityTables1759000000001 implements MigrationInterface {
+export class CreateBootstrapIdentityTables1759000000001
+  implements MigrationInterface
+{
   name = 'CreateBootstrapIdentityTables1759000000001';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

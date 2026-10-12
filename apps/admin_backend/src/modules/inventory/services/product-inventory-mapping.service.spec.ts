@@ -8,9 +8,7 @@ describe('ProductInventoryMappingService', () => {
   const insumoB = '00000000-0000-4000-8000-000000000012';
 
   it('selects only its tenant/product interval at exact supersession boundaries and sets RLS config', async () => {
-    const getOne = jest
-      .fn()
-      .mockResolvedValue({ id: 'version-b', insumo_id: insumoB });
+    const getOne = jest.fn().mockResolvedValue({ id: 'version-b', insumo_id: insumoB });
     const query = {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
@@ -40,17 +38,9 @@ describe('ProductInventoryMappingService', () => {
       "SELECT set_config('app.tenant_id', $1, true)",
       [tenant],
     );
-    expect(query.where).toHaveBeenCalledWith('mapping.tenant_id = :tenantId', {
-      tenantId: tenant,
-    });
-    expect(query.andWhere).toHaveBeenCalledWith(
-      'mapping.product_id = :productId',
-      { productId: product },
-    );
-    expect(query.andWhere).toHaveBeenCalledWith(
-      'mapping.effective_at <= :effectiveAt',
-      { effectiveAt: targetDate },
-    );
+    expect(query.where).toHaveBeenCalledWith('mapping.tenant_id = :tenantId', { tenantId: tenant });
+    expect(query.andWhere).toHaveBeenCalledWith('mapping.product_id = :productId', { productId: product });
+    expect(query.andWhere).toHaveBeenCalledWith('mapping.effective_at <= :effectiveAt', { effectiveAt: targetDate });
     expect(query.andWhere).toHaveBeenCalledWith(
       '(mapping.superseded_at IS NULL OR mapping.superseded_at > :effectiveAt)',
       { effectiveAt: targetDate },
@@ -67,10 +57,7 @@ describe('ProductInventoryMappingService', () => {
       effective_at: new Date('2026-01-01T00:00:00Z'),
       superseded_at: null,
     };
-    const save = jest.fn().mockImplementation(async (row) => ({
-      ...row,
-      id: row.id ?? 'version-b',
-    }));
+    const save = jest.fn().mockImplementation(async (row) => ({ ...row, id: row.id ?? 'version-b' }));
     const repo = {
       findOne: jest.fn().mockResolvedValue(active),
       create: jest.fn((row) => row),

@@ -20,12 +20,10 @@ describe('ReconciliationListService', () => {
   let sqlCalls: Array<{ sql: string; parameters?: unknown[] }>;
   let mockDataSource: { transaction: jest.Mock };
 
-  const bootstrap = (
-    options: {
-      countRow?: Record<string, unknown>;
-      dataRows?: Array<Record<string, unknown>>;
-    } = {},
-  ) => {
+  const bootstrap = (options: {
+    countRow?: Record<string, unknown>;
+    dataRows?: Array<Record<string, unknown>>;
+  } = {}) => {
     sqlCalls = [];
     mockDataSource = {
       transaction: jest.fn(
@@ -56,10 +54,7 @@ describe('ReconciliationListService', () => {
   it('binds the tenant context as the FIRST statement and tenant-parameterizes the queries', async () => {
     bootstrap();
 
-    await service.getReconciliationList(
-      TENANT_ID,
-      new ReconciliationListQueryDto(),
-    );
+    await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
 
     expect(mockDataSource.transaction).toHaveBeenCalledTimes(1);
     expect(sqlCalls.length).toBeGreaterThan(0);
@@ -76,10 +71,7 @@ describe('ReconciliationListService', () => {
   it('never opens a pooled-repository read (issue #592 tripwire by construction)', async () => {
     bootstrap();
 
-    await service.getReconciliationList(
-      TENANT_ID,
-      new ReconciliationListQueryDto(),
-    );
+    await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
 
     // The service's DataSource surface is transaction-only.
     expect(mockDataSource.transaction).toHaveBeenCalledTimes(1);
@@ -125,11 +117,11 @@ describe('ReconciliationListService', () => {
     const result = await service.getReconciliationList(TENANT_ID, {
       page: 3,
       limit: 25,
-    });
+    } as ReconciliationListQueryDto);
 
-    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'));
+    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'))!;
     // The last two bound parameters are LIMIT then OFFSET.
-    const params = dataCall.parameters;
+    const params = dataCall.parameters as unknown[];
     expect(params[params.length - 2]).toBe(25); // limit
     expect(params[params.length - 1]).toBe(50); // offset for page 3
     expect(dataCall.sql).toMatch(/LIMIT\s+\$\d+[\s\S]*OFFSET\s+\$\d+/);
@@ -142,9 +134,7 @@ describe('ReconciliationListService', () => {
       totalPages: 3, // ceil(60 / 25)
     });
     expect(result.reconciliations).toHaveLength(1);
-    expect(result.reconciliations[0].createdAt).toBe(
-      '2026-09-01T12:00:00.000Z',
-    );
+    expect(result.reconciliations[0].createdAt).toBe('2026-09-01T12:00:00.000Z');
   });
 
   it('filters by reconciliation status when provided (PENDIENTE vs MANUAL_OVERRIDE are distinct binds)', async () => {
@@ -152,13 +142,13 @@ describe('ReconciliationListService', () => {
 
     await service.getReconciliationList(TENANT_ID, {
       status: 'MANUAL_OVERRIDE',
-    });
+    } as ReconciliationListQueryDto);
 
-    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'));
+    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'))!;
     expect(dataCall.sql).toContain('p.reconciliation_status = $2');
     expect(dataCall.parameters).toContain('MANUAL_OVERRIDE');
     // The count query carries the same WHERE clause so total reflects the filter.
-    const countCall = sqlCalls.find((c) => c.sql.includes('COUNT'));
+    const countCall = sqlCalls.find((c) => c.sql.includes('COUNT'))!;
     expect(countCall.sql).toContain('p.reconciliation_status = $2');
     expect(countCall.parameters).toContain('MANUAL_OVERRIDE');
   });
@@ -168,9 +158,9 @@ describe('ReconciliationListService', () => {
 
     await service.getReconciliationList(TENANT_ID, {
       method: 'card',
-    });
+    } as ReconciliationListQueryDto);
 
-    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'));
+    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'))!;
     expect(dataCall.sql).toContain('p.method = $2');
     expect(dataCall.parameters).toContain('card');
   });
@@ -181,12 +171,12 @@ describe('ReconciliationListService', () => {
     await service.getReconciliationList(TENANT_ID, {
       startDate: '2026-09-01',
       endDate: '2026-09-03',
-    });
+    } as ReconciliationListQueryDto);
 
-    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'));
+    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'))!;
     expect(dataCall.sql).toContain('p.reconciled_at >= $2');
     expect(dataCall.sql).toContain('p.reconciled_at <= $3');
-    const params = dataCall.parameters;
+    const params = dataCall.parameters as unknown[];
     // startDate → midnight of that day; endDate → inclusive end of that day.
     expect(new Date(params[1] as string).toISOString()).toBe(
       '2026-09-01T00:00:00.000Z',
@@ -199,10 +189,7 @@ describe('ReconciliationListService', () => {
   it('scopes the row set exactly: parent tenant, non-canceled invoice, non-zero amount, voucher-bearing rows', async () => {
     bootstrap();
 
-    await service.getReconciliationList(
-      TENANT_ID,
-      new ReconciliationListQueryDto(),
-    );
+    await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
 
     const sql = sqlCalls[1].sql;
     expect(sql).toContain('i.tenant_id = $1');
@@ -218,20 +205,15 @@ describe('ReconciliationListService', () => {
   it('resolves terminalId through a LEFT join on the invoice shift and operatorName from users.name', async () => {
     bootstrap();
 
-    await service.getReconciliationList(
-      TENANT_ID,
-      new ReconciliationListQueryDto(),
-    );
+    await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
 
-    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'));
+    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'))!;
     // Both provenance joins are LEFT: rows survive a missing shift or an
     // unresolvable operator (honest nulls for legacy data).
     expect(dataCall.sql).toContain('LEFT JOIN cash_shift_sessions s');
     expect(dataCall.sql).toContain('ON s.id = i.shift_id AND s.tenant_id = $1');
     expect(dataCall.sql).toContain('LEFT JOIN users u');
-    expect(dataCall.sql).toContain(
-      'ON u.id::text = p.reconciled_by_user_id AND u.tenant_id = $1',
-    );
+    expect(dataCall.sql).toContain('ON u.id::text = p.reconciled_by_user_id AND u.tenant_id = $1');
     // Defense in depth: the joined tables carry the same tenant bind as the
     // parent join (mirrors the transaction-local RLS binding).
     expect(dataCall.sql).toContain('s.tenant_id = $1');
@@ -244,12 +226,9 @@ describe('ReconciliationListService', () => {
   it('exposes only the user display name — never email or any sensitive user column', async () => {
     bootstrap();
 
-    await service.getReconciliationList(
-      TENANT_ID,
-      new ReconciliationListQueryDto(),
-    );
+    await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
 
-    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'));
+    const dataCall = sqlCalls.find((c) => c.sql.includes('ORDER BY'))!;
     expect(dataCall.sql).not.toMatch(
       /email|password|pin_hash|hashed_refresh_token|security_version/i,
     );
@@ -258,12 +237,9 @@ describe('ReconciliationListService', () => {
   it('keeps the count query join-free so the LEFT JOINs can never overcount the total', async () => {
     bootstrap({ countRow: { total: 3 } });
 
-    const result = await service.getReconciliationList(
-      TENANT_ID,
-      new ReconciliationListQueryDto(),
-    );
+    const result = await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
 
-    const countCall = sqlCalls.find((c) => c.sql.includes('COUNT'));
+    const countCall = sqlCalls.find((c) => c.sql.includes('COUNT'))!;
     // Same FROM/WHERE shape over the parent join; the provenance joins are
     // not needed because they can neither filter nor multiply rows.
     expect(countCall.sql).toContain('FROM invoice_payments p');
@@ -292,26 +268,13 @@ describe('ReconciliationListService', () => {
     bootstrap({
       countRow: { total: 2 },
       dataRows: [
-        {
-          ...baseRow,
-          paymentId: 'pay-resolved',
-          terminalId: 'TERMINAL-01',
-          operatorName: 'Ana Operador',
-        },
+        { ...baseRow, paymentId: 'pay-resolved', terminalId: 'TERMINAL-01', operatorName: 'Ana Operador' },
         // Legacy MANUAL_OVERRIDE row: no matching shift/user → honest nulls.
-        {
-          ...baseRow,
-          paymentId: 'pay-legacy',
-          terminalId: null,
-          operatorName: null,
-        },
+        { ...baseRow, paymentId: 'pay-legacy', terminalId: null, operatorName: null },
       ],
     });
 
-    const result = await service.getReconciliationList(
-      TENANT_ID,
-      new ReconciliationListQueryDto(),
-    );
+    const result = await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
 
     expect(result.reconciliations[0].terminalId).toBe('TERMINAL-01');
     expect(result.reconciliations[0].operatorName).toBe('Ana Operador');
@@ -341,10 +304,7 @@ describe('ReconciliationListService', () => {
       ],
     });
 
-    const result = await service.getReconciliationList(
-      TENANT_ID,
-      new ReconciliationListQueryDto(),
-    );
+    const result = await service.getReconciliationList(TENANT_ID, new ReconciliationListQueryDto());
 
     expect(result.reconciliations).toEqual([
       {

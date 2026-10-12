@@ -29,7 +29,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * when the table is already present), every index uses `IF NOT EXISTS`, and
  * enum creation is guarded on the catalog.
  */
-export class CreateBootstrapLoyaltyTables1759000000004 implements MigrationInterface {
+export class CreateBootstrapLoyaltyTables1759000000004
+  implements MigrationInterface
+{
   name = 'CreateBootstrapLoyaltyTables1759000000004';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -159,7 +161,9 @@ export class CreateBootstrapLoyaltyTables1759000000004 implements MigrationInter
     await queryRunner.query('DROP TABLE IF EXISTS loyalty_rewards');
     await queryRunner.query('DROP TABLE IF EXISTS loyalty_programs');
 
-    await queryRunner.query('DROP TYPE IF EXISTS loyalty_rewards_status_enum');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS loyalty_rewards_status_enum',
+    );
     await queryRunner.query(
       'DROP TYPE IF EXISTS loyalty_rewards_reward_type_enum',
     );

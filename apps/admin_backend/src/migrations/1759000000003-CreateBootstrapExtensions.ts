@@ -19,7 +19,9 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * (or an equivalent) role; when the extension is already present the
  * statement succeeds regardless of privileges.
  */
-export class CreateBootstrapExtensions1759000000003 implements MigrationInterface {
+export class CreateBootstrapExtensions1759000000003
+  implements MigrationInterface
+{
   name = 'CreateBootstrapExtensions1759000000003';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

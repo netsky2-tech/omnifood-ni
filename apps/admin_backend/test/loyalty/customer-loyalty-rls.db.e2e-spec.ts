@@ -181,7 +181,7 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
         'customer-loyalty-rls-tenant-c',
         tenantDId,
         'customer-loyalty-rls-tenant-d',
-        normalizeTenantSlug('customer-loyalty-rls-tenant-a'),
+                normalizeTenantSlug('customer-loyalty-rls-tenant-a'),
         normalizeTenantSlug('customer-loyalty-rls-tenant-b'),
         normalizeTenantSlug('customer-loyalty-rls-tenant-c'),
         normalizeTenantSlug('customer-loyalty-rls-tenant-d'),

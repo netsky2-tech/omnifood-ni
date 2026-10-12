@@ -225,7 +225,7 @@ describe('InventoryMovementController device transport routes', () => {
         controller as unknown as {
           purchaseService: { listPurchases: unknown };
         }
-      ).purchaseService = { listPurchases };
+      ).purchaseService = { listPurchases } as never;
       const query = {
         startDate: '2026-01-01',
         endDate: '2026-01-31',
@@ -233,7 +233,7 @@ describe('InventoryMovementController device transport routes', () => {
         limit: 50,
       };
 
-      await controller.listPurchases(query, 'tenant-A');
+      await controller.listPurchases(query as never, 'tenant-A');
 
       expect(listPurchases).toHaveBeenCalledWith({
         tenantId: 'tenant-A',
@@ -269,10 +269,10 @@ describe('InventoryMovementController device transport routes', () => {
         controller as unknown as {
           purchaseService: { listPurchases: unknown };
         }
-      ).purchaseService = { listPurchases };
+      ).purchaseService = { listPurchases } as never;
 
       const result = (await controller.listPurchases(
-        { startDate: '2026-01-01' },
+        { startDate: '2026-01-01' } as never,
         'tenant-A',
       )) as Array<Record<string, unknown>>;
 
@@ -319,7 +319,7 @@ describe('InventoryMovementController device transport routes', () => {
         controller as unknown as {
           purchaseService: { previewPurchase: unknown };
         }
-      ).purchaseService = { previewPurchase };
+      ).purchaseService = { previewPurchase } as never;
       const dto = Object.assign(new PreviewPurchaseDto(), {
         insumoId: 'ins-1',
         supplierId: 'sup-1',
@@ -359,7 +359,7 @@ describe('InventoryMovementController device transport routes', () => {
         controller as unknown as {
           purchaseService: { previewPurchase: unknown };
         }
-      ).purchaseService = { previewPurchase };
+      ).purchaseService = { previewPurchase } as never;
       const dto = Object.assign(new PreviewPurchaseDto(), {
         insumoId: 'ins-1',
         supplierId: 'sup-1',
@@ -529,7 +529,7 @@ describe('InventoryMovementController device transport routes', () => {
         controller as unknown as {
           purchaseService: { recordPurchase: unknown };
         }
-      ).purchaseService = { recordPurchase };
+      ).purchaseService = { recordPurchase } as never;
       const dto = Object.assign(new ManualPurchaseDto(), {
         insumoId: 'ins-1',
         supplierId: 'sup-1',
@@ -573,16 +573,18 @@ describe('InventoryMovementController device transport routes', () => {
         unit_cost_nio: '350.2500',
         projected_cpp_nio: '360.1250',
       };
-      const recordPurchase = jest.fn().mockResolvedValue({
-        purchaseDocument: document,
-        insumo: {},
-        preview: {},
-      });
+      const recordPurchase = jest
+        .fn()
+        .mockResolvedValue({
+          purchaseDocument: document,
+          insumo: {},
+          preview: {},
+        });
       (
         controller as unknown as {
           purchaseService: { recordPurchase: unknown };
         }
-      ).purchaseService = { recordPurchase };
+      ).purchaseService = { recordPurchase } as never;
 
       const result = (await controller.recordManualPurchase(
         Object.assign(new ManualPurchaseDto(), {
@@ -612,7 +614,7 @@ describe('InventoryMovementController device transport routes', () => {
         controller as unknown as {
           purchaseService: { createSupplier: unknown };
         }
-      ).purchaseService = { createSupplier };
+      ).purchaseService = { createSupplier } as never;
       const dto = Object.assign(new CreateSupplierDto(), {
         name: 'Distribuidora Nica',
         phone: '5555-1234',
@@ -635,7 +637,7 @@ describe('InventoryMovementController device transport routes', () => {
         controller as unknown as {
           purchaseService: { listSuppliers: unknown };
         }
-      ).purchaseService = { listSuppliers };
+      ).purchaseService = { listSuppliers } as never;
 
       const query = Object.assign(new ListSuppliersQueryDto(), {
         includeInactive: true,
@@ -655,7 +657,7 @@ describe('InventoryMovementController device transport routes', () => {
         controller as unknown as {
           purchaseService: { updateSupplier: unknown };
         }
-      ).purchaseService = { updateSupplier };
+      ).purchaseService = { updateSupplier } as never;
 
       const dto = Object.assign(new UpdateSupplierDto(), {
         name: 'Nuevo Nombre',
@@ -713,11 +715,11 @@ describe('InventoryMovementController device transport routes', () => {
         controller as unknown as {
           purchaseService: { correctPurchase: unknown };
         }
-      ).purchaseService = { correctPurchase };
+      ).purchaseService = { correctPurchase } as never;
 
       const result = (await controller.correctPurchase(
         'pur-1',
-        { reason: 'Compra mal registrada' },
+        { reason: 'Compra mal registrada' } as never,
         'tenant-A',
       )) as { correctionDocument: Record<string, unknown> };
 

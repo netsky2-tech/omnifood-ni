@@ -194,15 +194,7 @@ describe('AuditLogsService POS forensic ledger reads (Real PostgreSQL DB, migrat
           signature, first_detected_at, last_seen_at)
        VALUES ($1, $2, 'POS-1', $4, 41, 44, $6, '2026-09-01T08:00:00Z', '2026-09-02T08:00:00Z'),
               ($3, $5, 'POS-1', $7, 41, 44, $6, '2026-09-01T08:00:00Z', '2026-09-02T08:00:00Z')`,
-      [
-        alertAId,
-        tenantAId,
-        alertBId,
-        userA1Id,
-        tenantBId,
-        SHARED_SIGNATURE,
-        userB1Id,
-      ],
+      [alertAId, tenantAId, alertBId, userA1Id, tenantBId, SHARED_SIGNATURE, userB1Id],
     );
 
     // The fixture's runtime role: production-shaped (NOSUPERUSER NOBYPASSRLS,
@@ -244,7 +236,7 @@ describe('AuditLogsService POS forensic ledger reads (Real PostgreSQL DB, migrat
     // predicate inside the bound transaction, NOT from a policy. If a future
     // slice promotes these tables to direct RLS, this expectation must be
     // flipped WITH that slice — the manifest gate will force the moment.
-    const facts = await admin.query(
+    const facts = (await admin.query(
       `SELECT c.relname, c.relrowsecurity AS rls_enabled
          FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -252,7 +244,7 @@ describe('AuditLogsService POS forensic ledger reads (Real PostgreSQL DB, migrat
           AND c.relname IN ('audit_logs', 'audit_integrity_alerts')
         ORDER BY c.relname`,
       [fixture.schema],
-    );
+    )) as Array<{ relname: string; rls_enabled: boolean }>;
 
     expect(facts).toEqual([
       { relname: 'audit_integrity_alerts', rls_enabled: false },

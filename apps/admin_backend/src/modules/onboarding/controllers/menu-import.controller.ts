@@ -9,10 +9,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { MenuImportService } from '../services/menu-import.service';
-import {
-  MenuImportRequestDto,
-  MenuImportSummary,
-} from '../dto/menu-import.dto';
+import { MenuImportRequestDto, MenuImportSummary } from '../dto/menu-import.dto';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';

@@ -1,9 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import {
@@ -1180,10 +1176,9 @@ describe('InventoryPurchaseService', () => {
       const result = await service.listPurchases({ tenantId: 'tenant-A' });
 
       expect(result).toHaveLength(1);
-      expect(manager.query).toHaveBeenCalledWith(
-        TENANT_CONTEXT_SET_CONFIG_SQL,
-        ['tenant-A'],
-      );
+      expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+        'tenant-A',
+      ]);
       // Tenant predicate is declared on the query builder before any filter.
       expect(listQueryBuilder.where).toHaveBeenCalledWith(
         'doc.tenant_id = :tenantId',
@@ -1246,9 +1241,9 @@ describe('InventoryPurchaseService', () => {
     });
 
     it('rejects a blank tenant id before borrowing a connection', async () => {
-      await expect(service.listPurchases({ tenantId: '   ' })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.listPurchases({ tenantId: '   ' }),
+      ).rejects.toThrow(BadRequestException);
       expect(transaction).not.toHaveBeenCalled();
       expect(manager.query).not.toHaveBeenCalled();
     });
@@ -1263,10 +1258,9 @@ describe('InventoryPurchaseService', () => {
       const result = await service.listSuppliers({ tenantId: 'tenant-A' });
 
       expect(result).toHaveLength(1);
-      expect(manager.query).toHaveBeenCalledWith(
-        TENANT_CONTEXT_SET_CONFIG_SQL,
-        ['tenant-A'],
-      );
+      expect(manager.query).toHaveBeenCalledWith(TENANT_CONTEXT_SET_CONFIG_SQL, [
+        'tenant-A',
+      ]);
       expect(manager.find).toHaveBeenCalledWith(Supplier, {
         where: { tenant_id: 'tenant-A', is_active: true },
         order: { name: 'ASC' },
@@ -1350,29 +1344,20 @@ describe('InventoryPurchaseService', () => {
         is_active: true,
       };
 
-      manager.findOne.mockImplementation(
-        (entity: unknown, options: { where: Record<string, unknown> }) => {
-          if (entity === Supplier) {
-            if (
-              options.where.id === 'sup-1' &&
-              options.where.tenant_id === 'tenant-A'
-            ) {
-              return Promise.resolve({ ...existingSupplier });
-            }
-            if (
-              options.where.name === 'Proveedor Nuevo' &&
-              options.where.tenant_id === 'tenant-A'
-            ) {
-              return Promise.resolve(null);
-            }
+      manager.findOne.mockImplementation((entity: unknown, options: { where: Record<string, unknown> }) => {
+        if (entity === Supplier) {
+          if (options.where.id === 'sup-1' && options.where.tenant_id === 'tenant-A') {
+            return Promise.resolve({ ...existingSupplier });
           }
-          return Promise.resolve(null);
-        },
-      );
+          if (options.where.name === 'Proveedor Nuevo' && options.where.tenant_id === 'tenant-A') {
+            return Promise.resolve(null);
+          }
+        }
+        return Promise.resolve(null);
+      });
 
-      manager.save = jest.fn(
-        (_entity: unknown, payload: Record<string, unknown>) =>
-          Promise.resolve(payload),
+      manager.save = jest.fn((_entity: unknown, payload: Record<string, unknown>) =>
+        Promise.resolve(payload),
       );
 
       const updated = await service.updateSupplier({
@@ -1427,17 +1412,13 @@ describe('InventoryPurchaseService', () => {
         name: 'Proveedor Dos',
       };
 
-      manager.findOne.mockImplementation(
-        (entity: unknown, options: { where: Record<string, unknown> }) => {
-          if (entity === Supplier) {
-            if (options.where.id === 'sup-1')
-              return Promise.resolve(existingSupplier);
-            if (options.where.name === 'Proveedor Dos')
-              return Promise.resolve(duplicateSupplier);
-          }
-          return Promise.resolve(null);
-        },
-      );
+      manager.findOne.mockImplementation((entity: unknown, options: { where: Record<string, unknown> }) => {
+        if (entity === Supplier) {
+          if (options.where.id === 'sup-1') return Promise.resolve(existingSupplier);
+          if (options.where.name === 'Proveedor Dos') return Promise.resolve(duplicateSupplier);
+        }
+        return Promise.resolve(null);
+      });
 
       await expect(
         service.updateSupplier({

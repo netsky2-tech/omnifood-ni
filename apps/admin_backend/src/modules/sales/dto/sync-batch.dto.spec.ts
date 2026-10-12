@@ -368,8 +368,7 @@ describe('SyncBatchEnvelopeDto', () => {
       events: [
         {
           event_id: 'evt-rev-1',
-          idempotency_key:
-            'loyalty:reversal:00000000-0000-4000-8000-00000000000b',
+          idempotency_key: 'loyalty:reversal:00000000-0000-4000-8000-00000000000b',
           transaction: {
             ...loyaltyRecord.events[0].transaction,
             transactionType: 'REVERSAL',

@@ -79,110 +79,126 @@ const runDown = (dataSource: DataSource) =>
 const readSlugs = (dataSource: DataSource, schema: string) =>
   dataSource.query(
     `SELECT id, name, slug FROM "${schema}".tenants ORDER BY created_at, id`,
-  );
+  ) as Promise<Array<{ id: string; name: string; slug: string }>>;
 
 describe('AddTenantSlug1809350000000 (db)', () => {
-  it('backfills slugs with the canonical normalization rule', async () => {
-    await withFreshSchema(async (dataSource, schema) => {
-      const tenantA = randomUUID();
-      const tenantB = randomUUID();
-      const tenantC = randomUUID();
-      await dataSource.query(INSERT_TENANT_SQL(schema), [
-        tenantA,
-        'Mi Negocio',
-        new Date(),
-      ]);
-      await dataSource.query(INSERT_TENANT_SQL(schema), [
-        tenantB,
-        'Café El Nica!',
-        new Date(),
-      ]);
-      await dataSource.query(INSERT_TENANT_SQL(schema), [
-        tenantC,
-        'Q80 Food   Park 2024',
-        new Date(),
-      ]);
+  it(
+    'backfills slugs with the canonical normalization rule',
+    async () => {
+      await withFreshSchema(async (dataSource, schema) => {
+        const tenantA = randomUUID();
+        const tenantB = randomUUID();
+        const tenantC = randomUUID();
+        await dataSource.query(INSERT_TENANT_SQL(schema), [
+          tenantA,
+          'Mi Negocio',
+          new Date(),
+        ]);
+        await dataSource.query(INSERT_TENANT_SQL(schema), [
+          tenantB,
+          'Café El Nica!',
+          new Date(),
+        ]);
+        await dataSource.query(INSERT_TENANT_SQL(schema), [
+          tenantC,
+          'Q80 Food   Park 2024',
+          new Date(),
+        ]);
 
-      await runUp(dataSource);
+        await runUp(dataSource);
 
-      const slugs = await readSlugs(dataSource, schema);
-      const byId = new Map(slugs.map((row) => [row.id, row.slug]));
-      expect(byId.get(tenantA)).toBe('mi-negocio');
-      expect(byId.get(tenantB)).toBe('caf-el-nica');
-      expect(byId.get(tenantC)).toBe('q80-food-park-2024');
-    });
-  }, 30000);
+        const slugs = await readSlugs(dataSource, schema);
+        const byId = new Map(slugs.map((row) => [row.id, row.slug]));
+        expect(byId.get(tenantA)).toBe('mi-negocio');
+        expect(byId.get(tenantB)).toBe('caf-el-nica');
+        expect(byId.get(tenantC)).toBe('q80-food-park-2024');
+      });
+    },
+    30000,
+  );
 
-  it('resolves normalization collisions deterministically with -2 suffixes', async () => {
-    await withFreshSchema(async (dataSource, schema) => {
-      const first = randomUUID();
-      const second = randomUUID();
-      const insertedAt = new Date();
-      await dataSource.query(INSERT_TENANT_SQL(schema), [
-        first,
-        'Mi Negocio',
-        insertedAt,
-      ]);
-      await dataSource.query(INSERT_TENANT_SQL(schema), [
-        second,
-        'MI   NEGOCIO',
-        new Date(insertedAt.getTime() + 1),
-      ]);
+  it(
+    'resolves normalization collisions deterministically with -2 suffixes',
+    async () => {
+      await withFreshSchema(async (dataSource, schema) => {
+        const first = randomUUID();
+        const second = randomUUID();
+        const insertedAt = new Date();
+        await dataSource.query(INSERT_TENANT_SQL(schema), [
+          first,
+          'Mi Negocio',
+          insertedAt,
+        ]);
+        await dataSource.query(INSERT_TENANT_SQL(schema), [
+          second,
+          'MI   NEGOCIO',
+          new Date(insertedAt.getTime() + 1),
+        ]);
 
-      await runUp(dataSource);
+        await runUp(dataSource);
 
-      const slugs = await readSlugs(dataSource, schema);
-      const byId = new Map(slugs.map((row) => [row.id, row.slug]));
-      expect(byId.get(first)).toBe('mi-negocio');
-      expect(byId.get(second)).toBe('mi-negocio-2');
-    });
-  }, 30000);
+        const slugs = await readSlugs(dataSource, schema);
+        const byId = new Map(slugs.map((row) => [row.id, row.slug]));
+        expect(byId.get(first)).toBe('mi-negocio');
+        expect(byId.get(second)).toBe('mi-negocio-2');
+      });
+    },
+    30000,
+  );
 
-  it('enforces NOT NULL and global uniqueness after the backfill', async () => {
-    await withFreshSchema(async (dataSource, schema) => {
-      await dataSource.query(INSERT_TENANT_SQL(schema), [
-        randomUUID(),
-        'Mi Negocio',
-        new Date(),
-      ]);
-      await runUp(dataSource);
-
-      await expect(
-        dataSource.query('INSERT INTO tenants (id, name) VALUES ($1, $2)', [
+  it(
+    'enforces NOT NULL and global uniqueness after the backfill',
+    async () => {
+      await withFreshSchema(async (dataSource, schema) => {
+        await dataSource.query(INSERT_TENANT_SQL(schema), [
           randomUUID(),
-          'Slugless Tenant',
-        ]),
-      ).rejects.toBeInstanceOf(QueryFailedError);
-      await expect(
-        dataSource.query(
-          'INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)',
-          [randomUUID(), 'Other Tenant', 'mi-negocio'],
-        ),
-      ).rejects.toBeInstanceOf(QueryFailedError);
-    });
-  }, 30000);
+          'Mi Negocio',
+          new Date(),
+        ]);
+        await runUp(dataSource);
 
-  it('is reversible and re-derives identical slugs on a fresh up()', async () => {
-    await withFreshSchema(async (dataSource, schema) => {
-      const tenantId = randomUUID();
-      await dataSource.query(INSERT_TENANT_SQL(schema), [
-        tenantId,
-        'Mi Negocio',
-        new Date(),
-      ]);
-      await runUp(dataSource);
-      const afterUp = await readSlugs(dataSource, schema);
+        await expect(
+          dataSource.query(
+            'INSERT INTO tenants (id, name) VALUES ($1, $2)',
+            [randomUUID(), 'Slugless Tenant'],
+          ),
+        ).rejects.toBeInstanceOf(QueryFailedError);
+        await expect(
+          dataSource.query(
+            'INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)',
+            [randomUUID(), 'Other Tenant', 'mi-negocio'],
+          ),
+        ).rejects.toBeInstanceOf(QueryFailedError);
+      });
+    },
+    30000,
+  );
 
-      await runDown(dataSource);
+  it(
+    'is reversible and re-derives identical slugs on a fresh up()',
+    async () => {
+      await withFreshSchema(async (dataSource, schema) => {
+        const tenantId = randomUUID();
+        await dataSource.query(INSERT_TENANT_SQL(schema), [
+          tenantId,
+          'Mi Negocio',
+          new Date(),
+        ]);
+        await runUp(dataSource);
+        const afterUp = await readSlugs(dataSource, schema);
 
-      const columns = await dataSource.query(
-        `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'tenants' AND column_name = 'slug'`,
-      );
-      expect(columns).toHaveLength(0);
+        await runDown(dataSource);
 
-      await runUp(dataSource);
-      const afterRerun = await readSlugs(dataSource, schema);
-      expect(afterRerun).toEqual(afterUp);
-    });
-  }, 30000);
+        const columns = (await dataSource.query(
+          `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'tenants' AND column_name = 'slug'`,
+        )) as unknown[];
+        expect(columns).toHaveLength(0);
+
+        await runUp(dataSource);
+        const afterRerun = await readSlugs(dataSource, schema);
+        expect(afterRerun).toEqual(afterUp);
+      });
+    },
+    30000,
+  );
 });

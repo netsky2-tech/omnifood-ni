@@ -160,16 +160,18 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
           discount: input.itemDiscount,
         },
       ],
-      payments: (input.payments ?? []).map((payment): Partial<Payment> => ({
-        method: payment.method,
-        amount: payment.amount,
-        currency: 'NIO',
-        exchangeRate: 1.0,
-        amountNio: payment.amountNio,
-        changeGiven: 0,
-        changeCurrency: 'NIO',
-        reconciliationStatus: payment.reconciliationStatus ?? 'PENDIENTE',
-      })),
+      payments: (input.payments ?? []).map(
+        (payment): Partial<Payment> => ({
+          method: payment.method,
+          amount: payment.amount,
+          currency: 'NIO',
+          exchangeRate: 1.0,
+          amountNio: payment.amountNio,
+          changeGiven: 0,
+          changeCurrency: 'NIO',
+          reconciliationStatus: payment.reconciliationStatus ?? 'PENDIENTE',
+        }),
+      ),
     });
   };
 
@@ -228,7 +230,9 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
         totalTax: 150,
         total: 1150,
         itemDiscount: 100,
-        payments: [{ method: 'CASH', amount: 1150, amountNio: 1150 }],
+        payments: [
+          { method: 'CASH', amount: 1150, amountNio: 1150 },
+        ],
       });
       await seedInvoice(manager, {
         id: invoiceA2Id,
@@ -241,12 +245,7 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
         total: 575,
         itemDiscount: 50,
         payments: [
-          {
-            method: 'CARD',
-            amount: 575,
-            amountNio: 575,
-            reconciliationStatus: 'PENDIENTE',
-          },
+          { method: 'CARD', amount: 575, amountNio: 575, reconciliationStatus: 'PENDIENTE' },
         ],
       });
 
@@ -311,12 +310,7 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
         total: 900,
         itemDiscount: 0,
         payments: [
-          {
-            method: 'CARD',
-            amount: 900,
-            amountNio: 900,
-            reconciliationStatus: 'PENDIENTE',
-          },
+          { method: 'CARD', amount: 900, amountNio: 900, reconciliationStatus: 'PENDIENTE' },
         ],
       });
 
@@ -360,21 +354,11 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
     // latestHighSeverity carries the change_log row id (c.id) and picks the
     // newest CRITICAL/WARNING row — capture all seeded high-severity row ids
     // for exact tenant-scoped assertions.
-    const highRows = await admin.query(
+    const highRows = (await admin.query(
       `SELECT tenant_id, id, severity FROM change_log WHERE severity IN ('CRITICAL', 'WARNING')`,
-    );
-    auditHighRowIdsByTenant.set(
-      tenantAId,
-      highRows
-        .filter((row) => row.tenant_id === tenantAId)
-        .map((row) => row.id),
-    );
-    auditHighRowIdsByTenant.set(
-      tenantBId,
-      highRows
-        .filter((row) => row.tenant_id === tenantBId)
-        .map((row) => row.id),
-    );
+    )) as Array<{ tenant_id: string; id: string; severity: string }>;
+    auditHighRowIdsByTenant.set(tenantAId, highRows.filter((row) => row.tenant_id === tenantAId).map((row) => row.id));
+    auditHighRowIdsByTenant.set(tenantBId, highRows.filter((row) => row.tenant_id === tenantBId).map((row) => row.id));
 
     // Lightest workable assembly: services instantiated directly against the
     // runtime-role DataSource, exactly like the pooled-reads RLS gate.
@@ -442,8 +426,7 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
       report.preDiscountSalesNio,
       2,
     );
-    const discountRate =
-      (report.totalDiscountsNio / report.preDiscountSalesNio) * 100;
+    const discountRate = (report.totalDiscountsNio / report.preDiscountSalesNio) * 100;
     expect(discountRate).toBeCloseTo((150 / 1650) * 100, 6);
   });
 
@@ -475,10 +458,7 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
     expect(byDate.get(startKey)?.netSalesNio).toBe(500);
     expect(byDate.get(endKey)?.netSalesNio).toBe(1000);
     // Parity: Σ days.netSalesNio === dashboard netSalesNio over the window.
-    const seriesTotal = series.days.reduce(
-      (sum, day) => sum + day.netSalesNio,
-      0,
-    );
+    const seriesTotal = series.days.reduce((sum, day) => sum + day.netSalesNio, 0);
     expect(seriesTotal).toBe(1500);
     // Tenant B's 900-sales day never leaks into A's buckets.
     for (const day of series.days) {
@@ -532,12 +512,8 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
 
     expect(fresh.state).toBe('COMPLETE');
     expect(stale.state).toBe('STALE');
-    const freshDevices = fresh.perTerminal.map(
-      (terminal) => terminal.terminalId,
-    );
-    const staleDevices = stale.perTerminal.map(
-      (terminal) => terminal.terminalId,
-    );
+    const freshDevices = fresh.perTerminal.map((terminal) => terminal.terminalId);
+    const staleDevices = stale.perTerminal.map((terminal) => terminal.terminalId);
     expect(freshDevices).not.toContain(deviceB);
     expect(staleDevices).not.toContain(deviceA);
   });
@@ -579,8 +555,7 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
   // ------------------------------------------------------------------------
 
   it('card reconciliation summary: tenant A counts only its own pending voucher', async () => {
-    const summary =
-      await cardReconciliation.getCardReconciliationSummary(tenantAId);
+    const summary = await cardReconciliation.getCardReconciliationSummary(tenantAId);
 
     expect(summary.pendingCount).toBe(1);
     expect(summary.pendingAmountNio).toBe(575);
@@ -590,8 +565,7 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
   });
 
   it('card reconciliation summary: tenant B counts only its own pending voucher', async () => {
-    const summary =
-      await cardReconciliation.getCardReconciliationSummary(tenantBId);
+    const summary = await cardReconciliation.getCardReconciliationSummary(tenantBId);
 
     expect(summary.pendingCount).toBe(1);
     expect(summary.pendingAmountNio).toBe(900);

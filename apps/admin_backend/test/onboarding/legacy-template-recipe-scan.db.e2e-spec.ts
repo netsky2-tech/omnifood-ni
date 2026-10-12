@@ -1,11 +1,15 @@
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
-import { LegacyTemplateRecipeScanService } from '../../src/modules/onboarding/services/legacy-template-recipe-scan.service';
+import {
+  LegacyTemplateRecipeScanService,
+} from '../../src/modules/onboarding/services/legacy-template-recipe-scan.service';
 import { IndustryTemplate } from '../../src/modules/onboarding/entities/industry-template.entity';
 import { TemplateProduct } from '../../src/modules/onboarding/entities/template-product.entity';
 import { TemplateRecipeItem } from '../../src/modules/onboarding/entities/template-recipe-item.entity';
 import { TemplateInsumo } from '../../src/modules/onboarding/entities/template-insumo.entity';
-import { LegacyOnboardingMigrationReceipt } from '../../src/modules/onboarding/entities/legacy-migration-receipt.entity';
+import {
+  LegacyOnboardingMigrationReceipt,
+} from '../../src/modules/onboarding/entities/legacy-migration-receipt.entity';
 import { OnboardingSession } from '../../src/modules/onboarding/entities/onboarding-session.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
@@ -13,7 +17,9 @@ import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { InvoiceItem } from '../../src/modules/sales/entities/invoice-item.entity';
 import { Invoice } from '../../src/modules/sales/entities/invoice.entity';
 import { Payment } from '../../src/modules/sales/entities/payment.entity';
-import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-item-modifier.entity';
+import {
+  InvoiceItemModifier,
+} from '../../src/modules/sales/entities/invoice-item-modifier.entity';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
 import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
 
@@ -97,21 +103,17 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
   const rvAtomicId = randomUUID();
 
   async function countAdmin(table: string, where: string, params: unknown[]) {
-    const rows = await admin.query(
+    const rows = (await admin.query(
       `SELECT count(*)::int AS count FROM ${table} WHERE ${where}`,
       params,
-    );
+    )) as Array<{ count: number }>;
     return rows[0].count;
   }
 
   async function seedTenantWithProducts(tenantId: string, label: string) {
     await admin.query(
       `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
-      [
-        tenantId,
-        `${label} ${tenantId}`,
-        normalizeTenantSlug(`${label} ${tenantId}`),
-      ],
+      [tenantId, `${label} ${tenantId}`, normalizeTenantSlug(`${label} ${tenantId}`)],
     );
     return admin.query(
       `INSERT INTO products (id, tenant_id, name, uom)
@@ -179,14 +181,11 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
     // recipe + unknown-provenance recipe.
     const scanProductId = randomUUID();
     const scanCustomProductId = randomUUID();
-    await admin.query(
-      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
-      [
-        tenantScanId,
-        `Scan Tenant (S4b) ${tenantScanId}`,
-        normalizeTenantSlug(`Scan Tenant (S4b) ${tenantScanId}`),
-      ],
-    );
+    await admin.query(`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`, [
+      tenantScanId,
+      `Scan Tenant (S4b) ${tenantScanId}`,
+      normalizeTenantSlug(`Scan Tenant (S4b) ${tenantScanId}`),
+    ]);
     await admin.query(
       `INSERT INTO products (id, tenant_id, name, uom) VALUES ($1, $2, 'Capuchino 8oz', 'UN'), ($3, $2, 'Plato Secreto', 'UN')`,
       [scanProductId, tenantScanId, scanCustomProductId],
@@ -212,14 +211,11 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
 
     // tenantUsage: NO session; usage comes from an invoice item only.
     const usageProductId = randomUUID();
-    await admin.query(
-      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
-      [
-        tenantUsageId,
-        `Usage Tenant (S4b) ${tenantUsageId}`,
-        normalizeTenantSlug(`Usage Tenant (S4b) ${tenantUsageId}`),
-      ],
-    );
+    await admin.query(`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`, [
+      tenantUsageId,
+      `Usage Tenant (S4b) ${tenantUsageId}`,
+      normalizeTenantSlug(`Usage Tenant (S4b) ${tenantUsageId}`),
+    ]);
     await admin.query(
       `INSERT INTO products (id, tenant_id, name, uom) VALUES ($1, $2, 'Espresso Simple', 'UN')`,
       [usageProductId, tenantUsageId],
@@ -235,14 +231,11 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
 
     // tenantSession: activated session, unused template recipe, no usage.
     const sessionProductId = randomUUID();
-    await admin.query(
-      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
-      [
-        tenantSessionId,
-        `Session Tenant (S4b) ${tenantSessionId}`,
-        normalizeTenantSlug(`Session Tenant (S4b) ${tenantSessionId}`),
-      ],
-    );
+    await admin.query(`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`, [
+      tenantSessionId,
+      `Session Tenant (S4b) ${tenantSessionId}`,
+      normalizeTenantSlug(`Session Tenant (S4b) ${tenantSessionId}`),
+    ]);
     await admin.query(
       `INSERT INTO products (id, tenant_id, name, uom) VALUES ($1, $2, 'Latte 12oz', 'UN')`,
       [sessionProductId, tenantSessionId],
@@ -276,14 +269,11 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
 
     // tenantAtomic: unused template recipe for the rollback proof.
     const atomicProductId = randomUUID();
-    await admin.query(
-      `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
-      [
-        tenantAtomicId,
-        `Atomic Tenant (S4b) ${tenantAtomicId}`,
-        normalizeTenantSlug(`Atomic Tenant (S4b) ${tenantAtomicId}`),
-      ],
-    );
+    await admin.query(`INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`, [
+      tenantAtomicId,
+      `Atomic Tenant (S4b) ${tenantAtomicId}`,
+      normalizeTenantSlug(`Atomic Tenant (S4b) ${tenantAtomicId}`),
+    ]);
     await admin.query(
       `INSERT INTO products (id, tenant_id, name, uom) VALUES ($1, $2, 'Espresso Doble', 'UN')`,
       [atomicProductId, tenantAtomicId],
@@ -389,11 +379,9 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
     );
     // No receipt anywhere for the synthetic tenants.
     expect(
-      await countAdmin(
-        'legacy_onboarding_migration_receipts',
-        'tenant_id = ANY($1)',
-        [[tenantScanId, tenantUsageId, tenantSessionId, tenantAtomicId]],
-      ),
+      await countAdmin('legacy_onboarding_migration_receipts', 'tenant_id = ANY($1)', [
+        [tenantScanId, tenantUsageId, tenantSessionId, tenantAtomicId],
+      ]),
     ).toBe(0);
   });
 
@@ -409,23 +397,23 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
     });
     expect(report.receipts).toHaveLength(2);
 
-    const moved = report.receipts.find(
-      (r) => r.recipeVersionId === rvScanTemplateId,
-    );
+    const moved = report.receipts.find((r) => r.recipeVersionId === rvScanTemplateId);
     expect(moved?.decision).toBe('MOVE_TO_DRAFT');
     expect(moved?.receiptId).toBeDefined();
 
-    const unknown = report.receipts.find(
-      (r) => r.recipeVersionId === rvScanCustomId,
-    );
+    const unknown = report.receipts.find((r) => r.recipeVersionId === rvScanCustomId);
     expect(unknown?.decision).toBe('UNKNOWN_PROVENANCE');
     expect(unknown?.receiptId).toBeDefined();
 
     // Recipe mutation persisted, tenant-local.
-    const recipe = await admin.query(
+    const recipe = (await admin.query(
       `SELECT is_active, publication_state, suggestion_state FROM recipe_versions WHERE id = $1`,
       [rvScanTemplateId],
-    );
+    )) as Array<{
+      is_active: boolean;
+      publication_state: string;
+      suggestion_state: string;
+    }>;
     expect(recipe[0]).toEqual({
       is_active: false,
       publication_state: 'DRAFT',
@@ -433,14 +421,11 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
     });
 
     // Unknown provenance never mutates.
-    const customRecipe = await admin.query(
+    const customRecipe = (await admin.query(
       `SELECT is_active, publication_state FROM recipe_versions WHERE id = $1`,
       [rvScanCustomId],
-    );
-    expect(customRecipe[0]).toEqual({
-      is_active: true,
-      publication_state: 'PUBLISHED',
-    });
+    )) as Array<{ is_active: boolean; publication_state: string }>;
+    expect(customRecipe[0]).toEqual({ is_active: true, publication_state: 'PUBLISHED' });
 
     // Both receipts persisted, tenant-local, scan type.
     expect(
@@ -459,20 +444,15 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
     expect(report.receipts[0].decision).toBe('KEEP_PUBLISHED');
     expect(report.migratedToDraftCount).toBe(0);
 
-    const recipe = await admin.query(
+    const recipe = (await admin.query(
       `SELECT is_active, publication_state FROM recipe_versions WHERE id = $1`,
       [rvUsageId],
-    );
-    expect(recipe[0]).toEqual({
-      is_active: true,
-      publication_state: 'PUBLISHED',
-    });
+    )) as Array<{ is_active: boolean; publication_state: string }>;
+    expect(recipe[0]).toEqual({ is_active: true, publication_state: 'PUBLISHED' });
     expect(
-      await countAdmin(
-        'legacy_onboarding_migration_receipts',
-        'tenant_id = $1',
-        [tenantUsageId],
-      ),
+      await countAdmin('legacy_onboarding_migration_receipts', 'tenant_id = $1', [
+        tenantUsageId,
+      ]),
     ).toBe(1);
   });
 
@@ -483,36 +463,28 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
     expect(report.receipts[0].decision).toBe('KEEP_PUBLISHED');
     expect(report.migratedToDraftCount).toBe(0);
 
-    const recipe = await admin.query(
+    const recipe = (await admin.query(
       `SELECT is_active, publication_state FROM recipe_versions WHERE id = $1`,
       [rvSessionUsageId],
-    );
-    expect(recipe[0]).toEqual({
-      is_active: true,
-      publication_state: 'PUBLISHED',
-    });
+    )) as Array<{ is_active: boolean; publication_state: string }>;
+    expect(recipe[0]).toEqual({ is_active: true, publication_state: 'PUBLISHED' });
   });
 
   it('never touches a foreign tenant recipe or writes foreign receipts', async () => {
     // After the bound tenants' scans above ran, the foreign tenant's own
     // unused template recipe must be untouched and carry no receipts: the
     // scan's tenant filter and the bound context never reached it.
-    const foreignRecipe = await admin.query(
+    const foreignRecipe = (await admin.query(
       `SELECT is_active, publication_state FROM recipe_versions WHERE id = $1`,
       [rvForeignId],
-    );
-    expect(foreignRecipe[0]).toEqual({
-      is_active: true,
-      publication_state: 'PUBLISHED',
-    });
+    )) as Array<{ is_active: boolean; publication_state: string }>;
+    expect(foreignRecipe[0]).toEqual({ is_active: true, publication_state: 'PUBLISHED' });
 
     // No receipts were ever attributed to the foreign tenant by other scans.
     expect(
-      await countAdmin(
-        'legacy_onboarding_migration_receipts',
-        'tenant_id = $1',
-        [tenantForeignId],
-      ),
+      await countAdmin('legacy_onboarding_migration_receipts', 'tenant_id = $1', [
+        tenantForeignId,
+      ]),
     ).toBe(0);
   });
 
@@ -525,9 +497,7 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
       `REVOKE INSERT ON TABLE legacy_onboarding_migration_receipts FROM "${fixture.runtimeRoleName}"`,
     );
     try {
-      await expect(
-        scanService.scanAndRemediate(tenantAtomicId),
-      ).rejects.toThrow();
+      await expect(scanService.scanAndRemediate(tenantAtomicId)).rejects.toThrow();
     } finally {
       await admin.query(
         `GRANT INSERT ON TABLE legacy_onboarding_migration_receipts TO "${fixture.runtimeRoleName}"`,
@@ -535,21 +505,23 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
     }
 
     // The mutation did NOT survive the failed receipt write.
-    const recipe = await admin.query(
+    const recipe = (await admin.query(
       `SELECT is_active, publication_state, suggestion_state FROM recipe_versions WHERE id = $1`,
       [rvAtomicId],
-    );
+    )) as Array<{
+      is_active: boolean;
+      publication_state: string;
+      suggestion_state: string;
+    }>;
     expect(recipe[0]).toEqual({
       is_active: true,
       publication_state: 'PUBLISHED',
       suggestion_state: 'CONFIRMED',
     });
     expect(
-      await countAdmin(
-        'legacy_onboarding_migration_receipts',
-        'tenant_id = $1',
-        [tenantAtomicId],
-      ),
+      await countAdmin('legacy_onboarding_migration_receipts', 'tenant_id = $1', [
+        tenantAtomicId,
+      ]),
     ).toBe(0);
 
     // After re-granting, the same scan succeeds end to end.
@@ -559,20 +531,15 @@ describe('legacy template recipe scan under migrated RLS (Real PostgreSQL DB, mi
       scannedCount: 1,
       migratedToDraftCount: 1,
     });
-    const recipeAfter = await admin.query(
+    const recipeAfter = (await admin.query(
       `SELECT is_active, publication_state FROM recipe_versions WHERE id = $1`,
       [rvAtomicId],
-    );
-    expect(recipeAfter[0]).toEqual({
-      is_active: false,
-      publication_state: 'DRAFT',
-    });
+    )) as Array<{ is_active: boolean; publication_state: string }>;
+    expect(recipeAfter[0]).toEqual({ is_active: false, publication_state: 'DRAFT' });
     expect(
-      await countAdmin(
-        'legacy_onboarding_migration_receipts',
-        'tenant_id = $1',
-        [tenantAtomicId],
-      ),
+      await countAdmin('legacy_onboarding_migration_receipts', 'tenant_id = $1', [
+        tenantAtomicId,
+      ]),
     ).toBe(1);
   });
 });

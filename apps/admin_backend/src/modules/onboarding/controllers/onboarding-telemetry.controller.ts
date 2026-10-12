@@ -39,7 +39,9 @@ interface RequestWithUser extends Request {
 @UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
 @UseInterceptors(TenantInterceptor)
 export class OnboardingTelemetryController {
-  constructor(private readonly telemetryService: OnboardingTelemetryService) {}
+  constructor(
+    private readonly telemetryService: OnboardingTelemetryService,
+  ) {}
 
   private requireTenant(tenantId?: string): string {
     if (!tenantId?.trim()) {

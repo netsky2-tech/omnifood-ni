@@ -140,7 +140,7 @@ describe('serializeCashShiftSession', () => {
     expect(result.difference_usd).toBeNull();
   });
 
-  it("coerces a closed shift's final counts and differences into numbers", () => {
+  it('coerces a closed shift\'s final counts and differences into numbers', () => {
     const result = serializeCashShiftSession(
       makeShift({
         status: CashShiftStatus.CLOSED,

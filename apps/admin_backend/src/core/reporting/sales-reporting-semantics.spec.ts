@@ -641,7 +641,10 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
       expect(folded.loyalty).toBe(totals.loyaltyDiscountNio);
       expect(folded.unattributed).toBe(totals.discountOriginUnattributedNio);
       expect(
-        folded.manual + folded.promotion + folded.loyalty + folded.unattributed,
+        folded.manual +
+          folded.promotion +
+          folded.loyalty +
+          folded.unattributed,
       ).toBe(totals.totalDiscountsNio);
     });
   });
@@ -938,9 +941,9 @@ describe('SalesReportingSemantics (spec §7.1)', () => {
       const totals = computeSalesReportingTotals(rows);
 
       // The §7.2 parity invariant is about netSalesNio and still holds.
-      expect(days.reduce((sum, d) => sum + d.netSalesNio, 0)).toBe(
-        totals.netSalesNio,
-      );
+      expect(
+        days.reduce((sum, d) => sum + d.netSalesNio, 0),
+      ).toBe(totals.netSalesNio);
       expect(totals.netSalesNio).toBe(250);
       expect(totals.completedTicketsNetNio).toBe(400);
       expect(totals.completedTicketCount).toBe(2);

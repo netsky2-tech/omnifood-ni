@@ -228,7 +228,7 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
     async () => {
       const result = await service.getReconciliationList(tenantAId, {
         status: 'MANUAL_OVERRIDE',
-      });
+      } as ReconciliationListQueryDto);
 
       expect(result.pagination.total).toBe(1);
       expect(result.reconciliations).toHaveLength(1);
@@ -253,7 +253,7 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
     async () => {
       const result = await service.getReconciliationList(tenantAId, {
         status: 'PENDIENTE',
-      });
+      } as ReconciliationListQueryDto);
 
       // payA2 (invoice RA-002, voucher-bearing) only: payA3 rides the
       // canceled invoice RA-003 and payB1 belongs to tenant B.
@@ -308,25 +308,25 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
 
       // Resolved row: invoice RA-005 linked to the tenant-A shift, operator
       // is a real users row.
-      const resolved = byPayment.get(payA5Id);
+      const resolved = byPayment.get(payA5Id)!;
       expect(resolved.terminalId).toBe('TERMINAL-01');
       expect(resolved.operatorName).toBe('Ana Operador');
 
       // Legacy MANUAL_OVERRIDE row: reconciled_by_user_id is a typed string
       // ('user-1') matching no user row — the row SURVIVES with honest nulls
       // (no crash, no fabricated operator).
-      const legacy = byPayment.get(payA1Id);
+      const legacy = byPayment.get(payA1Id)!;
       expect(legacy.reconciledByUserId).toBe('user-1');
       expect(legacy.operatorName).toBeNull();
       expect(legacy.terminalId).toBeNull(); // invoice has no shift
 
       // Never-reconciled row: no operator declared, invoice without shift.
-      expect(byPayment.get(payA2Id).terminalId).toBeNull();
-      expect(byPayment.get(payA2Id).operatorName).toBeNull();
+      expect(byPayment.get(payA2Id)!.terminalId).toBeNull();
+      expect(byPayment.get(payA2Id)!.operatorName).toBeNull();
 
       // payA4: reconciled by the bogus 'user-2' string, no shift either.
-      expect(byPayment.get(payA4Id).terminalId).toBeNull();
-      expect(byPayment.get(payA4Id).operatorName).toBeNull();
+      expect(byPayment.get(payA4Id)!.terminalId).toBeNull();
+      expect(byPayment.get(payA4Id)!.operatorName).toBeNull();
 
       // Tenant isolation with the new joins: tenant B's shift/user never
       // leak into tenant A's listing.
@@ -345,7 +345,7 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
       );
       const bRow = tenantBResult.reconciliations.find(
         (r) => r.paymentId === payB1Id,
-      );
+      )!;
       expect(bRow.terminalId).toBe('TERMINAL-B');
       expect(bRow.operatorName).toBe('Beto Operador');
     },
@@ -358,7 +358,7 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
       const result = await service.getReconciliationList(tenantAId, {
         startDate: '2026-09-01',
         endDate: '2026-09-03',
-      });
+      } as ReconciliationListQueryDto);
 
       // Only payA1 was reconciled inside 2026-09-01..2026-09-03;
       // payA4 (2026-08-15) falls outside, the never-reconciled rows have

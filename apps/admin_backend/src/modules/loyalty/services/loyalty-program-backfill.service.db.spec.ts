@@ -723,7 +723,9 @@ describe('LoyaltyProgramBackfillService (db)', () => {
         actorUserId,
       );
 
-      expect(report.customers).toEqual([{ customerId, unassignedRowCount: 2 }]);
+      expect(report.customers).toEqual([
+        { customerId, unassignedRowCount: 2 },
+      ]);
       expect(report.transactionsAttributed).toBe(2);
     });
   });

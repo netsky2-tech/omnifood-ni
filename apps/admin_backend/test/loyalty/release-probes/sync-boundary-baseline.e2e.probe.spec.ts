@@ -71,16 +71,8 @@ import { InvoiceItemModifier } from '../../../src/modules/sales/entities/invoice
 // (same migration-built tables, no mocks).
 import { Customer } from '../../../src/modules/customers/entities/customer.entity';
 import { CustomerPointTransaction } from '../../../src/modules/customers/entities/customer-point-transaction.entity';
-import {
-  LoyaltyProgram,
-  LoyaltyProgramStatus,
-  LoyaltyProgramType,
-} from '../../../src/modules/loyalty/entities/loyalty-program.entity';
-import {
-  RewardDefinition,
-  RewardStatus,
-  RewardType,
-} from '../../../src/modules/loyalty/entities/reward-definition.entity';
+import { LoyaltyProgram, LoyaltyProgramStatus, LoyaltyProgramType } from '../../../src/modules/loyalty/entities/loyalty-program.entity';
+import { RewardDefinition, RewardStatus, RewardType } from '../../../src/modules/loyalty/entities/reward-definition.entity';
 import { CustomerLoyaltyAccountProjection } from '../../../src/modules/loyalty/entities/customer-loyalty-account-projection.entity';
 import { ForensicAlert } from '../../../src/modules/inventory/entities/forensic-alert.entity';
 import { Promotion } from '../../../src/modules/promotions/entities/promotion.entity';
@@ -170,42 +162,16 @@ const postgresConnection = {
 // inbound endpoint's own queries (e.g. ProductInventoryMappingVersion): all
 // map to migration-built tables.
 const ENTITIES = [
-  Tenant,
-  User,
-  SecurityProfile,
-  AuditLog,
-  AuditIntegrityAlert,
-  DeviceSyncCredential,
-  ActivationAttempt,
-  InventorySyncReceipt,
-  InventorySyncOutbox,
-  InventoryMovement,
-  Insumo,
-  Product,
-  ProductInventoryMappingVersion,
-  Recipe,
-  RecipeVersion,
-  RecipeDetail,
-  Supplier,
-  Warehouse,
-  UomConversion,
-  Batch,
-  Invoice,
-  InvoiceItem,
-  Payment,
-  InvoiceItemModifier,
-  CatalogValue,
-  Customer,
-  CustomerPointTransaction,
-  LoyaltyProgram,
-  RewardDefinition,
+  Tenant, User, SecurityProfile, AuditLog, AuditIntegrityAlert,
+  DeviceSyncCredential, ActivationAttempt,
+  InventorySyncReceipt, InventorySyncOutbox, InventoryMovement,
+  Insumo, Product, ProductInventoryMappingVersion, Recipe, RecipeVersion,
+  RecipeDetail, Supplier, Warehouse, UomConversion, Batch,
+  Invoice, InvoiceItem, Payment, InvoiceItemModifier, CatalogValue,
+  Customer, CustomerPointTransaction, LoyaltyProgram, RewardDefinition,
   CustomerLoyaltyAccountProjection,
-  ForensicAlert,
-  Promotion,
-  ModifierGroup,
-  ModifierOption,
-  CategoryModifierGroup,
-  ProductModifierGroup,
+  ForensicAlert, Promotion, ModifierGroup, ModifierOption,
+  CategoryModifierGroup, ProductModifierGroup,
 ];
 
 describe('T1 sync-boundary baseline: real Nest HTTP sync surface (release probes)', () => {

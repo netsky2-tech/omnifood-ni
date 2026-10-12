@@ -293,7 +293,7 @@ export class MenuImportService {
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
-    return Buffer.from(buffer);
+    return Buffer.from(buffer as unknown as ArrayBuffer);
   }
 
   private parseSheet(sheet: ExcelJS.Worksheet): ParsedSheet {
@@ -320,19 +320,19 @@ export class MenuImportService {
       if (rowNumber === 1) return;
 
       const productName = this.cellText(
-        row.getCell(headerMap.get('producto')).value,
+        row.getCell(headerMap.get('producto') as number).value,
       ).trim();
       const priceText = this.cellText(
-        row.getCell(headerMap.get('precio')).value,
+        row.getCell(headerMap.get('precio') as number).value,
       );
       const ingredientName = this.cellText(
-        row.getCell(headerMap.get('insumo')).value,
+        row.getCell(headerMap.get('insumo') as number).value,
       ).trim();
       const quantityText = this.cellText(
-        row.getCell(headerMap.get('cantidad')).value,
+        row.getCell(headerMap.get('cantidad') as number).value,
       );
       const unit = this.cellText(
-        row.getCell(headerMap.get('unidad')).value,
+        row.getCell(headerMap.get('unidad') as number).value,
       ).trim();
 
       // Skip fully blank rows silently.

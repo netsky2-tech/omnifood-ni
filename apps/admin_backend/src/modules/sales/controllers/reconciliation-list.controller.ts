@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  UseGuards,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, UseInterceptors } from '@nestjs/common';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';

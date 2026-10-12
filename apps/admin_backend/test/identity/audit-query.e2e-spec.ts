@@ -42,8 +42,9 @@ const boundTransactionManager = {
       useValue: {
         entityMetadatas: [],
         getRepository: jest.fn().mockReturnValue({}),
-        transaction: jest.fn(async (work: (manager: unknown) => unknown) =>
-          work(boundTransactionManager),
+        transaction: jest.fn(
+          async (work: (manager: unknown) => unknown) =>
+            work(boundTransactionManager),
         ),
       },
     },

@@ -309,15 +309,20 @@ export class DeviceLinkingService {
           ),
         ];
         const deviceSet = new Set(deviceIds);
-        const latestStatusByDevice = new Map<string, ActivationAttemptStatus>();
+        const latestStatusByDevice = new Map<
+          string,
+          ActivationAttemptStatus
+        >();
         if (deviceIds.length > 0) {
-          const attempts = await manager.getRepository(ActivationAttempt).find({
-            where: [
-              { tenantId: trimmedTenantId, candidateTerminalId: In(deviceIds) },
-              { tenantId: trimmedTenantId, trustedTerminalId: In(deviceIds) },
-            ],
-            order: { startedAt: 'DESC' },
-          });
+          const attempts = await manager
+            .getRepository(ActivationAttempt)
+            .find({
+              where: [
+                { tenantId: trimmedTenantId, candidateTerminalId: In(deviceIds) },
+                { tenantId: trimmedTenantId, trustedTerminalId: In(deviceIds) },
+              ],
+              order: { startedAt: 'DESC' },
+            });
           for (const attempt of attempts) {
             // Rows arrive ordered by startedAt DESC, so the first status
             // observed per device is its latest attempt.

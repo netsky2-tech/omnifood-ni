@@ -19,10 +19,9 @@ describe('AuditEventsService', () => {
     service = new AuditEventsService({ findEvents } as never);
   };
 
+
   describe('getEvents (slice 6b — GET /operations/audit/events)', () => {
-    const makeRow = (
-      overrides: Partial<Record<keyof ChangeLog, unknown>> = {},
-    ) =>
+    const makeRow = (overrides: Partial<Record<keyof ChangeLog, unknown>> = {}) =>
       ({
         id: 'log-1',
         tenant_id: TENANT_ID,

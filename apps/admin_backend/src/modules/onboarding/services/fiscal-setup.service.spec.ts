@@ -130,68 +130,68 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
 
       const result = await service.getFiscalSetup(tenantId);
 
-      const paramMap: Record<string, unknown> = {
-        tenantId,
-        businessName: 'Café Managua',
-        ruc: 'J0310000001234',
-        regime: FiscalRegime.REGIMEN_GENERAL,
-        taxRateIva: 0.15,
-        pricesIncludeTax: true,
-        commercialFxSpread: 36.5,
+    const paramMap: Record<string, unknown> = {
+      tenantId,
+      businessName: 'Café Managua',
+      ruc: 'J0310000001234',
+      regime: FiscalRegime.REGIMEN_GENERAL,
+      taxRateIva: 0.15,
+      pricesIncludeTax: true,
+      commercialFxSpread: 36.5,
         // BXW-007 U1 rev 2: unconfigured params read as null (absence must
         // look like absence, never rebased to a default).
         operationMode: null,
         checkoutFxMode: null,
-        // D-21 (#554): the response must expose the authorization fields so the
-        // dashboard can prefill the form and render its expiry banner.
-        dgiAuthorizationCode: null,
-        dgiAuthorizationIssuedAt: null,
-        dgiAuthorizationExpiresAt: null,
-        // SOHO P3 (D-A): unconfigured discount caps read as null — absence
-        // must look like absence, never rebased to a default.
-        maxDiscountAmount: null,
-        maxDiscountPercent: null,
-      };
+      // D-21 (#554): the response must expose the authorization fields so the
+      // dashboard can prefill the form and render its expiry banner.
+      dgiAuthorizationCode: null,
+      dgiAuthorizationIssuedAt: null,
+      dgiAuthorizationExpiresAt: null,
+      // SOHO P3 (D-A): unconfigured discount caps read as null — absence
+      // must look like absence, never rebased to a default.
+      maxDiscountAmount: null,
+      maxDiscountPercent: null,
+    };
 
-      expect(result).toEqual(paramMap);
+    expect(result).toEqual(paramMap);
+  });
+
+  it('exposes DGI authorization fields from active parameter rows', async () => {
+    tenantRepo.findOne.mockResolvedValueOnce({
+      ...mockTenant,
+      name: 'Café Managua',
+      ruc: 'J0310000001234',
     });
 
-    it('exposes DGI authorization fields from active parameter rows', async () => {
-      tenantRepo.findOne.mockResolvedValueOnce({
-        ...mockTenant,
-        name: 'Café Managua',
-        ruc: 'J0310000001234',
-      });
-
-      const dgiRow = (
-        paramKey: string,
-        paramValue: string,
-      ): SystemParametersConfig => ({
-        id: paramKey,
-        tenant_id: tenantId,
-        tenant: mockTenant,
-        paramKey,
-        paramValue,
-        version: 1,
-        effectiveFrom: new Date(),
-        effectiveTo: null,
-        isActive: true,
-        createdBy: userId,
-        createdAt: new Date(),
-      });
-
-      mockManager.find.mockResolvedValueOnce([
-        dgiRow('DGI_AUTHORIZATION_CODE', 'DGI-SFC-2024-00123'),
-        dgiRow('DGI_AUTHORIZATION_ISSUED_AT', '2025-01-15'),
-        dgiRow('DGI_AUTHORIZATION_EXPIRES_AT', '2026-01-15'),
-      ]);
-
-      const result = await service.getFiscalSetup(tenantId);
-
-      expect(result.dgiAuthorizationCode).toBe('DGI-SFC-2024-00123');
-      expect(result.dgiAuthorizationIssuedAt).toBe('2025-01-15');
-      expect(result.dgiAuthorizationExpiresAt).toBe('2026-01-15');
+    const dgiRow = (
+      paramKey: string,
+      paramValue: string,
+    ): SystemParametersConfig => ({
+      id: paramKey,
+      tenant_id: tenantId,
+      tenant: mockTenant,
+      paramKey,
+      paramValue,
+      version: 1,
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+      isActive: true,
+      createdBy: userId,
+      createdAt: new Date(),
     });
+
+    mockManager.find.mockResolvedValueOnce([
+      dgiRow('DGI_AUTHORIZATION_CODE', 'DGI-SFC-2024-00123'),
+      dgiRow('DGI_AUTHORIZATION_ISSUED_AT', '2025-01-15'),
+      dgiRow('DGI_AUTHORIZATION_EXPIRES_AT', '2026-01-15'),
+    ]);
+
+    const result = await service.getFiscalSetup(tenantId);
+
+    expect(result.dgiAuthorizationCode).toBe('DGI-SFC-2024-00123');
+    expect(result.dgiAuthorizationIssuedAt).toBe('2025-01-15');
+    expect(result.dgiAuthorizationExpiresAt).toBe('2026-01-15');
+  });
 
     it('returns default values when system parameters have not yet been configured', async () => {
       tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
@@ -256,7 +256,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
           regime: FiscalRegime.CUOTA_FIJA,
           businessName: 'Café Central',
           ruc: 'J0310000055555',
-          commercialFxSpread: spread,
+          commercialFxSpread: spread as number,
           pricesIncludeTax: true,
           operationMode: TenantOperationMode.FOODPARK_QSR,
           checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -264,7 +264,9 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
 
         await expect(
           service.configureFiscalSetup(tenantId, dto),
-        ).rejects.toThrow('commercialFxSpread must be between 10 and 100');
+        ).rejects.toThrow(
+          'commercialFxSpread must be between 10 and 100',
+        );
       },
     );
 
@@ -541,7 +543,9 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
             );
           const all = [...rows, ...savedRows];
           const candidates = criteria?.where?.paramKey
-            ? all.filter((row) => row.paramKey === criteria.where.paramKey)
+            ? all.filter(
+                (row) => row.paramKey === criteria.where!.paramKey,
+              )
             : all;
           const governing = new Map<string, SystemParametersConfig>();
           for (const row of candidates) {
@@ -635,9 +639,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     });
 
     it('clears a blank code with a superseding null tombstone — never a stored empty string (D-16 spirit)', async () => {
-      configureActiveRows([
-        dgiParamRow('DGI_AUTHORIZATION_CODE', 'DGI-OLD-001', 1),
-      ]);
+      configureActiveRows([dgiParamRow('DGI_AUTHORIZATION_CODE', 'DGI-OLD-001', 1)]);
 
       const dto: FiscalSetupDto = {
         regime: FiscalRegime.CUOTA_FIJA,
@@ -846,7 +848,9 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
             (row as { paramKey?: string }).paramKey === paramKey,
         );
 
-    const baseDto = (extra: Partial<FiscalSetupDto> = {}): FiscalSetupDto => ({
+    const baseDto = (
+      extra: Partial<FiscalSetupDto> = {},
+    ): FiscalSetupDto => ({
       regime: FiscalRegime.CUOTA_FIJA,
       businessName: 'Cafetín Las Palmeras',
       ruc: 'J0310000055555',
@@ -899,7 +903,9 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     });
 
     it('clears a persisted cap with a superseding null tombstone on explicit null (append-only)', async () => {
-      configureActiveRows([capParamRow('MAX_DISCOUNT_AMOUNT', 500, 1)]);
+      configureActiveRows([
+        capParamRow('MAX_DISCOUNT_AMOUNT', 500, 1),
+      ]);
 
       const result = await service.configureFiscalSetup(
         tenantId,
@@ -924,7 +930,9 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     });
 
     it('clears a persisted percent cap with a superseding null tombstone on explicit null (numeric twin)', async () => {
-      configureActiveRows([capParamRow('MAX_DISCOUNT_PERCENT', 10, 1)]);
+      configureActiveRows([
+        capParamRow('MAX_DISCOUNT_PERCENT', 10, 1),
+      ]);
 
       const result = await service.configureFiscalSetup(
         tenantId,

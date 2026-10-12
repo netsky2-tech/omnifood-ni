@@ -54,7 +54,9 @@ export function resolveTrustProxyHops(input: TrustProxyHopsInput): number {
 
   const parsed = Number(raw);
   const valid =
-    Number.isInteger(parsed) && parsed >= 1 && parsed <= TRUST_PROXY_HOPS_MAX;
+    Number.isInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= TRUST_PROXY_HOPS_MAX;
 
   if (!valid) {
     throw new TrustProxyConfigError(

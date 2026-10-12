@@ -67,9 +67,7 @@ describe('resolveCorsOrigins', () => {
 
       expect(message).toContain(CORS_ORIGINS_ENV);
       expect(message).toMatch(/position 2\b/);
-      expect(message).not.toContain(
-        'https://user:secret-pass@soho.nhilospos.com',
-      );
+      expect(message).not.toContain('https://user:secret-pass@soho.nhilospos.com');
       expect(message).not.toContain('user:secret-pass');
       expect(message).not.toContain('soho.nhilospos.com');
     });

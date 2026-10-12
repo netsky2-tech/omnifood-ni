@@ -9,10 +9,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import {
-  NEGATIVE_STOCK_POLICY,
-  type NegativeStockPolicy,
-} from '../entities/insumo.entity';
+import { NEGATIVE_STOCK_POLICY, type NegativeStockPolicy } from '../entities/insumo.entity';
 
 export class UpdateInsumoDto {
   @IsOptional()
@@ -67,7 +64,10 @@ export class UpdateInsumoDto {
   is_perishable?: boolean;
 
   @IsOptional()
-  @IsIn([NEGATIVE_STOCK_POLICY.ALLOW_TEMPORARY, NEGATIVE_STOCK_POLICY.RESTRICT])
+  @IsIn([
+    NEGATIVE_STOCK_POLICY.ALLOW_TEMPORARY,
+    NEGATIVE_STOCK_POLICY.RESTRICT,
+  ])
   negativeStockPolicy?: NegativeStockPolicy;
 
   @IsOptional()

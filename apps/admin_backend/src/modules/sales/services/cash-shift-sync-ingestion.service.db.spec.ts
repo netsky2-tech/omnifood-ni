@@ -46,7 +46,7 @@ function posSession(
     finalCountedNio: 5200,
     differenceNio: 200,
     ...overrides,
-  };
+  } as CashShiftSessionSyncItemDto;
 }
 
 interface SessionRowSnapshot {
@@ -223,9 +223,7 @@ describe('CashShiftSyncIngestionService (db - Real PostgreSQL, migration-built s
     'OPEN -> CLOSED replay: the closed push carries the counts and a genuine zero overwrites NULL',
     async () => {
       const openResult = await service.ingestCashShiftBatch(tenantAId, {
-        sessions: [
-          posSession(sessionA3Id, { status: 'OPEN', closedAt: undefined }),
-        ],
+        sessions: [posSession(sessionA3Id, { status: 'OPEN', closedAt: undefined })],
         movements: [],
       });
       expect(openResult.failed).toBe(0);

@@ -211,7 +211,9 @@ describe('SalesExportService', () => {
       // Post-review fix (HIGH): the catalog lookup mock resolves empty by
       // default, so the legacy id falls back to the fiscal literal — the
       // internal UUID must NEVER surface in the sales book.
-      expect(jsonResult.data.records[0].customerName).toBe('CONSUMIDOR FINAL');
+      expect(jsonResult.data.records[0].customerName).toBe(
+        'CONSUMIDOR FINAL',
+      );
       expect(jsonResult.data.records[1].documentType).toBe('ANULADA');
       expect(jsonResult.data.records[1].status).toBe('ANULADA');
 
@@ -317,9 +319,7 @@ describe('SalesExportService', () => {
           format: 'xlsx',
         });
         const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(
-          xlsxResult.buffer as unknown as ExcelJS.Buffer,
-        );
+        await workbook.xlsx.load(xlsxResult.buffer as unknown as ExcelJS.Buffer);
         const headerValues = workbook
           .getWorksheet('Libro de Ventas DGI')
           .getRow(1).values as unknown[];
@@ -436,7 +436,9 @@ describe('SalesExportService', () => {
           format: 'json',
         });
 
-        const totals = computeSalesReportingTotals(originInvoices as never);
+        const totals = computeSalesReportingTotals(
+          originInvoices as never,
+        );
         const row = jsonResult.data.records[0];
         expect(row.manualDiscountNio).toBe(totals.manualDiscountNio);
         expect(row.promotionDiscountNio).toBe(totals.promotionDiscountNio);
@@ -464,7 +466,7 @@ describe('SalesExportService', () => {
           customerTaxId: 'J0310000009999',
           created_at: new Date('2026-08-26T12:00:00.000Z'),
           items: [],
-        },
+        } as unknown as Invoice,
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {
@@ -502,13 +504,10 @@ describe('SalesExportService', () => {
           customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
           created_at: new Date('2026-08-26T13:00:00.000Z'),
           items: [],
-        },
+        } as unknown as Invoice,
       ]);
       customerQueryBuilder.getMany.mockResolvedValue([
-        {
-          id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
-          name: 'SOHO Cliente SRL',
-        },
+        { id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01', name: 'SOHO Cliente SRL' },
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {
@@ -573,7 +572,7 @@ describe('SalesExportService', () => {
           customerId: 'J0310000000000',
           created_at: new Date('2026-08-26T15:00:00.000Z'),
           items: [],
-        },
+        } as unknown as Invoice,
         {
           id: 'inv-legacy-uuid',
           tenant_id: tenantId,
@@ -587,13 +586,10 @@ describe('SalesExportService', () => {
           customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
           created_at: new Date('2026-08-26T15:05:00.000Z'),
           items: [],
-        },
+        } as unknown as Invoice,
       ]);
       customerQueryBuilder.getMany.mockResolvedValue([
-        {
-          id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
-          name: 'SOHO Cliente SRL',
-        },
+        { id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01', name: 'SOHO Cliente SRL' },
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {
@@ -605,7 +601,9 @@ describe('SalesExportService', () => {
       // The export completed: the non-UUID row degraded, the UUID row
       // resolved, and no internal id leaked.
       expect(jsonResult.data.totalRecords).toBe(2);
-      expect(jsonResult.data.records[0].customerName).toBe('CONSUMIDOR FINAL');
+      expect(jsonResult.data.records[0].customerName).toBe(
+        'CONSUMIDOR FINAL',
+      );
       expect(jsonResult.data.records[1].customerName).toBe('SOHO Cliente SRL');
 
       // SQL contract: the non-UUID id went through the text comparison.
@@ -645,7 +643,7 @@ describe('SalesExportService', () => {
           customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
           created_at: new Date('2026-08-26T16:00:00.000Z'),
           items: [],
-        },
+        } as unknown as Invoice,
         {
           id: 'inv-degrade-2',
           tenant_id: tenantId,
@@ -659,7 +657,7 @@ describe('SalesExportService', () => {
           customerName: 'Snapshot Siempre Gana',
           created_at: new Date('2026-08-26T16:05:00.000Z'),
           items: [],
-        },
+        } as unknown as Invoice,
       ]);
       customerQueryBuilder.getMany.mockRejectedValue(
         new Error('permission denied for table customers'),
@@ -678,7 +676,9 @@ describe('SalesExportService', () => {
 
       // The export survived the catalog failure.
       expect(jsonResult.data.totalRecords).toBe(2);
-      expect(jsonResult.data.records[0].customerName).toBe('CONSUMIDOR FINAL');
+      expect(jsonResult.data.records[0].customerName).toBe(
+        'CONSUMIDOR FINAL',
+      );
       // The present snapshot is untouched by the degradation.
       expect(jsonResult.data.records[1].customerName).toBe(
         'Snapshot Siempre Gana',
@@ -769,13 +769,10 @@ describe('SalesExportService', () => {
           customerId: 'a1b2c3d4-e5f6-4789-8abc-def012345678',
           created_at: new Date('2026-08-26T14:00:00.000Z'),
           items: [],
-        },
+        } as unknown as Invoice,
       ]);
       customerQueryBuilder.getMany.mockResolvedValue([
-        {
-          id: 'a1b2c3d4-e5f6-4789-8abc-def012345678',
-          name: 'Nombre Actual Del Catalogo',
-        },
+        { id: 'a1b2c3d4-e5f6-4789-8abc-def012345678', name: 'Nombre Actual Del Catalogo' },
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {

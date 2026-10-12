@@ -48,7 +48,9 @@ import {
   parseCreditNoteSeries,
 } from '../../onboarding/services/fiscal-config-version.service';
 import { CreateAdminCreditNoteDto } from '../dto/admin-credit-note.dto';
-import { SequenceGapPolicyService } from '../sync-health/sequence-gap-policy.service';
+import {
+  SequenceGapPolicyService,
+} from '../sync-health/sequence-gap-policy.service';
 
 const SCALE_4 = 4;
 const CREDIT_NOTE_NO_STOCK_POLICIES = new Set([
@@ -390,11 +392,7 @@ export class InvoicesService {
       } as unknown as SyncInvoiceDto;
 
       this.assertCreditNoteReasonAndAuthorization(assertTarget);
-      await this.assertCreditNoteAuthorizingActor(
-        tenantId,
-        assertTarget,
-        manager,
-      );
+      await this.assertCreditNoteAuthorizingActor(tenantId, assertTarget, manager);
       await this.assertCreditNoteOriginInvoiceIsRegularSale(
         tenantId,
         assertTarget,
@@ -417,9 +415,7 @@ export class InvoicesService {
       const originItems = await this.itemRepoFor(manager).find({
         where: { invoiceId: dto.originInvoiceId, tenant_id: tenantId },
       });
-      const originItemsById = new Map(
-        originItems.map((item) => [item.id, item]),
-      );
+      const originItemsById = new Map(originItems.map((item) => [item.id, item]));
 
       // Number allocation: fail-closed against the configured series, inside
       // this same transaction (see allocateCreditNoteNumber for the race
@@ -440,8 +436,7 @@ export class InvoicesService {
         }
         const originQuantity = Math.abs(Number(originItem.quantity));
         const refundQuantity = Math.abs(Number(requested.quantity));
-        const ratio =
-          originQuantity === 0 ? 0 : refundQuantity / originQuantity;
+        const ratio = originQuantity === 0 ? 0 : refundQuantity / originQuantity;
         const total = round4(-Number(originItem.total) * ratio);
         const taxAmount = round4(-Number(originItem.taxAmount) * ratio);
         return {
@@ -504,9 +499,7 @@ export class InvoicesService {
         if (items.length) {
           await manager
             .getRepository(InvoiceItem)
-            .insert(
-              items.map((item) => ({ ...item, invoiceId: creditNoteId })),
-            );
+            .insert(items.map((item) => ({ ...item, invoiceId: creditNoteId })));
         }
 
         return {
@@ -1030,9 +1023,7 @@ export class InvoicesService {
           actorUserId: event.transaction.actorUserId ?? undefined,
           branchId: event.transaction.branchId ?? undefined,
           terminalId:
-            event.transaction.terminalId ??
-            record.terminalId ??
-            record.sourceDeviceId,
+            event.transaction.terminalId ?? record.terminalId ?? record.sourceDeviceId,
           programVersion: event.transaction.programVersion ?? undefined,
           rewardVersion: event.transaction.rewardVersion ?? undefined,
           commercialSnapshot: event.transaction.commercialSnapshot ?? undefined,

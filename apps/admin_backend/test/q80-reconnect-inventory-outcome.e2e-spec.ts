@@ -143,11 +143,7 @@ async function withIsolatedSchema(
     const tenantId = randomUUID();
     await dataSource.query(
       `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
-      [
-        tenantId,
-        `E2E Tenant ${schemaPrefix}`,
-        normalizeTenantSlug(`E2E Tenant ${schemaPrefix}`),
-      ],
+      [tenantId, `E2E Tenant ${schemaPrefix}`, normalizeTenantSlug(`E2E Tenant ${schemaPrefix}`)],
     );
 
     // The /v1/sync transport is device-only: provision an ACTIVE device sync

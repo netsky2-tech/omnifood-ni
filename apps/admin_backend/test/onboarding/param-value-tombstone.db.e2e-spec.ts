@@ -89,12 +89,12 @@ describe('param_value null-tombstone clear round trip (Real PostgreSQL DB, migra
       // The view is security_invoker = true: raw reads must bind the tenant
       // context exactly like the service paths do (RLS + uuid cast).
       await bindTenantContext(manager, tenantId);
-      const rows = await manager.query(
+      const rows = (await manager.query(
         `SELECT param_value AS "paramValue", version
            FROM v_sys_parametros_config_active
           WHERE tenant_id = $1 AND param_key = $2`,
         [tenantId, paramKey],
-      );
+      )) as Array<{ paramValue: unknown; version: number }>;
       return rows[0] ?? null;
     });
   };
@@ -105,13 +105,13 @@ describe('param_value null-tombstone clear round trip (Real PostgreSQL DB, migra
   ): Promise<Array<{ param_value: unknown; version: number }>> => {
     return runtime.transaction(async (manager) => {
       await bindTenantContext(manager, tenantId);
-      return await manager.query(
+      return (await manager.query(
         `SELECT param_value, version
            FROM sys_parametros_config
           WHERE tenant_id = $1 AND param_key = $2
           ORDER BY version`,
         [tenantId, paramKey],
-      );
+      )) as Array<{ param_value: unknown; version: number }>;
     });
   };
 
@@ -169,14 +169,14 @@ describe('param_value null-tombstone clear round trip (Real PostgreSQL DB, migra
   });
 
   it('migration 1809610000000 made param_value nullable in the migrated schema', async () => {
-    const rows = await admin.query(
+    const rows = (await admin.query(
       `SELECT is_nullable
          FROM information_schema.columns
         WHERE table_schema = $1
           AND table_name = 'sys_parametros_config'
           AND column_name = 'param_value'`,
       [fixture.schema],
-    );
+    )) as Array<{ is_nullable: string }>;
 
     expect(rows).toHaveLength(1);
     expect(rows[0].is_nullable).toBe('YES');

@@ -256,23 +256,19 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
     });
 
     it('covers the DGI authorization fields in the fingerprint: configuring a code changes it', async () => {
-      const payloadWithoutDgi =
-        await service.getEffectiveFiscalPayload(tenantId);
-      const fingerprintWithoutDgi =
-        service.computeCanonicalFingerprint(payloadWithoutDgi);
+      const payloadWithoutDgi = await service.getEffectiveFiscalPayload(tenantId);
+      const fingerprintWithoutDgi = service.computeCanonicalFingerprint(payloadWithoutDgi);
 
       sysParamRepo.find.mockResolvedValueOnce(paramsWithDgi);
       const payloadWithDgi = await service.getEffectiveFiscalPayload(tenantId);
-      const fingerprintWithDgi =
-        service.computeCanonicalFingerprint(payloadWithDgi);
+      const fingerprintWithDgi = service.computeCanonicalFingerprint(payloadWithDgi);
 
       expect(fingerprintWithDgi).not.toBe(fingerprintWithoutDgi);
     });
 
     it('records a strictly higher revision when the DGI authorization code changes', async () => {
       const baselinePayload = await service.getEffectiveFiscalPayload(tenantId);
-      const baselineFingerprint =
-        service.computeCanonicalFingerprint(baselinePayload);
+      const baselineFingerprint = service.computeCanonicalFingerprint(baselinePayload);
 
       const existingRevision: FiscalConfigRevision = {
         id: 'rev-1-id',
@@ -521,9 +517,10 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       expect(Object.keys(oldShape)).not.toContain('maxDiscountAmount');
 
       const newShapeFingerprint = service.computeCanonicalFingerprint(newShape);
-      const oldShapeFingerprint = service.computeCanonicalFingerprint(
-        oldShape as unknown as EffectiveFiscalPayload,
-      );
+      const oldShapeFingerprint =
+        service.computeCanonicalFingerprint(
+          oldShape as unknown as EffectiveFiscalPayload,
+        );
 
       // The shape change alone (no configuration change) alters the
       // fingerprint — the documented re-fingerprint wave.

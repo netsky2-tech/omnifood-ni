@@ -53,6 +53,6 @@ const PRODUCTION_OPTIONS: HelmetOptions = {
  * `NODE_ENV=production` hardens; every other value keeps dev relaxed so a
  * forgotten NODE_ENV can never lock a developer out of a local flow.
  */
-export function helmetOptions(nodeEnv?: string): HelmetOptions {
+export function helmetOptions(nodeEnv?: string | undefined): HelmetOptions {
   return nodeEnv === 'production' ? PRODUCTION_OPTIONS : RELAXED_OPTIONS;
 }

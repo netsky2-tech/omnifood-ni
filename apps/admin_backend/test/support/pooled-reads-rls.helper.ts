@@ -136,27 +136,31 @@ const seedInvoice = async (
     paymentStatus: input.payments?.length ? 'paid' : 'pending',
     customerId: 'J0310000123456',
     type: 'regular',
-    items: input.items.map((item): Partial<InvoiceItem> => ({
-      tenant_id: input.tenantId,
-      productId: item.productId,
-      productName: item.productName,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      originalTaxRate: 0.15,
-      appliedTaxRate: 0.15,
-      taxAmount: item.taxAmount,
-      total: item.total,
-      discount: 0,
-    })),
-    payments: (input.payments ?? []).map((payment): Partial<Payment> => ({
-      method: payment.method,
-      amount: payment.amount,
-      currency: payment.currency,
-      exchangeRate: 1.0,
-      amountNio: payment.amountNio,
-      changeGiven: 0,
-      changeCurrency: 'NIO',
-    })),
+    items: input.items.map(
+      (item): Partial<InvoiceItem> => ({
+        tenant_id: input.tenantId,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        originalTaxRate: 0.15,
+        appliedTaxRate: 0.15,
+        taxAmount: item.taxAmount,
+        total: item.total,
+        discount: 0,
+      }),
+    ),
+    payments: (input.payments ?? []).map(
+      (payment): Partial<Payment> => ({
+        method: payment.method,
+        amount: payment.amount,
+        currency: payment.currency,
+        exchangeRate: 1.0,
+        amountNio: payment.amountNio,
+        changeGiven: 0,
+        changeCurrency: 'NIO',
+      }),
+    ),
   });
 };
 

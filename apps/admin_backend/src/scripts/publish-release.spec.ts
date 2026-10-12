@@ -48,8 +48,8 @@ describe('publish-release ABI and version derivation', () => {
     const valid = '1.0.1+2';
     const match = valid.match(/^([0-9.]+)\+([0-9]+)$/);
     expect(match).not.toBeNull();
-    expect(match[1]).toBe('1.0.1');
-    expect(parseInt(match[2], 10)).toBe(2);
+    expect(match![1]).toBe('1.0.1');
+    expect(parseInt(match![2], 10)).toBe(2);
 
     const invalid = '1.0.1';
     expect(invalid.match(/^([0-9.]+)\+([0-9]+)$/)).toBeNull();

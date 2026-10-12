@@ -161,16 +161,8 @@ describe('AddCustomerSnapshotToInvoices1809590000000 (db)', () => {
           // 1. Both columns exist after the real migration set ran `up`.
           const columns = await snapshotColumns(queryRunner);
           expect(columns).toEqual([
-            {
-              column_name: 'customer_name',
-              data_type: 'character varying',
-              is_nullable: 'YES',
-            },
-            {
-              column_name: 'customer_tax_id',
-              data_type: 'character varying',
-              is_nullable: 'YES',
-            },
+            { column_name: 'customer_name', data_type: 'character varying', is_nullable: 'YES' },
+            { column_name: 'customer_tax_id', data_type: 'character varying', is_nullable: 'YES' },
           ]);
 
           // 2. Second `up` is a no-op (guarded idempotency): no throw, and
@@ -194,11 +186,7 @@ describe('AddCustomerSnapshotToInvoices1809590000000 (db)', () => {
 
           await queryRunner.query(
             `INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)`,
-            [
-              tenantId,
-              'cust-snapshot-backfill-tenant',
-              'cust-snapshot-backfill',
-            ],
+            [tenantId, 'cust-snapshot-backfill-tenant', 'cust-snapshot-backfill'],
           );
           // Simulate the PRE-MIGRATION state: drop both columns, then insert
           // a legacy-style invoice row (anonymous sale) so the row genuinely
@@ -239,10 +227,7 @@ describe('AddCustomerSnapshotToInvoices1809590000000 (db)', () => {
                FROM invoices
               WHERE id = $1`,
             ['22222222-2222-4222-8222-222222222222'],
-          )) as Array<{
-            customer_name: string | null;
-            customer_tax_id: string | null;
-          }>;
+          )) as Array<{ customer_name: string | null; customer_tax_id: string | null }>;
           expect(rows).toHaveLength(1);
           expect(rows[0].customer_name).toBeNull();
           expect(rows[0].customer_tax_id).toBeNull();

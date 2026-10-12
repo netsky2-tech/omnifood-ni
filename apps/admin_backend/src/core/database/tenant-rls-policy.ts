@@ -63,7 +63,11 @@ export const UUID_TENANT_COLUMN_TYPE = 'uuid';
 
 /** One policy command covered by the tenant policies. */
 export type TenantRlsPolicyCommand =
-  'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE' | 'ALL';
+  | 'SELECT'
+  | 'INSERT'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'ALL';
 
 /** One authored tenant policy. */
 export interface TenantRlsPolicyRow {

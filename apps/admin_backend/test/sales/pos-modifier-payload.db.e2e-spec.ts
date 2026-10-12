@@ -100,8 +100,7 @@ import {
  * (src/migrations/1809640000000-AddQuantityToInvoiceItemModifiers.spec.ts).
  */
 /* eslint-disable @typescript-eslint/no-require-imports -- fixture JSON cannot be imported statically (resolveJsonModule is off) and prettier's reflow pushes the call past a next-line directive */
-const posRecordPayload =
-  require('../fixtures/sales/pos-modifier-payload.json') as SyncBatchRecordDto;
+const posRecordPayload = require('../fixtures/sales/pos-modifier-payload.json') as SyncBatchRecordDto;
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 function getRequiredEnv(name: string): string {
@@ -323,10 +322,10 @@ describe('POS modifier payload replay E2E — real PostgreSQL', () => {
 
           // Fiscal integrity of the enclosing sale is untouched by the
           // modifier persistence.
-          const invoiceRows = await dataSource.query(
+          const invoiceRows = (await dataSource.query(
             `SELECT total FROM invoices WHERE id = $1 AND tenant_id = $2`,
             [fixtureInvoice.id, tenantId],
-          );
+          )) as Array<{ total: string }>;
           expect(invoiceRows).toHaveLength(1);
           expect(Number(invoiceRows[0].total)).toBe(fixtureInvoice.total);
         },
@@ -363,7 +362,10 @@ describe('POS modifier payload replay E2E — real PostgreSQL', () => {
           // device: the legacy record must arrive as sequence 1 to be
           // ACCEPTED (this schema holds exactly one record).
           legacyRecord.sourceSequence = 1;
-          const legacyInvoice = legacyRecordInvoice;
+          const legacyInvoice = legacyRecordInvoice as unknown as Record<
+            string,
+            unknown
+          >;
           legacyInvoice.id = legacyInvoiceId;
           const legacyItems = legacyInvoice.items as Array<
             Record<string, unknown>
@@ -438,7 +440,9 @@ describe('POS modifier payload replay E2E — real PostgreSQL', () => {
           zeroInvoice.id = zeroInvoiceId;
           zeroRecord.idempotencyKey = `sale:TERM-01:${zeroInvoiceId}`;
           zeroRecord.sourceSequence = 1;
-          const zeroItems = zeroInvoice.items as Array<Record<string, unknown>>;
+          const zeroItems = zeroInvoice.items as Array<
+            Record<string, unknown>
+          >;
           zeroItems[0].id = 'd0000000-0000-4000-8000-00000000d013';
           const zeroModifiers = zeroItems[0].modifiers as Array<
             Record<string, unknown>
@@ -457,9 +461,9 @@ describe('POS modifier payload replay E2E — real PostgreSQL', () => {
           const messages: string[] = Array.isArray(res.body.message)
             ? res.body.message
             : [res.body.message];
-          expect(messages.some((message) => message.includes('quantity'))).toBe(
-            true,
-          );
+          expect(
+            messages.some((message) => message.includes('quantity')),
+          ).toBe(true);
           expect(
             messages.some(
               (message) =>
@@ -476,10 +480,10 @@ describe('POS modifier payload replay E2E — real PostgreSQL', () => {
             [zeroItems[0].id],
           )) as unknown as PersistedModifierRow[];
           expect(modifierRows).toHaveLength(0);
-          const invoiceRows = await dataSource.query(
+          const invoiceRows = (await dataSource.query(
             `SELECT id FROM invoices WHERE id = $1`,
             [zeroInvoiceId],
-          );
+          )) as Array<{ id: string }>;
           expect(invoiceRows).toHaveLength(0);
         },
       );

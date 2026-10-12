@@ -417,9 +417,7 @@ export class FiscalConfigVersionService {
     const parsed = parseCreditNoteSeries({
       ...(series.prefix !== undefined ? { prefix: series.prefix } : {}),
       nextNumber: series.nextNumber,
-      ...(series.endNumber !== undefined
-        ? { endNumber: series.endNumber }
-        : {}),
+      ...(series.endNumber !== undefined ? { endNumber: series.endNumber } : {}),
     });
     if (parsed.ok === false) {
       throw new BadRequestException(`${parsed.reason}: ${parsed.detail}`);
@@ -434,10 +432,7 @@ export class FiscalConfigVersionService {
           SystemParametersConfigActiveView,
         );
         const active = await viewRepo.findOne({
-          where: {
-            tenant_id: tenantId,
-            paramKey: CREDIT_NOTE_SERIES_PARAM_KEY,
-          },
+          where: { tenant_id: tenantId, paramKey: CREDIT_NOTE_SERIES_PARAM_KEY },
         });
 
         const tableRepo = manager.getRepository(SystemParametersConfig);
@@ -537,8 +532,7 @@ export function parseCreditNoteSeries(
       return {
         ok: false,
         reason: 'FISCAL_CREDIT_NOTE_SERIES_INVALID',
-        detail:
-          'CREDIT_NOTE_SERIES prefix must be a non-blank string without whitespace',
+        detail: 'CREDIT_NOTE_SERIES prefix must be a non-blank string without whitespace',
       };
     }
     series.prefix = rawRecord.prefix;
@@ -552,8 +546,7 @@ export function parseCreditNoteSeries(
       return {
         ok: false,
         reason: 'FISCAL_CREDIT_NOTE_SERIES_INVALID',
-        detail:
-          'CREDIT_NOTE_SERIES endNumber must be an integer >= 1 when present',
+        detail: 'CREDIT_NOTE_SERIES endNumber must be an integer >= 1 when present',
       };
     }
     series.endNumber = rawRecord.endNumber;

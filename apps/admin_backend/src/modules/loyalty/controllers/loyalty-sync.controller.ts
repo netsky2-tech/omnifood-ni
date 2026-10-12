@@ -24,7 +24,9 @@ import { LoyaltySyncIngestionService } from '../services/loyalty-sync-ingestion.
 @UseGuards(SyncTransportGuard)
 @UseInterceptors(TenantInterceptor)
 export class LoyaltySyncController {
-  constructor(private readonly ingestionService: LoyaltySyncIngestionService) {}
+  constructor(
+    private readonly ingestionService: LoyaltySyncIngestionService,
+  ) {}
 
   /**
    * Fail-closed tenant binding: the tenant always comes from the

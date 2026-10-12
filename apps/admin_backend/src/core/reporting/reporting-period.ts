@@ -175,7 +175,8 @@ export function currentLocalDateKey(): string {
 }
 
 type ResolvedBound =
-  { kind: 'dateKey'; dateKey: string } | { kind: 'instant'; instant: Date };
+  | { kind: 'dateKey'; dateKey: string }
+  | { kind: 'instant'; instant: Date };
 
 function resolveBoundInput(
   input: string | undefined | null,

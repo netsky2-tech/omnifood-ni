@@ -275,12 +275,10 @@ describe('ImportStagingController (Unit)', () => {
     });
 
     it('delegates remediateReport to integrityReportService (ONB1.10A)', async () => {
-      integrityService.remediateReportWithInventoryCommand.mockResolvedValueOnce(
-        {
-          id: 'report-1',
-          status: LegacyImportIntegrityStatus.REMEDIATED,
-        } as never,
-      );
+      integrityService.remediateReportWithInventoryCommand.mockResolvedValueOnce({
+        id: 'report-1',
+        status: LegacyImportIntegrityStatus.REMEDIATED,
+      } as never);
 
       const req = { user: { sub: 'user-audit-1' } } as never;
       const result = await controller.remediateReport(

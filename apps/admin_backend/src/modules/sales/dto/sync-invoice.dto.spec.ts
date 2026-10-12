@@ -480,7 +480,9 @@ describe('CreateModifierDto modifier quantity (SOHO P3)', () => {
   it('accepts the POS wire shape {name, extraPrice, quantity} and keeps quantity after validation', () => {
     const { dto, errors } = validate({
       ...basePayload,
-      items: [{ ...baseItem, modifiers: [{ ...baseModifier, quantity: 2 }] }],
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: 2 }] },
+      ],
     });
 
     expect(errors).toEqual([]);
@@ -497,7 +499,9 @@ describe('CreateModifierDto modifier quantity (SOHO P3)', () => {
   it('rejects quantity 0 with the named min constraint', () => {
     const { errors } = validate({
       ...basePayload,
-      items: [{ ...baseItem, modifiers: [{ ...baseModifier, quantity: 0 }] }],
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: 0 }] },
+      ],
     });
 
     const quantityError = quantityErrors(errors);
@@ -508,7 +512,9 @@ describe('CreateModifierDto modifier quantity (SOHO P3)', () => {
   it('rejects a NEGATIVE quantity with the named min constraint', () => {
     const { errors } = validate({
       ...basePayload,
-      items: [{ ...baseItem, modifiers: [{ ...baseModifier, quantity: -3 }] }],
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: -3 }] },
+      ],
     });
 
     const quantityError = quantityErrors(errors);
@@ -519,7 +525,9 @@ describe('CreateModifierDto modifier quantity (SOHO P3)', () => {
   it('rejects a NON-INTEGER quantity (fractional units of an option are meaningless)', () => {
     const { errors } = validate({
       ...basePayload,
-      items: [{ ...baseItem, modifiers: [{ ...baseModifier, quantity: 1.5 }] }],
+      items: [
+        { ...baseItem, modifiers: [{ ...baseModifier, quantity: 1.5 }] },
+      ],
     });
 
     expect(errors.flatMap(flatten)).toContain('quantity');

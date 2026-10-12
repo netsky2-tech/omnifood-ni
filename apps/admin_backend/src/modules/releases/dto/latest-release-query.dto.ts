@@ -1,12 +1,7 @@
 import { IsNotEmpty, IsOptional, IsString, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export const ALLOWED_ABIS = [
-  'arm64-v8a',
-  'armeabi-v7a',
-  'x86_64',
-  'x86',
-] as const;
+export const ALLOWED_ABIS = ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'] as const;
 export type AllowedAbi = (typeof ALLOWED_ABIS)[number];
 
 export class LatestReleaseQueryDto {

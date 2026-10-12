@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import helmet from 'helmet';
-import { Express, Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './core/app/app.module';
 import { resolveCorsOrigins } from './core/config/http-security.config';
 import { resolveTrustProxyHops } from './core/config/trust-proxy.config';
@@ -29,8 +29,7 @@ async function bootstrap() {
   const trustProxyHops = resolveTrustProxyHops({
     raw: process.env.TRUST_PROXY_HOPS,
   });
-  const expressApp = app.getHttpAdapter().getInstance() as Express;
-  expressApp.set('trust proxy', trustProxyHops);
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
 
   // Global prefix
   app.setGlobalPrefix('api');
