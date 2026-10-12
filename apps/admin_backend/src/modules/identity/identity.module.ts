@@ -7,6 +7,7 @@ import { SecurityProfile } from './entities/security-profile.entity';
 import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
 import { TenantCapabilityEvent } from './entities/tenant-capability-event.entity';
 import { AuthService } from './services/auth.service';
+import { AuthAuditService } from './services/auth-audit.service';
 import { UserService } from './services/user.service';
 import { AuditIntegrityService } from './services/audit-integrity.service';
 import { SupervisorOverrideService } from './services/supervisor-override.service';
@@ -81,6 +82,7 @@ import { AuthThrottleModule } from './security/auth-throttle.module';
   ],
   providers: [
     AuthService,
+    AuthAuditService,
     UserService,
     AuditIntegrityService,
     SupervisorOverrideService,

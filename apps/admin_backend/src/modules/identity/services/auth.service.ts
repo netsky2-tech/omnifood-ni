@@ -14,6 +14,10 @@ import {
 } from '../config/identity-jwt.config';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import {
+  AuthAuditService,
+  LoginAuditReason,
+} from './auth-audit.service';
+import {
   JWT_TOKEN_TYPES,
   isRefreshTokenPayloadForSubject,
   type JwtRefreshPayload,
@@ -81,6 +85,7 @@ export class AuthService {
     private jwtService: JwtService,
     private dataSource: DataSource,
     @Inject(IDENTITY_JWT_CONFIG) private readonly jwtConfig: IdentityJwtConfig,
+    private readonly authAudit: AuthAuditService,
   ) {}
 
   async login(email: string, pass: string, tenantSlug?: string) {
@@ -100,13 +105,25 @@ export class AuthService {
     const resolvedTenantId = await this.resolveTenantIdBySlugForLogin(
       tenantSlug,
       pass,
-    );
+    ).catch(async (error: unknown) => {
+      // Unknown/inactive slug: no tenant anchor, so this stays an app-log
+      // event (the client response stays generic, see issue #556).
+      await this.authAudit.recordAuthFailure({
+        action: 'LOGIN_FAILURE',
+        tenantId: null,
+        userId: null,
+        email,
+        reason: LoginAuditReason.UNKNOWN_TENANT,
+      });
+      throw error;
+    });
 
     return runInTenantTransaction(
       this.dataSource,
       resolvedTenantId,
       async (manager) =>
         this.authenticateAndIssueTokens(
+          manager,
           manager.getRepository(User),
           email ? email.trim().toLowerCase() : '',
           email,
@@ -162,6 +179,7 @@ export class AuthService {
    * user from a plain wrong password.
    */
   private async authenticateAndIssueTokens(
+    manager: EntityManager,
     repository: Pick<Repository<User>, 'findOne' | 'update'>,
     cleanEmail: string,
     rawEmail: string,
@@ -205,6 +223,13 @@ export class AuthService {
       // Generic failure with equalized timing: the email exists but belongs
       // to another tenant; never reveal that through a distinct error.
       await this.burnDummyPasswordCompare(pass);
+      await this.authAudit.recordAuthFailure({
+        action: 'LOGIN_FAILURE',
+        tenantId: expectedTenantId,
+        userId: user.id,
+        email: rawEmail,
+        reason: LoginAuditReason.CROSS_TENANT_USER,
+      });
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
@@ -213,14 +238,35 @@ export class AuthService {
       // as an unknown slug or a wrong password, or response timing
       // enumerates slugs.
       await this.burnDummyPasswordCompare(pass);
+      await this.authAudit.recordAuthFailure({
+        action: 'LOGIN_FAILURE',
+        tenantId: expectedTenantId,
+        userId: null,
+        email: rawEmail,
+        reason: LoginAuditReason.UNKNOWN_USER,
+      });
       throw new UnauthorizedException('Credenciales inválidas');
     }
     if (!user.is_active) {
       await this.burnDummyPasswordCompare(pass);
+      await this.authAudit.recordAuthFailure({
+        action: 'LOGIN_FAILURE',
+        tenantId: expectedTenantId,
+        userId: user.id,
+        email: rawEmail,
+        reason: LoginAuditReason.INACTIVE_USER,
+      });
       throw new UnauthorizedException('Credenciales inválidas');
     }
     if (!(await bcrypt.compare(pass, user.password_hash))) {
       // The wrong-password exit already burns exactly one compare.
+      await this.authAudit.recordAuthFailure({
+        action: 'LOGIN_FAILURE',
+        tenantId: expectedTenantId,
+        userId: user.id,
+        email: rawEmail,
+        reason: LoginAuditReason.WRONG_PASSWORD,
+      });
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
@@ -240,6 +286,10 @@ export class AuthService {
       refreshTokenFamilyId,
       repository,
     );
+
+    // Security audit remediation S4: successful logins join the hash-chained
+    // audit log, atomically with the token issuance.
+    await this.authAudit.recordLoginSuccess(expectedTenantId, user.id, manager);
 
     return {
       ...tokens,
@@ -326,6 +376,14 @@ export class AuthService {
       }
       refreshPayload = payload;
     } catch {
+      // The JWT claim is unverified here: no reliable user/tenant anchor,
+      // so this stays an app-log event (generic response unchanged).
+      await this.authAudit.recordAuthFailure({
+        action: 'REFRESH_FAILURE',
+        tenantId: null,
+        userId: null,
+        reason: LoginAuditReason.INVALID_REFRESH,
+      });
       throw new UnauthorizedException('Acceso denegado');
     }
 
@@ -335,6 +393,12 @@ export class AuthService {
     // The legacy unbound branch is removed; missing/unknown/inactive slug
     // fails with the same generic refresh rejection (no tenant enumeration).
     if (!tenantSlug?.trim()) {
+      await this.authAudit.recordAuthFailure({
+        action: 'REFRESH_FAILURE',
+        tenantId: null,
+        userId: null,
+        reason: LoginAuditReason.UNKNOWN_TENANT,
+      });
       throw new UnauthorizedException('Acceso denegado');
     }
     const outcome = await this.refreshWithTenantSlug(
@@ -342,11 +406,22 @@ export class AuthService {
       refreshPayload,
       refreshToken,
       tenantSlug,
-    );
+    ).catch(async (error: unknown) => {
+      await this.authAudit.recordAuthFailure({
+        action: 'REFRESH_FAILURE',
+        tenantId: null,
+        userId: null,
+        reason: LoginAuditReason.INVALID_REFRESH,
+      });
+      throw error;
+    });
 
     if (!outcome) {
       throw new UnauthorizedException('Acceso denegado');
     }
+    // Security audit remediation S4: successful refresh exchanges join the
+    // hash-chained audit log (best-effort write, see AuthAuditService).
+    await this.authAudit.recordRefreshSuccess(outcome.tenantId, userId);
     return outcome.tokens;
   }
 
@@ -406,7 +481,10 @@ export class AuthService {
     refreshPayload: JwtRefreshPayload,
     refreshToken: string,
     expectedTenantId: string,
-  ): Promise<{ tokens: Awaited<ReturnType<AuthService['getTokens']>> } | null> {
+  ): Promise<{
+    tokens: Awaited<ReturnType<AuthService['getTokens']>>;
+    tenantId: string;
+  } | null> {
     const repository = manager.getRepository(User);
     const user = await repository.findOne({
       where: { id: userId, tenant_id: expectedTenantId },
@@ -462,7 +540,7 @@ export class AuthService {
         familyId,
         repository,
       );
-      return { tokens };
+      return { tokens, tenantId: expectedTenantId };
     }
 
     if (

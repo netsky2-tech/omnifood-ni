@@ -8,6 +8,7 @@ import {
 import { DataSource, type EntityManager } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService, DUMMY_PASSWORD_HASH } from './auth.service';
+import { AuthAuditService } from './auth-audit.service';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { User, UserRole } from '../entities/user.entity';
 import {
@@ -144,6 +145,14 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
+        {
+          provide: AuthAuditService,
+          useValue: {
+            recordLoginSuccess: jest.fn(async () => undefined),
+            recordRefreshSuccess: jest.fn(async () => undefined),
+            recordAuthFailure: jest.fn(async () => undefined),
+          },
+        },
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
@@ -1437,6 +1446,14 @@ describe('AuthService', () => {
         providers: [
           AuthService,
           {
+            provide: AuthAuditService,
+            useValue: {
+              recordLoginSuccess: jest.fn(async () => undefined),
+              recordRefreshSuccess: jest.fn(async () => undefined),
+              recordAuthFailure: jest.fn(async () => undefined),
+            },
+          },
+          {
             provide: getRepositoryToken(User),
             useValue: pooledUserRepository,
           },
@@ -1548,6 +1565,14 @@ describe('AuthService tenant-slug login context (issue #556 slice 11)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
+        {
+          provide: AuthAuditService,
+          useValue: {
+            recordLoginSuccess: jest.fn(async () => undefined),
+            recordRefreshSuccess: jest.fn(async () => undefined),
+            recordAuthFailure: jest.fn(async () => undefined),
+          },
+        },
         {
           provide: getRepositoryToken(User),
           useValue: mockUserRepository,
@@ -1867,6 +1892,14 @@ describe('AuthService slug-path timing equalization (F1 regression, issue #556)'
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
+        {
+          provide: AuthAuditService,
+          useValue: {
+            recordLoginSuccess: jest.fn(async () => undefined),
+            recordRefreshSuccess: jest.fn(async () => undefined),
+            recordAuthFailure: jest.fn(async () => undefined),
+          },
+        },
         { provide: getRepositoryToken(User), useValue: mockUserRepository },
         { provide: JwtService, useValue: mockJwtService },
         { provide: DataSource, useValue: mockDataSource },
