@@ -205,8 +205,13 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
       `INSERT INTO customers (id, tenant_id, name) VALUES ($1, $2, 'rls-customer-a'), ($3, $4, 'rls-customer-b')`,
       [customerAId, tenantAId, customerBId, tenantBId],
     );
+    // V1-complete ledger rows: since the ledger identity batch, the table
+    // carries ck_loyalty_tx_type_semantics (every row must DECLARE a type
+    // with its §9.3 key parts) and the four partial unique identities. An
+    // EARN with a per-tenant ticket satisfies both engines' contracts.
     await admin.query(
-      `INSERT INTO customer_point_transactions (id, tenant_id, customer_id) VALUES ($1, $2, $3), ($4, $5, $6)`,
+      `INSERT INTO customer_point_transactions (id, tenant_id, customer_id, transaction_type, ticket_id, loyalty_program_id, units)
+       VALUES ($1, $2, $3, 'earn', $7, $8, 10), ($4, $5, $6, 'earn', $7, $9, 10)`,
       [
         pointTransactionAId,
         tenantAId,
@@ -214,6 +219,9 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
         pointTransactionBId,
         tenantBId,
         customerBId,
+        `rls-ticket-${tenantAId.slice(0, 8)}`,
+        programAId,
+        programBId,
       ],
     );
     await admin.query(
@@ -439,8 +447,9 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
 
       const insertedPointTransaction = returningRows(
         await runner.query(
-          `INSERT INTO customer_point_transactions (tenant_id, customer_id)
-           VALUES ($1, $2) RETURNING id, tenant_id`,
+          `INSERT INTO customer_point_transactions (tenant_id, customer_id, transaction_type, ticket_id, loyalty_program_id, units)
+           VALUES ($1, $2, 'earn', gen_random_uuid()::text, (SELECT id FROM loyalty_programs WHERE tenant_id = $1 LIMIT 1), 10)
+           RETURNING id, tenant_id`,
           [tenantCId, insertedCustomerId],
         ),
       );
@@ -626,8 +635,9 @@ describe('customer/loyalty tenant RLS (Real PostgreSQL DB, migration-built schem
 
       const throwawayPointTransaction = returningRows(
         await runner.query(
-          `INSERT INTO customer_point_transactions (tenant_id, customer_id)
-           VALUES ($1, $2) RETURNING id`,
+          `INSERT INTO customer_point_transactions (tenant_id, customer_id, transaction_type, ticket_id, loyalty_program_id, units)
+           VALUES ($1, $2, 'earn', gen_random_uuid()::text, (SELECT id FROM loyalty_programs WHERE tenant_id = $1 LIMIT 1), 10)
+           RETURNING id`,
           [tenantAId, customerAId],
         ),
       );
