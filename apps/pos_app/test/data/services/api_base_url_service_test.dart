@@ -228,6 +228,71 @@ void main() {
       expect(configDao.saved, isEmpty);
     });
 
+    group('cleartext (plain http) restricted to LAN hosts (audit S6)', () {
+      Future<ApiBaseUrlValidationFailure?> validate(String url) async {
+        final service = ApiBaseUrlService(
+          _InMemoryLocalConfigDao(),
+          isReleaseMode: false,
+        );
+        return ApiBaseUrlService.validateApiUrl(url);
+      }
+
+      test('accepts plain http for private IP literals', () async {
+        expect(await validate('http://192.168.1.20:3000/api'), isNull);
+        expect(await validate('http://10.0.0.5/api'), isNull);
+        expect(await validate('http://172.16.5.4/api'), isNull);
+        expect(await validate('http://172.31.255.1/api'), isNull);
+      });
+
+      test('accepts plain http for localhost and emulator loopback', () async {
+        expect(await validate('http://localhost:3000/api'), isNull);
+        expect(await validate('http://127.0.0.1:3000/api'), isNull);
+        expect(await validate('http://10.0.2.2:3000/api'), isNull);
+      });
+
+      test('accepts plain http for single-label and .local/.lan/.internal hosts', () async {
+        expect(await validate('http://nhilos-server:3000/api'), isNull);
+        expect(await validate('http://nas.local/api'), isNull);
+        expect(await validate('http://pos-backend.lan/api'), isNull);
+        expect(await validate('http://backend.internal/api'), isNull);
+      });
+
+      test('always accepts https for any host', () async {
+        expect(await validate('https://api.nhilospos.com/api'), isNull);
+        expect(await validate('https://pos.example.com/api'), isNull);
+      });
+
+      test('rejects plain http to public hosts', () async {
+        final failure = await validate('http://api.nhilospos.com/api');
+        expect(failure, isNotNull);
+        expect(failure!.reason, ApiBaseUrlValidationReason.cleartextNotAllowed);
+      });
+
+      test('rejects plain http to public IP literals', () async {
+        final failure = await validate('http://8.8.8.8/api');
+        expect(failure, isNotNull);
+        expect(failure!.reason, ApiBaseUrlValidationReason.cleartextNotAllowed);
+      });
+
+      test('rejects 172.15.x and 172.32.x (outside the private range)', () async {
+        final low = await validate('http://172.15.0.1/api');
+        expect(low!.reason, ApiBaseUrlValidationReason.cleartextNotAllowed);
+        final high = await validate('http://172.32.0.1/api');
+        expect(high!.reason, ApiBaseUrlValidationReason.cleartextNotAllowed);
+      });
+
+      test('a rejected public cleartext URL persists nothing', () async {
+        final configDao = _InMemoryLocalConfigDao();
+        final service = ApiBaseUrlService(configDao, isReleaseMode: false);
+
+        expect(
+          () => service.save('http://api.nhilospos.com/api'),
+          throwsA(isA<ApiBaseUrlValidationException>()),
+        );
+        expect(configDao.saved, isEmpty);
+      });
+    });
+
     test('accepts an absolute http:// URL with a non-empty host', () async {
       final configDao = _InMemoryLocalConfigDao();
       final service = ApiBaseUrlService(configDao, isReleaseMode: false);

@@ -68,7 +68,11 @@ validate_device_id() {
 }
 
 # Validate an --api-url candidate: absolute http:// or https:// URL with no
-# whitespace and a non-empty host. Rejected before any side effect.
+# whitespace and a non-empty host. Plain http:// is only accepted for LAN
+# hosts (private IPs, loopback, single-label names, .local/.lan/.internal):
+# mirrored exactly from `isLanHost` in
+# apps/pos_app/lib/data/services/api_base_url_service.dart (security audit S6).
+# Rejected before any side effect.
 validate_api_url() {
     local raw="$1"
     if [ -z "${raw}" ]; then
@@ -85,7 +89,45 @@ validate_api_url() {
         echo "Invalid --api-url: '${raw}' must be an absolute http:// or https:// URL with a non-empty host (e.g. https://api-staging.example.com/api)." >&2
         exit 1
     fi
+    if printf '%s' "${raw}" | grep -q '^http://'; then
+        local host_no_port="${host%%:*}"
+        if ! is_lan_host "${host_no_port}"; then
+            echo "Invalid --api-url: '${raw}' uses plain http:// to a public host. Plain HTTP is only allowed for LAN hosts (private IPs, localhost, single-label names, .local/.lan); use https:// for public hosts." >&2
+            exit 1
+        fi
+    fi
     API_URL="${raw}"
+}
+
+# LAN host test mirroring `isLanHost` in
+# apps/pos_app/lib/data/services/api_base_url_service.dart.
+is_lan_host() {
+    local host="${1,,}"
+    if [ -z "${host}" ]; then
+        return 1
+    fi
+    case "${host}" in
+        localhost|127.*) return 0 ;;
+        10.*) return 0 ;;
+        192.168.*) return 0 ;;
+        10.0.2.2) return 0 ;;
+        172.*)
+            local second
+            second="$(printf '%s' "${host}" | cut -d. -f2)"
+            if [ "${second}" -ge 16 ] 2>/dev/null && [ "${second}" -le 31 ] 2>/dev/null; then
+                return 0
+            fi
+            return 1
+            ;;
+        *.local|*.lan|*.internal) return 0 ;;
+        *)
+            # Single-label hostname resolved by LAN DNS or the hosts file.
+            case "${host}" in
+                *.*) return 1 ;;
+                *) return 0 ;;
+            esac
+            ;;
+    esac
 }
 
 # Validate a --test-concurrency candidate: a positive integer (>= 1). Rejected
