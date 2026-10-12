@@ -16,6 +16,7 @@ import 'data/database/database_seeder.dart';
 import 'data/daos/local_config_dao.dart';
 import 'data/network/cloud_auth_interceptor.dart';
 import 'data/network/device_sync_auth_interceptor.dart';
+import 'data/network/unconfigured_backend_interceptor.dart';
 import 'data/adapters/activation/dio_activation_priming_port.dart';
 import 'package:path_provider/path_provider.dart';
 import 'data/adapters/activation/dio_activation_sync_port.dart';
@@ -50,10 +51,9 @@ import 'data/services/local_auth_service.dart';
 import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
 import 'data/services/terminal_identity_service.dart';
-import 'data/services/platform/system_installer_adapter.dart';
-import 'data/services/update/fiscal_safety_gate_adapter.dart';
+import 'core/di/ota_providers.dart';
+import 'domain/services/update/ota_discovery_service.dart';
 import 'domain/services/update/ota_update_coordinator.dart';
-import 'domain/services/update/release_downloader.dart';
 import 'ui/features/auth/viewmodels/login_viewmodel.dart';
 import 'ui/features/auth/viewmodels/link_terminal_viewmodel.dart';
 import 'ui/features/auth/views/link_terminal_view.dart';
@@ -127,11 +127,11 @@ import 'ui/features/kitchen/kitchen_display_view.dart';
 import 'ui/features/kitchen/kitchen_display_view_model.dart';
 
 /// The backend transport resolved once at startup: the resolution (with its
-/// provenance, for the operator-facing surface) plus the concrete base URL
-/// every Dio client is constructed with.
+/// provenance, for the operator-facing surface) plus the base URL every Dio
+/// client is constructed with, or null when no backend is configured.
 typedef StartupTransport = ({
   ApiBaseUrlResolution resolution,
-  String transportBaseUrl,
+  String? transportBaseUrl,
 });
 
 /// Resolves the backend transport from the runtime-provisioning sources:
@@ -139,9 +139,14 @@ typedef StartupTransport = ({
 /// release build with neither reports [ApiBaseUrlSource.unconfigured] instead
 /// of pretending the localhost default is a configured backend.
 ///
-/// The transport still receives a concrete URL (the development default) when
-/// unconfigured so the offline sale path is never blocked; the unconfigured
-/// state is surfaced to the operator, never hidden.
+/// In debug builds, an unconfigured resolution still falls back to the
+/// development default so local development is unaffected. In release builds,
+/// unconfigured stays unconfigured: [StartupTransport.transportBaseUrl] is
+/// null and every client built from it by [PosDioClients] rejects each
+/// request locally with an [UnconfiguredBackendException] — before any
+/// socket is opened — so "not configured" is never disguised as a network
+/// failure. Transport only: the offline sale path never touches these
+/// clients, so an unconfigured backend never blocks a sale.
 @visibleForTesting
 Future<StartupTransport> resolveStartupTransport({
   required LocalConfigDao configDao,
@@ -154,22 +159,38 @@ Future<StartupTransport> resolveStartupTransport({
   ).resolve(buildTimeApiUrl: buildTimeApiUrl);
   return (
     resolution: resolution,
-    transportBaseUrl:
-        resolution.url ?? ApiBaseUrlService.developmentDefaultUrl,
+    transportBaseUrl: resolution.url,
   );
 }
 
 /// The POS transport Dio clients, built ONCE at startup from the resolved
 /// backend URL. The activation-sync port reuses [app]. A URL change applies
 /// on the next app start, not per request.
+/// When [baseUrl] is null (release build with no configured backend) no
+/// client receives any URL: each adapter is wrapped by
+/// [UnconfiguredBackendAdapter], so every request throws an
+/// [UnconfiguredBackendException] before any socket is opened. The guard is
+/// an adapter wrapper, NOT an interceptor, so [claim] stays free of
+/// interceptors as its contract requires.
 @visibleForTesting
 class PosDioClients {
-  PosDioClients({required String baseUrl})
-      : app = Dio(productionTransportOptions(baseUrl)),
-        refresh = Dio(productionTransportOptions(baseUrl)),
-        claim = Dio(productionTransportOptions(baseUrl)),
-        deviceSyncExchange = Dio(productionTransportOptions(baseUrl)),
-        sync = Dio(productionTransportOptions(baseUrl));
+  PosDioClients({required String? baseUrl})
+      : app = _buildTransport(baseUrl),
+        refresh = _buildTransport(baseUrl),
+        claim = _buildTransport(baseUrl),
+        deviceSyncExchange = _buildTransport(baseUrl),
+        sync = _buildTransport(baseUrl);
+
+  static Dio _buildTransport(String? baseUrl) {
+    final dio = Dio(productionTransportOptions(baseUrl ?? ''));
+    if (baseUrl == null) {
+      dio.httpClientAdapter = UnconfiguredBackendAdapter(
+        dio.httpClientAdapter,
+        source: ApiBaseUrlSource.unconfigured,
+      );
+    }
+    return dio;
+  }
 
   /// Primary client. The activation-sync port (DioActivationSyncPort) also
   /// rides on this instance.
@@ -226,7 +247,8 @@ void main() async {
   if (!startupTransport.resolution.isConfigured) {
     debugPrint(
       '[ApiUrl] Server not configured: no persisted api_base_url and no '
-      'API_URL define. Sync targets the development default until the '
+      'API_URL define. Backend requests fail locally with '
+      'UnconfiguredBackendException (no server is contacted) until the '
       'terminal is provisioned; sales are unaffected.',
     );
   }
@@ -514,6 +536,41 @@ void main() async {
     syncService.start();
   }
 
+  // T1 (OTA automatic discovery): build the OTA coordinator at app-root,
+  // BEFORE runApp, so its lifetime is the whole app session and never depends
+  // on the terminal-identity settings screen being opened. Offline-first:
+  // construction only stores closures and OtaInitial state — no I/O here.
+  final otaDependencies = buildOtaDependencies(
+    localConfigDao: database.localConfigDao,
+    cashierSessionDao: database.cashierSessionDao,
+    discoveryDio: dio,
+    getStorageDirectory: getApplicationSupportDirectory,
+  );
+
+  // T2 (OTA automatic discovery): silent discovery loop. Lifetime is the app
+  // session, like the coordinator itself; it owns only scheduling, backoff,
+  // and the silent-offer surface. It calls
+  // OtaUpdateCoordinator.discoverSilently() and NEVER mutates the interactive
+  // OtaUpdateState machine (AC3) — no tick can clobber an in-flight
+  // OtaDownloading or flash OtaFailed on a network blip.
+  // T3 (AC5): the suppression store is built inside buildOtaDependencies and
+  // makes the highest surfaced versionCode survive process restarts.
+  final otaDiscoveryService = OtaDiscoveryService(
+    otaCoordinator: otaDependencies.otaCoordinator,
+    connectivityChanges: connectivityService.onConnectivityChanged,
+    offerSuppressionStore: otaDependencies.releaseOfferSuppressionStore,
+  );
+
+  // T2: same pre-auth linking gate as connectivityService.start() /
+  // syncService.start() above (issue #556): an unlinked terminal has no
+  // backend URL and must not poll /v1/releases/latest. The first silent
+  // check runs inside start(), satisfying AC1 (one check at process start).
+  if (isTerminalLinked) {
+    // start() is awaited so the suppression record (T3, AC5) is loaded once
+    // before the first check is scheduled; it performs no other I/O.
+    await otaDiscoveryService.start();
+  }
+
   runApp(
     MultiProvider(
       providers: [
@@ -606,39 +663,32 @@ void main() async {
             configService: PrinterConfigService(database.localConfigDao),
           ),
         ),
+        // T1 (OTA automatic discovery): the coordinator is materialized in
+        // main() before runApp and registered as its own app-root provider
+        // with lazy: false, so it exists before any screen opens — the
+        // discovery timer runs without a human ever opening the
+        // terminal-identity settings screen.
+        ChangeNotifierProvider<OtaUpdateCoordinator>(
+          create: (_) => otaDependencies.otaCoordinator,
+          lazy: false,
+        ),
+        // T3b: register the SAME otaDiscoveryService instance constructed in
+        // main() above as an app-root provider so the OTA card can render
+        // silently discovered offers. Never a second service or a second
+        // discovery cycle.
+        ChangeNotifierProvider<OtaDiscoveryService>.value(
+          value: otaDiscoveryService,
+        ),
         ChangeNotifierProvider(
-          create: (_) {
-            final apiBaseUrlService =
-                ApiBaseUrlService(database.localConfigDao);
-            // Clean Dio instance with NO auth interceptors and generous timeouts
-            // for downloading large APK binaries from external object storage (R2).
-            final downloadDio = Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 30),
-                receiveTimeout: const Duration(minutes: 5),
-              ),
-            );
-            final otaCoordinator = OtaUpdateCoordinator(
-              apiBaseUrlService: apiBaseUrlService,
-              releaseDownloader: ReleaseDownloader(dio: downloadDio),
-              releaseInstaller: SystemInstallerAdapter(),
-              fiscalSafetyGate: FiscalSafetyGateAdapter(
-                checkOpenShift: () async {
-                  final sessions =
-                      await database.cashierSessionDao.getAllSessions();
-                  return sessions.any((s) => !s.isClosed);
-                },
-              ),
-              dio: dio,
-              getStorageDirectory: getApplicationSupportDirectory,
-            );
-
+          create: (context) {
             return TerminalIdentityViewModel(
               configDao: database.localConfigDao,
               printerConfigService:
                   PrinterConfigService(database.localConfigDao),
-              apiBaseUrlService: apiBaseUrlService,
-              otaCoordinator: otaCoordinator,
+              apiBaseUrlService: otaDependencies.apiBaseUrlService,
+              // Same instance as the app-root provider above — never a
+              // second coordinator with a second state machine.
+              otaCoordinator: context.read<OtaUpdateCoordinator>(),
               buildTimeApiUrl: buildTimeApiUrl,
             );
           },

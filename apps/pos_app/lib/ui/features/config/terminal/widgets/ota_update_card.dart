@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:pos_app/domain/models/update/release_manifest.dart';
 import 'package:pos_app/domain/ports/fiscal_safety_gate_port.dart';
+import 'package:pos_app/domain/services/update/ota_discovery_service.dart';
 import 'package:pos_app/domain/services/update/ota_update_coordinator.dart';
 
 /// Card widget embedded in [TerminalIdentityView] allowing the operator to
@@ -12,9 +16,18 @@ class OtaUpdateCard extends StatefulWidget {
   const OtaUpdateCard({
     super.key,
     required this.coordinator,
+    this.discoveryService,
   });
 
   final OtaUpdateCoordinator coordinator;
+
+  /// Silent discovery surface (T3b). When provided, an offer observed by
+  /// [OtaDiscoveryService.lastOffer] is rendered while the coordinator is
+  /// still in [OtaInitial] — the operator has not run a manual check yet, so
+  /// the silent offer is the only update information available. Once a manual
+  /// check runs, the coordinator's own state wins and this offer never
+  /// renders as a second competing block.
+  final OtaDiscoveryService? discoveryService;
 
   @override
   State<OtaUpdateCard> createState() => _OtaUpdateCardState();
@@ -22,6 +35,18 @@ class OtaUpdateCard extends StatefulWidget {
 
 class _OtaUpdateCardState extends State<OtaUpdateCard>
     with WidgetsBindingObserver {
+  /// versionCode of the silent offer hidden for the REST OF THIS CARD
+  /// INSTANCE (T3b, "Ahora no"). Deliberately in-memory only, never persisted:
+  /// the card never touches the suppression store.
+  ///
+  /// Honest scope (since T3c): "Ahora no" hides the offer for this card
+  /// instance only. The offer REAPPEARS after a process restart, because
+  /// [OtaDiscoveryService] persists suppression exclusively on explicit
+  /// dismissal ([OtaDiscoveryService.suppressOffer], the "No avisarme de
+  /// esta versión" action) — merely surfacing an offer never persists it.
+  /// The two buttons therefore have genuinely different reach: session-only
+  /// vs. permanent for that versionCode.
+  int? _dismissedSilentVersionCode;
   @override
   void initState() {
     super.initState();
@@ -45,7 +70,7 @@ class _OtaUpdateCardState extends State<OtaUpdateCard>
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.coordinator,
+      listenable: Listenable.merge([widget.coordinator, widget.discoveryService]),
       builder: (context, _) {
         final state = widget.coordinator.state;
         final theme = Theme.of(context);
@@ -96,6 +121,20 @@ class _OtaUpdateCardState extends State<OtaUpdateCard>
   ) {
     switch (state) {
       case OtaInitial():
+        final silentOffer = _visibleSilentOffer();
+        if (silentOffer != null) {
+          // T3b: surface the silently discovered offer with the SAME visual
+          // language and keys as OtaUpdateAvailable, plus the two dismissal
+          // affordances. One offer, one action — it replaces the idle check
+          // button, it is not stacked below it.
+          return _buildOfferBody(
+            context,
+            silentOffer.manifest,
+            silentOffer.fiscalVerdict,
+            canInstall: silentOffer.canInstallNow,
+            showDismissals: true,
+          );
+        }
         return _buildCheckAction(
           buttonLabel: 'Buscar actualizaciones',
           isLoading: false,
@@ -143,130 +182,12 @@ class _OtaUpdateCardState extends State<OtaUpdateCard>
         );
 
       case OtaUpdateAvailable(:final manifest, :final fiscalVerdict):
-        final canInstall = fiscalVerdict is FiscalGateClear;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Versión ${manifest.versionName}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade900,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade100,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'build ${manifest.versionCode}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue.shade900,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Tamaño: ${(manifest.sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB',
-                    style: TextStyle(color: Colors.blue.shade900, fontSize: 13),
-                  ),
-                  if (manifest.notes != null && manifest.notes!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      manifest.notes!,
-                      style: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        color: Colors.blue.shade900,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (!canInstall && fiscalVerdict is FiscalGateBlocked) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade400),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.amber.shade900,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Instalación temporalmente pausada',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.amber.shade900,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            fiscalVerdict.summary,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.amber.shade900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                key: const Key('ota_recheck_button'),
-                icon: const Icon(Icons.refresh),
-                label: const Text('Buscar actualizaciones'),
-                onPressed: () => widget.coordinator.checkForUpdate(),
-              ),
-              const SizedBox(height: 12),
-            ],
-            ElevatedButton.icon(
-              key: const Key('ota_install_button'),
-              icon: const Icon(Icons.download_for_offline),
-              label: const Text('Descargar e Instalar'),
-              onPressed: canInstall
-                  ? () => widget.coordinator.downloadAndInstall(manifest)
-                  : null,
-            ),
-          ],
+        return _buildOfferBody(
+          context,
+          manifest,
+          fiscalVerdict,
+          canInstall: fiscalVerdict is FiscalGateClear,
+          showDismissals: false,
         );
 
       case OtaDownloading(:final manifest, :final progress, :final receivedBytes, :final totalBytes):
@@ -447,6 +368,195 @@ class _OtaUpdateCardState extends State<OtaUpdateCard>
           ],
         );
     }
+  }
+
+  /// The silent offer currently visible on this card, or `null` when there
+  /// is nothing to show: no discovery service, no offer, or the offer's
+  /// version was already dismissed this session.
+  OtaSilentOffer? _visibleSilentOffer() {
+    final offer = widget.discoveryService?.lastOffer;
+    if (offer == null) return null;
+    if (offer.manifest.versionCode == _dismissedSilentVersionCode) return null;
+    return offer;
+  }
+
+  void _dismissSilentOffer(int versionCode, {required bool persist}) {
+    setState(() => _dismissedSilentVersionCode = versionCode);
+    if (persist) {
+      // T3b: persistent suppression goes through the discovery service API —
+      // never through the suppression store directly.
+      unawaited(widget.discoveryService!.suppressOffer(versionCode));
+    }
+  }
+
+  /// Shared body for a pending update offer, used by BOTH the manual
+  /// [OtaUpdateAvailable] branch and the T3b silent-offer branch so the
+  /// operator always sees one visual language for "there is an update".
+  Widget _buildOfferBody(
+    BuildContext context,
+    ReleaseManifest manifest,
+    FiscalSafetyVerdict fiscalVerdict, {
+    required bool canInstall,
+    required bool showDismissals,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Versión ${manifest.versionName}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue.shade900,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'build ${manifest.versionCode}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue.shade900,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Tamaño: ${(manifest.sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB',
+                style: TextStyle(color: Colors.blue.shade900, fontSize: 13),
+              ),
+              if (manifest.notes != null && manifest.notes!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  manifest.notes!,
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: Colors.blue.shade900,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (!canInstall && fiscalVerdict is FiscalGateBlocked) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.amber.shade400),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.amber.shade900,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Instalación temporalmente pausada',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        fiscalVerdict.summary,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.amber.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Main's blocked-state recheck affordance (kept on the port): an
+          // operator reading a paused MANUAL offer can re-check from the card
+          // itself. The silent-offer branch carries the dismissal controls
+          // instead, so this button only renders on the manual surface.
+          if (!showDismissals)
+            OutlinedButton.icon(
+              key: const Key('ota_recheck_button'),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Buscar actualizaciones'),
+              onPressed: () => widget.coordinator.checkForUpdate(),
+            ),
+          if (!showDismissals) const SizedBox(height: 12),
+        ],
+        ElevatedButton.icon(
+          key: const Key('ota_install_button'),
+          icon: const Icon(Icons.download_for_offline),
+          label: const Text('Descargar e Instalar'),
+          onPressed: canInstall
+              ? () => widget.coordinator.downloadAndInstall(manifest)
+              : null,
+        ),
+        if (showDismissals) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('ota_offer_dismiss_now'),
+                icon: const Icon(Icons.schedule),
+                label: const Text('Ahora no'),
+                // POS standard §18.3: secondary buttons >= 48 x 48 dp.
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                ),
+                onPressed: () =>
+                    _dismissSilentOffer(manifest.versionCode, persist: false),
+              ),
+              OutlinedButton.icon(
+                key: const Key('ota_offer_suppress_version'),
+                icon: const Icon(Icons.visibility_off_outlined),
+                label: const Text('No avisarme de esta versión'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                ),
+                onPressed: () =>
+                    _dismissSilentOffer(manifest.versionCode, persist: true),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
   }
 
   Widget _buildCheckAction({

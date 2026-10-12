@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:pos_app/data/daos/security_profile_dao.dart';
 import 'package:pos_app/data/daos/user_dao.dart';
+import 'package:pos_app/data/network/unconfigured_backend_interceptor.dart';
 import 'package:pos_app/data/repositories/auth_repository_impl.dart';
 import 'package:pos_app/data/security/totp_seed_key_provider.dart';
+import 'package:pos_app/data/services/api_base_url_service.dart';
 import 'package:pos_app/data/services/local_auth_service.dart';
 import 'package:pos_app/domain/models/auth/terminal_linking.dart';
 
@@ -183,5 +185,54 @@ void main() {
             'userMessage', 'Error de conexión. Verifique su red e intente de nuevo.'),
       ),
     );
+  });
+
+  test('claimLinkingCode maps an unconfigured transport to the honest '
+      'no-server-configured condition, not a network failure', () async {
+    when(() => claimDio.post(any(),
+            data: any(named: 'data'), options: any(named: 'options')))
+        .thenThrow(
+      UnconfiguredBackendException(
+        RequestOptions(path: '/onboarding/activation/link'),
+        ApiBaseUrlSource.unconfigured,
+      ),
+    );
+
+    await expectLater(
+      repository.claimLinkingCode('XXXXXX', 'pos-local-abc'),
+      throwsA(
+        isA<LinkingClaimException>().having(
+            (e) => e.userMessage,
+            'userMessage',
+            'Esta terminal no tiene un servidor configurado. Las ventas '
+                'siguen funcionando sin conexión, pero la sincronización '
+                'no está disponible.'),
+      ),
+    );
+  });
+
+  test('claimLinkingCode keeps the network copy for genuine connectivity '
+      'failures (timeout, generic unknown Dio error)', () async {
+    for (final type in const [
+      DioExceptionType.connectionTimeout,
+      DioExceptionType.unknown,
+    ]) {
+      when(() => claimDio.post(any(),
+              data: any(named: 'data'), options: any(named: 'options')))
+          .thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+          type: type,
+        ),
+      );
+
+      await expectLater(
+        repository.claimLinkingCode('XXXXXX', 'pos-local-abc'),
+        throwsA(
+          isA<LinkingClaimException>().having((e) => e.userMessage,
+              'userMessage', 'Error de conexión. Verifique su red e intente de nuevo.'),
+        ),
+      );
+    }
   });
 }
