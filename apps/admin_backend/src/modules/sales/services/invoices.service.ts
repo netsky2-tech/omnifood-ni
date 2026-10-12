@@ -9,6 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { createHash, randomUUID } from 'crypto';
+import { LoyaltyLedgerService } from '../../loyalty/services/loyalty-ledger.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
@@ -164,6 +165,7 @@ export const calculateSyncPayloadHash = (record: SyncBatchRecordDto): string =>
         fulfillment: record.fulfillment,
         invoice: record.invoice,
         movements: record.movements,
+        events: record.events,
         recipeVersionId: record.recipeVersionId,
         topologyRevision: record.topologyRevision,
       }),
@@ -219,6 +221,12 @@ export class InvoicesService {
     // SyncHealthModule.
     @Optional()
     private readonly sequenceGapPolicy?: SequenceGapPolicyService,
+    // T6 (arch §13.4): LOYALTY_LEDGER dispatch rides the ledger service so
+    // sync-batch never forks ledger semantics. Optional so standalone
+    // constructions (tests, replay scripts) keep booting; without it a
+    // LOYALTY_LEDGER record fails closed with a named rejection.
+    @Optional()
+    private readonly loyaltyLedgerService?: LoyaltyLedgerService,
   ) {
     this.outcomeService =
       this.saleInventoryOutcomeService ?? new SaleInventoryOutcomeService();
@@ -977,6 +985,49 @@ export class InvoicesService {
     };
   }
 
+  /**
+   * T6 (arch §13.4): dispatches a LOYALTY_LEDGER record's events[] through
+   * the shared ledger append core on the CALLER'S tenant-bound SERIALIZABLE
+   * manager, so the movements and the batch receipt commit atomically.
+   * Ledger-level dedupe (event idempotency_key) and integrity conflicts keep
+   * their existing semantics. A payload claiming another tenant fails closed.
+   */
+  private async appendLoyaltyLedgerRecord(
+    tenantId: string,
+    record: SyncBatchRecordDto,
+    manager: EntityManager,
+  ): Promise<void> {
+    if (record.documentType !== 'LOYALTY_LEDGER') return;
+    if (!this.loyaltyLedgerService) {
+      throw new Error(
+        'LOYALTY_LEDGER dispatch requires the loyalty ledger service: SalesModule must wire LoyaltyModule',
+      );
+    }
+    for (const event of record.events ?? []) {
+      if (event.transaction.tenantId !== tenantId) {
+        throw new BadRequestException(
+          'LOYALTY_LEDGER event payload tenant does not match the authenticated tenant',
+        );
+      }
+      await this.loyaltyLedgerService.appendTransactionInManager(
+        {
+          tenantId,
+          customerId: event.transaction.customerId,
+          loyaltyProgramId: event.transaction.loyaltyProgramId ?? undefined,
+          ticketId: event.transaction.ticketId,
+          transactionType: event.transaction.transactionType,
+          units: event.transaction.units,
+          origin: event.transaction.origin,
+          idempotencyKey: event.idempotency_key,
+          sourceEventId: event.event_id,
+          terminalId: record.terminalId ?? record.sourceDeviceId,
+          occurredAt: new Date(event.transaction.occurredAt),
+        },
+        manager,
+      );
+    }
+  }
+
   private buildResult(
     record: SyncBatchRecordDto,
     status: SyncResultStatus,
@@ -1224,6 +1275,10 @@ export class InvoicesService {
         await bindTenantContext(manager, tenantId);
         this.assertRecordCreditNoteBoundary(record);
         this.assertSupportedCreditNoteStockBehavior(record);
+        // T6 (arch §13.4): ledger movements AND the batch receipt commit in
+        // THIS same SERIALIZABLE transaction via the shared ledger append
+        // core — never a parallel transport or a split write.
+        await this.appendLoyaltyLedgerRecord(tenantId, record, manager);
         const acceptedAt = new Date();
         if (record.invoice) {
           v1Outcome = await this.outcomeService.validateSaleTimeSnapshot(
@@ -1344,6 +1399,31 @@ export class InvoicesService {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sync failed';
       const dbErr = error as { code?: string; constraint?: string };
+      if (error instanceof ConflictException) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'LOYALTY_IDEMPOTENCY_CONFLICT',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        error instanceof BadRequestException &&
+        message.includes(
+          'LOYALTY_LEDGER event payload tenant does not match the authenticated tenant',
+        )
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CROSS_TENANT_LOYALTY_EVENT',
+            retryable: false,
+            message,
+          }),
+        };
+      }
       if (
         (dbErr?.code === '23505' &&
           (dbErr?.constraint === 'uq_inventory_kardex_sale_correlation' ||

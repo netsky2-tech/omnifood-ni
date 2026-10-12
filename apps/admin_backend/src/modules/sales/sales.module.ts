@@ -37,6 +37,7 @@ import { CashShiftSyncController } from './controllers/cash-shift-sync.controlle
 import { CashShiftSyncIngestionService } from './services/cash-shift-sync-ingestion.service';
 import { SalesReportsService } from './services/sales-reports.service';
 import { SyncHealthModule } from './sync-health/sync-health.module';
+import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { FiscalReportsService } from './services/fiscal-reports.service';
 import { SalesExportService } from './services/sales-export.service';
 import { SaleInventoryOutcomeService } from './services/sale-inventory-outcome.service';
@@ -55,6 +56,10 @@ import { forwardRef } from '@nestjs/common';
     HumanAuthorizationModule,
     DeviceSyncModule,
     InventoryModule,
+    // T6 (arch §13.4): LOYALTY_LEDGER sync-batch records dispatch through the
+    // loyalty module's ledger service — the single ledger write path — so the
+    // transport never forks ledger semantics.
+    LoyaltyModule,
     // Dashboard V2 Batch 3: sync freshness read model; reads the sync
     // receipt/outbox tables through tenant-bound transactions only.
     SyncHealthModule,

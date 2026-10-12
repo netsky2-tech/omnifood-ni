@@ -313,4 +313,159 @@ describe('SyncBatchEnvelopeDto', () => {
     const { errors } = validate([invalidRecord]);
     expect(errors.length).toBeGreaterThan(0);
   });
+
+  // T6 (arch §13.4): the existing SyncBatchEnvelopeDto is extended — never a
+  // parallel transport — with the LOYALTY_LEDGER flow and its documented
+  // events[] payload ({ event_id, idempotency_key, transaction } with the
+  // canonical LoyaltyTransaction state, §2.3).
+  const loyaltyRecord = {
+    idempotencyKey: 'loyalty:earn:00000000-0000-4000-8000-000000000001',
+    sourceDeviceId: 'terminal-loyalty-1',
+    sourceSequence: 1,
+    terminalId: 'terminal-loyalty-1',
+    flowType: 'LOYALTY_LEDGER',
+    documentType: 'LOYALTY_LEDGER',
+    events: [
+      {
+        event_id: 'evt-00000000-0000-4000-8000-000000000001',
+        idempotency_key: 'loyalty:earn:00000000-0000-4000-8000-000000000002',
+        transaction: {
+          tenantId: '00000000-0000-4000-8000-000000000003',
+          loyaltyProgramId: null,
+          customerId: '00000000-0000-4000-8000-000000000004',
+          ticketId: 'TICKET-0001',
+          transactionType: 'EARN',
+          units: 10,
+          origin: 'POS',
+          occurredAt: new Date().toISOString(),
+        },
+      },
+    ],
+  };
+
+  it('accepts the documented LOYALTY_LEDGER flow with its events[] payload (arch §13.4)', () => {
+    const { errors, dto } = validate([loyaltyRecord]);
+    expect(errors).toHaveLength(0);
+    expect(dto.records[0]).toMatchObject({
+      flowType: 'LOYALTY_LEDGER',
+      documentType: 'LOYALTY_LEDGER',
+    });
+    expect(dto.records[0].events?.[0]).toMatchObject({
+      event_id: 'evt-00000000-0000-4000-8000-000000000001',
+      idempotency_key: 'loyalty:earn:00000000-0000-4000-8000-000000000002',
+    });
+    expect(dto.records[0].events?.[0].transaction).toMatchObject({
+      transactionType: 'EARN',
+      units: 10,
+      origin: 'POS',
+    });
+  });
+
+  it('accepts every ledger movement type the contract documents, including REVERSAL', () => {
+    const reversal = {
+      ...loyaltyRecord,
+      idempotencyKey: 'loyalty:reversal:00000000-0000-4000-8000-00000000000a',
+      events: [
+        {
+          event_id: 'evt-rev-1',
+          idempotency_key: 'loyalty:reversal:00000000-0000-4000-8000-00000000000b',
+          transaction: {
+            ...loyaltyRecord.events[0].transaction,
+            transactionType: 'REVERSAL',
+            units: -10,
+          },
+        },
+      ],
+    };
+    const { errors } = validate([reversal]);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects LOYALTY_LEDGER without events (the flow carries no invoice/movements/fulfillment)', () => {
+    const { events, ...withoutEvents } = loyaltyRecord;
+    const { errors } = validate([withoutEvents]);
+    expect(errors.length).toBeGreaterThan(0);
+
+    const emptyEvents = { ...loyaltyRecord, events: [] };
+    expect(validate([emptyEvents]).errors.length).toBeGreaterThan(0);
+  });
+
+  it('rejects LOYALTY_LEDGER mixed with invoice, movements, or fulfillment payloads', () => {
+    const withMovements = {
+      ...loyaltyRecord,
+      movements: [{ insumoId: 'ins-1', quantity: 2 }],
+    };
+    expect(validate([withMovements]).errors.length).toBeGreaterThan(0);
+
+    const withInvoice = {
+      ...loyaltyRecord,
+      invoice: { id: 'inv-1', items: [], payments: [] },
+    };
+    expect(validate([withInvoice]).errors.length).toBeGreaterThan(0);
+
+    const withFulfillment = {
+      ...loyaltyRecord,
+      fulfillment: { id: 'ful-1', channel: 'PRINT_ONLY', routeState: 'ROUTED' },
+    };
+    expect(validate([withFulfillment]).errors.length).toBeGreaterThan(0);
+  });
+
+  it('rejects events[] on records whose documentType is not LOYALTY_LEDGER', () => {
+    const misplaced = {
+      ...validRecord,
+      events: loyaltyRecord.events,
+    };
+    const { errors } = validate([misplaced]);
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it('rejects a LOYALTY_LEDGER documentType without the matching flowType (deterministic flow, like CREDIT_NOTE)', () => {
+    const missingFlow = { ...loyaltyRecord, flowType: undefined };
+    expect(validate([missingFlow]).errors.length).toBeGreaterThan(0);
+
+    const mismatchedFlow = { ...loyaltyRecord, flowType: 'sales' };
+    expect(validate([mismatchedFlow]).errors.length).toBeGreaterThan(0);
+  });
+
+  it('rejects an undocumented ledger transactionType', () => {
+    const invalidType = {
+      ...loyaltyRecord,
+      events: [
+        {
+          ...loyaltyRecord.events[0],
+          transaction: {
+            ...loyaltyRecord.events[0].transaction,
+            transactionType: 'VOID',
+          },
+        },
+      ],
+    };
+    const { errors } = validate([invalidType]);
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it('whitelists the ledger event shape under the production pipe policy (forbidNonWhitelisted)', () => {
+    const validateStrict = (records: unknown[]) =>
+      validateSync(plainToInstance(SyncBatchEnvelopeDto, { records }), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        forbidUnknownValues: false,
+      });
+
+    expect(validateStrict([loyaltyRecord])).toHaveLength(0);
+
+    const unknownField = {
+      ...loyaltyRecord,
+      events: [
+        {
+          ...loyaltyRecord.events[0],
+          transaction: {
+            ...loyaltyRecord.events[0].transaction,
+            notInContract: true,
+          },
+        },
+      ],
+    };
+    expect(validateStrict([unknownField]).length).toBeGreaterThan(0);
+  });
 });

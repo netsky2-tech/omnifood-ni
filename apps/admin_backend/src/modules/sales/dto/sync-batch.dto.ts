@@ -2,11 +2,12 @@ import {
   ArrayMaxSize,
   IsArray,
   IsEnum,
+  IsIn,
   IsNumber,
   IsObject,
   IsOptional,
-  registerDecorator,
   IsString,
+  registerDecorator,
   ValidationArguments,
   ValidationOptions,
   ValidateNested,
@@ -24,6 +25,7 @@ const SYNC_DOCUMENT_TYPE = {
   ADJUSTMENT: 'ADJUSTMENT',
   REVERSAL: 'REVERSAL',
   FULFILLMENT: 'FULFILLMENT',
+  LOYALTY_LEDGER: 'LOYALTY_LEDGER',
 } as const;
 
 export type SyncDocumentType =
@@ -33,9 +35,18 @@ const SYNC_FLOW_TYPE = {
   INVENTORY: 'inventory',
   SALES: 'sales',
   FULFILLMENT: 'fulfillment',
+  LOYALTY_LEDGER: 'LOYALTY_LEDGER',
 } as const;
 
 export type SyncFlowType = (typeof SYNC_FLOW_TYPE)[keyof typeof SYNC_FLOW_TYPE];
+
+/**
+ * Arch §2.3 canonical LoyaltyTransaction movement types. REVERSAL is part of
+ * the contract from day one (§4.3 per-movement reversals) even before the POS
+ * emits it, so the transport never becomes the reason the reversal contract
+ * cannot land.
+ */
+const LOYALTY_TRANSACTION_TYPES = ['EARN', 'REDEEM', 'ADJUST', 'REVERSAL'];
 
 const ABSOLUTE_STOCK_FIELDS = new Set([
   'stock',
@@ -175,6 +186,56 @@ function RejectCreditNoteMovementDeltas(validationOptions?: ValidationOptions) {
   };
 }
 
+/**
+ * Arch §13.4 cross-field contract for the LOYALTY_LEDGER flow, riding the
+ * EXISTING sync/batch envelope (no parallel transport):
+ *  - documentType LOYALTY_LEDGER requires the matching deterministic
+ *    flowType (same rule CREDIT_NOTE has);
+ *  - the record carries the documented events[] payload and no invoice /
+ *    movements / fulfillment payload;
+ *  - no other document type may carry events[].
+ */
+function LoyaltyLedgerDocumentContract(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'loyaltyLedgerDocumentContract',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: unknown, args: ValidationArguments) {
+          const record = args.object as SyncBatchRecordDto;
+          if (value !== SYNC_DOCUMENT_TYPE.LOYALTY_LEDGER) {
+            return record.events === undefined;
+          }
+          if (record.flowType !== 'LOYALTY_LEDGER' as SyncFlowType) {
+            return false;
+          }
+          if (!Array.isArray(record.events) || record.events.length === 0) {
+            return false;
+          }
+          return !record.invoice &&
+            !(record.movements && record.movements.length > 0) &&
+            !record.fulfillment;
+        },
+        defaultMessage(args: ValidationArguments) {
+          const record = args.object as SyncBatchRecordDto;
+          if (record.documentType === SYNC_DOCUMENT_TYPE.LOYALTY_LEDGER) {
+            if (record.flowType !== 'LOYALTY_LEDGER') {
+              return 'LOYALTY_LEDGER documentType requires flowType LOYALTY_LEDGER';
+            }
+            if (!Array.isArray(record.events) || record.events.length === 0) {
+              return 'LOYALTY_LEDGER records require at least one ledger event';
+            }
+            return 'LOYALTY_LEDGER records carry only the events[] payload: invoice, movements, and fulfillment are not accepted';
+          }
+          return 'events[] is only valid on LOYALTY_LEDGER records';
+        },
+      },
+    });
+  };
+}
+
 export class SyncMovementDeltaDto {
   @IsString()
   insumoId: string;
@@ -246,6 +307,52 @@ export class SyncFulfillmentDto {
   lines?: Array<Record<string, unknown>>;
 }
 
+/**
+ * One ledger event of a LOYALTY_LEDGER sync-batch record (arch §13.4 exact
+ * wire shape): snake_case event identity keys, plus the canonical
+ * LoyaltyTransaction state (§2.3) the ledger append consumes.
+ */
+export class SyncLoyaltyLedgerTransactionDto {
+  @IsString()
+  tenantId: string;
+
+  @IsOptional()
+  @IsString()
+  loyaltyProgramId?: string | null;
+
+  @IsString()
+  customerId: string;
+
+  @IsString()
+  ticketId: string;
+
+  @IsString()
+  @IsIn(LOYALTY_TRANSACTION_TYPES)
+  transactionType: string;
+
+  @IsNumber()
+  units: number;
+
+  @IsString()
+  origin: string;
+
+  @IsString()
+  occurredAt: string;
+}
+
+export class SyncLoyaltyLedgerEventDto {
+  @IsString()
+  event_id: string;
+
+  @IsString()
+  idempotency_key: string;
+
+  @IsObject()
+  @ValidateNested()
+  @Type(() => SyncLoyaltyLedgerTransactionDto)
+  transaction: SyncLoyaltyLedgerTransactionDto;
+}
+
 export class SyncBatchRecordDto {
   @IsString()
   idempotencyKey: string;
@@ -261,6 +368,7 @@ export class SyncBatchRecordDto {
   flowType?: SyncFlowType;
 
   @IsEnum(SYNC_DOCUMENT_TYPE)
+  @LoyaltyLedgerDocumentContract()
   documentType: SyncDocumentType;
 
   @IsString()
@@ -316,6 +424,13 @@ export class SyncBatchRecordDto {
   @ValidateNested()
   @Type(() => SyncFulfillmentDto)
   fulfillment?: SyncFulfillmentDto;
+
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => SyncLoyaltyLedgerEventDto)
+  events?: SyncLoyaltyLedgerEventDto[];
 }
 
 export class SyncBatchEnvelopeDto {
