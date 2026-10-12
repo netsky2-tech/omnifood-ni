@@ -10,6 +10,7 @@ import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/daos/customer/customer_dao.dart';
 import 'package:pos_app/data/daos/customer/customer_point_transaction_dao.dart';
+import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/daos/loyalty/loyalty_program_dao.dart';
 import 'package:pos_app/data/daos/loyalty/loyalty_reward_dao.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
@@ -1627,6 +1628,228 @@ void main() {
       expect(vmNoBinding.currentEvaluation, isNotNull);
       expect(vmNoBinding.currentEvaluation!.programs, isEmpty);
       expect(vmNoBinding.currentEvaluation!.hasAnyEligibleReward, isFalse);
+    });
+  });
+
+  group('T4: checkout writes §9.3-conformant ledger rows', () {
+    const testProduct = Product(
+      id: 'prod-1',
+      name: 'Smash Burger',
+      uom: 'UN',
+      stock: 100,
+      averageCost: 60.0,
+      sellPrice: 120.0,
+      category: 'Food',
+    );
+
+    LoyaltyProgramEntity testProgramEntity2 = LoyaltyProgramEntity(
+      id: 'prog-b',
+      tenantId: tenantId,
+      name: 'Program B',
+      programType: 'spendPoints',
+      status: 'ACTIVE',
+      earningRuleJson: '{}',
+      eligibilityRuleJson: '{}',
+      configVersion: 1,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+
+    final writtenRows = <CustomerPointTransactionEntity>[];
+
+    setUp(() {
+      // The group shares the mock DAO sink: drop rows captured by a
+      // previous test before capturing this one's checkout writes.
+      writtenRows.clear();
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'user-1',
+          name: 'Cashier',
+          role: UserRole.cashier,
+          isActive: true,
+        ),
+      );
+      when(
+        mockSalesRepo.saveSale(
+          invoice: anyNamed('invoice'),
+          items: anyNamed('items'),
+          payments: anyNamed('payments'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        mockPointTxDao.recordPointTransactionAndUpdateBalance(
+            any, any, any, any),
+      ).thenAnswer((_) async {});
+    });
+
+    /// Arranges a reward-based sale against ONE active program (the
+    /// unambiguous attribution case) without stubbing the point-transaction
+    /// DAO so each test captures the written rows.
+    Future<void> arrangeSingleProgramRewardSale() async {
+      when(mockRewardInteraction.selectedRewardId).thenReturn(rewardId);
+      when(
+        mockRewardInteraction.getSelectedReward(any),
+      ).thenReturn(testReward);
+      when(
+        mockProgramDao.getActivePrograms(tenantId),
+      ).thenAnswer((_) async => [testProgramEntity]);
+      when(
+        mockRewardDao.getActiveRewards(tenantId),
+      ).thenAnswer((_) async => [testRewardEntity]);
+
+      final evaluation = LoyaltyEvaluation(
+        customerId: customerId,
+        ticketId: '',
+        programs: [
+          ProgramEvaluation(
+            programId: programId,
+            programName: 'Smash Burger Club',
+            programType: LoyaltyProgramType.productStamps,
+            balanceUnits: 10,
+            eligibleRewards: [testReward.toEligibleReward()],
+          ),
+        ],
+      );
+      when(
+        mockEvaluationService.evaluate(
+          snapshot: anyNamed('snapshot'),
+          programs: anyNamed('programs'),
+          rewards: anyNamed('rewards'),
+          balanceMap: anyNamed('balanceMap'),
+        ),
+      ).thenReturn(evaluation);
+
+      viewModel.addToCart(testProduct);
+      await viewModel.selectCustomer(testCustomer);
+      viewModel.selectReward(rewardId);
+    }
+
+    /// Resets the capture sink: the group shares one mock DAO and rows from
+    /// a previous test would otherwise leak into these assertions (same
+    /// in-memory-DB lesson as the sender tests — always filter by own ids).
+    void captureWrittenRows() {
+      when(mockPointTxDao.recordPointTransactionAndUpdateBalance(
+        any,
+        any,
+        any,
+        any,
+      )).thenAnswer((invocation) async {
+        final entity = invocation.positionalArguments[0];
+        if (entity is CustomerPointTransactionEntity) {
+          writtenRows.add(entity);
+        }
+      });
+    }
+
+    test('single-program tenant: the earn/redeem rows declare their §9.3 '
+        'identity (type, program, ticket, origin, key)', () async {
+      await arrangeSingleProgramRewardSale();
+      captureWrittenRows();
+
+      await viewModel.processSale(
+        [PaymentMethod.cash],
+        customPayments: [
+          const Payment(
+            id: 'pay-1',
+            invoiceId: '',
+            method: PaymentMethod.cash,
+            amount: 138.0,
+          ),
+        ],
+      );
+
+      expect(writtenRows, hasLength(2));
+      final captured = writtenRows;
+
+      final earn = captured
+          .singleWhere((entity) => entity.transactionType == 'EARN');
+      // §9.3: a declared EARN carries ticket AND program; the deterministic
+      // key makes a same-ticket re-earn dedupe server-side.
+      expect(earn.loyaltyProgramId, programId);
+      expect(earn.ticketId, isNotNull);
+      expect(earn.origin, 'POS');
+      expect(earn.idempotencyKey, 'loyalty:earn:$programId:${earn.ticketId}');
+      expect(earn.units, earn.points.round());
+
+      final redeem = captured
+          .singleWhere((entity) => entity.transactionType == 'REDEEM');
+      // Reward-driven redemption attributes the reward's OWN program.
+      expect(redeem.loyaltyProgramId, programId);
+      expect(redeem.ticketId, isNotNull);
+      expect(redeem.idempotencyKey, startsWith('loyalty:redeem:'));
+      expect(redeem.origin, 'POS');
+    });
+
+    test('multi-program tenant: the earn stays in the NULL legacy namespace '
+        '(fail-safe: never an aborting declared EARN)', () async {
+      // Two ACTIVE programs: the legacy single-earn path cannot attribute
+      // one honestly, so the row must NOT declare EARN (the shape trigger
+      // would abort the insert and silently stop recording points).
+      when(
+        mockRewardInteraction.selectedRewardId,
+      ).thenReturn(null);
+      when(
+        mockProgramDao.getActivePrograms(tenantId),
+      ).thenAnswer((_) async => [testProgramEntity, testProgramEntity2]);
+      when(
+        mockRewardDao.getActiveRewards(tenantId),
+      ).thenAnswer((_) async => []);
+
+      final evaluation = LoyaltyEvaluation(
+        customerId: customerId,
+        ticketId: '',
+        programs: [
+          ProgramEvaluation(
+            programId: 'prog-a',
+            programName: 'Program A',
+            programType: LoyaltyProgramType.spendPoints,
+            balanceUnits: 0,
+            eligibleRewards: const [],
+          ),
+          ProgramEvaluation(
+            programId: 'prog-b',
+            programName: 'Program B',
+            programType: LoyaltyProgramType.spendPoints,
+            balanceUnits: 0,
+            eligibleRewards: const [],
+          ),
+        ],
+      );
+      when(
+        mockEvaluationService.evaluate(
+          snapshot: anyNamed('snapshot'),
+          programs: anyNamed('programs'),
+          rewards: anyNamed('rewards'),
+          balanceMap: anyNamed('balanceMap'),
+        ),
+      ).thenReturn(evaluation);
+
+      viewModel.addToCart(testProduct);
+      await viewModel.selectCustomer(testCustomer);
+      captureWrittenRows();
+
+      await viewModel.processSale(
+        [PaymentMethod.cash],
+        customPayments: [
+          const Payment(
+            id: 'pay-1',
+            invoiceId: '',
+            method: PaymentMethod.cash,
+            amount: 138.0,
+          ),
+        ],
+      );
+
+      final captured = writtenRows;
+
+      final earn = captured.firstWhere(
+        (entity) => entity.type == 'earn',
+      );
+      expect(earn.transactionType, isNull,
+          reason: 'unattributable earn stays in the legacy namespace');
+      expect(earn.loyaltyProgramId, isNull);
+      expect(earn.ticketId, isNotNull,
+          reason: 'the ticket context still rides the row');
     });
   });
 }

@@ -2123,6 +2123,20 @@ class SaleViewModel extends ChangeNotifier {
       if (_selectedCustomer != null) {
         final now = DateTime.now().millisecondsSinceEpoch;
 
+        // T4: §9.3 attribution. Reward-driven redemption attributes the
+        // reward's own program; everything else can only be attributed
+        // honestly when exactly one ACTIVE program produced the evaluation
+        // (fail-safe: an ambiguous attribution stays in the NULL legacy
+        // namespace instead of fabricating a row the EARN shape trigger
+        // would abort).
+        final attributedProgramId =
+            (_currentEvaluation != null &&
+                _currentEvaluation!.programs.length == 1)
+            ? _currentEvaluation!.programs.single.programId
+            : null;
+        final redeemProgramId =
+            _selectedReward?.loyaltyProgramId ?? attributedProgramId;
+
         // 1. Process REDEEM from the selected reward or legacy points flow.
         final redeemUnits =
             (_rewardInteraction?.selectedRewardId != null &&
@@ -2137,6 +2151,7 @@ class SaleViewModel extends ChangeNotifier {
             currentBalance: currentBalance,
             pointsToRedeem: redeemUnits,
             invoiceId: invoiceId,
+            loyaltyProgramId: redeemProgramId,
           );
           try {
             await _database.customerPointTransactionDao
@@ -2165,6 +2180,7 @@ class SaleViewModel extends ChangeNotifier {
             currentBalance: currentBalance,
             netAmount: subtotal,
             invoiceId: invoiceId,
+            loyaltyProgramId: attributedProgramId,
           );
           try {
             await _database.customerPointTransactionDao

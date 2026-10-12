@@ -81,13 +81,20 @@ class LoyaltyService {
     return RedemptionValidationResult.success(discountAmount);
   }
 
+  /// T4: the pre-V1 checkout earn writes a §9.3-conformant row when the
+  /// program is attributable (declared EARN requires ticket AND program —
+  /// the shape triggers abort otherwise). Unattributable earns stay in the
+  /// NULL legacy namespace instead of fabricating an attribution.
   CustomerPointTransaction createEarnTransaction({
     required String customerId,
     required double currentBalance,
     required double netAmount,
     String? invoiceId,
+    String? loyaltyProgramId,
   }) {
     final pointsEarned = calculatePointsEarned(netAmount);
+    final declared = invoiceId != null && loyaltyProgramId != null;
+    final units = pointsEarned.round();
     return CustomerPointTransaction(
       id: const Uuid().v4(),
       customerId: customerId,
@@ -99,29 +106,52 @@ class LoyaltyService {
       reason: 'Acumulación por compra',
       createdAt: DateTime.now(),
       syncStatus: SyncStatus.pending,
+      loyaltyProgramId: loyaltyProgramId,
+      ticketId: invoiceId,
+      transactionType: declared ? 'EARN' : null,
+      units: units == 0 ? null : units,
+      origin: 'POS',
+      idempotencyKey: declared
+          ? 'loyalty:earn:$loyaltyProgramId:$invoiceId'
+          : null,
     );
   }
 
+  /// T4: REDEEM declares its type with the ticket alone (§9.3 requires a
+  /// ticket but not a program); the attributed program rides along when the
+  /// caller knows it (reward-driven redemption).
   CustomerPointTransaction createRedeemTransaction({
     required String customerId,
     required double currentBalance,
     required double pointsToRedeem,
     String? invoiceId,
+    String? loyaltyProgramId,
   }) {
+    final redeemed = pointsToRedeem.abs();
+    final units = redeemed.round();
     return CustomerPointTransaction(
       id: const Uuid().v4(),
       customerId: customerId,
       invoiceId: invoiceId,
       type: PointTransactionType.redeem,
-      points: -pointsToRedeem.abs(),
-      balanceAfter: currentBalance - pointsToRedeem.abs(),
+      points: -redeemed,
+      balanceAfter: currentBalance - redeemed,
       conversionRate: redeemRate,
       reason: 'Redención en checkout',
       createdAt: DateTime.now(),
       syncStatus: SyncStatus.pending,
+      loyaltyProgramId: loyaltyProgramId,
+      ticketId: invoiceId,
+      transactionType: invoiceId != null ? 'REDEEM' : null,
+      units: units == 0 ? null : -units,
+      origin: 'POS',
+      idempotencyKey:
+          invoiceId != null ? 'loyalty:redeem:$invoiceId' : null,
     );
   }
 
+  /// T4: ADJUST carries no §9.3 ticket/program shape requirement, so the
+  /// type is declared unconditionally (signed units for the sync sender).
   CustomerPointTransaction createAdjustmentTransaction({
     required String customerId,
     required double currentBalance,
@@ -129,6 +159,7 @@ class LoyaltyService {
     required String reason,
     String? invoiceId,
   }) {
+    final units = pointsDelta.round();
     return CustomerPointTransaction(
       id: const Uuid().v4(),
       customerId: customerId,
@@ -140,6 +171,9 @@ class LoyaltyService {
       reason: reason,
       createdAt: DateTime.now(),
       syncStatus: SyncStatus.pending,
+      transactionType: 'ADJUST',
+      units: units == 0 ? null : units,
+      origin: 'POS',
     );
   }
 }

@@ -185,4 +185,88 @@ void main() {
       expect(tx.balanceAfter, equals(100.0));
     });
   });
+
+  group('T4: §9.3-conformant ledger rows on the pre-V1 creators', () {
+    test('declared EARN: program + ticket → explicit type, link fields, units, '
+        'origin and a deterministic idempotency key', () {
+      final tx = loyaltyService.createEarnTransaction(
+        customerId: 'c-1',
+        currentBalance: 100.0,
+        netAmount: 200.0, // Gana 20 pts
+        invoiceId: 'inv-101',
+        loyaltyProgramId: 'prog-1',
+      );
+
+      // §9.3: a DECLARED EARN requires ticket_id AND loyalty_program_id —
+      // the shape triggers abort anything else, so the type is only
+      // declared when the row can conform.
+      expect(tx.transactionType, equals('EARN'));
+      expect(tx.ticketId, equals('inv-101'));
+      expect(tx.loyaltyProgramId, equals('prog-1'));
+      expect(tx.units, equals(20));
+      expect(tx.origin, equals('POS'));
+      expect(tx.idempotencyKey, equals('loyalty:earn:prog-1:inv-101'));
+    });
+
+    test('unattributable earn (no program) stays in the NULL legacy namespace',
+        () {
+      final tx = loyaltyService.createEarnTransaction(
+        customerId: 'c-1',
+        currentBalance: 100.0,
+        netAmount: 200.0,
+        invoiceId: 'inv-101',
+      );
+
+      // Fail-safe: without a program the row MUST NOT declare EARN (the
+      // shape trigger would abort the insert and silently stop recording
+      // loyalty points). NULL transaction_type is the legacy namespace.
+      expect(tx.transactionType, isNull);
+      expect(tx.loyaltyProgramId, isNull);
+      expect(tx.idempotencyKey, isNull);
+      expect(tx.ticketId, equals('inv-101'));
+    });
+
+    test('declared REDEEM: ticket only — §9.3 does not require a program', () {
+      final tx = loyaltyService.createRedeemTransaction(
+        customerId: 'c-1',
+        currentBalance: 150.0,
+        pointsToRedeem: 50.0,
+        invoiceId: 'inv-102',
+      );
+
+      expect(tx.transactionType, equals('REDEEM'));
+      expect(tx.ticketId, equals('inv-102'));
+      expect(tx.units, equals(-50));
+      expect(tx.origin, equals('POS'));
+      expect(tx.idempotencyKey, equals('loyalty:redeem:inv-102'));
+    });
+
+    test('redeem with an attributed program carries it on the row', () {
+      final tx = loyaltyService.createRedeemTransaction(
+        customerId: 'c-1',
+        currentBalance: 150.0,
+        pointsToRedeem: 50.0,
+        invoiceId: 'inv-102',
+        loyaltyProgramId: 'prog-1',
+      );
+
+      expect(tx.transactionType, equals('REDEEM'));
+      expect(tx.loyaltyProgramId, equals('prog-1'));
+    });
+
+    test('declared ADJUST: explicit type, signed units and origin', () {
+      final tx = loyaltyService.createAdjustmentTransaction(
+        customerId: 'c-1',
+        currentBalance: 120.0,
+        pointsDelta: -20.0,
+        reason: 'Anulación de Factura inv-101',
+        invoiceId: 'inv-101',
+      );
+
+      // ADJUST carries no §9.3 ticket/program shape requirement.
+      expect(tx.transactionType, equals('ADJUST'));
+      expect(tx.units, equals(-20));
+      expect(tx.origin, equals('POS'));
+    });
+  });
 }
