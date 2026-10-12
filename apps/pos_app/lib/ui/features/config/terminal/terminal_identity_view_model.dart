@@ -201,6 +201,10 @@ class TerminalIdentityViewModel extends ChangeNotifier {
             'No es una URL válida. Use una dirección completa que empiece por '
             'http:// o https:// y tenga un servidor definido '
             '(por ejemplo: https://api.nhilospos.com/api).',
+          ApiBaseUrlValidationReason.cleartextNotAllowed =>
+            'No se pudo guardar la URL: http:// solo se permite para '
+            'servidores de red local (IPs privadas, localhost o nombres '
+            '.local/.lan). Para un servidor público use https://.',
           null => 'No se pudo guardar la URL: el servidor no es válido.',
         };
 }

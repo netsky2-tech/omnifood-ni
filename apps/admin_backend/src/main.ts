@@ -1,9 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import helmet from 'helmet';
-import { Request, Response, NextFunction } from 'express';
+import { Express, Request, Response, NextFunction } from 'express';
 import { AppModule } from './core/app/app.module';
 import { resolveCorsOrigins } from './core/config/http-security.config';
+import { resolveTrustProxyHops } from './core/config/trust-proxy.config';
+import { helmetOptions } from './core/config/helmet.config';
 import { AllExceptionsFilter } from './core/http/all-exceptions.filter';
 
 async function bootstrap() {
@@ -21,6 +23,15 @@ async function bootstrap() {
     logger: ['error', 'warn', 'log', 'debug'],
   });
 
+  // Resolve the real client address behind the reverse-proxy chain so per-IP
+  // rate limiting and access-log forensics are not keyed on the proxy IP.
+  // A malformed hop count aborts startup (fail closed).
+  const trustProxyHops = resolveTrustProxyHops({
+    raw: process.env.TRUST_PROXY_HOPS,
+  });
+  const expressApp = app.getHttpAdapter().getInstance() as Express;
+  expressApp.set('trust proxy', trustProxyHops);
+
   // Global prefix
   app.setGlobalPrefix('api');
 
@@ -33,14 +44,9 @@ async function bootstrap() {
     next();
   });
 
-  // Security - relaxed for local dev
-  app.use(
-    helmet({
-      contentSecurityPolicy: false,
-      crossOriginEmbedderPolicy: false,
-      hsts: false,
-    }),
-  );
+  // Security: relaxed locally, hardened in production (HSTS + deny-by-default
+  // CSP - the API serves JSON, not HTML). See core/config/helmet.config.ts.
+  app.use(helmet(helmetOptions(process.env.NODE_ENV)));
   app.enableCors({ origin: corsOrigins, credentials: true });
   console.log(`CORS allowed origins: ${corsOrigins.join(', ')}`);
 

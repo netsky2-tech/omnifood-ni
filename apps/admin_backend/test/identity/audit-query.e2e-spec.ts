@@ -273,7 +273,8 @@ describe('Forensic Audit Queries & Drawer Logs (e2e) (Slice 10.3)', () => {
 
   describe('POST /identity/audit/drawer-opens', () => {
     it('records a valid manual drawer opening with mandatory reason code (DEC-10.4)', async () => {
-      const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
+      // T5 (issue #879): manual drawer-open records are OWNER/MANAGER only.
+      const ownerToken = generateTestToken(ownerUserId, UserRole.OWNER);
 
       auditRepository.findOne.mockResolvedValue(null);
       auditRepository.save.mockImplementation(async (entity: AuditLog) => ({
@@ -283,7 +284,7 @@ describe('Forensic Audit Queries & Drawer Logs (e2e) (Slice 10.3)', () => {
 
       const res = await request(app.getHttpServer())
         .post('/identity/audit/drawer-opens')
-        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           terminalId: 'POS-TERMINAL-01',
           reason: 'FLOAT_ADJUSTMENT',
@@ -299,11 +300,13 @@ describe('Forensic Audit Queries & Drawer Logs (e2e) (Slice 10.3)', () => {
     });
 
     it('rejects invalid reason code with 400', async () => {
-      const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
+      // Role gating is covered by the 403 case above; this exercises payload
+      // validation for an authorized role.
+      const ownerToken = generateTestToken(ownerUserId, UserRole.OWNER);
 
       await request(app.getHttpServer())
         .post('/identity/audit/drawer-opens')
-        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
         .send({
           terminalId: 'POS-TERMINAL-01',
           reason: 'INVALID_REASON',

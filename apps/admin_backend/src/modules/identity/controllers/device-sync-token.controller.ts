@@ -5,7 +5,15 @@ import {
   HttpStatus,
   Post,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import {
+  ACCOUNT_THROTTLER_NAME,
+  DEVICE_SYNC_TOKEN_PER_IP_LIMIT,
+  IP_THROTTLER_NAME,
+  THROTTLE_TTL_MS,
+} from '../security/auth-throttle.config';
 import {
   DeviceSyncCredentialService,
   RenewTokenResponse,
@@ -32,6 +40,17 @@ export class DeviceSyncTokenController {
 
   @Post('token')
   @HttpCode(HttpStatus.OK)
+  // Pre-auth credential seam: bound per IP so token renewal cannot be
+  // hammered (see security audit remediation S1). No account bucket: the
+  // body carries device credential material, not a user identity.
+  @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ [ACCOUNT_THROTTLER_NAME]: true })
+  @Throttle({
+    [IP_THROTTLER_NAME]: {
+      limit: DEVICE_SYNC_TOKEN_PER_IP_LIMIT,
+      ttl: THROTTLE_TTL_MS,
+    },
+  })
   async renewToken(
     @Body() dto: RenewDeviceTokenDto,
   ): Promise<RenewTokenResponse> {

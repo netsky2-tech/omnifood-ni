@@ -68,7 +68,11 @@ validate_device_id() {
 }
 
 # Validate an --api-url candidate: absolute http:// or https:// URL with no
-# whitespace and a non-empty host. Rejected before any side effect.
+# whitespace and a non-empty host. Plain http:// is only accepted for LAN
+# hosts (private IPs, loopback, single-label names, .local/.lan/.internal):
+# mirrored exactly from `isLanHost` in
+# apps/pos_app/lib/data/services/api_base_url_service.dart (security audit S6).
+# Rejected before any side effect.
 validate_api_url() {
     local raw="$1"
     if [ -z "${raw}" ]; then
@@ -85,7 +89,65 @@ validate_api_url() {
         echo "Invalid --api-url: '${raw}' must be an absolute http:// or https:// URL with a non-empty host (e.g. https://api-staging.example.com/api)." >&2
         exit 1
     fi
+    if printf '%s' "${raw}" | grep -q '^http://'; then
+        # Pass the full host:port string — is_lan_host owns the port/IPv6
+        # splitting rules (mirroring isLanHost in the Dart service).
+        if ! is_lan_host "${host}"; then
+            echo "Invalid --api-url: '${raw}' uses plain http:// to a public host. Plain HTTP is only allowed for LAN hosts (private IPs, localhost, single-label names, .local/.lan); use https:// for public hosts." >&2
+            exit 1
+        fi
+    fi
     API_URL="${raw}"
+}
+
+# LAN host test mirroring `isLanHost` in
+# apps/pos_app/lib/data/services/api_base_url_service.dart (unified contract,
+# verification finding 6): userinfo rejected, exactly one colon = host:port,
+# two or more colons (IPv6) rejected, only exact dotted quads may match the
+# private ranges, then .local/.lan/.internal suffixes, then single-label
+# names.
+is_lan_host() {
+    local host="${1,,}"
+    if [ -z "${host}" ] || printf '%s' "${host}" | grep -q '@'; then
+        return 1
+    fi
+    local colons
+    colons="$(printf '%s' "${host}" | tr -cd ':' | wc -c)"
+    local host_no_port="${host}"
+    if [ "${colons}" -eq 1 ]; then
+        host_no_port="${host%%:*}"
+    elif [ "${colons}" -ge 2 ]; then
+        return 1
+    fi
+    if [ -z "${host_no_port}" ]; then
+        return 1
+    fi
+    case "${host_no_port}" in
+        *.*) ;;
+        *)
+            # Single-label hostname resolved by LAN DNS or the hosts file.
+            return 0
+            ;;
+    esac
+    if printf '%s' "${host_no_port}" | grep -Eq '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
+        local a b
+        a="$(printf '%s' "${host_no_port}" | cut -d. -f1)"
+        b="$(printf '%s' "${host_no_port}" | cut -d. -f2)"
+        if [ "${a}" -eq 127 ] || [ "${a}" -eq 10 ]; then
+            return 0
+        fi
+        if [ "${a}" -eq 192 ] && [ "${b}" -eq 168 ]; then
+            return 0
+        fi
+        if [ "${a}" -eq 172 ] && [ "${b}" -ge 16 ] 2>/dev/null && [ "${b}" -le 31 ] 2>/dev/null; then
+            return 0
+        fi
+        return 1
+    fi
+    case "${host_no_port}" in
+        *.local|*.lan|*.internal) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # Validate a --test-concurrency candidate: a positive integer (>= 1). Rejected

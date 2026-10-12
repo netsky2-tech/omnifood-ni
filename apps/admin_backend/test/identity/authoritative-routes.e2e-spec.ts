@@ -42,6 +42,8 @@ import {
   IDENTITY_JWT_CONFIG,
   type IdentityJwtConfig,
 } from '../../src/modules/identity/config/identity-jwt.config';
+import { AuthAuditService } from '../../src/modules/identity/services/auth-audit.service';
+import { getOptionsToken, getStorageToken } from '@nestjs/throttler';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { User } from '../../src/modules/identity/entities/user.entity';
 import { DataSource } from 'typeorm';
@@ -235,6 +237,20 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
         AuthoritativeCurrentUserGuard,
         RolesGuard,
         AuthService,
+        // T2 (issue #879): AuthController now carries @Throttle, so the
+        // harness must satisfy ThrottlerGuard's module options.
+        { provide: getOptionsToken(), useValue: { throttlers: [] } },
+        { provide: getStorageToken(), useValue: new Map() },
+        // T4 (issue #879): AuthService records login/refresh events on the
+        // hash-chained audit log; the harness stubs the best-effort sink.
+        {
+          provide: AuthAuditService,
+          useValue: {
+            recordLoginSuccess: jest.fn().mockResolvedValue(undefined),
+            recordRefreshSuccess: jest.fn().mockResolvedValue(undefined),
+            recordAuthFailure: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         { provide: SupervisorOverrideService, useValue: {} },
         { provide: SalesReportsService, useValue: {} },
         { provide: FiscalReportsService, useValue: {} },

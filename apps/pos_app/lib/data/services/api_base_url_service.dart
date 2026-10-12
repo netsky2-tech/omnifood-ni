@@ -57,6 +57,70 @@ enum ApiBaseUrlValidationReason {
 
   /// Not an absolute `http(s)` URL with a non-empty host.
   notAbsolute,
+
+  /// Plain `http://` URL whose host is not a LAN host (security audit S6:
+  /// cleartext is only allowed where an attacker needs LAN access to sniff).
+  cleartextNotAllowed,
+}
+
+/// Hosts where plain `http://` is accepted for the operator-configured API
+/// URL. Android's network security config cannot express private-IP ranges
+/// and LAN-HTTP backends are a documented pilot deployment mode, so the
+/// restriction lives here instead of the manifest (security audit S6):
+/// - RFC1918 private IPv4 literals (10/8, 172.16/12, 192.168/16);
+/// - loopback: `localhost`, `127.x.x.x`, and the Android emulator's `10.0.2.2`;
+/// - single-label hostnames (LAN DNS/hosts entries, e.g. `nhilos-server`);
+/// - mDNS-style LAN names: `.local`, `.lan`, `.internal`.
+bool isLanHost(String host) {
+  final normalized = host.trim().toLowerCase();
+  if (normalized.isEmpty || normalized.contains('@')) {
+    // Userinfo is never a LAN host: `user@evil.com` names evil.com.
+    return false;
+  }
+
+  // Exactly one ':' separates host and port. Two or more colons is an IPv6
+  // literal, which the LAN rule does not cover (use https instead).
+  final colonCount = ':'.allMatches(normalized).length;
+  final String withoutPort;
+  if (colonCount == 0) {
+    withoutPort = normalized;
+  } else if (colonCount == 1) {
+    withoutPort = normalized.split(':').first;
+  } else {
+    return false;
+  }
+  if (withoutPort.isEmpty) {
+    return false;
+  }
+
+  final ipv4 = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$')
+      .firstMatch(withoutPort);
+  if (ipv4 != null) {
+    final octets = ipv4
+        .groups([1, 2, 3, 4])!
+        .map((g) => int.parse(g!))
+        .toList(growable: false);
+    final (a, b) = (octets[0], octets[1]);
+    if (a == 127 || a == 10) {
+      return true;
+    }
+    if (a == 192 && b == 168) {
+      return true;
+    }
+    if (a == 172 && b >= 16 && b <= 31) {
+      return true;
+    }
+    return false;
+  }
+
+  if (withoutPort.contains('.')) {
+    return withoutPort.endsWith('.local') ||
+        withoutPort.endsWith('.lan') ||
+        withoutPort.endsWith('.internal');
+  }
+
+  // Single-label hostname resolved by the LAN's DNS or hosts file.
+  return true;
 }
 
 /// A validation rejection: the machine-readable [reason] plus the English
@@ -192,6 +256,17 @@ class ApiBaseUrlService {
         "Invalid API URL: '$raw' must be an absolute http:// or https:// "
         'URL with a non-empty host '
         '(e.g. https://api.nhilospos.com/api).',
+      );
+    }
+    // Security audit S6: plain HTTP is only allowed to LAN hosts. Public
+    // hosts must use https so credentials never cross the internet in
+    // cleartext.
+    if (raw.startsWith('http://') && !isLanHost(host)) {
+      return ApiBaseUrlValidationFailure(
+        ApiBaseUrlValidationReason.cleartextNotAllowed,
+        "Invalid API URL: '$raw' uses plain http:// to a public host. "
+        'Plain HTTP is only allowed for LAN hosts (private IPs, localhost, '
+        'single-label names, .local/.lan); use https:// for public hosts.',
       );
     }
     return null;

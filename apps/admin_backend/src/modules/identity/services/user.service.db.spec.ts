@@ -7,6 +7,7 @@ import { User, UserRole } from '../entities/user.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { UserService } from './user.service';
 import { AuthService } from './auth.service';
+import { AuthAuditService } from './auth-audit.service';
 import type { IdentityJwtConfig } from '../config/identity-jwt.config';
 
 const connection = {
@@ -90,6 +91,7 @@ function createService(dataSource: DataSource): UserService {
     new JwtService(),
     dataSource,
     jwtConfig,
+    new AuthAuditService(dataSource.getRepository(AuditLog), dataSource),
   );
   return new UserService(
     dataSource.getRepository(User),

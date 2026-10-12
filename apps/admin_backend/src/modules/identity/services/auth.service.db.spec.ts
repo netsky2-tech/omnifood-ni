@@ -6,6 +6,8 @@ import { AddJwtSessionState1783000000000 } from '../../../migrations/17830000000
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import type { IdentityJwtConfig } from '../config/identity-jwt.config';
 import { User } from '../entities/user.entity';
+import { AuditLog } from '../entities/audit-log.entity';
+import { AuthAuditService } from './auth-audit.service';
 import { SecurityProfile } from '../entities/security-profile.entity';
 import { JWT_TOKEN_TYPES } from '../security/jwt-token.types';
 import {
@@ -109,6 +111,10 @@ async function createRefreshHarness(withJti = false): Promise<RefreshHarness> {
       jwt,
       dataSource,
       jwtConfig,
+      new AuthAuditService(
+        dataSource.getRepository(AuditLog),
+        dataSource,
+      ),
     );
   };
   try {

@@ -7,6 +7,8 @@ import { User } from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { AuthService } from '../../src/modules/identity/services/auth.service';
+import { AuthAuditService } from '../../src/modules/identity/services/auth-audit.service';
+import { AuditLog } from '../../src/modules/identity/entities/audit-log.entity';
 import type { IdentityJwtConfig } from '../../src/modules/identity/config/identity-jwt.config';
 import { createMigrationBuiltSchemaFixture } from '../support/migration-built-schema.helper';
 import { normalizeTenantSlug } from '../../src/modules/tenant/tenant-slug';
@@ -420,6 +422,7 @@ describe('users tenant RLS (Real PostgreSQL DB, migration-built schema)', () => 
         jwtService,
         runtime,
         jwtConfig,
+        new AuthAuditService(runtime.getRepository(AuditLog), runtime),
       );
 
       const result = await service.login(
@@ -452,6 +455,7 @@ describe('users tenant RLS (Real PostgreSQL DB, migration-built schema)', () => 
         jwtService,
         runtime,
         jwtConfig,
+        new AuthAuditService(runtime.getRepository(AuditLog), runtime),
       );
 
       // The credentials are CORRECT for tenant B. Under tenant A's slug the
@@ -474,6 +478,7 @@ describe('users tenant RLS (Real PostgreSQL DB, migration-built schema)', () => 
         jwtService,
         runtime,
         jwtConfig,
+        new AuthAuditService(runtime.getRepository(AuditLog), runtime),
       );
 
       await expect(
