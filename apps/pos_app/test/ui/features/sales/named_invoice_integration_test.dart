@@ -622,8 +622,10 @@ void main() {
       await saveNamedSale();
 
       // Change BOTH provenance sources the reprint must NOT read: the
-      // customer catalog entry and the live fiscal config.
-      await database.customerDao.saveCustomer(CustomerEntity(
+      // customer catalog entry and the live fiscal config. The catalog change
+      // goes through the DAO's UPDATE (saveCustomer is insert-only since the
+      // T2a conflict fix: re-inserting the same id raises).
+      await database.customerDao.updateCustomer(CustomerEntity(
         id: 'cust-named-1',
         name: 'Cliente Renombrado S.A.',
         taxId: 'X9999999999999',

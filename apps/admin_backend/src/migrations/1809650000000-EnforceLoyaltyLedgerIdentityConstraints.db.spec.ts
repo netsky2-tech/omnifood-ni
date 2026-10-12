@@ -221,7 +221,7 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (db)', () => {
             expect(await indexExists(queryRunner, indexName)).toBe(true);
           }
 
-          const earn = await insertTx(queryRunner, {
+          await insertTx(queryRunner, {
             tenantId: TENANT_A,
             transactionType: 'earn',
             units: 10,
@@ -612,7 +612,9 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (db)', () => {
             `SELECT indexdef FROM pg_indexes WHERE indexname = 'uq_loyalty_redeem_ticket'`,
           )) as Array<{ indexdef: string }>;
           expect(definitions).toHaveLength(1);
-          expect(definitions[0].indexdef).toContain('(tenant_id, idempotency_key)');
+          expect(definitions[0].indexdef).toContain(
+            '(tenant_id, idempotency_key)',
+          );
 
           for (const indexName of IDENTITY_COLUMNS) {
             expect(await indexExists(queryRunner, indexName)).toBe(
@@ -649,7 +651,9 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (db)', () => {
           // Index names are schema-unique: a same-named index on a different
           // relation makes CREATE ... IF NOT EXISTS silently no-op, so it
           // must be reported as drift.
-          await queryRunner.query('CREATE TABLE loyalty_drift_other (id uuid PRIMARY KEY)');
+          await queryRunner.query(
+            'CREATE TABLE loyalty_drift_other (id uuid PRIMARY KEY)',
+          );
           await queryRunner.query(
             `CREATE UNIQUE INDEX uq_loyalty_redeem_ticket ON loyalty_drift_other (id)`,
           );
