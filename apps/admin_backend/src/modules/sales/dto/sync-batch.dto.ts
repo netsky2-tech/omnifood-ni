@@ -208,15 +208,17 @@ function LoyaltyLedgerDocumentContract(validationOptions?: ValidationOptions) {
           if (value !== SYNC_DOCUMENT_TYPE.LOYALTY_LEDGER) {
             return record.events === undefined;
           }
-          if (record.flowType !== 'LOYALTY_LEDGER' as SyncFlowType) {
+          if (record.flowType !== ('LOYALTY_LEDGER' as SyncFlowType)) {
             return false;
           }
           if (!Array.isArray(record.events) || record.events.length === 0) {
             return false;
           }
-          return !record.invoice &&
+          return (
+            !record.invoice &&
             !(record.movements && record.movements.length > 0) &&
-            !record.fulfillment;
+            !record.fulfillment
+          );
         },
         defaultMessage(args: ValidationArguments) {
           const record = args.object as SyncBatchRecordDto;

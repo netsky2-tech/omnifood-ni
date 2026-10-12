@@ -222,7 +222,11 @@ export class EnforceLoyaltyLedgerIdentityConstraints1809650000000 implements Mig
       return;
     }
 
-    const { offender_count: offenderCount, occurrences, sample_ids: sampleIds } = conflict;
+    const {
+      offender_count: offenderCount,
+      occurrences,
+      sample_ids: sampleIds,
+    } = conflict;
 
     throw new Error(
       `LOYALTY_LEDGER_DUPLICATE_IDENTITY: cannot create ${identity.name} on ${TABLE}. ` +
@@ -281,7 +285,8 @@ export class EnforceLoyaltyLedgerIdentityConstraints1809650000000 implements Mig
 
     const detail = rows
       .map((row) => {
-        const rule = SEMANTICS_RULE_BY_KIND[row.kind] ?? 'unknown violation kind';
+        const rule =
+          SEMANTICS_RULE_BY_KIND[row.kind] ?? 'unknown violation kind';
         return `${row.kind}: ${row.occurrences} row(s) — ${rule}; sample row ids: ${row.sample_ids.join(', ')}`;
       })
       .join('; ');
@@ -379,9 +384,12 @@ export class EnforceLoyaltyLedgerIdentityConstraints1809650000000 implements Mig
     const definitionMatches =
       found.indisunique === true &&
       foundColumns.length === identity.columns.length &&
-      identity.columns.every((column, position) => foundColumns[position] === column) &&
+      identity.columns.every(
+        (column, position) => foundColumns[position] === column,
+      ) &&
       found.predicate !== null &&
-      normalizePredicate(found.predicate) === normalizePredicate(identity.predicate);
+      normalizePredicate(found.predicate) ===
+        normalizePredicate(identity.predicate);
 
     if (definitionMatches && found.indisvalid === true) {
       return;
@@ -417,7 +425,9 @@ export class EnforceLoyaltyLedgerIdentityConstraints1809650000000 implements Mig
   }
 
   async down(runner: QueryRunner): Promise<void> {
-    await runner.query(`ALTER TABLE ${TABLE} DROP CONSTRAINT IF EXISTS ${CHECK_NAME}`);
+    await runner.query(
+      `ALTER TABLE ${TABLE} DROP CONSTRAINT IF EXISTS ${CHECK_NAME}`,
+    );
 
     for (const identity of IDENTITIES) {
       await runner.query(`DROP INDEX IF EXISTS ${identity.name}`);

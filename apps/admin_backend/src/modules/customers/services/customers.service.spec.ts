@@ -235,7 +235,10 @@ describe('CustomersService', () => {
       reason: 'Bono de fidelidad por aniversario',
     });
 
-    expect(sumQb.select).toHaveBeenCalledWith('COALESCE(SUM(tx.points), 0)', 'total');
+    expect(sumQb.select).toHaveBeenCalledWith(
+      'COALESCE(SUM(tx.points), 0)',
+      'total',
+    );
     expect(sumQb.where).toHaveBeenCalledWith('tx.tenant_id = :tenantId', {
       tenantId: 'tenant-1',
     });

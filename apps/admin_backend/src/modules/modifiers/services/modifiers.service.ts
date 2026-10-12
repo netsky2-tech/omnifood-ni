@@ -635,11 +635,7 @@ export class ModifiersService {
     // soft-deleted group, so inactive/all listings load them all.
     const options =
       status === 'active'
-        ? await this.findActiveOptionsOfGroups(
-            manager,
-            tenantId,
-            groupIdsList,
-          )
+        ? await this.findActiveOptionsOfGroups(manager, tenantId, groupIdsList)
         : await manager.getRepository(ModifierOption).find({
             where: { tenant_id: tenantId, group_id: In(groupIdsList) },
             order: { sort_order: 'ASC', name: 'ASC' },

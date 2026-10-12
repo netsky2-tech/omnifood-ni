@@ -81,10 +81,7 @@ export class OnboardingRolloutController {
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.OWNER)
   @RequirePermissions(AppPermission.ONBOARDING_START)
-  applyStage(
-    @Req() req: RequestWithUser,
-    @Body() dto: ApplyCutoverStageDto,
-  ) {
+  applyStage(@Req() req: RequestWithUser, @Body() dto: ApplyCutoverStageDto) {
     const tenantId = this.getTenantId(req);
     this.rolloutService.applyCutoverStage(tenantId, dto.stage);
     return {

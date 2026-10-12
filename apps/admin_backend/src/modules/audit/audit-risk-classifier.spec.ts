@@ -208,9 +208,7 @@ describe('audit-risk-classifier', () => {
     it('never classifies money, privilege or permission codes as INFO (S4a guard)', () => {
       for (const action of MONEY_PRIVILEGE_PERMISSION_CODES) {
         const severity = classifyAuditSeverity(action);
-        expect(
-          severity === 'CRITICAL' || severity === 'WARNING',
-        ).toBe(true);
+        expect(severity === 'CRITICAL' || severity === 'WARNING').toBe(true);
       }
     });
 

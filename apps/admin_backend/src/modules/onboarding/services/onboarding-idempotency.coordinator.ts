@@ -131,7 +131,10 @@ export class OnboardingIdempotencyCoordinator {
           });
 
           const saved = await repo.save(record);
-          return { state: 'ACQUIRED', record: saved } as IdempotencyExecutionLease;
+          return {
+            state: 'ACQUIRED',
+            record: saved,
+          };
         }
 
         // Integrity check
@@ -146,7 +149,7 @@ export class OnboardingIdempotencyCoordinator {
             state: 'ALREADY_COMPLETED',
             result: parseResultRef(existing.resultRef),
             record: existing,
-          } as IdempotencyExecutionLease;
+          };
         }
 
         if (existing.status === OnboardingIdempotencyStatus.FAILED_FINAL) {
@@ -169,7 +172,10 @@ export class OnboardingIdempotencyCoordinator {
           existing.attemptCount = (existing.attemptCount ?? 1) + 1;
 
           const saved = await repo.save(existing);
-          return { state: 'ACQUIRED', record: saved } as IdempotencyExecutionLease;
+          return {
+            state: 'ACQUIRED',
+            record: saved,
+          };
         }
 
         // FAILED_RETRYABLE
@@ -180,7 +186,10 @@ export class OnboardingIdempotencyCoordinator {
         existing.attemptCount = (existing.attemptCount ?? 1) + 1;
 
         const saved = await repo.save(existing);
-        return { state: 'ACQUIRED', record: saved } as IdempotencyExecutionLease;
+        return {
+          state: 'ACQUIRED',
+          record: saved,
+        };
       },
     );
   }
@@ -259,8 +268,7 @@ export class OnboardingIdempotencyCoordinator {
       // Caller-owned transaction: never open an independent one.
       const repo = manager.getRepository(OnboardingIdempotencyRecord);
       const boundTenantId =
-        explicitTenantId ??
-        (await this.discoverTenantId(repo, recordId));
+        explicitTenantId ?? (await this.discoverTenantId(repo, recordId));
       await bindTenantContext(manager, boundTenantId);
       await this.assertRecordVisible(repo, recordId);
       await mutate(repo);
@@ -268,8 +276,7 @@ export class OnboardingIdempotencyCoordinator {
     }
 
     const boundTenantId =
-      explicitTenantId ??
-      (await this.discoverTenantId(this.repo, recordId));
+      explicitTenantId ?? (await this.discoverTenantId(this.repo, recordId));
     await runInTenantTransaction(
       this.dataSource,
       boundTenantId,

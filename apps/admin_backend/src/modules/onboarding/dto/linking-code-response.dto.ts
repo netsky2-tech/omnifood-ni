@@ -1,6 +1,4 @@
-import {
-  ActivationAttemptStatus,
-} from '../entities/activation-attempt.entity';
+import { ActivationAttemptStatus } from '../entities/activation-attempt.entity';
 import { DeviceLinkingCodeStatus } from '../entities/device-linking-code.entity';
 
 /**

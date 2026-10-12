@@ -41,8 +41,7 @@ describe('EnforceOnboardingTemplateRls1809230000000', () => {
             resolvedTables.push(table);
             return Promise.resolve([
               {
-                data_type:
-                  tenantIdDataTypeByTable[table] ?? 'uuid',
+                data_type: tenantIdDataTypeByTable[table] ?? 'uuid',
               },
             ]) as unknown as Promise<QueryResult>;
           }

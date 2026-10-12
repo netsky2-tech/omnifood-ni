@@ -549,9 +549,7 @@ export class FiscalSetupService {
   } {
     const read = (key: string): number | null => {
       const value = paramMap.get(key);
-      return typeof value === 'number' && Number.isFinite(value)
-        ? value
-        : null;
+      return typeof value === 'number' && Number.isFinite(value) ? value : null;
     };
     return {
       maxDiscountAmount: read(FISCAL_PARAM_KEYS.MAX_DISCOUNT_AMOUNT),

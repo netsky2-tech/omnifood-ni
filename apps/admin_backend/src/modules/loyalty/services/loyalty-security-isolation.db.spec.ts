@@ -166,8 +166,18 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
 
     // Setup Tenant Alpha and Tenant Beta
     await tenantRepo.save([
-      { id: tenantA, name: 'Tenant Alpha (Burgers)', slug: normalizeTenantSlug('Tenant Alpha (Burgers)'), is_active: true },
-      { id: tenantB, name: 'Tenant Beta (Tacos)', slug: normalizeTenantSlug('Tenant Beta (Tacos)'), is_active: true },
+      {
+        id: tenantA,
+        name: 'Tenant Alpha (Burgers)',
+        slug: normalizeTenantSlug('Tenant Alpha (Burgers)'),
+        is_active: true,
+      },
+      {
+        id: tenantB,
+        name: 'Tenant Beta (Tacos)',
+        slug: normalizeTenantSlug('Tenant Beta (Tacos)'),
+        is_active: true,
+      },
     ]);
 
     const cA = await custRepo.save({

@@ -141,7 +141,12 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
        ($1, 'Tenant A', $3, now(), now()),
        ($2, 'Tenant B', $4, now(), now())
        ON CONFLICT (id) DO NOTHING`,
-      [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
+      [
+        tenantAId,
+        tenantBId,
+        normalizeTenantSlug('Tenant A'),
+        normalizeTenantSlug('Tenant B'),
+      ],
     );
 
     const cashierAEmail = `cashier.a.${randomUUID()}@test.com`;

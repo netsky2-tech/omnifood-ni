@@ -149,7 +149,7 @@ describe('promotions tenant RLS (Real PostgreSQL DB, migration-built schema)', (
         'promotions-rls-tenant-c',
         tenantDId,
         'promotions-rls-tenant-d',
-                normalizeTenantSlug('promotions-rls-tenant-a'),
+        normalizeTenantSlug('promotions-rls-tenant-a'),
         normalizeTenantSlug('promotions-rls-tenant-b'),
         normalizeTenantSlug('promotions-rls-tenant-c'),
         normalizeTenantSlug('promotions-rls-tenant-d'),
@@ -250,18 +250,18 @@ describe('promotions tenant RLS (Real PostgreSQL DB, migration-built schema)', (
 
   it('shows tenant A only its own rows, never tenant B’s', async () => {
     await asRuntimeRole(runtime, tenantAId, async (runner) => {
-      const rows = (await runner.query(
-        `SELECT id FROM promotions`,
-      )) as Array<{ id: string }>;
+      const rows = (await runner.query(`SELECT id FROM promotions`)) as Array<{
+        id: string;
+      }>;
       expect(rows.map((r) => r.id)).toEqual([promotionAId]);
     });
   });
 
   it('shows tenant B only its own rows (triangulation)', async () => {
     await asRuntimeRole(runtime, tenantBId, async (runner) => {
-      const rows = (await runner.query(
-        `SELECT id FROM promotions`,
-      )) as Array<{ id: string }>;
+      const rows = (await runner.query(`SELECT id FROM promotions`)) as Array<{
+        id: string;
+      }>;
       expect(rows.map((r) => r.id)).toEqual([promotionBId]);
     });
   });
@@ -315,9 +315,10 @@ describe('promotions tenant RLS (Real PostgreSQL DB, migration-built schema)', (
         ),
       );
       const deleted = returningRows(
-        await runner.query(`DELETE FROM promotions WHERE id = $1 RETURNING id`, [
-          throwaway[0].id,
-        ]),
+        await runner.query(
+          `DELETE FROM promotions WHERE id = $1 RETURNING id`,
+          [throwaway[0].id],
+        ),
       );
       expect(deleted.map((r) => r.id)).toEqual([throwaway[0].id]);
     });
@@ -334,9 +335,10 @@ describe('promotions tenant RLS (Real PostgreSQL DB, migration-built schema)', (
       expect(updated).toEqual([]);
 
       const deleted = returningRows(
-        await runner.query(`DELETE FROM promotions WHERE id = $1 RETURNING id`, [
-          promotionBId,
-        ]),
+        await runner.query(
+          `DELETE FROM promotions WHERE id = $1 RETURNING id`,
+          [promotionBId],
+        ),
       );
       expect(deleted).toEqual([]);
     });

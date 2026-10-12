@@ -31,7 +31,7 @@ function makeDataSource(payments: unknown): {
       cb(manager),
     ),
   } as unknown as DataSource;
-  return { dataSource, manager: manager as never };
+  return { dataSource, manager: manager };
 }
 
 function reconciliation(overrides: Record<string, unknown> = {}) {
@@ -139,7 +139,9 @@ describe('PaymentReconciliationSyncIngestionService', () => {
     // Upsert by payment id: the existing row is updated in place, never
     // re-inserted, so a replay cannot duplicate rows.
     expect(payments.update).toHaveBeenCalledTimes(2);
-    expect(payments.update.mock.calls[0]).toEqual(payments.update.mock.calls[1]);
+    expect(payments.update.mock.calls[0]).toEqual(
+      payments.update.mock.calls[1],
+    );
     // The timestamp is derived from the same payload value both times: no
     // second application shifts reconciled_at.
     expect(payments.update.mock.calls[1][1].reconciledAt).toEqual(

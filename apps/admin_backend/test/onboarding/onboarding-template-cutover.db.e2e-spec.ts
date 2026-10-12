@@ -141,11 +141,19 @@ async function withTemplateCutoverIsolatedSchema(
 
     await dataSource.query(
       `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
-      [tenantAId, 'Tenant A — Café Central', normalizeTenantSlug('Tenant A — Café Central')],
+      [
+        tenantAId,
+        'Tenant A — Café Central',
+        normalizeTenantSlug('Tenant A — Café Central'),
+      ],
     );
     await dataSource.query(
       `INSERT INTO tenants (id, name, slug, is_active, created_at, updated_at) VALUES ($1, $2, $3, true, now(), now())`,
-      [tenantBId, 'Tenant B — Panadería Real', normalizeTenantSlug('Tenant B — Panadería Real')],
+      [
+        tenantBId,
+        'Tenant B — Panadería Real',
+        normalizeTenantSlug('Tenant B — Panadería Real'),
+      ],
     );
 
     // Seed Industry Template

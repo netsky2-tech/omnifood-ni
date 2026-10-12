@@ -278,8 +278,8 @@ describe('ModifiersController', () => {
       const [group] = await controller.findAll('tenant-1');
 
       expect(Array.isArray(group.options)).toBe(true);
-      expect(typeof group.options[0]!.price_delta).toBe('number');
-      expect(group.options[0]!.price_delta).toBe(0);
+      expect(typeof group.options[0].price_delta).toBe('number');
+      expect(group.options[0].price_delta).toBe(0);
     });
 
     it('serializes option price deltas in findOne', async () => {
@@ -290,8 +290,8 @@ describe('ModifiersController', () => {
 
       const group = await controller.findOne('group-1', 'tenant-1');
 
-      expect(typeof group.options[0]!.price_delta).toBe('number');
-      expect(group.options[0]!.price_delta).toBe(0);
+      expect(typeof group.options[0].price_delta).toBe('number');
+      expect(group.options[0].price_delta).toBe(0);
     });
 
     it('serializes the created option response (createOption)', async () => {
@@ -338,13 +338,13 @@ describe('ModifiersController', () => {
 
       const [group] = await controller.getEffective('prod-uuid-1', 'tenant-1');
 
-      expect(typeof group.options[0]!.price_delta).toBe('number');
-      expect(group.options[0]!.price_delta).toBe(0);
+      expect(typeof group.options[0].price_delta).toBe('number');
+      expect(group.options[0].price_delta).toBe(0);
     });
 
     it('keeps group create/update responses working (no decimal fields)', async () => {
       const created = await controller.createGroup(
-        { name: 'Leche' } as any,
+        { name: 'Leche' },
         'tenant-1',
       );
       expect(created.id).toBe('group-1');

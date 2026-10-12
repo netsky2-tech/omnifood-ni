@@ -161,8 +161,7 @@ export class InsumoController {
           insumo.conversionFactor = dto.conversionFactor;
         if (dto.parLevel !== undefined) insumo.parLevel = dto.parLevel;
         if (dto.minStock !== undefined) insumo.minStock = dto.minStock;
-        if (dto.averageCost !== undefined)
-          insumo.averageCost = dto.averageCost;
+        if (dto.averageCost !== undefined) insumo.averageCost = dto.averageCost;
         if (dto.is_perishable !== undefined)
           insumo.is_perishable = dto.is_perishable;
         if (dto.negativeStockPolicy !== undefined)

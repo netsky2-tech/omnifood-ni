@@ -152,7 +152,7 @@ describe('cash shift tenant RLS (Real PostgreSQL DB, migration-built schema)', (
         'cash-shift-rls-tenant-c',
         tenantDId,
         'cash-shift-rls-tenant-d',
-                normalizeTenantSlug('cash-shift-rls-tenant-a'),
+        normalizeTenantSlug('cash-shift-rls-tenant-a'),
         normalizeTenantSlug('cash-shift-rls-tenant-b'),
         normalizeTenantSlug('cash-shift-rls-tenant-c'),
         normalizeTenantSlug('cash-shift-rls-tenant-d'),

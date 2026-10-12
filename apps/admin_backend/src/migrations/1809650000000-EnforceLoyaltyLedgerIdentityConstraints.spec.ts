@@ -59,7 +59,10 @@ const cleanQueryMock = (): jest.Mock =>
     return Promise.resolve([]);
   });
 
-const callOrder = (query: jest.Mock, marker: (sql: string) => boolean): number =>
+const callOrder = (
+  query: jest.Mock,
+  marker: (sql: string) => boolean,
+): number =>
   query.mock.calls.findIndex(([sql]) => typeof sql === 'string' && marker(sql));
 
 describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
@@ -79,12 +82,18 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
 
     const backfill = callOrder(
       query,
-      (sql) => sql.includes(`UPDATE ${GUARD_TABLE}`) && sql.includes(`SET ${LEGACY_COLUMN} = false`),
+      (sql) =>
+        sql.includes(`UPDATE ${GUARD_TABLE}`) &&
+        sql.includes(`SET ${LEGACY_COLUMN} = false`),
     );
     const setNotNull = callOrder(query, (sql) => sql.includes('SET NOT NULL'));
-    const setDefault = callOrder(query, (sql) => sql.includes('SET DEFAULT false'));
+    const setDefault = callOrder(query, (sql) =>
+      sql.includes('SET DEFAULT false'),
+    );
     const firstIdentityGuard = callOrder(query, isIdentityGuard);
-    const firstCreate = callOrder(query, (sql) => sql.includes('CREATE UNIQUE INDEX'));
+    const firstCreate = callOrder(query, (sql) =>
+      sql.includes('CREATE UNIQUE INDEX'),
+    );
 
     expect(backfill).toBeGreaterThanOrEqual(0);
     expect(backfill).toBeLessThan(firstIdentityGuard);
@@ -124,7 +133,8 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
     ).toBe(false);
     expect(
       query.mock.calls.some(
-        ([sql]) => typeof sql === 'string' && sql.includes('CREATE UNIQUE INDEX'),
+        ([sql]) =>
+          typeof sql === 'string' && sql.includes('CREATE UNIQUE INDEX'),
       ),
     ).toBe(false);
   });
@@ -135,7 +145,11 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
     query.mockImplementation((sql: string) => {
       if (isSemanticScan(sql)) {
         return Promise.resolve([
-          { kind: 'NULL', occurrences: 2, sample_ids: ['dddddddd-...1', 'dddddddd-...2'] },
+          {
+            kind: 'NULL',
+            occurrences: 2,
+            sample_ids: ['dddddddd-...1', 'dddddddd-...2'],
+          },
         ]);
       }
       if (isDriftCheck(sql)) {
@@ -156,7 +170,8 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
     ).toBe(false);
     expect(
       query.mock.calls.some(
-        ([sql]) => typeof sql === 'string' && sql.includes('CREATE UNIQUE INDEX'),
+        ([sql]) =>
+          typeof sql === 'string' && sql.includes('CREATE UNIQUE INDEX'),
       ),
     ).toBe(false);
   });
@@ -168,7 +183,8 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
     await migration.up(queryRunner);
 
     const addConstraint = query.mock.calls.filter(
-      ([sql]) => typeof sql === 'string' && sql.includes(`ADD CONSTRAINT ${CHECK_NAME}`),
+      ([sql]) =>
+        typeof sql === 'string' && sql.includes(`ADD CONSTRAINT ${CHECK_NAME}`),
     );
     expect(addConstraint).toHaveLength(1);
 
@@ -177,9 +193,13 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
     expect(sql).toContain('transaction_type IS NOT NULL');
     // EARN needs ticket_id AND loyalty_program_id.
     expect(sql).toContain("transaction_type <> 'earn'");
-    expect(sql).toContain('ticket_id IS NOT NULL AND loyalty_program_id IS NOT NULL');
+    expect(sql).toContain(
+      'ticket_id IS NOT NULL AND loyalty_program_id IS NOT NULL',
+    );
     // REDEEM needs ticket_id; REVERSAL needs reversal_of_transaction_id.
-    expect(sql).toContain("transaction_type <> 'redeem' OR ticket_id IS NOT NULL");
+    expect(sql).toContain(
+      "transaction_type <> 'redeem' OR ticket_id IS NOT NULL",
+    );
     expect(sql).toContain(
       "transaction_type <> 'reversal' OR reversal_of_transaction_id IS NOT NULL",
     );
@@ -189,7 +209,9 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
     // Guard ordering: the semantic scan precedes the ADD CONSTRAINT.
     const scan = callOrder(query, isSemanticScan);
     expect(scan).toBeGreaterThanOrEqual(0);
-    expect(scan).toBeLessThan(callOrder(query, (s) => s.includes('ADD CONSTRAINT')));
+    expect(scan).toBeLessThan(
+      callOrder(query, (s) => s.includes('ADD CONSTRAINT')),
+    );
   });
 
   it('skips the CHECK when a same-named constraint already exists (idempotent re-run)', async () => {
@@ -214,7 +236,9 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
 
     await migration.up(queryRunner);
 
-    const guardCalls = query.mock.calls.filter(([sql]) => isIdentityGuard(sql as string));
+    const guardCalls = query.mock.calls.filter(([sql]) =>
+      isIdentityGuard(sql as string),
+    );
 
     expect(guardCalls).toHaveLength(INDEX_DDL.length);
 
@@ -236,8 +260,7 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
     await migration.up(queryRunner);
 
     const createCalls = query.mock.calls.filter(
-      ([sql]) =>
-        typeof sql === 'string' && sql.includes('CREATE UNIQUE INDEX'),
+      ([sql]) => typeof sql === 'string' && sql.includes('CREATE UNIQUE INDEX'),
     );
 
     expect(createCalls).toHaveLength(INDEX_DDL.length);
@@ -308,8 +331,7 @@ describe('EnforceLoyaltyLedgerIdentityConstraints1809650000000 (unit)', () => {
 
     // Fail closed: no CREATE UNIQUE INDEX may follow a failed guard.
     const createdAfterThrow = query.mock.calls.filter(
-      ([sql]) =>
-        typeof sql === 'string' && sql.includes('CREATE UNIQUE INDEX'),
+      ([sql]) => typeof sql === 'string' && sql.includes('CREATE UNIQUE INDEX'),
     );
     expect(createdAfterThrow).toHaveLength(1); // only idempotency, before the failure
   });

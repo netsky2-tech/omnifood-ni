@@ -301,7 +301,8 @@ export class ActivationService {
         ];
         if (
           !acceptableStates.includes(session.lifecycleState) &&
-          session.lifecycleState !== OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
+          session.lifecycleState !==
+            OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
         ) {
           throw new BadRequestException(
             `CANNOT_START_ACTIVATION_NOT_SALE_READY: Onboarding session is in '${session.lifecycleState}' state, but must be 'SALE_READY'`,
@@ -886,7 +887,8 @@ export class ActivationService {
       });
       if (
         session &&
-        session.lifecycleState === OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
+        session.lifecycleState ===
+          OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
       ) {
         session.lifecycleState = OnboardingLifecycleState.SALE_READY;
         session.lastActivityAt = new Date();

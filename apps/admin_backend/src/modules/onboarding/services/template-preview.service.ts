@@ -6,7 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import * as crypto from 'crypto';
-import { runInTenantTransaction, resolveTenantContextId } from '../../../core/database/tenant-transaction';
+import {
+  runInTenantTransaction,
+  resolveTenantContextId,
+} from '../../../core/database/tenant-transaction';
 import { IndustryTemplate } from '../entities/industry-template.entity';
 import {
   TemplateSeedLink,

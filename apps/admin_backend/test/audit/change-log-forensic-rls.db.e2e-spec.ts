@@ -177,14 +177,28 @@ describe('change_log and forensic_alerts tenant RLS (Real PostgreSQL DB, migrati
       `INSERT INTO change_log (id, tenant_id, actor_ref, action, target_type, target_id)
        VALUES ($1, $2, 'SYSTEM', 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED', $4, $5),
               ($3, $6, 'SYSTEM', 'ONBOARDING_ACTIVATION_ATTEMPT_STARTED', $4, $5)`,
-      [changeLogAId, tenantAId, changeLogBId, SHARED_TARGET_TYPE, SHARED_TARGET_ID, tenantBId],
+      [
+        changeLogAId,
+        tenantAId,
+        changeLogBId,
+        SHARED_TARGET_TYPE,
+        SHARED_TARGET_ID,
+        tenantBId,
+      ],
     );
 
     // Seeded probes, one identical alert per tenant A and B.
     await admin.query(
       `INSERT INTO forensic_alerts (id, tenant_id, alert_type, severity, message)
        VALUES ($1, $2, $4, 'HIGH', $5), ($3, $6, $4, 'HIGH', $5)`,
-      [alertAId, tenantAId, alertBId, SHARED_ALERT_TYPE, SHARED_ALERT_MESSAGE, tenantBId],
+      [
+        alertAId,
+        tenantAId,
+        alertBId,
+        SHARED_ALERT_TYPE,
+        SHARED_ALERT_MESSAGE,
+        tenantBId,
+      ],
     );
 
     // The fixture's runtime role: NOSUPERUSER NOBYPASSRLS, non-owner, exact
@@ -258,10 +272,26 @@ describe('change_log and forensic_alerts tenant RLS (Real PostgreSQL DB, migrati
     // EXACTLY the four command policies per table: an extra policy would
     // widen access beyond the tenant contract, a missing one narrows it.
     expect(policies).toEqual([
-      { tablename: 'change_log', policyname: 'change_log_tenant_delete', cmd: 'DELETE' },
-      { tablename: 'change_log', policyname: 'change_log_tenant_insert', cmd: 'INSERT' },
-      { tablename: 'change_log', policyname: 'change_log_tenant_select', cmd: 'SELECT' },
-      { tablename: 'change_log', policyname: 'change_log_tenant_update', cmd: 'UPDATE' },
+      {
+        tablename: 'change_log',
+        policyname: 'change_log_tenant_delete',
+        cmd: 'DELETE',
+      },
+      {
+        tablename: 'change_log',
+        policyname: 'change_log_tenant_insert',
+        cmd: 'INSERT',
+      },
+      {
+        tablename: 'change_log',
+        policyname: 'change_log_tenant_select',
+        cmd: 'SELECT',
+      },
+      {
+        tablename: 'change_log',
+        policyname: 'change_log_tenant_update',
+        cmd: 'UPDATE',
+      },
       {
         tablename: 'forensic_alerts',
         policyname: 'forensic_alerts_tenant_delete',
@@ -453,9 +483,10 @@ describe('change_log and forensic_alerts tenant RLS (Real PostgreSQL DB, migrati
       expect(updatedAlert).toEqual([]);
 
       const deletedLog = returningRows(
-        await runner.query(`DELETE FROM change_log WHERE id = $1 RETURNING id`, [
-          changeLogBId,
-        ]),
+        await runner.query(
+          `DELETE FROM change_log WHERE id = $1 RETURNING id`,
+          [changeLogBId],
+        ),
       );
       expect(deletedLog).toEqual([]);
 

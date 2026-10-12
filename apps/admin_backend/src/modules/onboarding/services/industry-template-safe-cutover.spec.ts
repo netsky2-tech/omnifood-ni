@@ -1,7 +1,5 @@
 import { DataSource, EntityManager, Repository } from 'typeorm';
-import {
-  IndustryTemplateService,
-} from './industry-template.service';
+import { IndustryTemplateService } from './industry-template.service';
 import { TenantContextRequiredError } from '../../../core/database/tenant-transaction';
 import { IndustryTemplate } from '../entities/industry-template.entity';
 import { TemplateApplication } from '../entities/template-application.entity';
@@ -175,7 +173,8 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
       "SELECT set_config('app.tenant_id', $1, true)",
       ['tenant-1'],
     );
-    const queryCall = (mockManager.query as jest.Mock).mock.invocationCallOrder[0];
+    const queryCall = (mockManager.query as jest.Mock).mock
+      .invocationCallOrder[0];
     const firstProtected = Math.min(
       ...(mockManager.findOne as jest.Mock).mock.invocationCallOrder,
       ...(mockManager.find as jest.Mock).mock.invocationCallOrder,
@@ -185,9 +184,9 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
   });
 
   it('fails fast with TenantContextRequiredError on a blank tenant and issues no set_config SQL', async () => {
-    await expect(
-      service.applyTemplate('   ', 'CAFETERIA'),
-    ).rejects.toThrow(TenantContextRequiredError);
+    await expect(service.applyTemplate('   ', 'CAFETERIA')).rejects.toThrow(
+      TenantContextRequiredError,
+    );
 
     // The transaction itself must never be opened for a blank tenant.
     expect(dataSource.transaction).not.toHaveBeenCalled();

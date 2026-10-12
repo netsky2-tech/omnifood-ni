@@ -95,7 +95,7 @@ export class CustomerSyncIngestionService {
 
     const createdAt = createdAtRaw
       ? parseFiscalTimestamp(createdAtRaw)
-      : existing?.created_at ?? new Date();
+      : (existing?.created_at ?? new Date());
 
     const updatedAt = updatedAtRaw
       ? parseFiscalTimestamp(updatedAtRaw)

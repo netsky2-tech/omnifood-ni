@@ -420,7 +420,10 @@ export class SalesExportService {
         offset < unresolvedIds.length;
         offset += CUSTOMER_ID_CHUNK_SIZE
       ) {
-        const chunk = unresolvedIds.slice(offset, offset + CUSTOMER_ID_CHUNK_SIZE);
+        const chunk = unresolvedIds.slice(
+          offset,
+          offset + CUSTOMER_ID_CHUNK_SIZE,
+        );
         const customers = await manager
           .getRepository(Customer)
           .createQueryBuilder('customer')

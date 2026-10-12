@@ -415,9 +415,7 @@ export function salesRowDiscountOrigins(
           loyalty = round2(loyalty + amount);
         }
       }
-      unattributed = round2(
-        unattributed + round2(lineDiscount - attributed),
-      );
+      unattributed = round2(unattributed + round2(lineDiscount - attributed));
     }
   }
 
@@ -460,9 +458,7 @@ export function computeSalesReportingTotals(
     // holds EXACTLY for every input and the two surfaces cannot drift.
     const rowOrigins = salesRowDiscountOrigins(row);
     manualDiscountNio = round2(manualDiscountNio + rowOrigins.manual);
-    promotionDiscountNio = round2(
-      promotionDiscountNio + rowOrigins.promotion,
-    );
+    promotionDiscountNio = round2(promotionDiscountNio + rowOrigins.promotion);
     loyaltyDiscountNio = round2(loyaltyDiscountNio + rowOrigins.loyalty);
     discountOriginUnattributedNio = round2(
       discountOriginUnattributedNio + rowOrigins.unattributed,
@@ -573,8 +569,7 @@ export function computeSalesReportingTipsSummary(
       totalInvoicesCount,
       coverageRatio:
         totalInvoicesCount > 0
-          ? Math.round((recordedInvoicesCount / totalInvoicesCount) * 100) /
-            100
+          ? Math.round((recordedInvoicesCount / totalInvoicesCount) * 100) / 100
           : null,
     },
   };

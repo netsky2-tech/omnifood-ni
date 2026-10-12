@@ -311,8 +311,10 @@ describe('ModifiersService', () => {
           }),
         }),
       );
-      const optionWhere = optionRepo.find.mock.calls[0][0]
-        .where as Record<string, unknown>;
+      const optionWhere = optionRepo.find.mock.calls[0][0].where as Record<
+        string,
+        unknown
+      >;
       expect(optionWhere).not.toHaveProperty('is_active');
       expect(optionWhere).toEqual(
         expect.objectContaining({ tenant_id: 'tenant-1' }),
@@ -329,10 +331,14 @@ describe('ModifiersService', () => {
       const list = await service.findAll('tenant-1', { status: 'all' });
 
       expect(list).toHaveLength(2);
-      const groupWhere = groupRepo.find.mock.calls[0][0]
-        .where as Record<string, unknown>;
-      const optionWhere = optionRepo.find.mock.calls[0][0]
-        .where as Record<string, unknown>;
+      const groupWhere = groupRepo.find.mock.calls[0][0].where as Record<
+        string,
+        unknown
+      >;
+      const optionWhere = optionRepo.find.mock.calls[0][0].where as Record<
+        string,
+        unknown
+      >;
       expect(groupWhere).not.toHaveProperty('is_active');
       expect(optionWhere).not.toHaveProperty('is_active');
     });
@@ -353,9 +359,7 @@ describe('ModifiersService', () => {
       productAttachmentRepo.find.mockResolvedValue([
         { group_id: 'group-uuid-1' },
       ]);
-      groupRepo.find.mockResolvedValue([
-        mockGroup({ is_active: false }),
-      ]);
+      groupRepo.find.mockResolvedValue([mockGroup({ is_active: false })]);
 
       await service.findAll('tenant-1', {
         status: 'inactive',

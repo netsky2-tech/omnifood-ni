@@ -56,9 +56,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * migration in this repository creates an extension, and `gen_random_uuid()`
  * is built into PostgreSQL 13+.
  */
-export class CreateBootstrapInventorySalesTables1759000000002
-  implements MigrationInterface
-{
+export class CreateBootstrapInventorySalesTables1759000000002 implements MigrationInterface {
   name = 'CreateBootstrapInventorySalesTables1759000000002';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -579,7 +577,9 @@ export class CreateBootstrapInventorySalesTables1759000000002
     await queryRunner.query('DROP TABLE IF EXISTS warehouses');
 
     await queryRunner.query('DROP TYPE IF EXISTS cash_movement_type_enum');
-    await queryRunner.query('DROP TYPE IF EXISTS cash_shift_session_status_enum');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS cash_shift_session_status_enum',
+    );
     await queryRunner.query('DROP TYPE IF EXISTS recipe_ingredient_type_enum');
   }
 }

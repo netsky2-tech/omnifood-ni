@@ -9,10 +9,12 @@ const POLICY_NAMES = [
 ] as const;
 
 // Target predicate: direct uuid comparison, index-friendly on the uuid column.
-const TARGET_PREDICATE = "tenant_id = current_setting('app.tenant_id', true)::uuid";
+const TARGET_PREDICATE =
+  "tenant_id = current_setting('app.tenant_id', true)::uuid";
 
 // Previous predicate emitted by the credit-note provenance migration.
-const PREVIOUS_PREDICATE = "tenant_id::text = current_setting('app.tenant_id', true)";
+const PREVIOUS_PREDICATE =
+  "tenant_id::text = current_setting('app.tenant_id', true)";
 
 describe('AlignInvoiceTenantPolicyPredicate1809060000000', () => {
   const migration = new AlignInvoiceTenantPolicyPredicate1809060000000();

@@ -1,6 +1,5 @@
 import { ExecutionContext } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { Reflector } from '@nestjs/core';
 import {
   ThrottlerException,
   ThrottlerGuard,
@@ -23,7 +22,10 @@ function loginContext(ip: string, email: string | undefined): ExecutionContext {
         ip,
         method: 'POST',
         path: '/api/identity/login',
-        body: email === undefined ? {} : { email, pass: 'irrelevant', tenantSlug: 'acme' },
+        body:
+          email === undefined
+            ? {}
+            : { email, pass: 'irrelevant', tenantSlug: 'acme' },
       }),
       getResponse: () => ({}),
     }),

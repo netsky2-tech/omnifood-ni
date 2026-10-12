@@ -30,17 +30,19 @@ describe('CreateModifierGroups1809550000000', () => {
   const collectSql = async (direction: 'up' | 'down' = 'up') => {
     const queries: string[] = [];
     const queryRunner = {
-      query: jest.fn((sql: string, params?: unknown[]): Promise<QueryResult> => {
-        if (sql.includes('information_schema.columns')) {
-          const firstParam: unknown = params?.[0];
-          void (typeof firstParam === 'string' ? firstParam : '');
-          return Promise.resolve([
-            { data_type: 'uuid' },
-          ]) as unknown as Promise<QueryResult>;
-        }
-        queries.push(sql);
-        return Promise.resolve(new QueryResult());
-      }),
+      query: jest.fn(
+        (sql: string, params?: unknown[]): Promise<QueryResult> => {
+          if (sql.includes('information_schema.columns')) {
+            const firstParam: unknown = params?.[0];
+            void (typeof firstParam === 'string' ? firstParam : '');
+            return Promise.resolve([
+              { data_type: 'uuid' },
+            ]) as unknown as Promise<QueryResult>;
+          }
+          queries.push(sql);
+          return Promise.resolve(new QueryResult());
+        },
+      ),
     } as unknown as QueryRunner;
     await migration[direction](queryRunner);
     return { sql: queries.join('\n') };
@@ -91,8 +93,12 @@ describe('CreateModifierGroups1809550000000', () => {
 
       expect(sql).toContain('catalog_value_id uuid NOT NULL');
       expect(sql).toContain('product_id uuid NOT NULL');
-      expect(sql).toMatch(/category_modifier_groups[\s\S]*group_id uuid NOT NULL/);
-      expect(sql).toMatch(/product_modifier_groups[\s\S]*group_id uuid NOT NULL/);
+      expect(sql).toMatch(
+        /category_modifier_groups[\s\S]*group_id uuid NOT NULL/,
+      );
+      expect(sql).toMatch(
+        /product_modifier_groups[\s\S]*group_id uuid NOT NULL/,
+      );
     });
   });
 
@@ -221,17 +227,13 @@ describe('CreateModifierGroups1809550000000', () => {
     it.each(TABLES)('enables row level security on %s', async (table) => {
       const { sql } = await collectSql('up');
 
-      expect(sql).toContain(
-        `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`,
-      );
+      expect(sql).toContain(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
     });
 
     it.each(TABLES)('forces row level security on %s', async (table) => {
       const { sql } = await collectSql('up');
 
-      expect(sql).toContain(
-        `ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`,
-      );
+      expect(sql).toContain(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
     });
 
     it.each(TABLES)(
@@ -274,7 +276,7 @@ describe('CreateModifierGroups1809550000000', () => {
     it('resolves every tenant predicate through the shared type-aware resolver', async () => {
       const { sql } = await collectSql('up');
 
-      expect(sql).not.toContain("tenant_id::text = current_setting");
+      expect(sql).not.toContain('tenant_id::text = current_setting');
       expect(
         (sql.match(/current_setting\('app\.tenant_id', true\)::uuid/g) ?? [])
           .length,

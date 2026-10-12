@@ -2,10 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
-import {
-  classifyAuditSeverity,
-  AuditSeverity,
-} from './audit-risk-classifier';
+import { classifyAuditSeverity, AuditSeverity } from './audit-risk-classifier';
 import { ChangeLog } from './entities/change-log.entity';
 
 /**

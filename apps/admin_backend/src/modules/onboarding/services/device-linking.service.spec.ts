@@ -673,9 +673,8 @@ describe('DeviceLinkingService.listLinkingCodes', () => {
       buildListDataSource(find, attemptFindFailLatest),
     );
 
-    const resultFailLatest = await serviceFailLatest.listLinkingCodes(
-      'tenant-1',
-    );
+    const resultFailLatest =
+      await serviceFailLatest.listLinkingCodes('tenant-1');
 
     expect(resultFailLatest[0]?.lastAttemptStatus).toBe(
       ActivationAttemptStatus.FAIL,
