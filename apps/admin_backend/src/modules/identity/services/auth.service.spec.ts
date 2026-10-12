@@ -707,6 +707,61 @@ describe('AuthService', () => {
     );
   });
 
+
+  it('transparently re-hashes a legacy low-cost digest on successful login (S1)', async () => {
+    useResolvedTenant();
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      email: 'cashier@omnifood.ni',
+      name: 'Cashier',
+      password_hash: bcrypt.hashSync('Password123!', 4),
+      role: UserRole.CASHIER,
+      tenant_id: 'tenant-1',
+      is_active: true,
+    });
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    const hashSpy = jest
+      .spyOn(bcrypt, 'hash')
+      .mockResolvedValue('upgraded-password-hash' as never);
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await service.login('cashier@omnifood.ni', 'Password123!', 'mi-negocio');
+
+    expect(hashSpy).toHaveBeenCalledWith('Password123!', 12);
+    expect(mockUserRepository.update).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ password_hash: 'upgraded-password-hash' }),
+    );
+    hashSpy.mockRestore();
+  });
+
+  it('does not re-hash a digest already at the hardened cost (S1)', async () => {
+    useResolvedTenant();
+    mockUserRepository.findOne.mockResolvedValue({
+      id: 'user-1',
+      email: 'cashier@omnifood.ni',
+      name: 'Cashier',
+      password_hash: 'stored-hash',
+      role: UserRole.CASHIER,
+      tenant_id: 'tenant-1',
+      is_active: true,
+    });
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
+    jest.spyOn(bcrypt, 'getRounds').mockReturnValue(12);
+    const hashSpy = jest
+      .spyOn(bcrypt, 'hash')
+      .mockResolvedValue('refresh-or-noise' as never);
+    mockJwtService.signAsync
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await service.login('cashier@omnifood.ni', 'Password123!', 'mi-negocio');
+
+    expect(hashSpy).not.toHaveBeenCalledWith('Password123!', 12);
+    hashSpy.mockRestore();
+  });
   it('routes login refresh persistence through the canonical verifier', async () => {
     useResolvedTenant();
     mockUserRepository.findOne.mockResolvedValue({
@@ -2017,4 +2072,6 @@ describe('AuthService slug-path timing equalization (F1 regression, issue #556)'
       DUMMY_PASSWORD_HASH,
     );
   });
+
+
 });

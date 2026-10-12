@@ -24,6 +24,7 @@ import {
   type JwtSignPayload,
 } from '../security/jwt-token.types';
 import * as refreshTokenVerifier from '../security/refresh-token-verifier';
+import { PASSWORD_BCRYPT_COST, needsCostUpgrade } from '../security/password.config';
 
 const SYNC_SCOPE = {
   POS_AUTH_CONTINUITY: 'pos-auth-continuity',
@@ -268,6 +269,19 @@ export class AuthService {
         reason: LoginAuditReason.WRONG_PASSWORD,
       });
       throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    // S1 (security-hardening-batch2): transparently upgrade legacy digests
+    // stored at a lower bcrypt cost. Runs inside the login transaction; the
+    // login itself must not fail if the upgrade write fails.
+    if (needsCostUpgrade(user.password_hash)) {
+      try {
+        await repository.update(user.id, {
+          password_hash: await bcrypt.hash(pass, PASSWORD_BCRYPT_COST),
+        });
+      } catch {
+        // Best-effort upgrade: a failed write must never fail the login.
+      }
     }
 
     const refreshTokenFamilyId = randomUUID();
@@ -774,7 +788,7 @@ export class AuthService {
   }
 
   async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, 10);
+    return bcrypt.hash(password, PASSWORD_BCRYPT_COST);
   }
 
   async hashPin(pin: string): Promise<string> {

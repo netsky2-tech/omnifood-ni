@@ -885,4 +885,17 @@ describe('UserService', () => {
       expect(pooledAuditRepository.save).not.toHaveBeenCalled();
     });
   });
+
+  it('hashes new passwords at the hardened bcrypt cost (S1)', async () => {
+    const hash = jest.spyOn(bcrypt, 'hash');
+    // The existing hashing-failure test proves the update path reaches the
+    // hash call first; downstream mock gaps are irrelevant to the assertion.
+    await service
+      .update('user-1', { password: 'Str0ngPassw0rd!' }, 'tenant-1', 'admin-1')
+      .catch(() => undefined);
+
+    expect(hash).toHaveBeenCalledWith('Str0ngPassw0rd!', 12);
+    hash.mockRestore();
+  });
+
 });

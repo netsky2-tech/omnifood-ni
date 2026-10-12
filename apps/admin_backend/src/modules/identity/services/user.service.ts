@@ -22,6 +22,7 @@ import {
   UserEffectivePermissionsDto,
 } from '../dto/permission-matrix.dto';
 import { AuthService } from './auth.service';
+import { PASSWORD_BCRYPT_COST } from '../security/password.config';
 import { bindRlsTenantContext } from '../human-authorization/rls/tenant-context';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { markTenantPublicationDirty } from '../human-authorization/services/tenant-publication-marker';
@@ -85,7 +86,7 @@ export class UserService {
   ): Promise<User> {
     // Hashing is pure CPU work over secrets: keep it outside the transaction.
     const passwordHash = dto.password
-      ? await bcrypt.hash(dto.password, 10)
+      ? await bcrypt.hash(dto.password, PASSWORD_BCRYPT_COST)
       : undefined;
     const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 10) : undefined;
 
@@ -141,7 +142,7 @@ export class UserService {
     adminId: string,
   ): Promise<User> {
     const passwordHash = dto.password
-      ? await bcrypt.hash(dto.password, 10)
+      ? await bcrypt.hash(dto.password, PASSWORD_BCRYPT_COST)
       : undefined;
     const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 10) : undefined;
     const requiresSecurityRevocation =
