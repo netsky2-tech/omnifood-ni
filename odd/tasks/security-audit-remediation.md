@@ -86,3 +86,15 @@ filter hardening.
   batch_12_sunmi_v2s_release_candidate_apk.md R3, docs/operations/q80_ipos_hardware_verification_checklist.md).
   The restriction therefore moves to the URL validation layer (Dart service + build script rule),
   which keeps LAN-HTTP working while refusing cleartext to public hosts.
+- L5: Delivery reconciliation (PR #880, issue #879): three CI rounds were needed after the
+  first push — (1) CI installs the backend with `npm ci` against the committed
+  `apps/admin_backend/package-lock.json`, so the throttler dependency had to land there too;
+  (2) the backend lint gate uses typed-linting (`no-unsafe-call`/`-member-access`/`-assignment`),
+  fixed by typing the Express adapter instance and the throttler tracker lambda; (3) two e2e
+  harnesses needed reconciliation with T2/T4/T5 — `authoritative-routes` stubs `AuthAuditService`
+  and provides the throttler options/storage tokens, and the drawer-open POST cases now act as
+  OWNER (the 403 cashier case already covers the negative path). Local evidence: full unit suite
+  4030 passed / 348 suites, e2e suites 16/16, Flutter 36/36, bash matrix 24/24. Final CI state:
+  all seven checks green. An accidental 198-file formatting sweep commit was reverted on the
+  remote (no force-push; revert + cherry-pick + fast-forward) — nothing from concurrent sessions
+  was touched.
