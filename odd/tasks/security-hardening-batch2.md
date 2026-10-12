@@ -24,3 +24,15 @@ Remediation of the OWASP gap analysis delivered after PR #880, plus the out-of-s
 
 - L1: "PR y despues vamos con los items fuera de este lote" (user, after audit delivery); "También veamos lo que recomienda OWASP para solidificar nuestra capa de seguridad" (user); "merge" (user, authorizing PR #880 merge); "Bien, veamos si los CIs pasan y continuamos" (user). PR #880 merged as squash `db7429b1`; this batch implements the OWASP gap list (bcrypt cost, breached-password check, password policy, supervisor-override hardening, API6 business-flow limits, API8/A06 supply-chain + security.txt) that was out of scope for #880.
 - L2: Code anchors verified at batch start: `user.service.ts:88,144` (bcrypt cost 10 literals), `auth.service.ts:144` (compare + DUMMY_PASSWORD_HASH timing equalization), `user-management.dto.ts:24,29,44,49` (@MinLength 6 password / 4 pin), `supervisor-override.service.ts:97` (Spanish NotFoundException, per-reason distinct messages).
+- L3: Batch 2 delivery evidence — T1 commit `feat(security): raise password hashing cost to 12 with
+  transparent rehash` (unit RED observed: hash cost 10 vs expected 12; rehash absent; GREEN 79/79
+  auth+user suites, identity 771/771). T2 commit `feat(security): reject top common passwords on user
+  credentials` (corpus 10,184 entries; GREEN 772/772 identity). T3 commit `feat(security): raise the
+  user password minimum length to 8` (DTO RED: 7-char accepted on create and update; GREEN 781/781).
+  T4 commit `feat(security): harden supervisor override verification` (worker RED→GREEN 15/15 unit +
+  8/8 e2e, parent-verified identity 787/787). T5 commit `feat(security): tenant-keyed limits on heavy
+  report and export flows` (worker RED→GREEN 34/34 with HTTP-stack 429 and tenant isolation, parent
+  verified sales 597/597). T6 commit `chore(security): add weekly dependency audit and security.txt`
+  (contact verified against nhilos_support_policy_v0.1.md). Tooling note: local pnpm resolves
+  prettier 3.9.6 while CI pins 3.8.3 via package-lock — only new files were formatted with
+  prettier@3.8.3 and batch-1 formatting was kept byte-identical; CI remains the lint oracle.
